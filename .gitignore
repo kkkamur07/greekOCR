@@ -1,0 +1,18 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv/
+output/
+dots.ocr/
+deepseek_ocr/
+notebooks/
+blah.txt
+dataset/
+outputs/
+*.log
