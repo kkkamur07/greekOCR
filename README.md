@@ -59,3 +59,41 @@ Damm, this will definetly need fine tuning, relevant resources :
 ### Progress : 
 1. Nothing much from my side, just checking the code and experimenting with different ideas. Nothing tangible from my side 
 2. What did I do : 1. Mostly busy with exams 2. Tried out what is working and what is not working 3. Learning react & next js so that frontend can be made much better 4. Got some feedback from researchers to implement what is necessary 5. Probably next month will better progress. 
+
+---
+
+### Run Backend and Frontend
+
+Run both services in separate terminals from the project root.
+
+#### 1) Backend (FastAPI)
+
+```bash
+# from project root
+python3 -m venv .venv
+source .venv/bin/activate
+uv sync
+uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Backend will be available at:
+- API: `http://localhost:8000`
+- Docs: `http://localhost:8000/docs`
+
+#### 2) Frontend (React + Vite)
+
+```bash
+# in a new terminal
+cd frontend
+npm install
+npm run dev
+```
+
+Frontend will be available at:
+- App: `http://localhost:5173`
+
+#### 3) Verify full stack
+
+1. Open `http://localhost:5173`
+2. Upload an image in the UI
+3. Confirm backend requests are successful in browser devtools/network tab
