@@ -35,7 +35,19 @@ I think the `TrOCR` model is using the RoBERTa which is an english only architec
 
 I have added the frontend capability to visualize the segments and my current **cer** is hovering around 0.75
 
+### Next priorities are : 
+1. Create a good frontend & Make the frontend better.
+2. Filter the bounding boxes we have gotten, analyze them and see which of them are fit for transcription
+3. Train the model with the bibleData, esteban game me the script and do the hyper parameter optimization - see how esteban is doing it.
+4. If possible host it
+
 --- 
+
+### Updated
+
+I have updated the code, now the frontend is based on react. It is a small powerful editor to edit, which is AI assisted ofcourse, I need to make the editor more powerful. The features in the pipeline are to have a special dialog for the selected transcript area, and mostly related to transcript area. 
+
+I also need to train the model, to increase the character accuracy. Also need to clear all the AI Slop out there. 
 
 Damm, this will definetly need fine tuning, relevant resources : 
 1. [HuggingFace](https://discuss.huggingface.co/t/fine-tuning-trocr-on-new-language/58234)
@@ -43,3 +55,7 @@ Damm, this will definetly need fine tuning, relevant resources :
 3. [FineTuning](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/TrOCR/Fine_tune_TrOCR_on_IAM_Handwriting_Database_using_Seq2SeqTrainer.ipynb)
 4. [FineTuningOther](https://github.com/microsoft/unilm/issues/627)
 
+
+### Progress : 
+1. Nothing much from my side, just checking the code and experimenting with different ideas. Nothing tangible from my side 
+2. What did I do : 1. Mostly busy with exams 2. Tried out what is working and what is not working 3. Learning react & next js so that frontend can be made much better 4. Got some feedback from researchers to implement what is necessary 5. Probably next month will better progress. 

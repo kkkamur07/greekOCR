@@ -43,6 +43,5 @@ def main(root : str) :
 if __name__ == "__main__" :
     root = "/Users/krishuagarwal/Desktop/Programming/python/greek-ocr/data/labelledData"
     wer, cer = main(root)
-    
     print(f"Average WER: {wer}")
     print(f"Average CER: {cer}")
