@@ -71,3 +71,6 @@ frontend/node_modules
 
 # Ignore the datasets
 dataset/
+outputs/
+train.sh
+slurm*

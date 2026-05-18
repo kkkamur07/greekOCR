@@ -16,7 +16,7 @@ Usage:
   python -m ocr.main --epochs 50 --gpu 1
   python -m ocr.main --early-stopping-patience 15
 """
-
+#! I do not remember, why I created this file(will check it later), training is done in the calamari_ocr/train.sh file
 from __future__ import annotations
 
 import argparse

@@ -1,9 +1,12 @@
+
 """
 Document binarization.
 
 The backend (`POST /api/binarize`) uses Kraken ``nlbin``. Use the same path here for
 matching results. If Kraken is not installed, a lighter OpenCV fallback runs.
 """
+
+#! this file is redundant, will remove it later
 
 from __future__ import annotations
 

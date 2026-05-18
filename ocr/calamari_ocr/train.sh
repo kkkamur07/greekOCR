@@ -20,6 +20,8 @@
 #   best/            — continuously updated best model (by val loss)
 #   checkpoint*/     — checkpoint saved every epoch (for resume)
 
+
+#! do not change the training configuration, this is recommended by the Calamari documentation, will experiment with it later
 set -euo pipefail
 
 PACK="${CALAMARI_PACK:-./dataset/calamari}"
