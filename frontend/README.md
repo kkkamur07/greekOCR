@@ -68,22 +68,6 @@ Use `npm run typecheck` for the full app (includes legacy `/demo` OCR components
 
    App: `http://localhost:5173` — login → projects → documents.
 
-### Optional: test jobs panel (issue 016)
-
-Requires API flag and matching frontend flag:
-
-```bash
-# backend/.env
-ENABLE_TEST_JOB_ROUTES=true
-```
-
-```bash
-# frontend/.env.local
-VITE_ENABLE_TEST_JOBS=true
-```
-
-Open a document → **Run test job** in the jobs panel; status polls until `done` or `failed`.
-
 ## Public published view
 
 Anonymous users read **published** documents only:
@@ -132,4 +116,17 @@ Frontend lanes (014–017) are tracked in `issues/` but **do not count toward ka
 ### When to run codegen
 
 - After changing FastAPI routes or Pydantic schemas under `backend/`
-- Before a PR that touches API contracts
+- Before opening a PR that touches API contracts
+
+## Jobs panel (issue 016)
+
+The document editor shows a **Jobs** card (`JobsPanel`) that tracks jobs enqueued from the UI. Each row polls `GET /jobs/{id}` every ~1.5s until status is `done` or `failed`. Failed jobs surface the API `error` string via antd `notification` (and inline on the row).
+
+### Dev smoke: noop test job
+
+1. API: `ENABLE_TEST_JOB_ROUTES=true` in `backend/core/.env` (see `backend/core/.env.example`).
+2. Frontend: `VITE_ENABLE_TEST_JOBS=true` in `.env.local` (see `.env.local.example`).
+3. Start API (`uvicorn backend.core.app:create_app --factory --reload` from repo root).
+4. Open a document → **Run test job** → row moves `pending` → `running` → `done`.
+
+Segment/transcribe enqueue buttons arrive with issues 006/009; the panel already supports multiple concurrent job rows.

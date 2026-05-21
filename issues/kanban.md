@@ -20,7 +20,12 @@ _(empty — 0/4)_
 
 ## Review
 
-_(empty — 0/5)_
+_(empty — 0/5 AFK backend)_
+
+### Frontend (exempt from WIP limits)
+
+- [ ] [017-frontend-public-published-view](017-frontend-public-published-view.md) — branch `feat/017-frontend-public`
+- [ ] [016-frontend-jobs-panel](016-frontend-jobs-panel.md) — branch `feat/016-frontend-jobs`
 
 ## Done
 
@@ -51,4 +56,4 @@ _(empty — 0/5)_
 |------|-------------|------------|
 | **Now** | — | **005** (lane B) |
 | 005 merged | **006** (lane C) | — |
-| 006 + 008 path | **017** (after 011 ✓) | **014** (layout UI) |
+| Frontend (parallel) | **016**, **017** in review (`feat/016-*`, `feat/017-*`) | **014** (layout UI, blocked on 008) |

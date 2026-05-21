@@ -20,7 +20,11 @@ import { api, type DocumentWithPartsResponse } from '../api/client';
 import { ApiError } from '../api/errors';
 import { AppLayout } from '../components/AppLayout';
 import { AuthenticatedImage } from '../components/AuthenticatedImage';
+import { JobsPanel } from '../components/JobsPanel/JobsPanel';
 import { WorkflowBadge } from '../components/WorkflowBadge';
+
+const ENABLE_TEST_JOBS =
+  (import.meta.env.VITE_ENABLE_TEST_JOBS as string | undefined) === 'true';
 
 export function DocumentDetailPage() {
   const { projectId, documentId } = useParams<{ projectId: string; documentId: string }>();
@@ -126,6 +130,8 @@ export function DocumentDetailPage() {
           )}
         </Space>
       )}
+
+      <JobsPanel enableTestJobs={ENABLE_TEST_JOBS} />
 
       <Upload
         accept="image/*"

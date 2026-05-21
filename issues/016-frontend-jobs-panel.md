@@ -2,7 +2,7 @@
 id: "016"
 title: "frontend-jobs-panel"
 type: AFK
-status: backlog
+status: review
 blocked_by:
   - "done/004-job-runner.md"
   - "done/012-nextjs-openapi-codegen.md"
