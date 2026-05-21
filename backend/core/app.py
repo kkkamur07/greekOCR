@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.core.health import router as health_router
-from backend.infrastructure.config import settings
+from infrastructure.config import settings
 
 
 def create_app() -> FastAPI:

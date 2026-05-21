@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.infrastructure.db import get_db
+from infrastructure.db import get_db
 
 router = APIRouter(tags=["health"])
 

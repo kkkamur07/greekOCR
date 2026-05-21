@@ -10,7 +10,7 @@ COPY pyproject.toml ./
 RUN pip install --no-cache-dir ".[platform]"
 
 COPY backend ./backend
-COPY alembic.ini ./
+COPY infrastructure ./infrastructure
 
 ENV PYTHONPATH=/app
 

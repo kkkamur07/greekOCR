@@ -6,7 +6,7 @@ from sqlalchemy import DateTime, Enum, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from backend.infrastructure.db import Base
+from infrastructure.db import Base
 
 
 class InferenceTask(str, enum.Enum):

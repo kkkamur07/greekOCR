@@ -12,7 +12,7 @@ This is a very novel work and can enhance the quality of work everywhere in the 
 
 ## Platform development (Postgres + DDD backend)
 
-The new platform API lives under `backend/core/` with bounded contexts (`users`, `project`, `document`, `inference`). Postgres and Alembic are in shared `backend/infrastructure/`.
+The new platform API lives under `backend/core/` with bounded contexts (`users`, `project`, `document`, `inference`). Postgres and Alembic are in repo-root `infrastructure/`.
 
 ### Prerequisites
 
@@ -22,7 +22,7 @@ The new platform API lives under `backend/core/` with bounded contexts (`users`,
 ### Quick start (Docker Compose)
 
 ```bash
-cp backend/.env.example backend/.env
+cp infrastructure/.env.example infrastructure/.env
 docker compose up --build
 ```
 
@@ -33,7 +33,7 @@ docker compose up --build
 | OpenAPI | http://localhost:8000/docs |
 | Postgres | `localhost:5433` (user `postgres`, password `dev`, db **`kalamos`**) |
 
-See [backend/infrastructure/README.md](backend/infrastructure/README.md) for verify commands and branch-per-issue workflow.
+See [infrastructure/README.md](infrastructure/README.md) for verify commands and branch-per-issue workflow.
 
 Migrations run automatically on API container start (`alembic upgrade head`).
 
@@ -43,8 +43,8 @@ Migrations run automatically on API container start (`alembic upgrade head`).
 docker compose up db -d
 uv venv && source .venv/bin/activate
 uv pip install -e ".[dev]"
-cp backend/.env.example backend/.env
-alembic upgrade head
+cp infrastructure/.env.example infrastructure/.env
+alembic -c infrastructure/alembic.ini upgrade head
 uvicorn backend.core.main:app --reload --host 0.0.0.0 --port 8000
 pytest
 ```
@@ -202,8 +202,7 @@ We need to move away from django to fastAPI + pydantic for validation, they have
   We are going to do domain driven design : 
   /backend
    /core - FastAPI app entry, router wiring, shared dependencies
-   /infrastructure - SHARED: Postgres (db.py), config, Alembic (../alembic/), models aggregator for migrations
-   /alembic - migrations (env.py uses backend.infrastructure)
+   /infrastructure (repo root) - SHARED: Postgres (db.py), config, Alembic, models aggregator for migrations
    /users, /project, /document, /inference — each with:
       /domain
       /application

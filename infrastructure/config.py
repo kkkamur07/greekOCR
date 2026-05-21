@@ -1,4 +1,4 @@
-"""Application settings loaded from environment / backend/.env."""
+"""Application settings loaded from environment / infrastructure/.env."""
 
 from functools import lru_cache
 from pathlib import Path
@@ -6,13 +6,13 @@ from pathlib import Path
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-BACKEND_DIR = Path(__file__).resolve().parents[1]
-REPO_ROOT = BACKEND_DIR.parent
+INFRASTRUCTURE_DIR = Path(__file__).resolve().parent
+REPO_ROOT = INFRASTRUCTURE_DIR.parent
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=BACKEND_DIR / ".env",
+        env_file=INFRASTRUCTURE_DIR / ".env",
         env_file_encoding="utf-8",
         extra="ignore",
     )

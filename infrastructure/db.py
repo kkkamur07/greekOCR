@@ -6,7 +6,7 @@ from sqlalchemy import MetaData
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
-from backend.infrastructure.config import settings
+from infrastructure.config import settings
 
 # Naming convention helps Alembic autogenerate stable constraint names.
 convention = {

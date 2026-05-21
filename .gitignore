@@ -40,7 +40,7 @@ outputs/
 
 backend/uploads
 backend/media
-backend/.env
+infrastructure/.env
 
 
 # Frontend
@@ -113,7 +113,7 @@ outputs/
 
 backend/uploads
 backend/media
-backend/.env
+infrastructure/.env
 
 
 # Frontend

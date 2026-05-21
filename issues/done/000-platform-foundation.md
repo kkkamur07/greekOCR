@@ -16,14 +16,15 @@ branch: feat/000-platform-foundation
 
 End-to-end platform skeleton: Docker Compose (Postgres + API), bounded-context DDD layout, FastAPI app in `backend/core/`, `.env.example`. Demoable via `docker compose up`, migrated DB, `GET /health` and OpenAPI at `/docs`.
 
-**Shared platform (`backend/infrastructure/`)** — Postgres + Alembic live here only (not under `project/` or any context):
+**Shared platform (`infrastructure/` at repo root)** — Postgres + Alembic live here only (not under `backend/` or any bounded context):
 
 ```text
-backend/infrastructure/
+infrastructure/
   config.py          # DATABASE_URL, SYNC_DATABASE_URL
   db.py              # async engine, session, Base
   models.py          # imports all context ORM modules for Alembic metadata
-backend/alembic/     # env.py, versions/ — migrations for full schema
+  alembic.ini
+  alembic/           # env.py, versions/ — migrations for full schema
 ```
 
 Context `infrastructure/` folders hold **context ORM/repos only** (e.g. `project/infrastructure/orm_models.py`), not the global DB connection.
@@ -31,8 +32,8 @@ Context `infrastructure/` folders hold **context ORM/repos only** (e.g. `project
 ## Acceptance criteria
 
 - [x] `docker compose` starts Postgres and API; README or issue notes document ports and env vars
-- [x] `backend/infrastructure/db.py` + `config.py` own Postgres connection; no duplicate engine in context packages
-- [x] `backend/alembic/` configured with `env.py` using `SYNC_DATABASE_URL` and `backend.infrastructure.models` metadata
+- [x] `infrastructure/db.py` + `config.py` own Postgres connection; no duplicate engine in context packages
+- [x] `infrastructure/alembic/` configured with `env.py` using `SYNC_DATABASE_URL` and `infrastructure.models` metadata
 - [x] Alembic initial migration creates all v1 tables from PRD schema (including Job, InferenceModel, ModelBinding, manual_geometry flags)
 - [x] FastAPI app in `backend/core/` boots with settings from env; health endpoint returns OK when DB is reachable
 - [x] `alembic upgrade head` runs cleanly on empty database
@@ -53,9 +54,9 @@ None — can start immediately.
 ```bash
 docker compose up db -d
 uv venv && source .venv/bin/activate && uv pip install -e ".[dev]"
-cp backend/.env.example backend/.env
-alembic upgrade head
+cp infrastructure/.env.example infrastructure/.env
+alembic -c infrastructure/alembic.ini upgrade head
 pytest -v
 ```
 
-Full steps: `backend/infrastructure/README.md`
+Full steps: `infrastructure/README.md`
