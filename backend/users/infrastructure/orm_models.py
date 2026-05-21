@@ -1,11 +1,18 @@
+from __future__ import annotations
+
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from backend.project.infrastructure.orm_models import project_shared_users
 from infrastructure.db import Base
+
+if TYPE_CHECKING:
+    from backend.project.infrastructure.orm_models import Project
 
 
 class User(Base):
@@ -17,8 +24,9 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    owned_projects: Mapped[list["Project"]] = relationship(back_populates="owner")
-    shared_projects: Mapped[list["Project"]] = relationship(
-        secondary="project_shared_users",
+    owned_projects: Mapped[list[Project]] = relationship("Project", back_populates="owner")
+    shared_projects: Mapped[list[Project]] = relationship(
+        "Project",
+        secondary=project_shared_users,
         back_populates="shared_users",
     )

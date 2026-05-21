@@ -16,6 +16,10 @@ parent_prd: "issues/prd.md"
 
 Postgres-backed Job table with enqueue, transactional claim (`SKIP LOCKED` or equivalent), status transitions (`pending` → `running` → `done` | `failed`), and `GET /jobs/{id}`. Background worker loop runnable inside API process (compatible with multi-worker claim). Include a noop/sleep test handler to verify pipeline without GPU.
 
+## Error handling
+
+- [ ] Map job failures to persisted `Job.error`; API layer uses `NotFoundError` for missing jobs.
+
 ## Dev / test data
 
 - [ ] Reuse seeded user/project/document from 001–003 where job FKs are needed; noop job tests may omit document FK.

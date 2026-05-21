@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import enum
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Boolean,
@@ -19,6 +22,10 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from infrastructure.db import Base
+
+if TYPE_CHECKING:
+    from backend.inference.infrastructure.orm_models import ModelBinding
+    from backend.project.infrastructure.orm_models import Project
 
 
 class DocumentWorkflow(str, enum.Enum):
@@ -49,12 +56,14 @@ class Document(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    project: Mapped["Project"] = relationship(back_populates="documents")
-    parts: Mapped[list["DocumentPart"]] = relationship(back_populates="document", cascade="all, delete-orphan")
-    transcriptions: Mapped[list["Transcription"]] = relationship(
-        back_populates="document", cascade="all, delete-orphan"
+    project: Mapped[Project] = relationship("Project", back_populates="documents")
+    parts: Mapped[list[DocumentPart]] = relationship(
+        "DocumentPart", back_populates="document", cascade="all, delete-orphan"
     )
-    model_bindings: Mapped[list["ModelBinding"]] = relationship(back_populates="document")
+    transcriptions: Mapped[list[Transcription]] = relationship(
+        "Transcription", back_populates="document", cascade="all, delete-orphan"
+    )
+    model_bindings: Mapped[list[ModelBinding]] = relationship("ModelBinding", back_populates="document")
 
 
 class DocumentPart(Base):
@@ -70,10 +79,12 @@ class DocumentPart(Base):
     height: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    document: Mapped["Document"] = relationship(back_populates="parts")
-    blocks: Mapped[list["Block"]] = relationship(back_populates="part", cascade="all, delete-orphan")
-    lines: Mapped[list["Line"]] = relationship(back_populates="part", cascade="all, delete-orphan")
-    model_bindings: Mapped[list["ModelBinding"]] = relationship(back_populates="document_part")
+    document: Mapped[Document] = relationship("Document", back_populates="parts")
+    blocks: Mapped[list[Block]] = relationship("Block", back_populates="part", cascade="all, delete-orphan")
+    lines: Mapped[list[Line]] = relationship("Line", back_populates="part", cascade="all, delete-orphan")
+    model_bindings: Mapped[list[ModelBinding]] = relationship(
+        "ModelBinding", back_populates="document_part"
+    )
 
 
 class Block(Base):
@@ -88,8 +99,8 @@ class Block(Base):
     order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    part: Mapped["DocumentPart"] = relationship(back_populates="blocks")
-    lines: Mapped[list["Line"]] = relationship(back_populates="block")
+    part: Mapped[DocumentPart] = relationship("DocumentPart", back_populates="blocks")
+    lines: Mapped[list[Line]] = relationship("Line", back_populates="block")
 
 
 class Line(Base):
@@ -108,10 +119,10 @@ class Line(Base):
     order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    part: Mapped["DocumentPart"] = relationship(back_populates="lines")
-    block: Mapped["Block | None"] = relationship(back_populates="lines")
-    transcriptions: Mapped[list["LineTranscription"]] = relationship(
-        back_populates="line", cascade="all, delete-orphan"
+    part: Mapped[DocumentPart] = relationship("DocumentPart", back_populates="lines")
+    block: Mapped[Block | None] = relationship("Block", back_populates="lines")
+    transcriptions: Mapped[list[LineTranscription]] = relationship(
+        "LineTranscription", back_populates="line", cascade="all, delete-orphan"
     )
 
 
@@ -137,9 +148,9 @@ class Transcription(Base):
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    document: Mapped["Document"] = relationship(back_populates="transcriptions")
-    line_transcriptions: Mapped[list["LineTranscription"]] = relationship(
-        back_populates="transcription", cascade="all, delete-orphan"
+    document: Mapped[Document] = relationship("Document", back_populates="transcriptions")
+    line_transcriptions: Mapped[list[LineTranscription]] = relationship(
+        "LineTranscription", back_populates="transcription", cascade="all, delete-orphan"
     )
 
 
@@ -159,5 +170,7 @@ class LineTranscription(Base):
     text: Mapped[str] = mapped_column(Text, default="")
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
 
-    line: Mapped["Line"] = relationship(back_populates="transcriptions")
-    transcription: Mapped["Transcription"] = relationship(back_populates="line_transcriptions")
+    line: Mapped[Line] = relationship("Line", back_populates="transcriptions")
+    transcription: Mapped[Transcription] = relationship(
+        "Transcription", back_populates="line_transcriptions"
+    )

@@ -16,6 +16,10 @@ parent_prd: "issues/prd.md"
 
 Register, login, and `GET /me` with JWT and password hashing. Persist users in Postgres. Pytest covers happy path and invalid credentials with one failing tests and multiple suceeding tests. OpenAPI documents auth routes.
 
+## Error handling
+
+- [ ] Register FastAPI exception handlers mapping `backend.core.exceptions` (`NotFoundError` → 404, `AccessDeniedError` → 403, `ValidationError` → 422, etc.).
+
 ## Dev / test data
 
 - [ ] Add a dev seed script or fixture (at least one test user) so integration tests and local login do not require manual register each run.

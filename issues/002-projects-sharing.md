@@ -16,6 +16,10 @@ parent_prd: "issues/prd.md"
 
 Project CRUD for owner; share/unshare collaborator by username; list only projects owned or shared with caller. Tests for isolation between users.
 
+## Error handling
+
+- [ ] Raise `NotFoundError` / `AccessDeniedError` from project services; rely on global handlers from 001.
+
 ## Dev / test data
 
 - [ ] Seed or fixture: sample project + owner (depends on user seed from 001).

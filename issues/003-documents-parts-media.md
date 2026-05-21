@@ -16,6 +16,10 @@ parent_prd: "issues/prd.md"
 
 Documents under projects; ordered DocumentParts with image upload and media store; workflow field `draft` | `published` | `archived`; part reorder and delete. Document dashboard API lists parts. Archived documents excluded from default list.
 
+## Error handling
+
+- [ ] Use `NotFoundError`, `AccessDeniedError`, `ValidationError` from `backend.core.exceptions` in document/media use cases.
+
 ## Dev / test data
 
 - [ ] Seed or fixture: sample document + one DocumentPart (placeholder image or minimal bytes) for API/integration tests.
