@@ -68,3 +68,4 @@ dist-ssr
 *.sw?
 
 frontend/node_modules
+_support_repo/
