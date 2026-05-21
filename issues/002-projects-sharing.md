@@ -2,7 +2,8 @@
 id: "002"
 title: "projects-sharing"
 type: AFK
-status: backlog
+status: review
+branch: feat/002-projects-sharing
 blocked_by:
   - "001-user-auth-jwt.md"
 parent_prd: "issues/prd.md"
@@ -18,18 +19,18 @@ Project CRUD for owner; share/unshare collaborator by username; list only projec
 
 ## Error handling
 
-- [ ] Raise `NotFoundError` / `AccessDeniedError` from project services; rely on global handlers from 001.
+- [x] Raise `NotFoundError` / `AccessDeniedError` from project services; rely on global handlers from 001.
 
 ## Dev / test data
 
-- [ ] Seed or fixture: sample project + owner (depends on user seed from 001).
+- [x] Seed or fixture: sample project + owner (depends on user seed from 001).
 
 ## Acceptance criteria
 
-- [ ] Owner can create, read, update, delete own projects (slug, name, guidelines)
-- [ ] Owner can add/remove shared user by username; shared user sees project in list
-- [ ] Non-member cannot read or mutate project (403/404)
-- [ ] Tests cover owner CRUD, share access, and non-member denial
+- [x] Owner can create, read, update, delete own projects (slug, name, guidelines)
+- [x] Owner can add/remove shared user by username; shared user sees project in list
+- [x] Non-member cannot read or mutate project (403/404)
+- [x] Tests cover owner CRUD, share access, and non-member denial
 
 ## Blocked by
 

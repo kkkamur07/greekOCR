@@ -54,3 +54,52 @@ def auth_headers(registered_user: dict[str, str]) -> dict[str, str]:
 def test_user(registered_user: dict[str, str]) -> dict[str, str]:
     """Seeded test user for integration tests (via register fixture)."""
     return registered_user
+
+
+def _register_user(client: TestClient, suffix: str) -> dict[str, str]:
+    creds = {
+        "email": f"user-{suffix}@test.kalamos",
+        "username": f"user_{suffix}",
+        "password": "test-pass-123",
+    }
+    response = client.post(
+        "/auth/register",
+        json={
+            "email": creds["email"],
+            "username": creds["username"],
+            "password": creds["password"],
+        },
+    )
+    assert response.status_code == 201
+    creds["access_token"] = response.json()["access_token"]
+    return creds
+
+
+@pytest.fixture
+def owner_user(client: TestClient) -> dict[str, str]:
+    return _register_user(client, f"owner-{uuid.uuid4().hex[:8]}")
+
+
+@pytest.fixture
+def collaborator_user(client: TestClient) -> dict[str, str]:
+    return _register_user(client, f"collab-{uuid.uuid4().hex[:8]}")
+
+
+@pytest.fixture
+def outsider_user(client: TestClient) -> dict[str, str]:
+    return _register_user(client, f"outsider-{uuid.uuid4().hex[:8]}")
+
+
+@pytest.fixture
+def owner_headers(owner_user: dict[str, str]) -> dict[str, str]:
+    return {"Authorization": f"Bearer {owner_user['access_token']}"}
+
+
+@pytest.fixture
+def collaborator_headers(collaborator_user: dict[str, str]) -> dict[str, str]:
+    return {"Authorization": f"Bearer {collaborator_user['access_token']}"}
+
+
+@pytest.fixture
+def outsider_headers(outsider_user: dict[str, str]) -> dict[str, str]:
+    return {"Authorization": f"Bearer {outsider_user['access_token']}"}
