@@ -2,7 +2,8 @@
 id: "001"
 title: "user-auth-jwt"
 type: AFK
-status: backlog
+status: review
+branch: feat/001-user-auth-jwt
 blocked_by:
   - "done/000-platform-foundation.md"
 parent_prd: "issues/prd.md"
@@ -18,18 +19,18 @@ Register, login, and `GET /me` with JWT and password hashing. Persist users in P
 
 ## Error handling
 
-- [ ] Register FastAPI exception handlers mapping `backend.core.exceptions` (`NotFoundError` → 404, `AccessDeniedError` → 403, `ValidationError` → 422, etc.).
+- [x] Register FastAPI exception handlers mapping `backend.core.exceptions` (`NotFoundError` → 404, `AccessDeniedError` → 403, `ValidationError` → 422, etc.).
 
 ## Dev / test data
 
-- [ ] Add a dev seed script or fixture (at least one test user) so integration tests and local login do not require manual register each run.
+- [x] Add a dev seed script or fixture (at least one test user) so integration tests and local login do not require manual register each run.
 
 ## Acceptance criteria
 
-- [ ] `POST /auth/register` and `POST /auth/login` return JWT; passwords stored hashed
-- [ ] `GET /me` returns current user when Bearer token valid; 401 when missing/invalid
-- [ ] Tests: register + login + me success; wrong password fails
-- [ ] Unauthenticated users cannot access protected project routes (smoke on one guarded route)
+- [x] `POST /auth/register` and `POST /auth/login` return JWT; passwords stored hashed
+- [x] `GET /me` returns current user when Bearer token valid; 401 when missing/invalid
+- [x] Tests: register + login + me success; wrong password fails
+- [x] Unauthenticated users cannot access protected project routes (smoke on one guarded route)
 
 ## Blocked by
 
