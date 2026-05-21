@@ -1,5 +1,7 @@
 """FastAPI application factory — wires routers from core and bounded contexts."""
 
+from contextlib import asynccontextmanager
+
 import infrastructure.models  # noqa: F401 — register all ORM mappers before first query
 
 from fastapi import FastAPI, Request
@@ -15,8 +17,8 @@ from backend.core.exceptions import (
     ValidationError,
 )
 from backend.core.settings import get_app_settings
-from backend.project.api.projects import router as projects_router
-from backend.users.api.auth import _me_router, router as auth_router
+from backend.inference.api.jobs import router as jobs_router
+from backend.inference.infrastructure.worker import worker_loop
 
 
 def _register_exception_handlers(app: FastAPI) -> None:
@@ -41,12 +43,24 @@ def _register_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(status_code=500, content={"detail": str(exc)})
 
 
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    import asyncio
+
+    stop_event = asyncio.Event()
+    worker_task = asyncio.create_task(worker_loop(stop_event))
+    yield
+    stop_event.set()
+    await worker_task
+
+
 def create_app() -> FastAPI:
     app_settings = get_app_settings()
     app = FastAPI(
         title="greekOCR Platform",
         version="0.1.0",
         description="Greek manuscript OCR and annotation platform",
+        lifespan=_lifespan,
     )
     app.add_middleware(
         CORSMiddleware,
@@ -57,7 +71,5 @@ def create_app() -> FastAPI:
     )
     _register_exception_handlers(app)
     app.include_router(health_router)
-    app.include_router(auth_router)
-    app.include_router(_me_router)
-    app.include_router(projects_router)
+    app.include_router(jobs_router)
     return app
