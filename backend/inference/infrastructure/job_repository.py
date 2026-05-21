@@ -58,6 +58,41 @@ def claim_next_pending_job(*, test_only: bool | None = None) -> Job | None:
         return job
 
 
+def lock_first_pending_job_for_test() -> tuple[object, Job | None]:
+    """Begin a transaction and lock the oldest pending row (no SKIP LOCKED).
+
+    Returns ``(session, job)`` — caller must ``rollback()`` or ``commit()`` to release.
+    Used only to prove SKIP LOCKED in tests.
+    """
+    session = SyncSessionLocal()
+    job = (
+        session.execute(
+            select(Job)
+            .where(Job.status == JobStatus.pending)
+            .order_by(Job.created_at)
+            .with_for_update()
+            .limit(1)
+        )
+        .scalar_one_or_none()
+    )
+    return session, job
+
+
+def count_active_jobs(*, test_payload: bool | None = None) -> int:
+    """Count pending or running jobs (optionally filter by payload test flag)."""
+    from sqlalchemy import func
+
+    with SyncSessionLocal() as session:
+        query = select(func.count()).select_from(Job).where(
+            Job.status.in_((JobStatus.pending, JobStatus.running))
+        )
+        if test_payload is True:
+            query = query.where(Job.payload.contains({"test": True}))
+        elif test_payload is False:
+            query = query.where(~Job.payload.contains({"test": True}))
+        return session.execute(query).scalar_one()
+
+
 def mark_job_done(job_id: uuid.UUID, result: dict | None = None) -> None:
     now = datetime.now(UTC)
     with SyncSessionLocal() as session:

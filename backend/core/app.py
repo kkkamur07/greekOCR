@@ -1,5 +1,6 @@
 """FastAPI application factory — wires routers from core and bounded contexts."""
 
+import logging
 from contextlib import asynccontextmanager
 
 import infrastructure.models  # noqa: F401 — register all ORM mappers before first query
@@ -19,6 +20,8 @@ from backend.core.exceptions import (
 from backend.core.settings import get_app_settings
 from backend.inference.api.jobs import router as jobs_router
 from backend.inference.infrastructure.worker import worker_loop
+
+logger = logging.getLogger(__name__)
 
 
 def _register_exception_handlers(app: FastAPI) -> None:
@@ -40,7 +43,8 @@ def _register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(GreekOCRException)
     async def greekocr_handler(_request: Request, exc: GreekOCRException) -> JSONResponse:
-        return JSONResponse(status_code=500, content={"detail": str(exc)})
+        logger.exception("Unhandled platform error", exc_info=exc)
+        return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
 @asynccontextmanager

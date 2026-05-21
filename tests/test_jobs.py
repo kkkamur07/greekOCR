@@ -13,23 +13,42 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import delete, select
 
-from backend.inference.infrastructure.job_repository import claim_next_pending_job, mark_job_done
+from backend.inference.infrastructure.job_repository import (
+    claim_next_pending_job,
+    count_active_jobs,
+    lock_first_pending_job_for_test,
+    mark_job_done,
+)
 from backend.inference.infrastructure.orm_models import Job, JobStatus, JobType
 from backend.inference.infrastructure.worker import execute_claimed_job
 from infrastructure.db import SyncSessionLocal
 
 
+def _clear_all_jobs() -> None:
+    with SyncSessionLocal() as session:
+        session.execute(delete(Job))
+        session.commit()
+
+
+def _wait_until_no_active_test_jobs(*, timeout: float = 5.0) -> None:
+    """Wait until the lifespan worker finished API test jobs (payload test=true)."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if count_active_jobs(test_payload=True) == 0:
+            return
+        time.sleep(0.05)
+    raise AssertionError(
+        f"test jobs still active after {timeout}s (count={count_active_jobs(test_payload=True)})"
+    )
+
+
 @pytest.fixture(autouse=True)
 def _reset_jobs_table() -> None:
-    """Isolate tests — background worker and claim tests share the jobs table."""
-    with SyncSessionLocal() as session:
-        session.execute(delete(Job))
-        session.commit()
+    """Isolate tests — real Postgres; hard delete before each test; drain worker after."""
+    _clear_all_jobs()
     yield
-    time.sleep(0.15)
-    with SyncSessionLocal() as session:
-        session.execute(delete(Job))
-        session.commit()
+    _wait_until_no_active_test_jobs(timeout=5.0)
+    _clear_all_jobs()
 
 
 def _poll_job(client: TestClient, job_id: str, *, expect: str, timeout: float = 5.0) -> dict:
@@ -72,7 +91,7 @@ def test_get_job_returns_status_and_timestamps(client: TestClient):
 
 
 def test_claim_next_uses_skip_locked():
-    """Direct claim: second claimer gets a different job while first holds running."""
+    """While one transaction holds FOR UPDATE on job A, SKIP LOCKED claims job B."""
     job_a_id = uuid.uuid4()
     job_b_id = uuid.uuid4()
     with SyncSessionLocal() as session:
@@ -82,28 +101,35 @@ def test_claim_next_uses_skip_locked():
                     id=job_a_id,
                     type=JobType.pipeline,
                     status=JobStatus.pending,
-                    payload={"handler": "noop"},
+                    payload={"handler": "noop", "order": 0},
                 ),
                 Job(
                     id=job_b_id,
                     type=JobType.pipeline,
                     status=JobStatus.pending,
-                    payload={"handler": "noop"},
+                    payload={"handler": "noop", "order": 1},
                 ),
             ]
         )
         session.commit()
 
-    first = claim_next_pending_job()
-    second = claim_next_pending_job()
-    assert first is not None
-    assert second is not None
-    assert first.id != second.id
-    assert first.status == JobStatus.running
-    assert second.status == JobStatus.running
+    hold_session, locked = lock_first_pending_job_for_test()
+    assert locked is not None
+    assert locked.id == job_a_id
+    try:
+        second = claim_next_pending_job()
+        assert second is not None
+        assert second.id == job_b_id
+        assert second.status == JobStatus.running
+        mark_job_done(second.id)
+    finally:
+        hold_session.rollback()
+        hold_session.close()
 
+    first = claim_next_pending_job()
+    assert first is not None
+    assert first.id == job_a_id
     mark_job_done(first.id)
-    mark_job_done(second.id)
 
 
 def test_concurrent_claimers_do_not_run_same_job_twice():
@@ -151,6 +177,9 @@ def test_concurrent_claimers_do_not_run_same_job_twice():
         )
         assert len(running) == 4
 
+    for jid in job_ids:
+        mark_job_done(jid)
+
 
 def test_failed_handler_stores_error_message(client: TestClient):
     response = client.post("/jobs/test", json={"handler": "fail"})
@@ -188,4 +217,4 @@ def test_execute_claimed_job_marks_unknown_handler_failed():
         row = session.get(Job, job_id)
         assert row is not None
         assert row.status == JobStatus.failed
-        assert "no handler" in (row.error or "")
+        assert "no handler" in (row.error or "").lower()
