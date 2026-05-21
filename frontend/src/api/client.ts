@@ -18,6 +18,9 @@ export type DocumentCreateRequest = components['schemas']['DocumentCreateRequest
 export type DocumentPartResponse = components['schemas']['DocumentPartResponse'];
 export type DocumentWorkflow = components['schemas']['DocumentWorkflow'];
 export type ReorderPartsRequest = components['schemas']['ReorderPartsRequest'];
+export type PublicLayoutResponse = components['schemas']['PublicLayoutResponse'];
+export type PublicTranscriptionLayerResponse =
+  components['schemas']['PublicTranscriptionLayerResponse'];
 
 export const API_BASE_URL =
   (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') ||
@@ -88,6 +91,10 @@ export function mediaUrl(path: string): string {
   return `${API_BASE_URL}${path}`;
 }
 
+export function publicPartMediaUrl(partId: string): string {
+  return `${API_BASE_URL}/public/media/parts/${partId}`;
+}
+
 export const api = {
   login: (body: LoginRequest) =>
     apiRequest<TokenResponse>('/auth/login', { method: 'POST', body, skipAuth: true }),
@@ -140,5 +147,23 @@ export const api = {
     apiRequest<void>(
       `/projects/${projectId}/documents/${documentId}/parts/${partId}`,
       { method: 'DELETE' },
+    ),
+
+  getPublicDocument: (projectId: string, documentId: string) =>
+    apiRequest<DocumentWithPartsResponse>(
+      `/public/projects/${projectId}/documents/${documentId}`,
+      { skipAuth: true },
+    ),
+
+  getPublicLayout: (projectId: string, documentId: string) =>
+    apiRequest<PublicLayoutResponse>(
+      `/public/projects/${projectId}/documents/${documentId}/layout`,
+      { skipAuth: true },
+    ),
+
+  listPublicTranscriptions: (projectId: string, documentId: string) =>
+    apiRequest<PublicTranscriptionLayerResponse[]>(
+      `/public/projects/${projectId}/documents/${documentId}/transcriptions`,
+      { skipAuth: true },
     ),
 };

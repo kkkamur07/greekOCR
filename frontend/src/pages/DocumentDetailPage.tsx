@@ -13,6 +13,7 @@ import {
   ArrowDownOutlined,
   ArrowUpOutlined,
   DeleteOutlined,
+  GlobalOutlined,
   UploadOutlined,
 } from '@ant-design/icons';
 import { api, type DocumentWithPartsResponse } from '../api/client';
@@ -110,8 +111,19 @@ export function DocumentDetailPage() {
       }
     >
       {document && (
-        <Space style={{ marginBottom: 16 }}>
+        <Space style={{ marginBottom: 16 }} wrap>
           <WorkflowBadge workflow={document.workflow} />
+          {document.workflow === 'published' && projectId && documentId && (
+            <Link
+              to={`/public/projects/${projectId}/documents/${documentId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Button icon={<GlobalOutlined />} size="small">
+                View public page
+              </Button>
+            </Link>
+          )}
         </Space>
       )}
 
