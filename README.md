@@ -10,6 +10,42 @@ This is going to be a difficult task probably going to take months but the follo
 
 This is a very novel work and can enhance the quality of work everywhere in the world. 
 
+## Local development
+
+Run the **FastAPI backend** and **Vite (React) frontend** in two separate terminals. The UI is configured to call the API at `http://localhost:8000` (see `frontend/src/services/api.ts`). CORS on the API allows `http://localhost:5173` and `http://localhost:3000`.
+
+### Prerequisites
+
+- Python 3.11 or newer
+- Node.js with npm (a current LTS release is recommended)
+
+### Backend (FastAPI)
+
+Install the packages the API imports (they are not all listed in the root `pyproject.toml` today), then start Uvicorn from the **repository root** so uploads are stored under `backend/uploads/`:
+
+```bash
+cd /path/to/greek-foundation
+uv sync # Just ensure the pyproject.toml file is there.
+uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+- Health check: [http://localhost:8000/](http://localhost:8000/)
+- Interactive API docs: [http://localhost:8000/docs](http://localhost:8000/docs)
+
+
+
+### Frontend (React + Vite)
+
+```bash
+cd /path/to/greek-foundation/frontend
+npm install
+npm run dev
+```
+
+Open the URL printed in the terminal (by default [http://localhost:5173/](http://localhost:5173/)).
+
+---
+
 My **current priorites** are : 
 
 1. Figuring out a good base line $\to$ which means experimenting with different providers, open source models to see what is the accuracy we are getting and using that baseline to : 
@@ -97,3 +133,4 @@ Frontend will be available at:
 1. Open `http://localhost:5173`
 2. Upload an image in the UI
 3. Confirm backend requests are successful in browser devtools/network tab
+2. What did I do : 1. Mostly busy with exams 2. Tried out what is working and what is not working 3. Learning react & next js so that frontend can be made much better 4. Got some feedback from researchers to implement what is necessary 5. Probably next month will better progress. 

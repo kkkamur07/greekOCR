@@ -1,10 +1,24 @@
 [project]
-name = "greek-ocr"
+name = "greek-foundation"
 version = "0.1.0"
-description = "We are going to digitize the whole Greek Legal manuscripts"
-readme = "README.md"
-requires-python = ">=3.11"
+description = "OCR and processing for Greek documents"
+requires-python = ">=3.9"
 dependencies = [
-    "streamlit>=1.51.0",
-    "transformers>=4.57.1",
+    "numpy>=1.24.4",
+    "opencv-python>=4.13.0.92",
 ]
+
+[project.optional-dependencies]
+# Matches ``POST /api/binarize`` (Kraken ``nlbin``); pulls scipy and related stacks.
+kraken = ["kraken>=7.0"]
+# TrOCR fine-tuning (``python ocr/train_bible.py``).
+train = [
+    "accelerate>=0.26.0",
+    "jiwer>=3.0.0",
+    "pillow>=10.0.0",
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
+    "transformers>=4.40.0",
+]
+# ICDAR 2023 Greek pipeline (Calamari line HTR). Install separately if TensorFlow conflicts arise.
+calamari = ["calamari-ocr>=3.0.0"]
