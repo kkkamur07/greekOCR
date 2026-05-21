@@ -1,12 +1,12 @@
 # Kanban
 
-> Updated 2026-05-21 — full issue set (000–017); all links resolve
+> Regenerated 2026-05-21
 
-**WIP limits:** In progress ≤ **4** | Review ≤ **4** (AFK only)
+**WIP limits:** In progress ≤ **4** | Review ≤ **5** (AFK only)
 
-**HITL (2):** [005](005-inference-catalog-bindings.md), [014](014-frontend-layout-editor.md) — you implement/review → **Done** (skip Review column).
+**HITL:** [005](005-inference-catalog-bindings.md), [014](014-frontend-layout-editor.md) — you own In progress → Done (no Review).
 
-**AFK (15):** agent → **Review** → you → **Done**.
+**AFK:** agent → **Review** → you → **Done** (one `feat/NNN-slug` branch per lane).
 
 ## Ready (AFK)
 
@@ -22,7 +22,7 @@ _(empty — 0/4)_
 
 ## Review
 
-_(empty — 0/4)_
+_(empty — 0/5)_
 
 ## Done
 
@@ -50,10 +50,12 @@ _(empty — 0/4)_
 
 | When | Agent (AFK) | You (HITL) |
 |------|-------------|------------|
-| **Now** | **003** | **005** model paths & seeds |
+| **Now** | **003** (lane A) | **005** (lane B) |
 | 003 + 005 done | **006** + **011** | — |
 | 006 done | **007** + **009** | — |
 | 007 + 009 done | **008** + **010** | — |
-| 003 + 012 done | **013** | **014** (after 008) |
-| 006 + 004 + 012 | **016** | — |
-| 011 + 012 | **017** | — |
+| 003 + 012 done | **013** | — |
+| 008 + 012 done | — | **014** |
+| 010 + 012 done | **015** | — |
+| 006 + 004 + 012 done | **016** | — |
+| 011 + 012 done | **017** | — |

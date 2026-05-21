@@ -1,52 +1,82 @@
 {
-  "generated_at": "2026-05-21T20:00:00Z",
-  "limits": { "in_progress": 4, "review": 4 },
+  "generated_at": "2026-05-21T10:16:37Z",
+  "limits": { "in_progress": 4, "review": 5, "parallel_lanes": 2 },
   "counts": {
+    "in_progress": 0,
+    "review": 0,
+    "over_limit": { "in_progress": false, "review": false }
+  },
+  "stats": {
     "total": 18,
     "done": 5,
     "ready_afk": 1,
     "ready_hitl": 1,
     "backlog": 11,
-    "in_progress": 0,
-    "review": 0
+    "blocked": 11
   },
-  "issues": [
-    { "id": "000", "file": "done/000-platform-foundation.md", "title": "platform-foundation", "type": "AFK", "status": "done" },
-    { "id": "001", "file": "done/001-user-auth-jwt.md", "title": "user-auth-jwt", "type": "AFK", "status": "done" },
-    { "id": "002", "file": "done/002-projects-sharing.md", "title": "projects-sharing", "type": "AFK", "status": "done" },
-    { "id": "003", "file": "003-documents-parts-media.md", "title": "documents-parts-media", "type": "AFK", "status": "ready" },
-    { "id": "004", "file": "done/004-job-runner.md", "title": "job-runner", "type": "AFK", "status": "done" },
-    { "id": "005", "file": "005-inference-catalog-bindings.md", "title": "inference-catalog-bindings", "type": "HITL", "status": "ready" },
-    { "id": "006", "file": "006-segment-job-kraken.md", "title": "segment-job-kraken", "type": "AFK", "status": "backlog" },
-    { "id": "007", "file": "007-segment-merge.md", "title": "segment-merge", "type": "AFK", "status": "backlog" },
-    { "id": "008", "file": "008-layout-edit-reset-api.md", "title": "layout-edit-reset-api", "type": "AFK", "status": "backlog" },
-    { "id": "009", "file": "009-transcribe-job-layers.md", "title": "transcribe-job-layers", "type": "AFK", "status": "backlog" },
-    { "id": "010", "file": "010-ground-truth-copy-edit-api.md", "title": "ground-truth-copy-edit-api", "type": "AFK", "status": "backlog" },
-    { "id": "011", "file": "011-access-public-published.md", "title": "access-public-published", "type": "AFK", "status": "backlog" },
-    { "id": "012", "file": "done/012-nextjs-openapi-codegen.md", "title": "nextjs-openapi-codegen", "type": "AFK", "status": "done" },
-    { "id": "013", "file": "013-frontend-projects-documents.md", "title": "frontend-projects-documents", "type": "AFK", "status": "backlog" },
-    { "id": "014", "file": "014-frontend-layout-editor.md", "title": "frontend-layout-editor", "type": "HITL", "status": "backlog" },
-    { "id": "015", "file": "015-frontend-transcription-editor.md", "title": "frontend-transcription-editor", "type": "AFK", "status": "backlog" },
-    { "id": "016", "file": "016-frontend-jobs-panel.md", "title": "frontend-jobs-panel", "type": "AFK", "status": "backlog" },
-    { "id": "017", "file": "017-frontend-public-published-view.md", "title": "frontend-public-published-view", "type": "AFK", "status": "backlog" }
+  "warnings": [
+    "Frontmatter blocked_by paths omit issues/ prefix; body ## Blocked by uses issues/ — harmless drift"
   ],
+  "dag": {
+    "mermaid": "flowchart TD\n  I000[\"000 platform-foundation ✓\"]\n  I001[\"001 user-auth-jwt ✓\"]\n  I002[\"002 projects-sharing ✓\"]\n  I004[\"004 job-runner ✓\"]\n  I012[\"012 openapi-codegen ✓\"]\n  I005[\"005 inference-catalog HITL\"]\n  I003[\"003 documents-parts-media\"]\n  I006[\"006 segment-job-kraken\"]\n  I007[\"007 segment-merge\"]\n  I008[\"008 layout-edit-reset-api\"]\n  I009[\"009 transcribe-job-layers\"]\n  I010[\"010 ground-truth-copy-edit\"]\n  I011[\"011 access-public-published\"]\n  I013[\"013 frontend-projects-docs\"]\n  I014[\"014 frontend-layout-editor HITL\"]\n  I015[\"015 frontend-transcription-editor\"]\n  I016[\"016 frontend-jobs-panel\"]\n  I017[\"017 frontend-public-view\"]\n  I000 --> I001\n  I000 --> I004\n  I000 --> I005\n  I001 --> I002\n  I001 --> I012\n  I002 --> I003\n  I003 --> I006\n  I004 --> I006\n  I005 --> I006\n  I006 --> I007\n  I007 --> I008\n  I007 --> I009\n  I005 --> I009\n  I003 --> I009\n  I009 --> I010\n  I003 --> I011\n  I001 --> I011\n  I003 --> I013\n  I002 --> I013\n  I012 --> I013\n  I008 --> I014\n  I012 --> I014\n  I010 --> I015\n  I012 --> I015\n  I004 --> I016\n  I012 --> I016\n  I006 --> I016\n  I011 --> I017\n  I012 --> I017\n  classDef hitl stroke-dasharray: 5 5\n  class I005,I014 hitl",
+    "parallel_lanes": [
+      ["003-documents-parts-media.md"],
+      ["005-inference-catalog-bindings.md"]
+    ]
+  },
   "kanban": {
     "columns": [
       {
         "name": "Done",
-        "issues": ["000", "001", "002", "004", "012"]
+        "over_limit": false,
+        "issues": [
+          { "id": "000", "file": "done/000-platform-foundation.md", "title": "platform-foundation", "type": "AFK", "status": "done" },
+          { "id": "001", "file": "done/001-user-auth-jwt.md", "title": "user-auth-jwt", "type": "AFK", "status": "done" },
+          { "id": "002", "file": "done/002-projects-sharing.md", "title": "projects-sharing", "type": "AFK", "status": "done" },
+          { "id": "004", "file": "done/004-job-runner.md", "title": "job-runner", "type": "AFK", "status": "done" },
+          { "id": "012", "file": "done/012-nextjs-openapi-codegen.md", "title": "nextjs-openapi-codegen", "type": "AFK", "status": "done" }
+        ]
       },
       {
         "name": "Ready (AFK)",
-        "issues": ["003"]
+        "over_limit": false,
+        "issues": [
+          { "id": "003", "file": "003-documents-parts-media.md", "title": "documents-parts-media", "type": "AFK", "status": "ready" }
+        ]
       },
       {
         "name": "Ready (HITL)",
-        "issues": ["005"]
+        "over_limit": false,
+        "issues": [
+          { "id": "005", "file": "005-inference-catalog-bindings.md", "title": "inference-catalog-bindings", "type": "HITL", "status": "ready" }
+        ]
+      },
+      {
+        "name": "In progress",
+        "over_limit": false,
+        "issues": []
+      },
+      {
+        "name": "Review",
+        "over_limit": false,
+        "issues": []
       },
       {
         "name": "Backlog",
-        "issues": ["006", "007", "008", "009", "010", "011", "013", "014", "015", "016", "017"]
+        "over_limit": false,
+        "issues": [
+          { "id": "006", "file": "006-segment-job-kraken.md", "title": "segment-job-kraken", "type": "AFK", "status": "backlog" },
+          { "id": "007", "file": "007-segment-merge.md", "title": "segment-merge", "type": "AFK", "status": "backlog" },
+          { "id": "008", "file": "008-layout-edit-reset-api.md", "title": "layout-edit-reset-api", "type": "AFK", "status": "backlog" },
+          { "id": "009", "file": "009-transcribe-job-layers.md", "title": "transcribe-job-layers", "type": "AFK", "status": "backlog" },
+          { "id": "010", "file": "010-ground-truth-copy-edit-api.md", "title": "ground-truth-copy-edit-api", "type": "AFK", "status": "backlog" },
+          { "id": "011", "file": "011-access-public-published.md", "title": "access-public-published", "type": "AFK", "status": "backlog" },
+          { "id": "013", "file": "013-frontend-projects-documents.md", "title": "frontend-projects-documents", "type": "AFK", "status": "backlog" },
+          { "id": "014", "file": "014-frontend-layout-editor.md", "title": "frontend-layout-editor", "type": "HITL", "status": "backlog" },
+          { "id": "015", "file": "015-frontend-transcription-editor.md", "title": "frontend-transcription-editor", "type": "AFK", "status": "backlog" },
+          { "id": "016", "file": "016-frontend-jobs-panel.md", "title": "frontend-jobs-panel", "type": "AFK", "status": "backlog" },
+          { "id": "017", "file": "017-frontend-public-published-view.md", "title": "frontend-public-published-view", "type": "AFK", "status": "backlog" }
+        ]
       }
     ]
   }

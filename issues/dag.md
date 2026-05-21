@@ -1,6 +1,33 @@
 # Issue DAG
 
-> Generated 2026-05-21 from `issues/**/*.md` frontmatter
+> Regenerated 2026-05-21
+
+## Warnings
+
+- **Frontmatter vs body drift:** several issues use `done/NNN-….md` in `blocked_by` but `issues/done/…` in `## Blocked by` — equivalent for humans; normalize if automating.
+
+## Stats
+
+| Metric | Count |
+|--------|------:|
+| Total issues | 18 |
+| Done | 5 |
+| Ready (AFK) | 1 |
+| Ready (HITL) | 1 |
+| Backlog | 11 |
+| In progress | 0 |
+| Review | 0 |
+
+## Parallel lanes (ready now)
+
+Up to **2** AFK lanes without approval (WIP in progress ≤ 4).
+
+| Lane | Issues | Branch suggestion |
+|------|--------|-------------------|
+| **A** | [003-documents-parts-media](003-documents-parts-media.md) | `feat/003-documents-parts-media` |
+| **B** | [005-inference-catalog-bindings](005-inference-catalog-bindings.md) (HITL — **you**) | `work/005-inference-catalog` |
+
+After **003** + **005** complete → **006** + **011** can run in parallel.
 
 ## Mermaid
 
@@ -54,20 +81,7 @@ flowchart TD
   I006 --> I016
   I011 --> I017
   I012 --> I017
+
+  classDef hitl stroke-dasharray: 5 5
+  class I005,I014 hitl
 ```
-
-## Parallel lanes (when blockers clear)
-
-| Lane | Issues | Notes |
-|------|--------|-------|
-| **Now** | 003 (AFK), 005 (HITL) | After 002/000 done |
-| After 003 + 005 | 006, 011 | Segment + access policy |
-| After 006 | 007, 009 | Merge + transcribe jobs |
-| After 007 + 009 | 008, 010 | Layout API + ground truth API |
-| After 003 + 012 | 013 | Projects/documents UI |
-| After 006 + 004 + 012 | 016 | Jobs panel |
-| After 011 + 012 | 017 | Public view |
-
-## Warnings
-
-- None — all kanban links resolve to committed issue files.
