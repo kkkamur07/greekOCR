@@ -13,6 +13,7 @@ interface TranscriptionDetailProps {
   onDelete: () => void;
   onUpdateText: (text: string) => void;
   onTranscribe?: () => void;
+  readOnly?: boolean;
 }
 
 const TranscriptionDetail: React.FC<TranscriptionDetailProps> = ({
@@ -22,6 +23,7 @@ const TranscriptionDetail: React.FC<TranscriptionDetailProps> = ({
   onDelete,
   onUpdateText,
   onTranscribe,
+  readOnly = false,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState('');
@@ -70,14 +72,16 @@ const TranscriptionDetail: React.FC<TranscriptionDetailProps> = ({
         </Button>
         <Text strong>Region #{region.id}</Text>
         <div style={{ flex: 1 }} />
-        <Button 
-          danger 
-          type="text" 
-          icon={<DeleteOutlined />} 
-          onClick={onDelete}
-        >
-          Delete
-        </Button>
+        {!readOnly && (
+          <Button
+            danger
+            type="text"
+            icon={<DeleteOutlined />}
+            onClick={onDelete}
+          >
+            Delete
+          </Button>
+        )}
       </div>
 
       <Divider style={{ margin: '0 0 16px 0' }} />
@@ -103,13 +107,16 @@ const TranscriptionDetail: React.FC<TranscriptionDetailProps> = ({
         <div className="text-section">
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
             <Text type="secondary">Transcription</Text>
-            {!isEditing && transcription && (
+            {!readOnly && !isEditing && transcription && (
               <Space>
                 <Button size="small" icon={<CopyOutlined />} onClick={handleCopy} />
                 <Button size="small" type="primary" ghost icon={<EditOutlined />} onClick={() => setIsEditing(true)}>
                   Edit
                 </Button>
               </Space>
+            )}
+            {readOnly && transcription && (
+              <Button size="small" icon={<CopyOutlined />} onClick={handleCopy} />
             )}
           </div>
 

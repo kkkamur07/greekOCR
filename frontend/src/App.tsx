@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { DocumentDetailPage } from './pages/DocumentDetailPage';
+import { PublicDocumentPage } from './pages/PublicDocumentPage';
 import { LoginPage } from './pages/LoginPage';
 import { ProjectDashboardPage } from './pages/ProjectDashboardPage';
 import { ProjectsPage } from './pages/ProjectsPage';
@@ -38,6 +39,10 @@ function App() {
             <DocumentDetailPage />
           </ProtectedRoute>
         }
+      />
+      <Route
+        path="/public/projects/:projectId/documents/:documentId"
+        element={<PublicDocumentPage />}
       />
       <Route path="/demo" element={<LegacyDemoApp />} />
       <Route
