@@ -1,9 +1,15 @@
 """Local filesystem storage for DocumentPart images."""
 
+import re
 from pathlib import Path
 from uuid import UUID
 
 from backend.core.settings import get_app_settings
+
+# Keys are generated as parts/{uuid}.{suffix} — reject traversal and odd paths.
+_SAFE_IMAGE_KEY = re.compile(
+    r"^parts/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[a-z0-9]{1,16}$"
+)
 
 
 class MediaStore:
@@ -12,12 +18,23 @@ class MediaStore:
         self._root.mkdir(parents=True, exist_ok=True)
 
     def part_image_key(self, part_id: UUID, *, suffix: str = "bin") -> str:
-        safe = suffix.lstrip(".") or "bin"
+        safe = re.sub(r"[^a-z0-9]", "", suffix.lstrip(".").lower())[:16] or "bin"
         return f"parts/{part_id}.{safe}"
 
+    def _validate_image_key(self, image_key: str) -> None:
+        if not image_key or image_key.startswith("/"):
+            raise ValueError("Invalid image key")
+        if Path(image_key).is_absolute():
+            raise ValueError("Invalid image key")
+        if ".." in Path(image_key).parts:
+            raise ValueError("Invalid image key")
+        if not _SAFE_IMAGE_KEY.match(image_key):
+            raise ValueError("Invalid image key")
+
     def absolute_path(self, image_key: str) -> Path:
+        self._validate_image_key(image_key)
         path = (self._root / image_key).resolve()
-        if not str(path).startswith(str(self._root)):
+        if not path.is_relative_to(self._root):
             raise ValueError("Invalid image key")
         return path
 

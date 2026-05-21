@@ -61,11 +61,13 @@ def test_archived_document_hidden_from_default_list(client, owner_headers, owner
     assert create.status_code == 201
     document_id = create.json()["id"]
 
-    client.patch(
+    archive = client.patch(
         f"{base}/{document_id}",
         headers=owner_headers,
         json={"workflow": "archived"},
     )
+    assert archive.status_code == 200
+    assert archive.json()["workflow"] == "archived"
 
     default_list = client.get(base, headers=owner_headers)
     assert default_list.status_code == 200
@@ -151,3 +153,43 @@ def test_upload_reorder_delete_part_and_serve_media(client, owner_headers, owner
 
     after = client.get(f"{base}/{document_id}", headers=owner_headers)
     assert len(after.json()["parts"]) == 1
+
+
+@pytest.mark.integration
+def test_reorder_rejects_duplicate_part_ids(client, owner_headers, owner_project):
+    project_id = owner_project["id"]
+    base = _documents_url(project_id)
+    create = client.post(base, headers=owner_headers, json={"name": "Reorder dup"})
+    assert create.status_code == 201
+    document_id = create.json()["id"]
+
+    upload = client.post(
+        f"{base}/{document_id}/parts",
+        headers=owner_headers,
+        files={"file": ("folio.png", MINIMAL_PNG, "image/png")},
+    )
+    assert upload.status_code == 201
+    part_id = upload.json()["id"]
+
+    reorder = client.patch(
+        f"{base}/{document_id}/parts/reorder",
+        headers=owner_headers,
+        json={"part_ids": [part_id, part_id]},
+    )
+    assert reorder.status_code == 422
+
+
+@pytest.mark.integration
+def test_patch_null_name_returns_422(client, owner_headers, owner_project):
+    project_id = owner_project["id"]
+    base = _documents_url(project_id)
+    create = client.post(base, headers=owner_headers, json={"name": "Named"})
+    assert create.status_code == 201
+    document_id = create.json()["id"]
+
+    response = client.patch(
+        f"{base}/{document_id}",
+        headers=owner_headers,
+        json={"name": None},
+    )
+    assert response.status_code == 422

@@ -70,7 +70,7 @@ async def get_document(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> DocumentWithPartsResponse:
     document = await _service.get_document(db, current_user, project_id, document_id)
-    parts = await _service.list_parts(db, current_user, project_id, document_id)
+    parts = sorted(document.parts, key=lambda p: p.order)
     return DocumentWithPartsResponse(
         **DocumentResponse.model_validate(document).model_dump(),
         parts=[_part_response(p) for p in parts],

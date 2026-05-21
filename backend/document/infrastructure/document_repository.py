@@ -104,6 +104,10 @@ class DocumentRepository:
         self, session: AsyncSession, document: Document, ordered_part_ids: list[UUID]
     ) -> list[DocumentPart]:
         parts_by_id = {p.id: p for p in document.parts}
+        if len(ordered_part_ids) != len(parts_by_id):
+            return []
+        if len(set(ordered_part_ids)) != len(ordered_part_ids):
+            return []
         if set(ordered_part_ids) != set(parts_by_id):
             return []
         for index, part_id in enumerate(ordered_part_ids):

@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from backend.document.infrastructure.orm_models import DocumentWorkflow
 
@@ -15,6 +15,13 @@ class DocumentCreateRequest(BaseModel):
 class DocumentUpdateRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=512)
     workflow: DocumentWorkflow | None = None
+
+    @field_validator("name", "workflow", mode="before")
+    @classmethod
+    def reject_explicit_null(cls, value: object) -> object:
+        if value is None:
+            raise ValueError("must not be null")
+        return value
 
 
 class DocumentResponse(BaseModel):

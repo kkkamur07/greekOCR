@@ -1,5 +1,6 @@
 """Document and part use cases with project membership checks."""
 
+from pathlib import Path
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -195,8 +196,21 @@ class DocumentService:
         require_can_read(document, project, None)
         return part
 
+    def resolve_part_image_path(self, part: DocumentPart) -> Path:
+        """Resolved on-disk path for streaming; raises NotFoundError if missing."""
+        try:
+            path = self._media.absolute_path(part.image_key)
+        except (ValueError, FileNotFoundError):
+            raise NotFoundError("Part image not found") from None
+        if not path.is_file():
+            raise NotFoundError("Part image not found")
+        return path
+
     def read_part_bytes(self, part: DocumentPart) -> bytes:
-        return self._media.read(part.image_key)
+        try:
+            return self._media.read(part.image_key)
+        except (ValueError, FileNotFoundError):
+            raise NotFoundError("Part image not found") from None
 
     async def _load_project(self, session: AsyncSession, project_id: UUID) -> Project:
         project = await self._projects.get_by_id(session, project_id)

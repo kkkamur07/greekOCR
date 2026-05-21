@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ProjectCreateRequest(BaseModel):
@@ -16,6 +16,13 @@ class ProjectUpdateRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=512)
     slug: str | None = Field(default=None, min_length=1, max_length=512)
     guidelines: str | None = None
+
+    @field_validator("name", "slug", mode="before")
+    @classmethod
+    def reject_explicit_null(cls, value: object) -> object:
+        if value is None:
+            raise ValueError("must not be null")
+        return value
 
 
 class ShareUserRequest(BaseModel):

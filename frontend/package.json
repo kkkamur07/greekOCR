@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b tsconfig.api.json && vite build",
+    "build": "npm run typecheck:api && vite build",
     "typecheck": "tsc -b",
-    "typecheck:api": "tsc -b tsconfig.api.json",
+    "typecheck:api": "tsc --noEmit -p tsconfig.api.json",
     "codegen:api": "openapi-typescript openapi/openapi.json -o src/api/schema.d.ts",
     "lint": "eslint .",
     "preview": "vite preview"
