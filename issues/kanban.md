@@ -1,6 +1,6 @@
 # Kanban
 
-> Regenerated 2026-05-21 (post-merge)
+> Regenerated 2026-05-21 (016, 017 reviewed → done)
 
 **WIP limits:** In progress ≤ **4** | Review ≤ **5** (AFK only)
 
@@ -20,12 +20,7 @@ _(empty — 0/4)_
 
 ## Review
 
-_(empty — 0/5 AFK backend)_
-
-### Frontend (exempt from WIP limits)
-
-- [ ] [017-frontend-public-published-view](017-frontend-public-published-view.md) — branch `feat/017-frontend-public`
-- [ ] [016-frontend-jobs-panel](016-frontend-jobs-panel.md) — branch `feat/016-frontend-jobs`
+_(empty — 0/5)_
 
 ## Done
 
@@ -37,6 +32,8 @@ _(empty — 0/5 AFK backend)_
 - [x] [011-access-public-published](done/011-access-public-published.md)
 - [x] [012-nextjs-openapi-codegen](done/012-nextjs-openapi-codegen.md)
 - [x] [013-frontend-projects-documents](done/013-frontend-projects-documents.md)
+- [x] [016-frontend-jobs-panel](done/016-frontend-jobs-panel.md)
+- [x] [017-frontend-public-published-view](done/017-frontend-public-published-view.md)
 
 ## Backlog
 
@@ -47,8 +44,6 @@ _(empty — 0/5 AFK backend)_
 - [ ] [010-ground-truth-copy-edit-api](010-ground-truth-copy-edit-api.md)
 - [ ] [014-frontend-layout-editor](014-frontend-layout-editor.md)
 - [ ] [015-frontend-transcription-editor](015-frontend-transcription-editor.md)
-- [ ] [016-frontend-jobs-panel](016-frontend-jobs-panel.md)
-- [ ] [017-frontend-public-published-view](017-frontend-public-published-view.md)
 
 ## Parallelism cheat sheet
 
@@ -56,4 +51,4 @@ _(empty — 0/5 AFK backend)_
 |------|-------------|------------|
 | **Now** | — | **005** (lane B) |
 | 005 merged | **006** (lane C) | — |
-| Frontend (parallel) | **016**, **017** in review (`feat/016-*`, `feat/017-*`) | **014** (layout UI, blocked on 008) |
+| 006 + 008 path | — | **014** (layout UI) |
