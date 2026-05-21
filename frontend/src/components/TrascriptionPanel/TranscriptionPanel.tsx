@@ -14,6 +14,7 @@ interface TranscriptionPanelProps {
   onUpdateTranscription: (regionId: number, text: string) => void;
   onDeleteRegion: (regionId: number) => void;
   onTranscribeRegion?: (regionId: number) => void;
+  readOnly?: boolean;
 }
 
 const TranscriptionPanel: React.FC<TranscriptionPanelProps> = ({
@@ -24,6 +25,7 @@ const TranscriptionPanel: React.FC<TranscriptionPanelProps> = ({
   onUpdateTranscription,
   onDeleteRegion,
   onTranscribeRegion,
+  readOnly = false,
 }) => {
   const getTranscription = (regionId: number) => {
     return transcriptions.find(t => t.region_id === regionId);
@@ -42,10 +44,15 @@ const TranscriptionPanel: React.FC<TranscriptionPanelProps> = ({
         <TranscriptionDetail
           region={selectedRegion}
           transcription={getTranscription(safeSelectedId)}
+          readOnly={readOnly}
           onClose={() => onSelectRegion(null)}
           onDelete={() => onDeleteRegion(safeSelectedId)}
           onUpdateText={(text) => onUpdateTranscription(safeSelectedId, text)}
-          onTranscribe={onTranscribeRegion ? () => onTranscribeRegion(safeSelectedId) : undefined}
+          onTranscribe={
+            readOnly || !onTranscribeRegion
+              ? undefined
+              : () => onTranscribeRegion(safeSelectedId)
+          }
         />
       </div>
     );

@@ -24,6 +24,7 @@ interface ImageCanvasProps {
   onRedo?: () => void;
   canUndo?: boolean;
   canRedo?: boolean;
+  readOnly?: boolean;
 }
 
 const ImageCanvas: React.FC<ImageCanvasProps> = ({
@@ -40,6 +41,7 @@ const ImageCanvas: React.FC<ImageCanvasProps> = ({
   onRedo,
   canUndo = false,
   canRedo = false,
+  readOnly = false,
 }) => {
   const [drawMode, setDrawMode] = useState<DrawMode>('none');
   const [editMode, setEditMode] = useState<'none' | 'vertices'>('none');
@@ -118,21 +120,22 @@ const ImageCanvas: React.FC<ImageCanvasProps> = ({
 
   // Keyboard shortcuts
   useKeyboardShortcuts({
-    onDrawBox: () => imageUrl && toggleDrawMode('box'),
-    onDrawPolygon: () => imageUrl && toggleDrawMode('polygon'),
-    onEditVertices: () => imageUrl && regions.length > 0 && toggleEditMode(),
-    onDelete: handleDeleteSelected,
-    onEscape: cancelMode,
-    onUndo: onUndo,
-    onRedo: onRedo,
-    onMoveUp: () => moveRegion(0, -settings.moveStep),
-    onMoveDown: () => moveRegion(0, settings.moveStep),
-    onMoveLeft: () => moveRegion(-settings.moveStep, 0),
-    onMoveRight: () => moveRegion(settings.moveStep, 0),
+    onDrawBox: readOnly ? undefined : () => imageUrl && toggleDrawMode('box'),
+    onDrawPolygon: readOnly ? undefined : () => imageUrl && toggleDrawMode('polygon'),
+    onEditVertices: readOnly ? undefined : () => imageUrl && regions.length > 0 && toggleEditMode(),
+    onDelete: readOnly ? undefined : handleDeleteSelected,
+    onEscape: readOnly ? undefined : cancelMode,
+    onUndo: readOnly ? undefined : onUndo,
+    onRedo: readOnly ? undefined : onRedo,
+    onMoveUp: readOnly ? undefined : () => moveRegion(0, -settings.moveStep),
+    onMoveDown: readOnly ? undefined : () => moveRegion(0, settings.moveStep),
+    onMoveLeft: readOnly ? undefined : () => moveRegion(-settings.moveStep, 0),
+    onMoveRight: readOnly ? undefined : () => moveRegion(settings.moveStep, 0),
   });
 
   return (
     <div className="image-canvas-container">
+      {!readOnly && (
       <div className="canvas-toolbar">
         <Space wrap size="middle">
           {/* Drawing Tools */}
@@ -235,6 +238,7 @@ const ImageCanvas: React.FC<ImageCanvasProps> = ({
           </span>
         </Space>
       </div>
+      )}
 
       <div className="canvas-wrapper">
         {!imageUrl ? (
@@ -255,13 +259,14 @@ const ImageCanvas: React.FC<ImageCanvasProps> = ({
         )}
       </div>
 
-      {/* Settings Panel */}
-      <SettingsPanel
-        visible={settingsVisible}
-        onClose={() => setSettingsVisible(false)}
-        settings={settings}
-        onSettingsChange={setSettings}
-      />
+      {!readOnly && (
+        <SettingsPanel
+          visible={settingsVisible}
+          onClose={() => setSettingsVisible(false)}
+          settings={settings}
+          onSettingsChange={setSettings}
+        />
+      )}
     </div>
   );
 };

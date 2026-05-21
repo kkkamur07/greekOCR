@@ -2,7 +2,7 @@
 id: "017"
 title: "frontend-public-published-view"
 type: AFK
-status: backlog
+status: review
 blocked_by:
   - "done/011-access-public-published.md"
   - "done/012-nextjs-openapi-codegen.md"
