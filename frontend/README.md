@@ -63,3 +63,16 @@ Legacy OCR UI components still have open `tsc` debt; use `npm run typecheck` for
 
 - After changing FastAPI routes or Pydantic schemas under `backend/`
 - Before opening a PR that touches API contracts
+
+## Jobs panel (issue 016)
+
+The document editor shows a **Jobs** card (`JobsPanel`) that tracks jobs enqueued from the UI. Each row polls `GET /jobs/{id}` every ~1.5s until status is `done` or `failed`. Failed jobs surface the API `error` string via antd `notification` (and inline on the row).
+
+### Dev smoke: noop test job
+
+1. API: set `ENABLE_TEST_JOB_ROUTES=true` in `backend/core/.env` (see `backend/core/.env.example`).
+2. Frontend: in `.env.local`, set `VITE_ENABLE_TEST_JOBS=true` (see `.env.local.example`).
+3. Start API and worker (`uvicorn backend.core.app:create_app --factory --reload` from repo root).
+4. Open a document, click **Run test job**, confirm the row moves `pending` → `running` → `done`.
+
+Segment/transcribe enqueue buttons arrive with issues 006/009; the panel already supports multiple concurrent job rows.
