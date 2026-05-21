@@ -2,9 +2,9 @@
 id: "003"
 title: "documents-parts-media"
 type: AFK
-status: backlog
+status: ready
 blocked_by:
-  - "002-projects-sharing.md"
+  - "done/002-projects-sharing.md"
 parent_prd: "issues/prd.md"
 ---
 

@@ -2,10 +2,10 @@
 id: "002"
 title: "projects-sharing"
 type: AFK
-status: review
+status: done
 branch: feat/002-projects-sharing
 blocked_by:
-  - "001-user-auth-jwt.md"
+  - "done/001-user-auth-jwt.md"
 parent_prd: "issues/prd.md"
 ---
 

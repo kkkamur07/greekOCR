@@ -2,7 +2,7 @@
 id: "001"
 title: "user-auth-jwt"
 type: AFK
-status: review
+status: done
 branch: feat/001-user-auth-jwt
 blocked_by:
   - "done/000-platform-foundation.md"

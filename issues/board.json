@@ -1,17 +1,28 @@
 {
-  "generated_at": "2026-05-21T14:20:00Z",
+  "generated_at": "2026-05-21T18:00:00Z",
   "limits": { "in_progress": 4, "review": 4, "parallel_lanes": 2 },
-  "counts": { "in_progress": 0, "review": 1 },
-  "stats": { "total": 18, "ready_afk": 2, "ready_hitl": 0, "blocked": 15, "in_review": 1 },
+  "counts": { "in_progress": 0, "review": 0, "done": 5, "ready_afk": 1, "ready_hitl": 1 },
   "dag": {
-    "mermaid": "flowchart TD\n  I000[\"000 platform-foundation\"] --> I001[\"001 user-auth-jwt\"]\n  I000 --> I004[\"004 job-runner\"]\n  I000 --> I005[\"005 inference-catalog HITL\"]",
-    "parallel_lanes": [["001-user-auth-jwt.md", "004-job-runner.md"]]
+    "mermaid": "flowchart TD\n  I000[\"000 platform-foundation\"] --> I001[\"001 user-auth-jwt\"]\n  I000 --> I004[\"004 job-runner\"]\n  I000 --> I005[\"005 inference-catalog HITL\"]\n  I001 --> I002[\"002 projects-sharing\"]\n  I001 --> I012[\"012 openapi-codegen\"]\n  I002 --> I003[\"003 documents-parts-media\"]\n  I003 --> I011[\"011 access-public-published\"]\n  I004 --> I006[\"006 segment-job-kraken\"]",
+    "parallel_lanes": [["003-documents-parts-media.md"]]
   },
   "kanban": {
     "columns": [
-      { "name": "Review", "over_limit": false, "issues": [{ "file": "done/000-platform-foundation.md", "title": "platform-foundation", "type": "AFK", "branch": "feat/000-platform-foundation" }] },
+      { "name": "Done", "issues": [
+        { "file": "done/000-platform-foundation.md", "title": "platform-foundation", "type": "AFK", "status": "done" },
+        { "file": "done/001-user-auth-jwt.md", "title": "user-auth-jwt", "type": "AFK", "status": "done" },
+        { "file": "done/002-projects-sharing.md", "title": "projects-sharing", "type": "AFK", "status": "done" },
+        { "file": "done/004-job-runner.md", "title": "job-runner", "type": "AFK", "status": "done" },
+        { "file": "done/012-nextjs-openapi-codegen.md", "title": "nextjs-openapi-codegen", "type": "AFK", "status": "done" }
+      ]},
+      { "name": "Review", "over_limit": false, "issues": [] },
       { "name": "In progress", "over_limit": false, "issues": [] },
-      { "name": "Ready (AFK)", "over_limit": false, "issues": [{ "file": "001-user-auth-jwt.md", "title": "user-auth-jwt", "type": "AFK" }, { "file": "004-job-runner.md", "title": "job-runner", "type": "AFK" }] }
+      { "name": "Ready (AFK)", "issues": [
+        { "file": "003-documents-parts-media.md", "title": "documents-parts-media", "type": "AFK", "status": "ready" }
+      ]},
+      { "name": "Ready (HITL)", "issues": [
+        { "file": null, "title": "005 inference-catalog-bindings", "type": "HITL", "status": "ready", "note": "issue file not created" }
+      ]}
     ]
   }
 }

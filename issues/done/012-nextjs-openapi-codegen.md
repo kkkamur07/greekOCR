@@ -2,10 +2,10 @@
 id: "012"
 title: "nextjs-openapi-codegen"
 type: AFK
-status: review
+status: done
 branch: feat/012-openapi-codegen
 blocked_by:
-  - "001-user-auth-jwt.md"
+  - "done/001-user-auth-jwt.md"
 parent_prd: "issues/prd.md"
 ---
 

@@ -2,7 +2,7 @@
 id: "004"
 title: "job-runner"
 type: AFK
-status: review
+status: done
 branch: feat/004-job-runner
 blocked_by:
   - "done/000-platform-foundation.md"

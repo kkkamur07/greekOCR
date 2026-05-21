@@ -2,7 +2,7 @@
 id: "000"
 title: "platform-foundation"
 type: AFK
-status: review
+status: done
 blocked_by: []
 parent_prd: "issues/prd.md"
 branch: feat/000-platform-foundation

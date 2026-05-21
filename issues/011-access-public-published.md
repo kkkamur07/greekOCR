@@ -5,7 +5,7 @@ type: AFK
 status: backlog
 blocked_by:
   - "003-documents-parts-media.md"
-  - "001-user-auth-jwt.md"
+  - "done/001-user-auth-jwt.md"
 parent_prd: "issues/prd.md"
 ---
 
