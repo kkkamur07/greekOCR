@@ -4,7 +4,7 @@ title: "frontend-public-published-view"
 type: AFK
 status: backlog
 blocked_by:
-  - "011-access-public-published.md"
+  - "done/011-access-public-published.md"
   - "done/012-nextjs-openapi-codegen.md"
 parent_prd: "issues/prd.md"
 ---
@@ -35,7 +35,7 @@ Unauthenticated **Public view** route: read published document metadata, parts, 
 
 ## Blocked by
 
-- `issues/011-access-public-published.md`
+- `issues/done/011-access-public-published.md`
 - `issues/done/012-nextjs-openapi-codegen.md`
 
 ## User stories addressed

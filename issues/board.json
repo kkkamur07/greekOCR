@@ -1,53 +1,31 @@
 {
-  "generated_at": "2026-05-21T16:30:00Z",
+  "generated_at": "2026-05-21T17:00:00Z",
   "limits": { "in_progress": 4, "review": 5, "parallel_lanes": 2 },
   "counts": {
     "in_progress": 0,
-    "review": 3,
+    "review": 0,
     "over_limit": { "in_progress": false, "review": false }
   },
   "stats": {
     "total": 18,
-    "done": 5,
+    "done": 8,
     "ready_afk": 0,
     "ready_hitl": 1,
-    "backlog": 10,
-    "in_review": 3
+    "backlog": 9,
+    "in_review": 0
   },
   "dag": {
     "parallel_lanes": [],
-    "next_after_003_005": [["006-segment-job-kraken.md", "013-frontend-projects-documents.md"]]
+    "next_after_005": [["006-segment-job-kraken.md"]]
   },
   "kanban": {
     "columns": [
       {
-        "name": "Review",
-        "over_limit": false,
+        "name": "Done",
         "issues": [
-          {
-            "id": "003",
-            "file": "003-documents-parts-media.md",
-            "title": "documents-parts-media",
-            "type": "AFK",
-            "status": "review",
-            "branch": "feat/003-documents-parts-media"
-          },
-          {
-            "id": "011",
-            "file": "011-access-public-published.md",
-            "title": "access-public-published",
-            "type": "AFK",
-            "status": "review",
-            "branch": "feat/011-access-public"
-          },
-          {
-            "id": "013",
-            "file": "013-frontend-projects-documents.md",
-            "title": "frontend-projects-documents",
-            "type": "AFK",
-            "status": "review",
-            "branch": "feat/013-frontend-projects"
-          }
+          { "id": "003", "file": "done/003-documents-parts-media.md", "status": "done" },
+          { "id": "011", "file": "done/011-access-public-published.md", "status": "done" },
+          { "id": "013", "file": "done/013-frontend-projects-documents.md", "status": "done" }
         ]
       },
       {
@@ -56,24 +34,9 @@
           {
             "id": "005",
             "file": "005-inference-catalog-bindings.md",
-            "title": "inference-catalog-bindings",
             "type": "HITL",
             "status": "ready"
           }
-        ]
-      },
-      {
-        "name": "Backlog",
-        "issues": [
-          { "id": "006", "file": "006-segment-job-kraken.md", "status": "backlog" },
-          { "id": "007", "file": "007-segment-merge.md", "status": "backlog" },
-          { "id": "008", "file": "008-layout-edit-reset-api.md", "status": "backlog" },
-          { "id": "009", "file": "009-transcribe-job-layers.md", "status": "backlog" },
-          { "id": "010", "file": "010-ground-truth-copy-edit-api.md", "status": "backlog" },
-          { "id": "014", "file": "014-frontend-layout-editor.md", "status": "backlog" },
-          { "id": "015", "file": "015-frontend-transcription-editor.md", "status": "backlog" },
-          { "id": "016", "file": "016-frontend-jobs-panel.md", "status": "backlog" },
-          { "id": "017", "file": "017-frontend-public-published-view.md", "status": "backlog" }
         ]
       }
     ]

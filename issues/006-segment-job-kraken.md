@@ -4,7 +4,7 @@ title: "segment-job-kraken"
 type: AFK
 status: backlog
 blocked_by:
-  - "003-documents-parts-media.md"
+  - "done/003-documents-parts-media.md"
   - "done/004-job-runner.md"
   - "005-inference-catalog-bindings.md"
 parent_prd: "issues/prd.md"
@@ -38,7 +38,7 @@ Adapter lives under `inference` / `ocr/` without importing FastAPI.
 
 ## Blocked by
 
-- `issues/003-documents-parts-media.md`
+- `issues/done/003-documents-parts-media.md`
 - `issues/done/004-job-runner.md`
 - `issues/005-inference-catalog-bindings.md`
 

@@ -1,16 +1,14 @@
 # Kanban
 
-> Regenerated 2026-05-21
+> Regenerated 2026-05-21 (post-merge)
 
 **WIP limits:** In progress ≤ **4** | Review ≤ **5** (AFK only)
 
 **HITL:** [005](005-inference-catalog-bindings.md) — **you** (lane B).
 
-**AFK:** agent → **Review** → you → **Done**.
-
 ## Ready (AFK)
 
-_(empty)_
+_(empty — 006 blocked on 005 HITL)_
 
 ## Ready (HITL)
 
@@ -22,17 +20,18 @@ _(empty — 0/4)_
 
 ## Review
 
-- [ ] [003-documents-parts-media](003-documents-parts-media.md) — branch `feat/003-documents-parts-media`
-- [ ] [011-access-public-published](011-access-public-published.md) — branch `feat/011-access-public`
-- [ ] [013-frontend-projects-documents](013-frontend-projects-documents.md) — **3/5** — branch `feat/013-frontend-projects`
+_(empty — 0/5)_
 
 ## Done
 
 - [x] [000-platform-foundation](done/000-platform-foundation.md)
 - [x] [001-user-auth-jwt](done/001-user-auth-jwt.md)
 - [x] [002-projects-sharing](done/002-projects-sharing.md)
+- [x] [003-documents-parts-media](done/003-documents-parts-media.md)
 - [x] [004-job-runner](done/004-job-runner.md)
+- [x] [011-access-public-published](done/011-access-public-published.md)
 - [x] [012-nextjs-openapi-codegen](done/012-nextjs-openapi-codegen.md)
+- [x] [013-frontend-projects-documents](done/013-frontend-projects-documents.md)
 
 ## Backlog
 
@@ -50,5 +49,6 @@ _(empty — 0/4)_
 
 | When | Agent (AFK) | You (HITL) |
 |------|-------------|------------|
-| **Now** | **003**, **011**, **013** in Review (3/5) | **005** (lane B) |
-| 003 + 005 merged | **006** + **013** (2 lanes) | — |
+| **Now** | — | **005** (lane B) |
+| 005 merged | **006** (lane C) | — |
+| 006 + 008 path | **017** (after 011 ✓) | **014** (layout UI) |

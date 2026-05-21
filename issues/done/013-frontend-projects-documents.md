@@ -2,10 +2,9 @@
 id: "013"
 title: "frontend-projects-documents"
 type: AFK
-status: review
-branch: feat/013-frontend-projects
+status: done
 blocked_by:
-  - "003-documents-parts-media.md"
+  - "done/003-documents-parts-media.md"
   - "done/012-nextjs-openapi-codegen.md"
   - "done/002-projects-sharing.md"
 parent_prd: "issues/prd.md"
@@ -37,7 +36,7 @@ Vite/React routes: login/register, project list (owned + shared), project dashbo
 
 ## Blocked by
 
-- `issues/003-documents-parts-media.md`
+- `issues/done/003-documents-parts-media.md`
 - `issues/done/012-nextjs-openapi-codegen.md`
 - `issues/done/002-projects-sharing.md`
 

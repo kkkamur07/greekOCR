@@ -2,8 +2,7 @@
 id: "003"
 title: "documents-parts-media"
 type: AFK
-status: review
-branch: feat/003-documents-parts-media
+status: done
 blocked_by:
   - "done/002-projects-sharing.md"
 parent_prd: "issues/prd.md"

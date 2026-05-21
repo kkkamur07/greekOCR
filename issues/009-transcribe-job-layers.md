@@ -6,7 +6,7 @@ status: backlog
 blocked_by:
   - "007-segment-merge.md"
   - "005-inference-catalog-bindings.md"
-  - "003-documents-parts-media.md"
+  - "done/003-documents-parts-media.md"
 parent_prd: "issues/prd.md"
 ---
 
@@ -38,7 +38,7 @@ parent_prd: "issues/prd.md"
 
 - `issues/007-segment-merge.md`
 - `issues/005-inference-catalog-bindings.md`
-- `issues/003-documents-parts-media.md`
+- `issues/done/003-documents-parts-media.md`
 
 ## User stories addressed
 

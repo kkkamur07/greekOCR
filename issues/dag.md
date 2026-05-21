@@ -11,24 +11,21 @@
 | Metric | Count |
 |--------|------:|
 | Total issues | 18 |
-| Done | 5 |
+| Done | 8 |
 | Ready (AFK) | 0 |
 | Ready (HITL) | 1 |
-| Backlog | 10 |
+| Backlog | 9 |
 | In progress | 0 |
-| Review | 2 |
+| Review | 0 |
 
 ## Parallel lanes (ready now)
 
-Up to **2** AFK lanes without approval (WIP in progress ≤ 4). Review **2/5**.
+| Lane | Issues | Status |
+|------|--------|--------|
+| **B** | [005](005-inference-catalog-bindings.md) (HITL — **you**) | Ready |
+| **C** | 006 → 007 → 008 | Blocked on **005** |
 
-| Lane | Issues | Branch | Subagent |
-|------|--------|--------|----------|
-| **A** | [003](003-documents-parts-media.md) — **Review** | `feat/003-documents-parts-media` | `lane-documents-parts-media` |
-| **B** | [005](005-inference-catalog-bindings.md) (HITL — **you**) | `work/005-inference-catalog` | `lane-inference-catalog` |
-| **D** | [011](011-access-public-published.md) — **Review** | `feat/011-access-public` | `lane-access-public` |
-
-After **003** + **005** merged → **006** (lane C) + **013** (lane F) in parallel.
+**Merged to `main`:** 003, 011, 013 (+ PR review fixes in 013 merge).
 
 | Lane | Issues (same branch) | Branch | Subagent |
 |------|------------------------|--------|----------|

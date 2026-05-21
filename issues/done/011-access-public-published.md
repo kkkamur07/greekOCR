@@ -2,10 +2,9 @@
 id: "011"
 title: "access-public-published"
 type: AFK
-status: review
-branch: feat/011-access-public
+status: done
 blocked_by:
-  - "003-documents-parts-media.md"
+  - "done/003-documents-parts-media.md"
   - "done/001-user-auth-jwt.md"
 parent_prd: "issues/prd.md"
 ---
@@ -37,7 +36,7 @@ parent_prd: "issues/prd.md"
 
 ## Blocked by
 
-- `issues/003-documents-parts-media.md`
+- `issues/done/003-documents-parts-media.md`
 - `issues/done/001-user-auth-jwt.md`
 
 ## User stories addressed
