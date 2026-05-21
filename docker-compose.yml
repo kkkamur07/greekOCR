@@ -4,13 +4,13 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: dev
-      POSTGRES_DB: greekocr
+      POSTGRES_DB: kalamos
     ports:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d greekocr"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d kalamos"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -23,8 +23,8 @@ services:
       - "8000:8000"
     environment:
       ENVIRONMENT: development
-      DATABASE_URL: postgresql+asyncpg://postgres:dev@db:5432/greekocr
-      SYNC_DATABASE_URL: postgresql://postgres:dev@db:5432/greekocr
+      DATABASE_URL: postgresql+asyncpg://postgres:dev@db:5432/kalamos
+      SYNC_DATABASE_URL: postgresql://postgres:dev@db:5432/kalamos
       JWT_SECRET: dev-secret-change-in-production
       CORS_ORIGINS: http://localhost:3000,http://localhost:5173
       MEDIA_ROOT: /app/backend/media

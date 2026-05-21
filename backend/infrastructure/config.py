@@ -19,11 +19,11 @@ class Settings(BaseSettings):
 
     environment: str = Field(default="development", alias="ENVIRONMENT")
     database_url: str = Field(
-        default="postgresql+asyncpg://postgres:dev@localhost:5433/greekocr",
+        default="postgresql+asyncpg://postgres:dev@localhost:5433/kalamos",
         alias="DATABASE_URL",
     )
     sync_database_url: str = Field(
-        default="postgresql://postgres:dev@localhost:5433/greekocr",
+        default="postgresql://postgres:dev@localhost:5433/kalamos",
         alias="SYNC_DATABASE_URL",
     )
     jwt_secret: str = Field(default="change-me-in-production", alias="JWT_SECRET")

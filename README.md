@@ -31,7 +31,9 @@ docker compose up --build
 | API | http://localhost:8000 |
 | Health | http://localhost:8000/health |
 | OpenAPI | http://localhost:8000/docs |
-| Postgres | `localhost:5433` (user `postgres`, password `dev`, db `greekocr`) |
+| Postgres | `localhost:5433` (user `postgres`, password `dev`, db **`kalamos`**) |
+
+See [backend/infrastructure/README.md](backend/infrastructure/README.md) for verify commands and branch-per-issue workflow.
 
 Migrations run automatically on API container start (`alembic upgrade head`).
 
