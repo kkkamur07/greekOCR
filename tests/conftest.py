@@ -10,13 +10,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 import infrastructure.models  # noqa: F401 — register all ORM mappers
-
 from backend.core.app import create_app
 
 
 @pytest.fixture(scope="session")
 def client() -> TestClient:
-    """Single TestClient for the session — keeps one asyncio loop for the async engine."""
+    """Session TestClient — one asyncio loop; lifespan starts the job worker."""
     with TestClient(create_app()) as test_client:
         yield test_client
 

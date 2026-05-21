@@ -2,7 +2,8 @@
 id: "004"
 title: "job-runner"
 type: AFK
-status: backlog
+status: review
+branch: feat/004-job-runner
 blocked_by:
   - "done/000-platform-foundation.md"
 parent_prd: "issues/prd.md"
@@ -18,18 +19,18 @@ Postgres-backed Job table with enqueue, transactional claim (`SKIP LOCKED` or eq
 
 ## Error handling
 
-- [ ] Map job failures to persisted `Job.error`; API layer uses `NotFoundError` for missing jobs.
+- [x] Map job failures to persisted `Job.error`; API layer uses `NotFoundError` for missing jobs.
 
 ## Dev / test data
 
-- [ ] Reuse seeded user/project/document from 001–003 where job FKs are needed; noop job tests may omit document FK.
+- [x] Reuse seeded user/project/document from 001–003 where job FKs are needed; noop job tests may omit document FK.
 
 ## Acceptance criteria
 
-- [ ] `POST` test enqueue returns `job_id` immediately; poll until `done`
-- [ ] Two concurrent claimers do not execute the same job twice (test)
-- [ ] Failed handler stores error message on job row
-- [ ] Job record stores type, payload, timestamps, optional user/document/part FKs
+- [x] `POST` test enqueue returns `job_id` immediately; poll until `done`
+- [x] Two concurrent claimers do not execute the same job twice (test)
+- [x] Failed handler stores error message on job row
+- [x] Job record stores type, payload, timestamps, optional user/document/part FKs
 
 ## Blocked by
 
