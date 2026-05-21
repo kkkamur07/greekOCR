@@ -3,10 +3,12 @@
 import pytest
 from fastapi.testclient import TestClient
 
+import infrastructure.models  # noqa: F401 — register all ORM mappers
 from backend.core.app import create_app
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def client() -> TestClient:
-    """FastAPI TestClient against the real app (DB must be up: docker compose up db -d)."""
-    return TestClient(create_app())
+    """Single app + worker for the session — avoids overlapping lifespan workers."""
+    with TestClient(create_app()) as test_client:
+        yield test_client
