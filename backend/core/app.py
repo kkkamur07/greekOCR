@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from backend.core.api.health import router as health_router
+from backend.core.api.root import router as root_router
 from backend.core.exceptions import (
     AccessDeniedError,
     ConflictError,
@@ -68,6 +69,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     _register_exception_handlers(app)
+    app.include_router(root_router)
     app.include_router(health_router)
     app.include_router(auth_router)
     app.include_router(projects_router)
