@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-21T17:00:00Z",
+  "generated_at": "2026-05-21T18:00:00Z",
   "limits": { "in_progress": 4, "review": 5, "parallel_lanes": 2 },
   "counts": {
     "in_progress": 0,
@@ -8,10 +8,10 @@
   },
   "stats": {
     "total": 18,
-    "done": 8,
+    "done": 10,
     "ready_afk": 0,
     "ready_hitl": 1,
-    "backlog": 9,
+    "backlog": 7,
     "in_review": 0
   },
   "dag": {
@@ -23,9 +23,11 @@
       {
         "name": "Done",
         "issues": [
-          { "id": "003", "file": "done/003-documents-parts-media.md", "status": "done" },
+          { "id": "016", "file": "done/016-frontend-jobs-panel.md", "status": "done" },
+          { "id": "017", "file": "done/017-frontend-public-published-view.md", "status": "done" },
+          { "id": "013", "file": "done/013-frontend-projects-documents.md", "status": "done" },
           { "id": "011", "file": "done/011-access-public-published.md", "status": "done" },
-          { "id": "013", "file": "done/013-frontend-projects-documents.md", "status": "done" }
+          { "id": "003", "file": "done/003-documents-parts-media.md", "status": "done" }
         ]
       },
       {
@@ -37,6 +39,14 @@
             "type": "HITL",
             "status": "ready"
           }
+        ]
+      },
+      {
+        "name": "Backlog",
+        "issues": [
+          { "id": "006", "file": "006-segment-job-kraken.md", "status": "backlog" },
+          { "id": "014", "file": "014-frontend-layout-editor.md", "status": "backlog" },
+          { "id": "015", "file": "015-frontend-transcription-editor.md", "status": "backlog" }
         ]
       }
     ]

@@ -11,10 +11,10 @@
 | Metric | Count |
 |--------|------:|
 | Total issues | 18 |
-| Done | 8 |
+| Done | 10 |
 | Ready (AFK) | 0 |
 | Ready (HITL) | 1 |
-| Backlog | 9 |
+| Backlog | 7 |
 | In progress | 0 |
 | Review | 0 |
 
@@ -25,17 +25,14 @@
 | **B** | [005](005-inference-catalog-bindings.md) (HITL — **you**) | Ready |
 | **C** | 006 → 007 → 008 | Blocked on **005** |
 
-**Merged to `main`:** 003, 011, 013 (+ PR review fixes in 013 merge).
+**Merged to `main`:** 003, 011, 013, 016, 017.
 
 | Lane | Issues (same branch) | Branch | Subagent |
 |------|------------------------|--------|----------|
 | **C** | 006 → 007 → 008 | `feat/006-segment-pipeline` | `lane-segment-pipeline` |
 | **E** | 009 → 010 | `feat/009-transcribe-pipeline` | `lane-transcribe-pipeline` |
-| **F** | 013 | `feat/013-frontend-projects` | `lane-frontend-projects` |
 | **G** | 014 (HITL) | `work/014-frontend-layout` | `lane-frontend-layout` |
 | **H** | 015 | `feat/015-frontend-transcription` | `lane-frontend-transcription` |
-| **I** | 016 | `feat/016-frontend-jobs` | `lane-frontend-jobs` |
-| **J** | 017 | `feat/017-frontend-public` | `lane-frontend-public` |
 
 ## Mermaid
 
@@ -47,18 +44,18 @@ flowchart TD
   I004["004 job-runner ✓"]
   I012["012 openapi-codegen ✓"]
   I005["005 inference-catalog HITL"]
-  I003["003 documents-parts-media"]
+  I003["003 documents-parts-media ✓"]
   I006["006 segment-job-kraken"]
   I007["007 segment-merge"]
   I008["008 layout-edit-reset-api"]
   I009["009 transcribe-job-layers"]
   I010["010 ground-truth-copy-edit"]
-  I011["011 access-public-published"]
-  I013["013 frontend-projects-docs"]
+  I011["011 access-public-published ✓"]
+  I013["013 frontend-projects-docs ✓"]
   I014["014 frontend-layout-editor HITL"]
   I015["015 frontend-transcription-editor"]
-  I016["016 frontend-jobs-panel"]
-  I017["017 frontend-public-view"]
+  I016["016 frontend-jobs-panel ✓"]
+  I017["017 frontend-public-view ✓"]
 
   I000 --> I001
   I000 --> I004
