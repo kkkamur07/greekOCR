@@ -21,6 +21,10 @@ export type ReorderPartsRequest = components['schemas']['ReorderPartsRequest'];
 export type PublicLayoutResponse = components['schemas']['PublicLayoutResponse'];
 export type PublicTranscriptionLayerResponse =
   components['schemas']['PublicTranscriptionLayerResponse'];
+export type JobResponse = components['schemas']['JobResponse'];
+export type JobStatus = components['schemas']['JobStatus'];
+export type EnqueueTestJobRequest = components['schemas']['EnqueueTestJobRequest'];
+export type EnqueueTestJobResponse = components['schemas']['EnqueueTestJobResponse'];
 
 export const API_BASE_URL =
   (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') ||
@@ -166,4 +170,9 @@ export const api = {
       `/public/projects/${projectId}/documents/${documentId}/transcriptions`,
       { skipAuth: true },
     ),
+
+  enqueueTestJob: (body: EnqueueTestJobRequest = { handler: 'noop' }) =>
+    apiRequest<EnqueueTestJobResponse>('/jobs/test', { method: 'POST', body }),
+
+  getJob: (jobId: string) => apiRequest<JobResponse>(`/jobs/${jobId}`),
 };
