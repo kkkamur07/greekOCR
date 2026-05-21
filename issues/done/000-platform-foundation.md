@@ -34,7 +34,7 @@ Context `infrastructure/` folders hold **context ORM/repos only** (e.g. `project
 - [x] `docker compose` starts Postgres and API; README or issue notes document ports and env vars
 - [x] `infrastructure/db.py` + `config.py` own Postgres connection; no duplicate engine in context packages
 - [x] `infrastructure/alembic/` configured with `env.py` using `SYNC_DATABASE_URL` and `infrastructure.models` metadata
-- [x] Alembic initial migration creates all v1 tables from PRD schema (including Job, InferenceModel, ModelBinding, manual_geometry flags)
+- [x] Alembic domain-split migrations (`001_users` … `006_document_transcriptions`) create full v1 schema
 - [x] FastAPI app in `backend/core/` boots with settings from env; health endpoint returns OK when DB is reachable
 - [x] `alembic upgrade head` runs cleanly on empty database
 - [x] DDD folders exist: `backend/core/` plus users, project, document, inference (each: domain / application / infrastructure / api)

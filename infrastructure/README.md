@@ -12,6 +12,30 @@ infrastructure/
 
 Bounded contexts keep context ORM in `backend/<context>/infrastructure/orm_models.py`.
 
+## Migrations (by domain)
+
+Revisions under `infrastructure/alembic/versions/` — one file per bounded context (split for maintainability):
+
+| Revision | Domain | Tables |
+|----------|--------|--------|
+| `001_users` | users | `users` |
+| `002_project` | project | `projects`, `project_shared_users` |
+| `003_inference_models` | inference (catalog) | `inference_models` |
+| `004_document_layout` | document (layout) | `documents`, `document_parts`, `blocks`, `lines` |
+| `005_inference_jobs` | inference (jobs) | `model_bindings`, `jobs` |
+| `006_document_transcriptions` | document (text) | `transcriptions`, `line_transcriptions` |
+
+`006` depends on `005` because `transcriptions.created_by_job_id` references `jobs`.
+
+**If you already migrated the old single-file revision** (`e8d4f5814200`), reset dev data:
+
+```bash
+docker compose down
+docker volume rm greekocr_postgres_data
+docker compose up db -d
+alembic -c infrastructure/alembic.ini upgrade head
+```
+
 ## Database: `kalamos`
 
 | Setting | Value (local dev) |
