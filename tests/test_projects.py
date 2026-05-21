@@ -103,6 +103,7 @@ def test_share_and_collaborator_list_read(client, owner_headers, collaborator_he
     assert unshare.status_code == 204
 
     collab_list_after = client.get("/projects", headers=collaborator_headers)
+    assert collab_list_after.status_code == 200
     assert not any(p["id"] == project_id for p in collab_list_after.json())
 
     collab_read_after = client.get(f"/projects/{project_id}", headers=collaborator_headers)
@@ -119,6 +120,7 @@ def test_non_member_cannot_read_or_mutate(
         headers=owner_headers,
         json={"slug": slug, "name": "Private"},
     )
+    assert create.status_code == 201
     project_id = create.json()["id"]
 
     read = client.get(f"/projects/{project_id}", headers=outsider_headers)
@@ -152,12 +154,14 @@ def test_collaborator_cannot_update_or_delete(
         headers=owner_headers,
         json={"slug": slug, "name": "Team project"},
     )
+    assert create.status_code == 201
     project_id = create.json()["id"]
-    client.post(
+    share = client.post(
         f"/projects/{project_id}/share",
         headers=owner_headers,
         json={"username": collaborator_user["username"]},
     )
+    assert share.status_code == 204
 
     patch = client.patch(
         f"/projects/{project_id}",

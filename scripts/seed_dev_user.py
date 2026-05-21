@@ -14,6 +14,7 @@ from backend.users.application.auth_service import AuthService
 DEV_EMAIL = os.environ.get("DEV_USER_EMAIL", "dev@kalamos.local")
 DEV_USERNAME = os.environ.get("DEV_USER_USERNAME", "dev")
 DEV_PASSWORD = os.environ.get("DEV_USER_PASSWORD", "dev-pass-123")
+PRINT_TOKEN = os.environ.get("SEED_DEV_PRINT_TOKEN", "").lower() in ("1", "true", "yes")
 
 
 async def main() -> None:
@@ -29,7 +30,8 @@ async def main() -> None:
             print(f"Dev user already exists: {DEV_EMAIL}")
             return
         print(f"Created dev user id={user.id} email={DEV_EMAIL}")
-        print(f"Sample JWT (first 40 chars): {token[:40]}...")
+        if PRINT_TOKEN and token:
+            print(f"Sample JWT (first 40 chars): {token[:40]}...")
 
 
 if __name__ == "__main__":

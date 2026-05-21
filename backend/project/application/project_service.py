@@ -5,7 +5,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.exceptions import AccessDeniedError, ConflictError, NotFoundError
-from backend.project.domain.access import is_member, is_owner
+from backend.project.domain.access import has_owner, is_member, is_owner
 from backend.project.infrastructure.orm_models import Project
 from backend.project.infrastructure.project_repository import ProjectRepository
 from backend.users.infrastructure.orm_models import User
@@ -106,5 +106,9 @@ class ProjectService:
             raise AccessDeniedError("You do not have access to this project")
 
     def _require_owner(self, project: Project, user_id: UUID) -> None:
+        if not has_owner(project):
+            raise AccessDeniedError(
+                "This project has no owner; owner-only actions are unavailable"
+            )
         if not is_owner(project, user_id):
             raise AccessDeniedError("Only the project owner can perform this action")
