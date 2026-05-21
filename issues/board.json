@@ -1,0 +1,17 @@
+{
+  "generated_at": "2026-05-21T14:20:00Z",
+  "limits": { "in_progress": 4, "review": 4, "parallel_lanes": 2 },
+  "counts": { "in_progress": 0, "review": 1 },
+  "stats": { "total": 18, "ready_afk": 2, "ready_hitl": 0, "blocked": 15, "in_review": 1 },
+  "dag": {
+    "mermaid": "flowchart TD\n  I000[\"000 platform-foundation\"] --> I001[\"001 user-auth-jwt\"]\n  I000 --> I004[\"004 job-runner\"]\n  I000 --> I005[\"005 inference-catalog HITL\"]",
+    "parallel_lanes": [["001-user-auth-jwt.md", "004-job-runner.md"]]
+  },
+  "kanban": {
+    "columns": [
+      { "name": "Review", "over_limit": false, "issues": [{ "file": "done/000-platform-foundation.md", "title": "platform-foundation", "type": "AFK", "branch": "feat/000-platform-foundation" }] },
+      { "name": "In progress", "over_limit": false, "issues": [] },
+      { "name": "Ready (AFK)", "over_limit": false, "issues": [{ "file": "001-user-auth-jwt.md", "title": "user-auth-jwt", "type": "AFK" }, { "file": "004-job-runner.md", "title": "job-runner", "type": "AFK" }] }
+    ]
+  }
+}

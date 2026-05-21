@@ -1,0 +1,163 @@
+import enum
+import uuid
+from datetime import datetime
+
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
+from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from backend.infrastructure.db import Base
+
+
+class DocumentWorkflow(str, enum.Enum):
+    draft = "draft"
+    published = "published"
+    archived = "archived"
+
+
+class TranscriptionKind(str, enum.Enum):
+    ground_truth = "ground_truth"
+    model = "model"
+
+
+class Document(Base):
+    __tablename__ = "documents"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(512))
+    workflow: Mapped[DocumentWorkflow] = mapped_column(
+        Enum(DocumentWorkflow, name="document_workflow"),
+        default=DocumentWorkflow.draft,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    project: Mapped["Project"] = relationship(back_populates="documents")
+    parts: Mapped[list["DocumentPart"]] = relationship(back_populates="document", cascade="all, delete-orphan")
+    transcriptions: Mapped[list["Transcription"]] = relationship(
+        back_populates="document", cascade="all, delete-orphan"
+    )
+    model_bindings: Mapped[list["ModelBinding"]] = relationship(back_populates="document")
+
+
+class DocumentPart(Base):
+    __tablename__ = "document_parts"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE"), index=True
+    )
+    order: Mapped[int] = mapped_column(Integer, default=0)
+    image_key: Mapped[str] = mapped_column(String(1024))
+    width: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    height: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    document: Mapped["Document"] = relationship(back_populates="parts")
+    blocks: Mapped[list["Block"]] = relationship(back_populates="part", cascade="all, delete-orphan")
+    lines: Mapped[list["Line"]] = relationship(back_populates="part", cascade="all, delete-orphan")
+    model_bindings: Mapped[list["ModelBinding"]] = relationship(back_populates="document_part")
+
+
+class Block(Base):
+    __tablename__ = "blocks"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    part_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("document_parts.id", ondelete="CASCADE"), index=True
+    )
+    box: Mapped[dict] = mapped_column(JSONB)
+    manual_geometry: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    part: Mapped["DocumentPart"] = relationship(back_populates="blocks")
+    lines: Mapped[list["Line"]] = relationship(back_populates="block")
+
+
+class Line(Base):
+    __tablename__ = "lines"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    part_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("document_parts.id", ondelete="CASCADE"), index=True
+    )
+    block_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("blocks.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    baseline: Mapped[dict] = mapped_column(JSONB)
+    mask: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    manual_geometry: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    part: Mapped["DocumentPart"] = relationship(back_populates="lines")
+    block: Mapped["Block | None"] = relationship(back_populates="lines")
+    transcriptions: Mapped[list["LineTranscription"]] = relationship(
+        back_populates="line", cascade="all, delete-orphan"
+    )
+
+
+class Transcription(Base):
+    __tablename__ = "transcriptions"
+    __table_args__ = (
+        Index(
+            "uq_transcriptions_one_ground_truth",
+            "document_id",
+            unique=True,
+            postgresql_where="kind = 'ground_truth'",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(255))
+    kind: Mapped[TranscriptionKind] = mapped_column(Enum(TranscriptionKind, name="transcription_kind"))
+    created_by_job_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("jobs.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    document: Mapped["Document"] = relationship(back_populates="transcriptions")
+    line_transcriptions: Mapped[list["LineTranscription"]] = relationship(
+        back_populates="transcription", cascade="all, delete-orphan"
+    )
+
+
+class LineTranscription(Base):
+    __tablename__ = "line_transcriptions"
+    __table_args__ = (
+        UniqueConstraint("line_id", "transcription_id", name="uq_line_transcriptions_line_layer"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    line_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("lines.id", ondelete="CASCADE"), index=True
+    )
+    transcription_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("transcriptions.id", ondelete="CASCADE"), index=True
+    )
+    text: Mapped[str] = mapped_column(Text, default="")
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    line: Mapped["Line"] = relationship(back_populates="transcriptions")
+    transcription: Mapped["Transcription"] = relationship(back_populates="line_transcriptions")

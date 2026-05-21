@@ -10,22 +10,53 @@ This is going to be a difficult task probably going to take months but the follo
 
 This is a very novel work and can enhance the quality of work everywhere in the world. 
 
-## Local development
+## Platform development (Postgres + DDD backend)
 
-Run the **FastAPI backend** and **Vite (React) frontend** in two separate terminals. The UI is configured to call the API at `http://localhost:8000` (see `frontend/src/services/api.ts`). CORS on the API allows `http://localhost:5173` and `http://localhost:3000`.
+The new platform API lives under `backend/core/` with bounded contexts (`users`, `project`, `document`, `inference`). Postgres and Alembic are in shared `backend/infrastructure/`.
 
 ### Prerequisites
 
-- Python 3.11 or newer
-- Node.js with npm (a current LTS release is recommended)
+- Python 3.11+
+- Docker (for Postgres and optional full stack)
 
-### Backend (FastAPI)
-
-Install the packages the API imports (they are not all listed in the root `pyproject.toml` today), then start Uvicorn from the **repository root** so uploads are stored under `backend/uploads/`:
+### Quick start (Docker Compose)
 
 ```bash
-cd /path/to/greek-foundation
-uv sync # Just ensure the pyproject.toml file is there.
+cp backend/.env.example backend/.env
+docker compose up --build
+```
+
+| Service | URL |
+|---------|-----|
+| API | http://localhost:8000 |
+| Health | http://localhost:8000/health |
+| OpenAPI | http://localhost:8000/docs |
+| Postgres | `localhost:5433` (user `postgres`, password `dev`, db `greekocr`) |
+
+Migrations run automatically on API container start (`alembic upgrade head`).
+
+### Local API without Docker (DB in Docker only)
+
+```bash
+docker compose up db -d
+uv venv && source .venv/bin/activate
+uv pip install -e ".[dev]"
+cp backend/.env.example backend/.env
+alembic upgrade head
+uvicorn backend.core.main:app --reload --host 0.0.0.0 --port 8000
+pytest
+```
+
+---
+
+## Legacy prototype (Vite + upload API)
+
+Run the **legacy FastAPI backend** and **Vite (React) frontend** in two separate terminals. The UI is configured to call the API at `http://localhost:8000` (see `frontend/src/services/api.ts`). CORS on the API allows `http://localhost:5173` and `http://localhost:3000`.
+
+### Backend (legacy prototype)
+
+```bash
+uv sync
 uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
@@ -134,3 +165,49 @@ Frontend will be available at:
 2. Upload an image in the UI
 3. Confirm backend requests are successful in browser devtools/network tab
 2. What did I do : 1. Mostly busy with exams 2. Tried out what is working and what is not working 3. Learning react & next js so that frontend can be made much better 4. Got some feedback from researchers to implement what is necessary 5. Probably next month will better progress. 
+
+
+### Building / Extending Escriptorium 
+
+We need to move away from django to fastAPI + pydantic for validation, they have specificed the domain models quite well 
+
+
+  ┌───────────────────┬────────────────────────────────────────────────────────────┐
+  │ Entity            │ Role                                                       │
+  ├───────────────────┼────────────────────────────────────────────────────────────┤
+  │ Project           │ Workspace; sharing via users/groups                        │
+  │ Document          │ A manuscript/book; workflow (draft / published / archived) │
+  │ DocumentPart      │ One page/image (ordered)                                   │
+  │ Block             │ Region on a page (column, illustration, etc.)              │
+  │ Line              │ Text line with geometry (baseline polygon)                 │
+  │ Transcription     │ Named transcription layer on a document                    │
+  │ LineTranscription │ Text + confidence per line                                 │
+  │ OcrModel          │ Trained Kraken recognition/segmentation models             │
+  └───────────────────┴────────────────────────────────────────────────────────────┘
+
+  Celery is behind to run the kraken / training import -> kind of important to parallelize the work and have them do it effectively for heavy tasks. 
+
+  FastAPI till sometime can handle celery as well, shouldn't be a problem. 
+  The stack for us should be ideally : 
+  1. Orchestration : Docker 
+  2. Backend : FastAPI + uvicorn, doesn't matter if we use celery but if we see benefits then 100% we will. 
+  3. Frontend : NextJS / React (we will need to reuse a lot fo components because it has all the nuances of it. ) -> Reuse the frontend the most and backend we can leave like that. • UI libs: Bootstrap 4, Annotorious, Recogito, Paper.js, axios, reconnecting WebSocket should be migrated to nextJS ( we need to do this component wise because I am no expert in UI )
+  4. Postgres is good but we need something to handle the migrations like alembic -> like the docker setup we had. 
+  5. Backend should expose the segment, trascibe end points so that we can easily integrate models from hugging face and use our models. 
+  6. Authentication : JWT should be good enough for a small scale project but we can scale this up if required. 
+  7. Monitoring : Not a priority right now. 
+
+  We are going to do domain driven design : 
+  /backend
+   /core - FastAPI app entry, router wiring, shared dependencies
+   /infrastructure - SHARED: Postgres (db.py), config, Alembic (../alembic/), models aggregator for migrations
+   /alembic - migrations (env.py uses backend.infrastructure)
+   /users, /project, /document, /inference — each with:
+      /domain
+      /application
+      /infrastructure  # context ORM/repos only — not the global DB engine
+      /api
+
+This will make the project quite maintainable for me and extendable in future. We are going to use Test Driven Development, currently the tests are not a priority but : If we are testing then we are going to test with 1. One failing examples for each case 2. Multiple passing examples. 
+
+I believe a good rule should be that frontend should have the validations and communicate everything visa-vis the api. 

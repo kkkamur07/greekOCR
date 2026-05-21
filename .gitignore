@@ -39,6 +39,8 @@ outputs/
 *.log
 
 backend/uploads
+backend/media
+backend/.env
 
 
 # Frontend
@@ -110,6 +112,8 @@ outputs/
 *.log
 
 backend/uploads
+backend/media
+backend/.env
 
 
 # Frontend
