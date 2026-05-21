@@ -1,28 +1,53 @@
 {
-  "generated_at": "2026-05-21T18:00:00Z",
-  "limits": { "in_progress": 4, "review": 4, "parallel_lanes": 2 },
-  "counts": { "in_progress": 0, "review": 0, "done": 5, "ready_afk": 1, "ready_hitl": 1 },
-  "dag": {
-    "mermaid": "flowchart TD\n  I000[\"000 platform-foundation\"] --> I001[\"001 user-auth-jwt\"]\n  I000 --> I004[\"004 job-runner\"]\n  I000 --> I005[\"005 inference-catalog HITL\"]\n  I001 --> I002[\"002 projects-sharing\"]\n  I001 --> I012[\"012 openapi-codegen\"]\n  I002 --> I003[\"003 documents-parts-media\"]\n  I003 --> I011[\"011 access-public-published\"]\n  I004 --> I006[\"006 segment-job-kraken\"]",
-    "parallel_lanes": [["003-documents-parts-media.md"]]
+  "generated_at": "2026-05-21T20:00:00Z",
+  "limits": { "in_progress": 4, "review": 4 },
+  "counts": {
+    "total": 18,
+    "done": 5,
+    "ready_afk": 1,
+    "ready_hitl": 1,
+    "backlog": 11,
+    "in_progress": 0,
+    "review": 0
   },
+  "issues": [
+    { "id": "000", "file": "done/000-platform-foundation.md", "title": "platform-foundation", "type": "AFK", "status": "done" },
+    { "id": "001", "file": "done/001-user-auth-jwt.md", "title": "user-auth-jwt", "type": "AFK", "status": "done" },
+    { "id": "002", "file": "done/002-projects-sharing.md", "title": "projects-sharing", "type": "AFK", "status": "done" },
+    { "id": "003", "file": "003-documents-parts-media.md", "title": "documents-parts-media", "type": "AFK", "status": "ready" },
+    { "id": "004", "file": "done/004-job-runner.md", "title": "job-runner", "type": "AFK", "status": "done" },
+    { "id": "005", "file": "005-inference-catalog-bindings.md", "title": "inference-catalog-bindings", "type": "HITL", "status": "ready" },
+    { "id": "006", "file": "006-segment-job-kraken.md", "title": "segment-job-kraken", "type": "AFK", "status": "backlog" },
+    { "id": "007", "file": "007-segment-merge.md", "title": "segment-merge", "type": "AFK", "status": "backlog" },
+    { "id": "008", "file": "008-layout-edit-reset-api.md", "title": "layout-edit-reset-api", "type": "AFK", "status": "backlog" },
+    { "id": "009", "file": "009-transcribe-job-layers.md", "title": "transcribe-job-layers", "type": "AFK", "status": "backlog" },
+    { "id": "010", "file": "010-ground-truth-copy-edit-api.md", "title": "ground-truth-copy-edit-api", "type": "AFK", "status": "backlog" },
+    { "id": "011", "file": "011-access-public-published.md", "title": "access-public-published", "type": "AFK", "status": "backlog" },
+    { "id": "012", "file": "done/012-nextjs-openapi-codegen.md", "title": "nextjs-openapi-codegen", "type": "AFK", "status": "done" },
+    { "id": "013", "file": "013-frontend-projects-documents.md", "title": "frontend-projects-documents", "type": "AFK", "status": "backlog" },
+    { "id": "014", "file": "014-frontend-layout-editor.md", "title": "frontend-layout-editor", "type": "HITL", "status": "backlog" },
+    { "id": "015", "file": "015-frontend-transcription-editor.md", "title": "frontend-transcription-editor", "type": "AFK", "status": "backlog" },
+    { "id": "016", "file": "016-frontend-jobs-panel.md", "title": "frontend-jobs-panel", "type": "AFK", "status": "backlog" },
+    { "id": "017", "file": "017-frontend-public-published-view.md", "title": "frontend-public-published-view", "type": "AFK", "status": "backlog" }
+  ],
   "kanban": {
     "columns": [
-      { "name": "Done", "issues": [
-        { "file": "done/000-platform-foundation.md", "title": "platform-foundation", "type": "AFK", "status": "done" },
-        { "file": "done/001-user-auth-jwt.md", "title": "user-auth-jwt", "type": "AFK", "status": "done" },
-        { "file": "done/002-projects-sharing.md", "title": "projects-sharing", "type": "AFK", "status": "done" },
-        { "file": "done/004-job-runner.md", "title": "job-runner", "type": "AFK", "status": "done" },
-        { "file": "done/012-nextjs-openapi-codegen.md", "title": "nextjs-openapi-codegen", "type": "AFK", "status": "done" }
-      ]},
-      { "name": "Review", "over_limit": false, "issues": [] },
-      { "name": "In progress", "over_limit": false, "issues": [] },
-      { "name": "Ready (AFK)", "issues": [
-        { "file": "003-documents-parts-media.md", "title": "documents-parts-media", "type": "AFK", "status": "ready" }
-      ]},
-      { "name": "Ready (HITL)", "issues": [
-        { "file": null, "title": "005 inference-catalog-bindings", "type": "HITL", "status": "ready", "note": "issue file not created" }
-      ]}
+      {
+        "name": "Done",
+        "issues": ["000", "001", "002", "004", "012"]
+      },
+      {
+        "name": "Ready (AFK)",
+        "issues": ["003"]
+      },
+      {
+        "name": "Ready (HITL)",
+        "issues": ["005"]
+      },
+      {
+        "name": "Backlog",
+        "issues": ["006", "007", "008", "009", "010", "011", "013", "014", "015", "016", "017"]
+      }
     ]
   }
 }

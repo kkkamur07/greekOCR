@@ -17,7 +17,12 @@ parent_prd: "issues/prd.md"
 
 Export FastAPI OpenAPI schema to `frontend/openapi/openapi.json` and generate TypeScript types for the Vite/React client (`openapi-typescript`). Document the workflow in README or `frontend/README.md`.
 
-Pipeline: running API (or TestClient) → JSON schema → `npm run codegen:api` → `frontend/src/api/generated.ts` (or `frontend/openapi/types.ts`).
+Pipeline: `scripts/export_openapi.py` → `frontend/openapi/openapi.json` → `npm run codegen:api` → `frontend/src/api/schema.d.ts`.
+
+## Dev / test data
+
+- [x] Committed `frontend/openapi/openapi.json` and `schema.d.ts` for CI; regen documented in `frontend/README.md`.
+- [x] `sort_keys=True` on export for stable git diffs.
 
 ## Acceptance criteria
 
@@ -29,7 +34,7 @@ Pipeline: running API (or TestClient) → JSON schema → `npm run codegen:api` 
 
 ## Blocked by
 
-- `issues/001-user-auth-jwt.md`
+- `issues/done/001-user-auth-jwt.md`
 
 ## User stories addressed
 

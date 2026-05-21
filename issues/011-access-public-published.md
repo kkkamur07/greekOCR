@@ -21,6 +21,11 @@ parent_prd: "issues/prd.md"
 
 - [ ] Access policy raises `AccessDeniedError`; handlers from 001 return 403 with consistent body.
 
+## Dev / test data
+
+- [ ] Seed: one `published` and one `draft` document under dev project; anonymous pytest client fixture (no Bearer).
+- [ ] Public slug or id documented for manual browser check.
+
 ## Acceptance criteria
 
 - [ ] Unauthenticated `GET` published document + parts + layout + layers succeeds
@@ -32,7 +37,7 @@ parent_prd: "issues/prd.md"
 ## Blocked by
 
 - `issues/003-documents-parts-media.md`
-- `issues/001-user-auth-jwt.md`
+- `issues/done/001-user-auth-jwt.md`
 
 ## User stories addressed
 

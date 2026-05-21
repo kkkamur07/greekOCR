@@ -34,7 +34,7 @@ Postgres-backed Job table with enqueue, transactional claim (`SKIP LOCKED` or eq
 
 ## Blocked by
 
-- `issues/000-platform-foundation.md`
+- `issues/done/000-platform-foundation.md`
 
 ## User stories addressed
 

@@ -34,7 +34,7 @@ Register, login, and `GET /me` with JWT and password hashing. Persist users in P
 
 ## Blocked by
 
-- `issues/000-platform-foundation.md`
+- `issues/done/000-platform-foundation.md`
 
 ## User stories addressed
 

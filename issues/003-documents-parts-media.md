@@ -34,7 +34,7 @@ Documents under projects; ordered DocumentParts with image upload and media stor
 
 ## Blocked by
 
-- `issues/002-projects-sharing.md`
+- `issues/done/002-projects-sharing.md`
 
 ## User stories addressed
 

@@ -34,7 +34,7 @@ Project CRUD for owner; share/unshare collaborator by username; list only projec
 
 ## Blocked by
 
-- `issues/001-user-auth-jwt.md`
+- `issues/done/001-user-auth-jwt.md`
 
 ## User stories addressed
 

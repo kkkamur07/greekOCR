@@ -29,6 +29,11 @@ infrastructure/
 
 Context `infrastructure/` folders hold **context ORM/repos only** (e.g. `project/infrastructure/orm_models.py`), not the global DB connection.
 
+## Dev / test data
+
+- [x] `docker-compose.yml` Postgres service `kalamos` DB; `backend/core/.env.example` with `DATABASE_URL` / `SYNC_DATABASE_URL`.
+- [x] `requirements-platform.txt` + `PYTHONPATH=.` documented in `infrastructure/README.md` for local pytest without editable install.
+
 ## Acceptance criteria
 
 - [x] `docker compose` starts Postgres and API; README or issue notes document ports and env vars
