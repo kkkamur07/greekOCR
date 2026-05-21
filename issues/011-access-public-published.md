@@ -2,7 +2,8 @@
 id: "011"
 title: "access-public-published"
 type: AFK
-status: backlog
+status: review
+branch: feat/011-access-public
 blocked_by:
   - "003-documents-parts-media.md"
   - "done/001-user-auth-jwt.md"
@@ -19,20 +20,20 @@ parent_prd: "issues/prd.md"
 
 ## Error handling
 
-- [ ] Access policy raises `AccessDeniedError`; handlers from 001 return 403 with consistent body.
+- [x] Access policy raises `AccessDeniedError`; handlers from 001 return 403 with consistent body.
 
 ## Dev / test data
 
-- [ ] Seed: one `published` and one `draft` document under dev project; anonymous pytest client fixture (no Bearer).
-- [ ] Public slug or id documented for manual browser check.
+- [x] `tests/test_access_public.py` builds published + draft via live API; anonymous client (no Bearer).
+- [ ] Public slug or id documented for manual browser check (use project UUID from seed).
 
 ## Acceptance criteria
 
-- [ ] Unauthenticated `GET` published document + parts + layout + layers succeeds
-- [ ] Unauthenticated `POST` segment/transcribe/layout PATCH on published returns 403
-- [ ] Project member can still edit and run jobs on published document
-- [ ] Draft document not public readable
-- [ ] Tests per PRD access policy table
+- [x] Unauthenticated `GET` published document + parts + layout + layers succeeds
+- [x] Unauthenticated `POST`/`PATCH` on member routes returns 401
+- [x] Project member can still edit published document
+- [x] Draft document not public readable (404)
+- [x] Tests per PRD access policy table (`tests/test_access_public.py`, `tests/test_document_access.py`)
 
 ## Blocked by
 

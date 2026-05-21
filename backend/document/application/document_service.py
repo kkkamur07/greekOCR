@@ -8,6 +8,7 @@ from backend.core.exceptions import AccessDeniedError, NotFoundError, Validation
 from backend.document.infrastructure.document_repository import DocumentRepository
 from backend.document.infrastructure.media_store import MediaStore
 from backend.document.infrastructure.orm_models import Document, DocumentPart, DocumentWorkflow
+from backend.document.domain.access import require_can_read
 from backend.project.domain.access import is_member
 from backend.project.infrastructure.orm_models import Project
 from backend.project.infrastructure.project_repository import ProjectRepository
@@ -58,6 +59,17 @@ class DocumentService:
     ) -> Document:
         project = await self._require_member(session, project_id, user.id)
         document = await self._load_document_in_project(session, project, document_id)
+        return document
+
+    async def get_document_public(
+        self,
+        session: AsyncSession,
+        project_id: UUID,
+        document_id: UUID,
+    ) -> Document:
+        project = await self._load_project(session, project_id)
+        document = await self._load_document_in_project(session, project, document_id)
+        require_can_read(document, project, None)
         return document
 
     async def update_document(
@@ -168,15 +180,34 @@ class DocumentService:
         await self._require_member(session, document.project_id, user.id)
         return part
 
+    async def get_part_for_public_media(
+        self,
+        session: AsyncSession,
+        part_id: UUID,
+    ) -> DocumentPart:
+        part = await self._documents.get_part(session, part_id)
+        if part is None:
+            raise NotFoundError("Part not found")
+        document = await self._documents.get_by_id(session, part.document_id)
+        if document is None:
+            raise NotFoundError("Document not found")
+        project = await self._load_project(session, document.project_id)
+        require_can_read(document, project, None)
+        return part
+
     def read_part_bytes(self, part: DocumentPart) -> bytes:
         return self._media.read(part.image_key)
+
+    async def _load_project(self, session: AsyncSession, project_id: UUID) -> Project:
+        project = await self._projects.get_by_id(session, project_id)
+        if project is None:
+            raise NotFoundError("Project not found")
+        return project
 
     async def _require_member(
         self, session: AsyncSession, project_id: UUID, user_id: UUID
     ) -> Project:
-        project = await self._projects.get_by_id(session, project_id)
-        if project is None:
-            raise NotFoundError("Project not found")
+        project = await self._load_project(session, project_id)
         if not is_member(project, user_id):
             raise AccessDeniedError("You do not have access to this project")
         return project

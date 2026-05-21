@@ -24,6 +24,8 @@ from backend.inference.api.jobs import router as jobs_router
 from backend.inference.infrastructure.worker import worker_loop
 from backend.document.api.documents import router as documents_router
 from backend.document.api.media import router as media_router
+from backend.document.api.public import router as public_router
+from backend.document.api.public_media import router as public_media_router
 from backend.project.api.projects import router as projects_router
 from backend.users.api.auth import router as auth_router
 
@@ -92,5 +94,7 @@ def create_app() -> FastAPI:
     app.include_router(projects_router)
     app.include_router(documents_router)
     app.include_router(media_router)
+    app.include_router(public_router)
+    app.include_router(public_media_router)
     app.include_router(jobs_router)
     return app

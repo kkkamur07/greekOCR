@@ -13,18 +13,6 @@ MINIMAL_PNG = (
 )
 
 
-@pytest.fixture
-def owner_project(client, owner_headers):
-    slug = f"docproj-{uuid.uuid4().hex[:8]}"
-    response = client.post(
-        "/projects",
-        headers=owner_headers,
-        json={"slug": slug, "name": "Document test project"},
-    )
-    assert response.status_code == 201
-    return response.json()
-
-
 def _documents_url(project_id: str) -> str:
     return f"/projects/{project_id}/documents"
 

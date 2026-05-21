@@ -106,3 +106,16 @@ def collaborator_headers(collaborator_user: dict[str, str]) -> dict[str, str]:
 @pytest.fixture
 def outsider_headers(outsider_user: dict[str, str]) -> dict[str, str]:
     return {"Authorization": f"Bearer {outsider_user['access_token']}"}
+
+
+@pytest.fixture
+def owner_project(client: TestClient, owner_headers: dict[str, str]) -> dict:
+    """Project owned by ``owner_user``."""
+    slug = f"proj-{uuid.uuid4().hex[:8]}"
+    response = client.post(
+        "/projects",
+        headers=owner_headers,
+        json={"slug": slug, "name": "Test project"},
+    )
+    assert response.status_code == 201
+    return response.json()

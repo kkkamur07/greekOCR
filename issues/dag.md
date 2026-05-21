@@ -12,22 +12,33 @@
 |--------|------:|
 | Total issues | 18 |
 | Done | 5 |
-| Ready (AFK) | 1 |
+| Ready (AFK) | 0 |
 | Ready (HITL) | 1 |
-| Backlog | 11 |
+| Backlog | 10 |
 | In progress | 0 |
-| Review | 0 |
+| Review | 2 |
 
 ## Parallel lanes (ready now)
 
-Up to **2** AFK lanes without approval (WIP in progress ≤ 4).
+Up to **2** AFK lanes without approval (WIP in progress ≤ 4). Review **2/5**.
 
-| Lane | Issues | Branch suggestion |
-|------|--------|-------------------|
-| **A** | [003-documents-parts-media](003-documents-parts-media.md) | `feat/003-documents-parts-media` |
-| **B** | [005-inference-catalog-bindings](005-inference-catalog-bindings.md) (HITL — **you**) | `work/005-inference-catalog` |
+| Lane | Issues | Branch | Subagent |
+|------|--------|--------|----------|
+| **A** | [003](003-documents-parts-media.md) — **Review** | `feat/003-documents-parts-media` | `lane-documents-parts-media` |
+| **B** | [005](005-inference-catalog-bindings.md) (HITL — **you**) | `work/005-inference-catalog` | `lane-inference-catalog` |
+| **D** | [011](011-access-public-published.md) — **Review** | `feat/011-access-public` | `lane-access-public` |
 
-After **003** + **005** complete → **006** + **011** can run in parallel.
+After **003** + **005** merged → **006** (lane C) + **013** (lane F) in parallel.
+
+| Lane | Issues (same branch) | Branch | Subagent |
+|------|------------------------|--------|----------|
+| **C** | 006 → 007 → 008 | `feat/006-segment-pipeline` | `lane-segment-pipeline` |
+| **E** | 009 → 010 | `feat/009-transcribe-pipeline` | `lane-transcribe-pipeline` |
+| **F** | 013 | `feat/013-frontend-projects` | `lane-frontend-projects` |
+| **G** | 014 (HITL) | `work/014-frontend-layout` | `lane-frontend-layout` |
+| **H** | 015 | `feat/015-frontend-transcription` | `lane-frontend-transcription` |
+| **I** | 016 | `feat/016-frontend-jobs` | `lane-frontend-jobs` |
+| **J** | 017 | `feat/017-frontend-public` | `lane-frontend-public` |
 
 ## Mermaid
 

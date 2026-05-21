@@ -46,3 +46,16 @@ class DocumentWithPartsResponse(DocumentResponse):
 
 class ReorderPartsRequest(BaseModel):
     part_ids: list[UUID] = Field(min_length=1)
+
+
+class PublicLayoutResponse(BaseModel):
+    blocks: list[dict] = Field(default_factory=list)
+    lines: list[dict] = Field(default_factory=list)
+
+
+class PublicTranscriptionLayerResponse(BaseModel):
+    id: UUID
+    name: str
+    kind: str
+
+    model_config = {"from_attributes": True}
