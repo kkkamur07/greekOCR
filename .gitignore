@@ -150,4 +150,8 @@ dataset/
 outputs/
 train.sh
 slurm*
+
+# Ignores
 .cursor/
+model/data/
+model/outputs/

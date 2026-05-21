@@ -1,6 +1,6 @@
 # Platform API + Postgres + tests (install only deps — not the greekOCR repo as a package)
 #   uv venv && source .venv/bin/activate
-#   uv pip install -r requirements-platform.txt
+#   uv pip install -r requirements/requirements-platform.txt
 # Run from repo root with PYTHONPATH=. (or export once per shell)
 
 alembic>=1.14.0
