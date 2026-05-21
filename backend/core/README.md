@@ -6,7 +6,7 @@
 | `api/` | Platform routes (e.g. `health.py`) |
 | `schemas/` | HTTP DTOs (`*Response`, `*Edit`, `*Request`) |
 | `settings/` | Split Pydantic settings (`InfrastructureSettings`, `AuthSettings`, `AppSettings`, `ModelSettings`) |
-| `.env` | Copy from `.env.example` (not committed) |
+| `.env` | Copy from `.env.example` (not committed; DB password **`dev`** in dev) |
 
 **Router wiring:** `app.py` composes routers only; handlers live in `api/` or `backend/<context>/api/`.
 
