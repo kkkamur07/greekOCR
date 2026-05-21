@@ -5,12 +5,12 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from infrastructure.config import settings
+from backend.core.settings import get_infrastructure_settings
 from infrastructure.db import Base
 from infrastructure import models  # noqa: F401 — register all ORM tables
 
 config = context.config
-config.set_main_option("sqlalchemy.url", settings.sync_database_url)
+config.set_main_option("sqlalchemy.url", get_infrastructure_settings().sync_database_url)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

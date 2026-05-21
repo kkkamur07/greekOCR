@@ -1,18 +1,13 @@
-"""Health check — verifies API and database connectivity."""
+"""Health check routes."""
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.schemas.health import HealthResponse
 from infrastructure.db import get_db
 
 router = APIRouter(tags=["health"])
-
-
-class HealthResponse(BaseModel):
-    status: str
-    database: str
 
 
 @router.get("/health", response_model=HealthResponse)

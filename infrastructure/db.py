@@ -6,9 +6,8 @@ from sqlalchemy import MetaData
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
-from infrastructure.config import settings
+from backend.core.settings import get_infrastructure_settings
 
-# Naming convention helps Alembic autogenerate stable constraint names.
 convention = {
     "ix": "ix_%(column_0_label)s",
     "uq": "uq_%(table_name)s_%(column_0_name)s",
@@ -22,9 +21,11 @@ class Base(DeclarativeBase):
     metadata = MetaData(naming_convention=convention)
 
 
+_infra = get_infrastructure_settings()
+
 engine = create_async_engine(
-    settings.database_url,
-    echo=settings.environment == "development",
+    _infra.database_url,
+    echo=_infra.environment == "development",
 )
 
 AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)

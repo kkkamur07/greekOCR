@@ -54,7 +54,7 @@ None — can start immediately.
 ```bash
 docker compose up db -d
 uv venv && source .venv/bin/activate && uv pip install -e ".[dev]"
-cp infrastructure/.env.example infrastructure/.env
+cp backend/core/.env.example backend/core/.env
 alembic -c infrastructure/alembic.ini upgrade head
 pytest -v
 ```

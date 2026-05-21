@@ -22,7 +22,7 @@ The new platform API lives under `backend/core/` with bounded contexts (`users`,
 ### Quick start (Docker Compose)
 
 ```bash
-cp infrastructure/.env.example infrastructure/.env
+cp backend/core/.env.example backend/core/.env
 docker compose up --build
 ```
 
@@ -33,7 +33,7 @@ docker compose up --build
 | OpenAPI | http://localhost:8000/docs |
 | Postgres | `localhost:5433` (user `postgres`, password `dev`, db **`kalamos`**) |
 
-See [infrastructure/README.md](infrastructure/README.md) for verify commands and branch-per-issue workflow.
+See [infrastructure/README.md](infrastructure/README.md) (DB/migrations) and [backend/core/README.md](backend/core/README.md) (settings, routes, DTOs).
 
 Migrations run automatically on API container start (`alembic upgrade head`).
 
@@ -43,7 +43,7 @@ Migrations run automatically on API container start (`alembic upgrade head`).
 docker compose up db -d
 uv venv && source .venv/bin/activate
 uv pip install -e ".[dev]"
-cp infrastructure/.env.example infrastructure/.env
+cp backend/core/.env.example backend/core/.env
 alembic -c infrastructure/alembic.ini upgrade head
 uvicorn backend.core.main:app --reload --host 0.0.0.0 --port 8000
 pytest
