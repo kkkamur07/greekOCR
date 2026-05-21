@@ -17,7 +17,10 @@ def main() -> int:
     app = create_app()
     schema = app.openapi()
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    OUTPUT.write_text(json.dumps(schema, indent=2) + "\n", encoding="utf-8")
+    OUTPUT.write_text(
+        json.dumps(schema, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
     print(f"Wrote {OUTPUT.relative_to(ROOT)}")
     return 0
 

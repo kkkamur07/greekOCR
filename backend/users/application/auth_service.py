@@ -1,5 +1,7 @@
 """Register, login, and user lookup."""
 
+from uuid import UUID
+
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -62,7 +64,7 @@ class AuthService:
         token = create_access_token(user.id, self._auth_settings)
         return user, token
 
-    async def get_user(self, session: AsyncSession, user_id) -> User:
+    async def get_user(self, session: AsyncSession, user_id: UUID) -> User:
         user = await self._repo.get_by_id(session, user_id)
         if user is None:
             raise NotFoundError("User not found")
