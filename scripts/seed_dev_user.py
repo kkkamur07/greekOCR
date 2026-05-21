@@ -19,16 +19,15 @@ DEV_PASSWORD = os.environ.get("DEV_USER_PASSWORD", "dev-pass-123")
 async def main() -> None:
     async with AsyncSessionLocal() as session:
         service = AuthService()
-        existing = await service._repo.get_by_email(session, DEV_EMAIL)
-        if existing:
-            print(f"Dev user already exists: {DEV_EMAIL}")
-            return
-        user, token = await service.register(
+        user, token = await service.register_if_absent(
             session,
             email=DEV_EMAIL,
             username=DEV_USERNAME,
             password=DEV_PASSWORD,
         )
+        if user is None:
+            print(f"Dev user already exists: {DEV_EMAIL}")
+            return
         print(f"Created dev user id={user.id} email={DEV_EMAIL}")
         print(f"Sample JWT (first 40 chars): {token[:40]}...")
 

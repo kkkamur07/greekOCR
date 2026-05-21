@@ -2,9 +2,9 @@
 
 from collections.abc import AsyncGenerator
 
-from sqlalchemy import MetaData
+from sqlalchemy import MetaData, create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from backend.core.settings import get_infrastructure_settings
 
@@ -29,6 +29,9 @@ engine = create_async_engine(
 )
 
 AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+sync_engine = create_engine(_infra.sync_database_url, pool_pre_ping=True)
+SyncSessionLocal = sessionmaker(bind=sync_engine, expire_on_commit=False)
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
