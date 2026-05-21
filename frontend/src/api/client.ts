@@ -18,6 +18,10 @@ export type DocumentCreateRequest = components['schemas']['DocumentCreateRequest
 export type DocumentPartResponse = components['schemas']['DocumentPartResponse'];
 export type DocumentWorkflow = components['schemas']['DocumentWorkflow'];
 export type ReorderPartsRequest = components['schemas']['ReorderPartsRequest'];
+export type JobResponse = components['schemas']['JobResponse'];
+export type JobStatus = components['schemas']['JobStatus'];
+export type EnqueueTestJobRequest = components['schemas']['EnqueueTestJobRequest'];
+export type EnqueueTestJobResponse = components['schemas']['EnqueueTestJobResponse'];
 
 export const API_BASE_URL =
   (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') ||
@@ -141,4 +145,9 @@ export const api = {
       `/projects/${projectId}/documents/${documentId}/parts/${partId}`,
       { method: 'DELETE' },
     ),
+
+  enqueueTestJob: (body: EnqueueTestJobRequest = { handler: 'noop' }) =>
+    apiRequest<EnqueueTestJobResponse>('/jobs/test', { method: 'POST', body }),
+
+  getJob: (jobId: string) => apiRequest<JobResponse>(`/jobs/${jobId}`),
 };
