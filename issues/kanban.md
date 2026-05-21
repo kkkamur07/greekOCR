@@ -23,7 +23,8 @@ _(empty — 0/4)_
 ## Review
 
 - [ ] [003-documents-parts-media](003-documents-parts-media.md) — branch `feat/003-documents-parts-media`
-- [ ] [011-access-public-published](011-access-public-published.md) — **2/5** — branch `feat/011-access-public`
+- [ ] [011-access-public-published](011-access-public-published.md) — branch `feat/011-access-public`
+- [ ] [013-frontend-projects-documents](013-frontend-projects-documents.md) — **3/5** — branch `feat/013-frontend-projects`
 
 ## Done
 
@@ -40,7 +41,6 @@ _(empty — 0/4)_
 - [ ] [008-layout-edit-reset-api](008-layout-edit-reset-api.md)
 - [ ] [009-transcribe-job-layers](009-transcribe-job-layers.md)
 - [ ] [010-ground-truth-copy-edit-api](010-ground-truth-copy-edit-api.md)
-- [ ] [013-frontend-projects-documents](013-frontend-projects-documents.md)
 - [ ] [014-frontend-layout-editor](014-frontend-layout-editor.md)
 - [ ] [015-frontend-transcription-editor](015-frontend-transcription-editor.md)
 - [ ] [016-frontend-jobs-panel](016-frontend-jobs-panel.md)
@@ -50,5 +50,5 @@ _(empty — 0/4)_
 
 | When | Agent (AFK) | You (HITL) |
 |------|-------------|------------|
-| **Now** | **003**, **011** in Review (2/5) | **005** (lane B) |
+| **Now** | **003**, **011**, **013** in Review (3/5) | **005** (lane B) |
 | 003 + 005 merged | **006** + **013** (2 lanes) | — |

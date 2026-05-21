@@ -38,7 +38,26 @@ npm run build           # typecheck:api + Vite production bundle
 
 Legacy OCR UI components still have open `tsc` debt; use `npm run typecheck` for the full app when fixing those files.
 
-`src/api/client.ts` re-exports generated types (e.g. `UserResponse`, `TokenResponse`) used by future auth UI work (issue 013).
+`src/api/client.ts` is the JWT-aware fetch wrapper; pages under `src/pages/` implement projects and documents (issue 013).
+
+## Local dev
+
+1. Copy env: `cp .env.local.example .env.local` (set `VITE_API_BASE_URL` if the API is not on port 8000).
+2. Seed a dev user (from repo root, DB running):
+
+   ```bash
+   PYTHONPATH=. python scripts/seed_dev_user.py
+   ```
+
+   Default credentials: `dev@kalamos.local` / `dev-pass-123` (override with `DEV_USER_EMAIL`, `DEV_USER_PASSWORD`).
+
+3. Create a project via the UI after login, or use the API / optional `scripts/seed_dev_workspace.py` when available.
+
+4. Start the API and frontend:
+
+   ```bash
+   cd frontend && npm run dev
+   ```
 
 ### When to run
 
