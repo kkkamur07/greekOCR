@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Third-party deps only — no local package build; app code copied after install.
-COPY requirements-platform.txt ./
+COPY requirements/requirements-platform.txt ./
 RUN pip install --no-cache-dir -r requirements-platform.txt
 
 COPY backend ./backend
