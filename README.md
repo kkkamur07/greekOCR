@@ -214,4 +214,4 @@ We need to move away from django to fastAPI + pydantic for validation, they have
 
 This will make the project quite maintainable for me and extendable in future. We are going to use Test Driven Development, currently the tests are not a priority but : If we are testing then we are going to test with 1. One failing examples for each case 2. Multiple passing examples. 
 
-I believe a good rule should be that frontend should have the validations and communicate everything visa-vis the api. 
+I believe a good rule should be that frontend should have the validations and communicate everything visa-vis the api. return result.scalar_one_or_none() -> need to verify this as well, need to ask it to use Depends() for proper dependency injection. 

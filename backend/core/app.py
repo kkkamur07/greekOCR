@@ -22,6 +22,8 @@ from backend.core.exceptions import (
 from backend.core.settings import get_app_settings
 from backend.inference.api.jobs import router as jobs_router
 from backend.inference.infrastructure.worker import worker_loop
+from backend.document.api.documents import router as documents_router
+from backend.document.api.media import router as media_router
 from backend.project.api.projects import router as projects_router
 from backend.users.api.auth import router as auth_router
 
@@ -88,5 +90,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(auth_router)
     app.include_router(projects_router)
+    app.include_router(documents_router)
+    app.include_router(media_router)
     app.include_router(jobs_router)
     return app

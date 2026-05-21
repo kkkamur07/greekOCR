@@ -4,13 +4,13 @@
 
 **WIP limits:** In progress ≤ **4** | Review ≤ **5** (AFK only)
 
-**HITL:** [005](005-inference-catalog-bindings.md), [014](014-frontend-layout-editor.md) — you own In progress → Done (no Review).
+**HITL:** [005](005-inference-catalog-bindings.md) — **you** (lane B).
 
-**AFK:** agent → **Review** → you → **Done** (one `feat/NNN-slug` branch per lane).
+**AFK:** agent → **Review** → you → **Done**.
 
 ## Ready (AFK)
 
-- [ ] [003-documents-parts-media](003-documents-parts-media.md)
+_(empty — 003 moved to Review)_
 
 ## Ready (HITL)
 
@@ -22,7 +22,7 @@ _(empty — 0/4)_
 
 ## Review
 
-_(empty — 0/5)_
+- [ ] [003-documents-parts-media](003-documents-parts-media.md) — **1/5** — branch `feat/003-documents-parts-media`
 
 ## Done
 
@@ -50,12 +50,5 @@ _(empty — 0/5)_
 
 | When | Agent (AFK) | You (HITL) |
 |------|-------------|------------|
-| **Now** | **003** (lane A) | **005** (lane B) |
-| 003 + 005 done | **006** + **011** | — |
-| 006 done | **007** + **009** | — |
-| 007 + 009 done | **008** + **010** | — |
-| 003 + 012 done | **013** | — |
-| 008 + 012 done | — | **014** |
-| 010 + 012 done | **015** | — |
-| 006 + 004 + 012 done | **016** | — |
-| 011 + 012 done | **017** | — |
+| **Now** | **003** in Review | **005** (lane B) |
+| 003 + 005 merged | **006** + **011** (2 lanes) | — |

@@ -2,7 +2,8 @@
 id: "003"
 title: "documents-parts-media"
 type: AFK
-status: ready
+status: review
+branch: feat/003-documents-parts-media
 blocked_by:
   - "done/002-projects-sharing.md"
 parent_prd: "issues/prd.md"
@@ -18,19 +19,19 @@ Documents under projects; ordered DocumentParts with image upload and media stor
 
 ## Error handling
 
-- [ ] Use `NotFoundError`, `AccessDeniedError`, `ValidationError` from `backend.core.exceptions` in document/media use cases.
+- [x] Use `NotFoundError`, `AccessDeniedError`, `ValidationError` from `backend.core.exceptions` in document/media use cases.
 
 ## Dev / test data
 
-- [ ] Seed or fixture: sample document + one DocumentPart (placeholder image or minimal bytes) for API/integration tests.
+- [x] `tests/test_documents.py` uses `MINIMAL_PNG` bytes + `owner_project` fixture (live register + project create).
 
 ## Acceptance criteria
 
-- [ ] CRUD documents under project; only project members can access
-- [ ] Upload image creates DocumentPart with stable order; reorder and delete work
-- [ ] Media served or URL returned for part image
-- [ ] Workflow transitions persist; archived hidden from default document list
-- [ ] Tests: member CRUD parts; non-member denied
+- [x] CRUD documents under project; only project members can access
+- [x] Upload image creates DocumentPart with stable order; reorder and delete work
+- [x] Media served or URL returned for part image
+- [x] Workflow transitions persist; archived hidden from default document list
+- [x] Tests: member CRUD parts; non-member denied
 
 ## Blocked by
 
