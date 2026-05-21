@@ -1,8 +1,9 @@
 """Register, login, and user lookup."""
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core.exceptions import ConflictError, NotFoundError
+from backend.core.exceptions import ConflictError, InvalidCredentialsError, NotFoundError
 from backend.core.settings.auth import AuthSettings, get_auth_settings
 from backend.users.application.jwt_tokens import create_access_token
 from backend.users.application.password import hash_password, verify_password
@@ -18,6 +19,9 @@ class AuthService:
     ) -> None:
         self._repo = repository or UserRepository()
         self._auth_settings = auth_settings or get_auth_settings()
+
+    async def find_by_email(self, session: AsyncSession, email: str) -> User | None:
+        return await self._repo.get_by_email(session, email)
 
     async def register(
         self,
@@ -37,6 +41,11 @@ class AuthService:
             username=username,
             hashed_password=hash_password(password),
         )
+        try:
+            await session.commit()
+        except IntegrityError as exc:
+            await session.rollback()
+            raise ConflictError("Email or username already taken") from exc
         token = create_access_token(user.id, self._auth_settings)
         return user, token
 
@@ -49,7 +58,7 @@ class AuthService:
     ) -> tuple[User, str]:
         user = await self._repo.get_by_email(session, email)
         if user is None or not verify_password(password, user.hashed_password):
-            raise NotFoundError("Invalid email or password")
+            raise InvalidCredentialsError("Invalid email or password")
         token = create_access_token(user.id, self._auth_settings)
         return user, token
 
@@ -58,3 +67,22 @@ class AuthService:
         if user is None:
             raise NotFoundError("User not found")
         return user
+
+    async def register_if_absent(
+        self,
+        session: AsyncSession,
+        *,
+        email: str,
+        username: str,
+        password: str,
+    ) -> tuple[User | None, str | None]:
+        """Create user when email is free; return (None, None) if already exists."""
+        if await self.find_by_email(session, email):
+            return None, None
+        user, token = await self.register(
+            session,
+            email=email,
+            username=username,
+            password=password,
+        )
+        return user, token
