@@ -54,7 +54,8 @@ def test_register_stores_bcrypt_hash(client, unique_user):
             cur.execute("SELECT hashed_password FROM users WHERE email = %s", (unique_user["email"],))
             hashed = cur.fetchone()[0]
     assert hashed != unique_user["password"]
-    assert hashed.startswith("$2")
+    assert hashed.startswith("$2b$") or hashed.startswith("$2a$")
+    assert "$12$" in hashed  # bcrypt cost factor 12 (see password.BCRYPT_ROUNDS)
 
 
 @pytest.mark.integration

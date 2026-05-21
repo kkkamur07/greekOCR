@@ -29,8 +29,9 @@ class UserRepository:
         username: str,
         hashed_password: str,
     ) -> User:
+        """Stage a new user; caller commits the session."""
         user = User(email=email, username=username, hashed_password=hashed_password)
         session.add(user)
-        await session.commit()
+        await session.flush()
         await session.refresh(user)
         return user

@@ -1,4 +1,8 @@
-"""Shared pytest fixtures — integration tests use real Postgres (kalamos)."""
+"""Shared pytest fixtures — integration tests use real Postgres (kalamos).
+
+No DB mocking: ``unique_user`` only generates unique credentials; ``registered_user``
+hits live ``POST /auth/register`` against kalamos.
+"""
 
 import uuid
 
@@ -19,7 +23,7 @@ def client() -> TestClient:
 
 @pytest.fixture
 def unique_user() -> dict[str, str]:
-    """Credentials for a fresh user (unique per test run)."""
+    """Unique credentials dict only — not a mock; used with live register HTTP calls."""
     suffix = uuid.uuid4().hex[:8]
     return {
         "email": f"user-{suffix}@test.kalamos",
