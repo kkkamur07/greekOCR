@@ -3,7 +3,7 @@
   "info": {
     "title": "annote",
     "description": "Standalone manuscript line annotation API",
-    "version": "0.1.0"
+    "version": "0.0.0"
   },
   "paths": {
     "/": {
@@ -284,6 +284,66 @@
         }
       }
     },
+    "/pages/{stem}/segment": {
+      "post": {
+        "tags": [
+          "pages"
+        ],
+        "summary": "Post Auto Segment",
+        "description": "Run Kraken BLLA line segmentation and save segments to the page annotation JSON.",
+        "operationId": "post_auto_segment_pages__stem__segment_post",
+        "parameters": [
+          {
+            "name": "stem",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Stem"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/AutoSegmentRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageAnnotation"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/pages/{stem}/export": {
       "post": {
         "tags": [
@@ -403,6 +463,25 @@
   },
   "components": {
     "schemas": {
+      "AutoSegmentRequest": {
+        "properties": {
+          "replace": {
+            "type": "boolean",
+            "title": "Replace",
+            "description": "Replace existing segments. If false, append Kraken lines after current segments.",
+            "default": true
+          },
+          "pair_transcription": {
+            "type": "boolean",
+            "title": "Pair Transcription",
+            "description": "Pair segments to transcription text lines in reading order when available.",
+            "default": true
+          }
+        },
+        "type": "object",
+        "title": "AutoSegmentRequest",
+        "description": "Run Kraken line segmentation on a page image."
+      },
       "Body_post_import_page_pages_import_post": {
         "properties": {
           "image": {
@@ -525,11 +604,16 @@
           "status": {
             "type": "string",
             "title": "Status"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
           }
         },
         "type": "object",
         "required": [
-          "status"
+          "status",
+          "version"
         ],
         "title": "HealthResponse"
       },

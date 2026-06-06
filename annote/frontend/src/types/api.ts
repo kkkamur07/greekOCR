@@ -63,3 +63,8 @@ export interface ExportProgressEvent {
 }
 
 export type DrawTool = "pan" | "select" | "polygon" | "rectangle";
+
+export interface AutoSegmentRequest {
+  replace?: boolean;
+  pair_transcription?: boolean;
+}

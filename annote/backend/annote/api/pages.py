@@ -8,11 +8,13 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 
 from annote.schemas.annotation import PageAnnotation
+from annote.schemas.auto_segment import AutoSegmentRequest
 from annote.schemas.export import ExportErrorEvent, ExportRequest
 from annote.schemas.warnings import ExportResponse
 from annote.schemas.pages import PageListResponse, PageSummary, TextLineOut, TranscriptionResponse
 from annote.services.annotation_store import load_annotation, save_annotation
 from annote.services.export_service import export_page, export_page_events
+from annote.services.kraken_segment import auto_segment_page
 from annote.services.page_catalogue import image_media_type, list_pages, resolve_page_image
 from annote.services.page_import import import_page, import_summary
 from annote.services.text_lines import split_text_lines
@@ -68,6 +70,26 @@ async def get_transcription(stem: str) -> TranscriptionResponse:
 @router.get("/{stem}/annotation", response_model=PageAnnotation)
 async def get_annotation(stem: str) -> PageAnnotation:
     return load_annotation(_data_root(), stem)
+
+
+@router.post("/{stem}/segment", response_model=PageAnnotation)
+async def post_auto_segment(stem: str, body: AutoSegmentRequest | None = None) -> PageAnnotation:
+    """Run Kraken BLLA line segmentation and save segments to the page annotation JSON."""
+    image_path = resolve_page_image(_data_root() / "manuscripts" / "pages", stem)
+    if image_path is None:
+        raise HTTPException(status_code=404, detail=f"Page not found: {stem}")
+    opts = body or AutoSegmentRequest()
+    try:
+        return auto_segment_page(
+            _data_root(),
+            stem,
+            replace=opts.replace,
+            pair_transcription=opts.pair_transcription,
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.put("/{stem}/annotation", response_model=PageAnnotation)

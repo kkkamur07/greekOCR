@@ -1,4 +1,5 @@
 import type {
+  AutoSegmentRequest,
   ExportProgressEvent,
   ExportResponse,
   PageAnnotation,
@@ -71,6 +72,16 @@ export async function saveAnnotation(stem: string, annotation: PageAnnotation): 
   return request<PageAnnotation>(`/pages/${encodeURIComponent(stem)}/annotation`, {
     method: "PUT",
     body: JSON.stringify(annotation),
+  });
+}
+
+export async function autoSegmentPage(
+  stem: string,
+  options?: AutoSegmentRequest,
+): Promise<PageAnnotation> {
+  return request<PageAnnotation>(`/pages/${encodeURIComponent(stem)}/segment`, {
+    method: "POST",
+    body: JSON.stringify(options ?? {}),
   });
 }
 
