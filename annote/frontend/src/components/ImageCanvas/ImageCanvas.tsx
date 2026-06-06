@@ -381,6 +381,7 @@ const ImageCanvas = forwardRef<ImageCanvasHandle, ImageCanvasProps>(function Ima
               draftPoints={overlayDraft}
               editMode={editMode}
               visible={showSegments}
+              zoomScale={transform.scale}
               interactive={!editMode && !(tool === "polygon" && !spaceHeld)}
               onSelect={(id) => {
                 if (!panMovedRef.current) onSelect(id);
