@@ -139,16 +139,31 @@ Contributors: see [`issues/`](issues/) (`kanban.md`, `dag.md`) for what to work 
 
 ### Quick start (Docker)
 
+Ensure ports **3000** and **5050** are free, then from `annote/`:
+
 ```bash
-cd annote
-docker compose up --build -d # for the detached and the background mode.
+docker compose up --build      # foreground (logs in terminal; Ctrl+C stops)
+docker compose up --build -d   # detached (runs in background)
 ```
+
+After a detached start: `docker compose ps`, `docker compose logs -f`, `docker compose down`.
 
 | Service | URL |
 |---------|-----|
 | Editor | http://localhost:3000 |
 | API | http://localhost:5050 |
 
-`data/` is bind-mounted so pages, annotations, and exports persist on the host. For local dev without Docker, env vars, and export details, see [annote/README.md](annote/README.md). 
+`data/` is bind-mounted so pages, annotations, and exports persist on the host.
 
-Make sure that the port are free. 
+### Bumping the Docker image version
+
+1. Edit [`annote/VERSION`](annote/VERSION) (e.g. `0.2.0` → `0.2.1`).
+2. Rebuild and tag images with that version:
+
+```bash
+cd annote
+export ANNOTE_VERSION=$(cat VERSION)
+docker compose up --build -d
+```
+
+Compose tags images as `annote-backend:$ANNOTE_VERSION` and `annote-frontend:$ANNOTE_VERSION`. Confirm with `curl http://localhost:5050/health` (`version` in the JSON). Full details: [annote/README.md](annote/README.md).

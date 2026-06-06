@@ -163,6 +163,10 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
     return true;
   }, [scheduleSave]);
 
+  const handleUndoLastPoint = useCallback(() => {
+    canvasRef.current?.cancelDraft();
+  }, []);
+
   const handleDeleteKey = useCallback(() => {
     if (canvasRef.current?.cancelDraft()) return;
     deleteSelectedSegment();
@@ -264,12 +268,13 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
         onTool: pickTool,
         onToggleEdit: toggleEdit,
         onToggleLines: toggleLines,
+        onUndoLastPoint: handleUndoLastPoint,
         onDelete: handleDeleteKey,
         onZoomIn: () => canvasRef.current?.zoomIn(),
         onZoomOut: () => canvasRef.current?.zoomOut(),
         onFitPage: () => canvasRef.current?.fitPage(),
       }),
-      [pickTool, toggleEdit, toggleLines, handleDeleteKey],
+      [pickTool, toggleEdit, toggleLines, handleUndoLastPoint, handleDeleteKey],
     ),
   );
 
@@ -318,7 +323,7 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
             type="button"
             onClick={() => pickTool("polygon")}
             className={toolBtn(tool === "polygon")}
-            title={`Polygon (${EDITOR_SHORTCUTS.polygon})`}
+            title={`Polygon (${EDITOR_SHORTCUTS.polygon}) · ${EDITOR_SHORTCUTS.undoLastPoint} undo point`}
           >
             Poly <kbd className="ml-1 text-[10px] opacity-60">{EDITOR_SHORTCUTS.polygon}</kbd>
           </button>
@@ -398,8 +403,8 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
 
       <div className="shrink-0 border-b border-gray-100 bg-gray-50 px-3 py-1 text-[11px] text-gray-500">
         <span className="font-medium text-gray-600">Shortcuts:</span>{" "}
-        Drag to pan (polygon too) · scroll to zoom · Enter finish polygon · Esc cancel draw · Del delete ·{" "}
-        {EDITOR_SHORTCUTS.fitPage} fit page
+        Drag to pan (polygon too) · scroll to zoom · Enter finish polygon · {EDITOR_SHORTCUTS.undoLastPoint} / Backspace
+        undo point · Esc cancel draw · Del delete · {EDITOR_SHORTCUTS.fitPage} fit page
       </div>
 
       {saveError && <div className="shrink-0 bg-red-50 px-3 py-1.5 text-sm text-red-700">{saveError}</div>}

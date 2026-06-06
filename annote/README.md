@@ -64,21 +64,51 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## Docker (one command)
 
-From `annote/`:
+Ensure ports **3000** and **5050** are free. From `annote/`:
 
 ```bash
-docker compose up --build
+docker compose up --build      # foreground; Ctrl+C stops the stack
+docker compose up --build -d   # detached background
 ```
 
-- Frontend: [http://localhost:3000](http://localhost:3000)
-- API: [http://localhost:5050](http://localhost:5050)
+| Service | URL |
+|---------|-----|
+| Frontend | [http://localhost:3000](http://localhost:3000) |
+| API | [http://localhost:5050](http://localhost:5050) |
 
 `data/` is mounted into the backend container, so pages, annotations, and exports persist on the host.
+
+Useful after `-d`: `docker compose ps`, `docker compose logs -f`, `docker compose down`.
 
 - `NEXT_PUBLIC_API_BASE_URL` (build arg) — URL the **browser** uses (`http://localhost:5050`)
 - `API_INTERNAL_URL` (runtime env on the frontend service) — URL **server-side** Next.js uses inside Compose (`http://backend:5050`)
 
 Rebuild the frontend image if you change `NEXT_PUBLIC_API_BASE_URL`.
+
+### Bumping the Docker version
+
+**Single source of truth:** [`VERSION`](VERSION) at the repo root of `annote/` (also used by the Python package via `pyproject.toml`).
+
+1. Edit `VERSION` (semver, one line — e.g. `0.2.1`).
+2. Export it and rebuild so Compose tags images correctly:
+
+```bash
+export ANNOTE_VERSION=$(cat VERSION)
+docker compose up --build -d
+```
+
+`docker-compose.yml` builds `annote-backend:${ANNOTE_VERSION}` and `annote-frontend:${ANNOTE_VERSION}` and passes `APP_VERSION` into both Dockerfiles (API `/health` and frontend build).
+
+3. Verify:
+
+```bash
+curl -s http://localhost:5050/health | python -m json.tool
+docker images 'annote-*'
+```
+
+**When to bump:** any release you want to distinguish in image tags or `/health` — not required for every code change during dev (rebuild with the same `ANNOTE_VERSION` is fine).
+
+**Optional:** set `ANNOTE_VERSION` in a shell profile or `.env` next to `docker-compose.yml` so you do not export it every time. If `ANNOTE_VERSION` is unset, Compose defaults to `0.1.0` — keep it in sync with `VERSION` when tagging releases.
 
 ## Environment variables
 

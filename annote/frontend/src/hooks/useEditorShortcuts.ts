@@ -10,6 +10,7 @@ export const EDITOR_SHORTCUTS = {
   rectangle: "R",
   editVertices: "E",
   toggleLines: "L",
+  undoLastPoint: "⌘Z",
   delete: "Del",
   fitPage: "0",
   zoomIn: "=",
@@ -20,6 +21,7 @@ interface EditorShortcutHandlers {
   onTool: (tool: DrawTool) => void;
   onToggleEdit: () => void;
   onToggleLines: () => void;
+  onUndoLastPoint: () => void;
   onDelete: () => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
@@ -83,6 +85,11 @@ export function useEditorShortcuts(handlers: EditorShortcutHandlers): void {
       if (key === "-") {
         e.preventDefault();
         handlers.onZoomOut();
+        return;
+      }
+      if ((key === "z" || key === "Z") && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
+        e.preventDefault();
+        handlers.onUndoLastPoint();
         return;
       }
       if (key === "Delete" || (key === "Backspace" && !e.metaKey && !e.ctrlKey)) {
