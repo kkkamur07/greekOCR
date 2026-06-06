@@ -181,6 +181,7 @@ const ImageCanvas = forwardRef<ImageCanvasHandle, ImageCanvasProps>(function Ima
       if (e.key === "Enter" && tool === "polygon" && draftPoints.length >= 4) {
         e.preventDefault();
         finishSegment("polygon", draftPoints);
+        return;
       }
       if (e.key === "Escape") {
         setDraftPoints([]);
