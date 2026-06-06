@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 from fastapi.responses import PlainTextResponse
 
+from annote import __version__
 from annote.schemas.health import HealthResponse
 
 router = APIRouter(tags=["health"])
@@ -15,4 +16,4 @@ async def root() -> str:
 
 @router.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
-    return HealthResponse(status="ok")
+    return HealthResponse(status="ok", version=__version__)

@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from annote import __version__
 from annote.api.health import router as health_router
 from annote.api.pages import router as pages_router
 from annote.settings import get_settings
@@ -28,7 +29,7 @@ def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(
         title="annote",
-        version="0.1.0",
+        version=__version__,
         description="Standalone manuscript line annotation API",
         lifespan=lifespan,
     )

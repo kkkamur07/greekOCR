@@ -141,7 +141,7 @@ Contributors: see [`issues/`](issues/) (`kanban.md`, `dag.md`) for what to work 
 
 ```bash
 cd annote
-docker compose up --build
+docker compose up --build -d # for the detached and the background mode.
 ```
 
 | Service | URL |
@@ -149,4 +149,6 @@ docker compose up --build
 | Editor | http://localhost:3000 |
 | API | http://localhost:5050 |
 
-`data/` is bind-mounted so pages, annotations, and exports persist on the host. For local dev without Docker, env vars, and export details, see [annote/README.md](annote/README.md).
+`data/` is bind-mounted so pages, annotations, and exports persist on the host. For local dev without Docker, env vars, and export details, see [annote/README.md](annote/README.md). 
+
+Make sure that the port are free. 
