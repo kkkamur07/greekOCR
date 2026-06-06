@@ -1,0 +1,54 @@
+.image-canvas-root {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #e5e7eb;
+}
+
+.image-canvas-stage {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+  cursor: grab;
+}
+
+.image-canvas-stage.is-panning {
+  cursor: grabbing;
+}
+
+.image-canvas-stage.is-drawing {
+  cursor: crosshair;
+}
+
+.image-canvas-viewport {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.image-canvas-zoom {
+  pointer-events: auto;
+}
+
+.image-canvas-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+.image-page-layer {
+  position: relative;
+  display: inline-block;
+  line-height: 0;
+  user-select: none;
+}
+
+.image-page-layer img {
+  display: block;
+  max-width: none;
+  pointer-events: none;
+}

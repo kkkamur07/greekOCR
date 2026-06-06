@@ -2,7 +2,7 @@
 id: "005"
 title: "segment-edit-delete"
 type: AFK
-status: backlog
+status: done
 blocked_by:
   - "004-segment-draw-and-persist.md"
 parent_prd: "issues/prd.md"

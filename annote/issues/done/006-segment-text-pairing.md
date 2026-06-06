@@ -2,7 +2,7 @@
 id: "006"
 title: "segment-text-pairing"
 type: AFK
-status: backlog
+status: done
 blocked_by:
   - "005-segment-edit-delete.md"
 parent_prd: "issues/prd.md"

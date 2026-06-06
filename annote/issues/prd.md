@@ -115,8 +115,7 @@ Primary outputs per paired segment: `<manuscript_name>_<segment_number>.jpg` and
 - `data/manuscripts/pages/` — source page images
 - `data/transcriptions/pages/` — page transcription text files (matching stems)
 - `data/annotations/pages/` — per-page JSON (segments + pairings + export metadata)
-- `data/manuscripts/lines/` — exported processed JPEGs
-- `data/transcriptions/lines/` — exported line `.txt` files
+- `data/manuscripts/export/` — exported processed JPEGs and line `.txt` files (`<stem>_<segment_number>.{jpg,txt}`)
 
 ### API contracts (conceptual)
 
@@ -182,5 +181,5 @@ Primary outputs per paired segment: `<manuscript_name>_<segment_number>.jpg` and
 
 - Domain glossary: `annote/CONTEXT.md`
 - Sample data: move existing JPEG into `data/manuscripts/pages/` and add matching `.txt` transcription.
-- Rectangle draw gesture (exact click sequence) is TBD at implementation; slice 004 is marked HITL for canvas UX review.
+- Rectangle draw gesture (exact click sequence) is agent-chosen in slice 004; iterate on review if needed.
 - Primary user deliverables are processed `.jpg` + `.txt` per paired segment; annotation JSON is an intermediate persistence format.
