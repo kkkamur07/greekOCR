@@ -6,6 +6,7 @@ import ImageCanvas, { type ImageCanvasHandle } from "@/components/ImageCanvas/Im
 import SegmentPairingBar from "@/components/SegmentPairingBar";
 import { EDITOR_SHORTCUTS, useEditorShortcuts } from "@/hooks/useEditorShortcuts";
 import {
+  autoSegmentPage,
   exportPage,
   fetchAnnotation,
   fetchTranscription,
@@ -39,6 +40,10 @@ function exportStepLabel(step: ExportStep): string {
   return "Saving";
 }
 
+function renumberSegments(segments: Segment[]): Segment[] {
+  return segments.map((s, i) => ({ ...s, number: i + 1 }));
+}
+
 function firstUnpairedLineIndex(
   textLines: TranscriptionResponse["text_lines"],
   segments: Segment[],
@@ -64,6 +69,7 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
   const [imageSize, setImageSize] = useState({ width: 1200, height: 1600 });
   const [dirty, setDirty] = useState(initialDirty);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [segmenting, setSegmenting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState<ExportProgressEvent | null>(null);
   const [binarizeOnExport, setBinarizeOnExport] = useState(false);
@@ -156,7 +162,7 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
     const ann = annotationRef.current;
     scheduleSave({
       ...ann,
-      segments: ann.segments.filter((s) => s.id !== id),
+      segments: renumberSegments(ann.segments.filter((s) => s.id !== id)),
     });
     setSelectedId(null);
     setTranscriptionPromptId(null);
@@ -226,6 +232,33 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
     setTool("pan");
     setEditMode(false);
   }, []);
+
+  const handleAutoSegment = async () => {
+    const ann = annotationRef.current;
+    if (ann.segments.length > 0) {
+      const ok = window.confirm(
+        "Run Kraken line segmentation? This will replace all existing segments on this page.",
+      );
+      if (!ok) return;
+    }
+
+    setSegmenting(true);
+    try {
+      const result = await autoSegmentPage(stem, { replace: true, pair_transcription: true });
+      setAnnotation(result);
+      setDirty(true);
+      setSelectedId(null);
+      setTranscriptionPromptId(null);
+      setEditMode(false);
+      setTool("select");
+      setShowSegments(true);
+      showToast(`Kraken found ${result.segments.length} line segment(s).`);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Auto-segment failed", "error");
+    } finally {
+      setSegmenting(false);
+    }
+  };
 
   const handleExport = async () => {
     setExporting(true);
@@ -353,6 +386,15 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
           </button>
           <button
             type="button"
+            onClick={handleAutoSegment}
+            disabled={segmenting || exporting}
+            className="rounded px-2.5 py-1 text-sm text-indigo-800 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-40"
+            title="Auto line segmentation (Kraken BLLA) — requires pip install 'annote[kraken]'"
+          >
+            Auto segment
+          </button>
+          <button
+            type="button"
             onClick={handleDeleteClick}
             className="rounded px-2.5 py-1 text-sm text-red-700 hover:bg-red-50"
             title="Delete (Del)"
@@ -382,9 +424,26 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
         </div>
       </header>
 
-      {exporting && (
-        <div className="shrink-0 border-b border-blue-100 bg-blue-50 px-3 py-2">
-          {exportProgress && exportProgress.total > 0 ? (
+      <div className="shrink-0 border-b border-gray-100 bg-gray-50 px-3 py-1 text-[11px] text-gray-500">
+        <span className="font-medium text-gray-600">Shortcuts:</span>{" "}
+        Drag to pan (polygon too) · scroll to zoom · Enter finish polygon · {EDITOR_SHORTCUTS.undoLastPoint} / Backspace
+        undo point · Esc cancel draw · Del delete · {EDITOR_SHORTCUTS.fitPage} fit page
+      </div>
+
+      {saveError && <div className="shrink-0 bg-red-50 px-3 py-1.5 text-sm text-red-700">{saveError}</div>}
+
+      {(segmenting || exporting) && (
+        <div
+          role="alert"
+          aria-live="polite"
+          className="pointer-events-none fixed left-1/2 top-4 z-50 w-[min(24rem,calc(100vw-2rem))] -translate-x-1/2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 shadow-lg"
+        >
+          {segmenting ? (
+            <>
+              <p className="text-sm text-blue-900">Running Kraken line segmentation…</p>
+              <div className="progress-indeterminate mt-2 h-1.5 overflow-hidden rounded-full bg-blue-100" />
+            </>
+          ) : exportProgress && exportProgress.total > 0 ? (
             <>
               <div className="flex items-center justify-between gap-3 text-sm text-blue-900">
                 <span>
@@ -394,7 +453,7 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
                 </span>
                 <span className="text-xs text-blue-700">segment {exportProgress.segment_number}</span>
               </div>
-              <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-blue-100">
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-blue-100">
                 <div
                   className="h-full rounded-full bg-blue-600 transition-all duration-200"
                   style={{
@@ -404,20 +463,15 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
               </div>
             </>
           ) : (
-            <p className="text-sm text-blue-900">Preparing export…</p>
+            <>
+              <p className="text-sm text-blue-900">Preparing export…</p>
+              <div className="progress-indeterminate mt-2 h-1.5 overflow-hidden rounded-full bg-blue-100" />
+            </>
           )}
         </div>
       )}
 
-      <div className="shrink-0 border-b border-gray-100 bg-gray-50 px-3 py-1 text-[11px] text-gray-500">
-        <span className="font-medium text-gray-600">Shortcuts:</span>{" "}
-        Drag to pan (polygon too) · scroll to zoom · Enter finish polygon · {EDITOR_SHORTCUTS.undoLastPoint} / Backspace
-        undo point · Esc cancel draw · Del delete · {EDITOR_SHORTCUTS.fitPage} fit page
-      </div>
-
-      {saveError && <div className="shrink-0 bg-red-50 px-3 py-1.5 text-sm text-red-700">{saveError}</div>}
-
-      {toast && (
+      {toast && !segmenting && !exporting && (
         <div
           role="alert"
           className={`pointer-events-none fixed left-1/2 top-4 z-50 -translate-x-1/2 rounded-lg border px-4 py-2.5 text-sm shadow-lg ${
