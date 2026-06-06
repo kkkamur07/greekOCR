@@ -2,7 +2,7 @@
 id: "007"
 title: "export-dirty-state"
 type: AFK
-status: backlog
+status: done
 blocked_by:
   - "006-segment-text-pairing.md"
 parent_prd: "issues/prd.md"

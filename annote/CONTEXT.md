@@ -77,8 +77,7 @@ _Avoid_: Unsaved, modified
 - `data/manuscripts/pages/` — full **Page** images
 - `data/transcriptions/pages/` — full **Page transcription** files (same stem as the Page image)
 - `data/annotations/pages/` — segment geometry and pairings per Page (`<page_stem>.json`)
-- `data/manuscripts/lines/` — exported **Processed line image**s: `<manuscript_name>_<segment_number>.jpg`
-- `data/transcriptions/lines/` — exported **Line transcription file**s: `<manuscript_name>_<segment_number>.txt`
+- `data/manuscripts/export/` — exported **Processed line image**s and **Line transcription file**s together: `<manuscript_name>_<segment_number>.jpg` and `<manuscript_name>_<segment_number>.txt`
 
 ## Relationships
 
