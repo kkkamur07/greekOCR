@@ -11,14 +11,8 @@ router = APIRouter(tags=["root"])
 async def welcome() -> WelcomeResponse:
     return WelcomeResponse(
         service="Kalamos API",
-        tagline="Where manuscripts meet the machine",
         message=(
-            "Welcome to Kalamos — the greekOCR platform for scholars, curators, and builders. "
-            "Upload facsimiles, segment pages into blocks and lines, run Kraken and friends for "
-            "transcription, then refine ground truth by hand. Layout you draw is law; models "
-            "propose, humans decide."
+            "Welcome to Kalamos API"
         ),
-        docs_url="/docs",
-        health_url="/health",
         version="0.1.0",
     )
