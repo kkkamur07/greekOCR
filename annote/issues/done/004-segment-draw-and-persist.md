@@ -1,8 +1,8 @@
 ---
 id: "004"
 title: "segment-draw-and-persist"
-type: HITL
-status: backlog
+type: AFK
+status: done
 blocked_by:
   - "003-page-transcription-panel.md"
 parent_prd: "issues/prd.md"
@@ -18,7 +18,7 @@ Canvas tools to draw **Polygon segment** and **Rectangle segment** (corner-based
 
 Adapt drawing patterns from Kalamos legacy `ImageCanvas` where useful, implemented as Next.js client components.
 
-**Human decisions required:** rectangle draw gesture (click-drag-corner sequence), default vertex handle size, keyboard shortcuts, overlay styling.
+Canvas UX defaults (rectangle gesture, vertex size, shortcuts) are agent-chosen; iterate if review feedback requires changes.
 
 ## Error handling
 

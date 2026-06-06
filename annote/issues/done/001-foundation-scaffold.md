@@ -2,7 +2,7 @@
 id: "001"
 title: "foundation-scaffold"
 type: AFK
-status: backlog
+status: done
 blocked_by: []
 parent_prd: "issues/prd.md"
 ---
@@ -19,20 +19,20 @@ No annotation features yet — prove both processes start and the API responds.
 
 ## Error handling
 
-- [ ] Missing `data/` subdirectories are created on startup or documented as a setup step with clear errors.
+- [x] Missing `data/` subdirectories are created on startup or documented as a setup step with clear errors.
 
 ## Dev / test data
 
-- [ ] Document expected folder layout in `annote/README.md`.
-- [ ] Optional: relocate sample JPEG into `data/manuscripts/pages/` as fixture for next slices.
+- [x] Document expected folder layout in `annote/README.md`.
+- [x] Optional: relocate sample JPEG into `data/manuscripts/pages/` as fixture for next slices.
 
 ## Acceptance criteria
 
-- [ ] `uvicorn` starts annote FastAPI; `GET /health` returns OK
-- [ ] `npm run dev` starts Next.js; home page loads
-- [ ] CORS allows frontend to call backend on localhost
-- [ ] `data/` layout matches PRD (pages, transcriptions, annotations, line outputs)
-- [ ] README documents how to run both services
+- [x] `uvicorn` starts annote FastAPI; `GET /health` returns OK
+- [x] `npm run dev` starts Next.js; home page loads
+- [x] CORS allows frontend to call backend on localhost
+- [x] `data/` layout matches PRD (pages, transcriptions, annotations, line outputs)
+- [x] README documents how to run both services
 
 ## Blocked by
 

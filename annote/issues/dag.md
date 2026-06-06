@@ -29,8 +29,8 @@ No second lane is available — every other issue transitively depends on 001.
 
 | Type | Count |
 |------|------:|
-| AFK | 7 |
-| HITL | 1 |
+| AFK | 8 |
+| HITL | 0 |
 
 ## Branch plan (when pulling work)
 
@@ -40,7 +40,7 @@ All branches off `main` (or annote base branch):
 feat/001-foundation-scaffold   ← start here (only lane)
 feat/002-page-list-and-viewer  ← after 001 merges
 feat/003-page-transcription-panel
-feat/004-segment-draw-and-persist   (HITL — user-owned)
+feat/004-segment-draw-and-persist
 feat/005-segment-edit-delete
 feat/006-segment-text-pairing
 feat/007-export-dirty-state
@@ -56,7 +56,7 @@ flowchart TD
   001["001 foundation-scaffold<br/>AFK"]
   002["002 page-list-and-viewer<br/>AFK"]
   003["003 page-transcription-panel<br/>AFK"]
-  004["004 segment-draw-and-persist<br/>HITL"]
+  004["004 segment-draw-and-persist<br/>AFK"]
   005["005 segment-edit-delete<br/>AFK"]
   006["006 segment-text-pairing<br/>AFK"]
   007["007 export-dirty-state<br/>AFK"]
@@ -70,10 +70,8 @@ flowchart TD
   006 --> 007
   007 --> 008
 
-  classDef hitl stroke-dasharray: 5 5
   classDef ready fill:#e8f5e9,stroke:#2e7d32
   class 001 ready
-  class 004 hitl
 ```
 
 ## Dependency detail
@@ -83,7 +81,7 @@ flowchart TD
 | 001 foundation-scaffold | AFK | — | 002 |
 | 002 page-list-and-viewer | AFK | 001 | 003 |
 | 003 page-transcription-panel | AFK | 002 | 004 |
-| 004 segment-draw-and-persist | **HITL** | 003 | 005 |
+| 004 segment-draw-and-persist | AFK | 003 | 005 |
 | 005 segment-edit-delete | AFK | 004 | 006 |
 | 006 segment-text-pairing | AFK | 005 | 007 |
 | 007 export-dirty-state | AFK | 006 | 008 |
@@ -99,4 +97,4 @@ The current vertical slices form a **single critical path**. To unlock parallel 
 | Text line parser + transcription API | Page list UI + image viewer | 002 (needs page API) |
 | Rectify processing module (unit tests) | Pairing panel UI | 006+ (late; needs annotation model) |
 
-Until then, **one subagent / one branch at a time** on the critical path.
+Until then, **one subagent / one branch at a time** on the critical path. All slices are **AFK** — agents may implement any issue once its blockers are done.

@@ -2,7 +2,7 @@
 id: "003"
 title: "page-transcription-panel"
 type: AFK
-status: backlog
+status: done
 blocked_by:
   - "002-page-list-and-viewer.md"
 parent_prd: "issues/prd.md"

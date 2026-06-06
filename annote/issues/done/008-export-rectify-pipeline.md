@@ -2,7 +2,7 @@
 id: "008"
 title: "export-rectify-pipeline"
 type: AFK
-status: backlog
+status: done
 blocked_by:
   - "007-export-dirty-state.md"
 parent_prd: "issues/prd.md"

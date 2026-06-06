@@ -1,0 +1,95 @@
+# annote
+
+Standalone local tool for manually segmenting manuscript page images and pairing each segment with its transcription line. Produces training-ready processed line images and text files.
+
+See `CONTEXT.md` for domain glossary and `issues/prd.md` for requirements.
+
+## Data layout
+
+All persistence is under `data/` (path configurable via `ANNOTE_DATA_ROOT` in `backend/.env`):
+
+| Path | Contents |
+|------|----------|
+| `data/manuscripts/pages/` | Source page images (`.jpg`, `.png`, …) |
+| `data/transcriptions/pages/` | Page transcriptions (`<stem>.txt`, line-broken) |
+| `data/annotations/pages/` | Per-page annotation JSON (segments + pairings; tool-internal) |
+| `data/manuscripts/export/` | **Exported outputs** — paired `<stem>_<segment_number>.jpg` and `.txt` side by side |
+
+Missing subdirectories are **created automatically** when the API starts. If creation fails (permissions, bad path), startup aborts with a clear error pointing at `ANNOTE_DATA_ROOT`.
+
+### Sample fixture
+
+`data/manuscripts/pages/sample_folio.jpg` and `data/transcriptions/pages/sample_folio.txt` are included for local testing.
+
+## Setup
+
+### Backend virtual environment
+
+```bash
+cd annote/backend
+python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"            # add ,kraken for optional export binarization
+cp .env.example .env               # edit ANNOTE_DATA_ROOT / ANNOTE_PORT if needed
+```
+
+### Frontend
+
+```bash
+cd annote/frontend
+cp .env.local.example .env.local   # NEXT_PUBLIC_API_BASE_URL must match ANNOTE_PORT
+npm install
+```
+
+## Development (two terminals)
+
+### Terminal 1 — API
+
+```bash
+cd annote/backend
+source .venv/bin/activate
+annote                             # reads host/port/data root from .env
+```
+
+Defaults from `.env.example`: `http://127.0.0.1:5050`
+
+### Terminal 2 — Frontend
+
+```bash
+cd annote/frontend
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000).
+
+## Environment variables
+
+| Variable | File | Default | Purpose |
+|----------|------|---------|---------|
+| `ANNOTE_DATA_ROOT` | `backend/.env` | `../data` | Filesystem data root |
+| `ANNOTE_HOST` | `backend/.env` | `127.0.0.1` | API bind host |
+| `ANNOTE_PORT` | `backend/.env` | `5050` | API bind port |
+| `ANNOTE_CORS_ORIGINS` | `backend/.env` | `http://localhost:3000` | Allowed browser origins |
+| `ANNOTE_RELOAD` | `backend/.env` | `true` | Uvicorn auto-reload |
+| `NEXT_PUBLIC_API_BASE_URL` | `frontend/.env.local` | `http://localhost:5050` | Frontend → API URL |
+
+## Tests (TDD)
+
+```bash
+cd annote/backend
+source .venv/bin/activate
+pytest
+```
+
+## OpenAPI
+
+```bash
+cd annote/backend
+PYTHONPATH=. python scripts/export_openapi.py
+```
+
+Hand-written frontend types: `frontend/src/types/api.ts`.
+
+## Subagents
+
+Issue-specific Cursor subagents: `.cursor/agents/` (`annote-001` … `annote-008`). Completed issue files: `issues/done/`.

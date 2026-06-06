@@ -2,7 +2,7 @@
 id: "002"
 title: "page-list-and-viewer"
 type: AFK
-status: backlog
+status: done
 blocked_by:
   - "001-foundation-scaffold.md"
 parent_prd: "issues/prd.md"
