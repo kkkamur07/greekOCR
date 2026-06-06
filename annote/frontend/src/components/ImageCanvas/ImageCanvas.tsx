@@ -204,13 +204,14 @@ const ImageCanvas = forwardRef<ImageCanvasHandle, ImageCanvasProps>(function Ima
   const isDrawingTool = tool === "polygon" || tool === "rectangle";
 
   const isSegmentHit = (target: EventTarget | null) =>
-    target instanceof Element && target.closest("[data-segment-hit]") != null;
+    target instanceof Element &&
+    (target.closest("[data-segment-hit]") != null || target.closest("[data-vertex-handle]") != null);
 
   const canPanWithPointer = useCallback(
     (button: number) => {
       if (button === 1 || button === 2) return true;
       if (button !== 0) return false;
-      if (editMode) return false;
+      if (editMode && !spaceHeld) return false;
       if (spaceHeld || tool === "pan" || tool === "select") return true;
       if (isDrawingTool && spaceHeld) return true;
       return false;
@@ -338,6 +339,8 @@ const ImageCanvas = forwardRef<ImageCanvasHandle, ImageCanvasProps>(function Ima
   };
 
   const overlayDraft = rectPreview.length > 0 ? rectPreview : draftPoints;
+  const displayWidth = imageWidth * transform.scale;
+  const displayHeight = imageHeight * transform.scale;
   const stageClass = [
     "image-canvas-stage",
     isPanning ? "is-panning" : "",
@@ -360,14 +363,14 @@ const ImageCanvas = forwardRef<ImageCanvasHandle, ImageCanvasProps>(function Ima
         <div
           className="image-canvas-layer"
           style={{
-            width: imageWidth,
-            height: imageHeight,
-            transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
+            width: displayWidth,
+            height: displayHeight,
+            transform: `translate(${transform.x}px, ${transform.y}px)`,
           }}
           onClick={handleLayerClick}
           onDoubleClick={handleLayerDoubleClick}
         >
-          <div className="image-page-layer" style={{ width: imageWidth, height: imageHeight }}>
+          <div className="image-page-layer">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={imageUrl}
@@ -377,6 +380,8 @@ const ImageCanvas = forwardRef<ImageCanvasHandle, ImageCanvasProps>(function Ima
               draggable={false}
             />
             <SegmentOverlay
+              imageWidth={imageWidth}
+              imageHeight={imageHeight}
               segments={segments}
               selectedId={selectedId}
               draftPoints={overlayDraft}
@@ -387,11 +392,12 @@ const ImageCanvas = forwardRef<ImageCanvasHandle, ImageCanvasProps>(function Ima
               onSelect={(id) => {
                 if (!panMovedRef.current) onSelect(id);
               }}
+              clientToImage={imageCoords}
               onVertexDrag={(id, idx, x, y) => {
                 const seg = segments.find((s) => s.id === id);
                 if (!seg) return;
                 const points = seg.points.map((p, i) =>
-                  i === idx ? ([Math.round(x), Math.round(y)] as [number, number]) : p,
+                  i === idx ? ([x, y] as [number, number]) : p,
                 );
                 onUpdateSegment({ ...seg, points });
               }}

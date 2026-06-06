@@ -3,6 +3,8 @@
 import type { Segment } from "@/types/api";
 
 interface SegmentOverlayProps {
+  imageWidth: number;
+  imageHeight: number;
   segments: Segment[];
   selectedId: string | null;
   draftPoints: [number, number][];
@@ -12,6 +14,7 @@ interface SegmentOverlayProps {
   /** Canvas zoom scale — vertex handles shrink in image space so they stay small on screen. */
   zoomScale: number;
   onSelect: (id: string) => void;
+  clientToImage: (clientX: number, clientY: number) => [number, number] | null;
   onVertexDrag: (segmentId: string, pointIndex: number, x: number, y: number) => void;
 }
 
@@ -29,6 +32,8 @@ function segmentPath(points: [number, number][]): string {
 }
 
 export default function SegmentOverlay({
+  imageWidth,
+  imageHeight,
   segments,
   selectedId,
   draftPoints,
@@ -37,6 +42,7 @@ export default function SegmentOverlay({
   interactive,
   zoomScale,
   onSelect,
+  clientToImage,
   onVertexDrag,
 }: SegmentOverlayProps) {
   if (!visible) return null;
@@ -45,9 +51,15 @@ export default function SegmentOverlay({
   const draftRadius = screenScaled(DRAFT_RADIUS, zoomScale);
   const labelFontSize = screenScaled(LABEL_FONT_SIZE, zoomScale);
   const handleStroke = screenScaled(2, zoomScale);
+  const segmentStroke = screenScaled(1.5, zoomScale);
+  const selectedStroke = screenScaled(2.5, zoomScale);
 
   return (
-    <svg className="absolute inset-0 h-full w-full" style={{ pointerEvents: interactive ? "auto" : "none" }}>
+    <svg
+      viewBox={`0 0 ${imageWidth} ${imageHeight}`}
+      className="absolute inset-0 h-full w-full"
+      style={{ pointerEvents: interactive ? "auto" : "none" }}
+    >
       {segments.map((seg) => {
         const selected = seg.id === selectedId;
         return (
@@ -58,8 +70,7 @@ export default function SegmentOverlay({
               d={segmentPath(seg.points)}
               fill={selected ? "rgba(59,130,246,0.25)" : "rgba(34,197,94,0.15)"}
               stroke={selected ? "#2563eb" : "#16a34a"}
-              strokeWidth={selected ? 2.5 : 1.5}
-              vectorEffect="non-scaling-stroke"
+              strokeWidth={selected ? selectedStroke : segmentStroke}
               style={{ pointerEvents: interactive ? "auto" : "none", cursor: interactive ? "pointer" : "default" }}
               onPointerDown={(e) => {
                 if (!interactive) return;
@@ -86,10 +97,10 @@ export default function SegmentOverlay({
             )}
             {editMode &&
               selected &&
-              interactive &&
               seg.points.map((pt, idx) => (
                 <circle
                   key={idx}
+                  data-vertex-handle=""
                   cx={pt[0]}
                   cy={pt[1]}
                   r={handleRadius}
@@ -98,20 +109,21 @@ export default function SegmentOverlay({
                   strokeWidth={handleStroke}
                   className="cursor-move"
                   style={{ pointerEvents: "auto" }}
-                  onMouseDown={(e) => {
-                    e.stopPropagation();
-                  }}
                   onPointerDown={(e) => {
                     e.stopPropagation();
-                    const svg = (e.target as SVGElement).ownerSVGElement;
-                    if (!svg) return;
+                    e.preventDefault();
+                    const handle = e.currentTarget;
+                    handle.setPointerCapture(e.pointerId);
                     const move = (ev: PointerEvent) => {
-                      const rect = svg.getBoundingClientRect();
-                      const scaleX = svg.clientWidth / rect.width;
-                      const scaleY = svg.clientHeight / rect.height;
-                      onVertexDrag(seg.id, idx, (ev.clientX - rect.left) * scaleX, (ev.clientY - rect.top) * scaleY);
+                      const coords = clientToImage(ev.clientX, ev.clientY);
+                      if (coords) onVertexDrag(seg.id, idx, coords[0], coords[1]);
                     };
                     const up = () => {
+                      try {
+                        handle.releasePointerCapture(e.pointerId);
+                      } catch {
+                        /* capture may already be released */
+                      }
                       window.removeEventListener("pointermove", move);
                       window.removeEventListener("pointerup", up);
                     };
@@ -129,9 +141,8 @@ export default function SegmentOverlay({
             points={draftPoints.map((p) => p.join(",")).join(" ")}
             fill="none"
             stroke="#f59e0b"
-            strokeWidth={2}
-            strokeDasharray="6 4"
-            vectorEffect="non-scaling-stroke"
+            strokeWidth={screenScaled(2, zoomScale)}
+            strokeDasharray={`${screenScaled(6, zoomScale)} ${screenScaled(4, zoomScale)}`}
           />
           {draftPoints.map((pt, idx) => (
             <circle key={idx} cx={pt[0]} cy={pt[1]} r={draftRadius} fill="#f59e0b" />

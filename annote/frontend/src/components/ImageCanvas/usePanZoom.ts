@@ -62,7 +62,7 @@ export function imageCoordsFromTransform(
   const rect = container.getBoundingClientRect();
   const x = (clientX - rect.left - transform.x) / transform.scale;
   const y = (clientY - rect.top - transform.y) / transform.scale;
-  return [Math.round(x), Math.round(y)];
+  return [x, y];
 }
 
 export function usePanZoom(imageWidth: number, imageHeight: number) {
