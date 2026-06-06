@@ -1,0 +1,576 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "annote",
+    "description": "Standalone manuscript line annotation API",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Health",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pages": {
+      "get": {
+        "tags": [
+          "pages"
+        ],
+        "summary": "Get Pages",
+        "operationId": "get_pages_pages_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pages/{stem}/image": {
+      "get": {
+        "tags": [
+          "pages"
+        ],
+        "summary": "Get Page Image",
+        "operationId": "get_page_image_pages__stem__image_get",
+        "parameters": [
+          {
+            "name": "stem",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Stem"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pages/{stem}/transcription": {
+      "get": {
+        "tags": [
+          "pages"
+        ],
+        "summary": "Get Transcription",
+        "operationId": "get_transcription_pages__stem__transcription_get",
+        "parameters": [
+          {
+            "name": "stem",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Stem"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscriptionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pages/{stem}/annotation": {
+      "get": {
+        "tags": [
+          "pages"
+        ],
+        "summary": "Get Annotation",
+        "operationId": "get_annotation_pages__stem__annotation_get",
+        "parameters": [
+          {
+            "name": "stem",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Stem"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageAnnotation"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "pages"
+        ],
+        "summary": "Put Annotation",
+        "operationId": "put_annotation_pages__stem__annotation_put",
+        "parameters": [
+          {
+            "name": "stem",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Stem"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PageAnnotation"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageAnnotation"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pages/{stem}/export": {
+      "post": {
+        "tags": [
+          "pages"
+        ],
+        "summary": "Post Export",
+        "operationId": "post_export_pages__stem__export_post",
+        "parameters": [
+          {
+            "name": "stem",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Stem"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ExportMetadata": {
+        "properties": {
+          "exported_at": {
+            "type": "string",
+            "title": "Exported At"
+          },
+          "content_hash": {
+            "type": "string",
+            "title": "Content Hash"
+          }
+        },
+        "type": "object",
+        "required": [
+          "exported_at",
+          "content_hash"
+        ],
+        "title": "ExportMetadata"
+      },
+      "ExportResponse": {
+        "properties": {
+          "exported_count": {
+            "type": "integer",
+            "title": "Exported Count"
+          },
+          "warnings": {
+            "$ref": "#/components/schemas/ExportWarnings"
+          },
+          "steps": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Steps"
+          }
+        },
+        "type": "object",
+        "required": [
+          "exported_count",
+          "warnings",
+          "steps"
+        ],
+        "title": "ExportResponse"
+      },
+      "ExportWarnings": {
+        "properties": {
+          "unpaired_segments": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Unpaired Segments"
+          },
+          "unused_text_lines": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Unused Text Lines"
+          }
+        },
+        "type": "object",
+        "required": [
+          "unpaired_segments",
+          "unused_text_lines"
+        ],
+        "title": "ExportWarnings"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "HealthResponse"
+      },
+      "PageAnnotation": {
+        "properties": {
+          "segments": {
+            "items": {
+              "$ref": "#/components/schemas/Segment"
+            },
+            "type": "array",
+            "title": "Segments"
+          },
+          "export_metadata": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExportMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "PageAnnotation"
+      },
+      "PageListResponse": {
+        "properties": {
+          "pages": {
+            "items": {
+              "$ref": "#/components/schemas/PageSummary"
+            },
+            "type": "array",
+            "title": "Pages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pages"
+        ],
+        "title": "PageListResponse"
+      },
+      "PageSummary": {
+        "properties": {
+          "stem": {
+            "type": "string",
+            "title": "Stem"
+          },
+          "has_transcription": {
+            "type": "boolean",
+            "title": "Has Transcription"
+          },
+          "segment_count": {
+            "type": "integer",
+            "title": "Segment Count"
+          },
+          "export_dirty": {
+            "type": "boolean",
+            "title": "Export Dirty"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stem",
+          "has_transcription",
+          "segment_count",
+          "export_dirty"
+        ],
+        "title": "PageSummary"
+      },
+      "Segment": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "number": {
+            "type": "integer",
+            "title": "Number"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "polygon",
+              "rectangle"
+            ],
+            "title": "Kind"
+          },
+          "points": {
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "type": "array",
+            "title": "Points"
+          },
+          "paired_text_line_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paired Text Line Index"
+          },
+          "text_override": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text Override"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "number",
+          "kind",
+          "points"
+        ],
+        "title": "Segment"
+      },
+      "TextLineOut": {
+        "properties": {
+          "index": {
+            "type": "integer",
+            "title": "Index"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "index",
+          "text"
+        ],
+        "title": "TextLineOut"
+      },
+      "TranscriptionResponse": {
+        "properties": {
+          "raw_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Text"
+          },
+          "text_lines": {
+            "items": {
+              "$ref": "#/components/schemas/TextLineOut"
+            },
+            "type": "array",
+            "title": "Text Lines"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "ok"
+          }
+        },
+        "type": "object",
+        "required": [
+          "raw_text",
+          "text_lines"
+        ],
+        "title": "TranscriptionResponse"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}
