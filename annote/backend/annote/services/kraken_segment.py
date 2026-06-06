@@ -11,6 +11,7 @@ from PIL import Image
 from annote.schemas.annotation import PageAnnotation, Segment
 from annote.services.annotation_store import load_annotation, save_annotation
 from annote.services.page_catalogue import resolve_page_image
+from annote.services.processing.polygon import merge_close_polygon_points
 from annote.services.text_lines import split_text_lines
 
 _model = None
@@ -36,7 +37,8 @@ def _new_segment_id() -> str:
 
 
 def _boundary_to_points(boundary) -> list[list[float]]:
-    return [[float(x), float(y)] for x, y in boundary]
+    raw = [[float(x), float(y)] for x, y in boundary]
+    return merge_close_polygon_points(raw)
 
 
 def kraken_lines_to_segments(lines, *, start_number: int = 1) -> list[Segment]:

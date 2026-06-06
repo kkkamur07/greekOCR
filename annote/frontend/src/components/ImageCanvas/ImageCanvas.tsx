@@ -401,6 +401,13 @@ const ImageCanvas = forwardRef<ImageCanvasHandle, ImageCanvasProps>(function Ima
                 );
                 onUpdateSegment({ ...seg, points });
               }}
+              onInsertVertex={(id, afterIndex, x, y) => {
+                const seg = segments.find((s) => s.id === id);
+                if (!seg) return;
+                const points = [...seg.points];
+                points.splice(afterIndex + 1, 0, [x, y]);
+                onUpdateSegment({ ...seg, points });
+              }}
             />
           </div>
         </div>

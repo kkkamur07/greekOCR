@@ -314,6 +314,30 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
     ),
   );
 
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+
+      const inField =
+        e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement;
+
+      if (!inField && canvasRef.current?.cancelDraft()) {
+        e.preventDefault();
+        return;
+      }
+
+      if (selectedIdRef.current) {
+        e.preventDefault();
+        setSelectedId(null);
+        setTranscriptionPromptId(null);
+        setEditMode(false);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   const selectedSegment = annotation.segments.find((s) => s.id === selectedId) ?? null;
   const textLines = transcription?.status === "missing" ? [] : (transcription?.text_lines ?? []);
 
@@ -370,7 +394,7 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
             className={`${toolBtn(editMode)} disabled:cursor-not-allowed disabled:opacity-40`}
             title={
               selectedSegment
-                ? `Edit vertices (${EDITOR_SHORTCUTS.editVertices})`
+                ? `Edit vertices (${EDITOR_SHORTCUTS.editVertices}) — drag handles, click edge to add point`
                 : "Select a segment first"
             }
           >
@@ -427,7 +451,8 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
       <div className="shrink-0 border-b border-gray-100 bg-gray-50 px-3 py-1 text-[11px] text-gray-500">
         <span className="font-medium text-gray-600">Shortcuts:</span>{" "}
         Drag to pan (polygon too) · scroll to zoom · Enter finish polygon · {EDITOR_SHORTCUTS.undoLastPoint} / Backspace
-        undo point · Esc cancel draw · Del delete · {EDITOR_SHORTCUTS.fitPage} fit page
+        undo point · Esc cancel draw · Del delete · {EDITOR_SHORTCUTS.fitPage} fit page · Edit mode: drag
+        vertices · click edge to add point
       </div>
 
       {saveError && <div className="shrink-0 bg-red-50 px-3 py-1.5 text-sm text-red-700">{saveError}</div>}

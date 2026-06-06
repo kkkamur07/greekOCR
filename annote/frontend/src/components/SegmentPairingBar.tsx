@@ -119,7 +119,9 @@ export default function SegmentPairingBar({
           </p>
         )}
 
-        <p className="text-xs text-gray-400">Enter to finish and draw the next region · Shift+Enter for a new line</p>
+        <p className="text-xs text-gray-400">
+          Enter to finish and draw the next region · Shift+Enter for a new line · Escape to close
+        </p>
       </div>
     </div>
   );
