@@ -160,6 +160,7 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
     });
     setSelectedId(null);
     setTranscriptionPromptId(null);
+    setEditMode(false);
     return true;
   }, [scheduleSave]);
 
@@ -185,6 +186,7 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
       setEditMode(false);
     } else {
       setTranscriptionPromptId(null);
+      setEditMode(false);
     }
   };
 
@@ -254,6 +256,7 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
   }, []);
 
   const toggleEdit = useCallback(() => {
+    if (!selectedIdRef.current) return;
     setTool("select");
     setEditMode((v) => !v);
   }, []);
@@ -330,8 +333,13 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
           <button
             type="button"
             onClick={toggleEdit}
-            className={toolBtn(editMode)}
-            title={`Edit vertices (${EDITOR_SHORTCUTS.editVertices})`}
+            disabled={!selectedSegment}
+            className={`${toolBtn(editMode)} disabled:cursor-not-allowed disabled:opacity-40`}
+            title={
+              selectedSegment
+                ? `Edit vertices (${EDITOR_SHORTCUTS.editVertices})`
+                : "Select a segment first"
+            }
           >
             Edit <kbd className="ml-1 text-[10px] opacity-60">{EDITOR_SHORTCUTS.editVertices}</kbd>
           </button>
