@@ -130,3 +130,23 @@ The editor reuses interaction patterns from [eScriptorium](https://github.com/PS
 - Expert-in-the-loop annotation — compare runs, correct lines, publish read-only views  
 
 Contributors: see [`issues/`](issues/) (`kanban.md`, `dag.md`) for what to work on next.
+
+---
+
+## Annote (annotation + custom export)
+
+[`annote/`](annote/) is a standalone tool for segmenting manuscript page images, pairing each polygon with a transcription line, and exporting training-ready crops. Processing is pluggable: today the main step is **polygon rectification** (mask → axis-aligned crop), but the pipeline can be extended without changing the editor.
+
+### Quick start (Docker)
+
+```bash
+cd annote
+docker compose up --build
+```
+
+| Service | URL |
+|---------|-----|
+| Editor | http://localhost:3000 |
+| API | http://localhost:5050 |
+
+`data/` is bind-mounted so pages, annotations, and exports persist on the host. For local dev without Docker, env vars, and export details, see [annote/README.md](annote/README.md).

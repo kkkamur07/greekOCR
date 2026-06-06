@@ -18,6 +18,13 @@ def minimal_jpeg_bytes(width: int = 100, height: int = 50, color: str = "white")
     return buf.getvalue()
 
 
+def minimal_png_bytes(width: int = 100, height: int = 50, color: str = "white") -> bytes:
+    """Create a small PNG in memory for integration tests."""
+    buf = BytesIO()
+    Image.new("RGB", (width, height), color).save(buf, format="PNG")
+    return buf.getvalue()
+
+
 @pytest.fixture
 def data_root(tmp_path: Path) -> Path:
     """Isolated data directory with expected layout."""

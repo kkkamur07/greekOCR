@@ -7,10 +7,18 @@ import type {
   TranscriptionResponse,
 } from "@/types/api";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5050";
+const PUBLIC_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5050";
+
+/** Browser calls the published host; SSR inside Docker uses the compose service name. */
+function apiBase(): string {
+  if (typeof window !== "undefined") {
+    return PUBLIC_API_BASE;
+  }
+  return process.env.API_INTERNAL_URL ?? PUBLIC_API_BASE;
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await fetch(`${apiBase()}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
@@ -28,7 +36,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export function pageImageUrl(stem: string): string {
-  return `${API_BASE}/pages/${encodeURIComponent(stem)}/image`;
+  return `${PUBLIC_API_BASE}/pages/${encodeURIComponent(stem)}/image`;
 }
 
 export async function fetchPages(): Promise<PageListResponse> {
@@ -40,7 +48,7 @@ export async function importPage(image: File, transcription?: File): Promise<Pag
   form.append("image", image);
   if (transcription) form.append("transcription", transcription);
 
-  const response = await fetch(`${API_BASE}/pages/import`, {
+  const response = await fetch(`${apiBase()}/pages/import`, {
     method: "POST",
     body: form,
   });
@@ -76,7 +84,7 @@ export async function exportPage(
   options?: { binarize?: boolean },
   onProgress?: (event: ExportProgressEvent) => void,
 ): Promise<ExportResponse> {
-  const response = await fetch(`${API_BASE}/pages/${encodeURIComponent(stem)}/export/stream`, {
+  const response = await fetch(`${apiBase()}/pages/${encodeURIComponent(stem)}/export/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(options ?? {}),

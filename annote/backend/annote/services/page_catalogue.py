@@ -9,6 +9,19 @@ from annote.services.export_state import is_export_dirty
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp"}
 
+IMAGE_MEDIA_TYPES: dict[str, str] = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+    ".tif": "image/tiff",
+    ".tiff": "image/tiff",
+}
+
+
+def image_media_type(path: Path) -> str:
+    return IMAGE_MEDIA_TYPES[path.suffix.lower()]
+
 
 def list_page_stems(pages_dir: Path) -> list[str]:
     if not pages_dir.is_dir():
