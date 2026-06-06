@@ -62,6 +62,24 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+## Docker (one command)
+
+From `annote/`:
+
+```bash
+docker compose up --build
+```
+
+- Frontend: [http://localhost:3000](http://localhost:3000)
+- API: [http://localhost:5050](http://localhost:5050)
+
+`data/` is mounted into the backend container, so pages, annotations, and exports persist on the host.
+
+- `NEXT_PUBLIC_API_BASE_URL` (build arg) — URL the **browser** uses (`http://localhost:5050`)
+- `API_INTERNAL_URL` (runtime env on the frontend service) — URL **server-side** Next.js uses inside Compose (`http://backend:5050`)
+
+Rebuild the frontend image if you change `NEXT_PUBLIC_API_BASE_URL`.
+
 ## Environment variables
 
 | Variable | File | Default | Purpose |

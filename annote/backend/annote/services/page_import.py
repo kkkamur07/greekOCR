@@ -21,6 +21,16 @@ def safe_stem(filename: str) -> str:
     return cleaned or "page"
 
 
+def _decode_utf8_text(data: bytes, filename: str) -> str:
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Transcription file must be UTF-8 text: {filename}",
+        ) from exc
+
+
 def _extension_for_upload(upload: UploadFile) -> str:
     if upload.filename:
         ext = Path(upload.filename).suffix.lower()
@@ -55,7 +65,8 @@ async def import_page(
         tx_dir = data_root / "transcriptions" / "pages"
         tx_dir.mkdir(parents=True, exist_ok=True)
         tx_bytes = await transcription.read()
-        (tx_dir / f"{stem}.txt").write_bytes(tx_bytes)
+        text = _decode_utf8_text(tx_bytes, transcription.filename)
+        (tx_dir / f"{stem}.txt").write_text(text, encoding="utf-8")
 
     return stem
 

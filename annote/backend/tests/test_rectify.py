@@ -1,10 +1,18 @@
 """Rectify processing step — polygon mask onto axis-aligned rectangle."""
 
 import numpy as np
+import pytest
 from PIL import Image
 
 from annote.services.processing.rectify import rectify
 from tests.conftest import minimal_jpeg_bytes
+
+
+def test_rectify_empty_points_raises():
+    page = np.zeros((50, 50, 3), dtype=np.uint8)
+
+    with pytest.raises(ValueError, match="no points"):
+        rectify(page, {"points": []})
 
 
 def test_rectify_rectangle_produces_axis_aligned_crop():

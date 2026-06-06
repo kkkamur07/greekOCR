@@ -56,16 +56,18 @@ export default function SegmentOverlay({
               }}
               onClick={(e) => e.stopPropagation()}
             />
-            <text
-              x={seg.points[0][0] + 4}
-              y={seg.points[0][1] - 6}
-              fill={selected ? "#1d4ed8" : "#15803d"}
-              fontSize={14}
-              fontWeight={600}
-              style={{ pointerEvents: "none" }}
-            >
-              {seg.number}
-            </text>
+            {seg.points.length > 0 && (
+              <text
+                x={seg.points[0][0] + 4}
+                y={seg.points[0][1] - 6}
+                fill={selected ? "#1d4ed8" : "#15803d"}
+                fontSize={14}
+                fontWeight={600}
+                style={{ pointerEvents: "none" }}
+              >
+                {seg.number}
+              </text>
+            )}
             {editMode &&
               selected &&
               interactive &&

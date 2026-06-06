@@ -6,6 +6,27 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Root",
+        "operationId": "root__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "tags": [
@@ -41,6 +62,47 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PageListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pages/import": {
+      "post": {
+        "tags": [
+          "pages"
+        ],
+        "summary": "Post Import Page",
+        "operationId": "post_import_page_pages_import_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_post_import_page_pages_import_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageSummary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -240,6 +302,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ExportRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -263,10 +342,93 @@
           }
         }
       }
+    },
+    "/pages/{stem}/export/stream": {
+      "post": {
+        "tags": [
+          "pages"
+        ],
+        "summary": "Post Export Stream",
+        "operationId": "post_export_stream_pages__stem__export_stream_post",
+        "parameters": [
+          {
+            "name": "stem",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Stem"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ExportRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "Body_post_import_page_pages_import_post": {
+        "properties": {
+          "image": {
+            "type": "string",
+            "format": "binary",
+            "title": "Image"
+          },
+          "transcription": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "binary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcription"
+          }
+        },
+        "type": "object",
+        "required": [
+          "image"
+        ],
+        "title": "Body_post_import_page_pages_import_post"
+      },
       "ExportMetadata": {
         "properties": {
           "exported_at": {
@@ -284,6 +446,17 @@
           "content_hash"
         ],
         "title": "ExportMetadata"
+      },
+      "ExportRequest": {
+        "properties": {
+          "binarize": {
+            "type": "boolean",
+            "title": "Binarize",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "ExportRequest"
       },
       "ExportResponse": {
         "properties": {

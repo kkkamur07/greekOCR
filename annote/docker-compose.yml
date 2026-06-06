@@ -1,0 +1,41 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    ports:
+      - "5050:5050"
+    volumes:
+      - ./data:/data
+    environment:
+      ANNOTE_DATA_ROOT: /data
+      ANNOTE_HOST: 0.0.0.0
+      ANNOTE_PORT: 5050
+      ANNOTE_RELOAD: "false"
+      ANNOTE_CORS_ORIGINS: http://localhost:3000
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5050/health')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: http://localhost:5050
+    ports:
+      - "3000:3000"
+    environment:
+      API_INTERNAL_URL: http://backend:5050
+    depends_on:
+      backend:
+        condition: service_healthy

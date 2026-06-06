@@ -31,7 +31,10 @@ def _mask_bbox_rectify(page_image: np.ndarray, points: np.ndarray) -> np.ndarray
 
 def rectify(page_image: np.ndarray, segment: dict) -> np.ndarray:
     """Export the masked polygon region on a same-size axis-aligned rectangle."""
-    points = np.array(segment["points"], dtype=np.float32)
+    raw_points = segment.get("points") or []
+    points = np.array(raw_points, dtype=np.float32)
+    if points.size == 0:
+        raise ValueError("Segment has no points")
     if len(points) < 3:
         xs, ys = points[:, 0], points[:, 1]
         x0, y0 = int(max(xs.min(), 0)), int(max(ys.min(), 0))

@@ -14,5 +14,5 @@ export default async function PageRoute({ params }: PageProps) {
   } catch {
     /* editor still loads; dirty defaults false */
   }
-  return <PageEditor stem={decodeURIComponent(stem)} initialDirty={initialDirty} />;
+  return <PageEditor stem={stem} initialDirty={initialDirty} />;
 }

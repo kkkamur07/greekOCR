@@ -26,7 +26,7 @@ def resolve_export_steps(*, binarize: bool = False, steps: list[str] | None = No
 
 
 def _paired_text(segment: Segment, text_lines: list) -> str | None:
-    if segment.text_override:
+    if segment.text_override is not None:
         return segment.text_override
     if segment.paired_text_line_index is None:
         return None

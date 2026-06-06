@@ -13,7 +13,7 @@ from annote.schemas.warnings import ExportResponse
 from annote.schemas.pages import PageListResponse, PageSummary, TextLineOut, TranscriptionResponse
 from annote.services.annotation_store import load_annotation, save_annotation
 from annote.services.export_service import export_page, export_page_events
-from annote.services.page_catalogue import list_pages, resolve_page_image
+from annote.services.page_catalogue import image_media_type, list_pages, resolve_page_image
 from annote.services.page_import import import_page, import_summary
 from annote.services.text_lines import split_text_lines
 from annote.settings import get_settings
@@ -46,7 +46,7 @@ async def get_page_image(stem: str) -> FileResponse:
     image_path = resolve_page_image(_data_root() / "manuscripts" / "pages", stem)
     if image_path is None:
         raise HTTPException(status_code=404, detail=f"Page not found: {stem}")
-    return FileResponse(image_path, media_type="image/jpeg")
+    return FileResponse(image_path, media_type=image_media_type(image_path))
 
 
 @router.get("/{stem}/transcription", response_model=TranscriptionResponse)

@@ -62,6 +62,23 @@ def test_export_writes_paired_jpg_and_txt_only(client, data_root):
     assert txt2 == "καὶ φιλοσόφων"
 
 
+def test_export_empty_text_override_without_pairing(client, data_root):
+    _seed_page(data_root)
+    seg = {
+        **SEG1,
+        "paired_text_line_index": None,
+        "text_override": "",
+    }
+    client.put("/pages/folio/annotation", json={"segments": [seg], "export_metadata": None})
+
+    response = client.post("/pages/folio/export")
+    assert response.status_code == 200
+    assert response.json()["exported_count"] == 1
+
+    txt = (data_root / "manuscripts" / "export" / "folio_1.txt").read_text(encoding="utf-8")
+    assert txt == ""
+
+
 def test_export_text_override_without_pairing(client, data_root):
     _seed_page(data_root)
     seg = {

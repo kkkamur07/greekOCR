@@ -36,6 +36,21 @@ def test_import_page_with_transcription(client, data_root):
     assert tx.read_text(encoding="utf-8") == "line one\nline two"
 
 
+def test_import_page_rejects_non_utf8_transcription(client):
+    """Non-UTF-8 transcription uploads return 400."""
+    jpeg = minimal_jpeg_bytes()
+    response = client.post(
+        "/pages/import",
+        files={
+            "image": ("scan.jpg", jpeg, "image/jpeg"),
+            "transcription": ("scan.txt", b"\xff\xfe", "text/plain"),
+        },
+    )
+
+    assert response.status_code == 400
+    assert "UTF-8" in response.json()["detail"]
+
+
 def test_import_page_rejects_empty_image(client):
     """Empty uploads return 400."""
     response = client.post(
