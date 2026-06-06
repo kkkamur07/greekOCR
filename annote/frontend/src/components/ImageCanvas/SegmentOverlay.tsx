@@ -16,6 +16,7 @@ interface SegmentOverlayProps {
   onSelect: (id: string) => void;
   clientToImage: (clientX: number, clientY: number) => [number, number] | null;
   onVertexDrag: (segmentId: string, pointIndex: number, x: number, y: number) => void;
+  onInsertVertex: (segmentId: string, afterIndex: number, x: number, y: number) => void;
 }
 
 const HANDLE_RADIUS = 6;
@@ -44,6 +45,7 @@ export default function SegmentOverlay({
   onSelect,
   clientToImage,
   onVertexDrag,
+  onInsertVertex,
 }: SegmentOverlayProps) {
   if (!visible) return null;
 
@@ -95,6 +97,30 @@ export default function SegmentOverlay({
                 {seg.number}
               </text>
             )}
+            {editMode &&
+              selected &&
+              seg.points.map((pt, idx) => {
+                const next = seg.points[(idx + 1) % seg.points.length];
+                return (
+                  <line
+                    key={`edge-${idx}`}
+                    x1={pt[0]}
+                    y1={pt[1]}
+                    x2={next[0]}
+                    y2={next[1]}
+                    stroke="transparent"
+                    strokeWidth={screenScaled(14, zoomScale)}
+                    className="cursor-copy"
+                    style={{ pointerEvents: "stroke" }}
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      const coords = clientToImage(e.clientX, e.clientY);
+                      if (coords) onInsertVertex(seg.id, idx, coords[0], coords[1]);
+                    }}
+                  />
+                );
+              })}
             {editMode &&
               selected &&
               seg.points.map((pt, idx) => (

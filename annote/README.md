@@ -1,6 +1,6 @@
 # annote
 
-Standalone local tool for manually segmenting manuscript page images and pairing each segment with its transcription line. Produces training-ready processed line images and text files.
+AI-assisted transcription platform for manuscript pages. A standalone local tool for segmenting page images (manually or with Kraken auto-segmentation), pairing each segment with its transcription line, and exporting training-ready processed line images and text files.
 
 See `CONTEXT.md` for domain glossary and `issues/prd.md` for requirements.
 
