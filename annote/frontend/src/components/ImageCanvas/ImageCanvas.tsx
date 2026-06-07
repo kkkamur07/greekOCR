@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import type { DrawTool, Segment, SegmentKind } from "@/types/api";
-import SegmentOverlay from "./SegmentOverlay";
+import SegmentOverlay, { MIN_SEGMENT_POINTS } from "./SegmentOverlay";
 import ZoomControls from "./ZoomControls";
 import { imageCoordsFromTransform, usePanZoom } from "./usePanZoom";
 import "./ImageCanvas.css";
@@ -30,8 +30,11 @@ interface ImageCanvasProps {
   selectedId: string | null;
   tool: DrawTool;
   editMode: boolean;
+  readOnly?: boolean;
   showSegments: boolean;
+  selectedVertexIndex: number | null;
   onSelect: (id: string | null) => void;
+  onSelectVertex: (index: number | null) => void;
   onAddSegment: (segment: Segment) => void;
   onUpdateSegment: (segment: Segment) => void;
 }
@@ -67,8 +70,11 @@ const ImageCanvas = forwardRef<ImageCanvasHandle, ImageCanvasProps>(function Ima
     selectedId,
     tool,
     editMode,
+    readOnly = false,
     showSegments,
+    selectedVertexIndex,
     onSelect,
+    onSelectVertex,
     onAddSegment,
     onUpdateSegment,
   },
@@ -149,7 +155,7 @@ const ImageCanvas = forwardRef<ImageCanvasHandle, ImageCanvasProps>(function Ima
 
   const finishSegment = useCallback(
     (kind: SegmentKind, points: [number, number][]) => {
-      if (points.length < 4) return;
+      if (readOnly || points.length < 4) return;
       suppressClickRef.current = true;
       window.setTimeout(() => {
         suppressClickRef.current = false;
@@ -166,7 +172,7 @@ const ImageCanvas = forwardRef<ImageCanvasHandle, ImageCanvasProps>(function Ima
       rectStartRef.current = null;
       drawingRectRef.current = false;
     },
-    [onAddSegment, segments],
+    [onAddSegment, readOnly, segments],
   );
 
   useEffect(() => {
@@ -211,17 +217,26 @@ const ImageCanvas = forwardRef<ImageCanvasHandle, ImageCanvasProps>(function Ima
     (button: number) => {
       if (button === 1 || button === 2) return true;
       if (button !== 0) return false;
-      if (editMode && !spaceHeld) return false;
       if (spaceHeld || tool === "pan" || tool === "select") return true;
       if (isDrawingTool && spaceHeld) return true;
       return false;
     },
-    [editMode, spaceHeld, tool, isDrawingTool],
+    [spaceHeld, tool, isDrawingTool],
   );
 
   const handleStagePointerDownCapture = (e: React.PointerEvent) => {
     if (isSegmentHit(e.target)) {
       panMovedRef.current = false;
+      return;
+    }
+
+    if (readOnly) {
+      if (!canPanWithPointer(e.button)) return;
+      panMovedRef.current = false;
+      setIsPanning(true);
+      startPan(e.clientX, e.clientY);
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      e.preventDefault();
       return;
     }
 
@@ -326,6 +341,11 @@ const ImageCanvas = forwardRef<ImageCanvasHandle, ImageCanvasProps>(function Ima
       return;
     }
 
+    if (editMode && !isSegmentHit(e.target)) {
+      onSelectVertex(null);
+      return;
+    }
+
     if (tool === "select" && !editMode) {
       onSelect(null);
     }
@@ -388,12 +408,15 @@ const ImageCanvas = forwardRef<ImageCanvasHandle, ImageCanvasProps>(function Ima
               editMode={editMode}
               visible={showSegments}
               zoomScale={transform.scale}
-              interactive={!editMode && !(tool === "polygon" && !spaceHeld)}
+              interactive={!readOnly && !editMode && !(tool === "polygon" && !spaceHeld)}
               onSelect={(id) => {
                 if (!panMovedRef.current) onSelect(id);
               }}
               clientToImage={imageCoords}
+              selectedVertexIndex={selectedVertexIndex}
+              onSelectVertex={onSelectVertex}
               onVertexDrag={(id, idx, x, y) => {
+                if (readOnly) return;
                 const seg = segments.find((s) => s.id === id);
                 if (!seg) return;
                 const points = seg.points.map((p, i) =>
@@ -402,11 +425,24 @@ const ImageCanvas = forwardRef<ImageCanvasHandle, ImageCanvasProps>(function Ima
                 onUpdateSegment({ ...seg, points });
               }}
               onInsertVertex={(id, afterIndex, x, y) => {
+                if (readOnly) return;
                 const seg = segments.find((s) => s.id === id);
                 if (!seg) return;
                 const points = [...seg.points];
                 points.splice(afterIndex + 1, 0, [x, y]);
                 onUpdateSegment({ ...seg, points });
+              }}
+              onRemoveVertex={(id, pointIndex) => {
+                if (readOnly) return;
+                const seg = segments.find((s) => s.id === id);
+                if (!seg || seg.points.length <= MIN_SEGMENT_POINTS) return;
+                const points = seg.points.filter((_, i) => i !== pointIndex);
+                onUpdateSegment({ ...seg, points });
+                if (selectedVertexIndex === pointIndex) {
+                  onSelectVertex(null);
+                } else if (selectedVertexIndex != null && selectedVertexIndex > pointIndex) {
+                  onSelectVertex(selectedVertexIndex - 1);
+                }
               }}
             />
           </div>

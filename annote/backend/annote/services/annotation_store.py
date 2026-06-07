@@ -32,6 +32,6 @@ def save_annotation(data_root: Path, stem: str, annotation: PageAnnotation) -> P
 
 
 def annotation_content_hash(annotation: PageAnnotation) -> str:
-    payload = annotation.model_dump(exclude={"export_metadata"})
+    payload = annotation.model_dump(exclude={"export_metadata", "locked"})
     encoded = json.dumps(payload, sort_keys=True).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()

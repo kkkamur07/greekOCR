@@ -4,10 +4,9 @@ from collections.abc import Callable
 
 import numpy as np
 
-from annote.services.processing.binarize import binarize
 from annote.services.processing.rectify import rectify
 
-SUPPORTED_STEPS = {"rectify", "binarize"}
+SUPPORTED_STEPS = {"rectify"}
 StepCallback = Callable[[str], None]
 
 
@@ -17,8 +16,6 @@ def apply_step(image: np.ndarray, segment: dict, step: str) -> np.ndarray:
         raise ValueError(f"Unsupported processing step: {step}")
     if step == "rectify":
         return rectify(image, segment)
-    if step == "binarize":
-        return binarize(image)
     raise ValueError(f"Unsupported processing step: {step}")
 
 

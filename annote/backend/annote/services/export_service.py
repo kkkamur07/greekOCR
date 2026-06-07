@@ -12,28 +12,14 @@ from annote.services.image_export import load_page_rgb, save_line_image
 from annote.services.export_state import mark_exported
 from annote.services.page_catalogue import resolve_page_image
 from annote.services.processing.pipeline import apply_step
+from annote.services.segment_text import segment_text
 from annote.services.text_lines import split_text_lines
 
 DEFAULT_STEPS = ["rectify"]
 
 
-def resolve_export_steps(*, binarize: bool = False, steps: list[str] | None = None) -> list[str]:
-    if steps is not None:
-        return steps
-    if binarize:
-        return ["rectify", "binarize"]
-    return DEFAULT_STEPS
-
-
-def _paired_text(segment: Segment, text_lines: list) -> str | None:
-    if segment.text_override is not None:
-        return segment.text_override
-    if segment.paired_text_line_index is None:
-        return None
-    for line in text_lines:
-        if line.index == segment.paired_text_line_index:
-            return line.text
-    return None
+def resolve_export_steps(*, steps: list[str] | None = None) -> list[str]:
+    return steps if steps is not None else DEFAULT_STEPS
 
 
 def export_page_events(
@@ -41,10 +27,9 @@ def export_page_events(
     stem: str,
     *,
     steps: list[str] | None = None,
-    binarize: bool = False,
 ) -> Iterator[ExportProgressEvent | ExportDoneEvent]:
     """Yield per-step progress while exporting paired segments."""
-    steps = resolve_export_steps(binarize=binarize, steps=steps)
+    steps = resolve_export_steps(steps=steps)
     annotation = load_annotation(data_root, stem)
     image_path = resolve_page_image(data_root / "manuscripts" / "pages", stem)
     if image_path is None:
@@ -64,7 +49,7 @@ def export_page_events(
     paired: list[tuple[Segment, str]] = []
 
     for segment in annotation.segments:
-        text = _paired_text(segment, text_lines)
+        text = segment_text(segment, text_lines)
         if text is None:
             unpaired.append(segment.number)
             continue
@@ -119,11 +104,10 @@ def export_page(
     stem: str,
     *,
     steps: list[str] | None = None,
-    binarize: bool = False,
 ) -> ExportResponse:
     """Export paired segments to line image and transcription files."""
     result: ExportResponse | None = None
-    for event in export_page_events(data_root, stem, steps=steps, binarize=binarize):
+    for event in export_page_events(data_root, stem, steps=steps):
         if isinstance(event, ExportDoneEvent):
             result = event.result
     if result is None:

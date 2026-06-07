@@ -3,7 +3,7 @@
   "info": {
     "title": "annote",
     "description": "Standalone manuscript line annotation API",
-    "version": "0.0.0"
+    "version": "0.3.2"
   },
   "paths": {
     "/": {
@@ -344,6 +344,312 @@
         }
       }
     },
+    "/pages/{stem}/lock": {
+      "post": {
+        "tags": [
+          "pages"
+        ],
+        "summary": "Post Lock Page",
+        "operationId": "post_lock_page_pages__stem__lock_post",
+        "parameters": [
+          {
+            "name": "stem",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Stem"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageAnnotation"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pages/{stem}/unlock": {
+      "post": {
+        "tags": [
+          "pages"
+        ],
+        "summary": "Post Unlock Page",
+        "operationId": "post_unlock_page_pages__stem__unlock_post",
+        "parameters": [
+          {
+            "name": "stem",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Stem"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageAnnotation"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pages/{stem}/history": {
+      "get": {
+        "tags": [
+          "pages"
+        ],
+        "summary": "Get Page History",
+        "operationId": "get_page_history_pages__stem__history_get",
+        "parameters": [
+          {
+            "name": "stem",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Stem"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pages/{stem}/history/{snapshot_id}/restore": {
+      "post": {
+        "tags": [
+          "pages"
+        ],
+        "summary": "Post Restore History",
+        "operationId": "post_restore_history_pages__stem__history__snapshot_id__restore_post",
+        "parameters": [
+          {
+            "name": "stem",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Stem"
+            }
+          },
+          {
+            "name": "snapshot_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Snapshot Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageAnnotation"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pages/{stem}/transcription.share.pdf": {
+      "get": {
+        "tags": [
+          "pages"
+        ],
+        "summary": "Get Transcription Share Pdf",
+        "operationId": "get_transcription_share_pdf_pages__stem__transcription_share_pdf_get",
+        "parameters": [
+          {
+            "name": "stem",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Stem"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pages/{stem}/transcription.pdf": {
+      "get": {
+        "tags": [
+          "pages"
+        ],
+        "summary": "Get Transcription Pdf",
+        "operationId": "get_transcription_pdf_pages__stem__transcription_pdf_get",
+        "parameters": [
+          {
+            "name": "stem",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Stem"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pages/{stem}/segments/{segment_id}/preview": {
+      "get": {
+        "tags": [
+          "pages"
+        ],
+        "summary": "Get Segment Preview",
+        "operationId": "get_segment_preview_pages__stem__segments__segment_id__preview_get",
+        "parameters": [
+          {
+            "name": "stem",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Stem"
+            }
+          },
+          {
+            "name": "segment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Segment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/pages/{stem}/export": {
       "post": {
         "tags": [
@@ -362,23 +668,6 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/ExportRequest"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "title": "Body"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -421,23 +710,6 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/ExportRequest"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "title": "Body"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -526,17 +798,6 @@
         ],
         "title": "ExportMetadata"
       },
-      "ExportRequest": {
-        "properties": {
-          "binarize": {
-            "type": "boolean",
-            "title": "Binarize",
-            "default": false
-          }
-        },
-        "type": "object",
-        "title": "ExportRequest"
-      },
       "ExportResponse": {
         "properties": {
           "exported_count": {
@@ -617,6 +878,50 @@
         ],
         "title": "HealthResponse"
       },
+      "HistoryListResponse": {
+        "properties": {
+          "snapshots": {
+            "items": {
+              "$ref": "#/components/schemas/HistorySnapshotSummary"
+            },
+            "type": "array",
+            "title": "Snapshots"
+          }
+        },
+        "type": "object",
+        "required": [
+          "snapshots"
+        ],
+        "title": "HistoryListResponse"
+      },
+      "HistorySnapshotSummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "timestamp": {
+            "type": "string",
+            "title": "Timestamp"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "pairing_progress_percent": {
+            "type": "integer",
+            "title": "Pairing Progress Percent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "timestamp",
+          "reason",
+          "pairing_progress_percent"
+        ],
+        "title": "HistorySnapshotSummary"
+      },
       "PageAnnotation": {
         "properties": {
           "segments": {
@@ -635,6 +940,11 @@
                 "type": "null"
               }
             ]
+          },
+          "locked": {
+            "type": "boolean",
+            "title": "Locked",
+            "default": false
           }
         },
         "type": "object",
@@ -673,6 +983,14 @@
           "export_dirty": {
             "type": "boolean",
             "title": "Export Dirty"
+          },
+          "locked": {
+            "type": "boolean",
+            "title": "Locked",
+            "default": false
+          },
+          "pairing": {
+            "$ref": "#/components/schemas/PairingProgress"
           }
         },
         "type": "object",
@@ -680,9 +998,38 @@
           "stem",
           "has_transcription",
           "segment_count",
-          "export_dirty"
+          "export_dirty",
+          "pairing"
         ],
         "title": "PageSummary"
+      },
+      "PairingProgress": {
+        "properties": {
+          "paired_count": {
+            "type": "integer",
+            "title": "Paired Count"
+          },
+          "unpaired_count": {
+            "type": "integer",
+            "title": "Unpaired Count"
+          },
+          "text_line_count": {
+            "type": "integer",
+            "title": "Text Line Count"
+          },
+          "unused_line_count": {
+            "type": "integer",
+            "title": "Unused Line Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "paired_count",
+          "unpaired_count",
+          "text_line_count",
+          "unused_line_count"
+        ],
+        "title": "PairingProgress"
       },
       "Segment": {
         "properties": {

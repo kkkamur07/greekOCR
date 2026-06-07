@@ -68,6 +68,10 @@ _Avoid_: Text line (when meaning the in-memory string during editing)
 Produce a Processed line image and Line transcription file for each paired Segment on a Page. Unpaired segments are skipped. Export warns about unpaired segments and unused Text lines. Triggered manually by the user.
 _Avoid_: Save, download
 
+**Transcription PDF**:
+A single-page PDF for one **Page**: a blank page the same size as the **Page** image, with paired transcription text placed at each **Segment**'s position (using segment geometry coordinates). Plain text only — no facsimile, highlights, boxes, or borders. Text is drawn horizontal inside each segment's axis-aligned bounding box, auto-sized to fit, on a white page with dark text (not configurable in v1). No manuscript facsimile appears in the PDF. Only **paired** segments appear (unpaired segments are omitted). If none are paired, the PDF is still a blank page at the same dimensions. Used to **review** pairings while editing and as a **shareable artefact** for others who do not use annote. Two modes: **preview** (live, regenerated from current annotation); **share** (frozen PDF written at **Page lock**, served on download until the Page is unlocked and re-locked). Distinct from **Export** (per-segment `.jpg`/`.txt` training crops).
+_Avoid_: Export PDF, report, facsimile PDF
+
 **Export state**:
 Whether a Page's on-disk exports are up to date with its current annotations and pairings. The UI shows when re-export is needed ("dirty").
 _Avoid_: Unsaved, modified
@@ -129,8 +133,24 @@ Primary deliverables per paired Segment:
 
 Intermediate files (`annotations/pages/<stem>.json`, page transcription sources) exist for the tool to work but are not the user's focus. Internal geometry encoding is an implementation detail.
 
+**Page lock**:
+A deliberate state on a **Page** where its full annotation (all **Segments** and **Pairing**s) is frozen — no draw, edit, delete, or re-pair until explicitly **unlocked**. **Export** and transcription PDF may still be regenerated from the locked annotation. Distinct from **Export state** (whether on-disk exports match current annotations). Triggered manually at any time, or via a prompt when **pairing progress** reaches 100% (user may accept or dismiss; accepting locks the page).
+_Avoid_: Finalize, archive, read-only mode (too vague)
+
+**Annotation history**:
+A time-ordered sequence of saved snapshots of a Page's annotation. Used to **restore** a prior state when a mishap occurs (bad edit, accidental overwrite). Restoring replaces the current annotation with the chosen snapshot; distinct from **unlock**, which simply allows editing the current state again.
+_Avoid_: Backup (implies full-disk copy), version control (implies git)
+
+**History snapshot**:
+One persisted copy of a Page's annotation at a point in time. Written every **five minutes** during active editing on a Page, and when **pairing progress** crosses **50%** or **100%** (paired segments ÷ total segments). Retention: at most **five** rolling timed snapshots per Page, plus **protected milestone snapshots** (50%, 100%, lock, unlock) that are not evicted when the timed cap is reached. Restoring or unlocking does not delete history.
+_Avoid_: Checkpoint (reserved for optional manual save if added later)
+
+**Pairing progress**:
+How far a Page's **Pairing** work has gone: paired segments vs total segments on that Page. A segment counts as paired when linked to a **Text line** or given inline text. Drives the progress UI, history milestones at 50% and 100%, and is the primary signal for "annotation work complete."
+_Avoid_: Completion percentage (ambiguous with export state)
+
 **Session model**:
-Annotation is resumable across sessions (autosaved JSON reloads segments and pairings). **Export** is the checkpoint for processed `.jpg`/`.txt` deliverables; pages may still be reopened and edited afterward.
+Annotation is resumable across sessions (autosaved JSON reloads segments and pairings). **Export** is the checkpoint for processed `.jpg`/`.txt` deliverables. A **Page** may be **Page lock**ed when annotation work is complete; locked pages are not editable until unlocked.
 
 ## Flagged ambiguities
 

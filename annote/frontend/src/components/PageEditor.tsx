@@ -3,21 +3,33 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ImageCanvas, { type ImageCanvasHandle } from "@/components/ImageCanvas/ImageCanvas";
+import { MIN_SEGMENT_POINTS } from "@/components/ImageCanvas/SegmentOverlay";
+import ExportPreviewModal from "@/components/ExportPreviewModal";
+import HistoryPanel from "@/components/HistoryPanel";
+import PairingProgressBar from "@/components/PairingProgressBar";
 import SegmentPairingBar from "@/components/SegmentPairingBar";
+import TranscriptionPdfMenu from "@/components/TranscriptionPdfMenu";
+import TranscriptionPdfPanel, { type TranscriptionPdfMode } from "@/components/TranscriptionPdfPanel";
 import { EDITOR_SHORTCUTS, useEditorShortcuts } from "@/hooks/useEditorShortcuts";
 import {
   autoSegmentPage,
   exportPage,
   fetchAnnotation,
+  fetchHistory,
   fetchTranscription,
+  lockPage,
   pageImageUrl,
+  restoreHistorySnapshot,
   saveAnnotation,
+  unlockPage,
 } from "@/lib/api";
+import { computePairingProgress } from "@/lib/pairingProgress";
 import { displayPageName, formatPageTitle } from "@/lib/pageName";
 import type {
   DrawTool,
   ExportProgressEvent,
   ExportStep,
+  HistorySnapshotSummary,
   PageAnnotation,
   Segment,
   TranscriptionResponse,
@@ -35,7 +47,6 @@ function toolBtn(active: boolean) {
 }
 
 function exportStepLabel(step: ExportStep): string {
-  if (step === "binarize") return "Binarizing";
   if (step === "rectify") return "Rectifying";
   return "Saving";
 }
@@ -59,12 +70,17 @@ function firstUnpairedLineIndex(
 }
 
 export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
-  const [annotation, setAnnotation] = useState<PageAnnotation>({ segments: [], export_metadata: null });
+  const [annotation, setAnnotation] = useState<PageAnnotation>({
+    segments: [],
+    export_metadata: null,
+    locked: false,
+  });
   const [transcription, setTranscription] = useState<TranscriptionResponse | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [transcriptionPromptId, setTranscriptionPromptId] = useState<string | null>(null);
   const [tool, setTool] = useState<DrawTool>("pan");
   const [editMode, setEditMode] = useState(false);
+  const [selectedVertexIndex, setSelectedVertexIndex] = useState<number | null>(null);
   const [showSegments, setShowSegments] = useState(true);
   const [imageSize, setImageSize] = useState({ width: 1200, height: 1600 });
   const [dirty, setDirty] = useState(initialDirty);
@@ -72,17 +88,33 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
   const [segmenting, setSegmenting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState<ExportProgressEvent | null>(null);
-  const [binarizeOnExport, setBinarizeOnExport] = useState(false);
   const [toast, setToast] = useState<{ text: string; kind: "success" | "error" } | null>(null);
+  const [previewSegmentId, setPreviewSegmentId] = useState<string | null>(null);
+  const [pdfPanelMode, setPdfPanelMode] = useState<TranscriptionPdfMode | null>(null);
+  const [pdfRefreshKey, setPdfRefreshKey] = useState(0);
+  const pdfPanelModeRef = useRef(pdfPanelMode);
+  const [showHistory, setShowHistory] = useState(false);
+  const [historySnapshots, setHistorySnapshots] = useState<HistorySnapshotSummary[]>([]);
+  const [restoring, setRestoring] = useState(false);
+  const [showLockPrompt, setShowLockPrompt] = useState(false);
+  const lockPromptDismissedRef = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const canvasRef = useRef<ImageCanvasHandle>(null);
   const annotationRef = useRef(annotation);
   const transcriptionRef = useRef(transcription);
   const selectedIdRef = useRef(selectedId);
+  const editModeRef = useRef(editMode);
+  const selectedVertexIndexRef = useRef(selectedVertexIndex);
   annotationRef.current = annotation;
   transcriptionRef.current = transcription;
   selectedIdRef.current = selectedId;
+  editModeRef.current = editMode;
+  selectedVertexIndexRef.current = selectedVertexIndex;
+
+  useEffect(() => {
+    setSelectedVertexIndex(null);
+  }, [selectedId, editMode]);
 
   useEffect(() => {
     Promise.all([fetchAnnotation(stem), fetchTranscription(stem)]).then(([ann, tx]) => {
@@ -109,8 +141,30 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
     };
   }, []);
 
+  const locked = annotation.locked;
+
+  const flushSave = useCallback(async (): Promise<PageAnnotation> => {
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    const pending = annotationRef.current;
+    if (pending.locked) return pending;
+    try {
+      const saved = await saveAnnotation(stem, pending);
+      setAnnotation(saved);
+      setSaveError(null);
+      setPdfRefreshKey((k) => k + 1);
+      return saved;
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Save failed");
+      throw err;
+    }
+  }, [stem]);
+
   const scheduleSave = useCallback(
     (next: PageAnnotation) => {
+      if (next.locked) return;
       setAnnotation(next);
       setDirty(true);
       setSaveError(null);
@@ -118,6 +172,7 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
       saveTimer.current = setTimeout(async () => {
         try {
           await saveAnnotation(stem, next);
+          setPdfRefreshKey((k) => k + 1);
         } catch (err) {
           setSaveError(err instanceof Error ? err.message : "Save failed");
         }
@@ -156,6 +211,24 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
     });
   };
 
+  const deleteSelectedVertex = useCallback((): boolean => {
+    if (!editModeRef.current) return false;
+    const id = selectedIdRef.current;
+    const vtx = selectedVertexIndexRef.current;
+    if (id == null || vtx == null) return false;
+    const ann = annotationRef.current;
+    const seg = ann.segments.find((s) => s.id === id);
+    if (!seg || seg.points.length <= MIN_SEGMENT_POINTS) return false;
+    scheduleSave({
+      ...ann,
+      segments: ann.segments.map((s) =>
+        s.id === id ? { ...s, points: s.points.filter((_, i) => i !== vtx) } : s,
+      ),
+    });
+    setSelectedVertexIndex(null);
+    return true;
+  }, [scheduleSave]);
+
   const deleteSelectedSegment = useCallback(() => {
     const id = selectedIdRef.current;
     if (!id) return false;
@@ -175,9 +248,11 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
   }, []);
 
   const handleDeleteKey = useCallback(() => {
+    if (locked) return;
     if (canvasRef.current?.cancelDraft()) return;
+    if (deleteSelectedVertex()) return;
     deleteSelectedSegment();
-  }, [deleteSelectedSegment]);
+  }, [locked, deleteSelectedVertex, deleteSelectedSegment]);
 
   const handleDeleteClick = () => {
     if (canvasRef.current?.cancelDraft()) return;
@@ -233,7 +308,66 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
     setEditMode(false);
   }, []);
 
+  const refreshHistory = useCallback(async () => {
+    try {
+      const data = await fetchHistory(stem);
+      setHistorySnapshots(data.snapshots);
+    } catch {
+      setHistorySnapshots([]);
+    }
+  }, [stem]);
+
+  useEffect(() => {
+    if (showHistory) refreshHistory();
+  }, [showHistory, refreshHistory]);
+
+  const handleLock = async () => {
+    try {
+      await flushSave();
+      const result = await lockPage(stem);
+      setAnnotation(result);
+      setShowLockPrompt(false);
+      lockPromptDismissedRef.current = true;
+      setPdfRefreshKey((k) => k + 1);
+      showToast("Page locked.");
+      if (showHistory) refreshHistory();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Lock failed", "error");
+    }
+  };
+
+  const handleUnlock = async () => {
+    if (!window.confirm("Unlock this page for editing?")) return;
+    try {
+      const result = await unlockPage(stem);
+      setAnnotation(result);
+      lockPromptDismissedRef.current = false;
+      if (pdfPanelMode === "share") setPdfPanelMode("preview");
+      setPdfRefreshKey((k) => k + 1);
+      showToast("Page unlocked.");
+      if (showHistory) refreshHistory();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Unlock failed", "error");
+    }
+  };
+
+  const handleRestoreSnapshot = async (snapshotId: string) => {
+    setRestoring(true);
+    try {
+      const restored = await restoreHistorySnapshot(stem, snapshotId);
+      setAnnotation(restored);
+      setDirty(true);
+      showToast("Annotation restored from history.");
+      await refreshHistory();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Restore failed", "error");
+    } finally {
+      setRestoring(false);
+    }
+  };
+
   const handleAutoSegment = async () => {
+    if (locked) return;
     const ann = annotationRef.current;
     if (ann.segments.length > 0) {
       const ok = window.confirm(
@@ -264,11 +398,7 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
     setExporting(true);
     setExportProgress(null);
     try {
-      const result = await exportPage(
-        stem,
-        { binarize: binarizeOnExport },
-        (progress) => setExportProgress(progress),
-      );
+      const result = await exportPage(stem, (progress) => setExportProgress(progress));
       setDirty(false);
       const w = result.warnings;
       const unpaired = w.unpaired_segments.join(", ") || "none";
@@ -283,16 +413,20 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
     }
   };
 
-  const pickTool = useCallback((next: DrawTool) => {
-    setTool(next);
-    setEditMode(false);
-  }, []);
+  const pickTool = useCallback(
+    (next: DrawTool) => {
+      if (locked) return;
+      setTool(next);
+      setEditMode(false);
+    },
+    [locked],
+  );
 
   const toggleEdit = useCallback(() => {
-    if (!selectedIdRef.current) return;
+    if (locked || !selectedIdRef.current) return;
     setTool("select");
     setEditMode((v) => !v);
-  }, []);
+  }, [locked]);
 
   const toggleLines = useCallback(() => {
     setShowSegments((v) => !v);
@@ -326,6 +460,12 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
         return;
       }
 
+      if (editModeRef.current && selectedVertexIndexRef.current != null) {
+        e.preventDefault();
+        setSelectedVertexIndex(null);
+        return;
+      }
+
       if (selectedIdRef.current) {
         e.preventDefault();
         setSelectedId(null);
@@ -339,7 +479,36 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
   }, []);
 
   const selectedSegment = annotation.segments.find((s) => s.id === selectedId) ?? null;
-  const textLines = transcription?.status === "missing" ? [] : (transcription?.text_lines ?? []);
+  const previewSegment = annotation.segments.find((s) => s.id === previewSegmentId) ?? null;
+  const textLines = useMemo(
+    () => (transcription?.status === "missing" ? [] : (transcription?.text_lines ?? [])),
+    [transcription],
+  );
+  const pairingProgress = useMemo(
+    () => computePairingProgress(annotation.segments, textLines),
+    [annotation.segments, textLines],
+  );
+
+  const pairingComplete =
+    annotation.segments.length > 0 && pairingProgress.unpaired_count === 0;
+
+  useEffect(() => {
+    if (!pairingComplete) {
+      lockPromptDismissedRef.current = false;
+      setShowLockPrompt(false);
+      return;
+    }
+    if (!locked && !lockPromptDismissedRef.current) {
+      setShowLockPrompt(true);
+    }
+  }, [pairingComplete, locked]);
+
+  useEffect(() => {
+    if (pdfPanelModeRef.current === pdfPanelMode) return;
+    pdfPanelModeRef.current = pdfPanelMode;
+    const id = window.setTimeout(() => canvasRef.current?.fitPage(), 50);
+    return () => window.clearTimeout(id);
+  }, [pdfPanelMode]);
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-white text-gray-900">
@@ -352,6 +521,15 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
             {displayPageName(stem)}
           </h1>
           {dirty && <span className="shrink-0 text-xs text-amber-700">unsaved export</span>}
+          {locked && (
+            <span className="shrink-0 rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-700">
+              locked
+            </span>
+          )}
+        </div>
+
+        <div className="hidden min-w-0 flex-1 justify-center px-2 md:flex">
+          {annotation.segments.length > 0 && <PairingProgressBar progress={pairingProgress} />}
         </div>
 
         <div className="flex shrink-0 items-center gap-0.5">
@@ -366,7 +544,8 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
           <button
             type="button"
             onClick={() => pickTool("select")}
-            className={toolBtn(tool === "select" && !editMode)}
+            disabled={locked}
+            className={`${toolBtn(tool === "select" && !editMode)} disabled:cursor-not-allowed disabled:opacity-40`}
             title={`Select (${EDITOR_SHORTCUTS.select})`}
           >
             Select <kbd className="ml-1 text-[10px] opacity-60">{EDITOR_SHORTCUTS.select}</kbd>
@@ -374,7 +553,8 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
           <button
             type="button"
             onClick={() => pickTool("rectangle")}
-            className={toolBtn(tool === "rectangle")}
+            disabled={locked}
+            className={`${toolBtn(tool === "rectangle")} disabled:cursor-not-allowed disabled:opacity-40`}
             title={`Rectangle (${EDITOR_SHORTCUTS.rectangle})`}
           >
             Rect <kbd className="ml-1 text-[10px] opacity-60">{EDITOR_SHORTCUTS.rectangle}</kbd>
@@ -382,7 +562,8 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
           <button
             type="button"
             onClick={() => pickTool("polygon")}
-            className={toolBtn(tool === "polygon")}
+            disabled={locked}
+            className={`${toolBtn(tool === "polygon")} disabled:cursor-not-allowed disabled:opacity-40`}
             title={`Polygon (${EDITOR_SHORTCUTS.polygon}) · ${EDITOR_SHORTCUTS.undoLastPoint} undo point`}
           >
             Poly <kbd className="ml-1 text-[10px] opacity-60">{EDITOR_SHORTCUTS.polygon}</kbd>
@@ -390,11 +571,11 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
           <button
             type="button"
             onClick={toggleEdit}
-            disabled={!selectedSegment}
+            disabled={!selectedSegment || locked}
             className={`${toolBtn(editMode)} disabled:cursor-not-allowed disabled:opacity-40`}
             title={
               selectedSegment
-                ? `Edit vertices (${EDITOR_SHORTCUTS.editVertices}) — drag handles, click edge to add point`
+                ? `Edit vertices (${EDITOR_SHORTCUTS.editVertices}) — drag handles, click edge to add point, Del to remove selected point`
                 : "Select a segment first"
             }
           >
@@ -411,7 +592,7 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
           <button
             type="button"
             onClick={handleAutoSegment}
-            disabled={segmenting || exporting}
+            disabled={segmenting || exporting || locked}
             className="rounded px-2.5 py-1 text-sm text-indigo-800 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-40"
             title="Auto line segmentation (Kraken BLLA) — requires pip install 'annote[kraken]'"
           >
@@ -420,23 +601,49 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
           <button
             type="button"
             onClick={handleDeleteClick}
-            className="rounded px-2.5 py-1 text-sm text-red-700 hover:bg-red-50"
+            disabled={locked}
+            className="rounded px-2.5 py-1 text-sm text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
             title="Delete (Del)"
           >
             Del
           </button>
-          <label
-            className="ml-2 flex cursor-pointer items-center gap-1.5 text-xs text-gray-600"
-            title="Kraken nlbin — requires pip install 'annote[kraken]'"
+          <button
+            type="button"
+            onClick={() => setShowHistory((v) => !v)}
+            className="rounded px-2.5 py-1 text-sm text-gray-700 hover:bg-gray-100"
+            title="Annotation history"
           >
-            <input
-              type="checkbox"
-              checked={binarizeOnExport}
-              onChange={(e) => setBinarizeOnExport(e.target.checked)}
-              className="rounded border-gray-300"
-            />
-            Binarize
-          </label>
+            History
+          </button>
+          {locked ? (
+            <button
+              type="button"
+              onClick={handleUnlock}
+              className="rounded px-2.5 py-1 text-sm text-amber-800 hover:bg-amber-50"
+              title="Unlock page for editing"
+            >
+              Unlock
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleLock}
+              className="rounded px-2.5 py-1 text-sm text-slate-700 hover:bg-slate-100"
+              title="Lock page to freeze annotation"
+            >
+              Lock
+            </button>
+          )}
+          <TranscriptionPdfMenu
+            locked={locked}
+            panelOpen={pdfPanelMode !== null}
+            panelMode={pdfPanelMode}
+            onOpen={(mode) => {
+              setPdfRefreshKey((k) => k + 1);
+              setPdfPanelMode(mode);
+            }}
+            onClose={() => setPdfPanelMode(null)}
+          />
           <button
             type="button"
             onClick={handleExport}
@@ -448,12 +655,60 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
         </div>
       </header>
 
-      <div className="shrink-0 border-b border-gray-100 bg-gray-50 px-3 py-1 text-[11px] text-gray-500">
-        <span className="font-medium text-gray-600">Shortcuts:</span>{" "}
-        Drag to pan (polygon too) · scroll to zoom · Enter finish polygon · {EDITOR_SHORTCUTS.undoLastPoint} / Backspace
-        undo point · Esc cancel draw · Del delete · {EDITOR_SHORTCUTS.fitPage} fit page · Edit mode: drag
-        vertices · click edge to add point
-      </div>
+      {annotation.segments.length > 0 && (
+        <div className="shrink-0 border-b border-gray-100 bg-gray-50 px-3 py-1.5 md:hidden">
+          <PairingProgressBar progress={pairingProgress} />
+        </div>
+      )}
+
+      {showHistory && (
+        <div className="shrink-0 border-b border-gray-100 bg-gray-50 px-3 py-2">
+          <div className="mb-1 flex items-center justify-between">
+            <h2 className="text-xs font-medium uppercase tracking-wide text-gray-500">History</h2>
+            <button
+              type="button"
+              onClick={() => setShowHistory(false)}
+              className="text-xs text-gray-500 hover:text-gray-800"
+            >
+              Close
+            </button>
+          </div>
+          {locked && (
+            <p className="mb-2 text-xs text-amber-800">Unlock the page to restore a snapshot.</p>
+          )}
+          <HistoryPanel
+            snapshots={historySnapshots}
+            restoring={restoring}
+            locked={locked}
+            onRestore={handleRestoreSnapshot}
+          />
+        </div>
+      )}
+
+      {showLockPrompt && !locked && (
+        <div className="shrink-0 border-b border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+          <span>Pairing is complete. Lock this page to freeze annotation?</span>
+          <div className="mt-1 flex gap-2">
+            <button
+              type="button"
+              onClick={handleLock}
+              className="rounded bg-emerald-800 px-2.5 py-1 text-xs text-white hover:bg-emerald-900"
+            >
+              Lock page
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                lockPromptDismissedRef.current = true;
+                setShowLockPrompt(false);
+              }}
+              className="rounded px-2.5 py-1 text-xs text-emerald-800 hover:bg-emerald-100"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       {saveError && <div className="shrink-0 bg-red-50 px-3 py-1.5 text-sm text-red-700">{saveError}</div>}
 
@@ -474,7 +729,6 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
                 <span>
                   {exportStepLabel(exportProgress.step)} line {exportProgress.current} of{" "}
                   {exportProgress.total}
-                  {exportProgress.step === "binarize" ? " (Kraken)" : ""}
                 </span>
                 <span className="text-xs text-blue-700">segment {exportProgress.segment_number}</span>
               </div>
@@ -509,37 +763,67 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1 flex-col">
-        <div className="relative min-h-0 flex-1">
-          <ImageCanvas
-            ref={canvasRef}
-            imageUrl={pageImageUrl(stem)}
-            imageWidth={imageSize.width}
-            imageHeight={imageSize.height}
-            segments={annotation.segments}
-            selectedId={selectedId}
-            tool={tool}
-            editMode={editMode}
-            showSegments={showSegments}
-            onSelect={handleSelect}
-            onAddSegment={handleAddSegment}
-            onUpdateSegment={handleUpdateSegment}
-          />
+      <div className="flex min-h-0 flex-1">
+        <div className={`flex min-h-0 min-w-0 flex-col ${pdfPanelMode ? "w-1/2" : "flex-1"}`}>
+          <div className="relative min-h-0 flex-1">
+            <ImageCanvas
+              ref={canvasRef}
+              imageUrl={pageImageUrl(stem)}
+              imageWidth={imageSize.width}
+              imageHeight={imageSize.height}
+              segments={annotation.segments}
+              selectedId={selectedId}
+              tool={locked ? "pan" : tool}
+              editMode={locked ? false : editMode}
+              readOnly={locked}
+              showSegments={showSegments}
+              selectedVertexIndex={selectedVertexIndex}
+              onSelectVertex={setSelectedVertexIndex}
+              onSelect={handleSelect}
+              onAddSegment={handleAddSegment}
+              onUpdateSegment={handleUpdateSegment}
+            />
+          </div>
+
+          {selectedSegment && !locked && (
+            <SegmentPairingBar
+              segment={selectedSegment}
+              textLines={textLines}
+              segments={annotation.segments}
+              autoFocus={selectedSegment.id === transcriptionPromptId}
+              onPair={handlePair}
+              onTextOverride={handleTextOverride}
+              onClose={() => handleSelect(null)}
+              onDone={finishTranscription}
+              onPreviewExport={() => setPreviewSegmentId(selectedSegment.id)}
+            />
+          )}
         </div>
 
-        {selectedSegment && (
-          <SegmentPairingBar
-            segment={selectedSegment}
-            textLines={textLines}
-            segments={annotation.segments}
-            autoFocus={selectedSegment.id === transcriptionPromptId}
-            onPair={handlePair}
-            onTextOverride={handleTextOverride}
-            onClose={() => handleSelect(null)}
-            onDone={finishTranscription}
+        {pdfPanelMode && (
+          <TranscriptionPdfPanel
+            stem={stem}
+            mode={pdfPanelMode}
+            locked={locked}
+            refreshKey={pdfRefreshKey}
+            onClose={() => setPdfPanelMode(null)}
+            onSwitchMode={(mode) => {
+              if (mode === "share" && !locked) return;
+              setPdfRefreshKey((k) => k + 1);
+              setPdfPanelMode(mode);
+            }}
           />
         )}
       </div>
+
+      {previewSegment && (
+        <ExportPreviewModal
+          stem={stem}
+          segmentId={previewSegment.id}
+          segmentNumber={previewSegment.number}
+          onClose={() => setPreviewSegmentId(null)}
+        />
+      )}
     </div>
   );
 }

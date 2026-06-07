@@ -5,6 +5,8 @@ from pathlib import Path
 from annote.schemas.pages import PageSummary
 from annote.services.annotation_store import load_annotation
 from annote.services.export_state import is_export_dirty
+from annote.services.segment_text import compute_pairing_progress
+from annote.services.text_lines import split_text_lines
 
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp"}
@@ -47,11 +49,16 @@ def has_transcription(transcriptions_dir: Path, stem: str) -> bool:
 
 def build_page_summary(data_root: Path, stem: str) -> PageSummary:
     annotation = load_annotation(data_root, stem)
+    transcription_path = data_root / "transcriptions" / "pages" / f"{stem}.txt"
+    raw_text = transcription_path.read_text(encoding="utf-8") if transcription_path.is_file() else ""
+    text_lines = split_text_lines(raw_text) if raw_text.strip() else []
     return PageSummary(
         stem=stem,
         has_transcription=has_transcription(data_root / "transcriptions" / "pages", stem),
         segment_count=len(annotation.segments),
         export_dirty=is_export_dirty(data_root, stem, annotation),
+        locked=annotation.locked,
+        pairing=compute_pairing_progress(annotation.segments, text_lines),
     )
 
 

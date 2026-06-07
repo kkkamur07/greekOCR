@@ -10,6 +10,36 @@ _BACKEND_DIR = Path(__file__).resolve().parent.parent
 _DEFAULT_DATA_ROOT = _BACKEND_DIR.parent / "data"
 
 
+class PageLockSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="ANNOTE_PAGE_LOCK_", extra="ignore")
+
+    prompt_at_full_pairing: bool = Field(
+        default=True,
+        description="Show lock prompt when pairing progress reaches 100%",
+    )
+
+
+class HistorySettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="ANNOTE_HISTORY_", extra="ignore")
+
+    snapshot_interval_minutes: int = Field(default=5, ge=0)
+    max_timed_snapshots: int = Field(default=5, ge=1)
+    pairing_milestones: list[int] = Field(default=[50, 100])
+
+
+class TranscriptionPdfSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="ANNOTE_TRANSCRIPTION_PDF_", extra="ignore")
+
+    share_dir: str = Field(
+        default="manuscripts/share",
+        description="Directory under data_root for frozen share PDFs",
+    )
+    share_filename_pattern: str = Field(
+        default="{stem}_transcription.pdf",
+        description="Filename pattern for share PDFs; {stem} is replaced",
+    )
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="ANNOTE_",
@@ -29,6 +59,9 @@ class Settings(BaseSettings):
         default="http://localhost:3000",
         description="Comma-separated allowed CORS origins",
     )
+    page_lock: PageLockSettings = Field(default_factory=PageLockSettings)
+    history: HistorySettings = Field(default_factory=HistorySettings)
+    transcription_pdf: TranscriptionPdfSettings = Field(default_factory=TranscriptionPdfSettings)
 
     @property
     def cors_origin_list(self) -> list[str]:

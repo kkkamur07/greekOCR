@@ -11,8 +11,11 @@ COPY VERSION /app/VERSION
 COPY backend/pyproject.toml ./
 COPY backend/annote ./annote
 
-RUN pip install --no-cache-dir . \
-  && python -c "import annote"
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends fonts-dejavu-core \
+  && rm -rf /var/lib/apt/lists/* \
+  && pip install --no-cache-dir ".[kraken]" \
+  && python -c "import annote; import kraken"
 
 ENV ANNOTE_HOST=0.0.0.0
 ENV ANNOTE_PORT=5050
