@@ -7,16 +7,12 @@ from pydantic import BaseModel
 from annote.schemas.warnings import ExportResponse
 
 
-class ExportRequest(BaseModel):
-    binarize: bool = False
-
-
 class ExportProgressEvent(BaseModel):
     type: Literal["progress"] = "progress"
     current: int
     total: int
     segment_number: int
-    step: Literal["rectify", "binarize", "save"]
+    step: Literal["rectify", "save"]
 
 
 class ExportDoneEvent(BaseModel):

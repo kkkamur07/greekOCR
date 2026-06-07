@@ -29,7 +29,7 @@ Missing subdirectories are **created automatically** when the API starts. If cre
 cd annote/backend
 python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"            # add ,kraken for optional export binarization
+pip install -e ".[dev]"            # add ,kraken for auto-segmentation
 cp .env.example .env               # edit ANNOTE_DATA_ROOT / ANNOTE_PORT if needed
 ```
 
@@ -134,9 +134,12 @@ pytest
 ```bash
 cd annote/backend
 PYTHONPATH=. python scripts/export_openapi.py
+
+cd ../frontend
+npm run generate:openapi
 ```
 
-Hand-written frontend types: `frontend/src/types/api.ts`.
+Generated schema types: `frontend/src/types/openapi.ts`. App-facing aliases: `frontend/src/types/api.ts`.
 
 ## Subagents
 

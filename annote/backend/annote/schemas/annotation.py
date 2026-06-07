@@ -22,3 +22,4 @@ class ExportMetadata(BaseModel):
 class PageAnnotation(BaseModel):
     segments: list[Segment] = Field(default_factory=list)
     export_metadata: ExportMetadata | None = None
+    locked: bool = False

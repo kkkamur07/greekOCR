@@ -22,10 +22,11 @@ dependencies = [
     "Pillow>=11.0.0",
     "numpy>=2.0.0",
     "opencv-python-headless>=4.10.0",
+    "reportlab>=4.2.0",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.3.0"]
+dev = ["pytest>=8.3.0", "pypdf>=5.0.0"]
 kraken = ["kraken>=7.0"]
 
 [project.scripts]

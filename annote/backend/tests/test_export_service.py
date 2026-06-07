@@ -130,19 +130,14 @@ def test_export_uses_maximum_jpeg_quality(client, data_root, monkeypatch):
     assert saved_kwargs["subsampling"] == 0
 
 
-def test_export_stream_reports_progress(client, data_root, monkeypatch):
+def test_export_stream_reports_progress(client, data_root):
     _seed_page(data_root)
     client.put(
         "/pages/folio/annotation",
         json={"segments": [SEG1, SEG2], "export_metadata": None},
     )
 
-    monkeypatch.setattr(
-        "annote.services.processing.pipeline.binarize",
-        lambda image: image,
-    )
-
-    response = client.post("/pages/folio/export/stream", json={"binarize": True})
+    response = client.post("/pages/folio/export/stream")
     assert response.status_code == 200
 
     events = [__import__("json").loads(line) for line in response.text.strip().split("\n") if line]
@@ -151,43 +146,27 @@ def test_export_stream_reports_progress(client, data_root, monkeypatch):
 
     assert len(done) == 1
     assert done[0]["result"]["exported_count"] == 2
-    assert any(e["step"] == "binarize" for e in progress)
+    assert any(e["step"] == "rectify" for e in progress)
     assert progress[-1]["step"] == "save"
 
 
-def test_export_progress_yields_binarize_before_running_it(client, data_root, monkeypatch):
+def test_export_progress_yields_rectify_before_running_it(client, data_root, monkeypatch):
     _seed_page(data_root)
     client.put("/pages/folio/annotation", json={"segments": [SEG1], "export_metadata": None})
-    binarize_called = False
+    rectify_called = False
 
-    def fake_binarize(image):
-        nonlocal binarize_called
-        binarize_called = True
+    def fake_rectify(image, segment):
+        nonlocal rectify_called
+        rectify_called = True
         return image
 
-    monkeypatch.setattr("annote.services.processing.pipeline.binarize", fake_binarize)
+    monkeypatch.setattr("annote.services.processing.pipeline.rectify", fake_rectify)
 
-    events = export_page_events(data_root, "folio", binarize=True)
+    events = export_page_events(data_root, "folio")
     first = next(events)
-    second = next(events)
 
     assert first.step == "rectify"
-    assert second.step == "binarize"
-    assert binarize_called is False
+    assert rectify_called is False
 
     list(events)
-    assert binarize_called is True
-
-
-def test_export_with_binarize_reports_steps(client, data_root, monkeypatch):
-    _seed_page(data_root)
-    client.put("/pages/folio/annotation", json={"segments": [SEG1], "export_metadata": None})
-
-    monkeypatch.setattr(
-        "annote.services.processing.pipeline.binarize",
-        lambda image: image,
-    )
-
-    response = client.post("/pages/folio/export", json={"binarize": True})
-    assert response.status_code == 200
-    assert response.json()["steps"] == ["rectify", "binarize"]
+    assert rectify_called is True

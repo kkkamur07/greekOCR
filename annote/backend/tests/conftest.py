@@ -33,9 +33,27 @@ def data_root(tmp_path: Path) -> Path:
         "manuscripts/export",
         "transcriptions/pages",
         "annotations/pages",
+        "manuscripts/share",
     ):
         (tmp_path / sub).mkdir(parents=True)
     return tmp_path
+
+
+@pytest.fixture
+def unicode_font(monkeypatch: pytest.MonkeyPatch):
+    """Ensure PDF tests can render Greek without skipping when a system font exists."""
+    from annote.services.fonts import resolve_unicode_font
+    import annote.services.transcription_pdf as transcription_pdf
+
+    try:
+        font_path = resolve_unicode_font()
+    except RuntimeError as e:
+        pytest.skip(str(e))
+
+    transcription_pdf._font_registered = False
+    monkeypatch.setattr(transcription_pdf, "resolve_unicode_font", lambda: font_path)
+    monkeypatch.setattr("annote.services.fonts.resolve_unicode_font", lambda: font_path)
+    return font_path
 
 
 @pytest.fixture

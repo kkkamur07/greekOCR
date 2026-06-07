@@ -1,6 +1,9 @@
 "use client";
 
 import type { Segment } from "@/types/api";
+import { segmentIsPaired } from "@/lib/pairingProgress";
+
+import { getSegmentHighlight } from "./segmentHighlight";
 
 interface SegmentOverlayProps {
   imageWidth: number;
@@ -15,9 +18,14 @@ interface SegmentOverlayProps {
   zoomScale: number;
   onSelect: (id: string) => void;
   clientToImage: (clientX: number, clientY: number) => [number, number] | null;
+  selectedVertexIndex: number | null;
+  onSelectVertex: (index: number | null) => void;
   onVertexDrag: (segmentId: string, pointIndex: number, x: number, y: number) => void;
   onInsertVertex: (segmentId: string, afterIndex: number, x: number, y: number) => void;
+  onRemoveVertex: (segmentId: string, pointIndex: number) => void;
 }
+
+export const MIN_SEGMENT_POINTS = 4;
 
 const HANDLE_RADIUS = 6;
 const DRAFT_RADIUS = 4;
@@ -44,8 +52,11 @@ export default function SegmentOverlay({
   zoomScale,
   onSelect,
   clientToImage,
+  selectedVertexIndex,
+  onSelectVertex,
   onVertexDrag,
   onInsertVertex,
+  onRemoveVertex,
 }: SegmentOverlayProps) {
   if (!visible) return null;
 
@@ -60,18 +71,20 @@ export default function SegmentOverlay({
     <svg
       viewBox={`0 0 ${imageWidth} ${imageHeight}`}
       className="absolute inset-0 h-full w-full"
-      style={{ pointerEvents: interactive ? "auto" : "none" }}
+      style={{ pointerEvents: interactive || editMode ? "auto" : "none" }}
     >
       {segments.map((seg) => {
         const selected = seg.id === selectedId;
+        const paired = segmentIsPaired(seg);
+        const highlight = getSegmentHighlight({ selected, paired });
         return (
           <g key={seg.id}>
             <path
               data-segment-hit=""
               data-segment-id={seg.id}
               d={segmentPath(seg.points)}
-              fill={selected ? "rgba(59,130,246,0.25)" : "rgba(34,197,94,0.15)"}
-              stroke={selected ? "#2563eb" : "#16a34a"}
+              fill={highlight.fill}
+              stroke={highlight.stroke}
               strokeWidth={selected ? selectedStroke : segmentStroke}
               style={{ pointerEvents: interactive ? "auto" : "none", cursor: interactive ? "pointer" : "default" }}
               onPointerDown={(e) => {
@@ -89,7 +102,7 @@ export default function SegmentOverlay({
               <text
                 x={seg.points[0][0] + 4}
                 y={seg.points[0][1] - 6}
-                fill={selected ? "#1d4ed8" : "#15803d"}
+                fill={highlight.label}
                 fontSize={labelFontSize}
                 fontWeight={600}
                 style={{ pointerEvents: "none" }}
@@ -123,41 +136,53 @@ export default function SegmentOverlay({
               })}
             {editMode &&
               selected &&
-              seg.points.map((pt, idx) => (
-                <circle
-                  key={idx}
-                  data-vertex-handle=""
-                  cx={pt[0]}
-                  cy={pt[1]}
-                  r={handleRadius}
-                  fill="#fff"
-                  stroke="#2563eb"
-                  strokeWidth={handleStroke}
-                  className="cursor-move"
-                  style={{ pointerEvents: "auto" }}
-                  onPointerDown={(e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    const handle = e.currentTarget;
-                    handle.setPointerCapture(e.pointerId);
-                    const move = (ev: PointerEvent) => {
-                      const coords = clientToImage(ev.clientX, ev.clientY);
-                      if (coords) onVertexDrag(seg.id, idx, coords[0], coords[1]);
-                    };
-                    const up = () => {
-                      try {
-                        handle.releasePointerCapture(e.pointerId);
-                      } catch {
-                        /* capture may already be released */
-                      }
-                      window.removeEventListener("pointermove", move);
-                      window.removeEventListener("pointerup", up);
-                    };
-                    window.addEventListener("pointermove", move);
-                    window.addEventListener("pointerup", up);
-                  }}
-                />
-              ))}
+              seg.points.map((pt, idx) => {
+                const vtxSelected = selectedVertexIndex === idx;
+                const canRemove = seg.points.length > MIN_SEGMENT_POINTS;
+                return (
+                  <circle
+                    key={idx}
+                    data-vertex-handle=""
+                    cx={pt[0]}
+                    cy={pt[1]}
+                    r={handleRadius}
+                    fill={vtxSelected ? "#2563eb" : "#fff"}
+                    stroke={vtxSelected ? "#1d4ed8" : "#2563eb"}
+                    strokeWidth={vtxSelected ? handleStroke * 1.5 : handleStroke}
+                    className={canRemove ? "cursor-move" : "cursor-not-allowed"}
+                    style={{ pointerEvents: "auto" }}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (!canRemove) return;
+                      onRemoveVertex(seg.id, idx);
+                    }}
+                    onPointerDown={(e) => {
+                      if (e.button !== 0) return;
+                      e.stopPropagation();
+                      e.preventDefault();
+                      onSelectVertex(idx);
+                      const handle = e.currentTarget;
+                      handle.setPointerCapture(e.pointerId);
+                      const move = (ev: PointerEvent) => {
+                        const coords = clientToImage(ev.clientX, ev.clientY);
+                        if (coords) onVertexDrag(seg.id, idx, coords[0], coords[1]);
+                      };
+                      const up = () => {
+                        try {
+                          handle.releasePointerCapture(e.pointerId);
+                        } catch {
+                          /* capture may already be released */
+                        }
+                        window.removeEventListener("pointermove", move);
+                        window.removeEventListener("pointerup", up);
+                      };
+                      window.addEventListener("pointermove", move);
+                      window.addEventListener("pointerup", up);
+                    }}
+                  />
+                );
+              })}
           </g>
         );
       })}

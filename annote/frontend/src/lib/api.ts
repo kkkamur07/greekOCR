@@ -2,6 +2,7 @@ import type {
   AutoSegmentRequest,
   ExportProgressEvent,
   ExportResponse,
+  HistoryListResponse,
   PageAnnotation,
   PageListResponse,
   PageSummary,
@@ -40,6 +41,31 @@ export function pageImageUrl(stem: string): string {
   return `${PUBLIC_API_BASE}/pages/${encodeURIComponent(stem)}/image`;
 }
 
+export function segmentPreviewUrl(stem: string, segmentId: string): string {
+  return `${PUBLIC_API_BASE}/pages/${encodeURIComponent(stem)}/segments/${encodeURIComponent(segmentId)}/preview`;
+}
+
+export function transcriptionPdfUrl(stem: string): string {
+  return `${PUBLIC_API_BASE}/pages/${encodeURIComponent(stem)}/transcription.pdf`;
+}
+
+export function transcriptionSharePdfUrl(stem: string): string {
+  return `${PUBLIC_API_BASE}/pages/${encodeURIComponent(stem)}/transcription.share.pdf`;
+}
+
+export async function fetchTranscriptionPdfBlob(
+  stem: string,
+  mode: "preview" | "share",
+): Promise<Blob> {
+  const base = mode === "preview" ? transcriptionPdfUrl(stem) : transcriptionSharePdfUrl(stem);
+  const response = await fetch(`${base}?t=${Date.now()}`);
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(detail || `PDF request failed: ${response.status}`);
+  }
+  return response.blob();
+}
+
 export async function fetchPages(): Promise<PageListResponse> {
   return request<PageListResponse>("/pages");
 }
@@ -75,6 +101,25 @@ export async function saveAnnotation(stem: string, annotation: PageAnnotation): 
   });
 }
 
+export async function lockPage(stem: string): Promise<PageAnnotation> {
+  return request<PageAnnotation>(`/pages/${encodeURIComponent(stem)}/lock`, { method: "POST" });
+}
+
+export async function unlockPage(stem: string): Promise<PageAnnotation> {
+  return request<PageAnnotation>(`/pages/${encodeURIComponent(stem)}/unlock`, { method: "POST" });
+}
+
+export async function fetchHistory(stem: string): Promise<HistoryListResponse> {
+  return request<HistoryListResponse>(`/pages/${encodeURIComponent(stem)}/history`);
+}
+
+export async function restoreHistorySnapshot(stem: string, snapshotId: string): Promise<PageAnnotation> {
+  return request<PageAnnotation>(
+    `/pages/${encodeURIComponent(stem)}/history/${encodeURIComponent(snapshotId)}/restore`,
+    { method: "POST" },
+  );
+}
+
 export async function autoSegmentPage(
   stem: string,
   options?: AutoSegmentRequest,
@@ -92,13 +137,10 @@ type ExportStreamEvent =
 
 export async function exportPage(
   stem: string,
-  options?: { binarize?: boolean },
   onProgress?: (event: ExportProgressEvent) => void,
 ): Promise<ExportResponse> {
   const response = await fetch(`${apiBase()}/pages/${encodeURIComponent(stem)}/export/stream`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(options ?? {}),
   });
 
   if (!response.ok) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export interface PanZoomState {
   x: number;
@@ -149,6 +149,36 @@ export function usePanZoom(imageWidth: number, imageHeight: number) {
 
   const endPan = useCallback(() => {
     panSession.current = null;
+  }, []);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+
+    let prevWidth = el.clientWidth;
+    let prevHeight = el.clientHeight;
+
+    const observer = new ResizeObserver(() => {
+      const width = el.clientWidth;
+      const height = el.clientHeight;
+      if (width === prevWidth && height === prevHeight) return;
+
+      const deltaX = width - prevWidth;
+      const deltaY = height - prevHeight;
+      prevWidth = width;
+      prevHeight = height;
+
+      if (deltaX === 0 && deltaY === 0) return;
+
+      setTransform((prev) => ({
+        ...prev,
+        x: prev.x + deltaX / 2,
+        y: prev.y + deltaY / 2,
+      }));
+    });
+
+    observer.observe(el);
+    return () => observer.disconnect();
   }, []);
 
   return {

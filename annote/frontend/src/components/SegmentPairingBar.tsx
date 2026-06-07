@@ -12,6 +12,7 @@ interface SegmentPairingBarProps {
   onTextOverride: (text: string) => void;
   onClose: () => void;
   onDone: () => void;
+  onPreviewExport?: () => void;
 }
 
 export default function SegmentPairingBar({
@@ -23,6 +24,7 @@ export default function SegmentPairingBar({
   onTextOverride,
   onClose,
   onDone,
+  onPreviewExport,
 }: SegmentPairingBarProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const pairedLineIndices = new Set(
@@ -52,6 +54,15 @@ export default function SegmentPairingBar({
             {value ? "" : " — add transcription"}
           </p>
           <div className="flex items-center gap-2">
+            {onPreviewExport && (
+              <button
+                type="button"
+                onClick={onPreviewExport}
+                className="rounded border border-gray-300 px-3 py-1 text-xs text-gray-700 hover:bg-gray-50"
+              >
+                Preview export
+              </button>
+            )}
             <button
               type="button"
               onClick={onDone}
@@ -88,6 +99,7 @@ export default function SegmentPairingBar({
                 const used = pairedLineIndices.has(line.index);
                 const active = segment.paired_text_line_index === line.index;
                 const suggested = !active && !used && nextUnpaired?.index === line.index;
+                const pairedLine = active || used;
                 return (
                   <button
                     key={line.index}
@@ -96,17 +108,18 @@ export default function SegmentPairingBar({
                     onClick={() => onPair(line.index)}
                     className={`max-w-full truncate rounded-lg border px-2.5 py-1 text-left text-xs ${
                       active
-                        ? "border-blue-500 bg-blue-50 text-blue-900"
-                        : suggested
-                          ? "border-amber-400 bg-amber-50 text-amber-900"
-                          : used
-                            ? "border-gray-200 text-gray-400"
-                            : "border-gray-300 hover:border-blue-400 hover:bg-blue-50"
+                        ? "border-green-600 bg-green-50 text-green-900"
+                        : used
+                          ? "border-green-300 bg-green-50/60 text-green-800"
+                          : suggested
+                            ? "border-amber-400 bg-amber-50 text-amber-900"
+                            : "border-amber-300 bg-amber-50/40 text-amber-900 hover:border-amber-500 hover:bg-amber-50"
                     }`}
                     title={line.text}
                   >
                     <span className="mr-1 font-mono text-gray-500">{line.index}.</span>
                     {line.text}
+                    {pairedLine && !active && <span className="ml-1 text-green-700">(paired)</span>}
                     {suggested && <span className="ml-1 text-amber-700">(next)</span>}
                   </button>
                 );
