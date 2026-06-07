@@ -1,11 +1,9 @@
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
 import type { Segment, TextLine } from "@/types/api";
 
 import SegmentPairingBar from "./SegmentPairingBar";
-
-afterEach(cleanup);
 
 const textLines: TextLine[] = [
   { index: 1, text: "first line" },

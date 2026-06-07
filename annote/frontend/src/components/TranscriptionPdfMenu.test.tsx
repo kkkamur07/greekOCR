@@ -1,9 +1,7 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
 import TranscriptionPdfMenu from "./TranscriptionPdfMenu";
-
-afterEach(cleanup);
 
 describe("TranscriptionPdfMenu", () => {
   it("opens live preview from the primary button", () => {

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-export interface PanZoomState {
+interface PanZoomState {
   x: number;
   y: number;
   scale: number;
@@ -15,7 +15,7 @@ function clampScale(scale: number): number {
   return Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale));
 }
 
-export function centerAtFullScale(
+function centerAtFullScale(
   containerWidth: number,
   containerHeight: number,
   imageWidth: number,
@@ -184,7 +184,6 @@ export function usePanZoom(imageWidth: number, imageHeight: number) {
   return {
     containerRef,
     transform,
-    setTransform,
     fitPage,
     centerPage,
     zoomIn,

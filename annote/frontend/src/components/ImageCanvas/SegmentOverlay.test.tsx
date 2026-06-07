@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 import type { Segment } from "@/types/api";
 
 import SegmentOverlay from "./SegmentOverlay";
-import { getSegmentHighlight } from "./segmentHighlight";
 
 const noop = () => {};
 
@@ -45,23 +44,21 @@ const baseProps = {
 describe("SegmentOverlay", () => {
   it("renders a paired segment with the paired highlight colors", () => {
     const segment = makeSegment({ paired_text_line_index: 2 });
-    const paired = getSegmentHighlight({ selected: false, paired: true });
 
     const { container } = render(<SegmentOverlay {...baseProps} segments={[segment]} />);
 
     const path = container.querySelector('[data-segment-id="seg-1"]');
     expect(path).not.toBeNull();
-    expect(path).toHaveAttribute("fill", paired.fill);
-    expect(path).toHaveAttribute("stroke", paired.stroke);
+    expect(path).toHaveAttribute("fill", "rgba(34,197,94,0.15)");
+    expect(path).toHaveAttribute("stroke", "#16a34a");
   });
 
   it("treats inline text override as paired for highlight color", () => {
     const segment = makeSegment({ text_override: "typed line" });
-    const paired = getSegmentHighlight({ selected: false, paired: true });
 
     const { container } = render(<SegmentOverlay {...baseProps} segments={[segment]} />);
 
     const path = container.querySelector('[data-segment-id="seg-1"]');
-    expect(path).toHaveAttribute("stroke", paired.stroke);
+    expect(path).toHaveAttribute("stroke", "#16a34a");
   });
 });

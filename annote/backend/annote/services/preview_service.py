@@ -21,7 +21,7 @@ def preview_segment_jpeg(data_root: Path, stem: str, segment_id: str) -> bytes:
     if image_path is None:
         raise FileNotFoundError(f"Page image not found: {stem}")
 
-    page_image, page_pil = load_page_rgb(image_path)
+    page_image, _ = load_page_rgb(image_path)
     crop = process(page_image, segment.model_dump(), resolve_export_steps())
 
     from PIL import Image

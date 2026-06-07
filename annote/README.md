@@ -141,6 +141,3 @@ npm run generate:openapi
 
 Generated schema types: `frontend/src/types/openapi.ts`. App-facing aliases: `frontend/src/types/api.ts`.
 
-## Subagents
-
-Issue-specific Cursor subagents: `.cursor/agents/` (`annote-001` … `annote-008`). Completed issue files: `issues/done/`.

@@ -4,7 +4,16 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from annote.schemas.warnings import ExportResponse
+
+class ExportWarnings(BaseModel):
+    unpaired_segments: list[int]
+    unused_text_lines: list[int]
+
+
+class ExportResponse(BaseModel):
+    exported_count: int
+    warnings: ExportWarnings
+    steps: list[str]
 
 
 class ExportProgressEvent(BaseModel):
