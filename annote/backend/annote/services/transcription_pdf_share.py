@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-from annote.services.transcription_pdf import generate_transcription_pdf
 from annote.settings import get_settings
 
 
@@ -17,10 +16,6 @@ def write_share_pdf_bytes(data_root: Path, stem: str, pdf_bytes: bytes) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(pdf_bytes)
     return path
-
-
-def write_share_pdf(data_root: Path, stem: str) -> Path:
-    return write_share_pdf_bytes(data_root, stem, generate_transcription_pdf(data_root, stem))
 
 
 def remove_share_pdf(data_root: Path, stem: str) -> None:

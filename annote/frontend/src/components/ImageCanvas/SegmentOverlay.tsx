@@ -3,8 +3,6 @@
 import type { Segment } from "@/types/api";
 import { segmentIsPaired } from "@/lib/pairingProgress";
 
-import { getSegmentHighlight } from "./segmentHighlight";
-
 interface SegmentOverlayProps {
   imageWidth: number;
   imageHeight: number;
@@ -27,6 +25,30 @@ interface SegmentOverlayProps {
 
 export const MIN_SEGMENT_POINTS = 4;
 
+interface SegmentHighlight {
+  fill: string;
+  stroke: string;
+  label: string;
+}
+
+const PAIRED_HIGHLIGHT: SegmentHighlight = {
+  fill: "rgba(34,197,94,0.15)",
+  stroke: "#16a34a",
+  label: "#15803d",
+};
+
+const UNPAIRED_HIGHLIGHT: SegmentHighlight = {
+  fill: "rgba(245,158,11,0.15)",
+  stroke: "#d97706",
+  label: "#b45309",
+};
+
+const SELECTED_HIGHLIGHT: SegmentHighlight = {
+  fill: "rgba(59,130,246,0.25)",
+  stroke: "#2563eb",
+  label: "#1d4ed8",
+};
+
 const HANDLE_RADIUS = 6;
 const DRAFT_RADIUS = 4;
 const LABEL_FONT_SIZE = 14;
@@ -38,6 +60,12 @@ function screenScaled(size: number, zoomScale: number): number {
 function segmentPath(points: [number, number][]): string {
   if (points.length === 0) return "";
   return points.map((p, i) => `${i === 0 ? "M" : "L"} ${p[0]} ${p[1]}`).join(" ") + " Z";
+}
+
+function segmentHighlight(selected: boolean, paired: boolean): SegmentHighlight {
+  if (selected) return SELECTED_HIGHLIGHT;
+  if (paired) return PAIRED_HIGHLIGHT;
+  return UNPAIRED_HIGHLIGHT;
 }
 
 export default function SegmentOverlay({
@@ -76,7 +104,7 @@ export default function SegmentOverlay({
       {segments.map((seg) => {
         const selected = seg.id === selectedId;
         const paired = segmentIsPaired(seg);
-        const highlight = getSegmentHighlight({ selected, paired });
+        const highlight = segmentHighlight(selected, paired);
         return (
           <g key={seg.id}>
             <path

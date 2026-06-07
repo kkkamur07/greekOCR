@@ -1,10 +1,8 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
 import * as api from "@/lib/api";
 import TranscriptionPdfPanel from "./TranscriptionPdfPanel";
-
-afterEach(cleanup);
 
 describe("TranscriptionPdfPanel", () => {
   it("loads the live preview PDF into an embedded object", async () => {

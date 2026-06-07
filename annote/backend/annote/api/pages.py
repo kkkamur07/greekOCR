@@ -9,9 +9,8 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 
 from annote.schemas.annotation import PageAnnotation
 from annote.schemas.auto_segment import AutoSegmentRequest
-from annote.schemas.export import ExportErrorEvent
+from annote.schemas.export import ExportErrorEvent, ExportResponse
 from annote.schemas.history import HistoryListResponse
-from annote.schemas.warnings import ExportResponse
 from annote.schemas.pages import PageListResponse, PageSummary, TextLineOut, TranscriptionResponse
 from annote.services.annotation_history import (
     capture_snapshot,
@@ -22,9 +21,9 @@ from annote.services.annotation_history import (
 from annote.services.annotation_store import load_annotation, save_annotation
 from annote.services.export_service import export_page, export_page_events
 from annote.services.kraken_segment import auto_segment_page
-from annote.services.page_catalogue import image_media_type, list_pages, resolve_page_image
+from annote.services.page_catalogue import build_page_summary, image_media_type, list_pages, resolve_page_image
 from annote.services.page_lock import assert_page_unlocked, lock_page, unlock_page
-from annote.services.page_import import import_page, import_summary
+from annote.services.page_import import import_page
 from annote.services.preview_service import preview_segment_jpeg
 from annote.services.text_lines import split_text_lines
 from annote.services.transcription_pdf import generate_transcription_pdf
@@ -55,7 +54,7 @@ async def post_import_page(
 ) -> PageSummary:
     root = _data_root()
     stem = await import_page(root, image, transcription)
-    return import_summary(root, stem)
+    return build_page_summary(root, stem)
 
 
 @router.get("/{stem}/image")

@@ -5,7 +5,7 @@ from pathlib import Path
 
 from fastapi import HTTPException, UploadFile
 
-from annote.services.page_catalogue import IMAGE_EXTENSIONS, build_page_summary
+from annote.services.page_catalogue import IMAGE_EXTENSIONS
 
 ALLOWED_IMAGE_CONTENT_TYPES = {
     "image/jpeg": ".jpg",
@@ -69,7 +69,3 @@ async def import_page(
         (tx_dir / f"{stem}.txt").write_text(text, encoding="utf-8")
 
     return stem
-
-
-def import_summary(data_root: Path, stem: str):
-    return build_page_summary(data_root, stem)

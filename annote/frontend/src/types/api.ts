@@ -19,7 +19,6 @@ export type PageAnnotation = {
 };
 export type HistorySnapshotSummary = Schemas["HistorySnapshotSummary"];
 export type HistoryListResponse = Schemas["HistoryListResponse"];
-export type ExportWarnings = Schemas["ExportWarnings"];
 export type ExportResponse = Schemas["ExportResponse"];
 export type AutoSegmentRequest = Schemas["AutoSegmentRequest"];
 
