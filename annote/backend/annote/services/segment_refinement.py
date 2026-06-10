@@ -59,8 +59,8 @@ def _segment_contour(
     return [[float(x), float(y)] for x, y in c]
 
 
-def refine_segment(
-    image: Image.Image,
+def _refine_ceiling_on_gray(
+    gray: np.ndarray,
     ceiling: list[list[float]],
     *,
     margin_px: float = REFINEMENT_MARGIN_PX,
@@ -70,13 +70,6 @@ def refine_segment(
         return ceiling
 
     fallback = merge_close_polygon_points(ceiling)
-
-    try:
-        import cv2
-    except ImportError:
-        return fallback
-
-    gray = cv2.cvtColor(np.array(image.convert("RGB")), cv2.COLOR_RGB2GRAY)
     page_points = _segment_contour(gray, ceiling, margin_px)
     if page_points is None:
         return fallback
@@ -86,12 +79,37 @@ def refine_segment(
     return page_points if len(page_points) >= 3 else fallback
 
 
+def refine_segment(
+    image: Image.Image,
+    ceiling: list[list[float]],
+    *,
+    margin_px: float = REFINEMENT_MARGIN_PX,
+) -> list[list[float]]:
+    try:
+        import cv2
+    except ImportError:
+        return merge_close_polygon_points(ceiling) if len(ceiling) >= 3 else ceiling
+
+    gray = cv2.cvtColor(np.array(image.convert("RGB")), cv2.COLOR_RGB2GRAY)
+    return _refine_ceiling_on_gray(gray, ceiling, margin_px=margin_px)
+
+
 def refine_kraken_segments(image: Image.Image, segments: list) -> list:
     """Auto-refine Kraken segments and stamp source / kraken_ceiling metadata."""
+    try:
+        import cv2
+    except ImportError:
+        gray = None
+    else:
+        gray = cv2.cvtColor(np.array(image.convert("RGB")), cv2.COLOR_RGB2GRAY)
+
     refined_segments = []
     for segment in segments:
         ceiling = [list(point) for point in segment.points]
-        points = refine_segment(image, ceiling)
+        if gray is None:
+            points = merge_close_polygon_points(ceiling) if len(ceiling) >= 3 else ceiling
+        else:
+            points = _refine_ceiling_on_gray(gray, ceiling)
         refined_segments.append(
             segment.model_copy(
                 update={

@@ -1,6 +1,7 @@
 FROM python:3.12-slim
 
-ARG APP_VERSION=0.2.1
+# Keep default in sync with ../VERSION; docker compose passes APP_VERSION from ANNOTE_VERSION.
+ARG APP_VERSION=0.3.2
 LABEL org.opencontainers.image.title="annote-backend" \
       org.opencontainers.image.version="${APP_VERSION}"
 
