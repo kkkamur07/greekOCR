@@ -23,6 +23,7 @@ import {
   saveAnnotation,
   unlockPage,
 } from "@/lib/api";
+import { latestHistorySnapshotId } from "@/lib/historyRestore";
 import { computePairingProgress } from "@/lib/pairingProgress";
 import { displayPageName, formatPageTitle } from "@/lib/pageName";
 import type {
@@ -243,9 +244,10 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
     return true;
   }, [scheduleSave]);
 
-  const handleUndoLastPoint = useCallback(() => {
-    canvasRef.current?.cancelDraft();
-  }, []);
+  const handleSave = useCallback(() => {
+    if (locked) return;
+    void flushSave().then(() => showToast("Annotation saved."));
+  }, [locked, flushSave, showToast]);
 
   const handleDeleteKey = useCallback(() => {
     if (locked) return;
@@ -316,6 +318,29 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
       setHistorySnapshots([]);
     }
   }, [stem]);
+
+  const handleUndo = useCallback(async () => {
+    if (canvasRef.current?.cancelDraft()) return;
+    if (locked) return;
+    try {
+      const data = await fetchHistory(stem);
+      const snapshotId = latestHistorySnapshotId(data.snapshots);
+      if (!snapshotId) {
+        showToast("No history to restore.", "error");
+        return;
+      }
+      const restored = await restoreHistorySnapshot(stem, snapshotId);
+      setAnnotation(restored);
+      setDirty(true);
+      setSelectedId(null);
+      setTranscriptionPromptId(null);
+      setEditMode(false);
+      showToast("Restored from history.");
+      if (showHistory) await refreshHistory();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Restore failed", "error");
+    }
+  }, [locked, stem, showHistory, refreshHistory, showToast]);
 
   useEffect(() => {
     if (showHistory) refreshHistory();
@@ -438,13 +463,14 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
         onTool: pickTool,
         onToggleEdit: toggleEdit,
         onToggleLines: toggleLines,
-        onUndoLastPoint: handleUndoLastPoint,
+        onUndo: () => void handleUndo(),
         onDelete: handleDeleteKey,
+        onSave: handleSave,
         onZoomIn: () => canvasRef.current?.zoomIn(),
         onZoomOut: () => canvasRef.current?.zoomOut(),
         onFitPage: () => canvasRef.current?.fitPage(),
       }),
-      [pickTool, toggleEdit, toggleLines, handleUndoLastPoint, handleDeleteKey],
+      [pickTool, toggleEdit, toggleLines, handleUndo, handleDeleteKey, handleSave],
     ),
   );
 
@@ -564,7 +590,7 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
             onClick={() => pickTool("polygon")}
             disabled={locked}
             className={`${toolBtn(tool === "polygon")} disabled:cursor-not-allowed disabled:opacity-40`}
-            title={`Polygon (${EDITOR_SHORTCUTS.polygon}) · ${EDITOR_SHORTCUTS.undoLastPoint} undo point`}
+            title={`Polygon (${EDITOR_SHORTCUTS.polygon}) · ${EDITOR_SHORTCUTS.undo} undo point while drawing`}
           >
             Poly <kbd className="ml-1 text-[10px] opacity-60">{EDITOR_SHORTCUTS.polygon}</kbd>
           </button>
@@ -793,6 +819,7 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
               autoFocus={selectedSegment.id === transcriptionPromptId}
               onPair={handlePair}
               onTextOverride={handleTextOverride}
+              onSave={() => void flushSave()}
               onClose={() => handleSelect(null)}
               onDone={finishTranscription}
               onPreviewExport={() => setPreviewSegmentId(selectedSegment.id)}
