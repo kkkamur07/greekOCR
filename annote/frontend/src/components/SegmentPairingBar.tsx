@@ -10,6 +10,7 @@ interface SegmentPairingBarProps {
   autoFocus?: boolean;
   onPair: (textLineIndex: number) => void;
   onTextOverride: (text: string) => void;
+  onSave?: () => void;
   onClose: () => void;
   onDone: () => void;
   onPreviewExport?: () => void;
@@ -22,6 +23,7 @@ export default function SegmentPairingBar({
   autoFocus = false,
   onPair,
   onTextOverride,
+  onSave,
   onClose,
   onDone,
   onPreviewExport,
@@ -85,6 +87,7 @@ export default function SegmentPairingBar({
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
+              onSave?.();
               onDone();
             }
           }}
@@ -133,7 +136,7 @@ export default function SegmentPairingBar({
         )}
 
         <p className="text-xs text-gray-400">
-          Enter to finish and draw the next region · Shift+Enter for a new line · Escape to close
+          Enter to save and draw the next region · Shift+Enter for a new line · Escape to close
         </p>
       </div>
     </div>

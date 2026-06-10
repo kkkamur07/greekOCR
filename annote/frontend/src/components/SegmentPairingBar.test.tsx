@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { Segment, TextLine } from "@/types/api";
@@ -52,5 +52,28 @@ describe("SegmentPairingBar", () => {
     expect(activeLine.className).toContain("border-green-600");
     expect(pairedElsewhere.className).toContain("border-green-300");
     expect(unpairedLine.className).toContain("border-amber-300");
+  });
+
+  it("saves then finishes when Enter is pressed in the transcription field", () => {
+    const onSave = vi.fn();
+    const onDone = vi.fn();
+
+    render(
+      <SegmentPairingBar
+        segment={segment}
+        textLines={textLines}
+        segments={[segment]}
+        onPair={vi.fn()}
+        onTextOverride={vi.fn()}
+        onSave={onSave}
+        onClose={vi.fn()}
+        onDone={onDone}
+      />,
+    );
+
+    fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
+
+    expect(onSave).toHaveBeenCalledOnce();
+    expect(onDone).toHaveBeenCalledOnce();
   });
 });
