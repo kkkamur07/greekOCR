@@ -249,19 +249,14 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
     void flushSave().then(() => showToast("Annotation saved."));
   }, [locked, flushSave, showToast]);
 
-  const handleDeleteKey = useCallback(() => {
+  const handleDelete = useCallback(() => {
     if (locked) return;
     if (canvasRef.current?.cancelDraft()) return;
     if (deleteSelectedVertex()) return;
-    deleteSelectedSegment();
-  }, [locked, deleteSelectedVertex, deleteSelectedSegment]);
-
-  const handleDeleteClick = () => {
-    if (canvasRef.current?.cancelDraft()) return;
     if (!selectedIdRef.current) return;
     if (!window.confirm("Delete selected segment?")) return;
     deleteSelectedSegment();
-  };
+  }, [locked, deleteSelectedVertex, deleteSelectedSegment]);
 
   const handleSelect = (id: string | null) => {
     setSelectedId(id);
@@ -464,13 +459,13 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
         onToggleEdit: toggleEdit,
         onToggleLines: toggleLines,
         onUndo: () => void handleUndo(),
-        onDelete: handleDeleteKey,
+        onDelete: handleDelete,
         onSave: handleSave,
         onZoomIn: () => canvasRef.current?.zoomIn(),
         onZoomOut: () => canvasRef.current?.zoomOut(),
         onFitPage: () => canvasRef.current?.fitPage(),
       }),
-      [pickTool, toggleEdit, toggleLines, handleUndo, handleDeleteKey, handleSave],
+      [pickTool, toggleEdit, toggleLines, handleUndo, handleDelete, handleSave],
     ),
   );
 
@@ -626,7 +621,7 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
           </button>
           <button
             type="button"
-            onClick={handleDeleteClick}
+            onClick={handleDelete}
             disabled={locked}
             className="rounded px-2.5 py-1 text-sm text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
             title="Delete (Del)"
