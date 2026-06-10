@@ -12,6 +12,8 @@ class Segment(BaseModel):
     points: list[list[float]]
     paired_text_line_index: int | None = None
     text_override: str | None = None
+    source: Literal["manual", "kraken"] = "manual"
+    kraken_ceiling: list[list[float]] | None = None
 
 
 class ExportMetadata(BaseModel):

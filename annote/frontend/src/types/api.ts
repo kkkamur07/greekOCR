@@ -8,8 +8,10 @@ export type PageListResponse = Schemas["PageListResponse"];
 export type TextLine = Schemas["TextLineOut"];
 export type TranscriptionResponse = Schemas["TranscriptionResponse"];
 export type SegmentKind = Schemas["Segment"]["kind"];
-export type Segment = Omit<Schemas["Segment"], "points"> & {
+export type Segment = Omit<Schemas["Segment"], "points" | "source"> & {
   points: [number, number][];
+  /** Defaults to manual when omitted (legacy annotations). */
+  source?: "manual" | "kraken";
 };
 export type ExportMetadata = Schemas["ExportMetadata"];
 export type PageAnnotation = {

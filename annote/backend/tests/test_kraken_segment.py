@@ -10,6 +10,7 @@ from annote.services.kraken_segment import (
     kraken_lines_to_segments,
     pair_segments_to_transcription,
 )
+from annote.services.segment_refinement import refine_kraken_segments
 from tests.conftest import minimal_jpeg_bytes
 
 
@@ -58,7 +59,7 @@ def test_auto_segment_page_replace(client, data_root, monkeypatch):
 
     def fake_segment_image(image, *, device="cpu"):
         assert image.size[0] > 0
-        return fake_segments
+        return refine_kraken_segments(image, fake_segments)
 
     monkeypatch.setattr("annote.services.kraken_segment.segment_image", fake_segment_image)
 
@@ -69,6 +70,9 @@ def test_auto_segment_page_replace(client, data_root, monkeypatch):
     assert body["segments"][0]["paired_text_line_index"] == 1
     assert body["segments"][1]["paired_text_line_index"] == 2
     assert all(s["id"].startswith("seg-") for s in body["segments"])
+    assert all(s["source"] == "kraken" for s in body["segments"])
+    assert body["segments"][0]["kraken_ceiling"] == fake_segments[0].points
+    assert body["segments"][1]["kraken_ceiling"] == fake_segments[1].points
 
 
 def test_auto_segment_page_append(client, data_root, monkeypatch):
@@ -86,7 +90,7 @@ def test_auto_segment_page_append(client, data_root, monkeypatch):
 
     monkeypatch.setattr(
         "annote.services.kraken_segment.segment_image",
-        lambda image, *, device="cpu": fake_segments,
+        lambda image, *, device="cpu": refine_kraken_segments(image, fake_segments),
     )
 
     response = client.post(f"/pages/{stem}/segment", json={"replace": False, "pair_transcription": False})
@@ -94,7 +98,10 @@ def test_auto_segment_page_append(client, data_root, monkeypatch):
     segments = response.json()["segments"]
     assert len(segments) == 2
     assert segments[0]["id"] == "keep"
+    assert segments[0]["source"] == "manual"
     assert segments[1]["number"] == 3
+    assert segments[1]["source"] == "kraken"
+    assert segments[1]["kraken_ceiling"] == fake_segments[0].points
 
 
 def test_auto_segment_requires_kraken_message(client, data_root, monkeypatch):
@@ -104,7 +111,7 @@ def test_auto_segment_requires_kraken_message(client, data_root, monkeypatch):
     def boom(*_args, **_kwargs):
         raise RuntimeError("Kraken is required for auto-segmentation. Install with: pip install 'annote[kraken]'")
 
-    monkeypatch.setattr("annote.services.kraken_segment.auto_segment_page", boom)
+    monkeypatch.setattr("annote.api.pages.auto_segment_page", boom)
 
     response = client.post(f"/pages/{stem}/segment", json={})
     assert response.status_code == 400

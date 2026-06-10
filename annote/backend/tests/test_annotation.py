@@ -1,5 +1,7 @@
 """Annotation store — segment geometry and pairings."""
 
+from annote.schemas.annotation import PageAnnotation, Segment
+
 from tests.conftest import minimal_jpeg_bytes
 
 SAMPLE_POLYGON = {
@@ -45,6 +47,36 @@ def test_annotation_empty_page(client, data_root):
     get = client.get("/pages/folio/annotation")
     assert get.status_code == 200
     assert get.json()["segments"] == []
+
+
+def test_segment_defaults_source_manual_and_null_kraken_ceiling():
+    segment = Segment(
+        id="seg-1",
+        number=1,
+        kind="polygon",
+        points=[[0, 0], [10, 0], [10, 5], [0, 5]],
+    )
+    assert segment.source == "manual"
+    assert segment.kraken_ceiling is None
+
+
+def test_page_annotation_accepts_legacy_segments_without_source_fields():
+    annotation = PageAnnotation.model_validate(
+        {
+            "segments": [
+                {
+                    "id": "seg-1",
+                    "number": 1,
+                    "kind": "polygon",
+                    "points": [[0, 0], [10, 0], [10, 5], [0, 5]],
+                    "paired_text_line_index": None,
+                }
+            ],
+            "export_metadata": None,
+        }
+    )
+    assert annotation.segments[0].source == "manual"
+    assert annotation.segments[0].kraken_ceiling is None
 
 
 def test_annotation_corrupt_json_returns_422(client, data_root):

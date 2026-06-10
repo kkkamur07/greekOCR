@@ -83,6 +83,7 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
   const [editMode, setEditMode] = useState(false);
   const [selectedVertexIndex, setSelectedVertexIndex] = useState<number | null>(null);
   const [showSegments, setShowSegments] = useState(true);
+  const [showKrakenCeiling, setShowKrakenCeiling] = useState(false);
   const [imageSize, setImageSize] = useState({ width: 1200, height: 1600 });
   const [dirty, setDirty] = useState(initialDirty);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -612,6 +613,19 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
           </button>
           <button
             type="button"
+            onClick={() => setShowKrakenCeiling((v) => !v)}
+            disabled={!selectedSegment || (selectedSegment.source ?? "manual") !== "kraken"}
+            className={`${toolBtn(showKrakenCeiling)} disabled:cursor-not-allowed disabled:opacity-40`}
+            title={
+              selectedSegment && (selectedSegment.source ?? "manual") === "kraken"
+                ? "Toggle Kraken ceiling overlay (magenta dashed) for the selected segment"
+                : "Select a Kraken segment first"
+            }
+          >
+            Ceiling
+          </button>
+          <button
+            type="button"
             onClick={handleAutoSegment}
             disabled={segmenting || exporting || locked}
             className="rounded px-2.5 py-1 text-sm text-indigo-800 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-40"
@@ -798,6 +812,7 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
               editMode={locked ? false : editMode}
               readOnly={locked}
               showSegments={showSegments}
+              showKrakenCeiling={showKrakenCeiling}
               selectedVertexIndex={selectedVertexIndex}
               onSelectVertex={setSelectedVertexIndex}
               onSelect={handleSelect}

@@ -32,6 +32,7 @@ interface ImageCanvasProps {
   editMode: boolean;
   readOnly?: boolean;
   showSegments: boolean;
+  showKrakenCeiling?: boolean;
   selectedVertexIndex: number | null;
   onSelect: (id: string | null) => void;
   onSelectVertex: (index: number | null) => void;
@@ -72,6 +73,7 @@ const ImageCanvas = forwardRef<ImageCanvasHandle, ImageCanvasProps>(function Ima
     editMode,
     readOnly = false,
     showSegments,
+    showKrakenCeiling = false,
     selectedVertexIndex,
     onSelect,
     onSelectVertex,
@@ -166,6 +168,8 @@ const ImageCanvas = forwardRef<ImageCanvasHandle, ImageCanvasProps>(function Ima
         kind,
         points,
         paired_text_line_index: null,
+        source: "manual",
+        kraken_ceiling: null,
       });
       setDraftPoints([]);
       setRectPreview([]);
@@ -407,6 +411,7 @@ const ImageCanvas = forwardRef<ImageCanvasHandle, ImageCanvasProps>(function Ima
               draftPoints={overlayDraft}
               editMode={editMode}
               visible={showSegments}
+              showKrakenCeiling={showKrakenCeiling}
               zoomScale={transform.scale}
               interactive={!readOnly && !editMode && !(tool === "polygon" && !spaceHeld)}
               onSelect={(id) => {
