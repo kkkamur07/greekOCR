@@ -440,6 +440,14 @@ export interface components {
             paired_text_line_index?: number | null;
             /** Text Override */
             text_override?: string | null;
+            /**
+             * Source
+             * @default manual
+             * @enum {string}
+             */
+            source: "manual" | "kraken";
+            /** Kraken Ceiling */
+            kraken_ceiling?: number[][] | null;
         };
         /** TextLineOut */
         TextLineOut: {

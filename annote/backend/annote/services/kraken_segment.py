@@ -12,6 +12,7 @@ from annote.schemas.annotation import PageAnnotation, Segment
 from annote.services.annotation_store import load_annotation, save_annotation
 from annote.services.page_catalogue import resolve_page_image
 from annote.services.processing.polygon import merge_close_polygon_points
+from annote.services.segment_refinement import refine_kraken_segments
 from annote.services.text_lines import split_text_lines
 
 _model = None
@@ -72,7 +73,8 @@ def segment_image(image: Image.Image, *, device: str = "cpu") -> list[Segment]:
 
     model = _load_model()
     segmented = segment(im=image, device=device, model=model)
-    return kraken_lines_to_segments(segmented.lines)
+    segments = kraken_lines_to_segments(segmented.lines)
+    return refine_kraken_segments(image, segments)
 
 
 def pair_segments_to_transcription(

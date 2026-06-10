@@ -1080,6 +1080,32 @@
               }
             ],
             "title": "Text Override"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "kraken"
+            ],
+            "title": "Source",
+            "default": "manual"
+          },
+          "kraken_ceiling": {
+            "anyOf": [
+              {
+                "items": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kraken Ceiling"
           }
         },
         "type": "object",

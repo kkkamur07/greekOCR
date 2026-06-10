@@ -1,6 +1,6 @@
 FROM python:3.12-slim
 
-ARG APP_VERSION=0.1.0
+ARG APP_VERSION=0.2.1
 LABEL org.opencontainers.image.title="annote-backend" \
       org.opencontainers.image.version="${APP_VERSION}"
 
