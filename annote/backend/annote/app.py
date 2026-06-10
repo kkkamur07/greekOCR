@@ -15,6 +15,9 @@ from annote.services.data_layout import ensure_data_directories
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     settings = get_settings()
+    import logging
+
+    logging.getLogger("annote").info("data_root=%s", settings.data_root)
     try:
         ensure_data_directories(settings.data_root)
     except OSError as exc:

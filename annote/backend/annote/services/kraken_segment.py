@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import secrets
+import sys
 from importlib import resources
 from pathlib import Path
 
@@ -18,6 +19,14 @@ from annote.services.text_lines import split_text_lines
 _model = None
 
 
+def _kraken_install_hint(cause: ImportError) -> str:
+    return (
+        f"Kraken is not available in this Python ({sys.executable}): {cause}. "
+        "Stop the server, then from annote/backend run: "
+        "source .venv/bin/activate && pip install -e '.[kraken]' && annote"
+    )
+
+
 def _load_model():
     global _model
     if _model is not None:
@@ -25,9 +34,7 @@ def _load_model():
     try:
         from kraken.lib.vgsl import TorchVGSLModel
     except ImportError as e:
-        raise RuntimeError(
-            "Kraken is required for auto-segmentation. Install with: pip install 'annote[kraken]'"
-        ) from e
+        raise RuntimeError(_kraken_install_hint(e)) from e
     model_path = resources.files("kraken").joinpath("blla.mlmodel")
     _model = TorchVGSLModel.load_model(str(model_path))
     return _model
@@ -67,9 +74,7 @@ def segment_image(image: Image.Image, *, device: str = "cpu") -> list[Segment]:
     try:
         from kraken.blla import segment
     except ImportError as e:
-        raise RuntimeError(
-            "Kraken is required for auto-segmentation. Install with: pip install 'annote[kraken]'"
-        ) from e
+        raise RuntimeError(_kraken_install_hint(e)) from e
 
     model = _load_model()
     segmented = segment(im=image, device=device, model=model)
