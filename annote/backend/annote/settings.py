@@ -3,11 +3,12 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _BACKEND_DIR = Path(__file__).resolve().parent.parent
-_DEFAULT_DATA_ROOT = _BACKEND_DIR.parent / "data"
+_PROJECT_ROOT = _BACKEND_DIR.parent
+_DEFAULT_DATA_ROOT = _PROJECT_ROOT / "data"
 
 
 class PageLockSettings(BaseSettings):
@@ -53,6 +54,15 @@ class Settings(BaseSettings):
         description="Root directory for annote filesystem data",
     )
     host: str = Field(default="127.0.0.1", description="API bind host")
+
+    @field_validator("data_root", mode="before")
+    @classmethod
+    def resolve_data_root(cls, value: Path | str) -> Path:
+        path = Path(value).expanduser()
+        if not path.is_absolute():
+            path = (_PROJECT_ROOT / path).resolve()
+        return path
+
     port: int = Field(default=5050, description="API bind port")
     reload: bool = Field(default=True, description="Uvicorn auto-reload (local dev)")
     cors_origins: str = Field(
