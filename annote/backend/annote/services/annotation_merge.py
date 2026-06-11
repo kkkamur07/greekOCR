@@ -10,6 +10,12 @@ def clear_stale_model_transcriptions(existing: PageAnnotation, incoming: PageAnn
     for seg in incoming.segments:
         prev = prev_by_id.get(seg.id)
         if prev is not None and prev.points != seg.points:
-            seg = seg.model_copy(update={"model_transcription": None, "model_transcription_at": None})
+            seg = seg.model_copy(
+                update={
+                    "model_transcription": None,
+                    "model_transcription_confidence": None,
+                    "model_transcription_at": None,
+                }
+            )
         segments.append(seg)
     return incoming.model_copy(update={"segments": segments})

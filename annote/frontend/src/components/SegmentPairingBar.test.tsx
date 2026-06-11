@@ -55,6 +55,35 @@ describe("SegmentPairingBar", () => {
     expect(unpairedLine.className).toContain("border-amber-300");
   });
 
+  it("renders per-character confidence in the model suggestion", () => {
+    const withModel: Segment = {
+      ...segment,
+      model_transcription: "αβ",
+      model_transcription_confidence: [
+        { char: "α", probability: 0.95 },
+        { char: "β", probability: 0.55 },
+      ],
+    };
+
+    render(
+      <SegmentPairingBar
+        stem="folio"
+        segment={withModel}
+        textLines={textLines}
+        segments={[withModel]}
+        onPair={vi.fn()}
+        onTextOverride={vi.fn()}
+        onClose={vi.fn()}
+        onDone={vi.fn()}
+      />,
+    );
+
+    const alpha = screen.getByTitle("α: 95%");
+    const beta = screen.getByTitle("β: 55%");
+    expect(alpha.className).toContain("bg-emerald");
+    expect(beta.className).toContain("bg-rose");
+  });
+
   it("calls onTextOverride with model transcription when Use suggestion is clicked", () => {
     const onTextOverride = vi.fn();
     const withModel: Segment = {

@@ -5,6 +5,11 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
+class ModelCharacterConfidence(BaseModel):
+    char: str
+    probability: float = Field(ge=0.0, le=1.0)
+
+
 class Segment(BaseModel):
     id: str
     number: int
@@ -13,6 +18,7 @@ class Segment(BaseModel):
     paired_text_line_index: int | None = None
     text_override: str | None = None
     model_transcription: str | None = None
+    model_transcription_confidence: list[ModelCharacterConfidence] | None = None
     model_transcription_at: str | None = None
     source: Literal["manual", "kraken"] = "manual"
     kraken_ceiling: list[list[float]] | None = None

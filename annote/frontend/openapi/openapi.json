@@ -935,14 +935,14 @@
         "properties": {
           "image": {
             "type": "string",
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "Image"
           },
           "transcription": {
             "anyOf": [
               {
                 "type": "string",
-                "format": "binary"
+                "contentMediaType": "application/octet-stream"
               },
               {
                 "type": "null"
@@ -1098,6 +1098,26 @@
           "pairing_progress_percent"
         ],
         "title": "HistorySnapshotSummary"
+      },
+      "ModelCharacterConfidence": {
+        "properties": {
+          "char": {
+            "type": "string",
+            "title": "Char"
+          },
+          "probability": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Probability"
+          }
+        },
+        "type": "object",
+        "required": [
+          "char",
+          "probability"
+        ],
+        "title": "ModelCharacterConfidence"
       },
       "PageAnnotation": {
         "properties": {
@@ -1280,6 +1300,20 @@
             ],
             "title": "Model Transcription"
           },
+          "model_transcription_confidence": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ModelCharacterConfidence"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Transcription Confidence"
+          },
           "model_transcription_at": {
             "anyOf": [
               {
@@ -1401,6 +1435,13 @@
           "type": {
             "type": "string",
             "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
           }
         },
         "type": "object",

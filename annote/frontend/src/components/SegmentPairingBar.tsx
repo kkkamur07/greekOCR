@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { Segment, TextLine } from "@/types/api";
 
+import ModelSuggestion from "./ModelSuggestion";
+
 interface SegmentPairingBarProps {
   segment: Segment;
   textLines: TextLine[];
@@ -124,10 +126,7 @@ export default function SegmentPairingBar({
         </div>
 
         {modelSuggestion != null && modelSuggestion !== "" && (
-          <div className="rounded-lg border border-indigo-100 bg-indigo-50/50 px-3 py-2 text-sm text-indigo-950">
-            <p className="text-xs font-medium text-indigo-700">Model suggestion</p>
-            <p className="mt-0.5 whitespace-pre-wrap leading-relaxed">{modelSuggestion}</p>
-          </div>
+          <ModelSuggestion text={modelSuggestion} confidence={segment.model_transcription_confidence} />
         )}
 
         <textarea

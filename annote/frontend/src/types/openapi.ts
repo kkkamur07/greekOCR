@@ -385,10 +385,7 @@ export interface components {
         };
         /** Body_post_import_page_pages_import_post */
         Body_post_import_page_pages_import_post: {
-            /**
-             * Image
-             * Format: binary
-             */
+            /** Image */
             image: string;
             /** Transcription */
             transcription?: string | null;
@@ -442,6 +439,13 @@ export interface components {
             reason: string;
             /** Pairing Progress Percent */
             pairing_progress_percent: number;
+        };
+        /** ModelCharacterConfidence */
+        ModelCharacterConfidence: {
+            /** Char */
+            char: string;
+            /** Probability */
+            probability: number;
         };
         /** PageAnnotation */
         PageAnnotation: {
@@ -508,6 +512,8 @@ export interface components {
             text_override?: string | null;
             /** Model Transcription */
             model_transcription?: string | null;
+            /** Model Transcription Confidence */
+            model_transcription_confidence?: components["schemas"]["ModelCharacterConfidence"][] | null;
             /** Model Transcription At */
             model_transcription_at?: string | null;
             /**
@@ -546,6 +552,10 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+            /** Input */
+            input?: unknown;
+            /** Context */
+            ctx?: Record<string, never>;
         };
     };
     responses: never;

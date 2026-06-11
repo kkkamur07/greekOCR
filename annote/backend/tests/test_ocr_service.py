@@ -8,7 +8,14 @@ import pytest
 
 from annote.schemas.annotation import PageAnnotation, Segment
 from annote.services.annotation_merge import clear_stale_model_transcriptions
-from annote.services.calamari_ocr import _checkpoint_exists, predict_segment_text
+from annote.schemas.annotation import ModelCharacterConfidence
+from annote.services.calamari_ocr import (
+    SegmentOcrResult,
+    _checkpoint_exists,
+    _extract_prediction,
+    predict_segment,
+    predict_segment_text,
+)
 from tests.conftest import minimal_jpeg_bytes
 
 SEG = {
@@ -60,6 +67,7 @@ def test_segment_defaults_model_transcription_null():
         points=[[0, 0], [10, 0], [10, 5], [0, 5]],
     )
     assert segment.model_transcription is None
+    assert segment.model_transcription_confidence is None
     assert segment.model_transcription_at is None
 
 
@@ -79,6 +87,7 @@ def test_page_annotation_accepts_legacy_segments_without_model_fields():
         }
     )
     assert annotation.segments[0].model_transcription is None
+    assert annotation.segments[0].model_transcription_confidence is None
     assert annotation.segments[0].model_transcription_at is None
 
 
@@ -91,6 +100,7 @@ def test_clear_stale_model_transcription_when_points_change():
                 kind="rectangle",
                 points=[[0, 0], [10, 0], [10, 5], [0, 5]],
                 model_transcription="old text",
+                model_transcription_confidence=[ModelCharacterConfidence(char="o", probability=0.9)],
                 model_transcription_at="2026-01-01T00:00:00Z",
             )
         ]
@@ -103,6 +113,7 @@ def test_clear_stale_model_transcription_when_points_change():
                 kind="rectangle",
                 points=[[1, 0], [10, 0], [10, 5], [0, 5]],
                 model_transcription="old text",
+                model_transcription_confidence=[ModelCharacterConfidence(char="o", probability=0.9)],
                 model_transcription_at="2026-01-01T00:00:00Z",
             )
         ]
@@ -110,6 +121,7 @@ def test_clear_stale_model_transcription_when_points_change():
 
     merged = clear_stale_model_transcriptions(existing, incoming)
     assert merged.segments[0].model_transcription is None
+    assert merged.segments[0].model_transcription_confidence is None
     assert merged.segments[0].model_transcription_at is None
 
 
@@ -134,6 +146,30 @@ def test_clear_stale_model_transcription_preserves_when_points_unchanged():
     assert merged.segments[0].model_transcription_at == "2026-01-01T00:00:00Z"
 
 
+def test_extract_prediction_reads_per_character_confidence():
+    class FakeCodec:
+        def decode(self, labels):
+            return ["α", "β"]
+
+    sample = SimpleNamespace(
+        outputs=SimpleNamespace(
+            sentence="αβ",
+            labels=[1, 2],
+            positions=[
+                SimpleNamespace(chars=[SimpleNamespace(label=1, probability=0.91)]),
+                SimpleNamespace(chars=[SimpleNamespace(label=2, probability=0.42)]),
+            ],
+        )
+    )
+
+    result = _extract_prediction(sample, FakeCodec())
+    assert result.text == "αβ"
+    assert [item.model_dump() for item in result.char_confidence] == [
+        {"char": "α", "probability": 0.91},
+        {"char": "β", "probability": 0.42},
+    ]
+
+
 def test_predict_segment_text_uses_rectify_and_predictor(monkeypatch):
     page = np.zeros((50, 100, 3), dtype=np.uint8)
     segment = Segment(id="seg-1", number=1, kind="rectangle", points=[[0, 0], [10, 0], [10, 5], [0, 5]])
@@ -146,17 +182,38 @@ def test_predict_segment_text_uses_rectify_and_predictor(monkeypatch):
 
     monkeypatch.setattr("annote.services.calamari_ocr.rectify", fake_rectify)
 
+    class FakeCodec:
+        def decode(self, labels):
+            return ["p", "r", "e", "d"]
+
     class FakePredictor:
+        data = SimpleNamespace(params=SimpleNamespace(codec=FakeCodec()))
+
         def predict_raw(self, images):
             assert len(images) == 1
             assert images[0].ndim == 2
             assert images[0].dtype == np.uint8
-            return [SimpleNamespace(outputs=SimpleNamespace(sentence=SimpleNamespace(sentence="predicted line")))]
+            return [
+                SimpleNamespace(
+                    outputs=SimpleNamespace(
+                        sentence="predicted line",
+                        labels=[1, 2, 3, 4],
+                        positions=[
+                            SimpleNamespace(chars=[SimpleNamespace(label=1, probability=0.95)]),
+                            SimpleNamespace(chars=[SimpleNamespace(label=2, probability=0.88)]),
+                            SimpleNamespace(chars=[SimpleNamespace(label=3, probability=0.77)]),
+                            SimpleNamespace(chars=[SimpleNamespace(label=4, probability=0.66)]),
+                        ],
+                    )
+                )
+            ]
 
     monkeypatch.setattr("annote.services.calamari_ocr._get_predictor", lambda: FakePredictor())
 
-    text = predict_segment_text(page, segment)
-    assert text == "predicted line"
+    result = predict_segment(page, segment)
+    assert result.text == "predicted line"
+    assert predict_segment_text(page, segment) == "predicted line"
+    assert len(result.char_confidence) == 4
     assert rectify_called is True
 
 
@@ -165,8 +222,14 @@ def test_post_segment_ocr_returns_model_fields(client, data_root, monkeypatch):
     client.put("/pages/folio/annotation", json={"segments": [SEG], "export_metadata": None})
 
     monkeypatch.setattr(
-        "annote.services.calamari_ocr.predict_segment_text",
-        lambda _page, _seg: "model line",
+        "annote.services.calamari_ocr.predict_segment",
+        lambda _page, _seg: SegmentOcrResult(
+            text="model line",
+            char_confidence=[
+                ModelCharacterConfidence(char="m", probability=0.9),
+                ModelCharacterConfidence(char="o", probability=0.8),
+            ],
+        ),
     )
 
     response = client.post("/pages/folio/segments/seg-1/ocr")
@@ -174,13 +237,20 @@ def test_post_segment_ocr_returns_model_fields(client, data_root, monkeypatch):
     body = response.json()
     seg = body["segments"][0]
     assert seg["model_transcription"] == "model line"
+    assert seg["model_transcription_confidence"] == [
+        {"char": "m", "probability": 0.9},
+        {"char": "o", "probability": 0.8},
+    ]
     assert seg["model_transcription_at"] is not None
 
 
 def test_post_segment_ocr_404_for_unknown_segment(client, data_root, monkeypatch):
     _seed_page(data_root)
     client.put("/pages/folio/annotation", json={"segments": [SEG], "export_metadata": None})
-    monkeypatch.setattr("annote.services.calamari_ocr.predict_segment_text", lambda *_: "x")
+    monkeypatch.setattr(
+        "annote.services.calamari_ocr.predict_segment",
+        lambda *_: SegmentOcrResult(text="x", char_confidence=[]),
+    )
 
     response = client.post("/pages/folio/segments/missing/ocr")
     assert response.status_code == 404
@@ -191,8 +261,8 @@ def test_post_segment_ocr_allowed_when_locked(client, data_root, monkeypatch):
     client.put("/pages/folio/annotation", json={"segments": [SEG], "export_metadata": None})
     client.post("/pages/folio/lock")
     monkeypatch.setattr(
-        "annote.services.calamari_ocr.predict_segment_text",
-        lambda _page, _seg: "locked ocr",
+        "annote.services.calamari_ocr.predict_segment",
+        lambda _page, _seg: SegmentOcrResult(text="locked ocr", char_confidence=[]),
     )
 
     response = client.post("/pages/folio/segments/seg-1/ocr")
@@ -202,7 +272,12 @@ def test_post_segment_ocr_allowed_when_locked(client, data_root, monkeypatch):
 
 def test_put_annotation_clears_model_fields_when_points_change(client, data_root):
     _seed_page(data_root)
-    seg = {**SEG, "model_transcription": "stale", "model_transcription_at": "2026-01-01T00:00:00Z"}
+    seg = {
+        **SEG,
+        "model_transcription": "stale",
+        "model_transcription_confidence": [{"char": "s", "probability": 0.5}],
+        "model_transcription_at": "2026-01-01T00:00:00Z",
+    }
     client.put("/pages/folio/annotation", json={"segments": [seg], "export_metadata": None})
 
     moved = dict(seg)
@@ -212,6 +287,7 @@ def test_put_annotation_clears_model_fields_when_points_change(client, data_root
     get = client.get("/pages/folio/annotation")
     saved = get.json()["segments"][0]
     assert saved["model_transcription"] is None
+    assert saved["model_transcription_confidence"] is None
     assert saved["model_transcription_at"] is None
 
 
@@ -222,7 +298,7 @@ def test_calamari_missing_returns_clear_error(client, data_root, monkeypatch):
     def boom(*_args, **_kwargs):
         raise RuntimeError("Calamari is required for OCR. Install with: pip install -e '.[calamari]'")
 
-    monkeypatch.setattr("annote.services.calamari_ocr.predict_segment_text", boom)
+    monkeypatch.setattr("annote.services.calamari_ocr.predict_segment", boom)
 
     response = client.post("/pages/folio/segments/seg-1/ocr")
     assert response.status_code == 400
@@ -239,9 +315,13 @@ def test_page_ocr_stream_emits_progress_and_updates_all_segments(client, data_ro
     def fake_predict(_page, _seg):
         nonlocal call_count
         call_count += 1
-        return f"line-{call_count}"
+        text = f"line-{call_count}"
+        return SegmentOcrResult(
+            text=text,
+            char_confidence=[ModelCharacterConfidence(char=text, probability=0.75)],
+        )
 
-    monkeypatch.setattr("annote.services.calamari_ocr.predict_segment_text", fake_predict)
+    monkeypatch.setattr("annote.services.calamari_ocr.predict_segment", fake_predict)
 
     response = client.post("/pages/folio/ocr/stream")
     assert response.status_code == 200

@@ -3,19 +3,26 @@
 from __future__ import annotations
 
 import sys
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
 from PIL import Image
 
-from annote.schemas.annotation import PageAnnotation, Segment
+from annote.schemas.annotation import ModelCharacterConfidence, PageAnnotation, Segment
 from annote.services.annotation_store import load_annotation, save_annotation
 from annote.services.page_image import load_working_page_rgb, resolve_source_page_image
 from annote.services.processing.rectify import rectify
 from annote.settings import get_settings
 
 _predictor = None
+
+
+@dataclass(frozen=True)
+class SegmentOcrResult:
+    text: str
+    char_confidence: list[ModelCharacterConfidence]
 
 
 def _calamari_install_hint(cause: ImportError) -> str:
@@ -105,12 +112,35 @@ def _get_predictor():
     return _predictor
 
 
-def _extract_sentence(sample) -> str:
-    outputs = getattr(sample, "outputs", sample)
-    sentence = getattr(outputs, "sentence", outputs)
-    if hasattr(sentence, "sentence"):
-        return str(sentence.sentence)
-    return str(sentence)
+def _prediction_outputs(sample):
+    return getattr(sample, "outputs", sample)
+
+
+def _extract_char_confidence(outputs, codec) -> list[ModelCharacterConfidence]:
+    labels = getattr(outputs, "labels", None)
+    positions = getattr(outputs, "positions", None)
+    if not labels or not positions:
+        return []
+
+    decoded = codec.decode(labels)
+    confidences: list[ModelCharacterConfidence] = []
+    for index, position in enumerate(positions):
+        label = labels[index]
+        chars = getattr(position, "chars", None) or []
+        match = next((char for char in chars if char.label == label), chars[0] if chars else None)
+        probability = float(match.probability) if match is not None else 0.0
+        char = decoded[index] if index < len(decoded) else ""
+        confidences.append(ModelCharacterConfidence(char=char, probability=probability))
+    return confidences
+
+
+def _extract_prediction(sample, codec) -> SegmentOcrResult:
+    outputs = _prediction_outputs(sample)
+    sentence = str(getattr(outputs, "sentence", "") or "")
+    char_confidence = _extract_char_confidence(outputs, codec)
+    if not sentence and char_confidence:
+        sentence = "".join(item.char for item in char_confidence)
+    return SegmentOcrResult(text=sentence, char_confidence=char_confidence)
 
 
 def _rectified_grayscale(page_image: np.ndarray, segment: Segment) -> np.ndarray:
@@ -121,14 +151,27 @@ def _rectified_grayscale(page_image: np.ndarray, segment: Segment) -> np.ndarray
     return crop.astype(np.uint8)
 
 
-def predict_segment_text(page_image: np.ndarray, segment: Segment) -> str:
+def predict_segment(page_image: np.ndarray, segment: Segment) -> SegmentOcrResult:
     """Run OCR on a rectified grayscale crop for one segment."""
     gray = _rectified_grayscale(page_image, segment)
     predictor = _get_predictor()
     predictions = list(predictor.predict_raw([gray]))
     if not predictions:
-        return ""
-    return _extract_sentence(predictions[0])
+        return SegmentOcrResult(text="", char_confidence=[])
+    codec = predictor.data.params.codec
+    return _extract_prediction(predictions[0], codec)
+
+
+def predict_segment_text(page_image: np.ndarray, segment: Segment) -> str:
+    return predict_segment(page_image, segment).text
+
+
+def _segment_ocr_update(result: SegmentOcrResult, timestamp: str) -> dict:
+    return {
+        "model_transcription": result.text,
+        "model_transcription_confidence": result.char_confidence or None,
+        "model_transcription_at": timestamp,
+    }
 
 
 def run_segment_ocr(data_root: Path, stem: str, segment_id: str) -> PageAnnotation:
@@ -142,13 +185,13 @@ def run_segment_ocr(data_root: Path, stem: str, segment_id: str) -> PageAnnotati
         raise FileNotFoundError(f"Page image not found: {stem}")
 
     page_image, _ = load_working_page_rgb(data_root, stem)
-    text = predict_segment_text(page_image, segment)
+    result = predict_segment(page_image, segment)
     now = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
     segments = []
     for seg in annotation.segments:
         if seg.id == segment_id:
-            seg = seg.model_copy(update={"model_transcription": text, "model_transcription_at": now})
+            seg = seg.model_copy(update=_segment_ocr_update(result, now))
         segments.append(seg)
 
     updated = annotation.model_copy(update={"segments": segments})
@@ -175,10 +218,8 @@ def ocr_page_events(data_root: Path, stem: str):
     updated_segments: list[Segment] = []
 
     for index, segment in enumerate(segments, start=1):
-        text = predict_segment_text(page_image, segment)
-        updated_segments.append(
-            segment.model_copy(update={"model_transcription": text, "model_transcription_at": now})
-        )
+        result = predict_segment(page_image, segment)
+        updated_segments.append(segment.model_copy(update=_segment_ocr_update(result, now)))
         save_annotation(data_root, stem, annotation.model_copy(update={"segments": updated_segments + segments[index:]}))
         yield OcrProgressEvent(
             current=index,
