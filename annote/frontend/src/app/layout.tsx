@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "annote",
+  title: "nomicous",
   description: "Manuscript line segmentation and transcription pairing",
 };
 

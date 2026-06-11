@@ -63,7 +63,7 @@ describe("TranscriptionPdfPanel", () => {
     vi.unstubAllGlobals();
   });
 
-  it("renders as a side panel beside the canvas", () => {
+  it("fills its split-pane slot", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -83,7 +83,7 @@ describe("TranscriptionPdfPanel", () => {
       />,
     );
 
-    expect(screen.getByLabelText("Transcription PDF preview")).toHaveClass("w-1/2");
+    expect(screen.getByLabelText("Transcription PDF preview")).toHaveClass("h-full");
     vi.unstubAllGlobals();
   });
 

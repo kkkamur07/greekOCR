@@ -21,7 +21,7 @@ FROM node:20-alpine AS runner
 
 # Keep default in sync with ../VERSION; docker compose passes APP_VERSION from ANNOTE_VERSION.
 ARG APP_VERSION=0.3.2
-LABEL org.opencontainers.image.title="annote-frontend" \
+LABEL org.opencontainers.image.title="nomicous-frontend" \
       org.opencontainers.image.version="${APP_VERSION}"
 
 WORKDIR /app

@@ -1,3 +1,5 @@
+import Image from "next/image";
+
 import PageCard from "@/components/PageCard";
 import PageImport from "@/components/PageImport";
 import { fetchPages } from "@/lib/api";
@@ -19,7 +21,16 @@ export default async function HomePage() {
     <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       <div className="mx-auto max-w-md px-5 py-14 sm:py-20">
         <header className="text-center">
-          <h1 className="text-2xl font-semibold tracking-tight text-gray-900">annote</h1>
+          <Image
+            src="/nomos.svg"
+            alt=""
+            width={51}
+            height={75}
+            priority
+            className="mx-auto h-[4.5rem] w-auto"
+            aria-hidden
+          />
+          <h1 className="mt-4 text-2xl font-semibold tracking-tight text-gray-900">nomicous</h1>
           <p className="mt-1.5 text-sm text-gray-500">Segment lines and pair transcriptions</p>
         </header>
 

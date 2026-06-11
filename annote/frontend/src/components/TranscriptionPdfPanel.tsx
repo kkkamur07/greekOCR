@@ -87,7 +87,7 @@ export default function TranscriptionPdfPanel({
 
   return (
     <aside
-      className="flex min-h-0 w-1/2 min-w-0 flex-col border-l border-gray-200 bg-gray-50"
+      className="flex h-full min-h-0 min-w-0 flex-col bg-gray-50"
       aria-label="Transcription PDF preview"
     >
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 bg-white px-3 py-2">

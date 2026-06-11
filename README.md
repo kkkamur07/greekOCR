@@ -1,4 +1,4 @@
-# greekOCR (Kalamos)
+# greekOCR (NOMOSicous)
 
 **Kalamos** helps researchers transcribe and annotate Greek Byzantine manuscripts — accurate text, with models and an editor in one repo.
 
@@ -167,3 +167,7 @@ docker compose up --build -d
 ```
 
 Compose tags images as `annote-backend:$ANNOTE_VERSION` and `annote-frontend:$ANNOTE_VERSION`. Confirm with `curl http://localhost:5050/health` (`version` in the JSON). Full details: [annote/README.md](annote/README.md).
+
+
+### Note : 
+Have been using `OTSU` to tighten the segments, but it doesn't seem to generalize -> which is not good but the `kraken` segmentation the default model, generalizes super well but needs minor finetuning
