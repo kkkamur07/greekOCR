@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+#SBATCH --partition=all
+#SBATCH --gres=gpu:1
 # Train Calamari with settings aligned to Kaddas et al. ICDAR 2023 (Section 4):
 # - network "def" (best in their Table 1)
 # - data augmentation ON (--n_augmentations > 0)
@@ -24,8 +26,48 @@
 #! do not change the training configuration, this is recommended by the Calamari documentation, will experiment with it later
 set -euo pipefail
 
-PACK="${CALAMARI_PACK:-./dataset/calamari}"
-OUT="${CALAMARI_OUTPUT:-./outputs/calamari-greek-bible}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+is_repo_root() {
+  [[ -d "$1/ocr/calamari_ocr" && -d "$1/dataset" ]]
+}
+
+find_repo_root() {
+  local base candidate resolved top
+  for base in \
+    "${CALAMARI_REPO:-}" \
+    "${SLURM_SUBMIT_DIR:-}" \
+    "${PWD}" \
+    "${SCRIPT_DIR}" \
+    "${SCRIPT_DIR}/.." \
+    "${SCRIPT_DIR}/../.." \
+    "/home/math/gupta/work/greek_byzantine/greek-foundation"; do
+    [[ -n "${base}" ]] || continue
+    for candidate in "${base}" "${base}/.." "${base}/../.."; do
+      [[ -d "${candidate}" ]] || continue
+      resolved="$(cd "${candidate}" && pwd)"
+      if top="$(git -C "${resolved}" rev-parse --show-toplevel 2>/dev/null)" && is_repo_root "${top}"; then
+        echo "${top}"
+        return 0
+      fi
+      if is_repo_root "${resolved}"; then
+        echo "${resolved}"
+        return 0
+      fi
+    done
+  done
+  return 1
+}
+
+REPO="$(find_repo_root || true)"
+if [[ -z "${REPO}" ]]; then
+  echo "Could not determine repository root. Set CALAMARI_REPO=/path/to/greek-foundation." >&2
+  exit 1
+fi
+cd "${REPO}"
+
+PACK="${CALAMARI_PACK:-${REPO}/dataset/calamari}"
+OUT="${CALAMARI_OUTPUT:-${REPO}/outputs/calamari-greek-bible}"
 EPOCHS="${CALAMARI_EPOCHS:-100}"
 ES_N_TO_GO="${CALAMARI_ES_N_TO_GO:-20}"
 GPU="${CALAMARI_GPU:-0}"
@@ -58,6 +100,9 @@ fi
   echo "  Epochs:            ${EPOCHS}"
   echo "  Early stopping:    ${ES_N_TO_GO} epochs patience (-1 = disabled)"
   echo "  GPU:               ${GPU}"
+  echo "  Slurm job:         ${SLURM_JOB_ID:-not running under Slurm}"
+  echo "  Slurm job GPUs:    ${SLURM_JOB_GPUS:-<unset>}"
+  echo "  CUDA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES:-<unset>}"
   echo "========================================"
   nvidia-smi
   echo "========================================"
