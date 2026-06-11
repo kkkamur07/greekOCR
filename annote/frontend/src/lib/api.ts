@@ -3,6 +3,8 @@ import type {
   ExportProgressEvent,
   ExportResponse,
   HistoryListResponse,
+  OcrProgressEvent,
+  OcrResult,
   PageAnnotation,
   PageListResponse,
   PageSummary,
@@ -37,8 +39,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export function pageImageUrl(stem: string): string {
-  return `${PUBLIC_API_BASE}/pages/${encodeURIComponent(stem)}/image`;
+export function pageImageUrl(stem: string, cacheKey?: string | null): string {
+  const base = `${PUBLIC_API_BASE}/pages/${encodeURIComponent(stem)}/image`;
+  if (!cacheKey) return base;
+  return `${base}?t=${encodeURIComponent(cacheKey)}`;
 }
 
 export function segmentPreviewUrl(stem: string, segmentId: string): string {
@@ -130,6 +134,18 @@ export async function autoSegmentPage(
   });
 }
 
+export async function binarizePage(stem: string): Promise<PageAnnotation> {
+  return request<PageAnnotation>(`/pages/${encodeURIComponent(stem)}/binarize`, {
+    method: "POST",
+  });
+}
+
+export async function clearBinarizedPage(stem: string): Promise<PageAnnotation> {
+  return request<PageAnnotation>(`/pages/${encodeURIComponent(stem)}/binarize`, {
+    method: "DELETE",
+  });
+}
+
 type ExportStreamEvent =
   | ExportProgressEvent
   | { type: "done"; result: ExportResponse }
@@ -189,6 +205,76 @@ export async function exportPage(
 
   if (!result) {
     throw new Error("Export incomplete");
+  }
+  return result;
+}
+
+export async function runSegmentOcr(stem: string, segmentId: string): Promise<PageAnnotation> {
+  return request<PageAnnotation>(
+    `/pages/${encodeURIComponent(stem)}/segments/${encodeURIComponent(segmentId)}/ocr`,
+    { method: "POST" },
+  );
+}
+
+type OcrStreamEvent =
+  | OcrProgressEvent
+  | { type: "done"; result: OcrResult }
+  | { type: "error"; detail: string };
+
+export async function ocrPage(
+  stem: string,
+  onProgress?: (event: OcrProgressEvent) => void,
+): Promise<OcrResult> {
+  const response = await fetch(`${apiBase()}/pages/${encodeURIComponent(stem)}/ocr/stream`, {
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(detail || `OCR failed: ${response.status}`);
+  }
+  if (!response.body) {
+    throw new Error("OCR failed: empty response");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let result: OcrResult | null = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const event = JSON.parse(line) as OcrStreamEvent;
+      if (event.type === "progress") {
+        onProgress?.(event);
+      } else if (event.type === "done") {
+        result = event.result;
+      } else if (event.type === "error") {
+        throw new Error(event.detail);
+      }
+    }
+  }
+
+  if (buffer.trim()) {
+    const event = JSON.parse(buffer) as OcrStreamEvent;
+    if (event.type === "progress") {
+      onProgress?.(event);
+    } else if (event.type === "done") {
+      result = event.result;
+    } else if (event.type === "error") {
+      throw new Error(event.detail);
+    }
+  }
+
+  if (!result) {
+    throw new Error("OCR incomplete");
   }
   return result;
 }

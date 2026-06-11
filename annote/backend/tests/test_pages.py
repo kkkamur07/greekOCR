@@ -1,6 +1,6 @@
 """Page catalogue API — list and serve page images."""
 
-from tests.conftest import minimal_jpeg_bytes, minimal_png_bytes
+from tests.conftest import minimal_jpeg_bytes, minimal_png_bytes, minimal_tiff_bytes
 
 
 def test_list_pages_empty(client):
@@ -33,6 +33,21 @@ def test_get_page_image_returns_bytes(client, data_root):
     assert response.status_code == 200
     assert response.headers["content-type"] == "image/jpeg"
     assert response.content == jpeg
+
+
+def test_get_page_image_tiff_returns_jpeg_for_display(client, data_root):
+    """GET /pages/{stem}/image transcodes TIFF to JPEG for browser display."""
+    tiff = minimal_tiff_bytes()
+    tiff_path = data_root / "manuscripts" / "pages" / "folio.tif"
+    tiff_path.write_bytes(tiff)
+
+    response = client.get("/pages/folio/image")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/jpeg"
+    assert response.content != tiff
+    assert response.content.startswith(b"\xff\xd8\xff")
+    assert tiff_path.read_bytes() == tiff
 
 
 def test_get_page_image_png_uses_matching_content_type(client, data_root):

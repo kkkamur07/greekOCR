@@ -114,7 +114,7 @@ docker images 'annote-*'
 
 | Variable | File | Default | Purpose |
 |----------|------|---------|---------|
-| `ANNOTE_DATA_ROOT` | `backend/.env` | `../data` | Filesystem data root |
+| `ANNOTE_DATA_ROOT` | `backend/.env` | `data` (→ `annote/data`) | Filesystem data root; relative paths resolve from `annote/` |
 | `ANNOTE_HOST` | `backend/.env` | `127.0.0.1` | API bind host |
 | `ANNOTE_PORT` | `backend/.env` | `5050` | API bind port |
 | `ANNOTE_CORS_ORIGINS` | `backend/.env` | `http://localhost:3000` | Allowed browser origins |

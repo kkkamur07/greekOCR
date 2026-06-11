@@ -12,6 +12,8 @@ interface SegmentOverlayProps {
   editMode: boolean;
   visible: boolean;
   interactive: boolean;
+  /** When true, show dashed Kraken ceiling for the selected Kraken segment. */
+  showKrakenCeiling: boolean;
   /** Canvas zoom scale — vertex handles shrink in image space so they stay small on screen. */
   zoomScale: number;
   onSelect: (id: string) => void;
@@ -68,6 +70,17 @@ function segmentHighlight(selected: boolean, paired: boolean): SegmentHighlight 
   return UNPAIRED_HIGHLIGHT;
 }
 
+function segmentDashArray(
+  segment: Segment,
+  selected: boolean,
+  zoomScale: number,
+): string | undefined {
+  if ((segment.source ?? "manual") !== "kraken" || selected) return undefined;
+  const dash = screenScaled(8, zoomScale);
+  const gap = screenScaled(5, zoomScale);
+  return `${dash} ${gap}`;
+}
+
 export default function SegmentOverlay({
   imageWidth,
   imageHeight,
@@ -77,6 +90,7 @@ export default function SegmentOverlay({
   editMode,
   visible,
   interactive,
+  showKrakenCeiling,
   zoomScale,
   onSelect,
   clientToImage,
@@ -105,6 +119,16 @@ export default function SegmentOverlay({
         const selected = seg.id === selectedId;
         const paired = segmentIsPaired(seg);
         const highlight = segmentHighlight(selected, paired);
+        const dashArray = segmentDashArray(seg, selected, zoomScale);
+        const ceiling =
+          showKrakenCeiling &&
+          selected &&
+          (seg.source ?? "manual") === "kraken" &&
+          seg.kraken_ceiling &&
+          seg.kraken_ceiling.length >= 3
+            ? seg.kraken_ceiling
+            : null;
+
         return (
           <g key={seg.id}>
             <path
@@ -114,6 +138,7 @@ export default function SegmentOverlay({
               fill={highlight.fill}
               stroke={highlight.stroke}
               strokeWidth={selected ? selectedStroke : segmentStroke}
+              strokeDasharray={dashArray}
               style={{ pointerEvents: interactive ? "auto" : "none", cursor: interactive ? "pointer" : "default" }}
               onPointerDown={(e) => {
                 if (!interactive) return;
@@ -126,6 +151,18 @@ export default function SegmentOverlay({
               }}
               onClick={(e) => e.stopPropagation()}
             />
+            {ceiling && (
+              <path
+                data-kraken-ceiling=""
+                data-segment-id={seg.id}
+                d={segmentPath(ceiling as [number, number][])}
+                fill="none"
+                stroke="#c026d3"
+                strokeWidth={screenScaled(2.5, zoomScale)}
+                strokeDasharray={`${screenScaled(12, zoomScale)} ${screenScaled(7, zoomScale)}`}
+                style={{ pointerEvents: "none" }}
+              />
+            )}
             {seg.points.length > 0 && (
               <text
                 x={seg.points[0][0] + 4}

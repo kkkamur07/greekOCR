@@ -284,6 +284,90 @@
         }
       }
     },
+    "/pages/{stem}/binarize": {
+      "post": {
+        "tags": [
+          "pages"
+        ],
+        "summary": "Post Binarize Page",
+        "description": "Binarize the whole page with Kraken nlbin and use it for display and processing.",
+        "operationId": "post_binarize_page_pages__stem__binarize_post",
+        "parameters": [
+          {
+            "name": "stem",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Stem"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageAnnotation"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "pages"
+        ],
+        "summary": "Delete Binarized Page",
+        "description": "Revert to the original manuscript image for display and processing.",
+        "operationId": "delete_binarized_page_pages__stem__binarize_delete",
+        "parameters": [
+          {
+            "name": "stem",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Stem"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageAnnotation"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/pages/{stem}/segment": {
       "post": {
         "tags": [
@@ -650,6 +734,99 @@
         }
       }
     },
+    "/pages/{stem}/segments/{segment_id}/ocr": {
+      "post": {
+        "tags": [
+          "pages"
+        ],
+        "summary": "Post Segment Ocr",
+        "description": "Run Calamari OCR on one segment and persist model transcription fields.",
+        "operationId": "post_segment_ocr_pages__stem__segments__segment_id__ocr_post",
+        "parameters": [
+          {
+            "name": "stem",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Stem"
+            }
+          },
+          {
+            "name": "segment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Segment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageAnnotation"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pages/{stem}/ocr/stream": {
+      "post": {
+        "tags": [
+          "pages"
+        ],
+        "summary": "Post Page Ocr Stream",
+        "description": "Stream NDJSON progress while running OCR on every segment on the page.",
+        "operationId": "post_page_ocr_stream_pages__stem__ocr_stream_post",
+        "parameters": [
+          {
+            "name": "stem",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Stem"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/pages/{stem}/export": {
       "post": {
         "tags": [
@@ -945,6 +1122,17 @@
             "type": "boolean",
             "title": "Locked",
             "default": false
+          },
+          "binarized_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Binarized At"
           }
         },
         "type": "object",
@@ -1080,6 +1268,54 @@
               }
             ],
             "title": "Text Override"
+          },
+          "model_transcription": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Transcription"
+          },
+          "model_transcription_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Transcription At"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "kraken"
+            ],
+            "title": "Source",
+            "default": "manual"
+          },
+          "kraken_ceiling": {
+            "anyOf": [
+              {
+                "items": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kraken Ceiling"
           }
         },
         "type": "object",

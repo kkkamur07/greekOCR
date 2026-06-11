@@ -1,11 +1,11 @@
 services:
   backend:
-    image: annote-backend:${ANNOTE_VERSION:-0.1.0}
+    image: annote-backend:${ANNOTE_VERSION:-0.3.2}
     build:
       context: .
       dockerfile: backend/Dockerfile
       args:
-        APP_VERSION: ${ANNOTE_VERSION:-0.1.0}
+        APP_VERSION: ${ANNOTE_VERSION:-0.3.2}
     ports:
       - "5050:5050"
     volumes:
@@ -30,12 +30,12 @@ services:
       start_period: 10s
 
   frontend:
-    image: annote-frontend:${ANNOTE_VERSION:-0.1.0}
+    image: annote-frontend:${ANNOTE_VERSION:-0.3.2}
     build:
       context: .
       dockerfile: frontend/Dockerfile
       args:
-        APP_VERSION: ${ANNOTE_VERSION:-0.1.0}
+        APP_VERSION: ${ANNOTE_VERSION:-0.3.2}
         NEXT_PUBLIC_API_BASE_URL: http://localhost:5050
     ports:
       - "3000:3000"

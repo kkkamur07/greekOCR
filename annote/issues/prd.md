@@ -10,6 +10,8 @@ Once a folio is fully segmented and paired, researchers also need confidence tha
 
 Researchers reviewing transcription PDFs need to compare the spatial layout of paired text against the manuscript while editing, without the PDF overlapping the canvas or triggering unwanted downloads. The PDF itself should be a clean press-style page — text at segment positions on a blank page — not a facsimile photograph with text painted on top.
 
+**Kraken** auto-segmentation speeds up line outlining but produces polygons that are often too large: they bleed into neighbouring lines and create **Segment overlap** (shared interior area between segments). Manually clipping neighbours after every edit is tedious. Researchers need **Segment refinement** that automatically shrinks each Kraken polygon inward to actual ink edges while respecting the original Kraken boundary as a maximum extent, then leaves segments hand-editable without further automatic constraints.
+
 ## Solution
 
 Build **annote** as a local browser application under `annote/`: a **Next.js App Router** frontend and a **standalone FastAPI** backend that read and write files under `annote/data/`. The researcher opens a **Page** from a flat list, draws **Segments** (polygon or rotated rectangle) on the full-page image, manually **pairs** each segment to a **Text line** from the page transcription, and **exports** processed line images and text files when ready.
@@ -23,6 +25,8 @@ Annotation autosaves to JSON so sessions are resumable. **Export** is manual, sh
 **Page lock** freezes all segment geometry and pairings when annotation work is complete (manual lock anytime, or prompt at 100% pairing). While locked, the canvas is read-only but export and PDF preview/download remain available. **Unlock** returns to normal editing.
 
 **Annotation history** keeps rolling timed snapshots plus protected milestone snapshots so researchers can **restore** a prior annotation state after mishaps, without git or a database.
+
+**Segment refinement** runs automatically (**Auto-refine**) immediately after **Kraken** auto-segmentation. Each Kraken segment stores its original boundary as the **Kraken ceiling** (maximum extent during refinement) and its editable `points` as the refined polygon snapped to **Ink edge signal** (grayscale luminance edges, e.g. Canny) inside a fixed **Refinement margin** of **4 px** inward from the ceiling. Refined polygons are **Contour simplification**-reduced for hand editing. If refinement fails for one segment, **Refinement fallback** keeps the unrefined Kraken polygon as `points` while still storing the ceiling. **Segment source** distinguishes **manual** draws from **Kraken** segments. Hand-edits are never clamped to the ceiling. An optional **Kraken ceiling overlay** (dashed outline, toggleable, off by default) shows the original Kraken boundary for the selected segment.
 
 Primary outputs per paired segment: `<manuscript_name>_<segment_number>.jpg` and `<manuscript_name>_<segment_number>.txt`, where **manuscript name** is the page image filename stem and **segment number** is assigned in creation order.
 
@@ -135,6 +139,27 @@ Primary outputs per paired segment: `<manuscript_name>_<segment_number>.jpg` and
 79. As a researcher, I want restore to replace the current annotation, so that the canvas reflects the chosen snapshot immediately.
 80. As a researcher, I want unlock to remain available after restore, so that I can edit from a restored baseline.
 
+### Kraken auto-segmentation and segment refinement
+
+86. As a researcher, I want Kraken auto-segmentation to produce tighter line polygons that hug ink edges, so that neighbouring segments overlap less and need less manual correction.
+87. As a researcher, I want refinement to run automatically right after Kraken segmentation, so that I see improved segments immediately without an extra button.
+88. As a researcher, I want refined segments to shrink inward only and never grow beyond the original Kraken boundary, so that I trust auto-refinement not to steal ink from neighbours.
+89. As a researcher, I want the original Kraken boundary stored per segment, so that I can see how far refinement moved the outline.
+90. As a researcher, I want segments that fail refinement to keep the unrefined Kraken polygon, so that one bad line does not block the rest of the page.
+91. As a researcher, I want refined polygons simplified to fewer vertices, so that I can adjust corners by hand without fighting dense Kraken point runs.
+92. As a researcher, I want to edit refined segment vertices freely without automatic clamping to the Kraken ceiling, so that I can fix stubborn lines manually.
+93. As a researcher, I want manually drawn segments distinguished from Kraken-generated ones, so that I know which outlines came from auto-segmentation.
+94. As a researcher, I want to toggle a dashed Kraken ceiling outline for the selected segment, so that I can compare refined shape against the original Kraken box when needed.
+95. As a researcher, I want the Kraken ceiling overlay off by default, so that the canvas stays uncluttered during normal editing.
+96. As a researcher, I want segment interiors not to overlap after refinement where possible, so that each line claims distinct ink area (shared edges and corners are fine).
+97. As a researcher, I want refinement to use ink-edge detection on the page image inside each Kraken region, so that outlines follow visible stroke boundaries.
+98. As a researcher, I want auto-segment to still pair segments to transcription lines by reading order when a page transcription exists, so that refinement does not change the pairing workflow.
+99. As a researcher, I want append-mode Kraken segmentation to refine only the newly added segments, so that existing manual work is preserved.
+100. As a researcher, I want replace-mode Kraken segmentation to replace all segments with refined Kraken polygons, so that a full re-segment gets a clean slate.
+101. As a researcher, I want locked pages to reject Kraken auto-segment, so that frozen annotation cannot be overwritten accidentally.
+102. As a developer, I want segment refinement testable on synthetic ink images without the UI, so that contour behaviour can be verified in isolation.
+103. As a developer, I want backward-compatible annotation JSON for pages annotated before refinement shipped, so that existing work loads without migration scripts.
+
 ### Developer and quality
 
 81. As a developer, I want OpenAPI-generated types from the FastAPI schema, so that the Next.js client stays aligned with the API.
@@ -173,6 +198,24 @@ Primary outputs per paired segment: `<manuscript_name>_<segment_number>.jpg` and
 | **Canvas editor** | Draw/select/edit segments; respect lock; pan while PDF panel open | Client component |
 | **Transcription PDF panel** | Side-by-side preview/share embed, explicit download, refresh on save | Client component |
 | **Pairing panel** | Text line list, inline edit, export preview | Client component |
+| **Kraken segment service** | Run BLLA; convert lines to segments; optional transcription pairing | `segment_image(image)`, `auto_segment_page(stem, ...)` |
+| **Segment refinement** | Active-contour shrink inside Kraken ceiling; simplification; per-segment fallback | `refine_segment(image, ceiling, *, margin_px=4) -> RefineResult` |
+| **Segment source** | Distinguish manual vs Kraken provenance on each segment | `source: "manual" \| "kraken"` on `Segment` |
+
+### Segment refinement
+
+- **Trigger**: **Auto-refine** runs inside the Kraken auto-segment pipeline immediately after Kraken polygons are produced, before persistence and API response.
+- **Kraken ceiling**: For each Kraken segment, store the merged Kraken polygon (pre-refinement) in `kraken_ceiling`. Set `points` to the refined polygon (or unrefined Kraken polygon on **Refinement fallback**).
+- **Refinement margin**: Fixed **4 px** inward from the ceiling in v1 (configurable constant; adaptive per-line height deferred).
+- **Ink edge signal**: Grayscale luminance → edge map (e.g. Canny) on the page image crop masked to the ceiling polygon.
+- **Algorithm**: Active contour / snake constrained to stay inside the ceiling and at least `margin_px` inset from it; snap to strong edges.
+- **Contour simplification**: Douglas–Peucker (or equivalent) with ~2 px tolerance after refinement to reduce vertex count.
+- **Refinement fallback**: Per-segment — on failure (no stable contour, degenerate result, contour escapes ceiling), `points` = unrefined Kraken polygon; `kraken_ceiling` still stored; other segments on the page continue.
+- **Hand-edits**: Vertex moves and new manual segments are never clamped to `kraken_ceiling`.
+- **Segment source**: `manual` for user-drawn segments (`kraken_ceiling` null); `kraken` for auto-segment output. Defaults to `manual` when field absent (backward compatibility).
+- **Kraken ceiling overlay**: Editor-only dashed outline of `kraken_ceiling` for the selected segment; toggle in toolbar; **off by default**; not shown for manual segments.
+- **Visual source distinction**: Subtle canvas styling difference between `manual` and `kraken` segments (e.g. stroke dash or colour); exact styling agent-chosen.
+- **Overlap repair** (manual neighbour clip) remains **deferred** — refinement is the primary strategy to reduce **Segment overlap** from fat Kraken boxes.
 
 ### On-disk layout
 
@@ -191,6 +234,7 @@ Primary outputs per paired segment: `<manuscript_name>_<segment_number>.jpg` and
 - `GET /pages/{stem}/transcription` — page transcription text + parsed text lines
 - `GET /pages/{stem}/annotation` — full annotation JSON (includes locked flag)
 - `PUT /pages/{stem}/annotation` — replace annotation (rejected with 409 when locked)
+- `POST /pages/{stem}/segment` — Kraken BLLA auto-segment; runs **Auto-refine** before save; returns segments with `source`, `kraken_ceiling`, refined `points` (rejected when locked)
 - `POST /pages/{stem}/export` — run processing + write line outputs; return warnings
 - `GET /pages/{stem}/segments/{segment_id}/preview` — rectified JPEG preview for one segment
 - `GET /pages/{stem}/transcription.pdf` — live preview transcription PDF (`Content-Disposition: inline` for embedding)
@@ -240,6 +284,7 @@ Nested settings classes on application `Settings`, env-configurable (e.g. `ANNOT
 - Polygon: ordered list of `[x, y]` points (four or more).
 - Rectangle: four corners as ordered points.
 - Transcription PDF uses axis-aligned bounding box of segment points for text placement (not rotated to polygon angle).
+- **Segment** schema extensions: `source` (`manual` \| `kraken`, default `manual`), `kraken_ceiling` (`list[list[float]]` \| `null`, null for manual segments).
 
 ### Export rules
 
@@ -270,15 +315,29 @@ Nested settings classes on application `Settings`, env-configurable (e.g. `ANNOT
 | **Export service** | Paired-only files; warnings |
 | **Page API** | Integration tests with temp data directory; preview endpoint inline disposition |
 | **Transcription PDF panel (UI)** | Menu opens preview mode; share disabled when unlocked; embed loads via fetch; download is explicit |
+| **Segment refinement service** | Refined polygon inside ceiling; respects margin; simplified vertex count; fallback returns ceiling as points; synthetic ink fixtures |
+| **Kraken auto-segment + refine** | POST `/segment` returns `source=kraken`, `kraken_ceiling` populated; refined `points` differ from ceiling on synthetic ink; append/replace modes |
+| **Kraken ceiling overlay (UI)** | Toggle shows/hides dashed ceiling for selected Kraken segment only; off by default |
 
-**Prior art**: `annote/backend/tests/` pytest fixtures with temp `data_root`; frontend Vitest for pure helpers and component behavior.
+**Test seams** (highest first):
+
+1. **Segment refinement service** — pure function tests on synthetic page crops: refined polygon ⊆ ceiling, inset ≥ margin where possible, closer to synthetic ink than ceiling, fallback on blank crop.
+2. **Kraken auto-segment pipeline** — `auto_segment_page` with monkeypatched Kraken lines: schema fields, per-segment refine/fallback, pairing preserved.
+3. **POST `/segment` API** — integration test through HTTP (existing `test_kraken_segment` pattern).
+4. **Editor overlay toggle** — Vitest on overlay component / canvas props for dashed ceiling visibility.
+
+**Prior art**: `annote/backend/tests/` pytest fixtures with temp `data_root`; `test_kraken_segment.py`, `test_polygon.py`; frontend Vitest for pure helpers and component behavior.
 
 **UI**: Manual QA for side-by-side layout, pan while panel open, and lock/share switching; automated tests for menu/panel behavior and disabled share when unlocked.
 
 ## Out of Scope
 
 - Kalamos platform integration, Postgres, user authentication, JWT, jobs/workers
-- Automatic text-to-segment alignment or OCR inference (beyond optional Kraken assist already present)
+- Automatic text-to-segment alignment or bulk auto-pairing from OCR (optional Kraken assist, **Auto-refine**, and on-demand **Pairing assist** in `issues/prd-calamari-pairing-assist.md` are in scope separately)
+- **Overlap repair** (manual subtract overlap from neighbour segment) — discussed, deferred in favour of **Segment refinement**
+- Adaptive **Refinement margin** per line height (fixed 4 px in v1)
+- Re-refining segments on demand via a separate UI button (v1 refines only at Kraken auto-segment time)
+- Clamping hand-edits to **Kraken ceiling**
 - Manuscript grouping UI, project/dashboard hierarchy, multi-user collaboration
 - Block-level layout (columns, regions above line level)
 - Packaging as Electron/desktop app; cloud deployment
@@ -297,8 +356,9 @@ Nested settings classes on application `Settings`, env-configurable (e.g. `ANNOT
 
 ## Further Notes
 
-- Domain glossary: `annote/CONTEXT.md` (includes Page lock, Annotation history, Transcription PDF spatial layout, Pairing progress).
-- Delivered in issues 001–011: foundation through transcription PDF share mode (facsimile overlay generation and separate Preview/Share links).
-- Remaining vertical slices: spatial blank-page transcription PDF (012), side-by-side editor PDF experience (013).
+- Domain glossary: `annote/CONTEXT.md` (includes **Segment refinement**, **Kraken ceiling**, **Segment source**, **Segment overlap**, **Refinement fallback**).
+- Delivered in issues 001–013: foundation through transcription PDF side-by-side editor.
+- Delivered in issues 016–017: Calamari **Pairing assist** (see `issues/prd-calamari-pairing-assist.md`).
+- Remaining vertical slices: **Segment refinement** auto-refine pipeline (014), Kraken ceiling overlay and source styling (015).
 - Rectangle draw gesture (exact click sequence) is agent-chosen in slice 004; iterate on review if needed.
 - Primary user deliverables remain processed `.jpg` + `.txt` per paired segment; share transcription PDF is a secondary shareable artefact for colleagues who do not use annote.

@@ -35,6 +35,7 @@ describe("SegmentPairingBar", () => {
   it("shows paired transcription lines in green and unpaired lines in amber", () => {
     render(
       <SegmentPairingBar
+        stem="folio"
         segment={segment}
         textLines={textLines}
         segments={[segment, otherSegment]}
@@ -54,12 +55,60 @@ describe("SegmentPairingBar", () => {
     expect(unpairedLine.className).toContain("border-amber-300");
   });
 
+  it("calls onTextOverride with model transcription when Use suggestion is clicked", () => {
+    const onTextOverride = vi.fn();
+    const withModel: Segment = {
+      ...segment,
+      model_transcription: "suggested greek text",
+    };
+
+    render(
+      <SegmentPairingBar
+        stem="folio"
+        segment={withModel}
+        textLines={textLines}
+        segments={[withModel]}
+        onPair={vi.fn()}
+        onTextOverride={onTextOverride}
+        onClose={vi.fn()}
+        onDone={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /use suggestion/i }));
+    expect(onTextOverride).toHaveBeenCalledWith("suggested greek text");
+  });
+
+  it("disables Use suggestion when page is locked", () => {
+    const withModel: Segment = {
+      ...segment,
+      model_transcription: "suggested greek text",
+    };
+
+    render(
+      <SegmentPairingBar
+        stem="folio"
+        segment={withModel}
+        textLines={textLines}
+        segments={[withModel]}
+        locked
+        onPair={vi.fn()}
+        onTextOverride={vi.fn()}
+        onClose={vi.fn()}
+        onDone={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /use suggestion/i })).toBeDisabled();
+  });
+
   it("saves then finishes when Enter is pressed in the transcription field", () => {
     const onSave = vi.fn();
     const onDone = vi.fn();
 
     render(
       <SegmentPairingBar
+        stem="folio"
         segment={segment}
         textLines={textLines}
         segments={[segment]}
