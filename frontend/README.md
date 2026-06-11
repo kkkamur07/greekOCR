@@ -8,7 +8,7 @@ Types are generated from the FastAPI OpenAPI schema so the client stays aligned 
 
 ### Prerequisites
 
-- Python env with platform dependencies (`requirements-platform.txt`)
+- Python env with platform dependencies (`uv sync --no-install-project --group platform`)
 - Node.js 20+
 - PostgreSQL running (`docker compose up db -d`)
 

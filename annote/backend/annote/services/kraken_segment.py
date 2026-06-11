@@ -11,7 +11,7 @@ from PIL import Image
 
 from annote.schemas.annotation import PageAnnotation, Segment
 from annote.services.annotation_store import load_annotation, save_annotation
-from annote.services.page_catalogue import resolve_page_image
+from annote.services.page_image import load_working_page_rgb
 from annote.services.processing.polygon import merge_close_polygon_points
 from annote.services.segment_refinement import refine_kraken_segments
 from annote.services.text_lines import split_text_lines
@@ -105,13 +105,8 @@ def auto_segment_page(
     device: str = "cpu",
 ) -> PageAnnotation:
     """Run Kraken segmentation for a page and persist annotation JSON."""
-    image_path = resolve_page_image(data_root / "manuscripts" / "pages", stem)
-    if image_path is None:
-        raise FileNotFoundError(f"Page not found: {stem}")
-
-    with Image.open(image_path) as img:
-        image = img.convert("RGB")
-        new_segments = segment_image(image, device=device)
+    _, image = load_working_page_rgb(data_root, stem)
+    new_segments = segment_image(image, device=device)
 
     if not new_segments:
         raise RuntimeError("Kraken found no line segments on this page")
@@ -133,5 +128,5 @@ def auto_segment_page(
             text_lines = split_text_lines(raw)
             merged_segments = pair_segments_to_transcription(merged_segments, text_lines)
 
-    annotation = PageAnnotation(segments=merged_segments, export_metadata=existing.export_metadata)
-    return save_annotation(data_root, stem, annotation)
+    updated = existing.model_copy(update={"segments": merged_segments})
+    return save_annotation(data_root, stem, updated)

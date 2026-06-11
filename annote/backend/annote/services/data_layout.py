@@ -4,6 +4,7 @@ from pathlib import Path
 
 REQUIRED_SUBDIRS = (
     "manuscripts/pages",
+    "manuscripts/pages_processed",
     "manuscripts/export",
     "transcriptions/pages",
     "annotations/pages",

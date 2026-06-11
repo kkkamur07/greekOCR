@@ -333,7 +333,7 @@ Nested settings classes on application `Settings`, env-configurable (e.g. `ANNOT
 ## Out of Scope
 
 - Kalamos platform integration, Postgres, user authentication, JWT, jobs/workers
-- Automatic text-to-segment alignment or OCR inference (beyond optional Kraken assist and **Auto-refine** already present)
+- Automatic text-to-segment alignment or bulk auto-pairing from OCR (optional Kraken assist, **Auto-refine**, and on-demand **Pairing assist** in `issues/prd-calamari-pairing-assist.md` are in scope separately)
 - **Overlap repair** (manual subtract overlap from neighbour segment) — discussed, deferred in favour of **Segment refinement**
 - Adaptive **Refinement margin** per line height (fixed 4 px in v1)
 - Re-refining segments on demand via a separate UI button (v1 refines only at Kraken auto-segment time)
@@ -358,6 +358,7 @@ Nested settings classes on application `Settings`, env-configurable (e.g. `ANNOT
 
 - Domain glossary: `annote/CONTEXT.md` (includes **Segment refinement**, **Kraken ceiling**, **Segment source**, **Segment overlap**, **Refinement fallback**).
 - Delivered in issues 001–013: foundation through transcription PDF side-by-side editor.
+- Delivered in issues 016–017: Calamari **Pairing assist** (see `issues/prd-calamari-pairing-assist.md`).
 - Remaining vertical slices: **Segment refinement** auto-refine pipeline (014), Kraken ceiling overlay and source styling (015).
 - Rectangle draw gesture (exact click sequence) is agent-chosen in slice 004; iterate on review if needed.
 - Primary user deliverables remain processed `.jpg` + `.txt` per paired segment; share transcription PDF is a secondary shareable artefact for colleagues who do not use annote.

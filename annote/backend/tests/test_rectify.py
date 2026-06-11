@@ -1,5 +1,7 @@
 """Rectify processing step — polygon mask onto axis-aligned rectangle."""
 
+from io import BytesIO
+
 import numpy as np
 import pytest
 from PIL import Image
@@ -17,7 +19,7 @@ def test_rectify_empty_points_raises():
 
 def test_rectify_rectangle_produces_axis_aligned_crop():
     jpeg = minimal_jpeg_bytes(200, 100, color="red")
-    page = np.array(Image.open(__import__("io").BytesIO(jpeg)))
+    page = np.array(Image.open(BytesIO(jpeg)))
     segment = {
         "kind": "rectangle",
         "points": [[20, 30], [120, 30], [120, 60], [20, 60]],
@@ -31,7 +33,7 @@ def test_rectify_rectangle_produces_axis_aligned_crop():
 
 def test_rectify_polygon_produces_output():
     jpeg = minimal_jpeg_bytes(200, 100, color="blue")
-    page = np.array(Image.open(__import__("io").BytesIO(jpeg)))
+    page = np.array(Image.open(BytesIO(jpeg)))
     segment = {
         "kind": "polygon",
         "points": [[10, 10], [80, 15], [75, 45], [15, 40]],
@@ -45,7 +47,7 @@ def test_rectify_polygon_produces_output():
 def test_rectify_many_point_polygon_uses_full_bbox_extent():
     """Multi-click polygons crop to the full selection bounding box."""
     jpeg = minimal_jpeg_bytes(400, 120, color="green")
-    page = np.array(Image.open(__import__("io").BytesIO(jpeg)))
+    page = np.array(Image.open(BytesIO(jpeg)))
     segment = {
         "kind": "polygon",
         "points": [

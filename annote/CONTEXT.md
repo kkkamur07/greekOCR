@@ -53,8 +53,20 @@ The exported image for one Segment after processing (includes polygon-to-rectang
 _Avoid_: Line crop, crop (alone), raw segment
 
 **Processing**:
-A pluggable sequence of steps applied to a Segment's ink region before export. v1 implements **rectify** (polygon-to-rectangle) only; further steps (e.g. normalize height, binarize) are added later without changing annotation data.
-_Avoid_: Preprocessing, inference
+A pluggable sequence of steps applied to a Segment's ink region before export. v1 implements **rectify** (polygon-to-rectangle) only; further steps (e.g. normalize height, binarize) are added later without changing annotation data. Distinct from **OCR prediction** (model transcription of a line image).
+_Avoid_: Preprocessing (generic image ops)
+
+**OCR prediction**:
+Running a trained line OCR model (Calamari) on one Segment's line image to produce a **Model transcription**. Uses the same **rectify** step as **Export** (polygon masked onto an axis-aligned rectangle) so the model sees the same kind of line image it was trained on. On-demand assist only — does not change **Pairing** unless the researcher explicitly accepts the result.
+_Avoid_: Inference (too generic), auto-transcription
+
+**Model transcription**:
+The text string returned by **OCR prediction** for one Segment. Shown as a pairing suggestion; not ground truth until accepted into **Pairing**.
+_Avoid_: Prediction (ambiguous with ML jargon alone), OCR output
+
+**Pairing assist**:
+Using **OCR prediction** to suggest a **Model transcription** while the researcher pairs a selected Segment. Triggered on demand — either for one selected Segment or for all Segments on the Page. The researcher may accept the suggestion (into inline text or by matching a **Text line**), edit it, or ignore it. No automatic pairing.
+_Avoid_: Auto-pair, auto-match
 
 **Processing step**:
 One named transformation in the Processing pipeline (e.g. `rectify`, `normalize_height`, `binarize`).

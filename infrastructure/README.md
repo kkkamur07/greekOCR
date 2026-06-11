@@ -55,7 +55,7 @@ From the **repository root** (deps only — repo is **not** installed as a packa
 ```bash
 docker compose up db -d
 uv venv && source .venv/bin/activate
-uv pip install -r requirements/requirements-platform.txt
+uv sync --no-install-project --group platform
 export PYTHONPATH=.   # needed for alembic / uvicorn from the shell
 cp backend/core/.env.example backend/core/.env
 alembic -c infrastructure/alembic.ini upgrade head

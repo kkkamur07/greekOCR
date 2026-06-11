@@ -28,6 +28,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8.3.0", "pypdf>=5.0.0"]
 kraken = ["kraken>=7.0"]
+calamari = ["calamari-ocr>=2.0.0"]
 
 [project.scripts]
 annote = "annote.main:main"
