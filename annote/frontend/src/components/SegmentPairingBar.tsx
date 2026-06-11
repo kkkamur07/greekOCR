@@ -1,34 +1,43 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Segment, TextLine } from "@/types/api";
 
 interface SegmentPairingBarProps {
   segment: Segment;
   textLines: TextLine[];
   segments: Segment[];
+  stem: string;
+  locked?: boolean;
   autoFocus?: boolean;
   onPair: (textLineIndex: number) => void;
   onTextOverride: (text: string) => void;
+  onOcrComplete?: (segment: Segment) => void;
   onSave?: () => void;
   onClose: () => void;
   onDone: () => void;
   onPreviewExport?: () => void;
+  onOcrError?: (message: string) => void;
 }
 
 export default function SegmentPairingBar({
   segment,
   textLines,
   segments,
+  stem,
+  locked = false,
   autoFocus = false,
   onPair,
   onTextOverride,
+  onOcrComplete,
   onSave,
   onClose,
   onDone,
   onPreviewExport,
+  onOcrError,
 }: SegmentPairingBarProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [ocrLoading, setOcrLoading] = useState(false);
   const pairedLineIndices = new Set(
     segments
       .filter((s) => s.id !== segment.id && s.paired_text_line_index != null)
@@ -38,6 +47,21 @@ export default function SegmentPairingBar({
   const pairedLine = textLines.find((l) => l.index === segment.paired_text_line_index);
   const value = segment.text_override ?? pairedLine?.text ?? "";
   const nextUnpaired = textLines.find((l) => !pairedLineIndices.has(l.index));
+  const modelSuggestion = segment.model_transcription;
+
+  const handleOcr = async () => {
+    setOcrLoading(true);
+    try {
+      const { runSegmentOcr } = await import("@/lib/api");
+      const updated = await runSegmentOcr(stem, segment.id);
+      const refreshed = updated.segments.find((s) => s.id === segment.id);
+      if (refreshed) onOcrComplete?.(refreshed);
+    } catch (err) {
+      onOcrError?.(err instanceof Error ? err.message : "OCR failed");
+    } finally {
+      setOcrLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!autoFocus) return;
@@ -78,11 +102,40 @@ export default function SegmentPairingBar({
           </div>
         </div>
 
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void handleOcr()}
+            disabled={ocrLoading}
+            className="rounded border border-indigo-300 px-3 py-1 text-xs text-indigo-800 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {ocrLoading ? "OCR…" : "OCR"}
+          </button>
+          {modelSuggestion != null && modelSuggestion !== "" && (
+            <button
+              type="button"
+              onClick={() => onTextOverride(modelSuggestion)}
+              disabled={locked}
+              className="rounded border border-gray-300 px-3 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Use suggestion
+            </button>
+          )}
+        </div>
+
+        {modelSuggestion != null && modelSuggestion !== "" && (
+          <div className="rounded-lg border border-indigo-100 bg-indigo-50/50 px-3 py-2 text-sm text-indigo-950">
+            <p className="text-xs font-medium text-indigo-700">Model suggestion</p>
+            <p className="mt-0.5 whitespace-pre-wrap leading-relaxed">{modelSuggestion}</p>
+          </div>
+        )}
+
         <textarea
           ref={textareaRef}
-          className="w-full resize-y rounded-lg border border-gray-300 p-3 text-sm leading-relaxed focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+          className="w-full resize-y rounded-lg border border-gray-300 p-3 text-sm leading-relaxed focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:bg-gray-50 disabled:text-gray-600"
           rows={3}
           value={value}
+          disabled={locked}
           onChange={(e) => onTextOverride(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {

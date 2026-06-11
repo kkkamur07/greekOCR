@@ -1,9 +1,34 @@
-"""High-quality image load/save helpers for export."""
+"""High-quality image load/save helpers for export and display."""
 
+from io import BytesIO
 from pathlib import Path
 
 import numpy as np
 from PIL import Image
+
+# Browsers handle TIFF poorly; convert these to JPEG only for GET /pages/{stem}/image.
+DISPLAY_JPEG_SOURCE_EXTENSIONS = {".tif", ".tiff"}
+
+
+def needs_display_jpeg(image_path: Path) -> bool:
+    """True when the page image should be transcoded to JPEG for browser display."""
+    return image_path.suffix.lower() in DISPLAY_JPEG_SOURCE_EXTENSIONS
+
+
+def encode_page_display_jpeg(image_path: Path) -> bytes:
+    """Return high-quality JPEG bytes for editor display.
+
+    The source file on disk (e.g. lossless TIFF) is never modified; export and OCR
+    continue to read the original via load_page_rgb().
+    """
+    pil = Image.open(image_path)
+    try:
+        rgb = pil.convert("RGB")
+        buf = BytesIO()
+        rgb.save(buf, format="JPEG", quality=95, subsampling=0)
+        return buf.getvalue()
+    finally:
+        pil.close()
 
 
 def load_page_rgb(image_path: Path) -> tuple[np.ndarray, Image.Image]:

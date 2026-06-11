@@ -1,5 +1,6 @@
 """Export service — paired segments to line files."""
 
+import json
 from pathlib import Path
 
 from PIL import Image
@@ -140,7 +141,7 @@ def test_export_stream_reports_progress(client, data_root):
     response = client.post("/pages/folio/export/stream")
     assert response.status_code == 200
 
-    events = [__import__("json").loads(line) for line in response.text.strip().split("\n") if line]
+    events = [json.loads(line) for line in response.text.strip().split("\n") if line]
     progress = [e for e in events if e["type"] == "progress"]
     done = [e for e in events if e["type"] == "done"]
 

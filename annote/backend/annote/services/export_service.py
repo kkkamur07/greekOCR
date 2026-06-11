@@ -7,9 +7,9 @@ from annote.schemas.annotation import Segment
 from annote.schemas.export import ExportDoneEvent, ExportProgressEvent, ExportResponse, ExportWarnings
 from annote.services.annotation_store import load_annotation
 from annote.services.data_layout import export_dir
-from annote.services.image_export import load_page_rgb, save_line_image
+from annote.services.image_export import save_line_image
 from annote.services.export_state import mark_exported
-from annote.services.page_catalogue import resolve_page_image
+from annote.services.page_image import load_working_page_rgb, resolve_source_page_image
 from annote.services.processing.pipeline import apply_step
 from annote.services.segment_text import segment_text
 from annote.services.text_lines import split_text_lines
@@ -30,11 +30,11 @@ def export_page_events(
     """Yield per-step progress while exporting paired segments."""
     steps = resolve_export_steps(steps=steps)
     annotation = load_annotation(data_root, stem)
-    image_path = resolve_page_image(data_root / "manuscripts" / "pages", stem)
+    image_path = resolve_source_page_image(data_root, stem)
     if image_path is None:
         raise FileNotFoundError(f"Page image not found: {stem}")
 
-    page_image, page_pil = load_page_rgb(image_path)
+    page_image, page_pil = load_working_page_rgb(data_root, stem)
     transcription_path = data_root / "transcriptions" / "pages" / f"{stem}.txt"
     raw_text = transcription_path.read_text(encoding="utf-8") if transcription_path.is_file() else ""
     text_lines = split_text_lines(raw_text)

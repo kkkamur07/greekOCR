@@ -13,11 +13,14 @@ import TranscriptionPdfPanel, { type TranscriptionPdfMode } from "@/components/T
 import { EDITOR_SHORTCUTS, useEditorShortcuts } from "@/hooks/useEditorShortcuts";
 import {
   autoSegmentPage,
+  binarizePage,
+  clearBinarizedPage,
   exportPage,
   fetchAnnotation,
   fetchHistory,
   fetchTranscription,
   lockPage,
+  ocrPage,
   pageImageUrl,
   restoreHistorySnapshot,
   saveAnnotation,
@@ -31,6 +34,7 @@ import type {
   ExportProgressEvent,
   ExportStep,
   HistorySnapshotSummary,
+  OcrProgressEvent,
   PageAnnotation,
   Segment,
   TranscriptionResponse,
@@ -88,8 +92,11 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
   const [dirty, setDirty] = useState(initialDirty);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [segmenting, setSegmenting] = useState(false);
+  const [binarizing, setBinarizing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState<ExportProgressEvent | null>(null);
+  const [ocrRunning, setOcrRunning] = useState(false);
+  const [ocrProgress, setOcrProgress] = useState<OcrProgressEvent | null>(null);
   const [toast, setToast] = useState<{ text: string; kind: "success" | "error" } | null>(null);
   const [previewSegmentId, setPreviewSegmentId] = useState<string | null>(null);
   const [pdfPanelMode, setPdfPanelMode] = useState<TranscriptionPdfMode | null>(null);
@@ -128,8 +135,8 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
   useEffect(() => {
     const img = new Image();
     img.onload = () => setImageSize({ width: img.naturalWidth, height: img.naturalHeight });
-    img.src = pageImageUrl(stem);
-  }, [stem]);
+    img.src = pageImageUrl(stem, annotation.binarized_at ?? null);
+  }, [stem, annotation.binarized_at]);
 
   const showToast = useCallback((text: string, kind: "success" | "error" = "success") => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -415,6 +422,34 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
     }
   };
 
+  const handleBinarize = async () => {
+    if (locked) return;
+    setBinarizing(true);
+    try {
+      const result = await binarizePage(stem);
+      setAnnotation(result);
+      showToast("Page binarized with Kraken nlbin.");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Binarize failed", "error");
+    } finally {
+      setBinarizing(false);
+    }
+  };
+
+  const handleClearBinarize = async () => {
+    if (locked) return;
+    setBinarizing(true);
+    try {
+      const result = await clearBinarizedPage(stem);
+      setAnnotation(result);
+      showToast("Showing original page image.");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Revert failed", "error");
+    } finally {
+      setBinarizing(false);
+    }
+  };
+
   const handleExport = async () => {
     setExporting(true);
     setExportProgress(null);
@@ -432,6 +467,29 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
       setExporting(false);
       setExportProgress(null);
     }
+  };
+
+  const handleOcrPage = async () => {
+    setOcrRunning(true);
+    setOcrProgress(null);
+    try {
+      const result = await ocrPage(stem, (progress) => setOcrProgress(progress));
+      const ann = await fetchAnnotation(stem);
+      setAnnotation(ann);
+      showToast(`OCR completed for ${result.processed_count} segment(s).`);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Page OCR failed", "error");
+    } finally {
+      setOcrRunning(false);
+      setOcrProgress(null);
+    }
+  };
+
+  const handleOcrSegmentComplete = (segment: Segment) => {
+    setAnnotation((ann) => ({
+      ...ann,
+      segments: ann.segments.map((s) => (s.id === segment.id ? segment : s)),
+    }));
   };
 
   const pickTool = useCallback(
@@ -548,6 +606,11 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
               locked
             </span>
           )}
+          {annotation.binarized_at && (
+            <span className="shrink-0 rounded-full bg-zinc-200 px-2 py-0.5 text-xs font-medium text-zinc-700">
+              binarized
+            </span>
+          )}
         </div>
 
         <div className="hidden min-w-0 flex-1 justify-center px-2 md:flex">
@@ -626,8 +689,21 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
           </button>
           <button
             type="button"
+            onClick={annotation.binarized_at ? handleClearBinarize : handleBinarize}
+            disabled={binarizing || segmenting || exporting || ocrRunning || locked}
+            className="rounded px-2.5 py-1 text-sm text-indigo-800 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-40"
+            title={
+              annotation.binarized_at
+                ? "Show the original manuscript image"
+                : "Binarize the whole page with Kraken nlbin — requires pip install 'annote[kraken]'"
+            }
+          >
+            {binarizing ? "Binarize…" : annotation.binarized_at ? "Original" : "Binarize"}
+          </button>
+          <button
+            type="button"
             onClick={handleAutoSegment}
-            disabled={segmenting || exporting || locked}
+            disabled={segmenting || exporting || ocrRunning || binarizing || locked}
             className="rounded px-2.5 py-1 text-sm text-indigo-800 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-40"
             title="Auto line segmentation (Kraken BLLA) — requires pip install 'annote[kraken]'"
           >
@@ -681,8 +757,17 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
           />
           <button
             type="button"
+            onClick={handleOcrPage}
+            disabled={ocrRunning || exporting || segmenting || binarizing || annotation.segments.length === 0}
+            className="rounded px-2.5 py-1 text-sm text-indigo-800 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-40"
+            title="Run Calamari OCR on every segment — requires pip install 'annote[calamari]'"
+          >
+            {ocrRunning ? "OCR…" : "OCR page"}
+          </button>
+          <button
+            type="button"
             onClick={handleExport}
-            disabled={exporting}
+            disabled={exporting || ocrRunning}
             className="ml-1 rounded bg-gray-900 px-3 py-1 text-sm text-white disabled:opacity-50"
           >
             {exporting ? "Exporting…" : "Export"}
@@ -747,15 +832,42 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
 
       {saveError && <div className="shrink-0 bg-red-50 px-3 py-1.5 text-sm text-red-700">{saveError}</div>}
 
-      {(segmenting || exporting) && (
+      {(segmenting || binarizing || exporting || ocrRunning) && (
         <div
           role="alert"
           aria-live="polite"
           className="pointer-events-none fixed left-1/2 top-4 z-50 w-[min(24rem,calc(100vw-2rem))] -translate-x-1/2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 shadow-lg"
         >
-          {segmenting ? (
+          {binarizing ? (
+            <>
+              <p className="text-sm text-blue-900">Binarizing page with Kraken nlbin…</p>
+              <div className="progress-indeterminate mt-2 h-1.5 overflow-hidden rounded-full bg-blue-100" />
+            </>
+          ) : segmenting ? (
             <>
               <p className="text-sm text-blue-900">Running Kraken line segmentation…</p>
+              <div className="progress-indeterminate mt-2 h-1.5 overflow-hidden rounded-full bg-blue-100" />
+            </>
+          ) : ocrRunning && ocrProgress && ocrProgress.total > 0 ? (
+            <>
+              <div className="flex items-center justify-between gap-3 text-sm text-blue-900">
+                <span>
+                  OCR line {ocrProgress.current} of {ocrProgress.total}
+                </span>
+                <span className="text-xs text-blue-700">segment {ocrProgress.segment_number}</span>
+              </div>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-blue-100">
+                <div
+                  className="h-full rounded-full bg-blue-600 transition-all duration-200"
+                  style={{
+                    width: `${Math.round((ocrProgress.current / ocrProgress.total) * 100)}%`,
+                  }}
+                />
+              </div>
+            </>
+          ) : ocrRunning ? (
+            <>
+              <p className="text-sm text-blue-900">Preparing page OCR…</p>
               <div className="progress-indeterminate mt-2 h-1.5 overflow-hidden rounded-full bg-blue-100" />
             </>
           ) : exportProgress && exportProgress.total > 0 ? (
@@ -785,7 +897,7 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
         </div>
       )}
 
-      {toast && !segmenting && !exporting && (
+      {toast && !segmenting && !binarizing && !exporting && !ocrRunning && (
         <div
           role="alert"
           className={`pointer-events-none fixed left-1/2 top-4 z-50 -translate-x-1/2 rounded-lg border px-4 py-2.5 text-sm shadow-lg ${
@@ -803,7 +915,7 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
           <div className="relative min-h-0 flex-1">
             <ImageCanvas
               ref={canvasRef}
-              imageUrl={pageImageUrl(stem)}
+              imageUrl={pageImageUrl(stem, annotation.binarized_at ?? null)}
               imageWidth={imageSize.width}
               imageHeight={imageSize.height}
               segments={annotation.segments}
@@ -821,14 +933,18 @@ export default function PageEditor({ stem, initialDirty }: PageEditorProps) {
             />
           </div>
 
-          {selectedSegment && !locked && (
+          {selectedSegment && (
             <SegmentPairingBar
+              stem={stem}
               segment={selectedSegment}
               textLines={textLines}
               segments={annotation.segments}
-              autoFocus={selectedSegment.id === transcriptionPromptId}
+              locked={locked}
+              autoFocus={!locked && selectedSegment.id === transcriptionPromptId}
               onPair={handlePair}
               onTextOverride={handleTextOverride}
+              onOcrComplete={handleOcrSegmentComplete}
+              onOcrError={(message) => showToast(message, "error")}
               onSave={() => void flushSave()}
               onClose={() => handleSelect(null)}
               onDone={finishTranscription}

@@ -83,7 +83,7 @@ Migrations run on API container start (`alembic upgrade head`).
 ```bash
 docker compose up db -d
 uv venv && source .venv/bin/activate
-uv pip install -r requirements/requirements-platform.txt
+uv sync --no-install-project --group platform
 export PYTHONPATH=.
 cp backend/core/.env.example backend/core/.env
 alembic -c infrastructure/alembic.ini upgrade head

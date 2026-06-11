@@ -18,6 +18,7 @@ export type PageAnnotation = {
   segments: Segment[];
   export_metadata: ExportMetadata | null;
   locked: boolean;
+  binarized_at?: string | null;
 };
 export type HistorySnapshotSummary = Schemas["HistorySnapshotSummary"];
 export type HistoryListResponse = Schemas["HistoryListResponse"];
@@ -33,5 +34,15 @@ export interface ExportProgressEvent {
   segment_number: number;
   step: ExportStep;
 }
+
+export interface OcrProgressEvent {
+  type: "progress";
+  current: number;
+  total: number;
+  segment_number: number;
+  segment_id: string;
+}
+
+export type OcrResult = Schemas["OcrResult"];
 
 export type DrawTool = "pan" | "select" | "polygon" | "rectangle";
