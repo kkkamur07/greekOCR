@@ -3,11 +3,14 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _BACKEND_DIR = Path(__file__).resolve().parent.parent
-_DEFAULT_DATA_ROOT = _BACKEND_DIR.parent / "data"
+_PROJECT_ROOT = _BACKEND_DIR.parent
+_REPO_ROOT = _PROJECT_ROOT.parent
+_DEFAULT_DATA_ROOT = _PROJECT_ROOT / "data"
+_DEFAULT_CALAMARI_CHECKPOINT = _REPO_ROOT / "model" / "checkpoints" / "best.ckpt"
 
 
 class PageLockSettings(BaseSettings):
@@ -25,6 +28,23 @@ class HistorySettings(BaseSettings):
     snapshot_interval_minutes: int = Field(default=5, ge=0)
     max_timed_snapshots: int = Field(default=5, ge=1)
     pairing_milestones: list[int] = Field(default=[50, 100])
+
+
+class CalamariSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="ANNOTE_CALAMARI_", extra="ignore")
+
+    checkpoint: Path = Field(
+        default=_DEFAULT_CALAMARI_CHECKPOINT,
+        description="Path to Calamari checkpoint (SavedModel directory or .ckpt)",
+    )
+
+    @field_validator("checkpoint", mode="before")
+    @classmethod
+    def resolve_checkpoint(cls, value: Path | str) -> Path:
+        path = Path(value).expanduser()
+        if not path.is_absolute():
+            path = (_REPO_ROOT / path).resolve()
+        return path
 
 
 class TranscriptionPdfSettings(BaseSettings):
@@ -53,6 +73,15 @@ class Settings(BaseSettings):
         description="Root directory for annote filesystem data",
     )
     host: str = Field(default="127.0.0.1", description="API bind host")
+
+    @field_validator("data_root", mode="before")
+    @classmethod
+    def resolve_data_root(cls, value: Path | str) -> Path:
+        path = Path(value).expanduser()
+        if not path.is_absolute():
+            path = (_PROJECT_ROOT / path).resolve()
+        return path
+
     port: int = Field(default=5050, description="API bind port")
     reload: bool = Field(default=True, description="Uvicorn auto-reload (local dev)")
     cors_origins: str = Field(
@@ -61,6 +90,7 @@ class Settings(BaseSettings):
     )
     page_lock: PageLockSettings = Field(default_factory=PageLockSettings)
     history: HistorySettings = Field(default_factory=HistorySettings)
+    calamari: CalamariSettings = Field(default_factory=CalamariSettings)
     transcription_pdf: TranscriptionPdfSettings = Field(default_factory=TranscriptionPdfSettings)
 
     @property

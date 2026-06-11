@@ -53,8 +53,20 @@ The exported image for one Segment after processing (includes polygon-to-rectang
 _Avoid_: Line crop, crop (alone), raw segment
 
 **Processing**:
-A pluggable sequence of steps applied to a Segment's ink region before export. v1 implements **rectify** (polygon-to-rectangle) only; further steps (e.g. normalize height, binarize) are added later without changing annotation data.
-_Avoid_: Preprocessing, inference
+A pluggable sequence of steps applied to a Segment's ink region before export. v1 implements **rectify** (polygon-to-rectangle) only; further steps (e.g. normalize height, binarize) are added later without changing annotation data. Distinct from **OCR prediction** (model transcription of a line image).
+_Avoid_: Preprocessing (generic image ops)
+
+**OCR prediction**:
+Running a trained line OCR model (Calamari) on one Segment's line image to produce a **Model transcription**. Uses the same **rectify** step as **Export** (polygon masked onto an axis-aligned rectangle) so the model sees the same kind of line image it was trained on. On-demand assist only — does not change **Pairing** unless the researcher explicitly accepts the result.
+_Avoid_: Inference (too generic), auto-transcription
+
+**Model transcription**:
+The text string returned by **OCR prediction** for one Segment. Shown as a pairing suggestion; not ground truth until accepted into **Pairing**.
+_Avoid_: Prediction (ambiguous with ML jargon alone), OCR output
+
+**Pairing assist**:
+Using **OCR prediction** to suggest a **Model transcription** while the researcher pairs a selected Segment. Triggered on demand — either for one selected Segment or for all Segments on the Page. The researcher may accept the suggestion (into inline text or by matching a **Text line**), edit it, or ignore it. No automatic pairing.
+_Avoid_: Auto-pair, auto-match
 
 **Processing step**:
 One named transformation in the Processing pipeline (e.g. `rectify`, `normalize_height`, `binarize`).
@@ -89,7 +101,9 @@ _Avoid_: Unsaved, modified
 - A **Page** has exactly one **Page transcription**
 - A **Page transcription** contains one or more **Text lines** (in reading order)
 - A **Page** contains one or more **Segments**
+- A **Kraken** segment stores a **Kraken ceiling** (original boundary) plus refined `points` shown in the editor; the ceiling constrains **Auto-refine**, not hand-edits
 - Each **Segment** is manually paired with at most one **Text line** (unpaired segments are not exported)
+- **Segments** on the same **Page** must not have **Segment overlap**; edge/corner contact is allowed
 - A **Text line** should pair to at most one **Segment**; unused text lines trigger an export warning
 - Pairing always starts by selecting a **Segment** on the canvas, then assigning its **Text line**
 - Annotation happens on the full **Page** image; **Processed line image**s and **Line transcription file**s are **Export** artefacts
@@ -109,6 +123,12 @@ _Avoid_: Alignment, matching (implies automation)
 >
 > **Dev:** "If I close the browser mid-page, is the work lost?"
 > **Domain expert:** "No — resume from saved annotations. Export is when the training images are ready."
+>
+> **Dev:** "These two line polygons share a border — is that overlap?"
+> **Domain expert:** "No. Touching edges are fine. Overlap means the interiors share ink area — two segments claiming the same pixels."
+>
+> **Dev:** "Kraken's box is too fat — can we tighten it automatically?"
+> **Domain expert:** "Yes — shrink inward to the ink, but never past the Kraken boundary. I'll fix stubborn ones by hand afterward."
 
 ## Build phases (implementation order)
 
@@ -149,11 +169,56 @@ _Avoid_: Checkpoint (reserved for optional manual save if added later)
 How far a Page's **Pairing** work has gone: paired segments vs total segments on that Page. A segment counts as paired when linked to a **Text line** or given inline text. Drives the progress UI, history milestones at 50% and 100%, and is the primary signal for "annotation work complete."
 _Avoid_: Completion percentage (ambiguous with export state)
 
+**Segment overlap**:
+Two **Segments** on the same **Page** whose polygon interiors share area. Shared edges or corner contact alone is permitted — only interior area counts.
+_Avoid_: Touching (too vague), collision (implies physics)
+
+**Overlap repair**:
+Removing **Segment overlap** by subtracting the shared interior from a **neighbour Segment**'s polygon. The **selected Segment** keeps its shape; the neighbour yields. Where overlap existed, the neighbour's new edge follows the selected segment's boundary. Triggered manually (e.g. a button while a segment is selected).
+_Avoid_: Merge, split (different operations)
+
+**Segment source**:
+Whether a **Segment**'s geometry came from the annotator (**manual**) or **Kraken** auto-segmentation. Distinct from **Polygon segment** vs **Rectangle segment** (shape kind).
+_Avoid_: Origin, provenance (fine in code; avoid in UI copy)
+
+**Segment refinement**:
+Improving a **Kraken** segment's polygon by snapping it to actual ink edges while shrinking inward. The original **Kraken** boundary is the maximum extent — the refined polygon may only shrink inside it, never grow beyond it. The annotator may still edit vertices afterward.
+_Avoid_: Auto-segment (that's Kraken itself), rectify (that's export-time)
+
+**Refinement margin**:
+How far inward from the **Kraken** boundary **Segment refinement** may shrink (in image pixels). v1: fixed **4 px** (tunable in the 2–5 px range). Later: adaptive per line from segment height.
+_Avoid_: Padding (implies crop only), overlap gap (different concern)
+
+**Auto-refine**:
+**Segment refinement** that runs automatically immediately after **Kraken** auto-segmentation, before segments are shown in the editor.
+_Avoid_: Post-process (too generic)
+
+**Kraken ceiling**:
+The original **Kraken** polygon stored alongside the refined segment geometry. Hard maximum extent during **Auto-refine** only — hand-edits are not clamped to it.
+_Avoid_: Original boundary, max extent (fine in code)
+
+**Refinement fallback**:
+When **Segment refinement** cannot find a stable ink edge for one segment, that segment keeps the unrefined **Kraken** polygon as its editable `points`. **Auto-refine** continues for the rest of the page.
+_Avoid_: Skip (implies omitting the segment), fail (implies aborting the page)
+
+**Ink edge signal**:
+What **Segment refinement** snaps to inside the **Kraken ceiling**. v1: grayscale luminance edges (e.g. Canny) within the cropped region.
+_Avoid_: Threshold (implies binarization only)
+
+**Contour simplification**:
+Reducing refined polygon vertex count after **Segment refinement** (e.g. Douglas–Peucker, ~2 px tolerance) so segments remain hand-editable.
+_Avoid_: Decimation (too implementation-specific for glossary)
+
+**Kraken ceiling overlay**:
+Optional dashed outline of the **Kraken ceiling** shown for the selected segment. Toggleable in the editor; off by default.
+_Avoid_: Ghost boundary, max extent preview
+
 **Session model**:
 Annotation is resumable across sessions (autosaved JSON reloads segments and pairings). **Export** is the checkpoint for processed `.jpg`/`.txt` deliverables. A **Page** may be **Page lock**ed when annotation work is complete; locked pages are not editable until unlocked.
 
 ## Flagged ambiguities
 
+- **Overlap repair** (manual clip of neighbour segments) — discussed, deferred in favour of **Segment refinement** via active contours inside Kraken boundaries.
 - "segment" vs Kalamos "Line" — same intent; Kalamos compatibility is deferred.
 - "line" alone is ambiguous — use **Segment** (image) or **Text line** (transcription).
 - Exact rectangle draw gesture (how many clicks before corners are editable) — TBD at implementation.

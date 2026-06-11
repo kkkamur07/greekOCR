@@ -25,12 +25,20 @@ def minimal_png_bytes(width: int = 100, height: int = 50, color: str = "white") 
     return buf.getvalue()
 
 
+def minimal_tiff_bytes(width: int = 100, height: int = 50, color: str = "white") -> bytes:
+    """Create a small TIFF in memory for integration tests."""
+    buf = BytesIO()
+    Image.new("RGB", (width, height), color).save(buf, format="TIFF")
+    return buf.getvalue()
+
+
 @pytest.fixture
 def data_root(tmp_path: Path) -> Path:
     """Isolated data directory with expected layout."""
     for sub in (
-        "manuscripts/pages",
-        "manuscripts/export",
+    "manuscripts/pages",
+    "manuscripts/pages_processed",
+    "manuscripts/export",
         "transcriptions/pages",
         "annotations/pages",
         "manuscripts/share",

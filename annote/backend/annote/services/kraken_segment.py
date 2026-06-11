@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import secrets
+import sys
 from importlib import resources
 from pathlib import Path
 
@@ -10,11 +11,20 @@ from PIL import Image
 
 from annote.schemas.annotation import PageAnnotation, Segment
 from annote.services.annotation_store import load_annotation, save_annotation
-from annote.services.page_catalogue import resolve_page_image
+from annote.services.page_image import load_working_page_rgb
 from annote.services.processing.polygon import merge_close_polygon_points
+from annote.services.segment_refinement import refine_kraken_segments
 from annote.services.text_lines import split_text_lines
 
 _model = None
+
+
+def _kraken_install_hint(cause: ImportError) -> str:
+    return (
+        f"Kraken is not available in this Python ({sys.executable}): {cause}. "
+        "Stop the server, then from annote/backend run: "
+        "source .venv/bin/activate && pip install -e '.[kraken]' && annote"
+    )
 
 
 def _load_model():
@@ -24,9 +34,7 @@ def _load_model():
     try:
         from kraken.lib.vgsl import TorchVGSLModel
     except ImportError as e:
-        raise RuntimeError(
-            "Kraken is required for auto-segmentation. Install with: pip install 'annote[kraken]'"
-        ) from e
+        raise RuntimeError(_kraken_install_hint(e)) from e
     model_path = resources.files("kraken").joinpath("blla.mlmodel")
     _model = TorchVGSLModel.load_model(str(model_path))
     return _model
@@ -66,13 +74,12 @@ def segment_image(image: Image.Image, *, device: str = "cpu") -> list[Segment]:
     try:
         from kraken.blla import segment
     except ImportError as e:
-        raise RuntimeError(
-            "Kraken is required for auto-segmentation. Install with: pip install 'annote[kraken]'"
-        ) from e
+        raise RuntimeError(_kraken_install_hint(e)) from e
 
     model = _load_model()
     segmented = segment(im=image, device=device, model=model)
-    return kraken_lines_to_segments(segmented.lines)
+    segments = kraken_lines_to_segments(segmented.lines)
+    return refine_kraken_segments(image, segments)
 
 
 def pair_segments_to_transcription(
@@ -98,13 +105,8 @@ def auto_segment_page(
     device: str = "cpu",
 ) -> PageAnnotation:
     """Run Kraken segmentation for a page and persist annotation JSON."""
-    image_path = resolve_page_image(data_root / "manuscripts" / "pages", stem)
-    if image_path is None:
-        raise FileNotFoundError(f"Page not found: {stem}")
-
-    with Image.open(image_path) as img:
-        image = img.convert("RGB")
-        new_segments = segment_image(image, device=device)
+    _, image = load_working_page_rgb(data_root, stem)
+    new_segments = segment_image(image, device=device)
 
     if not new_segments:
         raise RuntimeError("Kraken found no line segments on this page")
@@ -126,5 +128,5 @@ def auto_segment_page(
             text_lines = split_text_lines(raw)
             merged_segments = pair_segments_to_transcription(merged_segments, text_lines)
 
-    annotation = PageAnnotation(segments=merged_segments, export_metadata=existing.export_metadata)
-    return save_annotation(data_root, stem, annotation)
+    updated = existing.model_copy(update={"segments": merged_segments})
+    return save_annotation(data_root, stem, updated)

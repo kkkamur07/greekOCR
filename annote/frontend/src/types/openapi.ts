@@ -124,6 +124,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/pages/{stem}/binarize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Binarize Page
+         * @description Binarize the whole page with Kraken nlbin and use it for display and processing.
+         */
+        post: operations["post_binarize_page_pages__stem__binarize_post"];
+        /**
+         * Delete Binarized Page
+         * @description Revert to the original manuscript image for display and processing.
+         */
+        delete: operations["delete_binarized_page_pages__stem__binarize_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/pages/{stem}/segment": {
         parameters: {
             query?: never;
@@ -263,6 +287,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/pages/{stem}/segments/{segment_id}/ocr": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Segment Ocr
+         * @description Run Calamari OCR on one segment and persist model transcription fields.
+         */
+        post: operations["post_segment_ocr_pages__stem__segments__segment_id__ocr_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/pages/{stem}/ocr/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Page Ocr Stream
+         * @description Stream NDJSON progress while running OCR on every segment on the page.
+         */
+        post: operations["post_page_ocr_stream_pages__stem__ocr_stream_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/pages/{stem}/export": {
         parameters: {
             query?: never;
@@ -389,6 +453,8 @@ export interface components {
              * @default false
              */
             locked: boolean;
+            /** Binarized At */
+            binarized_at?: string | null;
         };
         /** PageListResponse */
         PageListResponse: {
@@ -440,6 +506,18 @@ export interface components {
             paired_text_line_index?: number | null;
             /** Text Override */
             text_override?: string | null;
+            /** Model Transcription */
+            model_transcription?: string | null;
+            /** Model Transcription At */
+            model_transcription_at?: string | null;
+            /**
+             * Source
+             * @default manual
+             * @enum {string}
+             */
+            source: "manual" | "kraken";
+            /** Kraken Ceiling */
+            kraken_ceiling?: number[][] | null;
         };
         /** TextLineOut */
         TextLineOut: {
@@ -699,6 +777,68 @@ export interface operations {
             };
         };
     };
+    post_binarize_page_pages__stem__binarize_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                stem: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageAnnotation"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_binarized_page_pages__stem__binarize_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                stem: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageAnnotation"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     post_auto_segment_pages__stem__segment_post: {
         parameters: {
             query?: never;
@@ -928,6 +1068,69 @@ export interface operations {
             path: {
                 stem: string;
                 segment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_segment_ocr_pages__stem__segments__segment_id__ocr_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                stem: string;
+                segment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageAnnotation"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_page_ocr_stream_pages__stem__ocr_stream_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                stem: string;
             };
             cookie?: never;
         };
