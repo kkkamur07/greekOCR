@@ -11,26 +11,25 @@
 | Metric | Count |
 |--------|------:|
 | Total issues | 29 |
-| Done | 25 |
-| Ready (AFK) | 2 |
+| Done | 26 |
+| Ready (AFK) | 1 |
 | Ready (HITL) | 1 |
-| Backlog | 1 |
+| Backlog | 0 |
 | In progress | 0 |
-| Review | 0 |
+| Review | 1 |
 
 ## Parallel lanes (ready now)
 
 | Lane | Issues | Status |
 |------|--------|--------|
-| **1** | [015](015-frontend-transcription-editor.md) (AFK) | Ready |
-| **2** | [026](026-transcription-pdf-artifact.md) (AFK) | Ready |
+| **1** | [027](027-remove-root-app-duplicates.md) (AFK) | Ready |
 
 ## Mermaid
 
 ```mermaid
 flowchart TD
   I015["015 frontend-transcription-editor"]
-  I026["026 transcription-pdf-artifact"]
+  I026["026 transcription-pdf-artifact ✓"]
   I027["027 remove-root-app-duplicates"]
   I028["028 ocr-prediction-execution-design HITL"]
   I000["000 platform-foundation ✓"]

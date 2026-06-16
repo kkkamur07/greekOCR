@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent } from 'react';
+import { useEffect, useState, type ChangeEvent, type MouseEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Alert, Button, Card, Input, Space, Spin, Typography } from 'antd';
 import { ArrowLeftOutlined } from '@ant-design/icons';
@@ -13,6 +13,7 @@ import {
   type LinesReplaceRequest,
   type LayoutPoint,
   type PartLayoutResponse,
+  type TranscriptionLayerResponse,
 } from '../api/client';
 import { ApiError } from '../api/errors';
 import { AppLayout } from '../components/AppLayout';
@@ -53,6 +54,7 @@ export function PageEditorPlaceholderPage() {
   const [error, setError] = useState<string | null>(null);
   const [layoutError, setLayoutError] = useState<string | null>(null);
   const [lineError, setLineError] = useState<string | null>(null);
+  const [editorMode, setEditorMode] = useState<'layout' | 'transcription'>('layout');
   const [drawMode, setDrawMode] = useState<'none' | 'rectangle' | 'polygon'>('none');
   const [draftStart, setDraftStart] = useState<LayoutPoint | null>(null);
   const [draftPolygon, setDraftPolygon] = useState<LinePoint[]>([]);
@@ -64,6 +66,10 @@ export function PageEditorPlaceholderPage() {
   } | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
+  const [transcriptionLayers, setTranscriptionLayers] = useState<TranscriptionLayerResponse[]>([]);
+  const [selectedTranscriptionLayerId, setSelectedTranscriptionLayerId] = useState<string | null>(null);
+  const [transcriptionSaveMessage, setTranscriptionSaveMessage] = useState<string | null>(null);
+  const [copyMessage, setCopyMessage] = useState<string | null>(null);
   const [groundTruthTranscriptionId, setGroundTruthTranscriptionId] = useState<string | null>(null);
   const [pageTranscriptionText, setPageTranscriptionText] = useState('');
   const [approvedTextDraft, setApprovedTextDraft] = useState('');
@@ -93,6 +99,11 @@ export function PageEditorPlaceholderPage() {
     setPart(null);
     setLayout({ blocks: [], lines: [] });
     setLines([]);
+    setEditorMode('layout');
+    setTranscriptionLayers([]);
+    setSelectedTranscriptionLayerId(null);
+    setTranscriptionSaveMessage(null);
+    setCopyMessage(null);
     setGroundTruthTranscriptionId(null);
     setTextLines([]);
     setApprovedTextDraft('');
@@ -137,7 +148,9 @@ export function PageEditorPlaceholderPage() {
         try {
           const layers = await api.listTranscriptions(projectId, documentId);
           const groundTruth = layers.find((layer) => layer.kind === 'ground_truth');
+          setTranscriptionLayers(layers);
           setGroundTruthTranscriptionId(groundTruth?.id ?? null);
+          setSelectedTranscriptionLayerId(groundTruth?.id ?? layers[0]?.id ?? null);
           const pairing = await api.getPagePairing(projectId, documentId, partId);
           setTextLines(pairing.text_lines);
           setPairingProgress(pairing.pairing_progress);
@@ -182,6 +195,23 @@ export function PageEditorPlaceholderPage() {
       )?.text ?? null
     );
   }
+
+  function lineTextForLayer(line: LineResponse, transcriptionLayerId: string | null): string {
+    if (!transcriptionLayerId) return '';
+    return (
+      line.line_transcriptions.find(
+        (transcription) => transcription.transcription_id === transcriptionLayerId,
+      )?.text ?? ''
+    );
+  }
+
+  const selectedTranscriptionLayer =
+    selectedTranscriptionLayerId === null
+      ? null
+      : transcriptionLayers.find((layer) => layer.id === selectedTranscriptionLayerId) ?? null;
+
+  const selectedSegment =
+    selectedSegmentId === null ? null : lines.find((line) => line.id === selectedSegmentId) ?? null;
 
   function upsertLineRequest(line: LineResponse, order: number): LineUpsertRequest {
     const text = approvedText(line);
@@ -404,6 +434,72 @@ export function PageEditorPlaceholderPage() {
     }
   }
 
+  function selectTranscriptionLayer(event: ChangeEvent<HTMLSelectElement>) {
+    const nextLayerId = event.target.value;
+    setSelectedTranscriptionLayerId(nextLayerId);
+    setTranscriptionSaveMessage(null);
+    setCopyMessage(null);
+    setPairingError(null);
+    if (selectedSegment) {
+      setApprovedTextDraft(lineTextForLayer(selectedSegment, nextLayerId));
+    }
+  }
+
+  async function saveGroundTruthText() {
+    if (!projectId || !documentId || !partId || !selectedSegmentId) return;
+    if (!groundTruthTranscriptionId || selectedTranscriptionLayer?.kind !== 'ground_truth') {
+      setPairingError('Only Ground truth can be edited.');
+      return;
+    }
+    try {
+      const updated = await api.updateGroundTruthLineText(
+        projectId,
+        documentId,
+        groundTruthTranscriptionId,
+        selectedSegmentId,
+        { text: approvedTextDraft },
+      );
+      setLines(withLocalGroundTruth(selectedSegmentId, updated.text));
+      const pairing = await api.getPagePairing(projectId, documentId, partId);
+      setTextLines(pairing.text_lines);
+      setPairingProgress(pairing.pairing_progress);
+      setPairingError(null);
+      setTranscriptionSaveMessage('Ground truth text saved');
+    } catch (err) {
+      setTranscriptionSaveMessage(null);
+      setPairingError(err instanceof Error ? err.message : 'Failed to save Ground truth text.');
+    }
+  }
+
+  async function copySelectedLayerToGroundTruth(lineIds: string[] | null) {
+    if (!projectId || !documentId || !partId || !selectedTranscriptionLayerId) return;
+    if (selectedTranscriptionLayer?.kind !== 'model') {
+      setPairingError('Choose a model layer before copying to Ground truth.');
+      return;
+    }
+    try {
+      const result = await api.copyToGroundTruth(projectId, documentId, selectedTranscriptionLayerId, {
+        line_ids: lineIds,
+      });
+      const [reloadedLines, pairing] = await Promise.all([
+        api.listPartLines(projectId, documentId, partId),
+        api.getPagePairing(projectId, documentId, partId),
+      ]);
+      setLines(reloadedLines);
+      setTextLines(pairing.text_lines);
+      setPairingProgress(pairing.pairing_progress);
+      setPairingError(null);
+      setTranscriptionSaveMessage(null);
+      const copiedCount = result.copied_line_ids.length;
+      setCopyMessage(
+        `Copied ${copiedCount} ${copiedCount === 1 ? 'Segment' : 'Segments'} to Ground truth`,
+      );
+    } catch (err) {
+      setCopyMessage(null);
+      setPairingError(err instanceof Error ? err.message : 'Failed to copy to Ground truth.');
+    }
+  }
+
   async function updateReviewStatus(reviewed: boolean) {
     if (!projectId || !documentId || !partId) return;
     try {
@@ -471,23 +567,39 @@ export function PageEditorPlaceholderPage() {
               {document.name} · Page {partIndex}
             </Typography.Title>
             <Typography.Title level={5} style={{ color: '#f7f2e8', margin: 0 }}>
-              Layout edit
+              {editorMode === 'layout' ? 'Layout edit' : 'Transcription edit'}
             </Typography.Title>
             <Typography.Text style={{ color: '#c5ccd6' }}>
-              Correct Segment baselines and block geometry without entering transcription mode.
+              {editorMode === 'layout'
+                ? 'Correct Segment baselines and block geometry without entering transcription mode.'
+                : 'Edit the Ground truth transcription while model layers stay read-only.'}
             </Typography.Text>
           </Space>
 
           <Space wrap>
             <Button
+              type={editorMode === 'layout' ? 'primary' : 'default'}
+              onClick={() => setEditorMode('layout')}
+            >
+              Layout edit
+            </Button>
+            <Button
+              type={editorMode === 'transcription' ? 'primary' : 'default'}
+              onClick={() => setEditorMode('transcription')}
+            >
+              Transcription edit
+            </Button>
+            <Button
               type={drawMode === 'rectangle' ? 'primary' : 'default'}
               onClick={() => pickDrawMode('rectangle')}
+              disabled={editorMode !== 'layout'}
             >
               Rectangle segment
             </Button>
             <Button
               type={drawMode === 'polygon' ? 'primary' : 'default'}
               onClick={() => pickDrawMode('polygon')}
+              disabled={editorMode !== 'layout'}
             >
               Polygon segment
             </Button>
@@ -496,10 +608,17 @@ export function PageEditorPlaceholderPage() {
             </Typography.Text>
             {selectedSegmentId && (
               <>
-                <Button onClick={() => void moveSelectedSegmentRight()}>
+                <Button
+                  disabled={editorMode !== 'layout'}
+                  onClick={() => void moveSelectedSegmentRight()}
+                >
                   Move segment right
                 </Button>
-                <Button danger onClick={() => void deleteSelectedSegment()}>
+                <Button
+                  danger
+                  disabled={editorMode !== 'layout'}
+                  onClick={() => void deleteSelectedSegment()}
+                >
                   Delete Segment
                 </Button>
               </>
@@ -518,6 +637,10 @@ export function PageEditorPlaceholderPage() {
           </Space>
 
           {saveMessage && <Alert type="success" showIcon message={saveMessage} />}
+          {transcriptionSaveMessage && (
+            <Alert type="success" showIcon message={transcriptionSaveMessage} />
+          )}
+          {copyMessage && <Alert type="success" showIcon message={copyMessage} />}
           {mutationError && <Alert type="error" showIcon message={mutationError} />}
           {pairingError && <Alert type="warning" showIcon message={pairingError} />}
           {reviewError && <Alert type="warning" showIcon message={reviewError} />}
@@ -586,10 +709,82 @@ export function PageEditorPlaceholderPage() {
                 setSelectedSegmentId(lineId);
                 setSelectedLineId(null);
                 setSaveMessage(null);
-                setApprovedTextDraft(selected ? approvedText(selected) ?? '' : '');
+                setTranscriptionSaveMessage(null);
+                setApprovedTextDraft(
+                  selected ? lineTextForLayer(selected, selectedTranscriptionLayerId) : '',
+                );
               }}
             />
           </div>
+
+          {editorMode === 'transcription' && (
+            <Card
+              title="Transcription edit"
+              style={{ background: '#101318', borderColor: '#3b4350' }}
+              styles={{ header: { color: '#f7f2e8' }, body: { display: 'grid', gap: 12 } }}
+            >
+              <label style={{ display: 'grid', gap: 8, color: '#c5ccd6' }}>
+                Transcription layer
+                <select
+                  aria-label="Transcription layer"
+                  value={selectedTranscriptionLayerId ?? ''}
+                  onChange={selectTranscriptionLayer}
+                >
+                  {transcriptionLayers.map((layer) => (
+                    <option key={layer.id} value={layer.id}>
+                      {layer.name}
+                      {layer.kind === 'model' ? ' (read-only)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <Typography.Text style={{ color: '#c5ccd6' }}>
+                {selectedSegmentNumber
+                  ? `Selected Segment ${selectedSegmentNumber}`
+                  : 'Select a Segment to view transcription text.'}
+              </Typography.Text>
+              {selectedSegment && selectedTranscriptionLayer?.kind === 'ground_truth' && (
+                <>
+                  <label style={{ display: 'grid', gap: 8, color: '#c5ccd6' }}>
+                    Ground truth text for selected Segment
+                    <Input.TextArea
+                      aria-label="Ground truth text for selected Segment"
+                      value={approvedTextDraft}
+                      rows={3}
+                      onChange={(event) => setApprovedTextDraft(event.target.value)}
+                    />
+                  </label>
+                  <Button type="primary" onClick={() => void saveGroundTruthText()}>
+                    Save Ground truth text
+                  </Button>
+                </>
+              )}
+              {selectedSegment && selectedTranscriptionLayer?.kind === 'model' && (
+                <>
+                  <label style={{ display: 'grid', gap: 8, color: '#c5ccd6' }}>
+                    Read-only text for selected Segment
+                    <Input.TextArea
+                      aria-label="Read-only text for selected Segment"
+                      value={lineTextForLayer(selectedSegment, selectedTranscriptionLayer.id)}
+                      rows={3}
+                      readOnly
+                    />
+                  </label>
+                  <Space wrap>
+                    <Button
+                      type="primary"
+                      onClick={() => void copySelectedLayerToGroundTruth([selectedSegment.id])}
+                    >
+                      Copy selected Segment to Ground truth
+                    </Button>
+                    <Button onClick={() => void copySelectedLayerToGroundTruth(null)}>
+                      Copy whole Page to Ground truth
+                    </Button>
+                  </Space>
+                </>
+              )}
+            </Card>
+          )}
 
           <Card
             title="Pairing"

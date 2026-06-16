@@ -104,6 +104,8 @@ export type PairTextLineRequest = {
 export type LineTranscriptionPatchRequest = {
   text: string;
 };
+export type CopyToGroundTruthRequest = components['schemas']['CopyToGroundTruthRequest'];
+export type CopyToGroundTruthResponse = components['schemas']['CopyToGroundTruthResponse'];
 export type AnnotationHistorySnapshotResponse =
   components['schemas']['AnnotationHistorySnapshotResponse'];
 export type ExportResponse = components['schemas']['ExportResponse'];
@@ -362,6 +364,17 @@ export const api = {
     apiRequest<LineTranscriptionResponse>(
       `/projects/${projectId}/documents/${documentId}/transcriptions/${transcriptionId}/lines/${lineId}`,
       { method: 'PATCH', body },
+    ),
+
+  copyToGroundTruth: (
+    projectId: string,
+    documentId: string,
+    transcriptionId: string,
+    body: CopyToGroundTruthRequest,
+  ) =>
+    apiRequest<CopyToGroundTruthResponse>(
+      `/projects/${projectId}/documents/${documentId}/transcriptions/${transcriptionId}/copy-to-ground-truth`,
+      { method: 'POST', body },
     ),
 
   getPublicDocument: (projectId: string, documentId: string) =>
