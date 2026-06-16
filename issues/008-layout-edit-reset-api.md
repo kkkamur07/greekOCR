@@ -2,7 +2,7 @@
 id: "008"
 title: "layout-edit-reset-api"
 type: AFK
-status: backlog
+status: review
 blocked_by:
   - "007-segment-merge.md"
 parent_prd: "issues/prd.md"

@@ -1,464 +1,274 @@
-"use client";
-
+import { useState, useCallback } from 'react';
+import type { Region, DrawMode, EditingSettings } from '../../types';
+import { Button, Space, Empty, message, Tooltip, Tag } from 'antd';
 import {
-  forwardRef,
-  useCallback,
-  useEffect,
-  useImperativeHandle,
-  useRef,
-  useState,
-} from "react";
-import type { DrawTool, Segment, SegmentKind } from "@/types/api";
-import SegmentOverlay, { MIN_SEGMENT_POINTS } from "./SegmentOverlay";
-import ZoomControls from "./ZoomControls";
-import { imageCoordsFromTransform, usePanZoom } from "./usePanZoom";
-import "./ImageCanvas.css";
-
-export interface ImageCanvasHandle {
-  zoomIn: () => void;
-  zoomOut: () => void;
-  fitPage: () => void;
-  /** Cancel in-progress draw; returns true if something was cancelled. */
-  cancelDraft: () => boolean;
-}
+  PlusOutlined, DeleteOutlined, EditOutlined, BorderOutlined,
+  StopOutlined, UndoOutlined, RedoOutlined, SettingOutlined
+} from '@ant-design/icons';
+import { useKeyboardShortcuts, KEYBOARD_SHORTCUTS } from '../../hooks/useKeyboardShortcuts';
+import ImageViewer from './components/ImageViewer';
+import { SettingsPanel } from './components/SettingsPanel';
+import './ImageCanvas.css';
 
 interface ImageCanvasProps {
-  imageUrl: string;
-  imageWidth: number;
-  imageHeight: number;
-  segments: Segment[];
-  selectedId: string | null;
-  tool: DrawTool;
-  editMode: boolean;
+  imageUrl: string | null;
+  imageDimensions: { width: number; height: number };
+  regions: Region[];
+  selectedRegionId: number | null;
+  onSelectRegion: (id: number | null) => void;
+  onAddRegion: (region: Region) => void;
+  onUpdateRegion: (region: Region) => void;
+  onDeleteRegion: (id: number) => void;
+  onTranscribeRegion: (regionId: number) => void;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
   readOnly?: boolean;
-  showSegments: boolean;
-  showKrakenCeiling?: boolean;
-  selectedVertexIndex: number | null;
-  onSelect: (id: string | null) => void;
-  onSelectVertex: (index: number | null) => void;
-  onAddSegment: (segment: Segment) => void;
-  onUpdateSegment: (segment: Segment) => void;
 }
 
-function nextSegmentNumber(segments: Segment[]): number {
-  if (segments.length === 0) return 1;
-  return Math.max(...segments.map((s) => s.number)) + 1;
-}
+const ImageCanvas: React.FC<ImageCanvasProps> = ({
+  imageUrl,
+  imageDimensions,
+  regions,
+  selectedRegionId,
+  onSelectRegion,
+  onAddRegion,
+  onUpdateRegion,
+  onDeleteRegion,
+  onTranscribeRegion,
+  onUndo,
+  onRedo,
+  canUndo = false,
+  canRedo = false,
+  readOnly = false,
+}) => {
+  const [drawMode, setDrawMode] = useState<DrawMode>('none');
+  const [editMode, setEditMode] = useState<'none' | 'vertices'>('none');
+  const [settingsVisible, setSettingsVisible] = useState(false);
+  const [settings, setSettings] = useState<EditingSettings>({
+    showBoundingBoxes: true,
+    vertexSize: 1.5,
+    moveStep: 5,
+  });
 
-function newId(): string {
-  return `seg-${crypto.randomUUID().slice(0, 8)}`;
-}
+  const handleRegionDrawn = useCallback((region: Region) => {
+    onAddRegion(region);
+    setDrawMode('none');
+  }, [onAddRegion]);
 
-function rectFromDrag(start: [number, number], end: [number, number]): [number, number][] {
-  const x1 = Math.min(start[0], end[0]);
-  const y1 = Math.min(start[1], end[1]);
-  const x2 = Math.max(start[0], end[0]);
-  const y2 = Math.max(start[1], end[1]);
-  return [
-    [x1, y1],
-    [x2, y1],
-    [x2, y2],
-    [x1, y2],
-  ];
-}
+  const handleRegionUpdated = useCallback((region: Region) => {
+    onUpdateRegion(region);
+  }, [onUpdateRegion]);
 
-const ImageCanvas = forwardRef<ImageCanvasHandle, ImageCanvasProps>(function ImageCanvas(
-  {
-    imageUrl,
-    imageWidth,
-    imageHeight,
-    segments,
-    selectedId,
-    tool,
-    editMode,
-    readOnly = false,
-    showSegments,
-    showKrakenCeiling = false,
-    selectedVertexIndex,
-    onSelect,
-    onSelectVertex,
-    onAddSegment,
-    onUpdateSegment,
-  },
-  ref,
-) {
-  const [draftPoints, setDraftPoints] = useState<[number, number][]>([]);
-  const [rectPreview, setRectPreview] = useState<[number, number][]>([]);
-  const [spaceHeld, setSpaceHeld] = useState(false);
-  const [isPanning, setIsPanning] = useState(false);
-
-  const panMovedRef = useRef(false);
-  const suppressClickRef = useRef(false);
-  const rectStartRef = useRef<[number, number] | null>(null);
-  const drawingRectRef = useRef(false);
-  const polygonPointerRef = useRef<{ x: number; y: number } | null>(null);
-  const polygonDragRef = useRef(false);
-  const draftPointsRef = useRef(draftPoints);
-  draftPointsRef.current = draftPoints;
-
-  const DRAG_THRESHOLD = 5;
-
-  const cancelDraft = useCallback(() => {
-    if (drawingRectRef.current || rectStartRef.current) {
-      setRectPreview([]);
-      rectStartRef.current = null;
-      drawingRectRef.current = false;
-      return true;
+  const handleDeleteSelected = useCallback(() => {
+    if (selectedRegionId !== null) {
+      onDeleteRegion(selectedRegionId);
+      message.success('Region deleted');
     }
-    if (draftPointsRef.current.length > 0) {
-      setDraftPoints((prev) => prev.slice(0, -1));
-      return true;
+  }, [selectedRegionId, onDeleteRegion]);
+
+  const toggleDrawMode = useCallback((mode: DrawMode) => {
+    if (drawMode === mode) {
+      setDrawMode('none');
+    } else {
+      setDrawMode(mode);
+      setEditMode('none');
     }
-    return false;
+  }, [drawMode]);
+
+  const toggleEditMode = useCallback(() => {
+    if (editMode === 'vertices') {
+      setEditMode('none');
+    } else {
+      setEditMode('vertices');
+      setDrawMode('none');
+    }
+  }, [editMode]);
+
+  const cancelMode = useCallback(() => {
+    setDrawMode('none');
+    setEditMode('none');
   }, []);
 
-  const {
-    containerRef,
-    transform,
-    fitPage,
-    centerPage,
-    zoomIn,
-    zoomOut,
-    handleWheel,
-    startPan,
-    movePan,
-    endPan,
-  } = usePanZoom(imageWidth, imageHeight);
+  // Arrow key movement handlers
+  const moveRegion = useCallback((dx: number, dy: number) => {
+    if (selectedRegionId === null) {
+      message.warning('Please select a region first');
+      return;
+    }
 
-  const centeredRef = useRef(false);
+    const region = regions.find(r => r.id === selectedRegionId);
+    if (!region) return;
 
-  useImperativeHandle(ref, () => ({ zoomIn, zoomOut, fitPage, cancelDraft }), [
-    zoomIn,
-    zoomOut,
-    fitPage,
-    cancelDraft,
-  ]);
+    const newBoundary = region.boundary.map(([x, y]) => [x + dx, y + dy]);
+    const newBbox: [number, number, number, number] = [
+      region.bbox[0] + dx,
+      region.bbox[1] + dy,
+      region.bbox[2] + dx,
+      region.bbox[3] + dy,
+    ];
 
-  useEffect(() => {
-    centeredRef.current = false;
-  }, [imageWidth, imageHeight]);
-
-  useEffect(() => {
-    if (centeredRef.current) return;
-    const el = containerRef.current;
-    if (!el || imageWidth <= 0 || imageHeight <= 0) return;
-    centerPage();
-    centeredRef.current = true;
-  }, [centerPage, containerRef, imageWidth, imageHeight]);
-
-  const imageCoords = useCallback(
-    (clientX: number, clientY: number) => {
-      const container = containerRef.current;
-      if (!container) return null;
-      return imageCoordsFromTransform(container, clientX, clientY, transform);
-    },
-    [containerRef, transform],
-  );
-
-  const finishSegment = useCallback(
-    (kind: SegmentKind, points: [number, number][]) => {
-      if (readOnly || points.length < 4) return;
-      suppressClickRef.current = true;
-      window.setTimeout(() => {
-        suppressClickRef.current = false;
-      }, 0);
-      onAddSegment({
-        id: newId(),
-        number: nextSegmentNumber(segments),
-        kind,
-        points,
-        paired_text_line_index: null,
-        source: "manual",
-        kraken_ceiling: null,
-      });
-      setDraftPoints([]);
-      setRectPreview([]);
-      rectStartRef.current = null;
-      drawingRectRef.current = false;
-    },
-    [onAddSegment, readOnly, segments],
-  );
-
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) return;
-
-      if (e.code === "Space" && !e.repeat) {
-        e.preventDefault();
-        setSpaceHeld(true);
-        return;
-      }
-      if (e.key === "Enter" && tool === "polygon" && draftPoints.length >= 4) {
-        e.preventDefault();
-        finishSegment("polygon", draftPoints);
-        return;
-      }
-      if (e.key === "Escape") {
-        setDraftPoints([]);
-        setRectPreview([]);
-        rectStartRef.current = null;
-        drawingRectRef.current = false;
-      }
+    const updatedRegion: Region = {
+      ...region,
+      boundary: newBoundary,
+      bbox: newBbox,
     };
-    const onKeyUp = (e: KeyboardEvent) => {
-      if (e.code === "Space") setSpaceHeld(false);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("keyup", onKeyUp);
-    return () => {
-      window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("keyup", onKeyUp);
-    };
-  }, [tool, draftPoints, finishSegment]);
 
-  const isDrawingTool = tool === "polygon" || tool === "rectangle";
+    onUpdateRegion(updatedRegion);
+  }, [selectedRegionId, regions, onUpdateRegion]);
 
-  const isSegmentHit = (target: EventTarget | null) =>
-    target instanceof Element &&
-    (target.closest("[data-segment-hit]") != null || target.closest("[data-vertex-handle]") != null);
-
-  const canPanWithPointer = useCallback(
-    (button: number) => {
-      if (button === 1 || button === 2) return true;
-      if (button !== 0) return false;
-      if (spaceHeld || tool === "pan" || tool === "select") return true;
-      if (isDrawingTool && spaceHeld) return true;
-      return false;
-    },
-    [spaceHeld, tool, isDrawingTool],
-  );
-
-  const handleStagePointerDownCapture = (e: React.PointerEvent) => {
-    if (isSegmentHit(e.target)) {
-      panMovedRef.current = false;
-      return;
-    }
-
-    if (readOnly) {
-      if (!canPanWithPointer(e.button)) return;
-      panMovedRef.current = false;
-      setIsPanning(true);
-      startPan(e.clientX, e.clientY);
-      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-      e.preventDefault();
-      return;
-    }
-
-    if (tool === "rectangle" && !editMode && !spaceHeld && e.button === 0) {
-      const pt = imageCoords(e.clientX, e.clientY);
-      if (!pt) return;
-      rectStartRef.current = pt;
-      drawingRectRef.current = true;
-      setRectPreview(rectFromDrag(pt, pt));
-      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-      e.preventDefault();
-      return;
-    }
-
-    if (tool === "polygon" && !editMode && !spaceHeld && e.button === 0) {
-      polygonPointerRef.current = { x: e.clientX, y: e.clientY };
-      polygonDragRef.current = false;
-      panMovedRef.current = false;
-      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-      e.preventDefault();
-      return;
-    }
-
-    if (!canPanWithPointer(e.button)) return;
-    if (tool === "rectangle" && !spaceHeld && e.button === 0) return;
-
-    panMovedRef.current = false;
-    setIsPanning(true);
-    startPan(e.clientX, e.clientY);
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    e.preventDefault();
-  };
-
-  const handleStagePointerMove = (e: React.PointerEvent) => {
-    if (tool === "rectangle" && drawingRectRef.current && rectStartRef.current) {
-      const pt = imageCoords(e.clientX, e.clientY);
-      if (!pt) return;
-      setRectPreview(rectFromDrag(rectStartRef.current, pt));
-      return;
-    }
-
-    if (tool === "polygon" && polygonPointerRef.current && !spaceHeld) {
-      const start = polygonPointerRef.current;
-      const dx = e.clientX - start.x;
-      const dy = e.clientY - start.y;
-      if (!polygonDragRef.current && Math.hypot(dx, dy) > DRAG_THRESHOLD) {
-        polygonDragRef.current = true;
-        setIsPanning(true);
-        startPan(start.x, start.y);
-        movePan(e.clientX, e.clientY);
-      }
-    }
-
-    if (movePan(e.clientX, e.clientY)) {
-      panMovedRef.current = true;
-    }
-  };
-
-  const handleStagePointerUp = (e: React.PointerEvent) => {
-    if (tool === "rectangle" && drawingRectRef.current && rectStartRef.current) {
-      const pt = imageCoords(e.clientX, e.clientY);
-      if (pt) {
-        const points = rectFromDrag(rectStartRef.current, pt);
-        const w = Math.abs(points[2][0] - points[0][0]);
-        const h = Math.abs(points[2][1] - points[0][1]);
-        if (w > 8 && h > 8) {
-          finishSegment("rectangle", points);
-        } else {
-          setRectPreview([]);
-          rectStartRef.current = null;
-          drawingRectRef.current = false;
-        }
-      }
-    }
-
-    if (tool === "polygon" && polygonPointerRef.current && !spaceHeld && !polygonDragRef.current) {
-      const pt = imageCoords(e.clientX, e.clientY);
-      if (pt) {
-        setDraftPoints((prev) => [...prev, pt]);
-      }
-    }
-
-    polygonPointerRef.current = null;
-    polygonDragRef.current = false;
-    setIsPanning(false);
-    endPan();
-    try {
-      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-    } catch {
-      /* capture may already be released */
-    }
-  };
-
-  const handleLayerClick = (e: React.MouseEvent) => {
-    if (
-      suppressClickRef.current ||
-      panMovedRef.current ||
-      spaceHeld ||
-      tool === "pan" ||
-      isSegmentHit(e.target)
-    ) {
-      return;
-    }
-
-    if (editMode && !isSegmentHit(e.target)) {
-      onSelectVertex(null);
-      return;
-    }
-
-    if (tool === "select" && !editMode) {
-      onSelect(null);
-    }
-  };
-
-  const handleLayerDoubleClick = () => {
-    if (panMovedRef.current) return;
-    if (tool === "polygon" && draftPoints.length >= 4) {
-      finishSegment("polygon", draftPoints);
-    }
-  };
-
-  const overlayDraft = rectPreview.length > 0 ? rectPreview : draftPoints;
-  const displayWidth = imageWidth * transform.scale;
-  const displayHeight = imageHeight * transform.scale;
-  const stageClass = [
-    "image-canvas-stage",
-    isPanning ? "is-panning" : "",
-    tool === "rectangle" && !spaceHeld ? "is-drawing" : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+  // Keyboard shortcuts
+  useKeyboardShortcuts({
+    onDrawBox: readOnly ? undefined : () => imageUrl && toggleDrawMode('box'),
+    onDrawPolygon: readOnly ? undefined : () => imageUrl && toggleDrawMode('polygon'),
+    onEditVertices: readOnly ? undefined : () => imageUrl && regions.length > 0 && toggleEditMode(),
+    onDelete: readOnly ? undefined : handleDeleteSelected,
+    onEscape: readOnly ? undefined : cancelMode,
+    onUndo: readOnly ? undefined : onUndo,
+    onRedo: readOnly ? undefined : onRedo,
+    onMoveUp: readOnly ? undefined : () => moveRegion(0, -settings.moveStep),
+    onMoveDown: readOnly ? undefined : () => moveRegion(0, settings.moveStep),
+    onMoveLeft: readOnly ? undefined : () => moveRegion(-settings.moveStep, 0),
+    onMoveRight: readOnly ? undefined : () => moveRegion(settings.moveStep, 0),
+  });
 
   return (
-    <div className="image-canvas-root">
-      <div
-        ref={containerRef}
-        className={stageClass}
-        onWheel={handleWheel}
-        onPointerDownCapture={handleStagePointerDownCapture}
-        onPointerMove={handleStagePointerMove}
-        onPointerUp={handleStagePointerUp}
-        onPointerCancel={handleStagePointerUp}
-      >
-        <div
-          className="image-canvas-layer"
-          style={{
-            width: displayWidth,
-            height: displayHeight,
-            transform: `translate(${transform.x}px, ${transform.y}px)`,
-          }}
-          onClick={handleLayerClick}
-          onDoubleClick={handleLayerDoubleClick}
-        >
-          <div className="image-page-layer">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={imageUrl}
-              alt="Manuscript page"
-              width={imageWidth}
-              height={imageHeight}
-              draggable={false}
-            />
-            <SegmentOverlay
-              imageWidth={imageWidth}
-              imageHeight={imageHeight}
-              segments={segments}
-              selectedId={selectedId}
-              draftPoints={overlayDraft}
-              editMode={editMode}
-              visible={showSegments}
-              showKrakenCeiling={showKrakenCeiling}
-              zoomScale={transform.scale}
-              interactive={!readOnly && !editMode && !(tool === "polygon" && !spaceHeld)}
-              onSelect={(id) => {
-                if (!panMovedRef.current) onSelect(id);
-              }}
-              clientToImage={imageCoords}
-              selectedVertexIndex={selectedVertexIndex}
-              onSelectVertex={onSelectVertex}
-              onVertexDrag={(id, idx, x, y) => {
-                if (readOnly) return;
-                const seg = segments.find((s) => s.id === id);
-                if (!seg) return;
-                const points = seg.points.map((p, i) =>
-                  i === idx ? ([x, y] as [number, number]) : p,
-                );
-                onUpdateSegment({ ...seg, points });
-              }}
-              onInsertVertex={(id, afterIndex, x, y) => {
-                if (readOnly) return;
-                const seg = segments.find((s) => s.id === id);
-                if (!seg) return;
-                const points = [...seg.points];
-                points.splice(afterIndex + 1, 0, [x, y]);
-                onUpdateSegment({ ...seg, points });
-              }}
-              onRemoveVertex={(id, pointIndex) => {
-                if (readOnly) return;
-                const seg = segments.find((s) => s.id === id);
-                if (!seg || seg.points.length <= MIN_SEGMENT_POINTS) return;
-                const points = seg.points.filter((_, i) => i !== pointIndex);
-                onUpdateSegment({ ...seg, points });
-                if (selectedVertexIndex === pointIndex) {
-                  onSelectVertex(null);
-                } else if (selectedVertexIndex != null && selectedVertexIndex > pointIndex) {
-                  onSelectVertex(selectedVertexIndex - 1);
-                }
-              }}
-            />
-          </div>
-        </div>
+    <div className="image-canvas-container">
+      {!readOnly && (
+      <div className="canvas-toolbar">
+        <Space wrap size="middle">
+          {/* Drawing Tools */}
+          <Space.Compact>
+            <Tooltip title={`Draw Box (${KEYBOARD_SHORTCUTS.DRAW_BOX})`}>
+              <Button
+                icon={<BorderOutlined />}
+                onClick={() => toggleDrawMode('box')}
+                type={drawMode === 'box' ? 'primary' : 'default'}
+                disabled={!imageUrl}
+              >
+                Box <Tag color="blue">{KEYBOARD_SHORTCUTS.DRAW_BOX}</Tag>
+              </Button>
+            </Tooltip>
+            <Tooltip title={`Draw Polygon (${KEYBOARD_SHORTCUTS.DRAW_POLYGON})`}>
+              <Button
+                icon={<PlusOutlined />}
+                onClick={() => toggleDrawMode('polygon')}
+                type={drawMode === 'polygon' ? 'primary' : 'default'}
+                disabled={!imageUrl}
+              >
+                Polygon <Tag color="blue">{KEYBOARD_SHORTCUTS.DRAW_POLYGON}</Tag>
+              </Button>
+            </Tooltip>
+          </Space.Compact>
+
+          {/* Edit Tool */}
+          <Tooltip title={`Edit Vertices (${KEYBOARD_SHORTCUTS.EDIT_VERTICES})`}>
+            <Button
+              icon={<EditOutlined />}
+              onClick={toggleEditMode}
+              type={editMode === 'vertices' ? 'primary' : 'default'}
+              disabled={!imageUrl || regions.length === 0}
+            >
+              Edit Vertices <Tag color="blue">{KEYBOARD_SHORTCUTS.EDIT_VERTICES}</Tag>
+            </Button>
+          </Tooltip>
+
+          {/* Cancel Button */}
+          {(drawMode !== 'none' || editMode !== 'none') && (
+            <Tooltip title={KEYBOARD_SHORTCUTS.CANCEL}>
+              <Button
+                icon={<StopOutlined />}
+                onClick={cancelMode}
+                danger
+              >
+                Cancel <Tag color="red">{KEYBOARD_SHORTCUTS.CANCEL}</Tag>
+              </Button>
+            </Tooltip>
+          )}
+
+          {/* Undo/Redo */}
+          <Space.Compact>
+            <Tooltip title={KEYBOARD_SHORTCUTS.UNDO}>
+              <Button
+                icon={<UndoOutlined />}
+                onClick={onUndo}
+                disabled={!canUndo}
+              >
+                Undo
+              </Button>
+            </Tooltip>
+            <Tooltip title={KEYBOARD_SHORTCUTS.REDO}>
+              <Button
+                icon={<RedoOutlined />}
+                onClick={onRedo}
+                disabled={!canRedo}
+              >
+                Redo
+              </Button>
+            </Tooltip>
+          </Space.Compact>
+
+          {/* Delete */}
+          <Tooltip title={KEYBOARD_SHORTCUTS.DELETE}>
+            <Button
+              icon={<DeleteOutlined />}
+              danger
+              onClick={handleDeleteSelected}
+              disabled={selectedRegionId === null}
+            >
+              Delete
+            </Button>
+          </Tooltip>
+
+          {/* Settings Button */}
+          <Tooltip title="Editing Settings">
+            <Button
+              icon={<SettingOutlined />}
+              onClick={() => setSettingsVisible(true)}
+            >
+              Settings
+            </Button>
+          </Tooltip>
+
+          {/* Status */}
+          <span style={{ marginLeft: 8, color: '#666', fontSize: '13px' }}>
+            Regions: <strong>{regions.length}</strong> |
+            Selected: <strong>{selectedRegionId !== null ? `#${selectedRegionId}` : 'None'}</strong>
+          </span>
+        </Space>
+      </div>
+      )}
+
+      <div className="canvas-wrapper">
+        {!imageUrl ? (
+          <Empty description="No image loaded" />
+        ) : (
+          <ImageViewer
+            imageUrl={imageUrl}
+            regions={regions}
+            selectedRegionId={selectedRegionId}
+            onSelectRegion={onSelectRegion}
+            onRegionDrawn={handleRegionDrawn}
+            onRegionUpdated={handleRegionUpdated}
+            onTranscribeRegion={onTranscribeRegion}
+            drawMode={drawMode}
+            editMode={editMode}
+            settings={settings}
+          />
+        )}
       </div>
 
-      <div className="image-canvas-viewport flex items-start justify-end p-3">
-        <ZoomControls zoomLevel={transform.scale} onZoomIn={zoomIn} onZoomOut={zoomOut} onFitPage={fitPage} />
-      </div>
+      {!readOnly && (
+        <SettingsPanel
+          visible={settingsVisible}
+          onClose={() => setSettingsVisible(false)}
+          settings={settings}
+          onSettingsChange={setSettings}
+        />
+      )}
     </div>
   );
-});
+};
 
 export default ImageCanvas;

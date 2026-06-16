@@ -125,9 +125,9 @@ The editor reuses interaction patterns from [eScriptorium](https://github.com/PS
 
 ## What we are building toward
 
-- Curated, shareable corpora of legal and biblical Greek manuscripts  
-- Models that researchers can actually trust on their material  
-- Expert-in-the-loop annotation — compare runs, correct lines, publish read-only views  
+- Curated, shareable corpora of legal and biblical Greek manuscripts
+- Models that researchers can actually trust on their material
+- Expert-in-the-loop annotation — compare runs, correct lines, publish read-only views
 
 Contributors: see [`issues/`](issues/) (`kanban.md`, `dag.md`) for what to work on next.
 
@@ -167,3 +167,7 @@ docker compose up --build -d
 ```
 
 Compose tags images as `annote-backend:$ANNOTE_VERSION` and `annote-frontend:$ANNOTE_VERSION`. Confirm with `curl http://localhost:5050/health` (`version` in the JSON). Full details: [annote/README.md](annote/README.md).
+
+
+### Note :
+Have been using `OTSU` to tighten the segments, but it doesn't seem to generalize -> which is not good but the `kraken` segmentation the default model, generalizes super well but needs minor finetuning`

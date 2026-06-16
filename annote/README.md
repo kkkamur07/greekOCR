@@ -1,6 +1,6 @@
 # annote
 
-AI-assisted transcription platform for manuscript pages. A standalone local tool for segmenting page images (manually or with Kraken auto-segmentation), pairing each segment with its transcription line, and exporting training-ready processed line images and text files.
+AI-assisted transcription platform for manuscript pages. `annote/` is the production app root: the Postgres-backed backend, Vite frontend, and migration infrastructure live here, while the repository-level `model/` workspace remains outside annote.
 
 See `CONTEXT.md` for domain glossary and `issues/prd.md` for requirements.
 
@@ -26,18 +26,18 @@ Missing subdirectories are **created automatically** when the API starts. If cre
 ### Backend virtual environment
 
 ```bash
-cd annote/backend
+cd annote
 python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"            # add ,kraken for auto-segmentation
-cp .env.example .env               # edit ANNOTE_DATA_ROOT / ANNOTE_PORT if needed
+pip install -e "backend[dev]"      # add ,kraken for auto-segmentation support
+cp backend/core/.env.example backend/core/.env
 ```
 
 ### Frontend
 
 ```bash
 cd annote/frontend
-cp .env.local.example .env.local   # NEXT_PUBLIC_API_BASE_URL must match ANNOTE_PORT
+cp .env.local.example .env.local   # VITE_API_BASE_URL defaults to http://localhost:8000
 npm install
 ```
 
@@ -46,12 +46,14 @@ npm install
 ### Terminal 1 — API
 
 ```bash
-cd annote/backend
+cd annote
 source .venv/bin/activate
-annote                             # reads host/port/data root from .env
+docker compose up db -d
+alembic -c infrastructure/alembic.ini upgrade head
+uvicorn backend.core.app:create_app --factory --reload
 ```
 
-Defaults from `.env.example`: `http://127.0.0.1:5050`
+Default API URL: `http://127.0.0.1:8000`
 
 ### Terminal 2 — Frontend
 
@@ -60,11 +62,11 @@ cd annote/frontend
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:5173](http://localhost:5173).
 
 ## Docker (one command)
 
-Ensure ports **3000** and **5050** are free. From `annote/`:
+Ensure ports **5173**, **8000**, and **5433** are free. From `annote/`:
 
 ```bash
 docker compose up --build      # foreground; Ctrl+C stops the stack
@@ -73,17 +75,17 @@ docker compose up --build -d   # detached background
 
 | Service | URL |
 |---------|-----|
-| Frontend | [http://localhost:3000](http://localhost:3000) |
-| API | [http://localhost:5050](http://localhost:5050) |
+| Frontend | [http://localhost:5173](http://localhost:5173) |
+| API | [http://localhost:8000](http://localhost:8000) |
+| Postgres | `localhost:5433` |
 
-`data/` is mounted into the backend container, so pages, annotations, and exports persist on the host.
+Platform media is mounted at `backend/media/`. The existing `data/` folder is not mounted or migrated by the production platform relocation.
 
 Useful after `-d`: `docker compose ps`, `docker compose logs -f`, `docker compose down`.
 
-- `NEXT_PUBLIC_API_BASE_URL` (build arg) — URL the **browser** uses (`http://localhost:5050`)
-- `API_INTERNAL_URL` (runtime env on the frontend service) — URL **server-side** Next.js uses inside Compose (`http://backend:5050`)
+- `VITE_API_BASE_URL` (build/runtime env) — URL the browser uses (`http://localhost:8000`)
 
-Rebuild the frontend image if you change `NEXT_PUBLIC_API_BASE_URL`.
+Rebuild the frontend image if you change `VITE_API_BASE_URL`.
 
 ### Bumping the Docker version
 
@@ -102,7 +104,7 @@ docker compose up --build -d
 3. Verify:
 
 ```bash
-curl -s http://localhost:5050/health | python -m json.tool
+curl -s http://localhost:8000/health | python -m json.tool
 docker images 'annote-*'
 ```
 
@@ -114,29 +116,44 @@ docker images 'annote-*'
 
 | Variable | File | Default | Purpose |
 |----------|------|---------|---------|
-| `ANNOTE_DATA_ROOT` | `backend/.env` | `data` (→ `annote/data`) | Filesystem data root; relative paths resolve from `annote/` |
-| `ANNOTE_HOST` | `backend/.env` | `127.0.0.1` | API bind host |
-| `ANNOTE_PORT` | `backend/.env` | `5050` | API bind port |
-| `ANNOTE_CORS_ORIGINS` | `backend/.env` | `http://localhost:3000` | Allowed browser origins |
-| `ANNOTE_RELOAD` | `backend/.env` | `true` | Uvicorn auto-reload |
-| `NEXT_PUBLIC_API_BASE_URL` | `frontend/.env.local` | `http://localhost:5050` | Frontend → API URL |
+| `DATABASE_URL` | `backend/core/.env` | `postgresql+asyncpg://postgres:dev@localhost:5433/kalamos` | Async platform database URL |
+| `SYNC_DATABASE_URL` | `backend/core/.env` | `postgresql://postgres:dev@localhost:5433/kalamos` | Alembic database URL |
+| `JWT_SECRET` | `backend/core/.env` | development secret | Auth token signing key |
+| `CORS_ORIGINS` | `backend/core/.env` | `http://localhost:3000,http://localhost:5173` | Allowed browser origins |
+| `MEDIA_ROOT` | `backend/core/.env` | `annote/backend/media` | Uploaded document part media |
+| `DEFAULT_SEGMENT_MODEL` | `backend/core/.env` | `kraken-segment-default` | Dev catalog name/ID for default segmentation |
+| `DEFAULT_TRANSCRIBE_MODEL` | `backend/core/.env` | `kraken-transcribe-default` | Dev catalog name/ID for default transcription |
+| `KRAKEN_MODEL_PATH` | `backend/core/.env` | `../model/kraken` | Local directory containing Kraken weights |
+| `VITE_API_BASE_URL` | `frontend/.env.local` | `http://localhost:8000` | Frontend → API URL |
+
+## Inference Catalog
+
+Keep Kraken weights in the repository-level `model/` workspace, not under
+`annote/`. The dev seed records `KRAKEN_MODEL_PATH/segment.mlmodel` and
+`KRAKEN_MODEL_PATH/transcribe.mlmodel` as artifact references and creates
+project-level defaults:
+
+```bash
+cd annote
+alembic -c infrastructure/alembic.ini upgrade head
+PYTHONPATH=. python scripts/seed_dev_inference.py
+```
 
 ## Tests (TDD)
 
 ```bash
-cd annote/backend
+cd annote
 source .venv/bin/activate
-pytest
+pytest backend/tests/platform
 ```
 
 ## OpenAPI
 
 ```bash
-cd annote/backend
 PYTHONPATH=. python scripts/export_openapi.py
 
-cd ../frontend
-npm run generate:openapi
+cd frontend
+npm run codegen:api
 ```
 
 Generated schema types: `frontend/src/types/openapi.ts`. App-facing aliases: `frontend/src/types/api.ts`.

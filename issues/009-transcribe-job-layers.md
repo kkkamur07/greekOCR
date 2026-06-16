@@ -2,7 +2,7 @@
 id: "009"
 title: "transcribe-job-layers"
 type: AFK
-status: backlog
+status: review
 blocked_by:
   - "007-segment-merge.md"
   - "005-inference-catalog-bindings.md"

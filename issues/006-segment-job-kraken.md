@@ -2,7 +2,7 @@
 id: "006"
 title: "segment-job-kraken"
 type: AFK
-status: backlog
+status: review
 blocked_by:
   - "done/003-documents-parts-media.md"
   - "done/004-job-runner.md"

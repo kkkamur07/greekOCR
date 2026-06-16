@@ -1,0 +1,35 @@
+"""MediaStore path safety."""
+
+import uuid
+from pathlib import Path
+
+import pytest
+
+from backend.document.infrastructure.media_store import MediaStore
+
+
+@pytest.fixture
+def store(tmp_path: Path) -> MediaStore:
+    return MediaStore(root=tmp_path)
+
+
+def test_part_image_key_and_roundtrip(store: MediaStore) -> None:
+    part_id = uuid.uuid4()
+    key = store.part_image_key(part_id, suffix="png")
+    store.write(key, b"pixels")
+    assert store.read(key) == b"pixels"
+    assert store.absolute_path(key).is_relative_to(store._root)
+
+
+def test_rejects_traversal_keys(store: MediaStore) -> None:
+    with pytest.raises(ValueError, match="Invalid image key"):
+        store.absolute_path("../outside.png")
+    with pytest.raises(ValueError, match="Invalid image key"):
+        store.absolute_path("parts/../../etc/passwd")
+
+
+def test_resolved_path_stays_under_root(store: MediaStore) -> None:
+    part_id = uuid.uuid4()
+    key = store.part_image_key(part_id, suffix="png")
+    resolved = store.absolute_path(key)
+    assert resolved.is_relative_to(store._root)

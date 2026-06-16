@@ -2,7 +2,7 @@
 id: "007"
 title: "segment-merge"
 type: AFK
-status: backlog
+status: review
 blocked_by:
   - "006-segment-job-kraken.md"
 parent_prd: "issues/prd.md"
