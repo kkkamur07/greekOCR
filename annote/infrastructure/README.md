@@ -1,82 +1,293 @@
-# Infrastructure (annote app root)
+# Annote Infrastructure
 
-Postgres engine, Alembic migrations, and ORM metadata aggregation. **Settings** live in `backend/core/settings/`; this folder is DB + migrations only.
+Database, migrations, and ORM metadata wiring for the production Annote app.
+This folder is intentionally small: domain ORM models live in the backend
+bounded contexts, while `infrastructure/` owns the shared SQLAlchemy base,
+engine/session setup, and Alembic migration environment.
+
+Run infrastructure commands from the `annote/` app root.
+
+## Directory Map
 
 ```text
 infrastructure/
-  db.py              # async engine, session, Base
-  models.py          # imports all context ORM for Alembic metadata
-  alembic.ini
-  alembic/           # env.py reads InfrastructureSettings from backend.core.settings
+  db.py
+    Base                         # shared DeclarativeBase
+    async_engine                 # async SQLAlchemy engine from DATABASE_URL
+    AsyncSessionLocal            # sessionmaker
+    get_db()                     # FastAPI session dependency
+  models.py                      # imports all context ORM models for Alembic
+  alembic.ini                    # Alembic config
+  alembic/
+    env.py                       # reads SYNC_DATABASE_URL from backend settings
+    script.py.mako               # migration template
+    versions/                    # ordered database revisions
 ```
 
-Bounded contexts keep context ORM in `backend/<context>/infrastructure/orm_models.py`.
+Settings live in `backend/core/settings/` and are usually loaded from
+`backend/core/.env`.
 
-## Migrations (by domain)
+## Local Database
 
-Revisions under `infrastructure/alembic/versions/` — one file per bounded context (split for maintainability):
+| Setting | Local value |
+|---------|-------------|
+| Database | `kalamos` |
+| Host from host machine | `localhost` |
+| Host from Compose services | `db` |
+| Host port | `5433` |
+| Container port | `5432` |
+| User | `postgres` |
+| Password | `dev` |
+| Async URL | `postgresql+asyncpg://postgres:dev@localhost:5433/kalamos` |
+| Sync/Alembic URL | `postgresql://postgres:dev@localhost:5433/kalamos` |
 
-| Revision | Domain | Tables |
-|----------|--------|--------|
-| `001_users` | users | `users` |
-| `002_project` | project | `projects`, `project_shared_users` |
-| `003_inference_models` | inference (catalog) | `inference_models` |
-| `004_document_layout` | document (layout) | `documents`, `document_parts`, `blocks`, `lines` |
-| `005_inference_jobs` | inference (jobs) | `model_bindings`, `jobs` |
-| `006_document_transcriptions` | document (text) | `transcriptions`, `line_transcriptions` |
+Start only Postgres:
 
-`006` depends on `005` because `transcriptions.created_by_job_id` references `jobs`.
+```bash
+cd annote
+docker compose up db -d
+docker compose ps
+```
 
-**If you already migrated the old single-file revision** (`e8d4f5814200`), reset dev data:
+Start the full stack:
+
+```bash
+cd annote
+docker compose up --build
+```
+
+Stop the stack:
+
+```bash
+docker compose down
+```
+
+Reset local dev data:
 
 ```bash
 docker compose down
 docker volume rm greekocr_postgres_data
 docker compose up db -d
-alembic -c infrastructure/alembic.ini upgrade head
+PYTHONPATH=. alembic -c infrastructure/alembic.ini upgrade head
 ```
 
-## Database: `kalamos`
+Use reset only for disposable local databases; it deletes the Compose Postgres
+volume.
 
-| Setting | Value (local dev) |
-|---------|-------------------|
-| Host | `localhost` (or `db` in Compose) |
-| Port | `5433` → `5432` |
-| User | `postgres` |
-| Password | **`dev`** (local dev only — change in production) |
-| Database | **`kalamos`** |
+## Migration Commands
 
-Connection URL (host): `postgresql://postgres:dev@localhost:5433/kalamos`
-
-## Verify locally
-
-From the **annote app root** (deps only — repo is **not** installed as a package; `PYTHONPATH=.` is set via pytest config and below):
+Apply all migrations:
 
 ```bash
-docker compose up db -d
-python -m venv .venv && source .venv/bin/activate
-pip install -e "backend[dev]"
-export PYTHONPATH=.   # needed for alembic / uvicorn from the shell
-cp backend/core/.env.example backend/core/.env
-alembic -c infrastructure/alembic.ini upgrade head
-pytest backend/tests/platform -v
-docker compose up --build   # optional full stack
+cd annote
+PYTHONPATH=. alembic -c infrastructure/alembic.ini upgrade head
 ```
 
-Env and settings: `backend/core/.env` + [backend/core/settings/](../backend/core/settings/).
+Show current database revision:
 
-## Inference model catalog
-
-Issue 005 keeps model weights outside the production app tree. For local development,
-store Kraken artifacts under the repository-level `model/` workspace, for example:
-
-```text
-../model/kraken/
-  segment.mlmodel
-  transcribe.mlmodel
+```bash
+PYTHONPATH=. alembic -c infrastructure/alembic.ini current
 ```
 
-`backend/core/.env` controls the names and base path registered by the dev seed:
+Show known heads:
+
+```bash
+PYTHONPATH=. alembic -c infrastructure/alembic.ini heads --verbose
+```
+
+Show migration history:
+
+```bash
+PYTHONPATH=. alembic -c infrastructure/alembic.ini history --verbose
+```
+
+Create a new migration:
+
+```bash
+PYTHONPATH=. alembic -c infrastructure/alembic.ini revision -m "describe change"
+```
+
+Autogenerate a migration after changing ORM models:
+
+```bash
+PYTHONPATH=. alembic -c infrastructure/alembic.ini revision --autogenerate -m "describe change"
+```
+
+Always inspect autogenerated migrations before committing them. Confirm enum
+changes, JSONB columns, foreign-key `ondelete` behavior, indexes, and downgrade
+steps.
+
+Downgrade one revision locally:
+
+```bash
+PYTHONPATH=. alembic -c infrastructure/alembic.ini downgrade -1
+```
+
+## Migration History
+
+| Revision | Domain | Main changes |
+|----------|--------|--------------|
+| `001_users` | users | `users` |
+| `002_project` | project | `projects`, `project_shared_users` |
+| `003_inference_models` | inference catalog | `inference_models` and `inference_task` enum |
+| `004_document_layout` | document layout | `documents`, `document_parts`, `blocks`, `lines`, document workflow enum |
+| `005_inference_jobs` | inference jobs | `model_bindings`, `jobs`, job status/type enums |
+| `006_document_transcriptions` | document text | `transcriptions`, `line_transcriptions`, transcription kind enum |
+| `007_doc_line_tx` | document line model | reviewed parts, line geometry kind/source, points/source metadata/Kraken ceiling/manual flags |
+| `008_page_tx_lines` | Pairing helper | `page_transcription_lines` |
+| `009_annotation_history` | annotation history | `annotation_history_snapshots` |
+
+`006` depends on jobs because `transcriptions.created_by_job_id` can reference
+`jobs`. `008` and `009` build on the merged Page/Line transcription model.
+
+## Database Structure
+
+### Users and Projects
+
+| Table | Purpose | Important columns |
+|-------|---------|-------------------|
+| `users` | Login identity | `email` unique, `username` unique, `hashed_password`, `created_at` |
+| `projects` | Workspace and sharing root | `slug` unique, `owner_id`, `guidelines`, timestamps |
+| `project_shared_users` | Many-to-many project sharing | composite PK `project_id`, `user_id` |
+
+Relationships:
+
+- A User may own many Projects.
+- A Project may be shared with many Users.
+- Project membership gates most Document and inference operations.
+
+### Documents, Parts, Layout, and Review
+
+| Table | Purpose | Important columns |
+|-------|---------|-------------------|
+| `documents` | Manuscript/work inside a Project | `project_id`, `name`, `workflow` (`draft`, `published`, `archived`) |
+| `document_parts` | One Page image within a Document | `document_id`, `order`, `image_key`, `width`, `height`, `reviewed` |
+| `blocks` | Layout region on a Page | `part_id`, JSONB `box`, `manual_geometry`, `order` |
+| `lines` | Segment/Line geometry on a Page | `part_id`, optional `block_id`, JSONB `baseline`, `mask`, `points`, `kind`, `source`, `source_metadata`, `kraken_ceiling`, `manual_geometry`, `order` |
+
+Relationships:
+
+- A Project has many Documents.
+- A Document has many Document parts.
+- A Document part has Blocks and Lines.
+- Deleting a Project cascades to Documents; deleting a Document cascades to its Parts; deleting a Part cascades to layout Lines/Blocks.
+
+Special fields:
+
+- `document_parts.reviewed` is Human review state and is independent from Pairing progress.
+- `document_parts.image_key` points to a file under `MEDIA_ROOT`; image bytes are not stored in Postgres.
+- `lines.kind` is `polygon` or `rectangle`.
+- `lines.source` is `manual`, `kraken`, or `model`.
+- `lines.kraken_ceiling` preserves model-suggested boundaries when relevant.
+
+### Transcriptions and Pairing
+
+| Table | Purpose | Important columns |
+|-------|---------|-------------------|
+| `transcriptions` | Document-level text layer | `document_id`, `name`, `kind` (`ground_truth`, `model`), optional `created_by_job_id` |
+| `line_transcriptions` | Text for one Line in one Transcription layer | `line_id`, `transcription_id`, `text`, optional `confidence` |
+| `page_transcription_lines` | Candidate Text lines imported for Pairing | `part_id`, `order`, `text`, optional unique `paired_line_id` |
+
+Constraints:
+
+- `line_transcriptions` has a unique `(line_id, transcription_id)` pair.
+- `transcriptions` has a partial unique index allowing one Ground truth layer per Document.
+- `page_transcription_lines` has unique `(part_id, order)`.
+- `page_transcription_lines.paired_line_id` is unique so a candidate Text line pairs to at most one Line.
+
+Domain rules:
+
+- Page transcription candidates are helper text, not canonical Ground truth.
+- Approved text lives in `line_transcriptions` on the Ground truth layer.
+- Pairing progress is computed from Lines with non-empty Ground truth text over total Lines.
+
+### Inference Catalog and Jobs
+
+| Table | Purpose | Important columns |
+|-------|---------|-------------------|
+| `inference_models` | Catalog entry for a model artifact | `name` unique, `provider`, `task`, `artifact_ref`, JSONB `default_params` |
+| `model_bindings` | Scope-specific model selection | `task`, `model_id`, optional `project_id`, `document_id`, `document_part_id`, JSONB `overrides` |
+| `jobs` | Async inference/work queue | `type`, `status`, JSONB `payload`, JSONB `result`, `error`, optional model/binding/user/document/part refs, timestamps |
+
+Enums:
+
+- `inference_task`: `segment`, `transcribe`, `binarize`
+- `binding_task`: `segment`, `transcribe`, `binarize`
+- `job_type`: `segment`, `transcribe`, `binarize`, `pipeline`
+- `job_status`: `pending`, `running`, `done`, `failed`
+
+Special behavior:
+
+- Model weights stay in the repository-level `model/` workspace or another external path.
+- `artifact_ref` records where the model is; it does not copy model bytes into Postgres.
+- The worker loop starts from FastAPI lifespan in `backend/core/app.py`.
+
+### Annotation History
+
+| Table | Purpose | Important columns |
+|-------|---------|-------------------|
+| `annotation_history_snapshots` | Compact restorable Page annotation states | `part_id`, JSONB `state`, `line_count`, `paired_line_count`, `created_at` |
+
+The snapshot `state` stores enough Line geometry and approved text to restore a
+Page. It intentionally excludes image bytes, exported artifacts, and raw
+edit-by-edit event logs. Retention is bounded in the application service.
+
+## ORM Ownership
+
+| Context | ORM file |
+|---------|----------|
+| users | `backend/users/infrastructure/orm_models.py` |
+| project | `backend/project/infrastructure/orm_models.py` |
+| document | `backend/document/infrastructure/orm_models.py` |
+| inference | `backend/inference/infrastructure/orm_models.py` |
+| annotation | `backend/annotation/infrastructure/orm_models.py` |
+
+When adding a new context model, import it from `infrastructure/models.py`; this
+is what Alembic uses as metadata.
+
+## Useful Database Inspection
+
+Open psql in the running DB container:
+
+```bash
+docker compose exec db psql -U postgres -d kalamos
+```
+
+Common psql commands:
+
+```sql
+\dt
+\d documents
+\d document_parts
+\d lines
+\d transcriptions
+\d line_transcriptions
+\d jobs
+select * from alembic_version;
+```
+
+Health check through the API:
+
+```bash
+curl -s http://localhost:8000/health | python -m json.tool
+```
+
+## Seed Helpers
+
+Create a dev user:
+
+```bash
+cd annote
+PYTHONPATH=. python scripts/seed_dev_user.py
+```
+
+Seed inference catalog defaults:
+
+```bash
+PYTHONPATH=. python scripts/seed_dev_inference.py
+```
+
+Relevant env values:
 
 ```bash
 DEFAULT_SEGMENT_MODEL=kraken-segment-default
@@ -84,15 +295,40 @@ DEFAULT_TRANSCRIBE_MODEL=kraken-transcribe-default
 KRAKEN_MODEL_PATH=../model/kraken
 ```
 
-After `alembic -c infrastructure/alembic.ini upgrade head`, seed the catalog and
-project-level default bindings from the annote app root:
+The seed records artifact references only; it does not download or modify model
+weights.
+
+## Troubleshooting
+
+### Port 5433 Already Allocated
+
+Check what owns the port:
 
 ```bash
-PYTHONPATH=. python scripts/seed_dev_inference.py
+lsof -nP -iTCP:5433 -sTCP:LISTEN
+docker ps --format '{{.ID}} {{.Names}} {{.Ports}}'
 ```
 
-The script upserts two `InferenceModel` rows (`segment`, `transcribe`) and a dev
-project with project-level bindings. It records artifact paths only; it does not
-download, create, or modify model weights. A later smoke-test fixture should use
-`backend/media/fixtures/sample_folio.png` or another checked-in image path once
-segment job tests land.
+If an old Compose DB is running and contains disposable data, stop it or reset
+the volume before starting this stack.
+
+### Alembic Cannot Locate a Revision
+
+Make sure commands run from `annote/`, not the repository root:
+
+```bash
+pwd
+PYTHONPATH=. alembic -c infrastructure/alembic.ini heads --verbose
+```
+
+The repository has had root-level infrastructure in older branches. Running
+Alembic from the wrong directory may point at the wrong migration folder.
+
+### App Imports Fail
+
+Use `PYTHONPATH=.` from `annote/`:
+
+```bash
+cd annote
+PYTHONPATH=. python -c "from backend.core.app import create_app; create_app()"
+```
