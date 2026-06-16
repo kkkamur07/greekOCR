@@ -146,3 +146,5 @@ slurm*
 model/data/
 model/outputs/
 annote/data/
+
+.cursor/
