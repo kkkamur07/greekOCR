@@ -6,7 +6,7 @@
 
 ## Ready (AFK)
 
-- [ ] [remove-root-app-duplicates](027-remove-root-app-duplicates.md)
+_(empty)_
 
 ## Ready (HITL)
 
@@ -18,7 +18,7 @@ _(empty)_
 
 ## Review
 
-_(empty)_
+- [ ] [remove-root-app-duplicates](027-remove-root-app-duplicates.md)
 
 ## Done
 

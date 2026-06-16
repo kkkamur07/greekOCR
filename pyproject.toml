@@ -21,7 +21,7 @@ train = [
 calamari = ["calamari-ocr>=2.0.0"]
 
 [dependency-groups]
-# Kalamos platform API + Postgres + tests (deps only — repo is not installed as a package)
+# Annote platform API + Postgres + tests (deps only — repo is not installed as a package)
 platform = [
     "alembic>=1.14.0",
     "asyncpg>=0.30.0",
@@ -38,6 +38,7 @@ platform = [
     "uvicorn[standard]>=0.32.0",
     "pytest>=8.3.0",
     "pytest-asyncio>=0.24.0",
+    "pypdf>=6.13.2",
 ]
 
 [tool.uv]
@@ -52,5 +53,5 @@ conflicts = [
 [tool.pytest.ini_options]
 pythonpath = ["."]
 asyncio_mode = "auto"
-testpaths = ["tests"]
+testpaths = ["annote/backend/tests/platform"]
 markers = ["integration: requires Postgres"]

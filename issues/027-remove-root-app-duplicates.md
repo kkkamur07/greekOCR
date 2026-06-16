@@ -2,7 +2,7 @@
 id: "027"
 title: "remove-root-app-duplicates"
 type: AFK
-status: backlog
+status: review
 blocked_by:
   - "019-authenticated-platform-shell.md"
   - "023-page-review-status.md"
@@ -22,13 +22,13 @@ Once the merged annote production app provides the platform shell, manual annota
 
 ## Acceptance criteria
 
-- [ ] Duplicate root backend app code is removed or clearly deprecated after equivalent annote behavior passes tests.
-- [ ] Duplicate root frontend app code is removed or clearly deprecated after equivalent annote behavior passes build/tests.
-- [ ] Duplicate root infrastructure app assets are removed or clearly deprecated after annote infrastructure works.
-- [ ] The root model workspace remains in place.
-- [ ] Root local data contents are untouched.
-- [ ] Documentation and commands point to the annote production app root.
-- [ ] Tests/builds pass after cleanup.
+- [x] Duplicate root backend app code is removed or clearly deprecated after equivalent annote behavior passes tests.
+- [x] Duplicate root frontend app code is removed or clearly deprecated after equivalent annote behavior passes build/tests.
+- [x] Duplicate root infrastructure app assets are removed or clearly deprecated after annote infrastructure works.
+- [x] The root model workspace remains in place.
+- [x] Root local data contents are untouched.
+- [x] Documentation and commands point to the annote production app root.
+- [x] Tests/builds pass after cleanup.
 
 ## Blocked by
 

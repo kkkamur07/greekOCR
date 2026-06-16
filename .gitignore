@@ -38,10 +38,6 @@ dataset/
 outputs/
 *.log
 
-backend/uploads
-backend/media
-backend/core/.env
-
 
 # Frontend
 # Logs
@@ -69,7 +65,6 @@ dist-ssr
 *.sln
 *.sw?
 
-frontend/node_modules
 _support_repo/
 # Python-generated files
 __pycache__/
@@ -111,10 +106,6 @@ dataset/
 outputs/
 *.log
 
-backend/uploads
-backend/media
-backend/core/.env
-
 
 # Frontend
 # Logs
@@ -142,7 +133,6 @@ dist-ssr
 *.sln
 *.sw?
 
-frontend/node_modules
 _support_repo/
 
 # Ignore the datasets
