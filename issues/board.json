@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-16T10:57:00Z",
+  "generated_at": "2026-06-16T11:31:53Z",
   "limits": {
     "in_progress": 4,
     "review": 5,
@@ -7,16 +7,16 @@
   },
   "counts": {
     "in_progress": 0,
-    "review": 11
+    "review": 15
   },
   "stats": {
     "total": 29,
     "done": 10,
     "ready_afk": 0,
     "ready_hitl": 0,
-    "backlog": 8,
-    "blocked": 8,
-    "in_review": 11
+    "backlog": 4,
+    "blocked": 4,
+    "in_review": 15
   },
   "dag": {
     "parallel_lanes": [
@@ -104,6 +104,26 @@
             "file": "010-ground-truth-copy-edit-api.md",
             "title": "ground-truth-copy-edit-api",
             "type": "AFK"
+          },
+          {
+            "file": "022-page-transcription-pairing-progress.md",
+            "title": "page-transcription-pairing-progress",
+            "type": "AFK"
+          },
+          {
+            "file": "023-page-review-status.md",
+            "title": "page-review-status",
+            "type": "AFK"
+          },
+          {
+            "file": "024-annotation-history-restore.md",
+            "title": "annotation-history-restore",
+            "type": "AFK"
+          },
+          {
+            "file": "025-export-approved-line-artifacts.md",
+            "title": "export-approved-line-artifacts",
+            "type": "AFK"
           }
         ]
       },
@@ -170,26 +190,6 @@
           {
             "file": "015-frontend-transcription-editor.md",
             "title": "frontend-transcription-editor",
-            "type": "AFK"
-          },
-          {
-            "file": "022-page-transcription-pairing-progress.md",
-            "title": "page-transcription-pairing-progress",
-            "type": "AFK"
-          },
-          {
-            "file": "023-page-review-status.md",
-            "title": "page-review-status",
-            "type": "AFK"
-          },
-          {
-            "file": "024-annotation-history-restore.md",
-            "title": "annotation-history-restore",
-            "type": "AFK"
-          },
-          {
-            "file": "025-export-approved-line-artifacts.md",
-            "title": "export-approved-line-artifacts",
             "type": "AFK"
           },
           {

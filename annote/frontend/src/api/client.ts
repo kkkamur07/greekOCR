@@ -16,11 +16,14 @@ export type DocumentResponse = components['schemas']['DocumentResponse'];
 export type DocumentWithPartsResponse = components['schemas']['DocumentWithPartsResponse'];
 export type DocumentCreateRequest = components['schemas']['DocumentCreateRequest'];
 export type DocumentPartResponse = components['schemas']['DocumentPartResponse'];
+export type DocumentPartUpdateRequest = components['schemas']['DocumentPartUpdateRequest'];
 export type DocumentWorkflow = components['schemas']['DocumentWorkflow'];
 export type ReorderPartsRequest = components['schemas']['ReorderPartsRequest'];
 export type PublicLayoutResponse = components['schemas']['PublicLayoutResponse'];
 export type PublicTranscriptionLayerResponse =
   components['schemas']['PublicTranscriptionLayerResponse'];
+export type TranscriptionLayerResponse = components['schemas']['TranscriptionLayerResponse'];
+export type LineTranscriptionResponse = components['schemas']['LineTranscriptionResponse'];
 export type JobResponse = components['schemas']['JobResponse'];
 export type JobStatus = components['schemas']['JobStatus'];
 export type EnqueueTestJobRequest = components['schemas']['EnqueueTestJobRequest'];
@@ -56,7 +59,7 @@ export type LineResponse = {
   source_metadata: Record<string, unknown> | null;
   kraken_ceiling: LinePoint[] | null;
   manual_geometry: boolean;
-  line_transcriptions: unknown[];
+  line_transcriptions: LineTranscriptionResponse[];
   created_at: string;
 };
 export type LineUpsertRequest = {
@@ -65,6 +68,7 @@ export type LineUpsertRequest = {
   kind: LineGeometryKind;
   points: LinePoint[];
   source: LineSource;
+  approved_text?: string | null;
 };
 export type LinesReplaceRequest = {
   lines: LineUpsertRequest[];
@@ -76,6 +80,35 @@ export type UpdateLineGeometryRequest = {
 export type ResetPartLayoutRequest = {
   line_ids?: string[] | null;
 };
+export type PageTranscriptionTextLineResponse = {
+  order: number;
+  text: string;
+  paired_line_id: string | null;
+};
+export type PairingProgressResponse = {
+  paired_lines: number;
+  total_lines: number;
+  percent: number;
+};
+export type PagePairingResponse = {
+  text_lines: PageTranscriptionTextLineResponse[];
+  pairing_progress: PairingProgressResponse;
+};
+export type PageTranscriptionImportRequest = {
+  text: string;
+};
+export type PairTextLineRequest = {
+  line_id: string;
+  text_line_order: number;
+};
+export type LineTranscriptionPatchRequest = {
+  text: string;
+};
+export type AnnotationHistorySnapshotResponse =
+  components['schemas']['AnnotationHistorySnapshotResponse'];
+export type ExportResponse = components['schemas']['ExportResponse'];
+export type ExportArtifactResponse = components['schemas']['ExportArtifactResponse'];
+export type ExportWarningsResponse = components['schemas']['ExportWarningsResponse'];
 
 export const API_BASE_URL =
   (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') ||
@@ -183,6 +216,11 @@ export const api = {
       `/projects/${projectId}/documents/${documentId}`,
     ),
 
+  listTranscriptions: (projectId: string, documentId: string) =>
+    apiRequest<TranscriptionLayerResponse[]>(
+      `/projects/${projectId}/documents/${documentId}/transcriptions`,
+    ),
+
   uploadPart: (projectId: string, documentId: string, file: File) => {
     const form = new FormData();
     form.append('file', file);
@@ -202,6 +240,17 @@ export const api = {
     apiRequest<void>(
       `/projects/${projectId}/documents/${documentId}/parts/${partId}`,
       { method: 'DELETE' },
+    ),
+
+  updatePartReviewStatus: (
+    projectId: string,
+    documentId: string,
+    partId: string,
+    body: DocumentPartUpdateRequest,
+  ) =>
+    apiRequest<DocumentPartResponse>(
+      `/projects/${projectId}/documents/${documentId}/parts/${partId}`,
+      { method: 'PATCH', body },
     ),
 
   getPartLayout: (projectId: string, documentId: string, partId: string) =>
@@ -246,6 +295,73 @@ export const api = {
     apiRequest<PartLayoutResponse>(
       `/projects/${projectId}/documents/${documentId}/parts/${partId}/layout/reset`,
       { method: 'POST', body },
+    ),
+
+  getPagePairing: (projectId: string, documentId: string, partId: string) =>
+    apiRequest<PagePairingResponse>(
+      `/projects/${projectId}/documents/${documentId}/parts/${partId}/pairing`,
+    ),
+
+  importPageTranscription: (
+    projectId: string,
+    documentId: string,
+    partId: string,
+    body: PageTranscriptionImportRequest,
+  ) =>
+    apiRequest<PagePairingResponse>(
+      `/projects/${projectId}/documents/${documentId}/parts/${partId}/page-transcription`,
+      { method: 'PUT', body },
+    ),
+
+  pairTextLine: (
+    projectId: string,
+    documentId: string,
+    partId: string,
+    body: PairTextLineRequest,
+  ) =>
+    apiRequest<PagePairingResponse>(
+      `/projects/${projectId}/documents/${documentId}/parts/${partId}/pairings`,
+      { method: 'POST', body },
+    ),
+
+  createAnnotationHistorySnapshot: (projectId: string, documentId: string, partId: string) =>
+    apiRequest<AnnotationHistorySnapshotResponse>(
+      `/projects/${projectId}/documents/${documentId}/parts/${partId}/history`,
+      { method: 'POST' },
+    ),
+
+  listAnnotationHistorySnapshots: (projectId: string, documentId: string, partId: string) =>
+    apiRequest<AnnotationHistorySnapshotResponse[]>(
+      `/projects/${projectId}/documents/${documentId}/parts/${partId}/history`,
+    ),
+
+  restoreAnnotationHistorySnapshot: (
+    projectId: string,
+    documentId: string,
+    partId: string,
+    snapshotId: string,
+  ) =>
+    apiRequest<LineResponse[]>(
+      `/projects/${projectId}/documents/${documentId}/parts/${partId}/history/${snapshotId}/restore`,
+      { method: 'POST' },
+    ),
+
+  exportApprovedLineArtifacts: (projectId: string, documentId: string, partId: string) =>
+    apiRequest<ExportResponse>(
+      `/projects/${projectId}/documents/${documentId}/parts/${partId}/export`,
+      { method: 'POST' },
+    ),
+
+  updateGroundTruthLineText: (
+    projectId: string,
+    documentId: string,
+    transcriptionId: string,
+    lineId: string,
+    body: LineTranscriptionPatchRequest,
+  ) =>
+    apiRequest<LineTranscriptionResponse>(
+      `/projects/${projectId}/documents/${documentId}/transcriptions/${transcriptionId}/lines/${lineId}`,
+      { method: 'PATCH', body },
     ),
 
   getPublicDocument: (projectId: string, documentId: string) =>

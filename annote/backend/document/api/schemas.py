@@ -194,6 +194,53 @@ class LayoutResponse(BaseModel):
     lines: list[LineResponse]
 
 
+class PageTranscriptionImportRequest(BaseModel):
+    text: str
+
+
+class PageTranscriptionTextLineResponse(BaseModel):
+    order: int
+    text: str
+    paired_line_id: UUID | None
+
+
+class PairingProgressResponse(BaseModel):
+    paired_lines: int
+    total_lines: int
+    percent: int
+
+
+class PagePairingResponse(BaseModel):
+    text_lines: list[PageTranscriptionTextLineResponse]
+    pairing_progress: PairingProgressResponse
+
+
+class ExportWarningsResponse(BaseModel):
+    unpaired_segments: list[int]
+    unused_text_lines: list[int]
+
+
+class ExportArtifactResponse(BaseModel):
+    line_id: UUID
+    segment_number: int
+    image_filename: str
+    transcription_filename: str
+    transcription_text: str
+    image_base64: str
+
+
+class ExportResponse(BaseModel):
+    exported_count: int
+    artifacts: list[ExportArtifactResponse]
+    warnings: ExportWarningsResponse
+    steps: list[str]
+
+
+class PairTextLineRequest(BaseModel):
+    line_id: UUID
+    text_line_order: int = Field(ge=0)
+
+
 class CopyToGroundTruthRequest(BaseModel):
     line_ids: list[UUID] | None = None
 

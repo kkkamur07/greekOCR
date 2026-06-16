@@ -19,6 +19,12 @@ vi.mock('../api/client', async (importOriginal) => {
       getDocument: vi.fn(),
       getPartLayout: vi.fn(),
       listPartLines: vi.fn(),
+      listTranscriptions: vi.fn(),
+      getPagePairing: vi.fn(),
+      importPageTranscription: vi.fn(),
+      pairTextLine: vi.fn(),
+      updateGroundTruthLineText: vi.fn(),
+      updatePartReviewStatus: vi.fn(),
       replacePartLines: vi.fn(),
       updateLineGeometry: vi.fn(),
       resetPartLayout: vi.fn(),
@@ -30,6 +36,12 @@ type MockedEditorApi = {
   getDocument: ReturnType<typeof vi.fn>;
   getPartLayout: ReturnType<typeof vi.fn>;
   listPartLines: ReturnType<typeof vi.fn>;
+  listTranscriptions: ReturnType<typeof vi.fn>;
+  getPagePairing: ReturnType<typeof vi.fn>;
+  importPageTranscription: ReturnType<typeof vi.fn>;
+  pairTextLine: ReturnType<typeof vi.fn>;
+  updateGroundTruthLineText: ReturnType<typeof vi.fn>;
+  updatePartReviewStatus: ReturnType<typeof vi.fn>;
   replacePartLines: ReturnType<typeof vi.fn>;
   updateLineGeometry: ReturnType<typeof vi.fn>;
   resetPartLayout: ReturnType<typeof vi.fn>;
@@ -76,6 +88,39 @@ describe('PageEditorPlaceholderPage', () => {
     vi.clearAllMocks();
     mockedApi.getPartLayout.mockResolvedValue({ blocks: [], lines: [] });
     mockedApi.listPartLines.mockResolvedValue([]);
+    mockedApi.listTranscriptions.mockResolvedValue([
+      {
+        id: 'ground-truth-1',
+        document_id: 'doc-1',
+        name: 'Ground truth',
+        kind: 'ground_truth',
+        created_by_job_id: null,
+        created_at: '2026-06-16T10:00:00Z',
+      },
+    ]);
+    mockedApi.getPagePairing.mockResolvedValue({
+      text_lines: [],
+      pairing_progress: { paired_lines: 0, total_lines: 0, percent: 0 },
+    });
+    mockedApi.importPageTranscription.mockResolvedValue({
+      text_lines: [],
+      pairing_progress: { paired_lines: 0, total_lines: 0, percent: 0 },
+    });
+    mockedApi.pairTextLine.mockResolvedValue({
+      text_lines: [],
+      pairing_progress: { paired_lines: 0, total_lines: 0, percent: 0 },
+    });
+    mockedApi.updateGroundTruthLineText.mockResolvedValue({
+      id: 'line-tx-1',
+      transcription_id: 'ground-truth-1',
+      transcription_kind: 'ground_truth',
+      text: 'typed approved text',
+      confidence: null,
+    });
+    mockedApi.updatePartReviewStatus.mockResolvedValue({
+      ...DOCUMENT.parts[0],
+      reviewed: true,
+    });
     mockedApi.replacePartLines.mockImplementation(async (_projectId, _documentId, _partId, body) =>
       body.lines.map((line: Record<string, unknown>, index: number) => ({
         id: `line-${index + 1}`,
@@ -194,6 +239,236 @@ describe('PageEditorPlaceholderPage', () => {
       );
     });
     expect(await screen.findByText('1 Segment')).toBeTruthy();
+  });
+
+  it('imports candidate Text lines, pairs the selected Segment, and updates Pairing progress', async () => {
+    mockedApi.getDocument.mockResolvedValue(DOCUMENT);
+    mockedApi.listPartLines.mockResolvedValue([
+      {
+        id: 'line-1',
+        part_id: 'part-1',
+        block_id: null,
+        order: 0,
+        kind: 'polygon',
+        points: [
+          [10, 10],
+          [50, 10],
+          [50, 30],
+          [10, 30],
+        ],
+        source: 'manual',
+        source_metadata: null,
+        kraken_ceiling: null,
+        manual_geometry: true,
+        line_transcriptions: [],
+        created_at: '2026-06-16T10:00:00Z',
+      },
+      {
+        id: 'line-2',
+        part_id: 'part-1',
+        block_id: null,
+        order: 1,
+        kind: 'polygon',
+        points: [
+          [80, 20],
+          [120, 20],
+          [120, 50],
+          [80, 50],
+        ],
+        source: 'manual',
+        source_metadata: null,
+        kraken_ceiling: null,
+        manual_geometry: true,
+        line_transcriptions: [],
+        created_at: '2026-06-16T10:00:00Z',
+      },
+    ]);
+    mockedApi.getPagePairing.mockResolvedValue({
+      text_lines: [],
+      pairing_progress: { paired_lines: 0, total_lines: 2, percent: 0 },
+    });
+    mockedApi.importPageTranscription.mockResolvedValue({
+      text_lines: [
+        { order: 0, text: 'alpha', paired_line_id: null },
+        { order: 1, text: 'beta', paired_line_id: null },
+      ],
+      pairing_progress: { paired_lines: 0, total_lines: 2, percent: 0 },
+    });
+    mockedApi.pairTextLine.mockResolvedValue({
+      text_lines: [
+        { order: 0, text: 'alpha', paired_line_id: null },
+        { order: 1, text: 'beta', paired_line_id: 'line-1' },
+      ],
+      pairing_progress: { paired_lines: 1, total_lines: 2, percent: 50 },
+    });
+
+    renderPageEditor();
+
+    expect(await screen.findByText('Pairing progress: 0/2 Lines paired')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/page transcription text/i), {
+      target: { value: 'alpha\n\nbeta' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /import page transcription/i }));
+
+    expect(await screen.findByText('Text line 2')).toBeTruthy();
+    fireEvent.click(screen.getByLabelText('Segment 1'));
+    fireEvent.click(screen.getByRole('button', { name: /pair text line 2/i }));
+
+    await waitFor(() => {
+      expect(mockedApi.pairTextLine).toHaveBeenLastCalledWith(
+        'project-1',
+        'doc-1',
+        'part-1',
+        { line_id: 'line-1', text_line_order: 1 },
+      );
+    });
+    expect(await screen.findByText('Pairing progress: 1/2 Lines paired')).toBeTruthy();
+    expect(screen.getByText('Text line 2 · paired with Segment 1')).toBeTruthy();
+  });
+
+  it('saves typed approved text for the selected Segment and refreshes Pairing progress', async () => {
+    mockedApi.getDocument.mockResolvedValue(DOCUMENT);
+    mockedApi.listPartLines.mockResolvedValue([
+      {
+        id: 'line-1',
+        part_id: 'part-1',
+        block_id: null,
+        order: 0,
+        kind: 'polygon',
+        points: [
+          [10, 10],
+          [50, 10],
+          [50, 30],
+          [10, 30],
+        ],
+        source: 'manual',
+        source_metadata: null,
+        kraken_ceiling: null,
+        manual_geometry: true,
+        line_transcriptions: [],
+        created_at: '2026-06-16T10:00:00Z',
+      },
+      {
+        id: 'line-2',
+        part_id: 'part-1',
+        block_id: null,
+        order: 1,
+        kind: 'polygon',
+        points: [
+          [80, 20],
+          [120, 20],
+          [120, 50],
+          [80, 50],
+        ],
+        source: 'manual',
+        source_metadata: null,
+        kraken_ceiling: null,
+        manual_geometry: true,
+        line_transcriptions: [],
+        created_at: '2026-06-16T10:00:00Z',
+      },
+    ]);
+    mockedApi.getPagePairing
+      .mockResolvedValueOnce({
+        text_lines: [],
+        pairing_progress: { paired_lines: 0, total_lines: 2, percent: 0 },
+      })
+      .mockResolvedValueOnce({
+        text_lines: [],
+        pairing_progress: { paired_lines: 1, total_lines: 2, percent: 50 },
+      });
+    mockedApi.updateGroundTruthLineText.mockResolvedValue({
+      id: 'line-tx-1',
+      transcription_id: 'ground-truth-1',
+      transcription_kind: 'ground_truth',
+      text: 'typed approved text',
+      confidence: null,
+    });
+
+    renderPageEditor();
+
+    fireEvent.click(await screen.findByLabelText('Segment 1'));
+    fireEvent.change(screen.getByLabelText(/approved text for selected segment/i), {
+      target: { value: 'typed approved text' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /save approved text/i }));
+
+    await waitFor(() => {
+      expect(mockedApi.updateGroundTruthLineText).toHaveBeenLastCalledWith(
+        'project-1',
+        'doc-1',
+        'ground-truth-1',
+        'line-1',
+        { text: 'typed approved text' },
+      );
+    });
+    expect(await screen.findByText('Pairing progress: 1/2 Lines paired')).toBeTruthy();
+  });
+
+  it('shows Review status and lets a project member mark the Page reviewed', async () => {
+    mockedApi.getDocument.mockResolvedValue(DOCUMENT);
+    mockedApi.getPagePairing.mockResolvedValue({
+      text_lines: [],
+      pairing_progress: { paired_lines: 1, total_lines: 2, percent: 50 },
+    });
+
+    renderPageEditor();
+
+    expect(await screen.findByText('Review status: Unreviewed')).toBeTruthy();
+    expect(screen.getByText('Pairing progress: 1/2 Lines paired')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /mark reviewed/i }));
+
+    await waitFor(() => {
+      expect(mockedApi.updatePartReviewStatus).toHaveBeenLastCalledWith(
+        'project-1',
+        'doc-1',
+        'part-1',
+        { reviewed: true },
+      );
+    });
+    expect(await screen.findByText('Review status: Reviewed')).toBeTruthy();
+    expect(screen.getByText('Pairing progress: 1/2 Lines paired')).toBeTruthy();
+  });
+
+  it('loads a Reviewed Page and lets a project member mark it unreviewed', async () => {
+    mockedApi.getDocument.mockResolvedValue({
+      ...DOCUMENT,
+      parts: [{ ...DOCUMENT.parts[0], reviewed: true }],
+    });
+    mockedApi.updatePartReviewStatus.mockResolvedValue({
+      ...DOCUMENT.parts[0],
+      reviewed: false,
+    });
+
+    renderPageEditor();
+
+    expect(await screen.findByText('Review status: Reviewed')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /mark unreviewed/i }));
+
+    await waitFor(() => {
+      expect(mockedApi.updatePartReviewStatus).toHaveBeenLastCalledWith(
+        'project-1',
+        'doc-1',
+        'part-1',
+        { reviewed: false },
+      );
+    });
+    expect(await screen.findByText('Review status: Unreviewed')).toBeTruthy();
+  });
+
+  it('keeps the visible Review status when the API rejects the change', async () => {
+    mockedApi.getDocument.mockResolvedValue(DOCUMENT);
+    mockedApi.updatePartReviewStatus.mockRejectedValue(new ApiError('Forbidden', 403));
+
+    renderPageEditor();
+
+    expect(await screen.findByText('Review status: Unreviewed')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /mark reviewed/i }));
+
+    expect(
+      await screen.findByText('Only project members can change Review status.'),
+    ).toBeTruthy();
+    expect(screen.getByText('Review status: Unreviewed')).toBeTruthy();
   });
 
   it('draws a polygon Segment and saves it as Line geometry for the document part', async () => {

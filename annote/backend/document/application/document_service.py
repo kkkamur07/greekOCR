@@ -18,6 +18,7 @@ from backend.document.infrastructure.orm_models import (
     LineGeometryKind,
     LineSource,
     LineTranscription,
+    PageTranscriptionLine,
     Transcription,
     TranscriptionKind,
 )
@@ -157,12 +158,15 @@ class DocumentService:
         document = await self.get_document(session, user, project_id, document_id)
         order = await self._documents.next_part_order(session, document.id)
         suffix = "bin"
+        filename_stem: str | None = None
         if filename and "." in filename:
-            suffix = filename.rsplit(".", 1)[-1].lower()[:16]
+            path = Path(filename)
+            suffix = path.suffix.lstrip(".").lower()[:16]
+            filename_stem = path.stem
         part = DocumentPart(document_id=document.id, order=order, image_key="pending")
         session.add(part)
         await session.flush()
-        image_key = self._media.part_image_key(part.id, suffix=suffix)
+        image_key = self._media.part_image_key(part.id, suffix=suffix, filename_stem=filename_stem)
         self._media.write(image_key, data)
         part.image_key = image_key
         await session.commit()
@@ -378,6 +382,82 @@ class DocumentService:
                 block.manual_geometry = False
         await session.commit()
         return await self.list_part_layout(session, user, project_id, document_id, part_id)
+
+    async def import_page_transcription(
+        self,
+        session: AsyncSession,
+        user: User,
+        project_id: UUID,
+        document_id: UUID,
+        part_id: UUID,
+        *,
+        text: str,
+    ) -> tuple[list[PageTranscriptionLine], dict[str, int]]:
+        document = await self.get_document(session, user, project_id, document_id)
+        part = await self._document_part_or_404(session, document, part_id)
+        existing = await self._list_page_transcription_lines(session, part.id)
+        for text_line in existing:
+            await session.delete(text_line)
+        for order, line_text in enumerate(self._split_page_transcription(text)):
+            session.add(PageTranscriptionLine(part_id=part.id, order=order, text=line_text))
+        await session.commit()
+        return await self.get_page_pairing(session, user, project_id, document_id, part_id)
+
+    async def get_page_pairing(
+        self,
+        session: AsyncSession,
+        user: User,
+        project_id: UUID,
+        document_id: UUID,
+        part_id: UUID,
+    ) -> tuple[list[PageTranscriptionLine], dict[str, int]]:
+        document = await self.get_document(session, user, project_id, document_id)
+        part = await self._document_part_or_404(session, document, part_id)
+        text_lines = await self._list_page_transcription_lines(session, part.id)
+        lines = await self._documents.list_part_lines(session, part.id)
+        paired_lines = sum(
+            1
+            for line in lines
+            if any(
+                transcription.transcription.kind == TranscriptionKind.ground_truth
+                and transcription.text.strip()
+                for transcription in line.transcriptions
+            )
+        )
+        total_lines = len(lines)
+        percent = round((paired_lines / total_lines) * 100) if total_lines else 0
+        return text_lines, {
+            "paired_lines": paired_lines,
+            "total_lines": total_lines,
+            "percent": percent,
+        }
+
+    async def pair_page_text_line(
+        self,
+        session: AsyncSession,
+        user: User,
+        project_id: UUID,
+        document_id: UUID,
+        part_id: UUID,
+        *,
+        line_id: UUID,
+        text_line_order: int,
+    ) -> tuple[list[PageTranscriptionLine], dict[str, int]]:
+        document = await self.get_document(session, user, project_id, document_id)
+        part = await self._document_part_or_404(session, document, part_id)
+        line = await self._line_or_404(session, part.id, line_id)
+        text_line = await self._page_transcription_line_or_404(
+            session, part.id, text_line_order
+        )
+        ground_truth = await self._ensure_ground_truth_transcription(session, document)
+
+        for candidate in await self._list_page_transcription_lines(session, part.id):
+            if candidate.paired_line_id == line.id:
+                candidate.paired_line_id = None
+        text_line.paired_line_id = line.id
+        await self._set_ground_truth_text(line, ground_truth, text_line.text, session)
+        await session.commit()
+        return await self.get_page_pairing(session, user, project_id, document_id, part_id)
 
     async def replace_part_lines(
         self,
@@ -679,6 +759,28 @@ class DocumentService:
             select(Block).where(Block.part_id == part_id).order_by(Block.order, Block.created_at)
         )
         return list(result.scalars().all())
+
+    async def _list_page_transcription_lines(
+        self, session: AsyncSession, part_id: UUID
+    ) -> list[PageTranscriptionLine]:
+        return await self._documents.list_page_transcription_lines(session, part_id)
+
+    async def _page_transcription_line_or_404(
+        self, session: AsyncSession, part_id: UUID, order: int
+    ) -> PageTranscriptionLine:
+        result = await session.execute(
+            select(PageTranscriptionLine).where(
+                PageTranscriptionLine.part_id == part_id,
+                PageTranscriptionLine.order == order,
+            )
+        )
+        text_line = result.scalar_one_or_none()
+        if text_line is None:
+            raise NotFoundError("Text line not found")
+        return text_line
+
+    def _split_page_transcription(self, text: str) -> list[str]:
+        return [line.strip() for line in text.splitlines() if line.strip()]
 
     async def _block_or_404(
         self, session: AsyncSession, part_id: UUID, block_id: UUID

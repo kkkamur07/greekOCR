@@ -13,18 +13,18 @@
 |--------|------:|
 | Total issues | 29 |
 | Done | 10 |
-| Ready (AFK) | 1 |
-| Ready (HITL) | 1 |
-| Backlog | 17 |
+| Ready (AFK) | 0 |
+| Ready (HITL) | 0 |
+| Backlog | 7 |
 | In progress | 0 |
-| Review | 0 |
+| Review | 12 |
 
 ## Parallel lanes (ready now)
 
 | Lane | Issues | Status |
 |------|--------|--------|
 | **A** | [018](018-annote-production-root.md) (AFK) | Review |
-| **B** | [005](005-inference-catalog-bindings.md) (HITL — **you**) | Ready |
+| **B** | [005](005-inference-catalog-bindings.md) (HITL — **you**) | Review |
 
 ## Parallel lanes (after blockers)
 

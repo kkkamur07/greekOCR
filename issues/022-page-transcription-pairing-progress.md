@@ -2,7 +2,7 @@
 id: "022"
 title: "page-transcription-pairing-progress"
 type: AFK
-status: backlog
+status: review
 blocked_by:
   - "021-editor-page-line-geometry.md"
 parent_prd: "issues/prd-annote-merge.md"

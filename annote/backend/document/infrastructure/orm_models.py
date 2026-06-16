@@ -94,6 +94,9 @@ class DocumentPart(Base):
     document: Mapped[Document] = relationship("Document", back_populates="parts")
     blocks: Mapped[list[Block]] = relationship("Block", back_populates="part", cascade="all, delete-orphan")
     lines: Mapped[list[Line]] = relationship("Line", back_populates="part", cascade="all, delete-orphan")
+    page_transcription_lines: Mapped[list[PageTranscriptionLine]] = relationship(
+        "PageTranscriptionLine", back_populates="part", cascade="all, delete-orphan"
+    )
     model_bindings: Mapped[list[ModelBinding]] = relationship(
         "ModelBinding", back_populates="document_part"
     )
@@ -199,3 +202,25 @@ class LineTranscription(Base):
     transcription: Mapped[Transcription] = relationship(
         "Transcription", back_populates="line_transcriptions"
     )
+
+
+class PageTranscriptionLine(Base):
+    __tablename__ = "page_transcription_lines"
+    __table_args__ = (
+        UniqueConstraint("part_id", "order", name="uq_page_transcription_lines_part_order"),
+        UniqueConstraint("paired_line_id", name="uq_page_transcription_lines_paired_line"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    part_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("document_parts.id", ondelete="CASCADE"), index=True
+    )
+    order: Mapped[int] = mapped_column(Integer)
+    text: Mapped[str] = mapped_column(Text)
+    paired_line_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("lines.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    part: Mapped[DocumentPart] = relationship("DocumentPart", back_populates="page_transcription_lines")
+    paired_line: Mapped[Line | None] = relationship("Line")
