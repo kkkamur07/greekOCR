@@ -11,8 +11,8 @@
 | Metric | Count |
 |--------|------:|
 | Total issues | 29 |
-| Done | 26 |
-| Ready (AFK) | 1 |
+| Done | 27 |
+| Ready (AFK) | 0 |
 | Ready (HITL) | 1 |
 | Backlog | 0 |
 | In progress | 0 |
@@ -22,7 +22,7 @@
 
 | Lane | Issues | Status |
 |------|--------|--------|
-| **1** | [027](027-remove-root-app-duplicates.md) (AFK) | Ready |
+| _none_ | _No AFK lanes ready_ | _At WIP limit or awaiting review_ |
 
 ## Mermaid
 
@@ -30,7 +30,7 @@
 flowchart TD
   I015["015 frontend-transcription-editor"]
   I026["026 transcription-pdf-artifact ✓"]
-  I027["027 remove-root-app-duplicates"]
+  I027["027 remove-root-app-duplicates review"]
   I028["028 ocr-prediction-execution-design HITL"]
   I000["000 platform-foundation ✓"]
   I001["001 user-auth-jwt ✓"]
