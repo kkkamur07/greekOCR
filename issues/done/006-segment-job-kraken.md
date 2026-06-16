@@ -1,14 +1,16 @@
 ---
 id: "006"
 title: "segment-job-kraken"
-type: AFK
-status: review
+type: "AFK"
+status: "done"
 blocked_by:
   - "done/003-documents-parts-media.md"
   - "done/004-job-runner.md"
   - "005-inference-catalog-bindings.md"
 parent_prd: "issues/prd.md"
 ---
+
+
 
 ## Parent PRD
 

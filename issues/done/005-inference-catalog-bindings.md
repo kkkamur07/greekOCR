@@ -1,12 +1,14 @@
 ---
 id: "005"
 title: "inference-catalog-bindings"
-type: HITL
-status: review
+type: "HITL"
+status: "done"
 blocked_by:
   - "done/000-platform-foundation.md"
 parent_prd: "issues/prd.md"
 ---
+
+
 
 ## Parent PRD
 

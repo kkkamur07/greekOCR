@@ -1,12 +1,14 @@
 ---
 id: "008"
 title: "layout-edit-reset-api"
-type: AFK
-status: review
+type: "AFK"
+status: "done"
 blocked_by:
   - "007-segment-merge.md"
 parent_prd: "issues/prd.md"
 ---
+
+
 
 ## Parent PRD
 

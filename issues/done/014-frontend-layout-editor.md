@@ -1,13 +1,15 @@
 ---
 id: "014"
 title: "frontend-layout-editor"
-type: HITL
-status: review
+type: "HITL"
+status: "done"
 blocked_by:
   - "008-layout-edit-reset-api.md"
   - "done/012-nextjs-openapi-codegen.md"
 parent_prd: "issues/prd.md"
 ---
+
+
 
 ## Parent PRD
 

@@ -1,12 +1,14 @@
 ---
 id: "010"
 title: "ground-truth-copy-edit-api"
-type: AFK
-status: review
+type: "AFK"
+status: "done"
 blocked_by:
   - "009-transcribe-job-layers.md"
 parent_prd: "issues/prd.md"
 ---
+
+
 
 ## Parent PRD
 
