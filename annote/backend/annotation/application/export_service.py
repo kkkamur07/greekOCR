@@ -1,0 +1,179 @@
+"""Stateless Export workflow for approved Line artifacts."""
+
+from __future__ import annotations
+
+import base64
+from dataclasses import dataclass
+from io import BytesIO
+from pathlib import Path
+from uuid import UUID
+
+import numpy as np
+from PIL import Image
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from annote.services.processing.pipeline import apply_step
+from backend.document.application.document_service import DocumentService
+from backend.document.infrastructure.document_repository import DocumentRepository
+from backend.document.infrastructure.media_store import MediaStore
+from backend.document.infrastructure.orm_models import (
+    Line,
+    PageTranscriptionLine,
+    TranscriptionKind,
+)
+from backend.users.infrastructure.orm_models import User
+
+
+@dataclass(frozen=True)
+class ExportWarnings:
+    unpaired_segments: list[int]
+    unused_text_lines: list[int]
+
+
+@dataclass(frozen=True)
+class ExportArtifact:
+    line_id: UUID
+    segment_number: int
+    image_filename: str
+    transcription_filename: str
+    transcription_text: str
+    image_base64: str
+
+
+@dataclass(frozen=True)
+class ExportResult:
+    exported_count: int
+    artifacts: list[ExportArtifact]
+    warnings: ExportWarnings
+    steps: list[str]
+
+
+class AnnotationExportService:
+    def __init__(
+        self,
+        *,
+        documents: DocumentRepository | None = None,
+        document_service: DocumentService | None = None,
+        media: MediaStore | None = None,
+    ) -> None:
+        self._documents = documents or DocumentRepository()
+        self._document_service = document_service or DocumentService()
+        self._media = media or MediaStore()
+
+    async def export_part(
+        self,
+        session: AsyncSession,
+        user: User,
+        project_id: UUID,
+        document_id: UUID,
+        part_id: UUID,
+        *,
+        steps: list[str] | None = None,
+    ) -> ExportResult:
+        document = await self._document_service.get_document(
+            session, user, project_id, document_id
+        )
+        part = await self._documents.get_part(session, part_id)
+        if part is None or part.document_id != document.id:
+            from backend.core.exceptions import NotFoundError
+
+            raise NotFoundError("Part not found")
+
+        page_image, source_image = self._load_page_image(part.image_key)
+        page_stem = self._page_stem(part.image_key)
+        export_steps = steps if steps is not None else ["rectify"]
+        text_lines = await self._documents.list_page_transcription_lines(session, part.id)
+
+        artifacts: list[ExportArtifact] = []
+        unpaired_segments: list[int] = []
+        paired_text_orders: set[int] = set()
+        for line in await self._documents.list_part_lines(session, part.id):
+            segment_number = line.order + 1
+            text = self._ground_truth_text(line)
+            if text is None:
+                unpaired_segments.append(segment_number)
+                continue
+            text_order = self._paired_text_order(text_lines, line.id)
+            if text_order is not None:
+                paired_text_orders.add(text_order)
+            image_base64 = self._processed_image_base64(
+                page_image,
+                source_image,
+                line,
+                export_steps,
+            )
+            artifacts.append(
+                ExportArtifact(
+                    line_id=line.id,
+                    segment_number=segment_number,
+                    image_filename=f"{page_stem}_{segment_number}.jpg",
+                    transcription_filename=f"{page_stem}_{segment_number}.txt",
+                    transcription_text=text,
+                    image_base64=image_base64,
+                )
+            )
+
+        unused_text_lines = [
+            text_line.order for text_line in text_lines if text_line.order not in paired_text_orders
+        ]
+        return ExportResult(
+            exported_count=len(artifacts),
+            artifacts=artifacts,
+            warnings=ExportWarnings(
+                unpaired_segments=unpaired_segments,
+                unused_text_lines=unused_text_lines,
+            ),
+            steps=export_steps,
+        )
+
+    def _load_page_image(self, image_key: str) -> tuple[np.ndarray, Image.Image]:
+        path = self._media.absolute_path(image_key)
+        pil = Image.open(path)
+        rgb = pil.convert("RGB")
+        pil.close()
+        return np.array(rgb), rgb
+
+    def _page_stem(self, image_key: str) -> str:
+        return Path(image_key).stem
+
+    def _ground_truth_text(self, line: Line) -> str | None:
+        for transcription in line.transcriptions:
+            if (
+                transcription.transcription.kind == TranscriptionKind.ground_truth
+                and transcription.text.strip()
+            ):
+                return transcription.text
+        return None
+
+    def _paired_text_order(
+        self, text_lines: list[PageTranscriptionLine], line_id: UUID
+    ) -> int | None:
+        for text_line in text_lines:
+            if text_line.paired_line_id == line_id:
+                return text_line.order
+        return None
+
+    def _processed_image_base64(
+        self,
+        page_image: np.ndarray,
+        source_image: Image.Image,
+        line: Line,
+        steps: list[str],
+    ) -> str:
+        image = page_image
+        segment = {"points": line.points, "kind": line.kind.value}
+        for step in steps:
+            image = apply_step(image, segment, step)
+        buf = BytesIO()
+        pil = Image.fromarray(image)
+        save_kwargs: dict[str, object] = {
+            "format": "JPEG",
+            "quality": 100,
+            "subsampling": 0,
+            "optimize": False,
+        }
+        dpi = source_image.info.get("dpi")
+        if isinstance(dpi, tuple) and len(dpi) >= 2:
+            save_kwargs["dpi"] = (int(round(dpi[0])), int(round(dpi[1])))
+        pil.save(buf, **save_kwargs)
+        return base64.b64encode(buf.getvalue()).decode("ascii")

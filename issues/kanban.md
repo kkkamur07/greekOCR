@@ -16,7 +16,7 @@ _(empty — 005 is in review)_
 
 ## In progress
 
-_(empty — 0/4)_
+_(empty)_
 
 ## Review
 
@@ -31,6 +31,10 @@ _(empty — 0/4)_
 - [ ] [008-layout-edit-reset-api](008-layout-edit-reset-api.md)
 - [ ] [009-transcribe-job-layers](009-transcribe-job-layers.md)
 - [ ] [010-ground-truth-copy-edit-api](010-ground-truth-copy-edit-api.md)
+- [ ] [022-page-transcription-pairing-progress](022-page-transcription-pairing-progress.md)
+- [ ] [023-page-review-status](023-page-review-status.md)
+- [ ] [024-annotation-history-restore](024-annotation-history-restore.md)
+- [ ] [025-export-approved-line-artifacts](025-export-approved-line-artifacts.md)
 
 ## Done
 
@@ -48,10 +52,6 @@ _(empty — 0/4)_
 ## Backlog
 
 - [ ] [015-frontend-transcription-editor](015-frontend-transcription-editor.md)
-- [ ] [022-page-transcription-pairing-progress](022-page-transcription-pairing-progress.md)
-- [ ] [023-page-review-status](023-page-review-status.md)
-- [ ] [024-annotation-history-restore](024-annotation-history-restore.md)
-- [ ] [025-export-approved-line-artifacts](025-export-approved-line-artifacts.md)
 - [ ] [026-transcription-pdf-artifact](026-transcription-pdf-artifact.md)
 - [ ] [027-remove-root-app-duplicates](027-remove-root-app-duplicates.md)
 - [ ] [028-ocr-prediction-execution-design](028-ocr-prediction-execution-design.md)
@@ -60,7 +60,7 @@ _(empty — 0/4)_
 
 | When | Agent (AFK) | You (HITL) |
 |------|-------------|------------|
-| Now | 018-021 and 005-010/014 in review | — |
+| Now | 022, 023, 024, and 025 in review | — |
 | 018 done | 019 and 020 already launched | — |
 | 019 + 020 done | 021 | — |
 | 021 done | 022 | — |

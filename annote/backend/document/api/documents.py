@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.annotation.application.export_service import AnnotationExportService
 from backend.core.exceptions import ValidationError
 from backend.document.api.schemas import (
     BlockCreateRequest,
@@ -19,6 +20,9 @@ from backend.document.api.schemas import (
     DocumentResponse,
     DocumentUpdateRequest,
     DocumentWithPartsResponse,
+    ExportArtifactResponse,
+    ExportResponse,
+    ExportWarningsResponse,
     LayoutResetRequest,
     LayoutResponse,
     LineCreateRequest,
@@ -27,6 +31,11 @@ from backend.document.api.schemas import (
     LinesReplaceRequest,
     LineTranscriptionPatchRequest,
     LineTranscriptionResponse,
+    PagePairingResponse,
+    PageTranscriptionImportRequest,
+    PageTranscriptionTextLineResponse,
+    PairTextLineRequest,
+    PairingProgressResponse,
     ReorderPartsRequest,
     TranscriptionLayerResponse,
 )
@@ -39,6 +48,7 @@ from infrastructure.db import get_db
 
 router = APIRouter(prefix="/projects/{project_id}/documents", tags=["documents"])
 _service = DocumentService()
+_export_service = AnnotationExportService()
 
 
 def _part_response(part: DocumentPart) -> DocumentPartResponse:
@@ -90,6 +100,42 @@ def _block_response(block: Block) -> BlockResponse:
         box=block.box,
         manual_geometry=block.manual_geometry,
         created_at=block.created_at,
+    )
+
+
+def _pairing_response(text_lines: list, progress: dict[str, int]) -> PagePairingResponse:
+    return PagePairingResponse(
+        text_lines=[
+            PageTranscriptionTextLineResponse(
+                order=line.order,
+                text=line.text,
+                paired_line_id=line.paired_line_id,
+            )
+            for line in text_lines
+        ],
+        pairing_progress=PairingProgressResponse(**progress),
+    )
+
+
+def _export_response(result) -> ExportResponse:
+    return ExportResponse(
+        exported_count=result.exported_count,
+        artifacts=[
+            ExportArtifactResponse(
+                line_id=artifact.line_id,
+                segment_number=artifact.segment_number,
+                image_filename=artifact.image_filename,
+                transcription_filename=artifact.transcription_filename,
+                transcription_text=artifact.transcription_text,
+                image_base64=artifact.image_base64,
+            )
+            for artifact in result.artifacts
+        ],
+        warnings=ExportWarningsResponse(
+            unpaired_segments=result.warnings.unpaired_segments,
+            unused_text_lines=result.warnings.unused_text_lines,
+        ),
+        steps=result.steps,
     )
 
 
@@ -429,6 +475,74 @@ async def reset_part_layout(
         blocks=[_block_response(block) for block in blocks],
         lines=[_line_response(line) for line in lines],
     )
+
+
+@router.put("/{document_id}/parts/{part_id}/page-transcription", response_model=PagePairingResponse)
+async def import_page_transcription(
+    project_id: UUID,
+    document_id: UUID,
+    part_id: UUID,
+    body: PageTranscriptionImportRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> PagePairingResponse:
+    text_lines, progress = await _service.import_page_transcription(
+        db, current_user, project_id, document_id, part_id, text=body.text
+    )
+    return _pairing_response(text_lines, progress)
+
+
+@router.get("/{document_id}/parts/{part_id}/pairing", response_model=PagePairingResponse)
+async def get_page_pairing(
+    project_id: UUID,
+    document_id: UUID,
+    part_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> PagePairingResponse:
+    text_lines, progress = await _service.get_page_pairing(
+        db, current_user, project_id, document_id, part_id
+    )
+    return _pairing_response(text_lines, progress)
+
+
+@router.post("/{document_id}/parts/{part_id}/pairings", response_model=PagePairingResponse)
+async def pair_page_text_line(
+    project_id: UUID,
+    document_id: UUID,
+    part_id: UUID,
+    body: PairTextLineRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> PagePairingResponse:
+    text_lines, progress = await _service.pair_page_text_line(
+        db,
+        current_user,
+        project_id,
+        document_id,
+        part_id,
+        line_id=body.line_id,
+        text_line_order=body.text_line_order,
+    )
+    return _pairing_response(text_lines, progress)
+
+
+@router.post("/{document_id}/parts/{part_id}/export", response_model=ExportResponse)
+async def export_approved_line_artifacts(
+    project_id: UUID,
+    document_id: UUID,
+    part_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> ExportResponse:
+    result = await _export_service.export_part(
+        db,
+        current_user,
+        project_id,
+        document_id,
+        part_id,
+    )
+    return _export_response(result)
 
 
 @router.post(

@@ -1,11 +1,12 @@
 import { useEffect, useState, type MouseEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Alert, Button, Card, Space, Spin, Typography } from 'antd';
+import { Alert, Button, Card, Input, Space, Spin, Typography } from 'antd';
 import { ArrowLeftOutlined } from '@ant-design/icons';
 import {
   api,
   type DocumentPartResponse,
   type DocumentWithPartsResponse,
+  type LineTranscriptionResponse,
   type LinePoint,
   type LineResponse,
   type LineUpsertRequest,
@@ -29,6 +30,13 @@ function layoutMutationMessage(error: unknown): string {
     return 'Only project members can edit layout.';
   }
   return error instanceof Error ? error.message : 'Layout update failed.';
+}
+
+function reviewMutationMessage(error: unknown): string {
+  if (error instanceof ApiError && error.status === 403) {
+    return 'Only project members can change Review status.';
+  }
+  return error instanceof Error ? error.message : 'Review status update failed.';
 }
 
 export function PageEditorPlaceholderPage() {
@@ -56,6 +64,19 @@ export function PageEditorPlaceholderPage() {
   } | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
+  const [groundTruthTranscriptionId, setGroundTruthTranscriptionId] = useState<string | null>(null);
+  const [pageTranscriptionText, setPageTranscriptionText] = useState('');
+  const [approvedTextDraft, setApprovedTextDraft] = useState('');
+  const [textLines, setTextLines] = useState<
+    { order: number; text: string; paired_line_id: string | null }[]
+  >([]);
+  const [pairingProgress, setPairingProgress] = useState({
+    paired_lines: 0,
+    total_lines: 0,
+    percent: 0,
+  });
+  const [pairingError, setPairingError] = useState<string | null>(null);
+  const [reviewError, setReviewError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!projectId || !documentId || !partId) {
@@ -72,6 +93,12 @@ export function PageEditorPlaceholderPage() {
     setPart(null);
     setLayout({ blocks: [], lines: [] });
     setLines([]);
+    setGroundTruthTranscriptionId(null);
+    setTextLines([]);
+    setApprovedTextDraft('');
+    setPairingProgress({ paired_lines: 0, total_lines: 0, percent: 0 });
+    setPairingError(null);
+    setReviewError(null);
 
     (async () => {
       try {
@@ -107,6 +134,22 @@ export function PageEditorPlaceholderPage() {
                 : 'Failed to load Segment geometry.',
           );
         }
+        try {
+          const layers = await api.listTranscriptions(projectId, documentId);
+          const groundTruth = layers.find((layer) => layer.kind === 'ground_truth');
+          setGroundTruthTranscriptionId(groundTruth?.id ?? null);
+          const pairing = await api.getPagePairing(projectId, documentId, partId);
+          setTextLines(pairing.text_lines);
+          setPairingProgress(pairing.pairing_progress);
+        } catch (err) {
+          setPairingError(
+            err instanceof ApiError && (err.status === 403 || err.status === 404)
+              ? 'Pairing is not available for this page.'
+              : err instanceof Error
+                ? err.message
+                : 'Failed to load Pairing progress.',
+          );
+        }
       } catch (err) {
         setError(err instanceof ApiError ? accessMessage(err) : 'Failed to load page.');
       } finally {
@@ -120,6 +163,60 @@ export function PageEditorPlaceholderPage() {
       ? [...document.parts].sort((a, b) => a.order - b.order).findIndex((item) => item.id === part.id) +
         1
       : null;
+
+  const selectedSegmentIndex =
+    selectedSegmentId === null
+      ? null
+      : [...lines]
+          .sort((a, b) => a.order - b.order)
+          .findIndex((line) => line.id === selectedSegmentId);
+
+  const selectedSegmentNumber = selectedSegmentIndex === null || selectedSegmentIndex < 0
+    ? null
+    : selectedSegmentIndex + 1;
+
+  function approvedText(line: LineResponse): string | null {
+    return (
+      line.line_transcriptions.find(
+        (transcription) => transcription.transcription_kind === 'ground_truth',
+      )?.text ?? null
+    );
+  }
+
+  function upsertLineRequest(line: LineResponse, order: number): LineUpsertRequest {
+    const text = approvedText(line);
+    const request: LineUpsertRequest = {
+      id: line.id,
+      order,
+      kind: line.kind,
+      points: line.points,
+      source: line.source,
+    };
+    if (text !== null) {
+      request.approved_text = text;
+    }
+    return request;
+  }
+
+  function withLocalGroundTruth(lineId: string, text: string): LineResponse[] {
+    if (!groundTruthTranscriptionId) return lines;
+    return lines.map((line) => {
+      if (line.id !== lineId) return line;
+      const existing = line.line_transcriptions.filter(
+        (transcription) => transcription.transcription_kind !== 'ground_truth',
+      );
+      const nextTranscription: LineTranscriptionResponse = {
+        id: line.line_transcriptions.find(
+          (transcription) => transcription.transcription_kind === 'ground_truth',
+        )?.id ?? `ground-truth-${lineId}`,
+        transcription_id: groundTruthTranscriptionId,
+        transcription_kind: 'ground_truth',
+        text,
+        confidence: null,
+      };
+      return { ...line, line_transcriptions: [...existing, nextTranscription] };
+    });
+  }
 
   function moveSelectedBaseline(deltaY: number) {
     if (!selectedLineId) return;
@@ -194,13 +291,7 @@ export function PageEditorPlaceholderPage() {
     if (!projectId || !documentId || !partId) return;
     const existing = [...lines]
       .sort((a, b) => a.order - b.order)
-      .map<LineUpsertRequest>((line, order) => ({
-        id: line.id,
-        order,
-        kind: line.kind,
-        points: line.points,
-        source: line.source,
-      }));
+      .map<LineUpsertRequest>(upsertLineRequest);
     const newLine: LineUpsertRequest = {
       order: existing.length,
       kind,
@@ -220,14 +311,11 @@ export function PageEditorPlaceholderPage() {
     const updatedLines = [...lines]
       .sort((a, b) => a.order - b.order)
       .map<LineUpsertRequest>((line, order) => ({
-        id: line.id,
-        order,
-        kind: line.kind,
+        ...upsertLineRequest(line, order),
         points:
           line.id === selectedSegmentId
             ? line.points.map(([x, y]) => [x + 5, y])
             : line.points,
-        source: line.source,
       }));
     const saved = await api.replacePartLines(projectId, documentId, partId, {
       lines: updatedLines,
@@ -244,13 +332,7 @@ export function PageEditorPlaceholderPage() {
     const remainingLines = [...lines]
       .sort((a, b) => a.order - b.order)
       .filter((line) => line.id !== selectedSegmentId)
-      .map<LineUpsertRequest>((line, order) => ({
-        id: line.id,
-        order,
-        kind: line.kind,
-        points: line.points,
-        source: line.source,
-      }));
+      .map<LineUpsertRequest>(upsertLineRequest);
     const saved = await api.replacePartLines(projectId, documentId, partId, {
       lines: remainingLines,
     });
@@ -262,6 +344,85 @@ export function PageEditorPlaceholderPage() {
     setDrawMode((mode) => (mode === nextMode ? 'none' : nextMode));
     setDraftPolygon([]);
     setDraftStart(null);
+  }
+
+  async function importPageTranscription() {
+    if (!projectId || !documentId || !partId) return;
+    try {
+      const pairing = await api.importPageTranscription(projectId, documentId, partId, {
+        text: pageTranscriptionText,
+      });
+      setTextLines(pairing.text_lines);
+      setPairingProgress(pairing.pairing_progress);
+      setPairingError(null);
+    } catch (err) {
+      setPairingError(err instanceof Error ? err.message : 'Failed to import Page transcription.');
+    }
+  }
+
+  async function pairTextLine(order: number) {
+    if (!projectId || !documentId || !partId || !selectedSegmentId) return;
+    try {
+      const pairing = await api.pairTextLine(projectId, documentId, partId, {
+        line_id: selectedSegmentId,
+        text_line_order: order,
+      });
+      const candidate = pairing.text_lines.find((textLine) => textLine.order === order);
+      if (candidate) {
+        setLines(withLocalGroundTruth(selectedSegmentId, candidate.text));
+        setApprovedTextDraft(candidate.text);
+      }
+      setTextLines(pairing.text_lines);
+      setPairingProgress(pairing.pairing_progress);
+      setPairingError(null);
+    } catch (err) {
+      setPairingError(err instanceof Error ? err.message : 'Failed to pair Text line.');
+    }
+  }
+
+  async function saveApprovedText() {
+    if (!projectId || !documentId || !partId || !selectedSegmentId) return;
+    if (!groundTruthTranscriptionId) {
+      setPairingError('Ground truth transcription layer is not available.');
+      return;
+    }
+    try {
+      const updated = await api.updateGroundTruthLineText(
+        projectId,
+        documentId,
+        groundTruthTranscriptionId,
+        selectedSegmentId,
+        { text: approvedTextDraft },
+      );
+      setLines(withLocalGroundTruth(selectedSegmentId, updated.text));
+      const pairing = await api.getPagePairing(projectId, documentId, partId);
+      setTextLines(pairing.text_lines);
+      setPairingProgress(pairing.pairing_progress);
+      setPairingError(null);
+    } catch (err) {
+      setPairingError(err instanceof Error ? err.message : 'Failed to save approved text.');
+    }
+  }
+
+  async function updateReviewStatus(reviewed: boolean) {
+    if (!projectId || !documentId || !partId) return;
+    try {
+      const updated = await api.updatePartReviewStatus(projectId, documentId, partId, {
+        reviewed,
+      });
+      setPart(updated);
+      setDocument((current) =>
+        current
+          ? {
+              ...current,
+              parts: current.parts.map((item) => (item.id === updated.id ? updated : item)),
+            }
+          : current,
+      );
+      setReviewError(null);
+    } catch (err) {
+      setReviewError(reviewMutationMessage(err));
+    }
   }
 
   return (
@@ -358,6 +519,8 @@ export function PageEditorPlaceholderPage() {
 
           {saveMessage && <Alert type="success" showIcon message={saveMessage} />}
           {mutationError && <Alert type="error" showIcon message={mutationError} />}
+          {pairingError && <Alert type="warning" showIcon message={pairingError} />}
+          {reviewError && <Alert type="warning" showIcon message={reviewError} />}
 
           {layoutError && (
             <Alert
@@ -419,12 +582,103 @@ export function PageEditorPlaceholderPage() {
                 setSaveMessage(null);
               }}
               onSelectSegment={(lineId) => {
+                const selected = lines.find((line) => line.id === lineId);
                 setSelectedSegmentId(lineId);
                 setSelectedLineId(null);
                 setSaveMessage(null);
+                setApprovedTextDraft(selected ? approvedText(selected) ?? '' : '');
               }}
             />
           </div>
+
+          <Card
+            title="Pairing"
+            style={{ background: '#101318', borderColor: '#3b4350' }}
+            styles={{ header: { color: '#f7f2e8' }, body: { display: 'grid', gap: 12 } }}
+          >
+            <Space wrap>
+              <Typography.Text style={{ color: '#f7f2e8' }}>
+                Review status: {part.reviewed ? 'Reviewed' : 'Unreviewed'}
+              </Typography.Text>
+              <Button onClick={() => void updateReviewStatus(!part.reviewed)}>
+                {part.reviewed ? 'Mark unreviewed' : 'Mark reviewed'}
+              </Button>
+            </Space>
+            <Typography.Text style={{ color: '#f7f2e8' }}>
+              Pairing progress: {pairingProgress.paired_lines}/{pairingProgress.total_lines}{' '}
+              Lines paired
+            </Typography.Text>
+            <Typography.Text style={{ color: '#c5ccd6' }}>
+              Select a Segment first, then pair a candidate Text line or type approved text.
+            </Typography.Text>
+            <label style={{ display: 'grid', gap: 8, color: '#c5ccd6' }}>
+              Page transcription text
+              <Input.TextArea
+                aria-label="Page transcription text"
+                value={pageTranscriptionText}
+                rows={4}
+                onChange={(event) => setPageTranscriptionText(event.target.value)}
+              />
+            </label>
+            <Button onClick={() => void importPageTranscription()}>
+              Import page transcription
+            </Button>
+            <div style={{ display: 'grid', gap: 8 }}>
+              {textLines.map((textLine) => {
+                const pairedIndex = textLine.paired_line_id
+                  ? [...lines]
+                      .sort((a, b) => a.order - b.order)
+                      .findIndex((line) => line.id === textLine.paired_line_id)
+                  : -1;
+                const pairedLabel =
+                  pairedIndex >= 0 ? ` · paired with Segment ${pairedIndex + 1}` : '';
+                return (
+                  <div
+                    key={textLine.order}
+                    style={{
+                      border: '1px solid #3b4350',
+                      borderRadius: 6,
+                      padding: 8,
+                      color: '#f7f2e8',
+                    }}
+                  >
+                    <Typography.Text style={{ color: '#d8c7a1' }}>
+                      Text line {textLine.order + 1}
+                      {pairedLabel}
+                    </Typography.Text>
+                    <Typography.Paragraph style={{ color: '#f7f2e8', marginBottom: 8 }}>
+                      {textLine.text}
+                    </Typography.Paragraph>
+                    <Button
+                      disabled={!selectedSegmentId}
+                      onClick={() => void pairTextLine(textLine.order)}
+                    >
+                      Pair Text line {textLine.order + 1}
+                    </Button>
+                  </div>
+                );
+              })}
+              {selectedSegmentNumber && (
+                <div style={{ display: 'grid', gap: 8 }}>
+                  <Typography.Text style={{ color: '#c5ccd6' }}>
+                    Selected Segment {selectedSegmentNumber}
+                  </Typography.Text>
+                  <label style={{ display: 'grid', gap: 8, color: '#c5ccd6' }}>
+                    Approved text for selected Segment
+                    <Input.TextArea
+                      aria-label="Approved text for selected Segment"
+                      value={approvedTextDraft}
+                      rows={3}
+                      onChange={(event) => setApprovedTextDraft(event.target.value)}
+                    />
+                  </label>
+                  <Button type="primary" onClick={() => void saveApprovedText()}>
+                    Save approved text
+                  </Button>
+                </div>
+              )}
+            </div>
+          </Card>
         </Card>
       )}
     </AppLayout>

@@ -1,10 +1,144 @@
 {
   "components": {
     "schemas": {
+      "AnnotationHistorySnapshotResponse": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "line_count": {
+            "title": "Line Count",
+            "type": "integer"
+          },
+          "paired_line_count": {
+            "title": "Paired Line Count",
+            "type": "integer"
+          },
+          "part_id": {
+            "format": "uuid",
+            "title": "Part Id",
+            "type": "string"
+          },
+          "state": {
+            "additionalProperties": true,
+            "title": "State",
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "part_id",
+          "state",
+          "line_count",
+          "paired_line_count",
+          "created_at"
+        ],
+        "title": "AnnotationHistorySnapshotResponse",
+        "type": "object"
+      },
+      "BlockCreateRequest": {
+        "properties": {
+          "box": {
+            "additionalProperties": true,
+            "title": "Box",
+            "type": "object"
+          },
+          "order": {
+            "minimum": 0.0,
+            "title": "Order",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "order",
+          "box"
+        ],
+        "title": "BlockCreateRequest",
+        "type": "object"
+      },
+      "BlockPatchRequest": {
+        "properties": {
+          "box": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Box"
+          },
+          "order": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order"
+          }
+        },
+        "title": "BlockPatchRequest",
+        "type": "object"
+      },
+      "BlockResponse": {
+        "properties": {
+          "box": {
+            "additionalProperties": true,
+            "title": "Box",
+            "type": "object"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "manual_geometry": {
+            "title": "Manual Geometry",
+            "type": "boolean"
+          },
+          "order": {
+            "title": "Order",
+            "type": "integer"
+          },
+          "part_id": {
+            "format": "uuid",
+            "title": "Part Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "part_id",
+          "order",
+          "box",
+          "manual_geometry",
+          "created_at"
+        ],
+        "title": "BlockResponse",
+        "type": "object"
+      },
       "Body_upload_part_projects__project_id__documents__document_id__parts_post": {
         "properties": {
           "file": {
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File",
             "type": "string"
           }
@@ -13,6 +147,44 @@
           "file"
         ],
         "title": "Body_upload_part_projects__project_id__documents__document_id__parts_post",
+        "type": "object"
+      },
+      "CopyToGroundTruthRequest": {
+        "properties": {
+          "line_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line Ids"
+          }
+        },
+        "title": "CopyToGroundTruthRequest",
+        "type": "object"
+      },
+      "CopyToGroundTruthResponse": {
+        "properties": {
+          "copied_line_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Copied Line Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "copied_line_ids"
+        ],
+        "title": "CopyToGroundTruthResponse",
         "type": "object"
       },
       "DocumentCreateRequest": {
@@ -66,6 +238,10 @@
             "title": "Order",
             "type": "integer"
           },
+          "reviewed": {
+            "title": "Reviewed",
+            "type": "boolean"
+          },
           "width": {
             "anyOf": [
               {
@@ -85,9 +261,27 @@
           "image_url",
           "width",
           "height",
+          "reviewed",
           "created_at"
         ],
         "title": "DocumentPartResponse",
+        "type": "object"
+      },
+      "DocumentPartUpdateRequest": {
+        "properties": {
+          "reviewed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed"
+          }
+        },
+        "title": "DocumentPartUpdateRequest",
         "type": "object"
       },
       "DocumentResponse": {
@@ -218,6 +412,20 @@
         "title": "DocumentWorkflow",
         "type": "string"
       },
+      "EnqueueJobResponse": {
+        "properties": {
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id"
+        ],
+        "title": "EnqueueJobResponse",
+        "type": "object"
+      },
       "EnqueueTestJobRequest": {
         "properties": {
           "handler": {
@@ -242,6 +450,102 @@
           "job_id"
         ],
         "title": "EnqueueTestJobResponse",
+        "type": "object"
+      },
+      "ExportArtifactResponse": {
+        "properties": {
+          "image_base64": {
+            "title": "Image Base64",
+            "type": "string"
+          },
+          "image_filename": {
+            "title": "Image Filename",
+            "type": "string"
+          },
+          "line_id": {
+            "format": "uuid",
+            "title": "Line Id",
+            "type": "string"
+          },
+          "segment_number": {
+            "title": "Segment Number",
+            "type": "integer"
+          },
+          "transcription_filename": {
+            "title": "Transcription Filename",
+            "type": "string"
+          },
+          "transcription_text": {
+            "title": "Transcription Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "line_id",
+          "segment_number",
+          "image_filename",
+          "transcription_filename",
+          "transcription_text",
+          "image_base64"
+        ],
+        "title": "ExportArtifactResponse",
+        "type": "object"
+      },
+      "ExportResponse": {
+        "properties": {
+          "artifacts": {
+            "items": {
+              "$ref": "#/components/schemas/ExportArtifactResponse"
+            },
+            "title": "Artifacts",
+            "type": "array"
+          },
+          "exported_count": {
+            "title": "Exported Count",
+            "type": "integer"
+          },
+          "steps": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "warnings": {
+            "$ref": "#/components/schemas/ExportWarningsResponse"
+          }
+        },
+        "required": [
+          "exported_count",
+          "artifacts",
+          "warnings",
+          "steps"
+        ],
+        "title": "ExportResponse",
+        "type": "object"
+      },
+      "ExportWarningsResponse": {
+        "properties": {
+          "unpaired_segments": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Unpaired Segments",
+            "type": "array"
+          },
+          "unused_text_lines": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Unused Text Lines",
+            "type": "array"
+          }
+        },
+        "required": [
+          "unpaired_segments",
+          "unused_text_lines"
+        ],
+        "title": "ExportWarningsResponse",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -274,6 +578,60 @@
         ],
         "title": "HealthResponse",
         "type": "object"
+      },
+      "InferenceModelResponse": {
+        "properties": {
+          "artifact_ref": {
+            "title": "Artifact Ref",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "default_params": {
+            "additionalProperties": true,
+            "title": "Default Params",
+            "type": "object"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "task": {
+            "$ref": "#/components/schemas/InferenceTask"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "provider",
+          "task",
+          "artifact_ref",
+          "default_params",
+          "created_at"
+        ],
+        "title": "InferenceModelResponse",
+        "type": "object"
+      },
+      "InferenceTask": {
+        "enum": [
+          "segment",
+          "transcribe",
+          "binarize"
+        ],
+        "title": "InferenceTask",
+        "type": "string"
       },
       "JobResponse": {
         "properties": {
@@ -425,6 +783,495 @@
         "title": "JobType",
         "type": "string"
       },
+      "LayoutResetRequest": {
+        "properties": {
+          "line_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line Ids"
+          }
+        },
+        "title": "LayoutResetRequest",
+        "type": "object"
+      },
+      "LayoutResponse": {
+        "properties": {
+          "blocks": {
+            "items": {
+              "$ref": "#/components/schemas/BlockResponse"
+            },
+            "title": "Blocks",
+            "type": "array"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/LineResponse"
+            },
+            "title": "Lines",
+            "type": "array"
+          }
+        },
+        "required": [
+          "blocks",
+          "lines"
+        ],
+        "title": "LayoutResponse",
+        "type": "object"
+      },
+      "LineCreateRequest": {
+        "properties": {
+          "baseline": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline"
+          },
+          "block_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Block Id"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/LineGeometryKind",
+            "default": "polygon"
+          },
+          "mask": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mask"
+          },
+          "order": {
+            "minimum": 0.0,
+            "title": "Order",
+            "type": "integer"
+          },
+          "points": {
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "minItems": 4,
+            "title": "Points",
+            "type": "array"
+          }
+        },
+        "required": [
+          "order",
+          "points"
+        ],
+        "title": "LineCreateRequest",
+        "type": "object"
+      },
+      "LineGeometryKind": {
+        "enum": [
+          "polygon",
+          "rectangle"
+        ],
+        "title": "LineGeometryKind",
+        "type": "string"
+      },
+      "LinePatchRequest": {
+        "properties": {
+          "baseline": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline"
+          },
+          "block_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Block Id"
+          },
+          "mask": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mask"
+          },
+          "order": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order"
+          },
+          "points": {
+            "anyOf": [
+              {
+                "items": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Points"
+          }
+        },
+        "title": "LinePatchRequest",
+        "type": "object"
+      },
+      "LineResponse": {
+        "properties": {
+          "baseline": {
+            "additionalProperties": true,
+            "title": "Baseline",
+            "type": "object"
+          },
+          "block_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Block Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/LineGeometryKind"
+          },
+          "kraken_ceiling": {
+            "anyOf": [
+              {
+                "items": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kraken Ceiling"
+          },
+          "line_transcriptions": {
+            "items": {
+              "$ref": "#/components/schemas/LineTranscriptionResponse"
+            },
+            "title": "Line Transcriptions",
+            "type": "array"
+          },
+          "manual_geometry": {
+            "title": "Manual Geometry",
+            "type": "boolean"
+          },
+          "mask": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mask"
+          },
+          "order": {
+            "title": "Order",
+            "type": "integer"
+          },
+          "part_id": {
+            "format": "uuid",
+            "title": "Part Id",
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "source": {
+            "$ref": "#/components/schemas/LineSource"
+          },
+          "source_metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Metadata"
+          }
+        },
+        "required": [
+          "id",
+          "part_id",
+          "block_id",
+          "order",
+          "baseline",
+          "mask",
+          "kind",
+          "points",
+          "source",
+          "source_metadata",
+          "kraken_ceiling",
+          "manual_geometry",
+          "created_at"
+        ],
+        "title": "LineResponse",
+        "type": "object"
+      },
+      "LineSource": {
+        "enum": [
+          "manual",
+          "kraken",
+          "model"
+        ],
+        "title": "LineSource",
+        "type": "string"
+      },
+      "LineTranscriptionPatchRequest": {
+        "properties": {
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "LineTranscriptionPatchRequest",
+        "type": "object"
+      },
+      "LineTranscriptionResponse": {
+        "properties": {
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "transcription_id": {
+            "format": "uuid",
+            "title": "Transcription Id",
+            "type": "string"
+          },
+          "transcription_kind": {
+            "$ref": "#/components/schemas/TranscriptionKind"
+          }
+        },
+        "required": [
+          "id",
+          "transcription_id",
+          "transcription_kind",
+          "text",
+          "confidence"
+        ],
+        "title": "LineTranscriptionResponse",
+        "type": "object"
+      },
+      "LineUpsertRequest": {
+        "properties": {
+          "approved_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved Text"
+          },
+          "block_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Block Id"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/LineGeometryKind",
+            "default": "polygon"
+          },
+          "kraken_ceiling": {
+            "anyOf": [
+              {
+                "items": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kraken Ceiling"
+          },
+          "order": {
+            "minimum": 0.0,
+            "title": "Order",
+            "type": "integer"
+          },
+          "points": {
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "minItems": 4,
+            "title": "Points",
+            "type": "array"
+          },
+          "source": {
+            "$ref": "#/components/schemas/LineSource",
+            "default": "manual"
+          },
+          "source_metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Metadata"
+          }
+        },
+        "required": [
+          "order",
+          "points"
+        ],
+        "title": "LineUpsertRequest",
+        "type": "object"
+      },
+      "LinesReplaceRequest": {
+        "properties": {
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/LineUpsertRequest"
+            },
+            "title": "Lines",
+            "type": "array"
+          }
+        },
+        "title": "LinesReplaceRequest",
+        "type": "object"
+      },
       "LoginRequest": {
         "properties": {
           "email": {
@@ -444,6 +1291,241 @@
           "password"
         ],
         "title": "LoginRequest",
+        "type": "object"
+      },
+      "ModelBindingCreateRequest": {
+        "properties": {
+          "model_id": {
+            "format": "uuid",
+            "title": "Model Id",
+            "type": "string"
+          },
+          "overrides": {
+            "additionalProperties": true,
+            "title": "Overrides",
+            "type": "object"
+          },
+          "task": {
+            "$ref": "#/components/schemas/InferenceTask"
+          }
+        },
+        "required": [
+          "task",
+          "model_id"
+        ],
+        "title": "ModelBindingCreateRequest",
+        "type": "object"
+      },
+      "ModelBindingResponse": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "document_part_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Part Id"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "model_id": {
+            "format": "uuid",
+            "title": "Model Id",
+            "type": "string"
+          },
+          "overrides": {
+            "additionalProperties": true,
+            "title": "Overrides",
+            "type": "object"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "task": {
+            "$ref": "#/components/schemas/InferenceTask"
+          }
+        },
+        "required": [
+          "id",
+          "task",
+          "model_id",
+          "project_id",
+          "document_id",
+          "document_part_id",
+          "overrides",
+          "created_at"
+        ],
+        "title": "ModelBindingResponse",
+        "type": "object"
+      },
+      "ModelBindingUpdateRequest": {
+        "properties": {
+          "model_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
+          },
+          "overrides": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overrides"
+          }
+        },
+        "title": "ModelBindingUpdateRequest",
+        "type": "object"
+      },
+      "PagePairingResponse": {
+        "properties": {
+          "pairing_progress": {
+            "$ref": "#/components/schemas/PairingProgressResponse"
+          },
+          "text_lines": {
+            "items": {
+              "$ref": "#/components/schemas/PageTranscriptionTextLineResponse"
+            },
+            "title": "Text Lines",
+            "type": "array"
+          }
+        },
+        "required": [
+          "text_lines",
+          "pairing_progress"
+        ],
+        "title": "PagePairingResponse",
+        "type": "object"
+      },
+      "PageTranscriptionImportRequest": {
+        "properties": {
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "PageTranscriptionImportRequest",
+        "type": "object"
+      },
+      "PageTranscriptionTextLineResponse": {
+        "properties": {
+          "order": {
+            "title": "Order",
+            "type": "integer"
+          },
+          "paired_line_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paired Line Id"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "order",
+          "text",
+          "paired_line_id"
+        ],
+        "title": "PageTranscriptionTextLineResponse",
+        "type": "object"
+      },
+      "PairTextLineRequest": {
+        "properties": {
+          "line_id": {
+            "format": "uuid",
+            "title": "Line Id",
+            "type": "string"
+          },
+          "text_line_order": {
+            "minimum": 0.0,
+            "title": "Text Line Order",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "line_id",
+          "text_line_order"
+        ],
+        "title": "PairTextLineRequest",
+        "type": "object"
+      },
+      "PairingProgressResponse": {
+        "properties": {
+          "paired_lines": {
+            "title": "Paired Lines",
+            "type": "integer"
+          },
+          "percent": {
+            "title": "Percent",
+            "type": "integer"
+          },
+          "total_lines": {
+            "title": "Total Lines",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "paired_lines",
+          "total_lines",
+          "percent"
+        ],
+        "title": "PairingProgressResponse",
         "type": "object"
       },
       "ProjectCreateRequest": {
@@ -613,8 +1695,7 @@
             "type": "string"
           },
           "kind": {
-            "title": "Kind",
-            "type": "string"
+            "$ref": "#/components/schemas/TranscriptionKind"
           },
           "name": {
             "title": "Name",
@@ -675,6 +1756,28 @@
         "title": "ReorderPartsRequest",
         "type": "object"
       },
+      "ResolvedModelBindingResponse": {
+        "properties": {
+          "binding": {
+            "$ref": "#/components/schemas/ModelBindingResponse"
+          },
+          "effective_params": {
+            "additionalProperties": true,
+            "title": "Effective Params",
+            "type": "object"
+          },
+          "model": {
+            "$ref": "#/components/schemas/InferenceModelResponse"
+          }
+        },
+        "required": [
+          "binding",
+          "model",
+          "effective_params"
+        ],
+        "title": "ResolvedModelBindingResponse",
+        "type": "object"
+      },
       "ShareUserRequest": {
         "properties": {
           "username": {
@@ -706,6 +1809,62 @@
           "access_token"
         ],
         "title": "TokenResponse",
+        "type": "object"
+      },
+      "TranscriptionKind": {
+        "enum": [
+          "ground_truth",
+          "model"
+        ],
+        "title": "TranscriptionKind",
+        "type": "string"
+      },
+      "TranscriptionLayerResponse": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by_job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Job Id"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/TranscriptionKind"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "document_id",
+          "name",
+          "kind",
+          "created_by_job_id",
+          "created_at"
+        ],
+        "title": "TranscriptionLayerResponse",
         "type": "object"
       },
       "UserResponse": {
@@ -740,6 +1899,13 @@
       },
       "ValidationError": {
         "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
           "loc": {
             "items": {
               "anyOf": [
@@ -940,6 +2106,36 @@
         "summary": "Health",
         "tags": [
           "health"
+        ]
+      }
+    },
+    "/inference/models": {
+      "get": {
+        "operationId": "list_inference_models_inference_models_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/InferenceModelResponse"
+                  },
+                  "title": "Response List Inference Models Inference Models Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Inference Models",
+        "tags": [
+          "inference"
         ]
       }
     },
@@ -1644,6 +2840,134 @@
         ]
       }
     },
+    "/projects/{project_id}/documents/{document_id}/model-bindings": {
+      "get": {
+        "operationId": "list_document_model_bindings_projects__project_id__documents__document_id__model_bindings_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ModelBindingResponse"
+                  },
+                  "title": "Response List Document Model Bindings Projects  Project Id  Documents  Document Id  Model Bindings Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Document Model Bindings",
+        "tags": [
+          "inference"
+        ]
+      },
+      "post": {
+        "operationId": "create_document_model_binding_projects__project_id__documents__document_id__model_bindings_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelBindingCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelBindingResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Document Model Binding",
+        "tags": [
+          "inference"
+        ]
+      }
+    },
     "/projects/{project_id}/documents/{document_id}/parts": {
       "post": {
         "operationId": "upload_part_projects__project_id__documents__document_id__parts_post",
@@ -1842,6 +3166,2173 @@
         "summary": "Delete Part",
         "tags": [
           "documents"
+        ]
+      },
+      "patch": {
+        "operationId": "update_part_projects__project_id__documents__document_id__parts__part_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Part Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentPartUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentPartResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Part",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/projects/{project_id}/documents/{document_id}/parts/{part_id}/blocks": {
+      "post": {
+        "operationId": "create_part_block_projects__project_id__documents__document_id__parts__part_id__blocks_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Part Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlockCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlockResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Part Block",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/projects/{project_id}/documents/{document_id}/parts/{part_id}/blocks/{block_id}": {
+      "delete": {
+        "operationId": "delete_part_block_projects__project_id__documents__document_id__parts__part_id__blocks__block_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Part Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "block_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Block Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Part Block",
+        "tags": [
+          "documents"
+        ]
+      },
+      "patch": {
+        "operationId": "patch_part_block_projects__project_id__documents__document_id__parts__part_id__blocks__block_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Part Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "block_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Block Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlockPatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlockResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Patch Part Block",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/projects/{project_id}/documents/{document_id}/parts/{part_id}/export": {
+      "post": {
+        "operationId": "export_approved_line_artifacts_projects__project_id__documents__document_id__parts__part_id__export_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Part Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Export Approved Line Artifacts",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/projects/{project_id}/documents/{document_id}/parts/{part_id}/history": {
+      "get": {
+        "operationId": "list_history_snapshots_projects__project_id__documents__document_id__parts__part_id__history_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Part Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AnnotationHistorySnapshotResponse"
+                  },
+                  "title": "Response List History Snapshots Projects  Project Id  Documents  Document Id  Parts  Part Id  History Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List History Snapshots",
+        "tags": [
+          "annotation-history"
+        ]
+      },
+      "post": {
+        "operationId": "create_history_snapshot_projects__project_id__documents__document_id__parts__part_id__history_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Part Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnnotationHistorySnapshotResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create History Snapshot",
+        "tags": [
+          "annotation-history"
+        ]
+      }
+    },
+    "/projects/{project_id}/documents/{document_id}/parts/{part_id}/history/{snapshot_id}/restore": {
+      "post": {
+        "operationId": "restore_history_snapshot_projects__project_id__documents__document_id__parts__part_id__history__snapshot_id__restore_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Part Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "snapshot_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Snapshot Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LineResponse"
+                  },
+                  "title": "Response Restore History Snapshot Projects  Project Id  Documents  Document Id  Parts  Part Id  History  Snapshot Id  Restore Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Restore History Snapshot",
+        "tags": [
+          "annotation-history"
+        ]
+      }
+    },
+    "/projects/{project_id}/documents/{document_id}/parts/{part_id}/layout": {
+      "get": {
+        "operationId": "list_part_layout_projects__project_id__documents__document_id__parts__part_id__layout_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Part Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LayoutResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Part Layout",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/projects/{project_id}/documents/{document_id}/parts/{part_id}/layout/reset": {
+      "post": {
+        "operationId": "reset_part_layout_projects__project_id__documents__document_id__parts__part_id__layout_reset_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Part Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LayoutResetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LayoutResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Reset Part Layout",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/projects/{project_id}/documents/{document_id}/parts/{part_id}/lines": {
+      "get": {
+        "operationId": "list_part_lines_projects__project_id__documents__document_id__parts__part_id__lines_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Part Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LineResponse"
+                  },
+                  "title": "Response List Part Lines Projects  Project Id  Documents  Document Id  Parts  Part Id  Lines Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Part Lines",
+        "tags": [
+          "documents"
+        ]
+      },
+      "post": {
+        "operationId": "create_part_line_projects__project_id__documents__document_id__parts__part_id__lines_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Part Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LineCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LineResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Part Line",
+        "tags": [
+          "documents"
+        ]
+      },
+      "put": {
+        "operationId": "replace_part_lines_projects__project_id__documents__document_id__parts__part_id__lines_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Part Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinesReplaceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LineResponse"
+                  },
+                  "title": "Response Replace Part Lines Projects  Project Id  Documents  Document Id  Parts  Part Id  Lines Put",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Replace Part Lines",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/projects/{project_id}/documents/{document_id}/parts/{part_id}/lines/{line_id}": {
+      "delete": {
+        "operationId": "delete_part_line_projects__project_id__documents__document_id__parts__part_id__lines__line_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Part Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "line_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Line Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Part Line",
+        "tags": [
+          "documents"
+        ]
+      },
+      "patch": {
+        "operationId": "patch_part_line_projects__project_id__documents__document_id__parts__part_id__lines__line_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Part Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "line_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Line Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinePatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LineResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Patch Part Line",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/projects/{project_id}/documents/{document_id}/parts/{part_id}/model-bindings": {
+      "get": {
+        "operationId": "list_part_model_bindings_projects__project_id__documents__document_id__parts__part_id__model_bindings_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Part Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ModelBindingResponse"
+                  },
+                  "title": "Response List Part Model Bindings Projects  Project Id  Documents  Document Id  Parts  Part Id  Model Bindings Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Part Model Bindings",
+        "tags": [
+          "inference"
+        ]
+      },
+      "post": {
+        "operationId": "create_part_model_binding_projects__project_id__documents__document_id__parts__part_id__model_bindings_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Part Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelBindingCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelBindingResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Part Model Binding",
+        "tags": [
+          "inference"
+        ]
+      }
+    },
+    "/projects/{project_id}/documents/{document_id}/parts/{part_id}/model-bindings/resolve": {
+      "get": {
+        "operationId": "resolve_part_model_binding_projects__project_id__documents__document_id__parts__part_id__model_bindings_resolve_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Part Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "task",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/InferenceTask"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResolvedModelBindingResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Resolve Part Model Binding",
+        "tags": [
+          "inference"
+        ]
+      }
+    },
+    "/projects/{project_id}/documents/{document_id}/parts/{part_id}/page-transcription": {
+      "put": {
+        "operationId": "import_page_transcription_projects__project_id__documents__document_id__parts__part_id__page_transcription_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Part Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PageTranscriptionImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagePairingResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Import Page Transcription",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/projects/{project_id}/documents/{document_id}/parts/{part_id}/pairing": {
+      "get": {
+        "operationId": "get_page_pairing_projects__project_id__documents__document_id__parts__part_id__pairing_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Part Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagePairingResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Page Pairing",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/projects/{project_id}/documents/{document_id}/parts/{part_id}/pairings": {
+      "post": {
+        "operationId": "pair_page_text_line_projects__project_id__documents__document_id__parts__part_id__pairings_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Part Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PairTextLineRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagePairingResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Pair Page Text Line",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/projects/{project_id}/documents/{document_id}/parts/{part_id}/segment": {
+      "post": {
+        "operationId": "segment_part_projects__project_id__documents__document_id__parts__part_id__segment_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Part Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnqueueJobResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Segment Part",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/projects/{project_id}/documents/{document_id}/parts/{part_id}/transcribe": {
+      "post": {
+        "operationId": "transcribe_part_projects__project_id__documents__document_id__parts__part_id__transcribe_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Part Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnqueueJobResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Transcribe Part",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/projects/{project_id}/documents/{document_id}/transcriptions": {
+      "get": {
+        "operationId": "list_transcriptions_projects__project_id__documents__document_id__transcriptions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TranscriptionLayerResponse"
+                  },
+                  "title": "Response List Transcriptions Projects  Project Id  Documents  Document Id  Transcriptions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Transcriptions",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/projects/{project_id}/documents/{document_id}/transcriptions/{transcription_id}/copy-to-ground-truth": {
+      "post": {
+        "operationId": "copy_to_ground_truth_projects__project_id__documents__document_id__transcriptions__transcription_id__copy_to_ground_truth_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "transcription_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Transcription Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CopyToGroundTruthRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CopyToGroundTruthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Copy To Ground Truth",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/projects/{project_id}/documents/{document_id}/transcriptions/{transcription_id}/lines/{line_id}": {
+      "patch": {
+        "operationId": "patch_ground_truth_line_text_projects__project_id__documents__document_id__transcriptions__transcription_id__lines__line_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "transcription_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Transcription Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "line_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Line Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LineTranscriptionPatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LineTranscriptionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Patch Ground Truth Line Text",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/projects/{project_id}/model-bindings": {
+      "get": {
+        "operationId": "list_project_model_bindings_projects__project_id__model_bindings_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ModelBindingResponse"
+                  },
+                  "title": "Response List Project Model Bindings Projects  Project Id  Model Bindings Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Project Model Bindings",
+        "tags": [
+          "inference"
+        ]
+      },
+      "post": {
+        "operationId": "create_project_model_binding_projects__project_id__model_bindings_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelBindingCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelBindingResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Project Model Binding",
+        "tags": [
+          "inference"
+        ]
+      }
+    },
+    "/projects/{project_id}/model-bindings/{binding_id}": {
+      "delete": {
+        "operationId": "delete_model_binding_projects__project_id__model_bindings__binding_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "binding_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Binding Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Model Binding",
+        "tags": [
+          "inference"
+        ]
+      },
+      "patch": {
+        "operationId": "update_model_binding_projects__project_id__model_bindings__binding_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "binding_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Binding Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelBindingUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelBindingResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Model Binding",
+        "tags": [
+          "inference"
         ]
       }
     },

@@ -12,6 +12,7 @@ from backend.document.infrastructure.orm_models import (
     DocumentWorkflow,
     Line,
     LineTranscription,
+    PageTranscriptionLine,
     Transcription,
     TranscriptionKind,
 )
@@ -118,6 +119,16 @@ class DocumentRepository:
             )
             .where(Line.part_id == part_id)
             .order_by(Line.order, Line.created_at)
+        )
+        return list(result.scalars().all())
+
+    async def list_page_transcription_lines(
+        self, session: AsyncSession, part_id: UUID
+    ) -> list[PageTranscriptionLine]:
+        result = await session.execute(
+            select(PageTranscriptionLine)
+            .where(PageTranscriptionLine.part_id == part_id)
+            .order_by(PageTranscriptionLine.order, PageTranscriptionLine.created_at)
         )
         return list(result.scalars().all())
 

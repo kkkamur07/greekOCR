@@ -9,6 +9,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from backend.annotation.api.history import router as annotation_history_router
 from backend.core.api.health import router as health_router
 from backend.core.api.root import router as root_router
 from backend.core.exceptions import (
@@ -94,6 +95,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_router)
     app.include_router(projects_router)
     app.include_router(documents_router)
+    app.include_router(annotation_history_router)
     app.include_router(media_router)
     app.include_router(public_router)
     app.include_router(public_media_router)
