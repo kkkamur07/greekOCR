@@ -18,7 +18,7 @@ _(empty)_
 
 ## Review
 
-- [ ] [remove-root-app-duplicates](027-remove-root-app-duplicates.md)
+_(empty)_
 
 ## Done
 
@@ -49,6 +49,7 @@ _(empty)_
 - [x] [annotation-history-restore](done/024-annotation-history-restore.md)
 - [x] [export-approved-line-artifacts](done/025-export-approved-line-artifacts.md)
 - [x] [transcription-pdf-artifact](done/026-transcription-pdf-artifact.md)
+- [x] [remove-root-app-duplicates](done/027-remove-root-app-duplicates.md)
 
 ## Backlog
 

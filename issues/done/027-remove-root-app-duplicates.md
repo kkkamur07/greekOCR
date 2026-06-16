@@ -2,7 +2,7 @@
 id: "027"
 title: "remove-root-app-duplicates"
 type: AFK
-status: review
+status: done
 blocked_by:
   - "019-authenticated-platform-shell.md"
   - "023-page-review-status.md"
