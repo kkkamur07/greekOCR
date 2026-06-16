@@ -118,6 +118,10 @@ Frontend lanes (014–017) are tracked in `issues/` but **do not count toward ka
 - After changing FastAPI routes or Pydantic schemas under `backend/`
 - Before opening a PR that touches API contracts
 
+## Transcription edit smoke
+
+Open a document part with a Ground truth layer and at least one model Transcription layer. Switch to **Transcription edit**, select a Segment, and use the **Transcription layer** picker: Ground truth is editable and saves with **Save Ground truth text**, while model layers are read-only and can be copied into Ground truth for the selected Segment or whole Page.
+
 ## Jobs panel (issue 016)
 
 The document editor shows a **Jobs** card (`JobsPanel`) that tracks jobs enqueued from the UI. Each row polls `GET /jobs/{id}` every ~1.5s until status is `done` or `failed`. Failed jobs surface the API `error` string via antd `notification` (and inline on the row).

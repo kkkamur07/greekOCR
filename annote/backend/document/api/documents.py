@@ -3,10 +3,11 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Query, Response, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.annotation.application.export_service import AnnotationExportService
+from backend.annotation.application.transcription_pdf_service import TranscriptionPdfService
 from backend.core.exceptions import ValidationError
 from backend.document.api.schemas import (
     BlockCreateRequest,
@@ -49,6 +50,7 @@ from infrastructure.db import get_db
 router = APIRouter(prefix="/projects/{project_id}/documents", tags=["documents"])
 _service = DocumentService()
 _export_service = AnnotationExportService()
+_transcription_pdf_service = TranscriptionPdfService()
 
 
 def _part_response(part: DocumentPart) -> DocumentPartResponse:
@@ -543,6 +545,28 @@ async def export_approved_line_artifacts(
         part_id,
     )
     return _export_response(result)
+
+
+@router.post("/{document_id}/parts/{part_id}/transcription-pdf")
+async def generate_transcription_pdf(
+    project_id: UUID,
+    document_id: UUID,
+    part_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> Response:
+    pdf_bytes = await _transcription_pdf_service.generate_part_pdf(
+        db,
+        current_user,
+        project_id,
+        document_id,
+        part_id,
+    )
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'attachment; filename="transcription.pdf"'},
+    )
 
 
 @router.post(

@@ -2,7 +2,7 @@
 id: "015"
 title: "frontend-transcription-editor"
 type: AFK
-status: backlog
+status: done
 blocked_by:
   - "010-ground-truth-copy-edit-api.md"
   - "done/012-nextjs-openapi-codegen.md"
@@ -19,18 +19,18 @@ parent_prd: "issues/prd.md"
 
 ## Error handling
 
-- [ ] Prevent editing model layer in UI; API errors on illegal PATCH surfaced to user.
+- [x] Prevent editing model layer in UI; API errors on illegal PATCH surfaced to user.
 
 ## Dev / test data
 
-- [ ] Requires seeded document with ground truth + model layer (010 seed); link from `scripts/README` or frontend README.
+- [x] Requires seeded document with ground truth + model layer (010 seed); link from `scripts/README` or frontend README.
 
 ## Acceptance criteria
 
-- [ ] User switches to transcription mode and edits ground truth line text
-- [ ] Copy from model layer populates ground truth for selected lines
-- [ ] Model layer text not editable in transcription edit mode
-- [ ] Build passes; smoke test documented in frontend README
+- [x] User switches to transcription mode and edits ground truth line text
+- [x] Copy from model layer populates ground truth for selected lines
+- [x] Model layer text not editable in transcription edit mode
+- [x] Build passes; smoke test documented in frontend README
 
 ## Blocked by
 

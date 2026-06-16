@@ -6,8 +6,7 @@
 
 ## Ready (AFK)
 
-- [ ] [frontend-transcription-editor](015-frontend-transcription-editor.md)
-- [ ] [transcription-pdf-artifact](026-transcription-pdf-artifact.md)
+- [ ] [remove-root-app-duplicates](027-remove-root-app-duplicates.md)
 
 ## Ready (HITL)
 
@@ -38,6 +37,7 @@ _(empty)_
 - [x] [nextjs-openapi-codegen](done/012-nextjs-openapi-codegen.md)
 - [x] [frontend-projects-documents](done/013-frontend-projects-documents.md)
 - [x] [frontend-layout-editor](done/014-frontend-layout-editor.md)
+- [x] [frontend-transcription-editor](done/015-frontend-transcription-editor.md)
 - [x] [frontend-jobs-panel](done/016-frontend-jobs-panel.md)
 - [x] [frontend-public-published-view](done/017-frontend-public-published-view.md)
 - [x] [annote-production-root](done/018-annote-production-root.md)
@@ -48,8 +48,9 @@ _(empty)_
 - [x] [page-review-status](done/023-page-review-status.md)
 - [x] [annotation-history-restore](done/024-annotation-history-restore.md)
 - [x] [export-approved-line-artifacts](done/025-export-approved-line-artifacts.md)
+- [x] [transcription-pdf-artifact](done/026-transcription-pdf-artifact.md)
 
 ## Backlog
 
-- [ ] [remove-root-app-duplicates](027-remove-root-app-duplicates.md)
+_(empty)_
 
