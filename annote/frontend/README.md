@@ -1,136 +1,192 @@
-# greekOCR frontend
+# Annote Frontend
 
-Vite + React client for the greekOCR platform API. Editor UI ports concepts and components from [eScriptorium](https://github.com/PSL-Paris-Saclay/escriptorium) (`_support_repo/escriptorium/front/vue/`) into React — not a line-for-line Vue port, but the same canvas, transcription panel, and workflow patterns.
+Vite + React client for the Annote production platform API. The app provides
+authentication, Project/Document navigation, public published-document views,
+and the Page editor used for layout, Pairing, Review status, Annotation
+history, Export, Transcription editing, jobs, and PDF artifacts.
 
-## API type codegen
+Run frontend commands from `annote/frontend/`.
 
-Types are generated from the FastAPI OpenAPI schema so the client stays aligned with backend DTOs.
-
-### Prerequisites
-
-- Python env with platform dependencies (`pip install -e "backend[dev]"` from `annote/`)
-- Node.js 20+
-- PostgreSQL running (`docker compose up db -d`)
-
-### Regenerate types
-
-From the annote app root:
+## Quick Start
 
 ```bash
+cd annote/frontend
+npm install
+cp .env.local.example .env.local
+npm run dev
+```
+
+The dev app runs at `http://localhost:5173`. By default it talks to
+`http://localhost:8000`; override with `VITE_API_BASE_URL` in `.env.local`.
+
+Start the backend separately from `annote/`:
+
+```bash
+docker compose up db -d
+PYTHONPATH=. alembic -c infrastructure/alembic.ini upgrade head
+PYTHONPATH=. uvicorn backend.core.app:create_app --factory --reload
+```
+
+## Directory Map
+
+```text
+frontend/
+  package.json                 # scripts and dependencies
+  vite.config.ts               # Vite + React
+  vitest.setup.ts              # test DOM setup and global mocks
+  openapi/openapi.json         # exported FastAPI schema
+  src/
+    main.tsx                   # React entrypoint
+    App.tsx                    # route tree and shell
+    LegacyDemoApp.tsx          # old OCR/editor demo route
+    api/
+      client.ts                # typed fetch wrapper and API helpers
+      schema.d.ts              # generated OpenAPI TypeScript types
+      errors.ts                # ApiError
+    auth/                      # token storage and redirect helpers
+    components/                # shared UI and editor components
+    pages/                     # route-level pages and tests
+    services/                  # legacy/demo service helpers
+    types/                     # legacy/demo types
+```
+
+## Main Libraries
+
+| Library | Role |
+|---------|------|
+| React 19 | UI framework |
+| React Router 7 | Client routing |
+| Ant Design 6 | Forms, cards, buttons, alerts, notifications |
+| TanStack Query | Server-state utilities where used |
+| Vite 7 | Dev server and production build |
+| Vitest + Testing Library | Component and route behavior tests |
+| openapi-typescript | Generates `src/api/schema.d.ts` |
+| react-zoom-pan-pinch | Image canvas zoom/pan |
+| fabric | Legacy/demo canvas support |
+
+## Scripts
+
+```bash
+npm run dev             # Vite dev server on 5173
+npm run build           # typecheck:api + production bundle
+npm run preview         # serve built bundle
+npm run test            # Vitest run
+npm run typecheck       # full TypeScript project references
+npm run typecheck:api   # API-focused typecheck used by build
+npm run codegen:api     # regenerate schema.d.ts from openapi/openapi.json
+npm run lint            # ESLint
+```
+
+For workflow PRs, the current focused gate is usually:
+
+```bash
+npm run test -- PageEditorPlaceholderPage.test.tsx
+npm run build
+```
+
+`npm run typecheck`, `npm run lint`, and all-test runs may also surface legacy
+demo files; fix or scope those separately when touching that surface.
+
+## API Contract Flow
+
+Backend routes are the source of truth. When FastAPI schemas or routes change:
+
+```bash
+cd annote
 PYTHONPATH=. python scripts/export_openapi.py
 cd frontend
 npm run codegen:api
+npm run typecheck:api
 ```
 
-Committed outputs:
+Committed API artifacts:
 
-- `annote/frontend/openapi/openapi.json`
-- `annote/frontend/src/api/schema.d.ts`
+- `frontend/openapi/openapi.json`
+- `frontend/src/api/schema.d.ts`
+- hand-authored helpers and aliases in `frontend/src/api/client.ts`
 
-### Smoke check
+`apiRequest()` attaches the JWT from `src/auth/storage.ts` unless a request sets
+`skipAuth: true`. Public routes use `skipAuth` and unauthenticated media helpers.
 
-```bash
-cd frontend
-npm run typecheck:api   # API + pages typecheck
-npm run build           # typecheck:api + Vite production bundle
-```
+## Route Pages
 
-Use `npm run typecheck` for the full app (includes legacy `/demo` OCR components).
+| Page | Purpose |
+|------|---------|
+| `LoginPage.tsx`, `RegisterPage.tsx` | Authentication |
+| `ProjectsPage.tsx` | Project list/create entry |
+| `ProjectDashboardPage.tsx` | Project-level navigation |
+| `DocumentDetailPage.tsx` | Document metadata, parts, workflow actions |
+| `PublicDocumentPage.tsx` | Anonymous read-only view for published Documents |
+| `PageEditorPlaceholderPage.tsx` | Main Page/Document part editor |
 
-## Local dev
+Each route page should have behavior tests next to it. Prefer Testing Library
+queries that describe user-visible behavior rather than component internals.
 
-1. **Env**
+## Page Editor Workflows
 
-   ```bash
-   cd frontend
-   cp .env.local.example .env.local
-   ```
+`PageEditorPlaceholderPage.tsx` is the central editor route. It coordinates:
 
-   Set `VITE_API_BASE_URL` if the API is not on `http://localhost:8000`.
+- Loading the Document, selected Document part, layout Blocks/Lines, Transcription layers, and Pairing state.
+- Drawing/editing Segment geometry on the Page image.
+- Importing Page transcription text and showing candidate Text lines.
+- Pairing a selected Segment to a candidate Text line.
+- Editing approved Ground truth Line transcription text directly.
+- Showing Pairing progress as paired Lines over total Lines.
+- Marking the Page reviewed/unreviewed independently from Pairing progress.
+- Working with Transcription layers: Ground truth is editable; model layers are read-only and copyable into Ground truth.
+- Triggering Export/PDF artifact behavior when exposed by the active branch.
+- Polling jobs through `JobsPanel`.
 
-2. **Dev user** (annote app root, DB up):
+Domain language follows `annote/CONTEXT.md`: Page, Document part, Segment, Text
+line, Page transcription, Line transcription, Pairing, Human review, Export,
+Transcription PDF.
 
-   ```bash
-   PYTHONPATH=. python scripts/seed_dev_user.py
-   ```
+## Component Map
 
-   Default: `dev@kalamos.local` / `dev-pass-123`.
+| Component | Role |
+|-----------|------|
+| `AppLayout` | Shared authenticated page shell |
+| `ProtectedRoute` | Redirects unauthenticated users |
+| `AuthenticatedImage` | Fetches protected media with JWT |
+| `RemoteImage` | Displays public unauthenticated media |
+| `WorkflowBadge` | Document workflow display |
+| `JobsPanel` | Job enqueue/poll/status UI |
+| `ImageCanvas/` | Page image, overlays, drawing, zoom/pan |
+| `TrascriptionPanel/` | Legacy spelling kept; transcription layer/detail UI |
+| `ControlBar/` | Legacy demo toolbar |
 
-3. **API + frontend**
+The editor borrows ideas from eScriptorium's manuscript workflow, but it is not
+a line-for-line Vue port.
 
-   ```bash
-   # Terminal 1 — API
-   uvicorn backend.core.app:create_app --factory --reload
+## Public Published View
 
-   # Terminal 2 — Vite
-   cd frontend && npm install && npm run dev
-   ```
-
-   App: `http://localhost:5173` — login → projects → documents.
-
-## Public published view
-
-Anonymous users read **published** documents only:
+Anonymous users can read published Documents only:
 
 ```text
 /public/projects/{projectId}/documents/{documentId}
 ```
 
-Example: `http://localhost:5173/public/projects/<uuid>/documents/<uuid>`
+Draft Documents return 404 through the public API. Authenticated project members
+see editor navigation affordances on the public page.
 
-### Publish for testing
+## Jobs Panel Smoke Test
 
-1. Sign in, create a document, upload a part image.
-2. PATCH workflow to `published`:
+1. Set `ENABLE_TEST_JOB_ROUTES=true` in `backend/core/.env`.
+2. Set `VITE_ENABLE_TEST_JOBS=true` in `frontend/.env.local`.
+3. Start the API from `annote/`.
+4. Start Vite from `annote/frontend/`.
+5. Open a Document and click **Run test job**.
 
-   ```bash
-   curl -X PATCH "http://localhost:8000/projects/{project_id}/documents/{document_id}" \
-     -H "Authorization: Bearer $TOKEN" \
-     -H "Content-Type: application/json" \
-     -d '{"workflow": "published"}'
-   ```
+The row should move `pending` -> `running` -> `done`, or show the API error if
+the job fails.
 
-3. Open the public URL in a private window (no JWT). Drafts return **404**.
+## Special Notes
 
-Logged-in members see **Open in editor** on the public page; the editor shows **View public page** when workflow is `published`.
-
-## eScriptorium → React component map
-
-| eScriptorium (Vue) | React port | Role |
-|--------------------|------------|------|
-| `VisuPanel` / canvas | `ImageCanvas/` | Folio image, regions, zoom (`react-zoom-pan-pinch`) |
-| `VisuLine` | `ImageCanvas/components/RegionOveraly.tsx` | Line/box overlays |
-| Transcription UI | `TrascriptionPanel/` | Layer list + detail (folder typo kept) |
-| `TaskDashboard` | `JobsPanel/` | Job enqueue + poll (test jobs until 006/009) |
-| Document workflow | `WorkflowBadge.tsx` | draft / published / archived |
-| Toolbar / modes | `ControlBar/` | Legacy demo at `/demo` only |
-| Authenticated media | `AuthenticatedImage.tsx` | JWT for `/media/parts/...` |
-| Public media | `RemoteImage.tsx` + `publicPartMediaUrl()` | No JWT; `/public/media/parts/{id}` |
-
-Platform routes live in `src/pages/`; HTTP in `src/api/client.ts` (`skipAuth` for public routes).
-
-## Issue tracking
-
-Frontend lanes (014–017) are tracked in `issues/` but **do not count toward kanban WIP** limits used for backend/platform lanes.
-
-### When to run codegen
-
-- After changing FastAPI routes or Pydantic schemas under `backend/`
-- Before opening a PR that touches API contracts
-
-## Transcription edit smoke
-
-Open a document part with a Ground truth layer and at least one model Transcription layer. Switch to **Transcription edit**, select a Segment, and use the **Transcription layer** picker: Ground truth is editable and saves with **Save Ground truth text**, while model layers are read-only and can be copied into Ground truth for the selected Segment or whole Page.
-
-## Jobs panel (issue 016)
-
-The document editor shows a **Jobs** card (`JobsPanel`) that tracks jobs enqueued from the UI. Each row polls `GET /jobs/{id}` every ~1.5s until status is `done` or `failed`. Failed jobs surface the API `error` string via antd `notification` (and inline on the row).
-
-### Dev smoke: noop test job
-
-1. API: `ENABLE_TEST_JOB_ROUTES=true` in `backend/core/.env` (see `backend/core/.env.example`).
-2. Frontend: `VITE_ENABLE_TEST_JOBS=true` in `.env.local` (see `.env.local.example`).
-3. Start API (`uvicorn backend.core.app:create_app --factory --reload` from `annote/`).
-4. Open a document → **Run test job** → row moves `pending` → `running` → `done`.
-
-Segment/transcribe enqueue buttons arrive with issues 006/009; the panel already supports multiple concurrent job rows.
+- `LegacyDemoApp.tsx`, `services/`, and some `types/` are retained for old OCR
+  demo behavior. Do not use them as patterns for production platform pages.
+- The `TrascriptionPanel` folder name is misspelled historically; keep imports
+  consistent unless doing a deliberate rename.
+- API-generated types may mark fields optional even when current backend
+  responses always include them; UI code should be robust where feasible.
+- Production build warns about large chunks today; that is a bundle-splitting
+  follow-up, not a build failure.
