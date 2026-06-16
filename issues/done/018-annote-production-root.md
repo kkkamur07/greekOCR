@@ -1,11 +1,13 @@
 ---
 id: "018"
 title: "annote-production-root"
-type: AFK
-status: review
-blocked_by: []
+type: "AFK"
+status: "done"
+blocked_by: "[]"
 parent_prd: "issues/prd-annote-merge.md"
 ---
+
+
 
 ## Parent
 

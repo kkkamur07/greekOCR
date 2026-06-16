@@ -1,12 +1,14 @@
 ---
 id: "019"
 title: "authenticated-platform-shell"
-type: AFK
-status: review
+type: "AFK"
+status: "done"
 blocked_by:
   - "018-annote-production-root.md"
 parent_prd: "issues/prd-annote-merge.md"
 ---
+
+
 
 ## Parent
 

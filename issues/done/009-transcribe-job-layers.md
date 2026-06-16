@@ -1,14 +1,16 @@
 ---
 id: "009"
 title: "transcribe-job-layers"
-type: AFK
-status: review
+type: "AFK"
+status: "done"
 blocked_by:
   - "007-segment-merge.md"
   - "005-inference-catalog-bindings.md"
   - "done/003-documents-parts-media.md"
 parent_prd: "issues/prd.md"
 ---
+
+
 
 ## Parent PRD
 

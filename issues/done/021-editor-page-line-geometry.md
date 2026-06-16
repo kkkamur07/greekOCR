@@ -1,13 +1,15 @@
 ---
 id: "021"
 title: "editor-page-line-geometry"
-type: AFK
-status: review
+type: "AFK"
+status: "done"
 blocked_by:
   - "019-authenticated-platform-shell.md"
   - "020-document-line-transcription-model.md"
 parent_prd: "issues/prd-annote-merge.md"
 ---
+
+
 
 ## Parent
 

@@ -1,12 +1,14 @@
 ---
 id: "020"
 title: "document-line-transcription-model"
-type: AFK
-status: review
+type: "AFK"
+status: "done"
 blocked_by:
   - "018-annote-production-root.md"
 parent_prd: "issues/prd-annote-merge.md"
 ---
+
+
 
 ## Parent
 

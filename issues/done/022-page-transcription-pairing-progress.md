@@ -1,12 +1,14 @@
 ---
 id: "022"
 title: "page-transcription-pairing-progress"
-type: AFK
-status: review
+type: "AFK"
+status: "done"
 blocked_by:
   - "021-editor-page-line-geometry.md"
 parent_prd: "issues/prd-annote-merge.md"
 ---
+
+
 
 ## Parent
 
