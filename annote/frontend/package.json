@@ -1,36 +1,46 @@
 {
   "name": "frontend",
-  "version": "0.1.0",
   "private": true,
+  "version": "0.0.0",
+  "type": "module",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "generate:openapi": "openapi-typescript openapi/openapi.json -o src/types/openapi.ts"
+    "dev": "vite",
+    "build": "npm run typecheck:api && vite build",
+    "typecheck": "tsc -b",
+    "typecheck:api": "tsc --noEmit -p tsconfig.api.json",
+    "codegen:api": "openapi-typescript openapi/openapi.json -o src/api/schema.d.ts",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "test": "vitest run"
   },
   "dependencies": {
-    "next": "15.1.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "@ant-design/icons": "^6.1.0",
+    "@tanstack/react-query": "^5.90.16",
+    "antd": "^6.1.4",
+    "axios": "^1.13.2",
+    "fabric": "^7.1.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-router-dom": "^7.15.1",
+    "react-zoom-pan-pinch": "^3.7.0"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "^3",
+    "@eslint/js": "^9.39.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "@vitejs/plugin-react": "^6.0.2",
-    "eslint": "^9",
-    "eslint-config-next": "15.1.0",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.5",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.1",
+    "eslint": "^9.39.1",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.4.24",
+    "globals": "^16.5.0",
     "jsdom": "^29.1.1",
     "openapi-typescript": "^7.10.1",
-    "postcss": "^8",
-    "tailwindcss": "^3.4.1",
-    "typescript": "^5",
-    "vitest": "^4.1.8"
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.46.4",
+    "vite": "^7.2.4",
+    "vitest": "^4.1.9"
   }
 }

@@ -2,7 +2,7 @@
 id: "010"
 title: "ground-truth-copy-edit-api"
 type: AFK
-status: backlog
+status: review
 blocked_by:
   - "009-transcribe-job-layers.md"
 parent_prd: "issues/prd.md"

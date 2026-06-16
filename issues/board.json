@@ -1,52 +1,212 @@
 {
-  "generated_at": "2026-05-21T18:00:00Z",
-  "limits": { "in_progress": 4, "review": 5, "parallel_lanes": 2 },
+  "generated_at": "2026-06-16T10:57:00Z",
+  "limits": {
+    "in_progress": 4,
+    "review": 5,
+    "parallel_lanes": 2
+  },
   "counts": {
     "in_progress": 0,
-    "review": 0,
-    "over_limit": { "in_progress": false, "review": false }
+    "review": 11
   },
   "stats": {
-    "total": 18,
+    "total": 29,
     "done": 10,
     "ready_afk": 0,
-    "ready_hitl": 1,
-    "backlog": 7,
-    "in_review": 0
+    "ready_hitl": 0,
+    "backlog": 8,
+    "blocked": 8,
+    "in_review": 11
   },
   "dag": {
-    "parallel_lanes": [],
-    "next_after_005": [["006-segment-job-kraken.md"]]
+    "parallel_lanes": [
+      [
+        "018-annote-production-root.md"
+      ],
+      [
+        "005-inference-catalog-bindings.md"
+      ]
+    ],
+    "mermaid": "flowchart TD\n  I000[\"000 platform-foundation ✓\"]\n  I001[\"001 user-auth-jwt ✓\"]\n  I002[\"002 projects-sharing ✓\"]\n  I003[\"003 documents-parts-media ✓\"]\n  I004[\"004 job-runner ✓\"]\n  I005[\"005 inference-catalog HITL\"]\n  I006[\"006 segment-job-kraken\"]\n  I007[\"007 segment-merge\"]\n  I008[\"008 layout-edit-reset-api\"]\n  I009[\"009 transcribe-job-layers\"]\n  I010[\"010 ground-truth-copy-edit\"]\n  I011[\"011 access-public-published ✓\"]\n  I012[\"012 openapi-codegen ✓\"]\n  I013[\"013 frontend-projects-docs ✓\"]\n  I014[\"014 frontend-layout-editor HITL\"]\n  I015[\"015 frontend-transcription-editor\"]\n  I016[\"016 frontend-jobs-panel ✓\"]\n  I017[\"017 frontend-public-view ✓\"]\n  I018[\"018 annote-production-root\"]\n  I019[\"019 authenticated-platform-shell\"]\n  I020[\"020 document-line-transcription-model\"]\n  I021[\"021 editor-page-line-geometry\"]\n  I022[\"022 page-transcription-pairing-progress\"]\n  I023[\"023 page-review-status\"]\n  I024[\"024 annotation-history-restore\"]\n  I025[\"025 export-approved-line-artifacts\"]\n  I026[\"026 transcription-pdf-artifact\"]\n  I027[\"027 remove-root-app-duplicates\"]\n  I028[\"028 ocr-prediction-execution-design HITL\"]\n  I000 --> I001\n  I000 --> I004\n  I000 --> I005\n  I001 --> I002\n  I001 --> I012\n  I002 --> I003\n  I003 --> I006\n  I004 --> I006\n  I005 --> I006\n  I006 --> I007\n  I007 --> I008\n  I007 --> I009\n  I005 --> I009\n  I003 --> I009\n  I009 --> I010\n  I003 --> I011\n  I001 --> I011\n  I003 --> I013\n  I002 --> I013\n  I012 --> I013\n  I008 --> I014\n  I012 --> I014\n  I010 --> I015\n  I012 --> I015\n  I004 --> I016\n  I012 --> I016\n  I006 --> I016\n  I011 --> I017\n  I012 --> I017\n  I018 --> I019\n  I018 --> I020\n  I019 --> I021\n  I020 --> I021\n  I021 --> I022\n  I022 --> I023\n  I022 --> I024\n  I022 --> I025\n  I022 --> I026\n  I019 --> I027\n  I023 --> I027\n  I024 --> I027\n  I025 --> I027\n  I026 --> I027\n  I022 --> I028\n  classDef hitl stroke-dasharray: 5 5\n  class I005,I014,I028 hitl"
   },
   "kanban": {
     "columns": [
       {
-        "name": "Done",
-        "issues": [
-          { "id": "016", "file": "done/016-frontend-jobs-panel.md", "status": "done" },
-          { "id": "017", "file": "done/017-frontend-public-published-view.md", "status": "done" },
-          { "id": "013", "file": "done/013-frontend-projects-documents.md", "status": "done" },
-          { "id": "011", "file": "done/011-access-public-published.md", "status": "done" },
-          { "id": "003", "file": "done/003-documents-parts-media.md", "status": "done" }
-        ]
+        "name": "Ready (AFK)",
+        "over_limit": false,
+        "issues": []
       },
       {
         "name": "Ready (HITL)",
+        "over_limit": false,
+        "issues": []
+      },
+      {
+        "name": "In progress",
+        "over_limit": false,
+        "issues": []
+      },
+      {
+        "name": "Review",
+        "over_limit": true,
         "issues": [
           {
-            "id": "005",
             "file": "005-inference-catalog-bindings.md",
-            "type": "HITL",
-            "status": "ready"
+            "title": "inference-catalog-bindings",
+            "type": "HITL"
+          },
+          {
+            "file": "018-annote-production-root.md",
+            "title": "annote-production-root",
+            "type": "AFK"
+          },
+          {
+            "file": "014-frontend-layout-editor.md",
+            "title": "frontend-layout-editor",
+            "type": "HITL"
+          },
+          {
+            "file": "019-authenticated-platform-shell.md",
+            "title": "authenticated-platform-shell",
+            "type": "AFK"
+          },
+          {
+            "file": "020-document-line-transcription-model.md",
+            "title": "document-line-transcription-model",
+            "type": "AFK"
+          },
+          {
+            "file": "021-editor-page-line-geometry.md",
+            "title": "editor-page-line-geometry",
+            "type": "AFK"
+          },
+          {
+            "file": "006-segment-job-kraken.md",
+            "title": "segment-job-kraken",
+            "type": "AFK"
+          },
+          {
+            "file": "007-segment-merge.md",
+            "title": "segment-merge",
+            "type": "AFK"
+          },
+          {
+            "file": "008-layout-edit-reset-api.md",
+            "title": "layout-edit-reset-api",
+            "type": "AFK"
+          },
+          {
+            "file": "009-transcribe-job-layers.md",
+            "title": "transcribe-job-layers",
+            "type": "AFK"
+          },
+          {
+            "file": "010-ground-truth-copy-edit-api.md",
+            "title": "ground-truth-copy-edit-api",
+            "type": "AFK"
+          }
+        ]
+      },
+      {
+        "name": "Done",
+        "over_limit": false,
+        "issues": [
+          {
+            "file": "done/000-platform-foundation.md",
+            "title": "platform-foundation",
+            "type": "AFK"
+          },
+          {
+            "file": "done/001-user-auth-jwt.md",
+            "title": "user-auth-jwt",
+            "type": "AFK"
+          },
+          {
+            "file": "done/002-projects-sharing.md",
+            "title": "projects-sharing",
+            "type": "AFK"
+          },
+          {
+            "file": "done/003-documents-parts-media.md",
+            "title": "documents-parts-media",
+            "type": "AFK"
+          },
+          {
+            "file": "done/004-job-runner.md",
+            "title": "job-runner",
+            "type": "AFK"
+          },
+          {
+            "file": "done/011-access-public-published.md",
+            "title": "access-public-published",
+            "type": "AFK"
+          },
+          {
+            "file": "done/012-nextjs-openapi-codegen.md",
+            "title": "nextjs-openapi-codegen",
+            "type": "AFK"
+          },
+          {
+            "file": "done/013-frontend-projects-documents.md",
+            "title": "frontend-projects-documents",
+            "type": "AFK"
+          },
+          {
+            "file": "done/016-frontend-jobs-panel.md",
+            "title": "frontend-jobs-panel",
+            "type": "AFK"
+          },
+          {
+            "file": "done/017-frontend-public-published-view.md",
+            "title": "frontend-public-published-view",
+            "type": "AFK"
           }
         ]
       },
       {
         "name": "Backlog",
+        "over_limit": false,
         "issues": [
-          { "id": "006", "file": "006-segment-job-kraken.md", "status": "backlog" },
-          { "id": "014", "file": "014-frontend-layout-editor.md", "status": "backlog" },
-          { "id": "015", "file": "015-frontend-transcription-editor.md", "status": "backlog" }
+          {
+            "file": "015-frontend-transcription-editor.md",
+            "title": "frontend-transcription-editor",
+            "type": "AFK"
+          },
+          {
+            "file": "022-page-transcription-pairing-progress.md",
+            "title": "page-transcription-pairing-progress",
+            "type": "AFK"
+          },
+          {
+            "file": "023-page-review-status.md",
+            "title": "page-review-status",
+            "type": "AFK"
+          },
+          {
+            "file": "024-annotation-history-restore.md",
+            "title": "annotation-history-restore",
+            "type": "AFK"
+          },
+          {
+            "file": "025-export-approved-line-artifacts.md",
+            "title": "export-approved-line-artifacts",
+            "type": "AFK"
+          },
+          {
+            "file": "026-transcription-pdf-artifact.md",
+            "title": "transcription-pdf-artifact",
+            "type": "AFK"
+          },
+          {
+            "file": "027-remove-root-app-duplicates.md",
+            "title": "remove-root-app-duplicates",
+            "type": "AFK"
+          },
+          {
+            "file": "028-ocr-prediction-execution-design.md",
+            "title": "ocr-prediction-execution-design",
+            "type": "HITL"
+          }
         ]
       }
     ]

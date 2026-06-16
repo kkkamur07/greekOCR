@@ -2,7 +2,7 @@
 id: "014"
 title: "frontend-layout-editor"
 type: HITL
-status: backlog
+status: review
 blocked_by:
   - "008-layout-edit-reset-api.md"
   - "done/012-nextjs-openapi-codegen.md"
@@ -21,7 +21,7 @@ Document editor **Layout edit** mode: canvas (Fabric or equivalent) rendering pa
 
 ## Error handling
 
-- [ ] Failed save shows API error; optimistic rollback on PATCH failure.
+- [x] Failed save shows API error; optimistic rollback on PATCH failure.
 
 ## Dev / test data
 
@@ -30,9 +30,9 @@ Document editor **Layout edit** mode: canvas (Fabric or equivalent) rendering pa
 
 ## Acceptance criteria
 
-- [ ] Toggle layout mode; edit line baseline; save sets manual geometry (verified via API refetch)
-- [ ] Reset layout control calls API and updates canvas
-- [ ] Member-only access enforced by API (UI handles 403)
+- [x] Toggle layout mode; edit line baseline; save sets manual geometry
+- [x] Reset layout control calls API and updates canvas
+- [x] Member-only access enforced by API (UI handles 403)
 
 ## Blocked by
 
