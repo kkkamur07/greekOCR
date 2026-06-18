@@ -171,6 +171,27 @@ def test_upload_reorder_delete_part_and_serve_media(client, owner_headers, owner
 
 
 @pytest.mark.integration
+def test_upload_part_rejects_non_image_bytes(client, owner_headers, owner_project):
+    project_id = owner_project["id"]
+    base = _documents_url(project_id)
+    create = client.post(base, headers=owner_headers, json={"name": "Invalid upload"})
+    assert create.status_code == 201
+    document_id = create.json()["id"]
+
+    response = client.post(
+        f"{base}/{document_id}/parts",
+        headers=owner_headers,
+        files={"file": ("not-image.txt", b"<script>alert(1)</script>", "text/plain")},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"] == {
+        "code": "VALIDATION_ERROR",
+        "message": "Uploaded file is not a valid image",
+    }
+
+
+@pytest.mark.integration
 def test_reorder_rejects_duplicate_part_ids(client, owner_headers, owner_project):
     project_id = owner_project["id"]
     base = _documents_url(project_id)
@@ -267,7 +288,6 @@ def test_replace_part_lines_persists_segment_geometry_and_approved_text(
         client, owner_headers, owner_project
     )
     base = _documents_url(project_id)
-    manual_line_id = str(uuid.uuid4())
 
     replace = client.put(
         f"{base}/{document_id}/parts/{part_id}/lines",
@@ -275,7 +295,6 @@ def test_replace_part_lines_persists_segment_geometry_and_approved_text(
         json={
             "lines": [
                 {
-                    "id": manual_line_id,
                     "order": 0,
                     "kind": "polygon",
                     "points": [[0, 0], [10, 0], [10, 5], [0, 5]],
@@ -296,7 +315,7 @@ def test_replace_part_lines_persists_segment_geometry_and_approved_text(
     assert replace.status_code == 200
     lines = replace.json()
     assert [line["order"] for line in lines] == [0, 1]
-    assert lines[0]["id"] == manual_line_id
+    uuid.UUID(lines[0]["id"])
     assert lines[0]["kind"] == "polygon"
     assert lines[0]["source"] == "manual"
     assert lines[0]["line_transcriptions"][0]["transcription_kind"] == "ground_truth"
@@ -311,6 +330,35 @@ def test_replace_part_lines_persists_segment_geometry_and_approved_text(
     )
     assert listed.status_code == 200
     assert listed.json() == lines
+
+
+@pytest.mark.integration
+def test_replace_part_lines_rejects_client_selected_id_for_new_line(
+    client, owner_headers, owner_project
+):
+    project_id, document_id, part_id = _create_document_with_part(
+        client, owner_headers, owner_project
+    )
+    base = _documents_url(project_id)
+
+    response = client.put(
+        f"{base}/{document_id}/parts/{part_id}/lines",
+        headers=owner_headers,
+        json={
+            "lines": [
+                {
+                    "id": str(uuid.uuid4()),
+                    "order": 0,
+                    "kind": "polygon",
+                    "points": [[0, 0], [10, 0], [10, 5], [0, 5]],
+                    "source": "manual",
+                },
+            ]
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["message"] == "New line ids are server-generated"
 
 
 @pytest.mark.integration

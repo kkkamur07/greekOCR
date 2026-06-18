@@ -42,6 +42,7 @@ const DOCUMENT: DocumentWithPartsResponse = {
       image_url: '/media/parts/part-2',
       width: 800,
       height: 1000,
+      reviewed: false,
       created_at: '2026-06-16T10:00:00Z',
     },
     {
@@ -51,6 +52,7 @@ const DOCUMENT: DocumentWithPartsResponse = {
       image_url: '/media/parts/part-1',
       width: 640,
       height: 900,
+      reviewed: false,
       created_at: '2026-06-16T10:00:00Z',
     },
   ],

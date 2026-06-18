@@ -13,7 +13,17 @@ RUN apt-get update \
 COPY README.md VERSION /app/
 COPY backend/pyproject.toml /app/backend/pyproject.toml
 
-RUN pip install --no-cache-dir /app/backend
+RUN python - <<'PY'
+import subprocess
+import sys
+import tomllib
+
+with open("/app/backend/pyproject.toml", "rb") as handle:
+    metadata = tomllib.load(handle)
+
+dependencies = metadata["project"]["dependencies"]
+subprocess.check_call([sys.executable, "-m", "pip", "install", "--no-cache-dir", *dependencies])
+PY
 
 COPY backend /app/backend
 COPY infrastructure /app/infrastructure
@@ -21,3 +31,5 @@ COPY infrastructure /app/infrastructure
 ENV PYTHONPATH=/app
 
 EXPOSE 8000
+
+CMD ["uvicorn", "backend.core.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

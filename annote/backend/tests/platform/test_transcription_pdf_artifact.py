@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import io
-import uuid
 from io import BytesIO
 
 from fastapi.testclient import TestClient
@@ -42,21 +41,18 @@ def _create_document_part_with_segments(
     assert upload.status_code == 201
     part_id = upload.json()["id"]
 
-    line_ids = [str(uuid.uuid4()), str(uuid.uuid4())]
     replace = client.put(
         f"{base}/{document_id}/parts/{part_id}/lines",
         headers=owner_headers,
         json={
             "lines": [
                 {
-                    "id": line_ids[0],
                     "order": 0,
                     "kind": "polygon",
                     "points": [[10, 10], [120, 10], [120, 30], [10, 30]],
                     "source": "manual",
                 },
                 {
-                    "id": line_ids[1],
                     "order": 1,
                     "kind": "polygon",
                     "points": [[10, 45], [120, 45], [120, 65], [10, 65]],
@@ -66,6 +62,7 @@ def _create_document_part_with_segments(
         },
     )
     assert replace.status_code == 200
+    line_ids = [line["id"] for line in replace.json()]
     return project_id, document_id, part_id, line_ids
 
 

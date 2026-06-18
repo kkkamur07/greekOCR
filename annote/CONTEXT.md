@@ -1,6 +1,6 @@
 # annote
 
-A standalone local browser app for manually segmenting manuscript page images and pairing each segment with its transcription, to produce training-ready line crops. Runs as FastAPI + React on localhost with filesystem storage (no database).
+An annotation platform for manually segmenting manuscript page images and pairing each segment with its transcription, to produce training-ready line crops. The current production app runs as FastAPI + React with users, projects, Postgres persistence, media storage, and background jobs.
 
 ## Language
 
@@ -180,7 +180,7 @@ Processing logic is pluggable; v1 UI/backend must not assume it is finished.
 
 annote frontend should use the platform frontend stack in `frontend/` while preserving annote's editor theme and workflow.
 
-annote backend is a **standalone FastAPI app** in `annote/backend/` — no users, jobs, or Postgres. Filesystem-only persistence under `annote/data/`. Not mounted on the Kalamos platform API.
+annote backend is now the **platform FastAPI app** in `annote/backend/`, composed from `backend/core` plus bounded contexts for users, projects, documents, annotation, ML, and jobs.
 
 ## Outputs (what matters to the user)
 

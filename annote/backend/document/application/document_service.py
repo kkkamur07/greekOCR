@@ -3,10 +3,13 @@
 from pathlib import Path
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from backend.core.exceptions import AccessDeniedError, ConflictError, NotFoundError, ValidationError
+from backend.core.settings.job import get_job_settings
 from backend.document.infrastructure.document_repository import DocumentRepository
 from backend.document.infrastructure.media_store import MediaStore
 from backend.document.infrastructure.orm_models import (
@@ -23,11 +26,18 @@ from backend.document.infrastructure.orm_models import (
     TranscriptionKind,
 )
 from backend.document.domain.access import require_can_read
-from backend.inference.infrastructure.orm_models import Job, JobStatus, JobType
+from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
 from backend.project.domain.access import is_member
 from backend.project.infrastructure.orm_models import Project
 from backend.project.infrastructure.project_repository import ProjectRepository
 from backend.users.infrastructure.orm_models import User
+
+MAX_PAGE_TRANSCRIPTION_LINES = 10_000
+MAX_REPLACE_PART_LINES = 10_000
+
+DOCUMENT_UPDATE_FIELDS = frozenset({"name", "workflow"})
+BLOCK_PATCH_FIELDS = frozenset({"order", "box"})
+LINE_PATCH_FIELDS = frozenset({"order", "block_id", "baseline", "mask", "points"})
 
 
 class DocumentService:
@@ -40,6 +50,7 @@ class DocumentService:
         self._documents = documents or DocumentRepository()
         self._projects = projects or ProjectRepository()
         self._media = media or MediaStore()
+        self._job_settings = get_job_settings()
 
     async def list_documents(
         self,
@@ -95,6 +106,7 @@ class DocumentService:
         document_id: UUID,
         **fields: object,
     ) -> Document:
+        self._reject_unknown_fields(fields, DOCUMENT_UPDATE_FIELDS, "document update")
         project = await self._require_member(session, project_id, user.id)
         document = await self._load_document_in_project(session, project, document_id)
         if "workflow" in fields and fields["workflow"] is not None:
@@ -112,8 +124,9 @@ class DocumentService:
     ) -> None:
         project = await self._require_member(session, project_id, user.id)
         document = await self._load_document_in_project(session, project, document_id)
-        for part in list(document.parts):
-            self._media.delete(part.image_key)
+        image_keys = [part.image_key for part in document.parts]
+        for image_key in image_keys:
+            self._media.delete(image_key)
         await self._documents.delete(session, document)
 
     async def list_parts(
@@ -145,6 +158,20 @@ class DocumentService:
         document = await self.get_document_public(session, project_id, document_id)
         return await self._documents.list_transcriptions(session, document.id)
 
+    async def list_document_layout_public(
+        self,
+        session: AsyncSession,
+        project_id: UUID,
+        document_id: UUID,
+    ) -> tuple[list[Block], list[Line]]:
+        document = await self.get_document_public(session, project_id, document_id)
+        blocks: list[Block] = []
+        lines: list[Line] = []
+        for part in sorted(document.parts, key=lambda item: item.order):
+            blocks.extend(await self._list_part_blocks(session, part.id))
+            lines.extend(await self._documents.list_part_lines(session, part.id))
+        return blocks, lines
+
     async def upload_part(
         self,
         session: AsyncSession,
@@ -167,9 +194,14 @@ class DocumentService:
         session.add(part)
         await session.flush()
         image_key = self._media.part_image_key(part.id, suffix=suffix, filename_stem=filename_stem)
-        self._media.write(image_key, data)
-        part.image_key = image_key
-        await session.commit()
+        try:
+            self._media.write(image_key, data)
+            part.image_key = image_key
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            self._media.delete(image_key)
+            raise
         await session.refresh(part)
         return part
 
@@ -259,6 +291,7 @@ class DocumentService:
         block_id: UUID,
         **updates: object,
     ) -> Block:
+        self._reject_unknown_fields(updates, BLOCK_PATCH_FIELDS, "block patch")
         document = await self.get_document(session, user, project_id, document_id)
         part = await self._document_part_or_404(session, document, part_id)
         block = await self._block_or_404(session, part.id, block_id)
@@ -329,6 +362,7 @@ class DocumentService:
         line_id: UUID,
         **updates: object,
     ) -> Line:
+        self._reject_unknown_fields(updates, LINE_PATCH_FIELDS, "line patch")
         document = await self.get_document(session, user, project_id, document_id)
         part = await self._document_part_or_404(session, document, part_id)
         line = await self._line_or_404(session, part.id, line_id)
@@ -395,10 +429,22 @@ class DocumentService:
     ) -> tuple[list[PageTranscriptionLine], dict[str, int]]:
         document = await self.get_document(session, user, project_id, document_id)
         part = await self._document_part_or_404(session, document, part_id)
+        text_lines = self._split_page_transcription(text)
+        if len(text_lines) > MAX_PAGE_TRANSCRIPTION_LINES:
+            raise ValidationError(
+                f"Page transcription cannot exceed {MAX_PAGE_TRANSCRIPTION_LINES} non-empty lines"
+            )
         existing = await self._list_page_transcription_lines(session, part.id)
+        paired_line_ids = {text_line.paired_line_id for text_line in existing if text_line.paired_line_id}
+        if paired_line_ids:
+            ground_truth = await self._documents.get_ground_truth_transcription(session, document.id)
+            if ground_truth is not None:
+                for paired_line_id in paired_line_ids:
+                    paired_line = await self._line_or_404(session, part.id, paired_line_id)
+                    await self._set_ground_truth_text(paired_line, ground_truth, None, session)
         for text_line in existing:
             await session.delete(text_line)
-        for order, line_text in enumerate(self._split_page_transcription(text)):
+        for order, line_text in enumerate(text_lines):
             session.add(PageTranscriptionLine(part_id=part.id, order=order, text=line_text))
         await session.commit()
         return await self.get_page_pairing(session, user, project_id, document_id, part_id)
@@ -414,17 +460,8 @@ class DocumentService:
         document = await self.get_document(session, user, project_id, document_id)
         part = await self._document_part_or_404(session, document, part_id)
         text_lines = await self._list_page_transcription_lines(session, part.id)
-        lines = await self._documents.list_part_lines(session, part.id)
-        paired_lines = sum(
-            1
-            for line in lines
-            if any(
-                transcription.transcription.kind == TranscriptionKind.ground_truth
-                and transcription.text.strip()
-                for transcription in line.transcriptions
-            )
-        )
-        total_lines = len(lines)
+        total_lines = await self._count_part_lines(session, part.id)
+        paired_lines = await self._count_paired_ground_truth_lines(session, part.id)
         percent = round((paired_lines / total_lines) * 100) if total_lines else 0
         return text_lines, {
             "paired_lines": paired_lines,
@@ -451,12 +488,20 @@ class DocumentService:
         )
         ground_truth = await self._ensure_ground_truth_transcription(session, document)
 
+        previous_paired_line_id = text_line.paired_line_id
+        if previous_paired_line_id is not None and previous_paired_line_id != line.id:
+            previous_line = await self._line_or_404(session, part.id, previous_paired_line_id)
+            await self._set_ground_truth_text(previous_line, ground_truth, None, session)
         for candidate in await self._list_page_transcription_lines(session, part.id):
             if candidate.paired_line_id == line.id:
                 candidate.paired_line_id = None
         text_line.paired_line_id = line.id
         await self._set_ground_truth_text(line, ground_truth, text_line.text, session)
-        await session.commit()
+        try:
+            await session.commit()
+        except IntegrityError as exc:
+            await session.rollback()
+            raise ConflictError("This segment is already paired to another text line") from exc
         return await self.get_page_pairing(session, user, project_id, document_id, part_id)
 
     async def replace_part_lines(
@@ -468,7 +513,10 @@ class DocumentService:
         part_id: UUID,
         *,
         lines: list[dict],
+        allow_new_ids: bool = False,
     ) -> list[Line]:
+        if len(lines) > MAX_REPLACE_PART_LINES:
+            raise ValidationError(f"Cannot replace more than {MAX_REPLACE_PART_LINES} lines at once")
         document = await self.get_document(session, user, project_id, document_id)
         part = await self._document_part_or_404(session, document, part_id)
         ground_truth = await self._ensure_ground_truth_transcription(session, document)
@@ -479,6 +527,10 @@ class DocumentService:
 
         existing = await self._documents.list_part_lines(session, part.id)
         existing_by_id = {line.id: line for line in existing}
+        if not allow_new_ids:
+            new_supplied_ids = [line_id for line_id in requested_ids if line_id not in existing_by_id]
+            if new_supplied_ids:
+                raise ValidationError("New line ids are server-generated")
         requested_id_set = set(requested_ids)
         for line in existing:
             if line.id not in requested_id_set:
@@ -494,7 +546,10 @@ class DocumentService:
                 session.add(line)
 
             points = data["points"]
-            line.block_id = data.get("block_id")
+            block_id = data.get("block_id")
+            if block_id is not None:
+                await self._block_or_404(session, part.id, block_id)
+            line.block_id = block_id
             line.order = data["order"]
             line.kind = data["kind"]
             line.points = points
@@ -532,7 +587,7 @@ class DocumentService:
             user_id=user.id,
             document_id=document.id,
             document_part_id=part.id,
-            payload={"test": True, "adapter": "mock:transcribe"},
+            payload={"adapter": self._job_settings.transcribe_adapter},
         )
         session.add(job)
         await session.commit()
@@ -555,7 +610,7 @@ class DocumentService:
             user_id=user.id,
             document_id=document.id,
             document_part_id=part.id,
-            payload={"adapter": "kraken_stub"},
+            payload={"adapter": self._job_settings.segment_adapter},
         )
         session.add(job)
         await session.commit()
@@ -675,7 +730,8 @@ class DocumentService:
         part = await self._documents.get_part(session, part_id)
         if part is None or part.document_id != document.id:
             raise NotFoundError("Part not found")
-        self._media.delete(part.image_key)
+        image_key = part.image_key
+        self._media.delete(image_key)
         await self._documents.delete_part(session, part)
 
     async def get_part_for_media(
@@ -782,6 +838,15 @@ class DocumentService:
     def _split_page_transcription(self, text: str) -> list[str]:
         return [line.strip() for line in text.splitlines() if line.strip()]
 
+    @staticmethod
+    def _reject_unknown_fields(
+        fields: dict[str, object], allowed: frozenset[str], operation: str
+    ) -> None:
+        unknown = set(fields) - allowed
+        if unknown:
+            joined = ", ".join(sorted(unknown))
+            raise ValidationError(f"Unsupported {operation} field(s): {joined}")
+
     async def _block_or_404(
         self, session: AsyncSession, part_id: UUID, block_id: UUID
     ) -> Block:
@@ -794,11 +859,35 @@ class DocumentService:
         return block
 
     async def _line_or_404(self, session: AsyncSession, part_id: UUID, line_id: UUID) -> Line:
-        lines = await self._documents.list_part_lines(session, part_id)
-        for line in lines:
-            if line.id == line_id:
-                return line
+        result = await session.execute(
+            select(Line)
+            .where(Line.id == line_id, Line.part_id == part_id)
+            .options(selectinload(Line.transcriptions).selectinload(LineTranscription.transcription))
+        )
+        line = result.scalar_one_or_none()
+        if line is not None:
+            return line
         raise NotFoundError("Line not found")
+
+    async def _count_part_lines(self, session: AsyncSession, part_id: UUID) -> int:
+        result = await session.execute(
+            select(func.count()).select_from(Line).where(Line.part_id == part_id)
+        )
+        return int(result.scalar_one())
+
+    async def _count_paired_ground_truth_lines(self, session: AsyncSession, part_id: UUID) -> int:
+        result = await session.execute(
+            select(func.count(func.distinct(Line.id)))
+            .select_from(Line)
+            .join(LineTranscription, LineTranscription.line_id == Line.id)
+            .join(Transcription, LineTranscription.transcription_id == Transcription.id)
+            .where(
+                Line.part_id == part_id,
+                Transcription.kind == TranscriptionKind.ground_truth,
+                func.length(func.trim(LineTranscription.text)) > 0,
+            )
+        )
+        return int(result.scalar_one())
 
     async def _transcription_or_404(
         self, session: AsyncSession, document: Document, transcription_id: UUID

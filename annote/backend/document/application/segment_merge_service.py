@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from backend.core.exceptions import NotFoundError
 from backend.document.infrastructure.orm_models import Block, DocumentPart, Line, LineSource
-from backend.inference.domain.segment import CanonicalSegmentResult
+from backend.ml.domain.segment import CanonicalSegmentResult
 
 
 @dataclass(frozen=True)

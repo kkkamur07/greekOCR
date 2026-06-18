@@ -1,9 +1,12 @@
 """Document and DocumentPart routes under projects."""
 
+from io import BytesIO
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Query, Response, UploadFile, status
+from PIL import Image, UnidentifiedImageError
+from PIL.Image import DecompressionBombError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.annotation.application.export_service import AnnotationExportService
@@ -40,9 +43,11 @@ from backend.document.api.schemas import (
     ReorderPartsRequest,
     TranscriptionLayerResponse,
 )
+from backend.document.api.line_responses import line_response
+from backend.document.api.responses import part_response
 from backend.document.application.document_service import DocumentService
-from backend.document.infrastructure.orm_models import Block, DocumentPart, Line
-from backend.inference.api.schemas import EnqueueJobResponse
+from backend.document.infrastructure.orm_models import Block
+from backend.jobs.api.schemas import EnqueueJobResponse
 from backend.users.api.dependencies import get_current_user
 from backend.users.infrastructure.orm_models import User
 from infrastructure.db import get_db
@@ -51,47 +56,16 @@ router = APIRouter(prefix="/projects/{project_id}/documents", tags=["documents"]
 _service = DocumentService()
 _export_service = AnnotationExportService()
 _transcription_pdf_service = TranscriptionPdfService()
-
-
-def _part_response(part: DocumentPart) -> DocumentPartResponse:
-    return DocumentPartResponse(
-        id=part.id,
-        document_id=part.document_id,
-        order=part.order,
-        image_url=f"/media/parts/{part.id}",
-        width=part.width,
-        height=part.height,
-        reviewed=part.reviewed,
-        created_at=part.created_at,
-    )
-
-
-def _line_response(line: Line) -> LineResponse:
-    return LineResponse(
-        id=line.id,
-        part_id=line.part_id,
-        block_id=line.block_id,
-        order=line.order,
-        baseline=line.baseline,
-        mask=line.mask,
-        kind=line.kind,
-        points=line.points,
-        source=line.source,
-        source_metadata=line.source_metadata,
-        kraken_ceiling=line.kraken_ceiling,
-        manual_geometry=line.manual_geometry,
-        line_transcriptions=[
-            LineTranscriptionResponse(
-                id=transcription.id,
-                transcription_id=transcription.transcription_id,
-                transcription_kind=transcription.transcription.kind,
-                text=transcription.text,
-                confidence=transcription.confidence,
-            )
-            for transcription in line.transcriptions
-        ],
-        created_at=line.created_at,
-    )
+MAX_UPLOAD_BYTES = 100 * 1024 * 1024
+Image.MAX_IMAGE_PIXELS = 200_000_000
+PDF_RESPONSE = {
+    200: {
+        "content": {
+            "application/pdf": {"schema": {"type": "string", "format": "binary"}}
+        },
+        "description": "Transcription PDF bytes",
+    }
+}
 
 
 def _block_response(block: Block) -> BlockResponse:
@@ -178,7 +152,7 @@ async def get_document(
     parts = sorted(document.parts, key=lambda p: p.order)
     return DocumentWithPartsResponse(
         **DocumentResponse.model_validate(document).model_dump(),
-        parts=[_part_response(p) for p in parts],
+        parts=[part_response(p) for p in parts],
     )
 
 
@@ -232,11 +206,16 @@ async def upload_part(
     db: Annotated[AsyncSession, Depends(get_db)],
     file: UploadFile = File(...),
 ) -> DocumentPartResponse:
-    from backend.core.exceptions import ValidationError
-
-    data = await file.read()
+    data = await file.read(MAX_UPLOAD_BYTES + 1)
     if not data:
         raise ValidationError("Uploaded file is empty")
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise ValidationError("File exceeds the 100 MB upload limit")
+    try:
+        with Image.open(BytesIO(data)) as image:
+            image.load()
+    except (DecompressionBombError, UnidentifiedImageError, OSError) as exc:
+        raise ValidationError("Uploaded file is not a valid image") from exc
     part = await _service.upload_part(
         db,
         current_user,
@@ -245,7 +224,7 @@ async def upload_part(
         data=data,
         filename=file.filename,
     )
-    return _part_response(part)
+    return part_response(part)
 
 
 @router.patch("/{document_id}/parts/reorder", response_model=list[DocumentPartResponse])
@@ -259,7 +238,7 @@ async def reorder_parts(
     parts = await _service.reorder_parts(
         db, current_user, project_id, document_id, body.part_ids
     )
-    return [_part_response(p) for p in parts]
+    return [part_response(p) for p in parts]
 
 
 @router.patch("/{document_id}/parts/{part_id}", response_model=DocumentPartResponse)
@@ -271,18 +250,15 @@ async def update_part(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> DocumentPartResponse:
-    updates = body.model_dump(exclude_unset=True)
-    if "reviewed" not in updates:
-        raise ValidationError("reviewed is required")
     part = await _service.update_part_review_status(
         db,
         current_user,
         project_id,
         document_id,
         part_id,
-        reviewed=updates["reviewed"],
+        reviewed=body.reviewed,
     )
-    return _part_response(part)
+    return part_response(part)
 
 
 @router.get("/{document_id}/parts/{part_id}/layout", response_model=LayoutResponse)
@@ -298,7 +274,7 @@ async def list_part_layout(
     )
     return LayoutResponse(
         blocks=[_block_response(block) for block in blocks],
-        lines=[_line_response(line) for line in lines],
+        lines=[line_response(line) for line in lines],
     )
 
 
@@ -367,7 +343,7 @@ async def list_part_lines(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> list[LineResponse]:
     lines = await _service.list_part_lines(db, current_user, project_id, document_id, part_id)
-    return [_line_response(line) for line in lines]
+    return [line_response(line) for line in lines]
 
 
 @router.post(
@@ -396,7 +372,7 @@ async def create_part_line(
         baseline=body.baseline,
         mask=body.mask,
     )
-    return _line_response(line)
+    return line_response(line)
 
 
 @router.patch("/{document_id}/parts/{part_id}/lines/{line_id}", response_model=LineResponse)
@@ -418,7 +394,7 @@ async def patch_part_line(
         line_id,
         **body.model_dump(exclude_unset=True),
     )
-    return _line_response(line)
+    return line_response(line)
 
 
 @router.delete(
@@ -453,7 +429,7 @@ async def replace_part_lines(
         part_id,
         lines=[line.model_dump() for line in body.lines],
     )
-    return [_line_response(line) for line in lines]
+    return [line_response(line) for line in lines]
 
 
 @router.post("/{document_id}/parts/{part_id}/layout/reset", response_model=LayoutResponse)
@@ -475,7 +451,7 @@ async def reset_part_layout(
     )
     return LayoutResponse(
         blocks=[_block_response(block) for block in blocks],
-        lines=[_line_response(line) for line in lines],
+        lines=[line_response(line) for line in lines],
     )
 
 
@@ -547,7 +523,11 @@ async def export_approved_line_artifacts(
     return _export_response(result)
 
 
-@router.post("/{document_id}/parts/{part_id}/transcription-pdf")
+@router.post(
+    "/{document_id}/parts/{part_id}/transcription-pdf",
+    response_class=Response,
+    responses=PDF_RESPONSE,
+)
 async def generate_transcription_pdf(
     project_id: UUID,
     document_id: UUID,

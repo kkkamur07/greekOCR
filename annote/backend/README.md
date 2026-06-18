@@ -2,7 +2,7 @@
 
 FastAPI backend for the production Annote platform. It exposes authentication,
 Project, Document, Document part/Page, layout, transcription, annotation history,
-Export, Transcription PDF, inference catalog, and job APIs.
+Export, Transcription PDF, ML model catalog, and job APIs.
 
 Run backend commands from the `annote/` app root unless a command says otherwise.
 
@@ -10,13 +10,10 @@ Run backend commands from the `annote/` app root unless a command says otherwise
 
 ```bash
 cd annote
-python -m venv .venv
-source .venv/bin/activate
-pip install -e "backend[dev]"
 cp backend/core/.env.example backend/core/.env
 docker compose up db -d
-PYTHONPATH=. alembic -c infrastructure/alembic.ini upgrade head
-PYTHONPATH=. uvicorn backend.core.app:create_app --factory --reload
+uv run --project .. --group platform alembic -c infrastructure/alembic.ini upgrade head
+uv run --project .. --group platform uvicorn backend.core.app:create_app --factory --reload
 ```
 
 API URLs:
@@ -29,7 +26,7 @@ API URLs:
 
 ```text
 backend/
-  pyproject.toml                  # Python package metadata and backend deps
+  pyproject.toml                  # Backend dependency metadata
   core/                           # FastAPI composition, settings, shared errors
     app.py                        # create_app(), middleware, router wiring
     main.py                       # Uvicorn module entrypoint
@@ -38,12 +35,10 @@ backend/
   users/                          # register/login/me, JWT, password hashing
   project/                        # project CRUD, sharing, membership checks
   document/                       # documents, parts, layout, transcriptions
-  inference/                      # model catalog, bindings, jobs, workers
   annotation/                     # history snapshots, export, PDF artifacts
-  app/                            # legacy-compatible relocated app scaffolding
-  annote/                         # standalone filesystem app kept for migration
+  ml/                             # model catalog, bindings, ML adapters
+  jobs/                           # enqueue, polling, workers, job persistence
   tests/platform/                 # Postgres-backed platform integration tests
-  tests/                          # standalone/filesystem service tests
 ```
 
 ## Architecture
@@ -73,8 +68,9 @@ Important rules:
 | `users` | Registration, login, JWT auth, current-user dependency | `users/api/auth.py`, `users/application/auth_service.py` |
 | `project` | Project CRUD, owner/shared-user membership | `project/api/projects.py`, `project/domain/access.py` |
 | `document` | Documents, Document parts, media, layout Blocks/Lines, Transcriptions, Pairing progress | `document/api/documents.py`, `document/application/document_service.py` |
-| `inference` | Inference model catalog, model bindings, async jobs, worker loop | `inference/api/models.py`, `inference/api/jobs.py`, `inference/infrastructure/worker.py` |
 | `annotation` | Annotation history, Export artifacts, Transcription PDF artifacts | `annotation/api/history.py`, `annotation/application/export_service.py`, `annotation/application/transcription_pdf_service.py` |
+| `ml` | ML model catalog, model bindings, Kraken/Calamari adapters, canonical model outputs | `ml/api/models.py`, `ml/application/model_service.py`, `ml/infrastructure/kraken_adapter.py` |
+| `jobs` | Async job enqueueing, status polling, claiming, worker execution, failure persistence | `jobs/api/jobs.py`, `jobs/application/job_service.py`, `jobs/infrastructure/worker.py` |
 
 ## API Surface
 
@@ -90,7 +86,7 @@ Major route families:
 - `POST/GET /.../parts/{part_id}/history`, `POST /.../history/{snapshot_id}/restore`
 - `POST /.../parts/{part_id}/export`
 - `POST /.../parts/{part_id}/transcription-pdf`
-- `GET/POST /models`, model binding routes, `GET /jobs/{job_id}`
+- `GET /inference/models`, model binding routes, `GET /jobs/{job_id}`
 - Public read-only routes under `/public/...`
 
 After API changes, regenerate frontend contracts:
@@ -111,10 +107,15 @@ Settings are loaded by `backend/core/settings/` from environment variables and
 |----------|---------|---------------|
 | `DATABASE_URL` | Async SQLAlchemy app connection | `postgresql+asyncpg://postgres:dev@localhost:5433/kalamos` |
 | `SYNC_DATABASE_URL` | Alembic sync connection | `postgresql://postgres:dev@localhost:5433/kalamos` |
-| `JWT_SECRET` | JWT signing secret | development value in `.env.example` |
+| `JWT_SECRET` | JWT signing secret | required; use a unique value per environment |
+| `JWT_EXPIRE_MINUTES` | Access-token lifetime | `60` |
+| `AUTH_RATE_LIMIT_REQUESTS` | Login/register attempts per window per client | `60` |
+| `AUTH_RATE_LIMIT_WINDOW_SECONDS` | Login/register rate-limit window | `60` |
 | `CORS_ORIGINS` | Browser origins | `http://localhost:3000,http://localhost:5173` |
 | `MEDIA_ROOT` | Uploaded Document part media | `annote/backend/media` |
-| `ENABLE_TEST_JOB_ROUTES` | Enables dev-only noop job route | `false` |
+| `ENABLE_TEST_JOB_ROUTES` | Enables dev-only noop job route | `false` in `.env.example` |
+| `TRANSCRIBE_ADAPTER` | Adapter marker used for transcribe jobs | `mock:transcribe` |
+| `SEGMENT_ADAPTER` | Adapter marker used for segment jobs | `kraken_stub` |
 | `DEFAULT_SEGMENT_MODEL` | Dev segment model name | `kraken-segment-default` |
 | `DEFAULT_TRANSCRIBE_MODEL` | Dev transcribe model name | `kraken-transcribe-default` |
 | `KRAKEN_MODEL_PATH` | Path to model weights outside annote | `../model/kraken` |
@@ -151,15 +152,12 @@ cd annote
 PYTHONPATH=. pytest backend/tests/platform
 ```
 
-Legacy standalone/filesystem tests live in `backend/tests/` and exercise the
-older `backend/annote` package. Keep them only when touching that compatibility
-surface.
+All backend API tests live under `backend/tests/platform/` and exercise the
+platform FastAPI app.
 
 ## Special Notes
 
-- `backend/annote/` is the older filesystem app. The production platform is
-  `backend/core` plus bounded contexts.
-- `backend/app/` exists for relocation/import compatibility during cleanup.
+- The production platform is `backend/core` plus bounded contexts.
 - Job workers are started by the FastAPI lifespan in `backend/core/app.py`.
 - `Page transcription` candidate Text lines are helpers; Ground truth lives in
   `line_transcriptions` under a `ground_truth` Transcription layer.

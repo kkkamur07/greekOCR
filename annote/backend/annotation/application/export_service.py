@@ -12,7 +12,7 @@ import numpy as np
 from PIL import Image
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from annote.services.processing.pipeline import apply_step
+from backend.annotation.application.processing import apply_step
 from backend.document.application.document_service import DocumentService
 from backend.document.infrastructure.document_repository import DocumentRepository
 from backend.document.infrastructure.media_store import MediaStore
@@ -80,51 +80,56 @@ class AnnotationExportService:
             raise NotFoundError("Part not found")
 
         page_image, source_image = self._load_page_image(part.image_key)
-        page_stem = self._page_stem(part.image_key)
-        export_steps = steps if steps is not None else ["rectify"]
-        text_lines = await self._documents.list_page_transcription_lines(session, part.id)
+        try:
+            page_stem = self._page_stem(part.image_key)
+            export_steps = steps if steps is not None else ["rectify"]
+            text_lines = await self._documents.list_page_transcription_lines(session, part.id)
 
-        artifacts: list[ExportArtifact] = []
-        unpaired_segments: list[int] = []
-        paired_text_orders: set[int] = set()
-        for line in await self._documents.list_part_lines(session, part.id):
-            segment_number = line.order + 1
-            text = self._ground_truth_text(line)
-            if text is None:
-                unpaired_segments.append(segment_number)
-                continue
-            text_order = self._paired_text_order(text_lines, line.id)
-            if text_order is not None:
-                paired_text_orders.add(text_order)
-            image_base64 = self._processed_image_base64(
-                page_image,
-                source_image,
-                line,
-                export_steps,
-            )
-            artifacts.append(
-                ExportArtifact(
-                    line_id=line.id,
-                    segment_number=segment_number,
-                    image_filename=f"{page_stem}_{segment_number}.jpg",
-                    transcription_filename=f"{page_stem}_{segment_number}.txt",
-                    transcription_text=text,
-                    image_base64=image_base64,
+            artifacts: list[ExportArtifact] = []
+            unpaired_segments: list[int] = []
+            paired_text_orders: set[int] = set()
+            for line in await self._documents.list_part_lines(session, part.id):
+                segment_number = line.order + 1
+                text = self._ground_truth_text(line)
+                if text is None:
+                    unpaired_segments.append(segment_number)
+                    continue
+                text_order = self._paired_text_order(text_lines, line.id)
+                if text_order is not None:
+                    paired_text_orders.add(text_order)
+                image_base64 = self._processed_image_base64(
+                    page_image,
+                    source_image,
+                    line,
+                    export_steps,
                 )
-            )
+                artifacts.append(
+                    ExportArtifact(
+                        line_id=line.id,
+                        segment_number=segment_number,
+                        image_filename=f"{page_stem}_{segment_number}.jpg",
+                        transcription_filename=f"{page_stem}_{segment_number}.txt",
+                        transcription_text=text,
+                        image_base64=image_base64,
+                    )
+                )
 
-        unused_text_lines = [
-            text_line.order for text_line in text_lines if text_line.order not in paired_text_orders
-        ]
-        return ExportResult(
-            exported_count=len(artifacts),
-            artifacts=artifacts,
-            warnings=ExportWarnings(
-                unpaired_segments=unpaired_segments,
-                unused_text_lines=unused_text_lines,
-            ),
-            steps=export_steps,
-        )
+            unused_text_lines = [
+                text_line.order
+                for text_line in text_lines
+                if text_line.order not in paired_text_orders
+            ]
+            return ExportResult(
+                exported_count=len(artifacts),
+                artifacts=artifacts,
+                warnings=ExportWarnings(
+                    unpaired_segments=unpaired_segments,
+                    unused_text_lines=unused_text_lines,
+                ),
+                steps=export_steps,
+            )
+        finally:
+            source_image.close()
 
     def _load_page_image(self, image_key: str) -> tuple[np.ndarray, Image.Image]:
         path = self._media.absolute_path(image_key)
@@ -165,7 +170,6 @@ class AnnotationExportService:
         for step in steps:
             image = apply_step(image, segment, step)
         buf = BytesIO()
-        pil = Image.fromarray(image)
         save_kwargs: dict[str, object] = {
             "format": "JPEG",
             "quality": 100,
@@ -175,5 +179,6 @@ class AnnotationExportService:
         dpi = source_image.info.get("dpi")
         if isinstance(dpi, tuple) and len(dpi) >= 2:
             save_kwargs["dpi"] = (int(round(dpi[0])), int(round(dpi[1])))
-        pil.save(buf, **save_kwargs)
+        with Image.fromarray(image) as pil:
+            pil.save(buf, **save_kwargs)
         return base64.b64encode(buf.getvalue()).decode("ascii")

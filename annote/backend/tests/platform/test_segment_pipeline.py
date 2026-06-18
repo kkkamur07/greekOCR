@@ -29,10 +29,12 @@ def _create_document_with_part(client, owner_headers, owner_project) -> tuple[st
     return project_id, document_id, upload.json()["id"]
 
 
-def _poll_job(client, job_id: str, *, expect: str, timeout: float = 5.0) -> dict:
+def _poll_job(
+    client, job_id: str, *, expect: str, headers: dict[str, str], timeout: float = 5.0
+) -> dict:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        response = client.get(f"/jobs/{job_id}")
+        response = client.get(f"/jobs/{job_id}", headers=headers)
         assert response.status_code == 200
         body = response.json()
         if body["status"] == expect:
@@ -58,7 +60,7 @@ def test_member_can_enqueue_segment_job_and_poll_result(client, owner_headers, o
     job_id = response.json()["job_id"]
     uuid.UUID(job_id)
 
-    job = _poll_job(client, job_id, expect="done")
+    job = _poll_job(client, job_id, expect="done", headers=owner_headers)
     assert job["type"] == "segment"
     assert job["document_id"] == document_id
     assert job["document_part_id"] == part_id
@@ -74,8 +76,6 @@ def test_segment_merge_preserves_manual_lines_and_prunes_machine_lines(
         client, owner_headers, owner_project
     )
     base = _documents_url(project_id)
-    manual_line_id = str(uuid.uuid4())
-    machine_line_id = str(uuid.uuid4())
 
     seed = client.put(
         f"{base}/{document_id}/parts/{part_id}/lines",
@@ -83,7 +83,6 @@ def test_segment_merge_preserves_manual_lines_and_prunes_machine_lines(
         json={
             "lines": [
                 {
-                    "id": manual_line_id,
                     "order": 0,
                     "kind": "polygon",
                     "points": [[100, 100], [120, 100], [120, 110], [100, 110]],
@@ -91,7 +90,6 @@ def test_segment_merge_preserves_manual_lines_and_prunes_machine_lines(
                     "approved_text": "manual text survives",
                 },
                 {
-                    "id": machine_line_id,
                     "order": 1,
                     "kind": "polygon",
                     "points": [[0, 50], [20, 50], [20, 58], [0, 58]],
@@ -102,6 +100,8 @@ def test_segment_merge_preserves_manual_lines_and_prunes_machine_lines(
         },
     )
     assert seed.status_code == 200
+    manual_line_id = seed.json()[0]["id"]
+    machine_line_id = seed.json()[1]["id"]
 
     response = client.post(
         f"{base}/{document_id}/parts/{part_id}/segment",
@@ -109,7 +109,7 @@ def test_segment_merge_preserves_manual_lines_and_prunes_machine_lines(
         json={},
     )
     assert response.status_code == 202
-    job = _poll_job(client, response.json()["job_id"], expect="done")
+    job = _poll_job(client, response.json()["job_id"], expect="done", headers=owner_headers)
     assert job["result"]["preserved_manual_lines"] == 1
     assert job["result"]["pruned_lines"] == 1
 

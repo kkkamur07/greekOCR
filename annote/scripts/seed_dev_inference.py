@@ -11,7 +11,7 @@ from sqlalchemy import select
 # Annote app root on PYTHONPATH when run: PYTHONPATH=. python scripts/seed_dev_inference.py
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from backend.inference.infrastructure.orm_models import (  # noqa: E402
+from backend.ml.infrastructure.orm_models import (  # noqa: E402
     InferenceModel,
     InferenceTask,
     ModelBinding,

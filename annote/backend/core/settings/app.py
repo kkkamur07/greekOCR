@@ -17,6 +17,8 @@ class AppSettings(BaseSettings):
         default="http://localhost:3000,http://localhost:5173",
         alias="CORS_ORIGINS",
     )
+    behind_proxy: bool = Field(default=False, alias="BEHIND_PROXY")
+    forwarded_allow_ips: str | None = Field(default=None, alias="FORWARDED_ALLOW_IPS")
 
     @property
     def cors_origin_list(self) -> list[str]:

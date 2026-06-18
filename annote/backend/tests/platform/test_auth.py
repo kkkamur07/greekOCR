@@ -2,8 +2,11 @@
 
 import psycopg2
 import pytest
+from pydantic import ValidationError
 
-from backend.core.settings import get_infrastructure_settings
+from backend.core.settings.auth import AuthSettings, get_auth_settings
+from backend.core.settings import get_app_settings, get_infrastructure_settings
+from backend.users.api.rate_limit import clear_auth_rate_limit_state
 
 
 @pytest.mark.integration
@@ -65,7 +68,10 @@ def test_login_wrong_password_fails(client, registered_user):
         json={"email": registered_user["email"], "password": "wrong-password-xyz"},
     )
     assert response.status_code == 401
-    assert response.json()["detail"] == "Invalid email or password"
+    assert response.json()["error"] == {
+        "code": "UNAUTHORIZED",
+        "message": "Invalid email or password",
+    }
 
 
 @pytest.mark.integration
@@ -91,3 +97,88 @@ def test_projects_with_auth_returns_empty_list(client, auth_headers):
     response = client.get("/projects", headers=auth_headers)
     assert response.status_code == 200
     assert response.json() == []
+
+
+def test_auth_settings_require_jwt_secret(monkeypatch):
+    monkeypatch.delenv("JWT_SECRET", raising=False)
+    with pytest.raises(ValidationError):
+        AuthSettings(_env_file=None)
+
+
+def test_login_rate_limit_returns_429(client, monkeypatch):
+    monkeypatch.setenv("AUTH_RATE_LIMIT_REQUESTS", "1")
+    monkeypatch.setenv("AUTH_RATE_LIMIT_WINDOW_SECONDS", "60")
+    get_auth_settings.cache_clear()
+    clear_auth_rate_limit_state()
+
+    first = client.post(
+        "/auth/login",
+        json={"email": "missing@test.kalamos", "password": "wrong-password-xyz"},
+    )
+    assert first.status_code == 401
+
+    limited = client.post(
+        "/auth/login",
+        json={"email": "missing@test.kalamos", "password": "wrong-password-xyz"},
+    )
+    assert limited.status_code == 429
+
+
+def test_login_rate_limit_ignores_forwarded_for_without_trusted_proxy(client, monkeypatch):
+    monkeypatch.setenv("AUTH_RATE_LIMIT_REQUESTS", "1")
+    monkeypatch.setenv("AUTH_RATE_LIMIT_WINDOW_SECONDS", "60")
+    get_auth_settings.cache_clear()
+    get_app_settings.cache_clear()
+    clear_auth_rate_limit_state()
+
+    first = client.post(
+        "/auth/login",
+        headers={"X-Forwarded-For": "203.0.113.10, 10.0.0.1"},
+        json={"email": "missing@test.kalamos", "password": "wrong-password-xyz"},
+    )
+    assert first.status_code == 401
+
+    limited = client.post(
+        "/auth/login",
+        headers={"X-Forwarded-For": "203.0.113.10, 10.0.0.1"},
+        json={"email": "missing@test.kalamos", "password": "wrong-password-xyz"},
+    )
+    assert limited.status_code == 429
+
+    other_client = client.post(
+        "/auth/login",
+        headers={"X-Forwarded-For": "203.0.113.11, 10.0.0.1"},
+        json={"email": "missing@test.kalamos", "password": "wrong-password-xyz"},
+    )
+    assert other_client.status_code == 429
+
+
+def test_login_rate_limit_uses_forwarded_for_from_trusted_proxy(client, monkeypatch):
+    monkeypatch.setenv("AUTH_RATE_LIMIT_REQUESTS", "1")
+    monkeypatch.setenv("AUTH_RATE_LIMIT_WINDOW_SECONDS", "60")
+    monkeypatch.setenv("BEHIND_PROXY", "true")
+    monkeypatch.setenv("FORWARDED_ALLOW_IPS", "testclient")
+    get_auth_settings.cache_clear()
+    get_app_settings.cache_clear()
+    clear_auth_rate_limit_state()
+
+    first = client.post(
+        "/auth/login",
+        headers={"X-Forwarded-For": "203.0.113.10, 10.0.0.1"},
+        json={"email": "missing@test.kalamos", "password": "wrong-password-xyz"},
+    )
+    assert first.status_code == 401
+
+    limited = client.post(
+        "/auth/login",
+        headers={"X-Forwarded-For": "203.0.113.10, 10.0.0.1"},
+        json={"email": "missing@test.kalamos", "password": "wrong-password-xyz"},
+    )
+    assert limited.status_code == 429
+
+    other_client = client.post(
+        "/auth/login",
+        headers={"X-Forwarded-For": "203.0.113.11, 10.0.0.1"},
+        json={"email": "missing@test.kalamos", "password": "wrong-password-xyz"},
+    )
+    assert other_client.status_code == 401

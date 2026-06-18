@@ -13,14 +13,14 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import delete, select
 
-from backend.inference.infrastructure.job_repository import (
+from backend.jobs.infrastructure.job_repository import (
     claim_next_pending_job,
     count_active_jobs,
     lock_first_pending_job_for_test,
     mark_job_done,
 )
-from backend.inference.infrastructure.orm_models import Job, JobStatus, JobType
-from backend.inference.infrastructure.worker import execute_claimed_job
+from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
+from backend.jobs.infrastructure.worker import execute_claimed_job
 from infrastructure.db import SyncSessionLocal
 
 
@@ -51,10 +51,17 @@ def _reset_jobs_table() -> None:
     _clear_all_jobs()
 
 
-def _poll_job(client: TestClient, job_id: str, *, expect: str, timeout: float = 5.0) -> dict:
+def _poll_job(
+    client: TestClient,
+    job_id: str,
+    *,
+    expect: str,
+    headers: dict[str, str],
+    timeout: float = 5.0,
+) -> dict:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        response = client.get(f"/jobs/{job_id}")
+        response = client.get(f"/jobs/{job_id}", headers=headers)
         assert response.status_code == 200
         body = response.json()
         if body["status"] == expect:
@@ -63,14 +70,29 @@ def _poll_job(client: TestClient, job_id: str, *, expect: str, timeout: float = 
     raise AssertionError(f"job {job_id} did not reach status {expect!r} in {timeout}s")
 
 
-def test_enqueue_test_job_returns_job_id_immediately(client: TestClient):
+def test_enqueue_test_job_requires_auth(client: TestClient):
     response = client.post("/jobs/test")
+    assert response.status_code == 401
+
+
+def test_get_job_requires_auth(client: TestClient, registered_user: dict[str, str]):
+    auth_headers = {"Authorization": f"Bearer {registered_user['access_token']}"}
+    created = client.post("/jobs/test", headers=auth_headers)
+    job_id = created.json()["job_id"]
+
+    response = client.get(f"/jobs/{job_id}")
+    assert response.status_code == 401
+
+
+def test_enqueue_test_job_returns_job_id_immediately(client: TestClient, registered_user: dict[str, str]):
+    auth_headers = {"Authorization": f"Bearer {registered_user['access_token']}"}
+    response = client.post("/jobs/test", headers=auth_headers)
 
     assert response.status_code == 201
     job_id = response.json()["job_id"]
     uuid.UUID(job_id)
 
-    body = _poll_job(client, job_id, expect="done")
+    body = _poll_job(client, job_id, expect="done", headers=auth_headers)
     assert body["type"] == "pipeline"
     assert body["payload"]["handler"] == "noop"
     assert body["error"] is None
@@ -78,16 +100,59 @@ def test_enqueue_test_job_returns_job_id_immediately(client: TestClient):
     assert body["completed_at"] is not None
 
 
-def test_get_job_returns_status_and_timestamps(client: TestClient):
-    created = client.post("/jobs/test")
+def test_get_job_returns_status_and_timestamps(client: TestClient, registered_user: dict[str, str]):
+    auth_headers = {"Authorization": f"Bearer {registered_user['access_token']}"}
+    created = client.post("/jobs/test", headers=auth_headers)
     job_id = created.json()["job_id"]
 
-    pending = client.get(f"/jobs/{job_id}")
+    pending = client.get(f"/jobs/{job_id}", headers=auth_headers)
     assert pending.status_code == 200
     assert pending.json()["status"] in ("pending", "running", "done")
 
-    missing = client.get(f"/jobs/{uuid.uuid4()}")
+    missing = client.get(f"/jobs/{uuid.uuid4()}", headers=auth_headers)
     assert missing.status_code == 404
+
+
+def test_get_job_denies_access_to_other_users_job(client: TestClient):
+    owner_suffix = uuid.uuid4().hex[:8]
+    other_suffix = uuid.uuid4().hex[:8]
+
+    def _register(suffix: str) -> str:
+        r = client.post(
+            "/auth/register",
+            json={"email": f"{suffix}@test.kalamos", "username": suffix, "password": "test-pass-123"},
+        )
+        return r.json()["access_token"]
+
+    owner_token = _register(f"owner-{owner_suffix}")
+    other_token = _register(f"other-{other_suffix}")
+
+    created = client.post("/jobs/test", headers={"Authorization": f"Bearer {owner_token}"})
+    job_id = created.json()["job_id"]
+
+    response = client.get(f"/jobs/{job_id}", headers={"Authorization": f"Bearer {other_token}"})
+    assert response.status_code == 403
+
+
+def test_get_job_denies_access_to_ownerless_job(client: TestClient, registered_user: dict[str, str]):
+    job_id = uuid.uuid4()
+    with SyncSessionLocal() as session:
+        session.add(
+            Job(
+                id=job_id,
+                type=JobType.pipeline,
+                status=JobStatus.done,
+                payload={"handler": "noop"},
+                result={"ok": True},
+                user_id=None,
+            )
+        )
+        session.commit()
+
+    auth_headers = {"Authorization": f"Bearer {registered_user['access_token']}"}
+    response = client.get(f"/jobs/{job_id}", headers=auth_headers)
+
+    assert response.status_code == 403
 
 
 def test_claim_next_uses_skip_locked():
@@ -181,20 +246,22 @@ def test_concurrent_claimers_do_not_run_same_job_twice():
         mark_job_done(jid)
 
 
-def test_failed_handler_stores_error_message(client: TestClient):
-    response = client.post("/jobs/test", json={"handler": "fail"})
+def test_failed_handler_stores_error_message(client: TestClient, registered_user: dict[str, str]):
+    auth_headers = {"Authorization": f"Bearer {registered_user['access_token']}"}
+    response = client.post("/jobs/test", json={"handler": "fail"}, headers=auth_headers)
     job_id = response.json()["job_id"]
 
-    body = _poll_job(client, job_id, expect="failed")
+    body = _poll_job(client, job_id, expect="failed", headers=auth_headers)
     assert body["error"] == "intentional test failure"
     assert body["completed_at"] is not None
 
 
-def test_worker_processes_pending_job_via_lifespan(client: TestClient):
+def test_worker_processes_pending_job_via_lifespan(client: TestClient, registered_user: dict[str, str]):
     """Background loop started in app lifespan completes a noop job without manual claim."""
-    response = client.post("/jobs/test")
+    auth_headers = {"Authorization": f"Bearer {registered_user['access_token']}"}
+    response = client.post("/jobs/test", headers=auth_headers)
     job_id = response.json()["job_id"]
-    body = _poll_job(client, job_id, expect="done", timeout=8.0)
+    body = _poll_job(client, job_id, expect="done", headers=auth_headers, timeout=8.0)
     assert body["result"] == {"ok": True}
 
 

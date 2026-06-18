@@ -13,3 +13,13 @@ class AnnotationHistorySnapshotResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class AnnotationHistorySnapshotSummaryResponse(BaseModel):
+    id: UUID
+    part_id: UUID
+    line_count: int
+    paired_line_count: int
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

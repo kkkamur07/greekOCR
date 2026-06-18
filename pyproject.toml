@@ -32,13 +32,16 @@ platform = [
     "psycopg2-binary>=2.9.10",
     "pydantic-settings>=2.6.0",
     "pydantic>=2.10.0",
-    "python-jose[cryptography]>=3.3.0",
+    "PyJWT>=2.10.0",
     "python-multipart>=0.0.18",
     "sqlalchemy[asyncio]>=2.0.36",
     "uvicorn[standard]>=0.32.0",
     "pytest>=8.3.0",
     "pytest-asyncio>=0.24.0",
     "pypdf>=6.13.2",
+    "pillow>=12.2.0",
+    "opencv-python-headless>=4.13.0.92",
+    "reportlab>=5.0.0",
 ]
 
 [tool.uv]
