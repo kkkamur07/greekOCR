@@ -1,11 +1,11 @@
-"""Inference catalog and binding integration tests — real Postgres (kalamos)."""
+"""ML catalog and binding integration tests — real Postgres (kalamos)."""
 
 import uuid
 
 import pytest
 from sqlalchemy import delete
 
-from backend.inference.infrastructure.orm_models import (
+from backend.ml.infrastructure.orm_models import (
     InferenceModel,
     InferenceTask,
     ModelBinding,

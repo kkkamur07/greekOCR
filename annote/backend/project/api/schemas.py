@@ -4,6 +4,7 @@ from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
+from pydantic.json_schema import SkipJsonSchema
 
 
 class ProjectCreateRequest(BaseModel):
@@ -13,8 +14,8 @@ class ProjectCreateRequest(BaseModel):
 
 
 class ProjectUpdateRequest(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=512)
-    slug: str | None = Field(default=None, min_length=1, max_length=512)
+    name: str | SkipJsonSchema[None] = Field(default=None, min_length=1, max_length=512)
+    slug: str | SkipJsonSchema[None] = Field(default=None, min_length=1, max_length=512)
     guidelines: str | None = None
 
     @field_validator("name", "slug", mode="before")

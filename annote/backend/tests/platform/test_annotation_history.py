@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import uuid
-
 from fastapi.testclient import TestClient
 
-from tests.platform.test_documents import MINIMAL_PNG
+from backend.tests.platform.test_documents import MINIMAL_PNG
 
 
 def _documents_url(project_id: str) -> str:
@@ -30,14 +28,12 @@ def _create_part_with_lines(
     assert upload.status_code == 201
     part_id = upload.json()["id"]
 
-    line_ids = [str(uuid.uuid4()), str(uuid.uuid4())]
     replace = client.put(
         f"{base}/{document_id}/parts/{part_id}/lines",
         headers=owner_headers,
         json={
             "lines": [
                 {
-                    "id": line_ids[0],
                     "order": 0,
                     "kind": "polygon",
                     "points": [[0, 0], [10, 0], [10, 5], [0, 5]],
@@ -45,7 +41,6 @@ def _create_part_with_lines(
                     "approved_text": "alpha",
                 },
                 {
-                    "id": line_ids[1],
                     "order": 1,
                     "kind": "rectangle",
                     "points": [[0, 10], [10, 10], [10, 15], [0, 15]],
@@ -57,6 +52,7 @@ def _create_part_with_lines(
         },
     )
     assert replace.status_code == 200
+    line_ids = [line["id"] for line in replace.json()]
     return project_id, document_id, part_id, line_ids
 
 
@@ -79,6 +75,7 @@ def test_member_can_create_and_list_compact_history_snapshots(
     assert snapshot["state"]["lines"] == [
         {
             "id": line_ids[0],
+            "block_id": None,
             "order": 0,
             "kind": "polygon",
             "points": [[0, 0], [10, 0], [10, 5], [0, 5]],
@@ -89,6 +86,7 @@ def test_member_can_create_and_list_compact_history_snapshots(
         },
         {
             "id": line_ids[1],
+            "block_id": None,
             "order": 1,
             "kind": "rectangle",
             "points": [[0, 10], [10, 10], [10, 15], [0, 15]],
@@ -106,7 +104,15 @@ def test_member_can_create_and_list_compact_history_snapshots(
     listed = client.get(history_url, headers=owner_headers)
 
     assert listed.status_code == 200
-    assert listed.json() == [snapshot]
+    assert listed.json() == [
+        {
+            "id": snapshot["id"],
+            "part_id": snapshot["part_id"],
+            "line_count": snapshot["line_count"],
+            "paired_line_count": snapshot["paired_line_count"],
+            "created_at": snapshot["created_at"],
+        }
+    ]
 
 
 def test_member_can_restore_snapshot_to_replace_current_page_annotations(
@@ -133,7 +139,6 @@ def test_member_can_restore_snapshot_to_replace_current_page_annotations(
                     "approved_text": "changed",
                 },
                 {
-                    "id": str(uuid.uuid4()),
                     "order": 1,
                     "kind": "polygon",
                     "points": [[200, 200], [210, 200], [210, 205], [200, 205]],
@@ -167,6 +172,52 @@ def test_member_can_restore_snapshot_to_replace_current_page_annotations(
     assert restored.json() == restored_lines
 
 
+def test_restore_snapshot_preserves_line_block_associations(
+    client: TestClient, owner_headers: dict[str, str], owner_project: dict
+) -> None:
+    project_id, document_id, part_id, line_ids = _create_part_with_lines(
+        client, owner_headers, owner_project
+    )
+    base = _documents_url(project_id)
+    history_url = f"{base}/{document_id}/parts/{part_id}/history"
+    first_block = client.post(
+        f"{base}/{document_id}/parts/{part_id}/blocks",
+        headers=owner_headers,
+        json={"order": 0, "box": {"points": [[0, 0], [10, 0], [10, 10], [0, 10]]}},
+    )
+    second_block = client.post(
+        f"{base}/{document_id}/parts/{part_id}/blocks",
+        headers=owner_headers,
+        json={"order": 1, "box": {"points": [[20, 0], [30, 0], [30, 10], [20, 10]]}},
+    )
+    assert first_block.status_code == 201
+    assert second_block.status_code == 201
+
+    assign_first = client.patch(
+        f"{base}/{document_id}/parts/{part_id}/lines/{line_ids[0]}",
+        headers=owner_headers,
+        json={"block_id": first_block.json()["id"]},
+    )
+    assert assign_first.status_code == 200
+    snapshot_id = client.post(history_url, headers=owner_headers).json()["id"]
+
+    assign_second = client.patch(
+        f"{base}/{document_id}/parts/{part_id}/lines/{line_ids[0]}",
+        headers=owner_headers,
+        json={"block_id": second_block.json()["id"]},
+    )
+    assert assign_second.status_code == 200
+
+    restored = client.post(
+        f"{history_url}/{snapshot_id}/restore",
+        headers=owner_headers,
+    )
+
+    assert restored.status_code == 200
+    restored_first_line = next(line for line in restored.json() if line["id"] == line_ids[0])
+    assert restored_first_line["block_id"] == first_block.json()["id"]
+
+
 def test_non_member_cannot_create_list_or_restore_history_snapshots(
     client: TestClient,
     owner_headers: dict[str, str],
@@ -192,7 +243,7 @@ def test_non_member_cannot_create_list_or_restore_history_snapshots(
     assert restored.status_code in (403, 404)
 
 
-def test_history_snapshot_retention_keeps_only_latest_twenty(
+def test_history_snapshot_retention_keeps_only_latest_five(
     client: TestClient, owner_headers: dict[str, str], owner_project: dict
 ) -> None:
     project_id, document_id, part_id, _line_ids = _create_part_with_lines(
@@ -202,7 +253,7 @@ def test_history_snapshot_retention_keeps_only_latest_twenty(
     history_url = f"{base}/{document_id}/parts/{part_id}/history"
 
     snapshot_ids = []
-    for index in range(21):
+    for index in range(6):
         created = client.post(history_url, headers=owner_headers)
         assert created.status_code == 201
         snapshot_ids.append(created.json()["id"])
@@ -211,7 +262,7 @@ def test_history_snapshot_retention_keeps_only_latest_twenty(
 
     assert listed.status_code == 200
     listed_ids = [snapshot["id"] for snapshot in listed.json()]
-    assert len(listed_ids) == 20
+    assert len(listed_ids) == 5
     assert snapshot_ids[0] not in listed_ids
     assert snapshot_ids[-1] in listed_ids
 

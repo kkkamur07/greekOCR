@@ -4,6 +4,7 @@ from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
+from pydantic.json_schema import SkipJsonSchema
 
 from backend.document.infrastructure.orm_models import (
     DocumentWorkflow,
@@ -12,14 +13,18 @@ from backend.document.infrastructure.orm_models import (
     TranscriptionKind,
 )
 
+MAX_PAGE_TRANSCRIPTION_CHARS = 1_000_000
+MAX_PAGE_TRANSCRIPTION_LINES = 10_000
+MAX_REPLACE_PART_LINES = 10_000
+
 
 class DocumentCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=512)
 
 
 class DocumentUpdateRequest(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=512)
-    workflow: DocumentWorkflow | None = None
+    name: str | SkipJsonSchema[None] = Field(default=None, min_length=1, max_length=512)
+    workflow: DocumentWorkflow | SkipJsonSchema[None] = None
 
     @field_validator("name", "workflow", mode="before")
     @classmethod
@@ -54,7 +59,7 @@ class DocumentPartResponse(BaseModel):
 
 
 class DocumentPartUpdateRequest(BaseModel):
-    reviewed: bool | None = None
+    reviewed: bool
 
     @field_validator("reviewed", mode="before")
     @classmethod
@@ -130,7 +135,7 @@ class LineUpsertRequest(BaseModel):
 
 
 class LinesReplaceRequest(BaseModel):
-    lines: list[LineUpsertRequest] = Field(default_factory=list)
+    lines: list[LineUpsertRequest] = Field(default_factory=list, max_length=MAX_REPLACE_PART_LINES)
 
 
 class BlockResponse(BaseModel):
@@ -195,7 +200,15 @@ class LayoutResponse(BaseModel):
 
 
 class PageTranscriptionImportRequest(BaseModel):
-    text: str
+    text: str = Field(max_length=MAX_PAGE_TRANSCRIPTION_CHARS)
+
+    @field_validator("text")
+    @classmethod
+    def validate_line_count(cls, value: str) -> str:
+        line_count = sum(1 for line in value.splitlines() if line.strip())
+        if line_count > MAX_PAGE_TRANSCRIPTION_LINES:
+            raise ValueError(f"text cannot exceed {MAX_PAGE_TRANSCRIPTION_LINES} non-empty lines")
+        return value
 
 
 class PageTranscriptionTextLineResponse(BaseModel):
@@ -253,9 +266,24 @@ class LineTranscriptionPatchRequest(BaseModel):
     text: str
 
 
+class PublicBlockResponse(BaseModel):
+    id: UUID
+    part_id: UUID
+    order: int
+    box: dict
+
+
+class PublicLineResponse(BaseModel):
+    id: UUID
+    part_id: UUID
+    order: int
+    points: list[list[float]]
+    line_transcriptions: list[LineTranscriptionResponse] = Field(default_factory=list)
+
+
 class PublicLayoutResponse(BaseModel):
-    blocks: list[dict] = Field(default_factory=list)
-    lines: list[dict] = Field(default_factory=list)
+    blocks: list[PublicBlockResponse] = Field(default_factory=list)
+    lines: list[PublicLineResponse] = Field(default_factory=list)
 
 
 class PublicTranscriptionLayerResponse(BaseModel):

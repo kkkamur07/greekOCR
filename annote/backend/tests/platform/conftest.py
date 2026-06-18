@@ -4,13 +4,55 @@ No DB mocking: ``unique_user`` only generates unique credentials; ``registered_u
 hits live ``POST /auth/register`` against kalamos.
 """
 
+import os
 import uuid
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import text
+
+os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production-at-least-32-bytes")
+os.environ.setdefault("AUTH_RATE_LIMIT_REQUESTS", "1000")
+os.environ.setdefault("ENABLE_TEST_JOB_ROUTES", "true")
 
 import infrastructure.models  # noqa: F401 — register all ORM mappers
 from backend.core.app import create_app
+from backend.core.settings import (
+    get_app_settings,
+    get_auth_settings,
+    get_infrastructure_settings,
+    get_job_settings,
+    get_model_settings,
+)
+from backend.users.api.rate_limit import clear_auth_rate_limit_state
+from infrastructure.db import Base, sync_engine
+
+
+def _truncate_database() -> None:
+    table_names = [
+        sync_engine.dialect.identifier_preparer.quote(table.name)
+        for table in reversed(Base.metadata.sorted_tables)
+    ]
+    if not table_names:
+        return
+    with sync_engine.begin() as connection:
+        connection.execute(
+            text(f"TRUNCATE TABLE {', '.join(table_names)} RESTART IDENTITY CASCADE")
+        )
+
+
+@pytest.fixture(autouse=True)
+def isolated_platform_state():
+    get_app_settings.cache_clear()
+    get_auth_settings.cache_clear()
+    get_infrastructure_settings.cache_clear()
+    get_job_settings.cache_clear()
+    get_model_settings.cache_clear()
+    clear_auth_rate_limit_state()
+    _truncate_database()
+    yield
+    clear_auth_rate_limit_state()
+    _truncate_database()
 
 
 @pytest.fixture(scope="session")

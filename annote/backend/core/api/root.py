@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 
 from backend.core.schemas.root import WelcomeResponse
+from backend.core.version import get_version
 
 router = APIRouter(tags=["root"])
 
@@ -14,7 +15,7 @@ async def welcome() -> WelcomeResponse:
         message=(
             "Welcome to Kalamos API"
         ),
-        version="0.1.0",
+        version=get_version(),
         docs_url="/docs",
         health_url="/health",
     )

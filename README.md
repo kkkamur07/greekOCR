@@ -54,7 +54,7 @@ Checkpoints default to `model/outputs/calamari-greek-bible/` (override with `CAL
 
 ## Annote Production App (API + Editor)
 
-The production app lives under [`annote/`](annote/). Its API uses **domain-driven design**: `annote/backend/core/` wires routers; bounded contexts are `users`, `project`, `document`, `annotation`, and `inference`. Postgres and Alembic live in [`annote/infrastructure/`](annote/infrastructure/).
+The production app lives under [`annote/`](annote/). Its API uses **domain-driven design**: `annote/backend/core/` wires routers; bounded contexts are `users`, `project`, `document`, `annotation`, `ml`, and `jobs`. Postgres and Alembic live in [`annote/infrastructure/`](annote/infrastructure/).
 
 ### Prerequisites
 
@@ -154,7 +154,7 @@ After a detached start: `docker compose ps`, `docker compose logs -f`, `docker c
 | Editor | http://localhost:3000 |
 | API | http://localhost:8000 |
 
-The repository root `model/` workspace and existing root `data/` contents are intentionally separate from the production app. Annote platform media is stored under `annote/backend/media/`; local legacy annotation data remains under `annote/data/` when used by standalone tooling.
+The repository root `model/` workspace and existing root `data/` contents are intentionally separate from the production app. Annote platform media is stored under `annote/backend/media/`.
 
 ### Bumping the Docker image version
 

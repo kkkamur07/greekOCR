@@ -4,6 +4,7 @@ from uuid import UUID
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
 
 from backend.annotation.infrastructure.orm_models import AnnotationHistorySnapshot
 from backend.core.exceptions import NotFoundError
@@ -18,7 +19,7 @@ from backend.document.infrastructure.orm_models import (
 from backend.users.infrastructure.orm_models import User
 
 
-HISTORY_RETENTION_LIMIT = 20
+HISTORY_RETENTION_LIMIT = 5
 
 
 class AnnotationHistoryService:
@@ -45,7 +46,11 @@ class AnnotationHistoryService:
             part_id=part_id,
             state=state,
             line_count=len(lines),
-            paired_line_count=sum(1 for line in state["lines"] if line["approved_text"]),
+            paired_line_count=sum(
+                1
+                for line in state["lines"]
+                if isinstance(line["approved_text"], str) and line["approved_text"].strip()
+            ),
         )
         session.add(snapshot)
         await session.flush()
@@ -65,6 +70,15 @@ class AnnotationHistoryService:
         await self._require_part(session, user, project_id, document_id, part_id)
         result = await session.execute(
             select(AnnotationHistorySnapshot)
+            .options(
+                load_only(
+                    AnnotationHistorySnapshot.id,
+                    AnnotationHistorySnapshot.part_id,
+                    AnnotationHistorySnapshot.line_count,
+                    AnnotationHistorySnapshot.paired_line_count,
+                    AnnotationHistorySnapshot.created_at,
+                )
+            )
             .where(AnnotationHistorySnapshot.part_id == part_id)
             .order_by(AnnotationHistorySnapshot.created_at.desc(), AnnotationHistorySnapshot.id.desc())
         )
@@ -87,6 +101,7 @@ class AnnotationHistoryService:
                 "order": line["order"],
                 "kind": LineGeometryKind(line["kind"]),
                 "points": line["points"],
+                "block_id": UUID(line["block_id"]) if line.get("block_id") is not None else None,
                 "source": LineSource(line["source"]),
                 "source_metadata": line["source_metadata"],
                 "kraken_ceiling": line["kraken_ceiling"],
@@ -101,6 +116,7 @@ class AnnotationHistoryService:
             document_id,
             part_id,
             lines=lines,
+            allow_new_ids=True,
         )
 
     async def _require_part(
@@ -150,6 +166,7 @@ class AnnotationHistoryService:
         )
         return {
             "id": str(line.id),
+            "block_id": str(line.block_id) if line.block_id is not None else None,
             "order": line.order,
             "kind": line.kind.value,
             "points": line.points,

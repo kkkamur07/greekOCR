@@ -12,7 +12,7 @@ from infrastructure.db import Base
 
 if TYPE_CHECKING:
     from backend.document.infrastructure.orm_models import Document
-    from backend.inference.infrastructure.orm_models import ModelBinding
+    from backend.ml.infrastructure.orm_models import ModelBinding
     from backend.users.infrastructure.orm_models import User
 
 project_shared_users = Table(

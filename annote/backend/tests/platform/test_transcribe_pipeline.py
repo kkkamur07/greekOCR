@@ -7,7 +7,7 @@ import uuid
 
 from fastapi.testclient import TestClient
 
-from tests.platform.test_documents import MINIMAL_PNG
+from backend.tests.platform.test_documents import MINIMAL_PNG
 
 
 def _documents_url(project_id: str) -> str:
@@ -37,14 +37,12 @@ def _create_document_part_with_lines(
         json={
             "lines": [
                 {
-                    "id": str(uuid.uuid4()),
                     "order": 0,
                     "kind": "polygon",
                     "points": [[0, 0], [10, 0], [10, 5], [0, 5]],
                     "source": "kraken",
                 },
                 {
-                    "id": str(uuid.uuid4()),
                     "order": 1,
                     "kind": "polygon",
                     "points": [[0, 10], [10, 10], [10, 15], [0, 15]],
@@ -57,10 +55,17 @@ def _create_document_part_with_lines(
     return project_id, document_id, part_id
 
 
-def _poll_job(client: TestClient, job_id: str, *, expect: str, timeout: float = 5.0) -> dict:
+def _poll_job(
+    client: TestClient,
+    job_id: str,
+    *,
+    expect: str,
+    headers: dict[str, str],
+    timeout: float = 5.0,
+) -> dict:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        response = client.get(f"/jobs/{job_id}")
+        response = client.get(f"/jobs/{job_id}", headers=headers)
         assert response.status_code == 200
         body = response.json()
         if body["status"] == expect:
@@ -84,7 +89,7 @@ def test_transcribe_job_creates_model_layer_and_leaves_ground_truth_empty(
     assert enqueue.status_code == 202
     job_id = enqueue.json()["job_id"]
 
-    job = _poll_job(client, job_id, expect="done", timeout=8.0)
+    job = _poll_job(client, job_id, expect="done", headers=owner_headers, timeout=8.0)
     assert job["type"] == "transcribe"
     assert [line["text"] for line in job["result"]["lines"]] == [
         "mock transcription 1",
@@ -120,7 +125,7 @@ def test_each_transcribe_job_creates_distinct_model_layer_without_ground_truth(
         )
         assert enqueue.status_code == 202
         job_ids.append(enqueue.json()["job_id"])
-        _poll_job(client, job_ids[-1], expect="done", timeout=8.0)
+        _poll_job(client, job_ids[-1], expect="done", headers=owner_headers, timeout=8.0)
 
     layers = client.get(f"{base}/{document_id}/transcriptions", headers=owner_headers)
     assert layers.status_code == 200
@@ -150,7 +155,9 @@ def test_copy_model_layer_to_ground_truth_for_whole_document(
         headers=owner_headers,
     )
     assert enqueue.status_code == 202
-    _poll_job(client, enqueue.json()["job_id"], expect="done", timeout=8.0)
+    _poll_job(
+        client, enqueue.json()["job_id"], expect="done", headers=owner_headers, timeout=8.0
+    )
     layers = client.get(f"{base}/{document_id}/transcriptions", headers=owner_headers).json()
     model_layer_id = next(layer["id"] for layer in layers if layer["kind"] == "model")
 
@@ -184,7 +191,9 @@ def test_copy_model_layer_to_ground_truth_for_selected_lines(
         headers=owner_headers,
     )
     assert enqueue.status_code == 202
-    _poll_job(client, enqueue.json()["job_id"], expect="done", timeout=8.0)
+    _poll_job(
+        client, enqueue.json()["job_id"], expect="done", headers=owner_headers, timeout=8.0
+    )
     layers = client.get(f"{base}/{document_id}/transcriptions", headers=owner_headers).json()
     model_layer_id = next(layer["id"] for layer in layers if layer["kind"] == "model")
     lines_before = client.get(
@@ -258,7 +267,9 @@ def test_patch_model_layer_line_text_is_rejected(
         headers=owner_headers,
     )
     assert enqueue.status_code == 202
-    _poll_job(client, enqueue.json()["job_id"], expect="done", timeout=8.0)
+    _poll_job(
+        client, enqueue.json()["job_id"], expect="done", headers=owner_headers, timeout=8.0
+    )
     layers = client.get(f"{base}/{document_id}/transcriptions", headers=owner_headers).json()
     model_layer_id = next(layer["id"] for layer in layers if layer["kind"] == "model")
     first_line = client.get(

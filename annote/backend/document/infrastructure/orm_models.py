@@ -24,7 +24,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from infrastructure.db import Base
 
 if TYPE_CHECKING:
-    from backend.inference.infrastructure.orm_models import ModelBinding
+    from backend.ml.infrastructure.orm_models import ModelBinding
     from backend.project.infrastructure.orm_models import Project
 
 

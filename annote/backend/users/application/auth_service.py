@@ -12,6 +12,8 @@ from backend.users.application.password import hash_password, verify_password
 from backend.users.infrastructure.orm_models import User
 from backend.users.infrastructure.user_repository import UserRepository
 
+_DUMMY_PASSWORD_HASH = "$2b$12$t7YSQy5g4YoP4Bfr5DXh0eUg2kUE4qavr20ibunY9EEWibESvTARu"
+
 
 class AuthService:
     def __init__(
@@ -47,6 +49,7 @@ class AuthService:
             await session.commit()
         except IntegrityError as exc:
             await session.rollback()
+            # Pre-checks above return precise feedback; this catches concurrent inserts safely.
             raise ConflictError("Email or username already taken") from exc
         token = create_access_token(user.id, self._auth_settings)
         return user, token
@@ -59,7 +62,9 @@ class AuthService:
         password: str,
     ) -> tuple[User, str]:
         user = await self._repo.get_by_email(session, email)
-        if user is None or not verify_password(password, user.hashed_password):
+        hash_to_check = user.hashed_password if user is not None else _DUMMY_PASSWORD_HASH
+        password_matches = verify_password(password, hash_to_check)
+        if user is None or not password_matches:
             raise InvalidCredentialsError("Invalid email or password")
         token = create_access_token(user.id, self._auth_settings)
         return user, token

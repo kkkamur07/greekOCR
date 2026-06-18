@@ -23,13 +23,11 @@ Missing subdirectories are **created automatically** when the API starts. If cre
 
 ## Setup
 
-### Backend virtual environment
+### Backend environment
 
 ```bash
 cd annote
-python -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -e "backend[dev]"      # add ,kraken for auto-segmentation support
+uv sync --project .. --group platform
 cp backend/core/.env.example backend/core/.env
 ```
 
@@ -47,10 +45,9 @@ npm install
 
 ```bash
 cd annote
-source .venv/bin/activate
 docker compose up db -d
-alembic -c infrastructure/alembic.ini upgrade head
-uvicorn backend.core.app:create_app --factory --reload
+uv run --project .. --group platform alembic -c infrastructure/alembic.ini upgrade head
+uv run --project .. --group platform uvicorn backend.core.app:create_app --factory --reload
 ```
 
 Default API URL: `http://127.0.0.1:8000`
@@ -89,7 +86,7 @@ Rebuild the frontend image if you change `VITE_API_BASE_URL`.
 
 ### Bumping the Docker version
 
-**Single source of truth:** [`VERSION`](VERSION) at the repo root of `annote/` (also used by the Python package via `pyproject.toml`).
+**Single source of truth:** [`VERSION`](VERSION) at the repo root of `annote/`.
 
 1. Edit `VERSION` (semver, one line — e.g. `0.2.1`).
 2. Export it and rebuild so Compose tags images correctly:
@@ -143,8 +140,7 @@ PYTHONPATH=. python scripts/seed_dev_inference.py
 
 ```bash
 cd annote
-source .venv/bin/activate
-pytest backend/tests/platform
+uv run --project .. --group platform pytest backend/tests/platform
 ```
 
 ## OpenAPI

@@ -2,6 +2,7 @@
 
 from fastapi.responses import FileResponse
 
+from backend.core.schemas.errors import ApiErrorResponse
 from backend.document.application.document_service import DocumentService
 from backend.document.infrastructure.orm_models import DocumentPart
 
@@ -18,7 +19,7 @@ IMAGE_MEDIA_RESPONSES: dict = {
         },
         "description": "Document part image bytes",
     },
-    404: {"description": "Part or image not found"},
+    404: {"model": ApiErrorResponse, "description": "Part or image not found"},
 }
 
 

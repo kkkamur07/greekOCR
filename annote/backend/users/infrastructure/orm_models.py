@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, String, func
+from sqlalchemy import BigInteger, DateTime, Index, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -30,3 +30,16 @@ class User(Base):
         secondary=project_shared_users,
         back_populates="shared_users",
     )
+
+
+class AuthRateLimitAttempt(Base):
+    """One row per auth attempt; used by the shared-state rate limiter."""
+
+    __tablename__ = "auth_rate_limit_attempts"
+    __table_args__ = (
+        Index("ix_auth_rate_limit_key_time", "key", "attempted_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    key: Mapped[str] = mapped_column(String(255), nullable=False)
+    attempted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

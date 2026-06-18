@@ -283,8 +283,8 @@ export const api = {
     lineId: string,
     body: UpdateLineGeometryRequest,
   ) =>
-    apiRequest<LayoutLineResponse>(
-      `/projects/${projectId}/documents/${documentId}/parts/${partId}/layout/lines/${lineId}`,
+    apiRequest<LineResponse>(
+      `/projects/${projectId}/documents/${documentId}/parts/${partId}/lines/${lineId}`,
       { method: 'PATCH', body },
     ),
 

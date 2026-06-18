@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import uuid
-
 from fastapi.testclient import TestClient
 
-from tests.platform.test_documents import MINIMAL_PNG
+from backend.tests.platform.test_documents import MINIMAL_PNG
 
 
 def _documents_url(project_id: str) -> str:
@@ -30,21 +28,18 @@ def _create_document_part_with_segments(
     assert upload.status_code == 201
     part_id = upload.json()["id"]
 
-    line_ids = [str(uuid.uuid4()), str(uuid.uuid4())]
     replace = client.put(
         f"{base}/{document_id}/parts/{part_id}/lines",
         headers=owner_headers,
         json={
             "lines": [
                 {
-                    "id": line_ids[0],
                     "order": 0,
                     "kind": "polygon",
                     "points": [[0, 0], [10, 0], [10, 5], [0, 5]],
                     "source": "manual",
                 },
                 {
-                    "id": line_ids[1],
                     "order": 1,
                     "kind": "polygon",
                     "points": [[0, 10], [10, 10], [10, 15], [0, 15]],
@@ -54,6 +49,7 @@ def _create_document_part_with_segments(
         },
     )
     assert replace.status_code == 200
+    line_ids = [line["id"] for line in replace.json()]
     return project_id, document_id, part_id, line_ids
 
 
@@ -130,6 +126,91 @@ def test_pair_candidate_text_line_creates_ground_truth_and_updates_progress(
     assert lines.json()[0]["line_transcriptions"][0]["text"] == "beta"
     assert lines.json()[0]["line_transcriptions"][0]["transcription_kind"] == "ground_truth"
     assert lines.json()[1]["line_transcriptions"] == []
+
+
+def test_repairing_candidate_text_line_clears_previous_segment_ground_truth(
+    client: TestClient, owner_headers: dict[str, str], owner_project: dict
+) -> None:
+    project_id, document_id, part_id, line_ids = _create_document_part_with_segments(
+        client, owner_headers, owner_project
+    )
+    base = _documents_url(project_id)
+    import_response = client.put(
+        f"{base}/{document_id}/parts/{part_id}/page-transcription",
+        headers=owner_headers,
+        json={"text": "alpha\nbeta"},
+    )
+    assert import_response.status_code == 200
+
+    first_pair = client.post(
+        f"{base}/{document_id}/parts/{part_id}/pairings",
+        headers=owner_headers,
+        json={"line_id": line_ids[0], "text_line_order": 0},
+    )
+    assert first_pair.status_code == 200
+
+    moved_pair = client.post(
+        f"{base}/{document_id}/parts/{part_id}/pairings",
+        headers=owner_headers,
+        json={"line_id": line_ids[1], "text_line_order": 0},
+    )
+
+    assert moved_pair.status_code == 200
+    assert moved_pair.json()["text_lines"] == [
+        {"order": 0, "text": "alpha", "paired_line_id": line_ids[1]},
+        {"order": 1, "text": "beta", "paired_line_id": None},
+    ]
+    assert moved_pair.json()["pairing_progress"] == {
+        "paired_lines": 1,
+        "total_lines": 2,
+        "percent": 50,
+    }
+
+    lines = client.get(f"{base}/{document_id}/parts/{part_id}/lines", headers=owner_headers)
+    assert lines.status_code == 200
+    assert lines.json()[0]["line_transcriptions"] == []
+    assert lines.json()[1]["line_transcriptions"][0]["text"] == "alpha"
+
+
+def test_reimport_page_transcription_clears_stale_pairing_ground_truth(
+    client: TestClient, owner_headers: dict[str, str], owner_project: dict
+) -> None:
+    project_id, document_id, part_id, line_ids = _create_document_part_with_segments(
+        client, owner_headers, owner_project
+    )
+    base = _documents_url(project_id)
+    import_response = client.put(
+        f"{base}/{document_id}/parts/{part_id}/page-transcription",
+        headers=owner_headers,
+        json={"text": "alpha\nbeta"},
+    )
+    assert import_response.status_code == 200
+    pair = client.post(
+        f"{base}/{document_id}/parts/{part_id}/pairings",
+        headers=owner_headers,
+        json={"line_id": line_ids[0], "text_line_order": 0},
+    )
+    assert pair.status_code == 200
+
+    reimport = client.put(
+        f"{base}/{document_id}/parts/{part_id}/page-transcription",
+        headers=owner_headers,
+        json={"text": "gamma\ndelta"},
+    )
+
+    assert reimport.status_code == 200
+    assert reimport.json()["text_lines"] == [
+        {"order": 0, "text": "gamma", "paired_line_id": None},
+        {"order": 1, "text": "delta", "paired_line_id": None},
+    ]
+    assert reimport.json()["pairing_progress"] == {
+        "paired_lines": 0,
+        "total_lines": 2,
+        "percent": 0,
+    }
+    lines = client.get(f"{base}/{document_id}/parts/{part_id}/lines", headers=owner_headers)
+    assert lines.status_code == 200
+    assert [line["line_transcriptions"] for line in lines.json()] == [[], []]
 
 
 def test_direct_ground_truth_text_edit_counts_toward_pairing_progress(

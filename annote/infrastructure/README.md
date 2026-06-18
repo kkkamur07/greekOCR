@@ -129,13 +129,15 @@ PYTHONPATH=. alembic -c infrastructure/alembic.ini downgrade -1
 |----------|--------|--------------|
 | `001_users` | users | `users` |
 | `002_project` | project | `projects`, `project_shared_users` |
-| `003_inference_models` | inference catalog | `inference_models` and `inference_task` enum |
+| `003_inference_models` | ML model catalog | `inference_models` and `inference_task` enum |
 | `004_document_layout` | document layout | `documents`, `document_parts`, `blocks`, `lines`, document workflow enum |
-| `005_inference_jobs` | inference jobs | `model_bindings`, `jobs`, job status/type enums |
+| `005_inference_jobs` | ML bindings and jobs | `model_bindings`, `jobs`, job status/type enums |
 | `006_document_transcriptions` | document text | `transcriptions`, `line_transcriptions`, transcription kind enum |
 | `007_doc_line_tx` | document line model | reviewed parts, line geometry kind/source, points/source metadata/Kraken ceiling/manual flags |
 | `008_page_tx_lines` | Pairing helper | `page_transcription_lines` |
 | `009_annotation_history` | annotation history | `annotation_history_snapshots` |
+| `010_jobs_payload_gin` | jobs performance | GIN index for `jobs.payload` containment queries |
+| `011_auth_rate_limit` | Auth brute-force protection | Postgres-backed `auth_rate_limit_attempts` |
 
 `006` depends on jobs because `transcriptions.created_by_job_id` can reference
 `jobs`. `008` and `009` build on the merged Page/Line transcription model.
@@ -154,7 +156,7 @@ Relationships:
 
 - A User may own many Projects.
 - A Project may be shared with many Users.
-- Project membership gates most Document and inference operations.
+- Project membership gates most Document and ML model operations.
 
 ### Documents, Parts, Layout, and Review
 
@@ -201,13 +203,13 @@ Domain rules:
 - Approved text lives in `line_transcriptions` on the Ground truth layer.
 - Pairing progress is computed from Lines with non-empty Ground truth text over total Lines.
 
-### Inference Catalog and Jobs
+### ML Catalog and Jobs
 
 | Table | Purpose | Important columns |
 |-------|---------|-------------------|
 | `inference_models` | Catalog entry for a model artifact | `name` unique, `provider`, `task`, `artifact_ref`, JSONB `default_params` |
 | `model_bindings` | Scope-specific model selection | `task`, `model_id`, optional `project_id`, `document_id`, `document_part_id`, JSONB `overrides` |
-| `jobs` | Async inference/work queue | `type`, `status`, JSONB `payload`, JSONB `result`, `error`, optional model/binding/user/document/part refs, timestamps |
+| `jobs` | Async work queue | `type`, `status`, JSONB `payload`, JSONB `result`, `error`, optional model/binding/user/document/part refs, timestamps |
 
 Enums:
 
@@ -239,7 +241,8 @@ edit-by-edit event logs. Retention is bounded in the application service.
 | users | `backend/users/infrastructure/orm_models.py` |
 | project | `backend/project/infrastructure/orm_models.py` |
 | document | `backend/document/infrastructure/orm_models.py` |
-| inference | `backend/inference/infrastructure/orm_models.py` |
+| ml | `backend/ml/infrastructure/orm_models.py` |
+| jobs | `backend/jobs/infrastructure/orm_models.py` |
 | annotation | `backend/annotation/infrastructure/orm_models.py` |
 
 When adding a new context model, import it from `infrastructure/models.py`; this
@@ -281,7 +284,7 @@ cd annote
 PYTHONPATH=. python scripts/seed_dev_user.py
 ```
 
-Seed inference catalog defaults:
+Seed ML catalog defaults:
 
 ```bash
 PYTHONPATH=. python scripts/seed_dev_inference.py

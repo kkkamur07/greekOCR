@@ -7,7 +7,6 @@ import { LoginPage } from './pages/LoginPage';
 import { ProjectDashboardPage } from './pages/ProjectDashboardPage';
 import { ProjectsPage } from './pages/ProjectsPage';
 import { RegisterPage } from './pages/RegisterPage';
-import LegacyDemoApp from './LegacyDemoApp';
 import { getAccessToken } from './auth/storage';
 
 function App() {
@@ -53,7 +52,6 @@ function App() {
         path="/public/projects/:projectId/documents/:documentId"
         element={<PublicDocumentPage />}
       />
-      <Route path="/demo" element={<LegacyDemoApp />} />
       <Route
         path="/"
         element={<Navigate to={isAuthed ? '/projects' : '/login'} replace />}

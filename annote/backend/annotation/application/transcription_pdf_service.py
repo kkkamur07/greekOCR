@@ -12,8 +12,8 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from annote.services.fonts import resolve_unicode_font
 from backend.core.exceptions import NotFoundError
+from backend.core.fonts import resolve_unicode_font
 from backend.document.application.document_service import DocumentService
 from backend.document.infrastructure.document_repository import DocumentRepository
 from backend.document.infrastructure.media_store import MediaStore

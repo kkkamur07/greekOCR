@@ -50,6 +50,7 @@ def test_anonymous_can_read_published_document(client, published_document):
     body = response.json()
     assert body["workflow"] == "published"
     assert len(body["parts"]) == 1
+    assert body["parts"][0]["image_url"] == f"/public/media/parts/{published_document['part_id']}"
 
 
 @pytest.mark.integration
