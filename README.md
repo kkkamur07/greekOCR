@@ -5,7 +5,7 @@
 Two main pieces:
 
 1. **Recognition models** — train and evaluate line-level Greek OCR (Calamari, legacy TrOCR/Kraken experiments).
-2. **Kalamos platform** — FastAPI + Postgres backend and a React editor (eScriptorium-style hierarchy: projects → documents → parts → layout → transcriptions).
+2. **Annote production app** — FastAPI + Postgres backend and a React editor under [`annote/`](annote/) (eScriptorium-style hierarchy: projects → documents → parts → layout → transcriptions).
 
 ---
 
@@ -52,9 +52,9 @@ Checkpoints default to `model/outputs/calamari-greek-bible/` (override with `CAL
 
 ---
 
-## Kalamos platform (API + editor)
+## Annote Production App (API + Editor)
 
-The platform API uses **domain-driven design**: `backend/core/` wires routers; bounded contexts are `users`, `project`, `document`, and `inference`. Postgres and Alembic live in repo-root [`infrastructure/`](infrastructure/).
+The production app lives under [`annote/`](annote/). Its API uses **domain-driven design**: `annote/backend/core/` wires routers; bounded contexts are `users`, `project`, `document`, `annotation`, `ml`, and `jobs`. Postgres and Alembic live in [`annote/infrastructure/`](annote/infrastructure/).
 
 ### Prerequisites
 
@@ -65,6 +65,7 @@ The platform API uses **domain-driven design**: `backend/core/` wires routers; b
 ### Quick start (Docker Compose)
 
 ```bash
+cd annote
 cp backend/core/.env.example backend/core/.env
 docker compose up --build
 ```
@@ -81,28 +82,27 @@ Migrations run on API container start (`alembic upgrade head`).
 ### Local API (DB in Docker only)
 
 ```bash
+cd annote
 docker compose up db -d
-uv venv && source .venv/bin/activate
-uv sync --no-install-project --group platform
 export PYTHONPATH=.
 cp backend/core/.env.example backend/core/.env
-alembic -c infrastructure/alembic.ini upgrade head
-uvicorn backend.core.main:app --reload --host 0.0.0.0 --port 8000
-pytest
+uv run --project ../ --group platform alembic -c infrastructure/alembic.ini upgrade head
+uv run --project ../ --group platform uvicorn backend.core.main:app --reload --host 0.0.0.0 --port 8000
+uv run --project ../ --group platform pytest backend/tests/platform
 ```
 
-More detail: [infrastructure/README.md](infrastructure/README.md) (DB, migrations), [backend/core/README.md](backend/core/README.md) (settings, DTOs, routes).
+More detail: [annote/infrastructure/README.md](annote/infrastructure/README.md) (DB, migrations), [annote/backend/core/README.md](annote/backend/core/README.md) (settings, DTOs, routes), and [annote/README.md](annote/README.md) (app operations).
 
 ### Frontend
 
 ```bash
-cd frontend
+cd annote/frontend
 cp .env.local.example .env.local   # if needed
 npm install
 npm run dev
 ```
 
-App: http://localhost:5173 — see [frontend/README.md](frontend/README.md) for OpenAPI codegen, auth, jobs panel, and public published view.
+App: http://localhost:5173 — see [annote/frontend/README.md](annote/frontend/README.md) for OpenAPI codegen, auth, jobs panel, and public published view.
 
 ---
 
@@ -125,23 +125,24 @@ The editor reuses interaction patterns from [eScriptorium](https://github.com/PS
 
 ## What we are building toward
 
-- Curated, shareable corpora of legal and biblical Greek manuscripts  
-- Models that researchers can actually trust on their material  
-- Expert-in-the-loop annotation — compare runs, correct lines, publish read-only views  
+- Curated, shareable corpora of legal and biblical Greek manuscripts
+- Models that researchers can actually trust on their material
+- Expert-in-the-loop annotation — compare runs, correct lines, publish read-only views
 
 Contributors: see [`issues/`](issues/) (`kanban.md`, `dag.md`) for what to work on next.
 
 ---
 
-## Annote (annotation + custom export)
+## Annotation + Custom Export
 
-[`annote/`](annote/) is a standalone tool for segmenting manuscript page images, pairing each polygon with a transcription line, and exporting training-ready crops. Processing is pluggable: today the main step is **polygon rectification** (mask → axis-aligned crop), but the pipeline can be extended without changing the editor.
+[`annote/`](annote/) also contains the manuscript annotation workflow: segmenting Page images, pairing each Segment with Ground truth transcription, generating Transcription PDFs, and exporting training-ready Processed line images plus Line transcription files. Processing is pluggable: today the main step is **polygon rectification** (mask → axis-aligned crop), but the pipeline can be extended without changing the editor.
 
 ### Quick start (Docker)
 
-Ensure ports **3000** and **5050** are free, then from `annote/`:
+From `annote/`:
 
 ```bash
+cd annote
 docker compose up --build      # foreground (logs in terminal; Ctrl+C stops)
 docker compose up --build -d   # detached (runs in background)
 ```
@@ -151,9 +152,9 @@ After a detached start: `docker compose ps`, `docker compose logs -f`, `docker c
 | Service | URL |
 |---------|-----|
 | Editor | http://localhost:3000 |
-| API | http://localhost:5050 |
+| API | http://localhost:8000 |
 
-`data/` is bind-mounted so pages, annotations, and exports persist on the host.
+The repository root `model/` workspace and existing root `data/` contents are intentionally separate from the production app. Annote platform media is stored under `annote/backend/media/`.
 
 ### Bumping the Docker image version
 
@@ -167,3 +168,7 @@ docker compose up --build -d
 ```
 
 Compose tags images as `annote-backend:$ANNOTE_VERSION` and `annote-frontend:$ANNOTE_VERSION`. Confirm with `curl http://localhost:5050/health` (`version` in the JSON). Full details: [annote/README.md](annote/README.md).
+
+
+### Note :
+Have been using `OTSU` to tighten the segments, but it doesn't seem to generalize -> which is not good but the `kraken` segmentation the default model, generalizes super well but needs minor finetuning`

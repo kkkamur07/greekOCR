@@ -7,152 +7,55 @@ wheels/
 *.egg-info
 
 # Virtual environments
-.venv
+.venv/
+
+# Local datasets and outputs
 data/9
 data/19
 data/25
 data/estebanData
 data/labelledData
-
-notebooks/experiment.ipynb
-available_models.txt
+dataset/
 outputs/
-.DS_Store
-
-# Python-generated files
-__pycache__/
-*.py[oc]
-build/
-dist/
-wheels/
-*.egg-info
-
-# Virtual environments
-.venv/
 output/
-dots.ocr/
-deepseek_ocr/
-notebooks/
-blah.txt
-dataset/
-outputs/
-*.log
-
-backend/uploads
-backend/media
-backend/core/.env
-
-
-# Frontend
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-node_modules/
-dist
-dist-ssr
-*.local
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-
-frontend/node_modules
-_support_repo/
-# Python-generated files
-__pycache__/
-*.py[oc]
-build/
-dist/
-wheels/
-*.egg-info
-
-# Virtual environments
-.venv
-data/9
-data/19
-data/25
-data/estebanData
-data/labelledData
-
-notebooks/experiment.ipynb
-available_models.txt
-outputs/
-.DS_Store
-
-# Python-generated files
-__pycache__/
-*.py[oc]
-build/
-dist/
-wheels/
-*.egg-info
-
-# Virtual environments
-.venv/
-output/
-dots.ocr/
-deepseek_ocr/
-notebooks/
-blah.txt
-dataset/
-outputs/
-*.log
-
-backend/uploads
-backend/media
-backend/core/.env
-
-
-# Frontend
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-node_modules/
-dist
-dist-ssr
-*.local
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-
-frontend/node_modules
-_support_repo/
-
-# Ignore the datasets
-dataset/
-outputs/
-train.sh
-slurm*
-
-# Ignores
-.cursor/
 model/data/
 model/outputs/
 annote/data/
+
+# Experiments and local artifacts
+notebooks/
+notebooks/experiment.ipynb
+available_models.txt
+dots.ocr/
+deepseek_ocr/
+blah.txt
+train.sh
+slurm*
+_support_repo/
+
+# Frontend
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Editor directories and files
+.cursor/
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

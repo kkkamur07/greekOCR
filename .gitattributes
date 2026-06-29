@@ -1,0 +1,3 @@
+# Experimental notebooks under model/experiments/ — not primary application code.
+# Exclude from GitHub language statistics (Linguist counts .ipynb JSON heavily).
+*.ipynb linguist-documentation

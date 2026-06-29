@@ -1,1 +1,0 @@
-"""Backend API for Greek OCR"""
