@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, status
 
-from ml.architectures.mock import mock_segment
+from ml.architectures.mock import mock_segment, mock_transcribe
 from ml.contracts.common import MLTask
 from ml.contracts.run import MlRunRequest, MlRunResponse
 from ml.registry import get_model_entry, load_registry
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/ml/v1", tags=["ml"])
 
 @router.post("/run", response_model=MlRunResponse)
 def run_ml(body: MlRunRequest) -> MlRunResponse:
-    if body.task != MLTask.segment:
+    if body.task not in {MLTask.segment, MLTask.transcribe}:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"sync run is not supported for task {body.task.value!r}",
@@ -28,10 +28,15 @@ def run_ml(body: MlRunRequest) -> MlRunResponse:
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(exc),
         ) from exc
-    if entry.task != MLTask.segment:
+    if entry.task != body.task:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="registry model task does not match segment request",
+            detail=f"registry model task does not match {body.task.value} request",
         )
 
-    return MlRunResponse(task=body.task, output=mock_segment(body.image_bytes))
+    if body.task == MLTask.segment:
+        output = mock_segment(body.image_bytes)
+    else:
+        output = mock_transcribe(body.image_bytes, params=body.params)
+
+    return MlRunResponse(task=body.task, output=output)

@@ -12,6 +12,7 @@ from backend.ml.domain.segment import CanonicalBlock, CanonicalLine, CanonicalSe
 from ml.contracts.common import MLTask
 from ml.contracts.run import MlRunRequest, MlRunResponse
 from ml.contracts.segment import SegmentRunResponse
+from ml.contracts.transcribe import TranscribeRunResponse
 
 
 class MlServiceClient:
@@ -59,6 +60,27 @@ class MlServiceClient:
         )
         if not isinstance(result.output, SegmentRunResponse):
             raise TypeError("ML service returned non-segment output for segment task")
+        return result.output
+
+    def run_transcribe(
+        self,
+        *,
+        registry_model_id: str,
+        registry_tag: str,
+        image_bytes: bytes,
+        params: dict[str, Any] | None = None,
+    ) -> TranscribeRunResponse:
+        result = self.run(
+            MlRunRequest(
+                task=MLTask.transcribe,
+                registry_model_id=registry_model_id,
+                registry_tag=registry_tag,
+                image_bytes=image_bytes,
+                params=params or {},
+            )
+        )
+        if not isinstance(result.output, TranscribeRunResponse):
+            raise TypeError("ML service returned non-transcribe output for transcribe task")
         return result.output
 
     @staticmethod
