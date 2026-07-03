@@ -174,6 +174,47 @@ export async function apiRequest<T>(
   return (await response.json()) as T;
 }
 
+export async function fetchBinaryApi(
+  path: string,
+  options: RequestOptions = {},
+): Promise<Blob> {
+  const { body, skipAuth, headers: initHeaders, ...rest } = options;
+  const headers = new Headers(initHeaders);
+
+  if (body !== undefined && !(body instanceof FormData)) {
+    headers.set('Content-Type', 'application/json');
+  }
+
+  if (!skipAuth) {
+    const token = getAccessToken();
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...rest,
+    headers,
+    body:
+      body === undefined
+        ? undefined
+        : body instanceof FormData
+          ? body
+          : JSON.stringify(body),
+  });
+
+  if (response.status === 401 && !skipAuth) {
+    redirectToLogin();
+    throw new ApiError('Unauthorized', 401);
+  }
+
+  if (!response.ok) {
+    throw await parseApiError(response);
+  }
+
+  return response.blob();
+}
+
 export function mediaUrl(path: string): string {
   if (path.startsWith('http://') || path.startsWith('https://')) {
     return path;
@@ -351,6 +392,12 @@ export const api = {
   exportApprovedLineArtifacts: (projectId: string, documentId: string, partId: string) =>
     apiRequest<ExportResponse>(
       `/projects/${projectId}/documents/${documentId}/parts/${partId}/export`,
+      { method: 'POST' },
+    ),
+
+  generateTranscriptionPdf: (projectId: string, documentId: string, partId: string) =>
+    fetchBinaryApi(
+      `/projects/${projectId}/documents/${documentId}/parts/${partId}/transcription-pdf`,
       { method: 'POST' },
     ),
 

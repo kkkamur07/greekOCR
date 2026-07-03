@@ -11,6 +11,7 @@ import {
   hasPageEditorStatusAlerts,
 } from '../components/page-editor/PageEditorStatusAlerts';
 import { PageEditorToolbar } from '../components/page-editor/PageEditorToolbar';
+import { PageEditorTranscriptionPdfPane } from '../components/page-editor/PageEditorTranscriptionPdfPane';
 import { rectanglePoints } from '../components/page-editor/canvasGeometry';
 import {
   useLayoutMutations,
@@ -38,6 +39,8 @@ export function PageEditorPlaceholderPage() {
   const [draftPolygon, setDraftPolygon] = useState<LinePoint[]>([]);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [transcriptionPdfOpen, setTranscriptionPdfOpen] = useState(false);
+  const [transcriptionPdfRefreshKey, setTranscriptionPdfRefreshKey] = useState(0);
 
   const editorData = usePageEditorData(projectId, documentId, partId, () => {
     setEditorMode('layout');
@@ -186,6 +189,16 @@ export function PageEditorPlaceholderPage() {
     }
   }
 
+  function openTranscriptionPdf() {
+    setTranscriptionPdfRefreshKey(Date.now());
+    setTranscriptionPdfOpen(true);
+    setActionsOpen(false);
+  }
+
+  function refreshTranscriptionPdf() {
+    setTranscriptionPdfRefreshKey(Date.now());
+  }
+
   const statusAlertProps = {
     saveMessage,
     transcriptionSaveMessage,
@@ -255,6 +268,9 @@ export function PageEditorPlaceholderPage() {
             onRunSegmentOcr={runSegmentOcr}
             onRunPageOcr={runPageOcr}
             onUpdateReviewStatus={updateReviewStatus}
+            transcriptionPdfOpen={transcriptionPdfOpen}
+            onOpenTranscriptionPdf={openTranscriptionPdf}
+            onCloseTranscriptionPdf={() => setTranscriptionPdfOpen(false)}
           />
         ) : null
       }
@@ -263,6 +279,7 @@ export function PageEditorPlaceholderPage() {
         <>
           <div
           style={{
+            display: 'flex',
             position: 'relative',
             minHeight: 0,
             flex: 1,
@@ -270,7 +287,8 @@ export function PageEditorPlaceholderPage() {
             background: '#f5f5f5',
           }}
         >
-          <PageEditorCanvas
+          <div style={{ position: 'relative', minHeight: 0, minWidth: 0, flex: 1, overflow: 'hidden' }}>
+            <PageEditorCanvas
             imageUrl={part.image_url}
             imageAlt={`Page ${partIndex}`}
             imageWidth={part.width ?? 640}
@@ -308,6 +326,18 @@ export function PageEditorPlaceholderPage() {
               selectSegment(lineId);
             }}
           />
+          </div>
+          {transcriptionPdfOpen && projectId && documentId && partId && (
+            <PageEditorTranscriptionPdfPane
+              projectId={projectId}
+              documentId={documentId}
+              partId={partId}
+              downloadFilename={`${document.name.replace(/\s+/g, '_')}_page_${partIndex}_transcription.pdf`}
+              refreshKey={transcriptionPdfRefreshKey}
+              onClose={() => setTranscriptionPdfOpen(false)}
+              onRefresh={refreshTranscriptionPdf}
+            />
+          )}
         </div>
 
         {selectedLineId && (

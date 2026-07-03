@@ -50,6 +50,9 @@ type PageEditorToolbarProps = {
   onRunSegmentOcr: () => void;
   onRunPageOcr: () => void;
   onUpdateReviewStatus: (reviewed: boolean) => void;
+  transcriptionPdfOpen: boolean;
+  onOpenTranscriptionPdf: () => void;
+  onCloseTranscriptionPdf: () => void;
 };
 
 function pairedSegmentLabel(textLine: TextLine, lines: LineResponse[]): string {
@@ -98,6 +101,9 @@ export function PageEditorToolbar({
   onRunSegmentOcr,
   onRunPageOcr,
   onUpdateReviewStatus,
+  transcriptionPdfOpen,
+  onOpenTranscriptionPdf,
+  onCloseTranscriptionPdf,
 }: PageEditorToolbarProps) {
   return (
     <header
@@ -380,6 +386,35 @@ export function PageEditorToolbar({
               >
                 {ocrRunning ? 'OCR…' : 'OCR page'}
               </button>
+              <div style={{ height: 1, background: '#e5e7eb', marginBlock: 2 }} />
+              <div
+                style={{
+                  padding: '2px 6px',
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: '#6b7280',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                Artifacts
+              </div>
+              <button
+                type="button"
+                role="menuitem"
+                aria-pressed={transcriptionPdfOpen}
+                onClick={() => {
+                  onActionsOpenChange(false);
+                  if (transcriptionPdfOpen) {
+                    onCloseTranscriptionPdf();
+                  } else {
+                    onOpenTranscriptionPdf();
+                  }
+                }}
+                className={editorButton(transcriptionPdfOpen)}
+              >
+                Transcription PDF
+              </button>
             </div>
           )}
         </div>
@@ -390,6 +425,20 @@ export function PageEditorToolbar({
             className="btn btn--ghost btn--sm"
           >
             {part.reviewed ? 'Mark unreviewed' : 'Mark reviewed'}
+          </button>
+          <button
+            type="button"
+            aria-pressed={transcriptionPdfOpen}
+            onClick={() => {
+              if (transcriptionPdfOpen) {
+                onCloseTranscriptionPdf();
+              } else {
+                onOpenTranscriptionPdf();
+              }
+            }}
+            className={editorButton(transcriptionPdfOpen)}
+          >
+            Transcription PDF
           </button>
           <button type="button" disabled className="btn btn--primary btn--sm">
             Export

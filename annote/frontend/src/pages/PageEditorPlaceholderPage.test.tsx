@@ -29,6 +29,7 @@ vi.mock('../api/client', async (importOriginal) => {
       replacePartLines: vi.fn(),
       updateLineGeometry: vi.fn(),
       resetPartLayout: vi.fn(),
+      generateTranscriptionPdf: vi.fn(),
     },
   };
 });
@@ -47,6 +48,7 @@ type MockedEditorApi = {
   replacePartLines: ReturnType<typeof vi.fn>;
   updateLineGeometry: ReturnType<typeof vi.fn>;
   resetPartLayout: ReturnType<typeof vi.fn>;
+  generateTranscriptionPdf: ReturnType<typeof vi.fn>;
 };
 
 const mockedApi = api as unknown as MockedEditorApi;
@@ -1099,5 +1101,32 @@ describe('PageEditorPlaceholderPage', () => {
     expect(screen.getByLabelText('Line line-1 baseline').getAttribute('points')).toBe(
       '60,140 300,150',
     );
+  });
+
+  it('opens the transcription PDF side pane from the toolbar', async () => {
+    mockedApi.getDocument.mockResolvedValue(DOCUMENT);
+    mockedApi.generateTranscriptionPdf.mockResolvedValue(
+      new Blob(['%PDF'], { type: 'application/pdf' }),
+    );
+    vi.stubGlobal('URL', {
+      createObjectURL: vi.fn(() => 'blob:preview'),
+      revokeObjectURL: vi.fn(),
+    });
+
+    renderPageEditor();
+
+    expect(await screen.findByText('ANNOTE PAGE WORKSPACE')).toBeTruthy();
+    fireEvent.click(screen.getAllByRole('button', { name: /^transcription pdf$/i })[0]);
+
+    expect(await screen.findByLabelText('Transcription PDF preview')).toBeTruthy();
+    await waitFor(() => {
+      expect(mockedApi.generateTranscriptionPdf).toHaveBeenCalledWith(
+        'project-1',
+        'doc-1',
+        'part-1',
+      );
+    });
+
+    vi.unstubAllGlobals();
   });
 });
