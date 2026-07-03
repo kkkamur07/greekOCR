@@ -29,6 +29,12 @@ vi.mock('../api/client', async (importOriginal) => {
       replacePartLines: vi.fn(),
       updateLineGeometry: vi.fn(),
       resetPartLayout: vi.fn(),
+      segmentPart: vi.fn(),
+      getJob: vi.fn(),
+      listInferenceModels: vi.fn(),
+      resolvePartModelBinding: vi.fn(),
+      ocrPredictLine: vi.fn(),
+      ocrPredictPart: vi.fn(),
     },
   };
 });
@@ -47,6 +53,12 @@ type MockedEditorApi = {
   replacePartLines: ReturnType<typeof vi.fn>;
   updateLineGeometry: ReturnType<typeof vi.fn>;
   resetPartLayout: ReturnType<typeof vi.fn>;
+  segmentPart: ReturnType<typeof vi.fn>;
+  getJob: ReturnType<typeof vi.fn>;
+  listInferenceModels: ReturnType<typeof vi.fn>;
+  resolvePartModelBinding: ReturnType<typeof vi.fn>;
+  ocrPredictLine: ReturnType<typeof vi.fn>;
+  ocrPredictPart: ReturnType<typeof vi.fn>;
 };
 
 const mockedApi = api as unknown as MockedEditorApi;
@@ -123,6 +135,33 @@ describe('PageEditorPlaceholderPage', () => {
     mockedApi.updatePartReviewStatus.mockResolvedValue({
       ...DOCUMENT.parts[0],
       reviewed: true,
+    });
+    mockedApi.segmentPart.mockResolvedValue({ job_id: 'segment-job-1' });
+    mockedApi.getJob.mockResolvedValue({
+      id: 'segment-job-1',
+      status: 'done',
+      handler: 'segment_part',
+      payload: {},
+      result: null,
+      error: null,
+      created_at: '2026-06-16T10:00:00Z',
+      updated_at: '2026-06-16T10:00:01Z',
+    });
+    mockedApi.listInferenceModels.mockResolvedValue([]);
+    mockedApi.resolvePartModelBinding.mockRejectedValue(new ApiError('No binding', 404));
+    mockedApi.ocrPredictLine.mockResolvedValue({
+      transcription_id: 'model-layer-1',
+      transcription_name: 'Model transcription',
+      model_id: 'model-1',
+      model_name: 'Mock OCR',
+      lines: [{ line_id: 'line-1', text: 'mock transcription 1', confidence: 0.91 }],
+    });
+    mockedApi.ocrPredictPart.mockResolvedValue({
+      transcription_id: 'model-layer-1',
+      transcription_name: 'Model transcription',
+      model_id: 'model-1',
+      model_name: 'Mock OCR',
+      lines: [{ line_id: 'line-1', text: 'mock transcription 1', confidence: 0.91 }],
     });
     mockedApi.replacePartLines.mockImplementation(async (_projectId, _documentId, _partId, body) =>
       body.lines.map((line: Record<string, unknown>, index: number) => ({
