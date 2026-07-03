@@ -823,6 +823,139 @@ describe('PageEditorPlaceholderPage', () => {
     expect(await screen.findByText('1 Segment')).toBeTruthy();
   });
 
+  it('runs auto segmentation from the Process menu and reloads Segment geometry', async () => {
+    mockedApi.getDocument.mockResolvedValue(DOCUMENT);
+    mockedApi.listPartLines
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: 'line-1',
+          part_id: 'part-1',
+          block_id: null,
+          order: 0,
+          kind: 'polygon',
+          points: [
+            [10, 10],
+            [50, 10],
+            [50, 30],
+            [10, 30],
+          ],
+          source: 'kraken',
+          source_metadata: null,
+          kraken_ceiling: null,
+          manual_geometry: false,
+          line_transcriptions: [],
+          created_at: '2026-06-16T10:00:00Z',
+        },
+      ]);
+
+    renderPageEditor();
+
+    expect(await screen.findByText('ANNOTE PAGE WORKSPACE')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /process/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /auto segment/i }));
+
+    await waitFor(() => {
+      expect(mockedApi.segmentPart).toHaveBeenLastCalledWith(
+        'project-1',
+        'doc-1',
+        'part-1',
+        { use_otsu: true },
+      );
+    });
+    expect(mockedApi.getJob).toHaveBeenLastCalledWith('segment-job-1');
+    expect(await screen.findByText(/Kraken segmentation completed with Otsu refinement/)).toBeTruthy();
+    expect(await screen.findByLabelText('Segment 1')).toBeTruthy();
+  });
+
+  it('clears stale Segment selection after auto segmentation replaces geometry', async () => {
+    mockedApi.getDocument.mockResolvedValue(DOCUMENT);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    mockedApi.listInferenceModels.mockResolvedValue([
+      {
+        id: 'model-1',
+        name: 'Mock OCR',
+        provider: 'mock',
+        task: 'transcribe',
+        artifact_ref: 'mock://transcribe',
+        default_params: {},
+        created_at: '2026-06-16T10:00:00Z',
+      },
+    ]);
+    mockedApi.resolvePartModelBinding.mockResolvedValue({
+      binding: {
+        id: 'binding-1',
+        task: 'transcribe',
+        model_id: 'model-1',
+        overrides: {},
+      },
+      model: {
+        id: 'model-1',
+        name: 'Mock OCR',
+        provider: 'mock',
+        task: 'transcribe',
+        artifact_ref: 'mock://transcribe',
+        default_params: {},
+        created_at: '2026-06-16T10:00:00Z',
+      },
+      effective_params: {},
+    });
+    mockedApi.listPartLines
+      .mockResolvedValueOnce([
+        {
+          id: 'old-line-1',
+          part_id: 'part-1',
+          block_id: null,
+          order: 0,
+          kind: 'polygon',
+          points: [
+            [10, 10],
+            [50, 10],
+            [50, 30],
+            [10, 30],
+          ],
+          source: 'kraken',
+          source_metadata: null,
+          kraken_ceiling: null,
+          manual_geometry: false,
+          line_transcriptions: [],
+          created_at: '2026-06-16T10:00:00Z',
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: 'new-line-1',
+          part_id: 'part-1',
+          block_id: null,
+          order: 0,
+          kind: 'polygon',
+          points: [
+            [20, 20],
+            [60, 20],
+            [60, 40],
+            [20, 40],
+          ],
+          source: 'kraken',
+          source_metadata: null,
+          kraken_ceiling: null,
+          manual_geometry: false,
+          line_transcriptions: [],
+          created_at: '2026-06-16T10:00:00Z',
+        },
+      ]);
+
+    renderPageEditor();
+
+    fireEvent.click(await screen.findByLabelText('Segment 1'));
+    fireEvent.click(screen.getByRole('button', { name: /process/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /auto segment/i }));
+    expect(await screen.findByText(/Kraken segmentation completed/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /process/i }));
+    const ocrSegment = screen.getByRole('menuitem', { name: /ocr segment/i }) as HTMLButtonElement;
+    expect(ocrSegment.disabled).toBe(true);
+  });
+
   it('edits an existing Segment geometry and saves the updated Line points', async () => {
     mockedApi.getDocument.mockResolvedValue(DOCUMENT);
     mockedApi.listPartLines.mockResolvedValue([
