@@ -68,7 +68,7 @@ Important rules:
 | `project` | Project CRUD, owner/shared-user membership | `project/api/projects.py`, `project/domain/access.py` |
 | `document` | Documents, Document parts, media, layout Blocks/Lines, Transcriptions, Pairing progress | `document/api/documents.py`, `document/application/document_service.py` |
 | `annotation` | Annotation history, Export artifacts, Transcription PDF artifacts | `annotation/api/history.py`, `annotation/application/export_service.py`, `annotation/application/transcription_pdf_service.py` |
-| `ml` | ML model catalog, model bindings, Kraken/Calamari adapters, canonical model outputs | `ml/api/models.py`, `ml/application/model_service.py`, `ml/infrastructure/kraken_adapter.py` |
+| `ml` | ML model catalog, model bindings, ML service client, canonical model outputs | `ml/api/models.py`, `ml/application/model_service.py`, `ml/infrastructure/ml_client.py` |
 | `jobs` | Async job enqueueing, status polling, claiming, worker execution, failure persistence | `jobs/api/jobs.py`, `jobs/application/job_service.py`, `jobs/infrastructure/worker.py` |
 
 ## API Surface

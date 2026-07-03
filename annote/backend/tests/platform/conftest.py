@@ -15,6 +15,7 @@ os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production-at-least-32-
 os.environ.setdefault("AUTH_RATE_LIMIT_REQUESTS", "1000")
 os.environ.setdefault("ENABLE_TEST_JOB_ROUTES", "true")
 os.environ.setdefault("ML_WEBHOOK_SECRET", "test-ml-webhook-secret")
+os.environ.setdefault("ML_SERVICE_URL", "http://ml.test")
 
 import infrastructure.models  # noqa: F401 — register all ORM mappers
 from backend.core.app import create_app
@@ -56,6 +57,32 @@ def isolated_platform_state():
     yield
     clear_auth_rate_limit_state()
     _truncate_database()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def wire_in_process_ml_service() -> None:
+    """Route segment jobs to the in-process ML run handler."""
+    import json
+
+    import httpx
+
+    from backend.jobs.infrastructure import worker as worker_module
+    from backend.ml.infrastructure.ml_client import MlServiceClient
+    from ml.api.run import run_ml
+    from ml.contracts.run import MlRunRequest
+
+    def _ml_run_handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and request.url.path == "/ml/v1/run":
+            body = MlRunRequest.model_validate(json.loads(request.content))
+            output = run_ml(body)
+            return httpx.Response(200, json=output.model_dump(mode="json"))
+        return httpx.Response(404, json={"detail": "not found"})
+
+    get_ml_settings.cache_clear()
+    worker_module._ml_client = MlServiceClient(
+        base_url="http://ml.test",
+        transport=httpx.MockTransport(_ml_run_handler),
+    )
 
 
 @pytest.fixture(scope="session")
