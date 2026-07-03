@@ -233,15 +233,16 @@ export function usePairingState({
     }
   }
 
-  async function copySelectedLayerToGroundTruth(lineIds: string[] | null) {
-    if (!projectId || !documentId || !partId || !selectedTranscriptionLayerId) return;
-    if (selectedTranscriptionLayer?.kind !== 'model') {
-      setPairingError('Choose a model layer before copying to Ground truth.');
+  async function promoteSelectedSegmentToGroundTruth() {
+    if (!projectId || !documentId || !partId || !selectedSegmentId || !selectedSegment) return;
+    const modelLayerId = modelLayerIdForPromotion(selectedSegment, selectedTranscriptionLayer);
+    if (!modelLayerId) {
+      setPairingError('Model transcription is not available to save as Ground truth.');
       return;
     }
     try {
-      const result = await api.copyToGroundTruth(projectId, documentId, selectedTranscriptionLayerId, {
-        line_ids: lineIds,
+      await api.copyToGroundTruth(projectId, documentId, modelLayerId, {
+        line_ids: [selectedSegmentId],
       });
       const [reloadedLines, pairing] = await Promise.all([
         api.listPartLines(projectId, documentId, partId),
@@ -251,13 +252,17 @@ export function usePairingState({
       setTextLines(pairing.text_lines);
       setPairingProgress(pairing.pairing_progress);
       setPairingError(null);
-      setTranscriptionSaveMessage(null);
-      const copiedCount = result.copied_line_ids.length;
-      setCopyMessage(
-        `Copied ${copiedCount} ${copiedCount === 1 ? 'Segment' : 'Segments'} to Ground truth`,
-      );
+      if (groundTruthTranscriptionId) {
+        setSelectedTranscriptionLayerId(groundTruthTranscriptionId);
+        const refreshedSegment = reloadedLines.find((line) => line.id === selectedSegmentId);
+        if (refreshedSegment) {
+          setApprovedTextDraft(lineTextForLayer(refreshedSegment, groundTruthTranscriptionId));
+        }
+      }
+      setTranscriptionSaveMessage('Saved to Ground truth');
     } catch (err) {
-        setPairingError(err instanceof Error ? err.message : 'Failed to copy to Ground truth.');
+      setTranscriptionSaveMessage(null);
+      setPairingError(err instanceof Error ? err.message : 'Failed to save to Ground truth.');
     }
   }
 
