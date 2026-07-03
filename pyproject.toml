@@ -25,6 +25,7 @@ calamari = ["calamari-ocr>=2.3.1"]
 ml = [
     "fastapi",
     "httpx",
+    "pillow",
     "poethepoet",
     "pydantic",
     "pydantic-settings",
