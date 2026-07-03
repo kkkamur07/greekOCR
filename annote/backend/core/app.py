@@ -26,6 +26,7 @@ from backend.core.exceptions import (
 from backend.core.schemas.errors import ApiErrorResponse
 from backend.core.settings import get_app_settings
 from backend.core.version import get_version
+from backend.jobs.api.internal_ml import router as internal_ml_router
 from backend.jobs.api.jobs import router as jobs_router
 from backend.jobs.infrastructure.worker import worker_loop
 from backend.document.api.documents import router as documents_router
@@ -196,4 +197,5 @@ def create_app() -> FastAPI:
     app.include_router(public_media_router)
     app.include_router(ml_models_router)
     app.include_router(jobs_router)
+    app.include_router(internal_ml_router)
     return app
