@@ -13,15 +13,14 @@ from typing import TYPE_CHECKING
 
 from backend.core.settings.job import get_job_settings
 from backend.document.application.segment_merge_service import SegmentMergeService
+from backend.document.application.transcribe_merge_service import (
+    TranscribeJobHandlerError,
+    TranscribeMergeService,
+)
 from backend.document.infrastructure.media_store import MediaStore
 from backend.document.infrastructure.orm_models import DocumentPart
 from backend.ml.infrastructure.ml_client import MlServiceClient
-from backend.jobs.infrastructure.handlers import (
-    TestJobHandlerError,
-    TranscribeJobHandlerError,
-    run_test_handler,
-    run_transcribe_handler,
-)
+from backend.jobs.infrastructure.handlers import TestJobHandlerError, run_test_handler
 from backend.jobs.infrastructure.job_repository import (
     claim_next_pending_job,
     mark_job_done,
@@ -37,6 +36,8 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_SEGMENT_REGISTRY_MODEL = "kraken-blla"
 _DEFAULT_SEGMENT_REGISTRY_TAG = "stable"
+_DEFAULT_TRANSCRIBE_REGISTRY_MODEL = "greek-calamariv1"
+_DEFAULT_TRANSCRIBE_REGISTRY_TAG = "stable"
 _ml_client: MlServiceClient | None = None
 
 
@@ -58,7 +59,33 @@ def execute_claimed_job(job: Job) -> None:
     """Run handler for a job already in ``running`` status."""
     if job.type == JobType.transcribe:
         try:
-            result = run_transcribe_handler(job)
+            if job.document_id is None or job.document_part_id is None:
+                raise TranscribeJobHandlerError(
+                    "Transcribe job is missing its target document part"
+                )
+            with SyncSessionLocal() as session:
+                part = session.get(DocumentPart, job.document_part_id)
+                if part is None:
+                    raise TranscribeJobHandlerError("Document part not found")
+                lines = TranscribeMergeService.load_lines(session, part.id)
+                image_bytes = MediaStore().absolute_path(part.image_key).read_bytes()
+                lines_with_output = []
+                for index, line in enumerate(lines):
+                    output = _get_ml_client().run_transcribe(
+                        registry_model_id=_DEFAULT_TRANSCRIBE_REGISTRY_MODEL,
+                        registry_tag=_DEFAULT_TRANSCRIBE_REGISTRY_TAG,
+                        image_bytes=image_bytes,
+                        params={"line_index": index},
+                    )
+                    lines_with_output.append((line, output))
+                result = TranscribeMergeService().apply_sync(
+                    session,
+                    document_id=job.document_id,
+                    part_id=part.id,
+                    job_id=job.id,
+                    lines_with_output=lines_with_output,
+                )
+            mark_job_done(job.id, result)
         except TranscribeJobHandlerError as exc:
             logger.warning("Transcribe job %s failed: %s", job.id, exc)
             mark_job_failed(job.id, _public_job_error(exc))
@@ -67,7 +94,6 @@ def execute_claimed_job(job: Job) -> None:
             logger.exception("Transcribe job %s failed", job.id, exc_info=exc)
             mark_job_failed(job.id, _public_job_error(exc))
             return
-        mark_job_done(job.id, result)
         return
 
     if (job.payload or {}).get("test"):

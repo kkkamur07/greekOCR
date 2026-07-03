@@ -61,7 +61,7 @@ def isolated_platform_state():
 
 @pytest.fixture(scope="session", autouse=True)
 def wire_in_process_ml_service() -> None:
-    """Route segment jobs to the in-process ML run handler."""
+    """Route segment and transcribe jobs to the in-process ML run handler."""
     import json
 
     import httpx
