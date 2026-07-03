@@ -5,6 +5,7 @@ hits live ``POST /auth/register`` against kalamos.
 """
 
 import os
+import threading
 import uuid
 
 import pytest
@@ -29,6 +30,9 @@ from backend.core.settings import (
 )
 from backend.users.api.rate_limit import clear_auth_rate_limit_state
 from infrastructure.db import Base, sync_engine
+
+_CALLBACK_CLIENT: TestClient | None = None
+_WEBHOOK_HEADERS = {"X-ML-Webhook-Secret": os.environ["ML_WEBHOOK_SECRET"]}
 
 
 def _truncate_database() -> None:
@@ -59,9 +63,27 @@ def isolated_platform_state():
     _truncate_database()
 
 
-@pytest.fixture(scope="session", autouse=True)
-def wire_in_process_ml_service() -> None:
-    """Route segment and transcribe jobs to the in-process ML run handler."""
+def _deliver_ml_callback(payload: dict) -> None:
+    if _CALLBACK_CLIENT is None:
+        return
+
+    def _post() -> None:
+        import time
+
+        time.sleep(0.2)
+        _CALLBACK_CLIENT.post(
+            "/internal/ml/job-complete",
+            headers=_WEBHOOK_HEADERS,
+            json=payload,
+        )
+
+    threading.Thread(target=_post, daemon=True).start()
+
+
+def _install_ml_jobs_mock(client: TestClient) -> None:
+    """Submit segment/transcribe jobs to mocked ``POST /ml/v1/jobs`` and auto-callback."""
+    global _CALLBACK_CLIENT
+    _CALLBACK_CLIENT = client
     import json
 
     import httpx
@@ -69,20 +91,56 @@ def wire_in_process_ml_service() -> None:
     from backend.jobs.infrastructure import worker as worker_module
     from backend.ml.infrastructure.ml_client import MlServiceClient
     from ml.api.run import run_ml
+    from ml.contracts.common import MLJobStatus
+    from ml.contracts.jobs import JobCallbackRequest, JobSubmitRequest
     from ml.contracts.run import MlRunRequest
 
-    def _ml_run_handler(request: httpx.Request) -> httpx.Response:
-        if request.method == "POST" and request.url.path == "/ml/v1/run":
-            body = MlRunRequest.model_validate(json.loads(request.content))
-            output = run_ml(body)
-            return httpx.Response(200, json=output.model_dump(mode="json"))
+    def _ml_handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and request.url.path == "/ml/v1/jobs":
+            body = JobSubmitRequest.model_validate(json.loads(request.content))
+            ml_job_id = uuid.uuid4()
+            run_output = run_ml(
+                MlRunRequest(
+                    task=body.task,
+                    registry_model_id=body.registry_model_id,
+                    registry_tag=body.registry_tag,
+                    image_bytes=body.image_bytes,
+                    params=body.params,
+                )
+            )
+            callback = JobCallbackRequest(
+                ml_job_id=ml_job_id,
+                product_job_id=body.product_job_id,
+                task=body.task,
+                status=MLJobStatus.done,
+                output=run_output.output,
+            )
+            _deliver_ml_callback(callback.model_dump(mode="json"))
+            return httpx.Response(201, json={"ml_job_id": str(ml_job_id)})
+
         return httpx.Response(404, json={"detail": "not found"})
 
     get_ml_settings.cache_clear()
     worker_module._ml_client = MlServiceClient(
         base_url="http://ml.test",
-        transport=httpx.MockTransport(_ml_run_handler),
+        transport=httpx.MockTransport(_ml_handler),
     )
+
+
+@pytest.fixture(scope="session", autouse=True)
+def wire_mock_ml_jobs_service(client: TestClient) -> None:
+    _install_ml_jobs_mock(client)
+
+
+def restore_default_ml_jobs_mock(client: TestClient) -> None:
+    """Re-install the session autouse ML jobs mock after per-test overrides."""
+    _install_ml_jobs_mock(client)
+
+
+@pytest.fixture(autouse=True)
+def _restore_ml_jobs_mock_after_test(client: TestClient) -> None:
+    yield
+    restore_default_ml_jobs_mock(client)
 
 
 @pytest.fixture(scope="session")
