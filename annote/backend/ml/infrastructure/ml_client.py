@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import uuid
 from typing import Any
 
 import httpx
@@ -11,10 +10,8 @@ from backend.core.settings.ml import get_ml_settings
 from backend.document.infrastructure.orm_models import LineGeometryKind
 from backend.ml.domain.segment import CanonicalBlock, CanonicalLine, CanonicalSegmentResult
 from ml.contracts.common import MLTask
-from ml.contracts.jobs import JobSubmitRequest, JobSubmitResponse
 from ml.contracts.run import MlRunRequest, MlRunResponse
 from ml.contracts.segment import SegmentRunResponse
-from ml.contracts.transcribe import TranscribeRunResponse
 
 
 class MlServiceClient:
@@ -43,36 +40,6 @@ class MlServiceClient:
             response.raise_for_status()
             return MlRunResponse.model_validate(response.json())
 
-    def submit_job(
-        self,
-        *,
-        task: MLTask,
-        registry_model_id: str,
-        registry_tag: str,
-        product_job_id: uuid.UUID,
-        image_bytes: bytes,
-        params: dict[str, Any] | None = None,
-    ) -> uuid.UUID:
-        request = JobSubmitRequest(
-            task=task,
-            registry_model_id=registry_model_id,
-            registry_tag=registry_tag,
-            product_job_id=product_job_id,
-            image_bytes=image_bytes,
-            params=params or {},
-        )
-        with httpx.Client(
-            base_url=self._base_url,
-            transport=self._transport,
-            timeout=self._timeout,
-        ) as client:
-            response = client.post(
-                "/ml/v1/jobs",
-                json=request.model_dump(mode="json"),
-            )
-            response.raise_for_status()
-            return JobSubmitResponse.model_validate(response.json()).ml_job_id
-
     def run_segment(
         self,
         *,
@@ -92,27 +59,6 @@ class MlServiceClient:
         )
         if not isinstance(result.output, SegmentRunResponse):
             raise TypeError("ML service returned non-segment output for segment task")
-        return result.output
-
-    def run_transcribe(
-        self,
-        *,
-        registry_model_id: str,
-        registry_tag: str,
-        image_bytes: bytes,
-        params: dict[str, Any] | None = None,
-    ) -> TranscribeRunResponse:
-        result = self.run(
-            MlRunRequest(
-                task=MLTask.transcribe,
-                registry_model_id=registry_model_id,
-                registry_tag=registry_tag,
-                image_bytes=image_bytes,
-                params=params or {},
-            )
-        )
-        if not isinstance(result.output, TranscribeRunResponse):
-            raise TypeError("ML service returned non-transcribe output for transcribe task")
         return result.output
 
     @staticmethod

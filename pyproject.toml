@@ -26,7 +26,6 @@ ml = [
     "fastapi>=0.115.0",
     "httpx>=0.28.0",
     "pillow>=12.2.0",
-    "poethepoet",
     "pydantic>=2.10.0",
     "pydantic-settings>=2.6.0",
     "psycopg2-binary>=2.9.10",

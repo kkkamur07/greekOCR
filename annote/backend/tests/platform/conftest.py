@@ -215,6 +215,32 @@ def _restore_ml_jobs_mock_after_test(client: TestClient) -> None:
     restore_default_ml_jobs_mock(client)
 
 
+@pytest.fixture(scope="session", autouse=True)
+def wire_in_process_ml_service() -> None:
+    """Route segment jobs to the in-process ML run handler."""
+    import json
+
+    import httpx
+
+    from backend.jobs.infrastructure import worker as worker_module
+    from backend.ml.infrastructure.ml_client import MlServiceClient
+    from ml.api.run import run_ml
+    from ml.contracts.run import MlRunRequest
+
+    def _ml_run_handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and request.url.path == "/ml/v1/run":
+            body = MlRunRequest.model_validate(json.loads(request.content))
+            output = run_ml(body)
+            return httpx.Response(200, json=output.model_dump(mode="json"))
+        return httpx.Response(404, json={"detail": "not found"})
+
+    get_ml_settings.cache_clear()
+    worker_module._ml_client = MlServiceClient(
+        base_url="http://ml.test",
+        transport=httpx.MockTransport(_ml_run_handler),
+    )
+
+
 @pytest.fixture(scope="session")
 def client() -> TestClient:
     """Session TestClient — one asyncio loop; lifespan starts the job worker."""

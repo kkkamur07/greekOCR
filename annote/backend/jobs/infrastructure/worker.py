@@ -16,7 +16,12 @@ from backend.document.application.transcribe_merge_service import TranscribeJobH
 from backend.document.infrastructure.media_store import MediaStore
 from backend.document.infrastructure.orm_models import DocumentPart
 from backend.ml.infrastructure.ml_client import MlServiceClient
-from backend.jobs.infrastructure.handlers import TestJobHandlerError, run_test_handler
+from backend.jobs.infrastructure.handlers import (
+    TestJobHandlerError,
+    TranscribeJobHandlerError,
+    run_test_handler,
+    run_transcribe_handler,
+)
 from backend.jobs.infrastructure.job_repository import (
     claim_next_pending_job,
     mark_job_done,
@@ -34,8 +39,6 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_SEGMENT_REGISTRY_MODEL = "kraken-blla"
 _DEFAULT_SEGMENT_REGISTRY_TAG = "stable"
-_DEFAULT_TRANSCRIBE_REGISTRY_MODEL = "greek-calamariv1"
-_DEFAULT_TRANSCRIBE_REGISTRY_TAG = "stable"
 _ml_client: MlServiceClient | None = None
 
 
@@ -145,7 +148,36 @@ def execute_claimed_job(job: Job) -> None:
 
     if job.type == JobType.segment:
         try:
-            _submit_segment_job(job)
+            with SyncSessionLocal() as session:
+                if job.document_part_id is None:
+                    raise ValueError("Segment job is missing its target document part")
+                part = session.get(DocumentPart, job.document_part_id)
+                if part is None:
+                    raise ValueError("Document part not found")
+                image_path = MediaStore().absolute_path(part.image_key)
+                segment_output = _get_ml_client().run_segment(
+                    registry_model_id=_DEFAULT_SEGMENT_REGISTRY_MODEL,
+                    registry_tag=_DEFAULT_SEGMENT_REGISTRY_TAG,
+                    image_bytes=image_path.read_bytes(),
+                )
+                result = MlServiceClient.to_canonical_segment(segment_output)
+                summary = SegmentMergeService().apply_sync(
+                    session,
+                    part_id=job.document_part_id,
+                    canonical_segment=result,
+                    job_id=job.id,
+                )
+            mark_job_done(
+                job.id,
+                {
+                    "blocks_count": summary.blocks_count,
+                    "lines_count": summary.lines_count,
+                    "added_lines": summary.added_lines,
+                    "pruned_lines": summary.pruned_lines,
+                    "preserved_manual_lines": summary.preserved_manual_lines,
+                },
+            )
+            return
         except Exception as exc:
             logger.exception("Segment job %s failed", job.id, exc_info=exc)
             mark_job_failed(job.id, _public_job_error(exc))
