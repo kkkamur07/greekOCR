@@ -32,6 +32,7 @@ services:
       CORS_ORIGINS: http://localhost:3000,http://localhost:5173
       MEDIA_ROOT: /app/backend/media
       ML_SERVICE_URL: http://ml-api:8001
+      ML_WEBHOOK_SECRET: dev-ml-webhook-secret
     volumes:
       - ./backend/media:/app/backend/media
     depends_on:

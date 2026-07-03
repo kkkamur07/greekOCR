@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 
 class JobStatus(str, enum.Enum):
     pending = "pending"
+    waiting = "waiting"
     running = "running"
     done = "done"
     failed = "failed"
@@ -36,6 +37,9 @@ class Job(Base):
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    ml_job_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True, index=True
+    )
     type: Mapped[JobType] = mapped_column(Enum(JobType, name="job_type"))
     status: Mapped[JobStatus] = mapped_column(
         Enum(JobStatus, name="job_status"), default=JobStatus.pending, index=True
