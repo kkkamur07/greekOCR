@@ -155,6 +155,42 @@ describe('PageEditorPlaceholderPage', () => {
     );
   });
 
+  it('renders classic strip layout with toolbar, canvas, and pairing strip when a Segment is selected', async () => {
+    mockedApi.getDocument.mockResolvedValue(DOCUMENT);
+    mockedApi.listPartLines.mockResolvedValue([
+      {
+        id: 'line-1',
+        part_id: 'part-1',
+        block_id: null,
+        order: 0,
+        kind: 'polygon',
+        points: [
+          [10, 10],
+          [50, 10],
+          [50, 30],
+          [10, 30],
+        ],
+        source: 'manual',
+        source_metadata: null,
+        kraken_ceiling: null,
+        manual_geometry: true,
+        line_transcriptions: [],
+        created_at: '2026-06-16T10:00:00Z',
+      },
+    ]);
+
+    renderPageEditor();
+
+    expect(await screen.findByText('ANNOTE PAGE WORKSPACE')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /rectangle segment/i })).toBeTruthy();
+    expect(screen.getByRole('img', { name: /page geometry canvas/i })).toBeTruthy();
+
+    fireEvent.click(screen.getByLabelText('Segment 1'));
+
+    expect(screen.getByLabelText(/transcription layer/i)).toBeTruthy();
+    expect(screen.getAllByText('Selected Segment 1').length).toBeGreaterThan(0);
+    expect(screen.getByText('Page transcription and pairing')).toBeTruthy();
+  });
 
   it('does not render protected media when the API rejects access', async () => {
     mockedApi.getDocument.mockRejectedValue(new ApiError('Forbidden', 403));

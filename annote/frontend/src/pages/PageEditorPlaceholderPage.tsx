@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Alert, Button, Input, Space, Spin, Typography } from 'antd';
+import { Alert, Button, Space, Spin, Typography } from 'antd';
 import { api, type LayoutPoint, type LinePoint } from '../api/client';
 import { ApiError } from '../api/errors';
 import { PageEditorCanvas } from '../components/page-editor/PageEditorCanvas';
+import { PageEditorPairingStrip } from '../components/page-editor/PageEditorPairingStrip';
 import { PageEditorToolbar } from '../components/page-editor/PageEditorToolbar';
 import { rectanglePoints } from '../components/page-editor/canvasGeometry';
 import {
@@ -340,145 +341,29 @@ export function PageEditorPlaceholderPage() {
           </div>
         )}
 
-        {(selectedSegment || editorMode === 'transcription') && (
-          <div style={{ flexShrink: 0, borderTop: '1px solid #e5e7eb', background: '#fff', padding: 12 }}>
-            <div style={{ display: 'grid', gap: 12 }}>
-              <label style={{ display: 'grid', gap: 8, color: '#c5ccd6' }}>
-                Transcription layer
-                <select
-                  aria-label="Transcription layer"
-                  value={selectedTranscriptionLayerId ?? ''}
-                  onChange={selectTranscriptionLayer}
-                >
-                  {transcriptionLayers.map((layer) => (
-                    <option key={layer.id} value={layer.id}>
-                      {layer.name}
-                      {layer.kind === 'model' ? ' (read-only)' : ''}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <Typography.Text>
-                {selectedSegmentNumber
-                  ? `Selected Segment ${selectedSegmentNumber}`
-                  : 'Select a Segment to view transcription text.'}
-              </Typography.Text>
-              {selectedSegment && selectedTranscriptionLayer?.kind === 'ground_truth' && (
-                <>
-                  <label style={{ display: 'grid', gap: 8 }}>
-                    Ground truth text for selected Segment
-                    <Input.TextArea
-                      aria-label="Ground truth text for selected Segment"
-                      value={approvedTextDraft}
-                      rows={3}
-                      onChange={(event) => setApprovedTextDraft(event.target.value)}
-                    />
-                  </label>
-                  <Button type="primary" onClick={() => void saveGroundTruthText()}>
-                    Save Ground truth text
-                  </Button>
-                </>
-              )}
-              {selectedSegment && selectedTranscriptionLayer?.kind === 'model' && (
-                <>
-                  <label style={{ display: 'grid', gap: 8 }}>
-                    Read-only text for selected Segment
-                    <Input.TextArea
-                      aria-label="Read-only text for selected Segment"
-                      value={lineTextForLayer(selectedSegment, selectedTranscriptionLayer.id)}
-                      rows={3}
-                      readOnly
-                    />
-                  </label>
-                  <Space wrap>
-                    <Button
-                      type="primary"
-                      onClick={() => void copySelectedLayerToGroundTruth([selectedSegment.id])}
-                    >
-                      Copy selected Segment to Ground truth
-                    </Button>
-                    <Button onClick={() => void copySelectedLayerToGroundTruth(null)}>
-                      Copy whole Page to Ground truth
-                    </Button>
-                  </Space>
-                </>
-              )}
-              <details>
-                <summary>Page transcription and pairing</summary>
-                <div style={{ display: 'grid', gap: 8, paddingTop: 8 }}>
-                  <Typography.Text>
-                    Pairing progress: {pairingProgress.paired_lines}/{pairingProgress.total_lines}{' '}
-                    Lines paired
-                  </Typography.Text>
-                  <label style={{ display: 'grid', gap: 8 }}>
-                    Page transcription text
-                    <Input.TextArea
-                      aria-label="Page transcription text"
-                      value={pageTranscriptionText}
-                      rows={4}
-                      onChange={(event) => setPageTranscriptionText(event.target.value)}
-                    />
-                  </label>
-                  <Button onClick={() => void importPageTranscription()}>
-                    Import page transcription
-                  </Button>
-                </div>
-              </details>
-              {textLines.map((textLine) => {
-                const pairedIndex = textLine.paired_line_id
-                  ? [...lines]
-                      .sort((a, b) => a.order - b.order)
-                      .findIndex((line) => line.id === textLine.paired_line_id)
-                  : -1;
-                const pairedLabel =
-                  pairedIndex >= 0 ? ` · paired with Segment ${pairedIndex + 1}` : '';
-                return (
-                  <div
-                    key={textLine.order}
-                    style={{
-                      border: '1px solid #3b4350',
-                      borderRadius: 6,
-                      padding: 8,
-                    }}
-                  >
-                    <Typography.Text style={{ color: '#d8c7a1' }}>
-                      Text line {textLine.order + 1}
-                      {pairedLabel}
-                    </Typography.Text>
-                    <Typography.Paragraph style={{ marginBottom: 8 }}>
-                      {textLine.text}
-                    </Typography.Paragraph>
-                    <Button
-                      disabled={!selectedSegmentId}
-                      onClick={() => void pairTextLine(textLine.order)}
-                    >
-                      Pair Text line {textLine.order + 1}
-                    </Button>
-                  </div>
-                );
-              })}
-              {selectedSegmentNumber && (
-                <div style={{ display: 'grid', gap: 8 }}>
-                  <Typography.Text>
-                    Selected Segment {selectedSegmentNumber}
-                  </Typography.Text>
-                  <label style={{ display: 'grid', gap: 8 }}>
-                    Approved text for selected Segment
-                    <Input.TextArea
-                      aria-label="Approved text for selected Segment"
-                      value={approvedTextDraft}
-                      rows={3}
-                      onChange={(event) => setApprovedTextDraft(event.target.value)}
-                    />
-                  </label>
-                  <Button type="primary" onClick={() => void saveApprovedText()}>
-                    Save approved text
-                  </Button>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+        <PageEditorPairingStrip
+          visible={Boolean(selectedSegment) || editorMode === 'transcription'}
+          transcriptionLayers={transcriptionLayers}
+          selectedTranscriptionLayerId={selectedTranscriptionLayerId}
+          onSelectTranscriptionLayer={selectTranscriptionLayer}
+          selectedSegmentNumber={selectedSegmentNumber}
+          selectedSegment={selectedSegment}
+          selectedTranscriptionLayer={selectedTranscriptionLayer}
+          approvedTextDraft={approvedTextDraft}
+          onApprovedTextDraftChange={setApprovedTextDraft}
+          lineTextForLayer={lineTextForLayer}
+          onSaveGroundTruthText={saveGroundTruthText}
+          onCopySelectedLayerToGroundTruth={copySelectedLayerToGroundTruth}
+          pairingProgress={pairingProgress}
+          pageTranscriptionText={pageTranscriptionText}
+          onPageTranscriptionTextChange={setPageTranscriptionText}
+          onImportPageTranscription={importPageTranscription}
+          textLines={textLines}
+          lines={lines}
+          selectedSegmentId={selectedSegmentId}
+          onPairTextLine={pairTextLine}
+          onSaveApprovedText={saveApprovedText}
+        />
       </main>
     </div>
   );
