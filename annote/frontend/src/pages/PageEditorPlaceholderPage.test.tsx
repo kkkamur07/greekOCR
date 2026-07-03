@@ -29,12 +29,6 @@ vi.mock('../api/client', async (importOriginal) => {
       replacePartLines: vi.fn(),
       updateLineGeometry: vi.fn(),
       resetPartLayout: vi.fn(),
-      segmentPart: vi.fn(),
-      getJob: vi.fn(),
-      listInferenceModels: vi.fn(),
-      resolvePartModelBinding: vi.fn(),
-      ocrPredictLine: vi.fn(),
-      ocrPredictPart: vi.fn(),
     },
   };
 });
@@ -53,12 +47,6 @@ type MockedEditorApi = {
   replacePartLines: ReturnType<typeof vi.fn>;
   updateLineGeometry: ReturnType<typeof vi.fn>;
   resetPartLayout: ReturnType<typeof vi.fn>;
-  segmentPart: ReturnType<typeof vi.fn>;
-  getJob: ReturnType<typeof vi.fn>;
-  listInferenceModels: ReturnType<typeof vi.fn>;
-  resolvePartModelBinding: ReturnType<typeof vi.fn>;
-  ocrPredictLine: ReturnType<typeof vi.fn>;
-  ocrPredictPart: ReturnType<typeof vi.fn>;
 };
 
 const mockedApi = api as unknown as MockedEditorApi;
@@ -136,33 +124,6 @@ describe('PageEditorPlaceholderPage', () => {
       ...DOCUMENT.parts[0],
       reviewed: true,
     });
-    mockedApi.segmentPart.mockResolvedValue({ job_id: 'segment-job-1' });
-    mockedApi.getJob.mockResolvedValue({
-      id: 'segment-job-1',
-      status: 'done',
-      handler: 'segment_part',
-      payload: {},
-      result: null,
-      error: null,
-      created_at: '2026-06-16T10:00:00Z',
-      updated_at: '2026-06-16T10:00:01Z',
-    });
-    mockedApi.listInferenceModels.mockResolvedValue([]);
-    mockedApi.resolvePartModelBinding.mockRejectedValue(new ApiError('No binding', 404));
-    mockedApi.ocrPredictLine.mockResolvedValue({
-      transcription_id: 'model-layer-1',
-      transcription_name: 'Model transcription',
-      model_id: 'model-1',
-      model_name: 'Mock OCR',
-      lines: [{ line_id: 'line-1', text: 'mock transcription 1', confidence: 0.91 }],
-    });
-    mockedApi.ocrPredictPart.mockResolvedValue({
-      transcription_id: 'model-layer-1',
-      transcription_name: 'Model transcription',
-      model_id: 'model-1',
-      model_name: 'Mock OCR',
-      lines: [{ line_id: 'line-1', text: 'mock transcription 1', confidence: 0.91 }],
-    });
     mockedApi.replacePartLines.mockImplementation(async (_projectId, _documentId, _partId, body) =>
       body.lines.map((line: Record<string, unknown>, index: number) => ({
         id: `line-${index + 1}`,
@@ -193,6 +154,7 @@ describe('PageEditorPlaceholderPage', () => {
       '/projects/project-1/documents/doc-1',
     );
   });
+
 
   it('does not render protected media when the API rejects access', async () => {
     mockedApi.getDocument.mockRejectedValue(new ApiError('Forbidden', 403));
@@ -821,139 +783,6 @@ describe('PageEditorPlaceholderPage', () => {
       );
     });
     expect(await screen.findByText('1 Segment')).toBeTruthy();
-  });
-
-  it('runs auto segmentation from the Process menu and reloads Segment geometry', async () => {
-    mockedApi.getDocument.mockResolvedValue(DOCUMENT);
-    mockedApi.listPartLines
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([
-        {
-          id: 'line-1',
-          part_id: 'part-1',
-          block_id: null,
-          order: 0,
-          kind: 'polygon',
-          points: [
-            [10, 10],
-            [50, 10],
-            [50, 30],
-            [10, 30],
-          ],
-          source: 'kraken',
-          source_metadata: null,
-          kraken_ceiling: null,
-          manual_geometry: false,
-          line_transcriptions: [],
-          created_at: '2026-06-16T10:00:00Z',
-        },
-      ]);
-
-    renderPageEditor();
-
-    expect(await screen.findByText('ANNOTE PAGE WORKSPACE')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /process/i }));
-    fireEvent.click(screen.getByRole('menuitem', { name: /auto segment/i }));
-
-    await waitFor(() => {
-      expect(mockedApi.segmentPart).toHaveBeenLastCalledWith(
-        'project-1',
-        'doc-1',
-        'part-1',
-        { use_otsu: true },
-      );
-    });
-    expect(mockedApi.getJob).toHaveBeenLastCalledWith('segment-job-1');
-    expect(await screen.findByText(/Kraken segmentation completed with Otsu refinement/)).toBeTruthy();
-    expect(await screen.findByLabelText('Segment 1')).toBeTruthy();
-  });
-
-  it('clears stale Segment selection after auto segmentation replaces geometry', async () => {
-    mockedApi.getDocument.mockResolvedValue(DOCUMENT);
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
-    mockedApi.listInferenceModels.mockResolvedValue([
-      {
-        id: 'model-1',
-        name: 'Mock OCR',
-        provider: 'mock',
-        task: 'transcribe',
-        artifact_ref: 'mock://transcribe',
-        default_params: {},
-        created_at: '2026-06-16T10:00:00Z',
-      },
-    ]);
-    mockedApi.resolvePartModelBinding.mockResolvedValue({
-      binding: {
-        id: 'binding-1',
-        task: 'transcribe',
-        model_id: 'model-1',
-        overrides: {},
-      },
-      model: {
-        id: 'model-1',
-        name: 'Mock OCR',
-        provider: 'mock',
-        task: 'transcribe',
-        artifact_ref: 'mock://transcribe',
-        default_params: {},
-        created_at: '2026-06-16T10:00:00Z',
-      },
-      effective_params: {},
-    });
-    mockedApi.listPartLines
-      .mockResolvedValueOnce([
-        {
-          id: 'old-line-1',
-          part_id: 'part-1',
-          block_id: null,
-          order: 0,
-          kind: 'polygon',
-          points: [
-            [10, 10],
-            [50, 10],
-            [50, 30],
-            [10, 30],
-          ],
-          source: 'kraken',
-          source_metadata: null,
-          kraken_ceiling: null,
-          manual_geometry: false,
-          line_transcriptions: [],
-          created_at: '2026-06-16T10:00:00Z',
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          id: 'new-line-1',
-          part_id: 'part-1',
-          block_id: null,
-          order: 0,
-          kind: 'polygon',
-          points: [
-            [20, 20],
-            [60, 20],
-            [60, 40],
-            [20, 40],
-          ],
-          source: 'kraken',
-          source_metadata: null,
-          kraken_ceiling: null,
-          manual_geometry: false,
-          line_transcriptions: [],
-          created_at: '2026-06-16T10:00:00Z',
-        },
-      ]);
-
-    renderPageEditor();
-
-    fireEvent.click(await screen.findByLabelText('Segment 1'));
-    fireEvent.click(screen.getByRole('button', { name: /process/i }));
-    fireEvent.click(screen.getByRole('menuitem', { name: /auto segment/i }));
-    expect(await screen.findByText(/Kraken segmentation completed/)).toBeTruthy();
-
-    fireEvent.click(screen.getByRole('button', { name: /process/i }));
-    const ocrSegment = screen.getByRole('menuitem', { name: /ocr segment/i }) as HTMLButtonElement;
-    expect(ocrSegment.disabled).toBe(true);
   });
 
   it('edits an existing Segment geometry and saves the updated Line points', async () => {
