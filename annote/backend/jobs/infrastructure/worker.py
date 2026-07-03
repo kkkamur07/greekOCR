@@ -15,7 +15,7 @@ from backend.core.settings.job import get_job_settings
 from backend.document.application.segment_merge_service import SegmentMergeService
 from backend.document.infrastructure.media_store import MediaStore
 from backend.document.infrastructure.orm_models import DocumentPart
-from backend.ml.infrastructure.kraken_adapter import KrakenSegmentAdapter
+from backend.ml.infrastructure.ml_client import MlServiceClient
 from backend.jobs.infrastructure.handlers import (
     TestJobHandlerError,
     TranscribeJobHandlerError,
@@ -34,6 +34,17 @@ if TYPE_CHECKING:
     from asyncio import Event
 
 logger = logging.getLogger(__name__)
+
+_DEFAULT_SEGMENT_REGISTRY_MODEL = "kraken-blla"
+_DEFAULT_SEGMENT_REGISTRY_TAG = "stable"
+_ml_client: MlServiceClient | None = None
+
+
+def _get_ml_client() -> MlServiceClient:
+    global _ml_client
+    if _ml_client is None:
+        _ml_client = MlServiceClient()
+    return _ml_client
 
 
 def _public_job_error(exc: BaseException, *, fallback: str = "Job failed") -> str:
@@ -81,7 +92,12 @@ def execute_claimed_job(job: Job) -> None:
                 if part is None:
                     raise ValueError("Document part not found")
                 image_path = MediaStore().absolute_path(part.image_key)
-                result = KrakenSegmentAdapter().segment_part(image_path)
+                segment_output = _get_ml_client().run_segment(
+                    registry_model_id=_DEFAULT_SEGMENT_REGISTRY_MODEL,
+                    registry_tag=_DEFAULT_SEGMENT_REGISTRY_TAG,
+                    image_bytes=image_path.read_bytes(),
+                )
+                result = MlServiceClient.to_canonical_segment(segment_output)
                 summary = SegmentMergeService().apply_sync(
                     session,
                     part_id=job.document_part_id,
