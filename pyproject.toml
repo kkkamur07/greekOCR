@@ -21,6 +21,17 @@ train = [
 calamari = ["calamari-ocr>=2.0.0"]
 
 [dependency-groups]
+# Inference service API (separate container; contracts importable from annote)
+ml = [
+    "fastapi>=0.115.0",
+    "httpx>=0.28.0",
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.6.0",
+    "psycopg2-binary>=2.9.10",
+    "pyyaml>=6.0.2",
+    "sqlalchemy>=2.0.36",
+    "uvicorn[standard]>=0.32.0",
+]
 # Annote platform API + Postgres + tests (deps only — repo is not installed as a package)
 platform = [
     "alembic>=1.14.0",
@@ -54,7 +65,18 @@ conflicts = [
 ]
 
 [tool.pytest.ini_options]
-pythonpath = ["."]
+pythonpath = ["annote", "."]
 asyncio_mode = "auto"
-testpaths = ["annote/backend/tests/platform"]
+testpaths = ["annote/backend/tests/platform", "ml/tests"]
 markers = ["integration: requires Postgres"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["annote/backend", "ml"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.ruff.format]
+quote-style = "double"
