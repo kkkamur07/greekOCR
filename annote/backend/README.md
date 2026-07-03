@@ -118,7 +118,9 @@ Settings are loaded by `backend/core/settings/` from environment variables and
 | `SEGMENT_ADAPTER` | Adapter marker used for segment jobs | `kraken_stub` |
 | `DEFAULT_SEGMENT_MODEL` | Dev segment model name | `kraken-segment-default` |
 | `DEFAULT_TRANSCRIBE_MODEL` | Dev transcribe model name | `kraken-transcribe-default` |
-| `KRAKEN_MODEL_PATH` | Path to model weights outside annote | `../model/kraken` |
+| `DEFAULT_SEGMENT_REGISTRY_ID` | Registry id for dev segment model | `kraken-blla` |
+| `DEFAULT_TRANSCRIBE_REGISTRY_ID` | Registry id for dev transcribe model | `greek-calamariv1` |
+| `DEFAULT_REGISTRY_TAG` | Registry version tag for dev seeds | `stable` |
 
 Keep real secrets out of git. `backend/core/.env` is local-only.
 

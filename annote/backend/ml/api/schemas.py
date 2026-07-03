@@ -13,7 +13,8 @@ class InferenceModelResponse(BaseModel):
     name: str
     provider: str
     task: InferenceTask
-    artifact_ref: str
+    registry_model_id: str
+    registry_tag: str = "stable"
     default_params: dict
     created_at: datetime
 

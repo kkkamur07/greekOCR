@@ -13,7 +13,13 @@ class ModelSettings(BaseSettings):
 
     default_segment_model: str | None = Field(default=None, alias="DEFAULT_SEGMENT_MODEL")
     default_transcribe_model: str | None = Field(default=None, alias="DEFAULT_TRANSCRIBE_MODEL")
-    kraken_model_path: str | None = Field(default=None, alias="KRAKEN_MODEL_PATH")
+    default_segment_registry_id: str | None = Field(
+        default=None, alias="DEFAULT_SEGMENT_REGISTRY_ID"
+    )
+    default_transcribe_registry_id: str | None = Field(
+        default=None, alias="DEFAULT_TRANSCRIBE_REGISTRY_ID"
+    )
+    default_registry_tag: str | None = Field(default=None, alias="DEFAULT_REGISTRY_TAG")
 
 
 @lru_cache

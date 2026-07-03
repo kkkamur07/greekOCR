@@ -10,6 +10,7 @@ from backend.ml.infrastructure.orm_models import (
     InferenceTask,
     ModelBinding,
 )
+from backend.tests.platform.test_documents import MINIMAL_PNG
 from infrastructure.db import SyncSessionLocal
 
 
@@ -26,13 +27,20 @@ def _reset_inference_tables() -> None:
         session.commit()
 
 
-def _seed_model(*, name: str, task: InferenceTask) -> InferenceModel:
+def _seed_model(
+    *,
+    name: str,
+    task: InferenceTask,
+    registry_model_id: str,
+    registry_tag: str = "stable",
+) -> InferenceModel:
     with SyncSessionLocal() as session:
         model = InferenceModel(
             name=name,
-            provider="kraken",
+            provider="kraken" if task == InferenceTask.segment else "calamari",
             task=task,
-            artifact_ref=f"model/kraken/{name}.mlmodel",
+            registry_model_id=registry_model_id,
+            registry_tag=registry_tag,
             default_params={"device": "cpu"},
         )
         session.add(model)
@@ -62,7 +70,7 @@ def _create_project_document_part(client, headers) -> tuple[str, str, str]:
     part = client.post(
         f"/projects/{project_id}/documents/{document_id}/parts",
         headers=headers,
-        files={"file": ("folio.png", b"not-empty", "image/png")},
+        files={"file": ("folio.png", MINIMAL_PNG, "image/png")},
     )
     assert part.status_code == 201
     return project_id, document_id, part.json()["id"]
@@ -73,10 +81,12 @@ def test_list_inference_models_returns_catalog_entries(client, auth_headers):
     segment_model = _seed_model(
         name=f"kraken-segment-{uuid.uuid4().hex[:8]}",
         task=InferenceTask.segment,
+        registry_model_id="kraken-blla",
     )
     transcribe_model = _seed_model(
         name=f"kraken-transcribe-{uuid.uuid4().hex[:8]}",
         task=InferenceTask.transcribe,
+        registry_model_id="greek-calamariv1",
     )
 
     response = client.get("/inference/models", headers=auth_headers)
@@ -85,8 +95,11 @@ def test_list_inference_models_returns_catalog_entries(client, auth_headers):
     body = response.json()
     by_id = {item["id"]: item for item in body}
     assert by_id[str(segment_model.id)]["task"] == "segment"
+    assert by_id[str(segment_model.id)]["registry_model_id"] == "kraken-blla"
+    assert by_id[str(segment_model.id)]["registry_tag"] == "stable"
     assert by_id[str(segment_model.id)]["default_params"] == {"device": "cpu"}
     assert by_id[str(transcribe_model.id)]["task"] == "transcribe"
+    assert by_id[str(transcribe_model.id)]["registry_model_id"] == "greek-calamariv1"
 
 
 @pytest.mark.integration
@@ -94,14 +107,17 @@ def test_part_binding_overrides_document_overrides_project(client, auth_headers)
     project_model = _seed_model(
         name=f"kraken-project-{uuid.uuid4().hex[:8]}",
         task=InferenceTask.segment,
+        registry_model_id="kraken-blla",
     )
     document_model = _seed_model(
         name=f"kraken-document-{uuid.uuid4().hex[:8]}",
         task=InferenceTask.segment,
+        registry_model_id="kraken-blla",
     )
     part_model = _seed_model(
         name=f"kraken-part-{uuid.uuid4().hex[:8]}",
         task=InferenceTask.segment,
+        registry_model_id="kraken-blla",
     )
     project_id, document_id, part_id = _create_project_document_part(client, auth_headers)
 
@@ -147,6 +163,8 @@ def test_part_binding_overrides_document_overrides_project(client, auth_headers)
     )
     assert resolved.status_code == 200
     assert resolved.json()["model"]["id"] == str(part_model.id)
+    assert resolved.json()["model"]["registry_model_id"] == "kraken-blla"
+    assert resolved.json()["model"]["registry_tag"] == "stable"
     assert resolved.json()["effective_params"]["level"] == "part"
 
     delete_part = client.delete(
@@ -178,6 +196,7 @@ def test_transcribe_resolver_returns_project_binding(client, auth_headers):
     transcribe_model = _seed_model(
         name=f"kraken-transcribe-{uuid.uuid4().hex[:8]}",
         task=InferenceTask.transcribe,
+        registry_model_id="greek-calamariv1",
     )
     project_id, document_id, part_id = _create_project_document_part(client, auth_headers)
 
@@ -202,4 +221,6 @@ def test_transcribe_resolver_returns_project_binding(client, auth_headers):
 
     assert resolved.status_code == 200
     assert resolved.json()["model"]["id"] == str(transcribe_model.id)
+    assert resolved.json()["model"]["registry_model_id"] == "greek-calamariv1"
+    assert resolved.json()["model"]["registry_tag"] == "stable"
     assert resolved.json()["effective_params"]["language"] == "grc"

@@ -207,7 +207,7 @@ Domain rules:
 
 | Table | Purpose | Important columns |
 |-------|---------|-------------------|
-| `inference_models` | Catalog entry for a model artifact | `name` unique, `provider`, `task`, `artifact_ref`, JSONB `default_params` |
+| `inference_models` | Catalog entry for a registry-backed model | `name` unique, `provider`, `task`, `registry_model_id`, `registry_tag` (default `stable`), JSONB `default_params` |
 | `model_bindings` | Scope-specific model selection | `task`, `model_id`, optional `project_id`, `document_id`, `document_part_id`, JSONB `overrides` |
 | `jobs` | Async work queue | `type`, `status`, JSONB `payload`, JSONB `result`, `error`, optional model/binding/user/document/part refs, timestamps |
 
@@ -220,8 +220,8 @@ Enums:
 
 Special behavior:
 
-- Model weights stay in the repository-level `model/` workspace or another external path.
-- `artifact_ref` records where the model is; it does not copy model bytes into Postgres.
+- Model weights and architecture live in root `ml/registry.yaml` only.
+- `registry_model_id` + `registry_tag` point at the ML service registry; Postgres does not store weight paths.
 - The worker loop starts from FastAPI lifespan in `backend/core/app.py`.
 
 ### Annotation History
@@ -295,11 +295,12 @@ Relevant env values:
 ```bash
 DEFAULT_SEGMENT_MODEL=kraken-segment-default
 DEFAULT_TRANSCRIBE_MODEL=kraken-transcribe-default
-KRAKEN_MODEL_PATH=../model/kraken
+DEFAULT_SEGMENT_REGISTRY_ID=kraken-blla
+DEFAULT_TRANSCRIBE_REGISTRY_ID=greek-calamariv1
+DEFAULT_REGISTRY_TAG=stable
 ```
 
-The seed records artifact references only; it does not download or modify model
-weights.
+The seed stores registry ids/tags only; weights are resolved from root `ml/registry.yaml`.
 
 ## Troubleshooting
 

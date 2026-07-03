@@ -4,7 +4,6 @@
 import asyncio
 import os
 import sys
-from pathlib import Path
 
 from sqlalchemy import select
 
@@ -19,38 +18,59 @@ from backend.ml.infrastructure.orm_models import (  # noqa: E402
 from backend.project.infrastructure.orm_models import Project  # noqa: E402
 from backend.users.infrastructure.orm_models import User  # noqa: E402
 from infrastructure.db import AsyncSessionLocal  # noqa: E402
+from ml.registry import load_registry  # noqa: E402
 
 DEFAULT_SEGMENT_MODEL = os.environ.get("DEFAULT_SEGMENT_MODEL", "kraken-segment-default")
 DEFAULT_TRANSCRIBE_MODEL = os.environ.get("DEFAULT_TRANSCRIBE_MODEL", "kraken-transcribe-default")
-KRAKEN_MODEL_PATH = Path(os.environ.get("KRAKEN_MODEL_PATH", "../model/kraken"))
+DEFAULT_SEGMENT_REGISTRY_ID = os.environ.get("DEFAULT_SEGMENT_REGISTRY_ID", "kraken-blla")
+DEFAULT_TRANSCRIBE_REGISTRY_ID = os.environ.get(
+    "DEFAULT_TRANSCRIBE_REGISTRY_ID", "greek-calamariv1"
+)
+DEFAULT_REGISTRY_TAG = os.environ.get("DEFAULT_REGISTRY_TAG", "stable")
 DEV_PROJECT_SLUG = os.environ.get("DEV_INFERENCE_PROJECT_SLUG", "dev-inference")
 DEV_PROJECT_NAME = os.environ.get("DEV_INFERENCE_PROJECT_NAME", "Dev inference defaults")
 DEV_USER_EMAIL = os.environ.get("DEV_USER_EMAIL", "dev@kalamos.local")
+
+
+def _validate_registry_entry(*, registry_model_id: str, registry_tag: str) -> None:
+    registry = load_registry()
+    if registry_model_id not in registry.models:
+        known = ", ".join(sorted(registry.models))
+        raise ValueError(f"Unknown registry model id {registry_model_id!r}; known: {known}")
+    if registry_tag not in registry.models[registry_model_id].versions:
+        known = ", ".join(sorted(registry.models[registry_model_id].versions))
+        raise ValueError(
+            f"Unknown registry tag {registry_tag!r} for {registry_model_id!r}; known: {known}"
+        )
 
 
 async def _upsert_model(
     *,
     name: str,
     task: InferenceTask,
-    artifact_ref: str,
+    registry_model_id: str,
+    registry_tag: str,
     default_params: dict,
 ) -> InferenceModel:
+    _validate_registry_entry(registry_model_id=registry_model_id, registry_tag=registry_tag)
     async with AsyncSessionLocal() as session:
         result = await session.execute(select(InferenceModel).where(InferenceModel.name == name))
         model = result.scalar_one_or_none()
         if model is None:
             model = InferenceModel(
                 name=name,
-                provider="kraken",
+                provider="kraken" if task == InferenceTask.segment else "calamari",
                 task=task,
-                artifact_ref=artifact_ref,
+                registry_model_id=registry_model_id,
+                registry_tag=registry_tag,
                 default_params=default_params,
             )
             session.add(model)
         else:
-            model.provider = "kraken"
+            model.provider = "kraken" if task == InferenceTask.segment else "calamari"
             model.task = task
-            model.artifact_ref = artifact_ref
+            model.registry_model_id = registry_model_id
+            model.registry_tag = registry_tag
             model.default_params = default_params
         await session.commit()
         await session.refresh(model)
@@ -111,13 +131,15 @@ async def main() -> None:
     segment_model = await _upsert_model(
         name=DEFAULT_SEGMENT_MODEL,
         task=InferenceTask.segment,
-        artifact_ref=str(KRAKEN_MODEL_PATH / "segment.mlmodel"),
+        registry_model_id=DEFAULT_SEGMENT_REGISTRY_ID,
+        registry_tag=DEFAULT_REGISTRY_TAG,
         default_params={"device": "cpu"},
     )
     transcribe_model = await _upsert_model(
         name=DEFAULT_TRANSCRIBE_MODEL,
         task=InferenceTask.transcribe,
-        artifact_ref=str(KRAKEN_MODEL_PATH / "transcribe.mlmodel"),
+        registry_model_id=DEFAULT_TRANSCRIBE_REGISTRY_ID,
+        registry_tag=DEFAULT_REGISTRY_TAG,
         default_params={"device": "cpu"},
     )
     project = await _ensure_dev_project()
@@ -132,8 +154,14 @@ async def main() -> None:
         model=transcribe_model,
     )
 
-    print(f"Seeded segment model: {segment_model.name} -> {segment_model.artifact_ref}")
-    print(f"Seeded transcribe model: {transcribe_model.name} -> {transcribe_model.artifact_ref}")
+    print(
+        f"Seeded segment model: {segment_model.name} -> "
+        f"{segment_model.registry_model_id}@{segment_model.registry_tag}"
+    )
+    print(
+        f"Seeded transcribe model: {transcribe_model.name} -> "
+        f"{transcribe_model.registry_model_id}@{transcribe_model.registry_tag}"
+    )
     print(f"Seeded project: {project.slug} ({project.id})")
     print(f"Segment binding: {segment_binding.id}")
     print(f"Transcribe binding: {transcribe_binding.id}")

@@ -30,7 +30,8 @@ class InferenceModel(Base):
     name: Mapped[str] = mapped_column(String(255), unique=True)
     provider: Mapped[str] = mapped_column(String(64))
     task: Mapped[InferenceTask] = mapped_column(Enum(InferenceTask, name="inference_task"))
-    artifact_ref: Mapped[str] = mapped_column(String(1024))
+    registry_model_id: Mapped[str] = mapped_column(String(255))
+    registry_tag: Mapped[str] = mapped_column(String(64), default="stable", server_default="stable")
     default_params: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

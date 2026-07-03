@@ -118,16 +118,17 @@ docker images 'annote-*'
 | `JWT_SECRET` | `backend/core/.env` | development secret | Auth token signing key |
 | `CORS_ORIGINS` | `backend/core/.env` | `http://localhost:3000,http://localhost:5173` | Allowed browser origins |
 | `MEDIA_ROOT` | `backend/core/.env` | `annote/backend/media` | Uploaded document part media |
-| `DEFAULT_SEGMENT_MODEL` | `backend/core/.env` | `kraken-segment-default` | Dev catalog name/ID for default segmentation |
-| `DEFAULT_TRANSCRIBE_MODEL` | `backend/core/.env` | `kraken-transcribe-default` | Dev catalog name/ID for default transcription |
-| `KRAKEN_MODEL_PATH` | `backend/core/.env` | `../model/kraken` | Local directory containing Kraken weights |
+| `DEFAULT_SEGMENT_MODEL` | `backend/core/.env` | `kraken-segment-default` | Dev catalog name for default segmentation |
+| `DEFAULT_TRANSCRIBE_MODEL` | `backend/core/.env` | `kraken-transcribe-default` | Dev catalog name for default transcription |
+| `DEFAULT_SEGMENT_REGISTRY_ID` | `backend/core/.env` | `kraken-blla` | Registry id for dev segment model |
+| `DEFAULT_TRANSCRIBE_REGISTRY_ID` | `backend/core/.env` | `greek-calamariv1` | Registry id for dev transcribe model |
+| `DEFAULT_REGISTRY_TAG` | `backend/core/.env` | `stable` | Registry version tag for dev seeds |
 | `VITE_API_BASE_URL` | `frontend/.env.local` | `http://localhost:8000` | Frontend → API URL |
 
 ## Inference Catalog
 
-Keep Kraken weights in the repository-level `model/` workspace, not under
-`annote/`. The dev seed records `KRAKEN_MODEL_PATH/segment.mlmodel` and
-`KRAKEN_MODEL_PATH/transcribe.mlmodel` as artifact references and creates
+Model weights and architecture live in root `ml/registry.yaml`. The dev seed
+stores `registry_model_id` + `registry_tag` in Postgres and creates
 project-level defaults:
 
 ```bash
