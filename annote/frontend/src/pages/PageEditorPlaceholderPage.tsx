@@ -140,13 +140,11 @@ export function PageEditorPlaceholderPage() {
     approvedTextDraft,
     setApprovedTextDraft,
     transcriptionSaveMessage,
-    copyMessage,
     ocrRunning,
     ocrMessage,
     selectedSegment,
     selectedSegmentNumber,
     selectedTranscriptionLayer,
-    lineTextForLayer,
     importPageTranscription,
     pairTextLine,
     saveApprovedText,
@@ -154,7 +152,7 @@ export function PageEditorPlaceholderPage() {
     saveGroundTruthText,
     runSegmentOcr,
     runPageOcr,
-    copySelectedLayerToGroundTruth,
+    promoteSelectedSegmentToGroundTruth,
     selectSegment,
   } = pairing;
 
@@ -189,7 +187,6 @@ export function PageEditorPlaceholderPage() {
   const statusAlertProps = {
     saveMessage,
     transcriptionSaveMessage,
-    copyMessage,
     ocrMessage,
     segmentMessage,
     mutationError,
@@ -335,9 +332,8 @@ export function PageEditorPlaceholderPage() {
           selectedTranscriptionLayer={selectedTranscriptionLayer}
           approvedTextDraft={approvedTextDraft}
           onApprovedTextDraftChange={setApprovedTextDraft}
-          lineTextForLayer={lineTextForLayer}
           onSaveGroundTruthText={saveGroundTruthText}
-          onCopySelectedLayerToGroundTruth={copySelectedLayerToGroundTruth}
+          onPromoteSelectedSegmentToGroundTruth={promoteSelectedSegmentToGroundTruth}
           pairingProgress={pairingProgress}
           pageTranscriptionText={pageTranscriptionText}
           onPageTranscriptionTextChange={setPageTranscriptionText}

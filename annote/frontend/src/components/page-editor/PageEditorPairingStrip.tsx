@@ -1,8 +1,12 @@
-import { Button, Input, Space, Typography } from 'antd';
+import { Button, Input, Typography } from 'antd';
 import type { ChangeEventHandler } from 'react';
 import type { LineResponse, TranscriptionLayerResponse } from '../../api/client';
 import { PageEditorOcrReviewPane } from './PageEditorOcrReviewPane';
-import { lineTranscriptionForLayer } from './hooks/utils';
+import {
+  lineTranscriptionForLayer,
+  showsModelSourceReview,
+  transcriptionForOcrReview,
+} from './hooks/utils';
 
 type TextLine = { order: number; text: string; paired_line_id: string | null };
 
@@ -16,9 +20,8 @@ type PageEditorPairingStripProps = {
   selectedTranscriptionLayer: TranscriptionLayerResponse | null;
   approvedTextDraft: string;
   onApprovedTextDraftChange: (value: string) => void;
-  lineTextForLayer: (line: LineResponse, layerId: string) => string;
   onSaveGroundTruthText: () => void;
-  onCopySelectedLayerToGroundTruth: (lineIds: string[] | null) => void;
+  onPromoteSelectedSegmentToGroundTruth: () => void;
   pairingProgress: { paired_lines: number; total_lines: number; percent: number };
   pageTranscriptionText: string;
   onPageTranscriptionTextChange: (value: string) => void;
@@ -49,9 +52,8 @@ export function PageEditorPairingStrip({
   selectedTranscriptionLayer,
   approvedTextDraft,
   onApprovedTextDraftChange,
-  lineTextForLayer,
   onSaveGroundTruthText,
-  onCopySelectedLayerToGroundTruth,
+  onPromoteSelectedSegmentToGroundTruth,
   pairingProgress,
   pageTranscriptionText,
   onPageTranscriptionTextChange,
@@ -65,6 +67,19 @@ export function PageEditorPairingStrip({
   if (!visible) {
     return null;
   }
+
+  const groundTruthTranscription =
+    selectedSegment && selectedTranscriptionLayer?.kind === 'ground_truth'
+      ? lineTranscriptionForLayer(selectedSegment, selectedTranscriptionLayer.id)
+      : null;
+  const showGroundTruthEditor =
+    Boolean(groundTruthTranscription) && !showsModelSourceReview(groundTruthTranscription);
+  const ocrReviewTranscription =
+    selectedSegment && selectedTranscriptionLayer
+      ? transcriptionForOcrReview(selectedSegment, selectedTranscriptionLayer)
+      : null;
+  const showOcrReview = Boolean(ocrReviewTranscription);
+
 
   return (
     <div
@@ -96,7 +111,7 @@ export function PageEditorPairingStrip({
             ? `Selected Segment ${selectedSegmentNumber}`
             : 'Select a Segment to view transcription text.'}
         </Typography.Text>
-        {selectedSegment && selectedTranscriptionLayer?.kind === 'ground_truth' && (
+        {selectedSegment && showGroundTruthEditor && (
           <>
             <label style={{ display: 'grid', gap: 8 }}>
               Ground truth text for selected Segment
@@ -112,23 +127,15 @@ export function PageEditorPairingStrip({
             </Button>
           </>
         )}
-        {selectedSegment && selectedTranscriptionLayer?.kind === 'model' && (
+        {selectedSegment && showOcrReview && (
           <>
             <PageEditorOcrReviewPane
               segmentNumber={selectedSegmentNumber}
-              transcription={lineTranscriptionForLayer(selectedSegment, selectedTranscriptionLayer.id)}
+              transcription={ocrReviewTranscription}
             />
-            <Space wrap>
-              <Button
-                type="primary"
-                onClick={() => void onCopySelectedLayerToGroundTruth([selectedSegment.id])}
-              >
-                Copy selected Segment to Ground truth
-              </Button>
-              <Button onClick={() => void onCopySelectedLayerToGroundTruth(null)}>
-                Copy whole Page to Ground truth
-              </Button>
-            </Space>
+            <Button type="primary" onClick={() => void onPromoteSelectedSegmentToGroundTruth()}>
+              Save
+            </Button>
           </>
         )}
         <details>

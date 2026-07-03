@@ -535,7 +535,7 @@ describe('PageEditorPlaceholderPage', () => {
     expect(await screen.findByText('Ground truth text saved')).toBeTruthy();
   });
 
-  it('shows model layer text as read-only and copies the selected Segment to Ground truth', async () => {
+  it('shows model OCR review and saves the selected Segment to Ground truth', async () => {
     mockedApi.getDocument.mockResolvedValue(DOCUMENT);
     mockedApi.listPartLines
       .mockResolvedValueOnce([
@@ -562,6 +562,7 @@ describe('PageEditorPlaceholderPage', () => {
               transcription_kind: 'model',
               text: 'model suggestion',
               confidence: 0.91,
+              text_source: 'model',
             },
           ],
           created_at: '2026-06-16T10:00:00Z',
@@ -598,6 +599,7 @@ describe('PageEditorPlaceholderPage', () => {
               transcription_kind: 'model',
               text: 'model suggestion',
               confidence: 0.91,
+              text_source: 'model',
             },
           ],
           created_at: '2026-06-16T10:00:00Z',
@@ -643,7 +645,7 @@ describe('PageEditorPlaceholderPage', () => {
     expect(screen.getByLabelText('Line confidence')).toBeTruthy();
     expect(screen.getByText('91.0%')).toBeTruthy();
     expect(screen.getByLabelText('OCR text with per-character confidence highlighting')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /copy selected segment to ground truth/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
 
     await waitFor(() => {
       expect(mockedApi.copyToGroundTruth).toHaveBeenLastCalledWith(
@@ -653,13 +655,80 @@ describe('PageEditorPlaceholderPage', () => {
         { line_ids: ['line-1'] },
       );
     });
-    expect(await screen.findByText('Copied 1 Segment to Ground truth')).toBeTruthy();
-    fireEvent.change(screen.getByLabelText(/transcription layer/i), {
-      target: { value: 'ground-truth-1' },
-    });
+    expect(await screen.findByText('Saved to Ground truth')).toBeTruthy();
+    expect(screen.getByLabelText(/transcription layer/i)).toHaveValue('ground-truth-1');
     expect(screen.getByLabelText(/ground truth text for selected segment/i)).toHaveValue(
       'model suggestion',
     );
+  });
+
+  it('shows OCR review on Ground truth when text_source is model', async () => {
+    mockedApi.getDocument.mockResolvedValue(DOCUMENT);
+    mockedApi.listPartLines.mockResolvedValue([
+      {
+        id: 'line-1',
+        part_id: 'part-1',
+        block_id: null,
+        order: 0,
+        kind: 'polygon',
+        points: [[10, 10], [50, 10], [50, 30], [10, 30]],
+        source: 'manual',
+        source_metadata: null,
+        kraken_ceiling: null,
+        manual_geometry: true,
+        line_transcriptions: [
+          {
+            id: 'line-tx-ground-1',
+            transcription_id: 'ground-truth-1',
+            transcription_kind: 'ground_truth',
+            text: 'model suggestion',
+            confidence: null,
+            text_source: 'model',
+          },
+          {
+            id: 'line-tx-model-1',
+            transcription_id: 'model-1',
+            transcription_kind: 'model',
+            text: 'model suggestion',
+            confidence: 0.91,
+            text_source: 'model',
+            character_confidences: [
+              { char: 'm', confidence: 0.95 },
+              { char: 'o', confidence: 0.62 },
+            ],
+          },
+        ],
+        created_at: '2026-06-16T10:00:00Z',
+      },
+    ]);
+    mockedApi.listTranscriptions.mockResolvedValue([
+      {
+        id: 'ground-truth-1',
+        document_id: 'doc-1',
+        name: 'Ground truth',
+        kind: 'ground_truth',
+        created_by_job_id: null,
+        created_at: '2026-06-16T10:00:00Z',
+      },
+      {
+        id: 'model-1',
+        document_id: 'doc-1',
+        name: 'Kraken run',
+        kind: 'model',
+        created_by_job_id: 'job-1',
+        created_at: '2026-06-16T10:01:00Z',
+      },
+    ]);
+
+    renderPageEditor();
+
+    fireEvent.click(await screen.findByRole('button', { name: /transcription edit/i }));
+    fireEvent.click(screen.getByLabelText('Segment 1'));
+
+    expect(screen.getByText('OCR review · Segment 1')).toBeTruthy();
+    expect(screen.getByLabelText('Line confidence')).toBeTruthy();
+    expect(screen.queryByLabelText(/ground truth text for selected segment/i)).toBeNull();
+    expect(screen.getByRole('button', { name: /^save$/i })).toBeTruthy();
   });
 
   it('surfaces Ground truth save API errors and keeps the typed text visible', async () => {

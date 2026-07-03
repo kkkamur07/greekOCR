@@ -3,7 +3,6 @@ import { Alert } from 'antd';
 type PageEditorStatusAlertsProps = {
   saveMessage: string | null;
   transcriptionSaveMessage: string | null;
-  copyMessage: string | null;
   ocrMessage: string | null;
   segmentMessage: string | null;
   mutationError: string | null;
@@ -16,7 +15,6 @@ type PageEditorStatusAlertsProps = {
 export function PageEditorStatusAlerts({
   saveMessage,
   transcriptionSaveMessage,
-  copyMessage,
   ocrMessage,
   segmentMessage,
   mutationError,
@@ -31,7 +29,6 @@ export function PageEditorStatusAlerts({
       {transcriptionSaveMessage && (
         <Alert type="success" showIcon message={transcriptionSaveMessage} />
       )}
-      {copyMessage && <Alert type="success" showIcon message={copyMessage} />}
       {ocrMessage && <Alert type="success" showIcon message={ocrMessage} />}
       {segmentMessage && <Alert type="success" showIcon message={segmentMessage} />}
       {mutationError && <Alert type="error" showIcon message={mutationError} />}
@@ -51,7 +48,6 @@ export function hasPageEditorStatusAlerts(props: PageEditorStatusAlertsProps): b
   return Boolean(
     props.saveMessage ||
       props.transcriptionSaveMessage ||
-      props.copyMessage ||
       props.ocrMessage ||
       props.segmentMessage ||
       props.mutationError ||

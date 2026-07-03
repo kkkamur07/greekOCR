@@ -4,7 +4,11 @@ import {
   type LineResponse,
   type TranscriptionLayerResponse,
 } from '../../../api/client';
-import { lineTextForLayer, withLocalGroundTruth } from './utils';
+import {
+  lineTextForLayer,
+  modelLayerIdForPromotion,
+  withLocalGroundTruth,
+} from './utils';
 
 type PairingStateInput = {
   projectId: string | undefined;
@@ -47,7 +51,6 @@ export function usePairingState({
   const [pageTranscriptionText, setPageTranscriptionText] = useState('');
   const [approvedTextDraft, setApprovedTextDraft] = useState('');
   const [transcriptionSaveMessage, setTranscriptionSaveMessage] = useState<string | null>(null);
-  const [copyMessage, setCopyMessage] = useState<string | null>(null);
   const [ocrRunning, setOcrRunning] = useState(false);
   const [ocrMessage, setOcrMessage] = useState<string | null>(null);
 
@@ -56,7 +59,6 @@ export function usePairingState({
     setPageTranscriptionText('');
     setApprovedTextDraft('');
     setTranscriptionSaveMessage(null);
-    setCopyMessage(null);
     setOcrMessage(null);
   }, [projectId, documentId, partId]);
 
@@ -140,7 +142,6 @@ export function usePairingState({
     const nextLayerId = event.target.value;
     setSelectedTranscriptionLayerId(nextLayerId);
     setTranscriptionSaveMessage(null);
-    setCopyMessage(null);
     setPairingError(null);
     if (selectedSegment) {
       setApprovedTextDraft(lineTextForLayer(selectedSegment, nextLayerId));
@@ -256,8 +257,7 @@ export function usePairingState({
         `Copied ${copiedCount} ${copiedCount === 1 ? 'Segment' : 'Segments'} to Ground truth`,
       );
     } catch (err) {
-      setCopyMessage(null);
-      setPairingError(err instanceof Error ? err.message : 'Failed to copy to Ground truth.');
+        setPairingError(err instanceof Error ? err.message : 'Failed to copy to Ground truth.');
     }
   }
 
@@ -278,7 +278,6 @@ export function usePairingState({
     approvedTextDraft,
     setApprovedTextDraft,
     transcriptionSaveMessage,
-    copyMessage,
     ocrRunning,
     ocrMessage,
     selectedSegment,
@@ -292,7 +291,7 @@ export function usePairingState({
     saveGroundTruthText,
     runSegmentOcr,
     runPageOcr,
-    copySelectedLayerToGroundTruth,
+    promoteSelectedSegmentToGroundTruth,
     selectSegment,
   };
 }

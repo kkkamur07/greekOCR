@@ -2,7 +2,16 @@ import type {
   LineResponse,
   LineTranscriptionResponse,
   LineUpsertRequest,
+  TranscriptionLayerResponse,
 } from '../../../api/client';
+
+/** Optional until OpenAPI types include text_source on LineTranscriptionResponse. */
+export type LineTranscriptionTextSource = 'model' | 'human_edited';
+
+export type LineTranscriptionWithTextSource = LineTranscriptionResponse & {
+  text_source?: LineTranscriptionTextSource | null;
+};
+
 
 export function approvedText(line: LineResponse): string | null {
   return (
@@ -27,6 +36,47 @@ export function lineTranscriptionForLayer(
       (transcription) => transcription.transcription_id === transcriptionLayerId,
     ) ?? null
   );
+}
+
+export function modelTranscriptionForLine(line: LineResponse): LineTranscriptionResponse | null {
+  return (
+    line.line_transcriptions.find(
+      (transcription) => transcription.transcription_kind === 'model',
+    ) ?? null
+  );
+}
+
+export function showsModelSourceReview(
+  transcription: LineTranscriptionResponse | null,
+): boolean {
+  if (!transcription) return false;
+  if (transcription.transcription_kind === 'model') return true;
+  return (transcription as LineTranscriptionWithTextSource).text_source === 'model';
+}
+
+export function transcriptionForOcrReview(
+  line: LineResponse,
+  selectedLayer: TranscriptionLayerResponse | null,
+): LineTranscriptionResponse | null {
+  if (!selectedLayer) return null;
+  const layerTranscription = lineTranscriptionForLayer(line, selectedLayer.id);
+  if (selectedLayer.kind === 'model') {
+    return layerTranscription;
+  }
+  if (layerTranscription && showsModelSourceReview(layerTranscription)) {
+    return modelTranscriptionForLine(line) ?? layerTranscription;
+  }
+  return null;
+}
+
+export function modelLayerIdForPromotion(
+  line: LineResponse,
+  selectedLayer: TranscriptionLayerResponse | null,
+): string | null {
+  if (selectedLayer?.kind === 'model') {
+    return selectedLayer.id;
+  }
+  return modelTranscriptionForLine(line)?.transcription_id ?? null;
 }
 
 export function upsertLineRequest(line: LineResponse, order: number): LineUpsertRequest {

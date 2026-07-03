@@ -1,87 +1,76 @@
 import { describe, expect, it } from 'vitest';
 
-import type { LineResponse } from '../../../api/client';
-
+import type { LineResponse, TranscriptionLayerResponse } from '../../../api/client';
 import {
-  approvedText,
-  lineTextForLayer,
-  lineTranscriptionForLayer,
-  upsertLineRequest,
-  withLocalGroundTruth,
+  modelLayerIdForPromotion,
+  showsModelSourceReview,
+  transcriptionForOcrReview,
 } from './utils';
 
-const BASE_LINE: LineResponse = {
+const MODEL_LAYER: TranscriptionLayerResponse = {
+  id: 'model-1',
+  document_id: 'doc-1',
+  name: 'Kraken run',
+  kind: 'model',
+  created_by_job_id: 'job-1',
+  created_at: '2026-06-16T10:01:00Z',
+};
+
+const GROUND_TRUTH_LAYER: TranscriptionLayerResponse = {
+  id: 'ground-truth-1',
+  document_id: 'doc-1',
+  name: 'Ground truth',
+  kind: 'ground_truth',
+  created_by_job_id: null,
+  created_at: '2026-06-16T10:00:00Z',
+};
+
+const LINE = {
   id: 'line-1',
   part_id: 'part-1',
   block_id: null,
   order: 0,
   kind: 'polygon',
-  points: [
-    [0, 0],
-    [10, 0],
-    [10, 5],
-    [0, 5],
-  ],
+  points: [[10, 10], [50, 10], [50, 30], [10, 30]],
   source: 'manual',
   source_metadata: null,
   kraken_ceiling: null,
   manual_geometry: true,
   line_transcriptions: [
     {
-      id: 'gt-1',
+      id: 'line-tx-ground-1',
       transcription_id: 'ground-truth-1',
       transcription_kind: 'ground_truth',
-      text: 'approved',
+      text: 'model suggestion',
       confidence: null,
+      text_source: 'model',
     },
     {
-      id: 'model-1',
-      transcription_id: 'model-layer-1',
+      id: 'line-tx-model-1',
+      transcription_id: 'model-1',
       transcription_kind: 'model',
-      text: 'model text',
-      confidence: 0.9,
+      text: 'model suggestion',
+      confidence: 0.91,
+      text_source: 'model',
     },
   ],
   created_at: '2026-06-16T10:00:00Z',
-};
+} as LineResponse;
 
-describe('page editor hook utils', () => {
-  it('reads approved ground-truth text from a line', () => {
-    expect(approvedText(BASE_LINE)).toBe('approved');
-    expect(approvedText({ ...BASE_LINE, line_transcriptions: [] })).toBeNull();
+describe('page editor transcription utils', () => {
+  it('shows OCR review for model layers and ground truth with text_source model', () => {
+    expect(showsModelSourceReview(LINE.line_transcriptions[1])).toBe(true);
+    expect(showsModelSourceReview(LINE.line_transcriptions[0])).toBe(true);
+    expect(showsModelSourceReview({ ...LINE.line_transcriptions[0], text_source: 'human_edited' })).toBe(false);
   });
 
-  it('reads transcription text and object for a selected layer', () => {
-    expect(lineTextForLayer(BASE_LINE, 'model-layer-1')).toBe('model text');
-    expect(lineTextForLayer(BASE_LINE, null)).toBe('');
-    expect(lineTextForLayer(BASE_LINE, 'missing-layer')).toBe('');
-    expect(lineTranscriptionForLayer(BASE_LINE, 'model-layer-1')?.confidence).toBe(0.9);
-    expect(lineTranscriptionForLayer(BASE_LINE, 'missing-layer')).toBeNull();
+  it('selects model transcription for OCR review on ground truth when text_source is model', () => {
+    expect(transcriptionForOcrReview(LINE, GROUND_TRUTH_LAYER)).toEqual(LINE.line_transcriptions[1]);
+    expect(transcriptionForOcrReview(LINE, MODEL_LAYER)).toEqual(LINE.line_transcriptions[1]);
   });
 
-  it('builds an upsert request with optional approved text', () => {
-    expect(upsertLineRequest(BASE_LINE, 2)).toEqual({
-      id: 'line-1',
-      order: 2,
-      kind: 'polygon',
-      points: BASE_LINE.points,
-      source: 'manual',
-      approved_text: 'approved',
-    });
-    expect(upsertLineRequest({ ...BASE_LINE, line_transcriptions: [] }, 0)).toEqual({
-      id: 'line-1',
-      order: 0,
-      kind: 'polygon',
-      points: BASE_LINE.points,
-      source: 'manual',
-    });
-  });
-
-  it('updates local ground-truth text for one line', () => {
-    const updated = withLocalGroundTruth([BASE_LINE], 'ground-truth-1', 'line-1', 'edited');
-    expect(updated[0]?.line_transcriptions.find((tx) => tx.transcription_kind === 'ground_truth')?.text).toBe(
-      'edited',
-    );
-    expect(withLocalGroundTruth([BASE_LINE], null, 'line-1', 'edited')).toEqual([BASE_LINE]);
+  it('resolves the model layer id used for ground truth promotion', () => {
+    expect(modelLayerIdForPromotion(LINE, MODEL_LAYER)).toBe('model-1');
+    expect(modelLayerIdForPromotion(LINE, GROUND_TRUTH_LAYER)).toBe('model-1');
   });
 });
