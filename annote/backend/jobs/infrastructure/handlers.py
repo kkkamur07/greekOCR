@@ -6,6 +6,10 @@ import time
 
 from sqlalchemy import select
 
+from backend.document.domain.line_transcription_text import (
+    LineTranscriptionTextSource,
+    character_confidences_for_text,
+)
 from backend.document.infrastructure.orm_models import (
     DocumentPart,
     Line,
@@ -68,12 +72,18 @@ def run_transcribe_handler(job: Job) -> dict:
         for index, line in enumerate(lines):
             text = f"mock transcription {index + 1}"
             confidence = round(max(0.01, 0.91 - (index * 0.09)), 2)
+            character_confidences = character_confidences_for_text(
+                text,
+                base_confidence=confidence,
+            )
             session.add(
                 LineTranscription(
                     line_id=line.id,
                     transcription_id=layer.id,
                     text=text,
                     confidence=confidence,
+                    text_source=LineTranscriptionTextSource.model,
+                    character_confidences=character_confidences,
                 )
             )
             result_lines.append(
@@ -81,6 +91,8 @@ def run_transcribe_handler(job: Job) -> dict:
                     "line_id": str(line.id),
                     "text": text,
                     "confidence": confidence,
+                    "text_source": LineTranscriptionTextSource.model.value,
+                    "character_confidences": character_confidences,
                 }
             )
 

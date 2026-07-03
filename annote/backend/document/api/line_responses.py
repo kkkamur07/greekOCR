@@ -1,6 +1,7 @@
 """Shared DTO builders for document line responses."""
 
 from backend.document.api.schemas import LineResponse, LineTranscriptionResponse
+from backend.document.api.transcription_responses import line_transcription_response
 from backend.document.infrastructure.orm_models import Line
 
 
@@ -19,13 +20,7 @@ def line_response(line: Line) -> LineResponse:
         kraken_ceiling=line.kraken_ceiling,
         manual_geometry=line.manual_geometry,
         line_transcriptions=[
-            LineTranscriptionResponse(
-                id=transcription.id,
-                transcription_id=transcription.transcription_id,
-                transcription_kind=transcription.transcription.kind,
-                text=transcription.text,
-                confidence=transcription.confidence,
-            )
+            line_transcription_response(transcription)
             for transcription in line.transcriptions
         ],
         created_at=line.created_at,

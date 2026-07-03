@@ -23,6 +23,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from infrastructure.db import Base
 
+from backend.document.domain.line_transcription_text import LineTranscriptionTextSource
+
 if TYPE_CHECKING:
     from backend.ml.infrastructure.orm_models import ModelBinding
     from backend.project.infrastructure.orm_models import Project
@@ -197,6 +199,14 @@ class LineTranscription(Base):
     )
     text: Mapped[str] = mapped_column(Text, default="")
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    text_source: Mapped[LineTranscriptionTextSource] = mapped_column(
+        Enum(LineTranscriptionTextSource, name="line_transcription_text_source"),
+        default=LineTranscriptionTextSource.human_edited,
+        server_default=LineTranscriptionTextSource.human_edited.value,
+    )
+    character_confidences: Mapped[list[dict[str, object]] | None] = mapped_column(
+        JSONB, nullable=True
+    )
 
     line: Mapped[Line] = relationship("Line", back_populates="transcriptions")
     transcription: Mapped[Transcription] = relationship(

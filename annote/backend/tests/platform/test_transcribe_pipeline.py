@@ -107,6 +107,11 @@ def test_transcribe_job_creates_model_layer_and_leaves_ground_truth_empty(
     assert lines.status_code == 200
     for line in lines.json():
         assert [entry["transcription_kind"] for entry in line["line_transcriptions"]] == ["model"]
+        model_entry = next(
+            entry for entry in line["line_transcriptions"] if entry["transcription_kind"] == "model"
+        )
+        assert model_entry["text_source"] == "model"
+        assert model_entry["character_confidences"] is not None
 
 
 def test_each_transcribe_job_creates_distinct_model_layer_without_ground_truth(
@@ -242,6 +247,8 @@ def test_patch_ground_truth_line_text_persists(
     assert patch.status_code == 200
     assert patch.json()["transcription_kind"] == "ground_truth"
     assert patch.json()["text"] == "curated ground truth"
+    assert patch.json()["text_source"] == "human_edited"
+    assert patch.json()["character_confidences"] is None
     lines = client.get(f"{base}/{document_id}/parts/{part_id}/lines", headers=owner_headers)
     first_line_entries = lines.json()[0]["line_transcriptions"]
     assert first_line_entries == [
@@ -251,6 +258,8 @@ def test_patch_ground_truth_line_text_persists(
             "transcription_kind": "ground_truth",
             "text": "curated ground truth",
             "confidence": None,
+            "text_source": "human_edited",
+            "character_confidences": None,
         }
     ]
 

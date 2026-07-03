@@ -26,6 +26,7 @@ from backend.document.infrastructure.orm_models import (
     TranscriptionKind,
 )
 from backend.document.domain.access import require_can_read
+from backend.document.domain.line_transcription_text import LineTranscriptionTextSource
 from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
 from backend.project.domain.access import is_member
 from backend.project.infrastructure.orm_models import Project
@@ -33,6 +34,13 @@ from backend.project.infrastructure.project_repository import ProjectRepository
 from backend.users.infrastructure.orm_models import User
 
 MAX_PAGE_TRANSCRIPTION_LINES = 10_000
+
+
+def _apply_human_edited_transcription(line_transcription: LineTranscription, text: str) -> None:
+    line_transcription.text = text
+    line_transcription.confidence = None
+    line_transcription.text_source = LineTranscriptionTextSource.human_edited
+    line_transcription.character_confidences = None
 MAX_REPLACE_PART_LINES = 10_000
 
 DOCUMENT_UPDATE_FIELDS = frozenset({"name", "workflow"})
@@ -601,6 +609,8 @@ class DocumentService:
         project_id: UUID,
         document_id: UUID,
         part_id: UUID,
+        *,
+        use_otsu: bool = True,
     ) -> Job:
         document = await self.get_document(session, user, project_id, document_id)
         part = await self._document_part_or_404(session, document, part_id)
@@ -610,7 +620,10 @@ class DocumentService:
             user_id=user.id,
             document_id=document.id,
             document_part_id=part.id,
-            payload={"adapter": self._job_settings.segment_adapter},
+            payload={
+                "adapter": self._job_settings.segment_adapter,
+                "use_otsu": use_otsu,
+            },
         )
         session.add(job)
         await session.commit()
@@ -670,11 +683,12 @@ class DocumentService:
                         transcription_id=ground_truth.id,
                         text=source_row.text,
                         confidence=None,
+                        text_source=LineTranscriptionTextSource.human_edited,
+                        character_confidences=None,
                     )
                 )
             else:
-                target.text = source_row.text
-                target.confidence = None
+                _apply_human_edited_transcription(target, source_row.text)
 
         await session.commit()
         return copied_line_ids
@@ -709,13 +723,15 @@ class DocumentService:
                 transcription_id=transcription.id,
                 text=text,
                 confidence=None,
+                text_source=LineTranscriptionTextSource.human_edited,
+                character_confidences=None,
             )
             session.add(line_transcription)
         else:
-            line_transcription.text = text
-            line_transcription.confidence = None
+            _apply_human_edited_transcription(line_transcription, text)
         await session.commit()
         await session.refresh(line_transcription)
+        line_transcription.transcription = transcription
         return line_transcription
 
     async def delete_part(
@@ -951,8 +967,9 @@ class DocumentService:
                     transcription=ground_truth,
                     text=text,
                     confidence=None,
+                    text_source=LineTranscriptionTextSource.human_edited,
+                    character_confidences=None,
                 )
             )
             return
-        existing.text = text
-        existing.confidence = None
+        _apply_human_edited_transcription(existing, text)

@@ -10,6 +10,7 @@ from backend.document.infrastructure.orm_models import (
     DocumentWorkflow,
     LineGeometryKind,
     LineSource,
+    LineTranscriptionTextSource,
     TranscriptionKind,
 )
 
@@ -88,12 +89,19 @@ class TranscriptionLayerResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class CharacterConfidenceResponse(BaseModel):
+    char: str
+    confidence: float
+
+
 class LineTranscriptionResponse(BaseModel):
     id: UUID
     transcription_id: UUID
     transcription_kind: TranscriptionKind
     text: str
     confidence: float | None
+    text_source: LineTranscriptionTextSource
+    character_confidences: list[CharacterConfidenceResponse] | None = None
 
 
 class LineResponse(BaseModel):
@@ -260,6 +268,33 @@ class CopyToGroundTruthRequest(BaseModel):
 
 class CopyToGroundTruthResponse(BaseModel):
     copied_line_ids: list[UUID]
+
+
+class OcrPredictRequest(BaseModel):
+    model_id: UUID | None = None
+
+
+class OcrPredictLineResponse(BaseModel):
+    line_id: UUID
+    text: str
+    confidence: float | None = None
+    text_source: LineTranscriptionTextSource = LineTranscriptionTextSource.model
+    character_confidences: list[CharacterConfidenceResponse] | None = None
+
+
+class OcrPredictResponse(BaseModel):
+    transcription_id: UUID
+    transcription_name: str
+    model_id: UUID
+    model_name: str
+    lines: list[OcrPredictLineResponse]
+
+
+class SegmentPartRequest(BaseModel):
+    use_otsu: bool = Field(
+        default=True,
+        description="When true, tighten Kraken segment boundaries with per-segment Otsu ink refinement.",
+    )
 
 
 class LineTranscriptionPatchRequest(BaseModel):

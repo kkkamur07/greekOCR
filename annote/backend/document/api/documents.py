@@ -35,19 +35,28 @@ from backend.document.api.schemas import (
     LinesReplaceRequest,
     LineTranscriptionPatchRequest,
     LineTranscriptionResponse,
+    OcrPredictRequest,
+    OcrPredictLineResponse,
+    OcrPredictResponse,
     PagePairingResponse,
     PageTranscriptionImportRequest,
     PageTranscriptionTextLineResponse,
     PairTextLineRequest,
     PairingProgressResponse,
     ReorderPartsRequest,
+    SegmentPartRequest,
     TranscriptionLayerResponse,
 )
 from backend.document.api.line_responses import line_response
+from backend.document.api.transcription_responses import (
+    character_confidence_responses,
+    line_transcription_response,
+)
 from backend.document.api.responses import part_response
 from backend.document.application.document_service import DocumentService
 from backend.document.infrastructure.orm_models import Block
 from backend.jobs.api.schemas import EnqueueJobResponse
+from backend.ml.application.ocr_prediction_service import OcrPredictionService
 from backend.users.api.dependencies import get_current_user
 from backend.users.infrastructure.orm_models import User
 from infrastructure.db import get_db
@@ -56,6 +65,7 @@ router = APIRouter(prefix="/projects/{project_id}/documents", tags=["documents"]
 _service = DocumentService()
 _export_service = AnnotationExportService()
 _transcription_pdf_service = TranscriptionPdfService()
+_ocr_prediction_service = OcrPredictionService()
 MAX_UPLOAD_BYTES = 100 * 1024 * 1024
 Image.MAX_IMAGE_PIXELS = 200_000_000
 PDF_RESPONSE = {
@@ -558,11 +568,17 @@ async def segment_part(
     project_id: UUID,
     document_id: UUID,
     part_id: UUID,
+    body: SegmentPartRequest,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> EnqueueJobResponse:
     job = await _service.enqueue_segment_part(
-        db, current_user, project_id, document_id, part_id
+        db,
+        current_user,
+        project_id,
+        document_id,
+        part_id,
+        use_otsu=body.use_otsu,
     )
     return EnqueueJobResponse(job_id=job.id)
 
@@ -583,6 +599,75 @@ async def transcribe_part(
         db, current_user, project_id, document_id, part_id
     )
     return EnqueueJobResponse(job_id=job.id)
+
+
+def _ocr_predict_response(result) -> OcrPredictResponse:
+    return OcrPredictResponse(
+        transcription_id=result.transcription_id,
+        transcription_name=result.transcription_name,
+        model_id=result.model_id,
+        model_name=result.model_name,
+        lines=[
+            OcrPredictLineResponse(
+                line_id=line.line_id,
+                text=line.text,
+                confidence=line.confidence,
+                text_source=line.text_source,
+                character_confidences=character_confidence_responses(
+                    list(line.character_confidences) if line.character_confidences else None
+                ),
+            )
+            for line in result.lines
+        ],
+    )
+
+
+@router.post(
+    "/{document_id}/parts/{part_id}/lines/{line_id}/ocr-predict",
+    response_model=OcrPredictResponse,
+)
+async def ocr_predict_line(
+    project_id: UUID,
+    document_id: UUID,
+    part_id: UUID,
+    line_id: UUID,
+    body: OcrPredictRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> OcrPredictResponse:
+    result = await _ocr_prediction_service.predict_line(
+        db,
+        current_user,
+        project_id,
+        document_id,
+        part_id,
+        line_id,
+        model_id=body.model_id,
+    )
+    return _ocr_predict_response(result)
+
+
+@router.post(
+    "/{document_id}/parts/{part_id}/ocr-predict",
+    response_model=OcrPredictResponse,
+)
+async def ocr_predict_part(
+    project_id: UUID,
+    document_id: UUID,
+    part_id: UUID,
+    body: OcrPredictRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> OcrPredictResponse:
+    result = await _ocr_prediction_service.predict_part(
+        db,
+        current_user,
+        project_id,
+        document_id,
+        part_id,
+        model_id=body.model_id,
+    )
+    return _ocr_predict_response(result)
 
 
 @router.post(
@@ -630,13 +715,7 @@ async def patch_ground_truth_line_text(
         line_id,
         text=body.text,
     )
-    return LineTranscriptionResponse(
-        id=line_transcription.id,
-        transcription_id=line_transcription.transcription_id,
-        transcription_kind="ground_truth",
-        text=line_transcription.text,
-        confidence=line_transcription.confidence,
-    )
+    return line_transcription_response(line_transcription)
 
 
 @router.delete("/{document_id}/parts/{part_id}", status_code=status.HTTP_204_NO_CONTENT)
