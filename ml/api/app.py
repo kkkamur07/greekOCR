@@ -3,6 +3,7 @@ from pydantic import BaseModel
 
 from ml.api.health import router as health_router
 from ml.api.jobs import router as jobs_router
+from ml.api.run import router as run_router
 
 router = APIRouter(tags=["root"])
 
@@ -21,4 +22,5 @@ def create_app() -> FastAPI:
     app.include_router(router)
     app.include_router(health_router)
     app.include_router(jobs_router)
+    app.include_router(run_router)
     return app
