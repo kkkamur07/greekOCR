@@ -7,6 +7,7 @@ from ml.contracts.common import (
     RegistryArchitecture,
 )
 from ml.contracts.jobs import JobCallbackRequest, JobSubmitRequest, JobSubmitResponse
+from ml.contracts.run import MlRunRequest, MlRunResponse
 from ml.contracts.segment import (
     SegmentBlock,
     SegmentLine,
@@ -25,6 +26,8 @@ __all__ = [
     "JobCallbackRequest",
     "JobSubmitRequest",
     "JobSubmitResponse",
+    "MlRunRequest",
+    "MlRunResponse",
     "MLJobStatus",
     "MLTask",
     "RegistryArchitecture",

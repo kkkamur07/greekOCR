@@ -37,7 +37,8 @@ def _seed_transcribe_model(*, name: str | None = None) -> InferenceModel:
             name=model_name,
             provider="calamari",
             task=InferenceTask.transcribe,
-            artifact_ref="../model/checkpoints/best.ckpt",
+            registry_model_id="greek-calamariv1",
+            registry_tag="stable",
             default_params={"device": "cpu"},
         )
         session.add(model)
@@ -68,6 +69,7 @@ def test_segment_ocr_predict_writes_model_layer_and_preserves_ground_truth(
     assert response.status_code == 200
     body = response.json()
     assert body["model_id"] == str(model.id)
+    assert body["transcription_name"] == f"Pairing assist ({model.name})"
     assert body["lines"] == [
         {
             "line_id": line_id,

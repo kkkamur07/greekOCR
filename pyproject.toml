@@ -67,7 +67,8 @@ conflicts = [
 [tool.pytest.ini_options]
 pythonpath = ["annote", "."]
 asyncio_mode = "auto"
-testpaths = ["annote/backend/tests/platform", "ml/tests"]
+addopts = ["--import-mode=importlib"]
+testpaths = ["annote/backend/tests/platform", "annote/backend/tests/ml", "ml/tests"]
 markers = ["integration: requires Postgres"]
 
 [tool.ruff]

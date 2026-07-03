@@ -5,15 +5,27 @@ hits live ``POST /auth/register`` against kalamos.
 """
 
 import os
+import sys
 import uuid
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from httpx import ASGITransport
 from sqlalchemy import text
+
+_REPO_ROOT = Path(__file__).resolve().parents[4]
+_ANNOTE_ROOT = Path(__file__).resolve().parents[3]
+if str(_ANNOTE_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ANNOTE_ROOT))
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production-at-least-32-bytes")
 os.environ.setdefault("AUTH_RATE_LIMIT_REQUESTS", "1000")
 os.environ.setdefault("ENABLE_TEST_JOB_ROUTES", "true")
+os.environ.setdefault("ML_SERVICE_URL", "http://ml.test")
+os.environ.setdefault("ML_FORCE_MOCK_RUNNER", "true")
 
 import infrastructure.models  # noqa: F401 — register all ORM mappers
 from backend.core.app import create_app
@@ -22,6 +34,7 @@ from backend.core.settings import (
     get_auth_settings,
     get_infrastructure_settings,
     get_job_settings,
+    get_ml_settings,
     get_model_settings,
 )
 from backend.users.api.rate_limit import clear_auth_rate_limit_state
@@ -48,11 +61,30 @@ def isolated_platform_state():
     get_infrastructure_settings.cache_clear()
     get_job_settings.cache_clear()
     get_model_settings.cache_clear()
+    get_ml_settings.cache_clear()
     clear_auth_rate_limit_state()
     _truncate_database()
     yield
     clear_auth_rate_limit_state()
     _truncate_database()
+
+
+@pytest.fixture(autouse=True)
+def wire_in_process_ml_service(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Route OCR prediction to the in-process ML FastAPI app."""
+    monkeypatch.setenv("ML_FORCE_MOCK_RUNNER", "true")
+    monkeypatch.setenv("ML_SERVICE_URL", "http://ml.test")
+    get_ml_settings.cache_clear()
+
+    from backend.document.api import documents as documents_module
+    from backend.ml.application.ocr_prediction_service import OcrPredictionService
+    from backend.ml.infrastructure.ml_client import MlServiceClient
+    from ml.api.app import create_app as create_ml_app
+
+    transport = ASGITransport(app=create_ml_app())
+    documents_module._ocr_prediction_service = OcrPredictionService(
+        ml_client=MlServiceClient(base_url="http://ml.test", transport=transport),
+    )
 
 
 @pytest.fixture(scope="session")
