@@ -40,6 +40,25 @@ def test_run_segment_returns_mock_layout(ml_client: TestClient) -> None:
     assert len(body["output"]["lines"]) == 1
 
 
+def test_run_transcribe_returns_mock_text(ml_client: TestClient) -> None:
+    response = ml_client.post(
+        "/ml/v1/run",
+        json={
+            "task": "transcribe",
+            "registry_model_id": "greek-calamariv1",
+            "registry_tag": "stable",
+            "image_bytes": base64.b64encode(MINIMAL_PNG).decode(),
+            "params": {"line_index": 1},
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["task"] == "transcribe"
+    assert body["output"]["text"] == "mock transcription 2"
+    assert body["output"]["confidence"] == 0.82
+
+
 def test_run_segment_unknown_model_returns_404(ml_client: TestClient) -> None:
     response = ml_client.post(
         "/ml/v1/run",
