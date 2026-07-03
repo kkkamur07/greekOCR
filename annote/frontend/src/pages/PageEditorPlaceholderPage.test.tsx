@@ -639,12 +639,10 @@ describe('PageEditorPlaceholderPage', () => {
       target: { value: 'model-1' },
     });
 
-    expect(screen.getByLabelText(/read-only text for selected segment/i)).toHaveValue(
-      'model suggestion',
-    );
-    expect(screen.getByLabelText(/read-only text for selected segment/i)).toHaveAttribute(
-      'readonly',
-    );
+    expect(screen.getByText('OCR review · Segment 1')).toBeTruthy();
+    expect(screen.getByLabelText('Line confidence')).toBeTruthy();
+    expect(screen.getByText('91.0%')).toBeTruthy();
+    expect(screen.getByLabelText('OCR text with per-character confidence highlighting')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /copy selected segment to ground truth/i }));
 
     await waitFor(() => {

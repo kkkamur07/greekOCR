@@ -5,6 +5,7 @@ import type { LineResponse } from '../../../api/client';
 import {
   approvedText,
   lineTextForLayer,
+  lineTranscriptionForLayer,
   upsertLineRequest,
   withLocalGroundTruth,
 } from './utils';
@@ -50,10 +51,12 @@ describe('page editor hook utils', () => {
     expect(approvedText({ ...BASE_LINE, line_transcriptions: [] })).toBeNull();
   });
 
-  it('reads transcription text for a selected layer', () => {
+  it('reads transcription text and object for a selected layer', () => {
     expect(lineTextForLayer(BASE_LINE, 'model-layer-1')).toBe('model text');
     expect(lineTextForLayer(BASE_LINE, null)).toBe('');
     expect(lineTextForLayer(BASE_LINE, 'missing-layer')).toBe('');
+    expect(lineTranscriptionForLayer(BASE_LINE, 'model-layer-1')?.confidence).toBe(0.9);
+    expect(lineTranscriptionForLayer(BASE_LINE, 'missing-layer')).toBeNull();
   });
 
   it('builds an upsert request with optional approved text', () => {

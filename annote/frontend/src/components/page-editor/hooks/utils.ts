@@ -14,10 +14,18 @@ export function approvedText(line: LineResponse): string | null {
 
 export function lineTextForLayer(line: LineResponse, transcriptionLayerId: string | null): string {
   if (!transcriptionLayerId) return '';
+  return lineTranscriptionForLayer(line, transcriptionLayerId)?.text ?? '';
+}
+
+export function lineTranscriptionForLayer(
+  line: LineResponse,
+  transcriptionLayerId: string | null,
+): LineTranscriptionResponse | null {
+  if (!transcriptionLayerId) return null;
   return (
     line.line_transcriptions.find(
       (transcription) => transcription.transcription_id === transcriptionLayerId,
-    )?.text ?? ''
+    ) ?? null
   );
 }
 

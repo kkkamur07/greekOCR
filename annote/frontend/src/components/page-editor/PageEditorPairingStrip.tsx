@@ -1,6 +1,8 @@
 import { Button, Input, Space, Typography } from 'antd';
 import type { ChangeEventHandler } from 'react';
 import type { LineResponse, TranscriptionLayerResponse } from '../../api/client';
+import { PageEditorOcrReviewPane } from './PageEditorOcrReviewPane';
+import { lineTranscriptionForLayer } from './hooks/utils';
 
 type TextLine = { order: number; text: string; paired_line_id: string | null };
 
@@ -112,15 +114,10 @@ export function PageEditorPairingStrip({
         )}
         {selectedSegment && selectedTranscriptionLayer?.kind === 'model' && (
           <>
-            <label style={{ display: 'grid', gap: 8 }}>
-              Read-only text for selected Segment
-              <Input.TextArea
-                aria-label="Read-only text for selected Segment"
-                value={lineTextForLayer(selectedSegment, selectedTranscriptionLayer.id)}
-                rows={3}
-                readOnly
-              />
-            </label>
+            <PageEditorOcrReviewPane
+              segmentNumber={selectedSegmentNumber}
+              transcription={lineTranscriptionForLayer(selectedSegment, selectedTranscriptionLayer.id)}
+            />
             <Space wrap>
               <Button
                 type="primary"
