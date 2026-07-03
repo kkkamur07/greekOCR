@@ -1,15 +1,12 @@
-import { useState, type CSSProperties, type MouseEvent } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Alert, Button, Input, Space, Spin, Typography } from 'antd';
-import {
-  api,
-  type LayoutPoint,
-  type LinePoint,
-  type LineResponse,
-  type PartLayoutResponse,
-} from '../api/client';
+import { api, type LayoutPoint, type LinePoint } from '../api/client';
 import { ApiError } from '../api/errors';
-import { AuthenticatedImage } from '../components/AuthenticatedImage';
+import {
+  PageEditorCanvas,
+} from '../components/page-editor/PageEditorCanvas';
+import { rectanglePoints } from '../components/page-editor/canvasGeometry';
 import {
   useLayoutMutations,
   usePageEditorData,
@@ -530,7 +527,7 @@ export function PageEditorPlaceholderPage() {
             background: '#f5f5f5',
           }}
         >
-          <LayoutCanvas
+          <PageEditorCanvas
             imageUrl={part.image_url}
             imageAlt={`Page ${partIndex}`}
             imageWidth={part.width ?? 640}
@@ -728,129 +725,3 @@ export function PageEditorPlaceholderPage() {
     </div>
   );
 }
-
-function points(points: LayoutPoint[] | null | undefined): string {
-  return (points ?? []).map(([x, y]) => `${x},${y}`).join(' ');
-}
-
-function rectanglePoints(start: LinePoint, end: LinePoint): LinePoint[] {
-  const [startX, startY] = start;
-  const [endX, endY] = end;
-  return [
-    [Math.min(startX, endX), Math.min(startY, endY)],
-    [Math.max(startX, endX), Math.min(startY, endY)],
-    [Math.max(startX, endX), Math.max(startY, endY)],
-    [Math.min(startX, endX), Math.max(startY, endY)],
-  ];
-}
-
-function LayoutCanvas({
-  imageUrl,
-  imageAlt,
-  imageWidth,
-  imageHeight,
-  layout,
-  lines,
-  drawingRectangle,
-  drawingPolygon,
-  onDraftStart,
-  onRectangleDrawn,
-  onPolygonPoint,
-  onPolygonComplete,
-  onSelectLine,
-  onSelectSegment,
-}: {
-  imageUrl: string;
-  imageAlt: string;
-  imageWidth: number;
-  imageHeight: number;
-  layout: PartLayoutResponse;
-  lines: LineResponse[];
-  drawingRectangle: boolean;
-  drawingPolygon: boolean;
-  onDraftStart: (point: LinePoint) => void;
-  onRectangleDrawn: (point: LinePoint) => void;
-  onPolygonPoint: (point: LinePoint) => void;
-  onPolygonComplete: () => void;
-  onSelectLine: (lineId: string) => void;
-  onSelectSegment: (lineId: string) => void;
-}) {
-  const eventPoint = (event: MouseEvent<SVGSVGElement>): LinePoint => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) {
-      return [event.clientX, event.clientY];
-    }
-    return [
-      Math.round(((event.clientX - rect.left) / rect.width) * imageWidth),
-      Math.round(((event.clientY - rect.top) / rect.height) * imageHeight),
-    ];
-  };
-
-  return (
-    <div style={{ position: 'relative', width: 480, maxWidth: '100%' }}>
-      <AuthenticatedImage src={imageUrl} alt={imageAlt} width={480} />
-      <svg
-        role="img"
-        aria-label="Page geometry canvas"
-        viewBox={`0 0 ${imageWidth} ${imageHeight}`}
-        onMouseDown={(event) => {
-          if (drawingRectangle) onDraftStart(eventPoint(event));
-        }}
-        onMouseUp={(event) => {
-          if (drawingRectangle) onRectangleDrawn(eventPoint(event));
-        }}
-        onClick={(event) => {
-          if (drawingPolygon) onPolygonPoint(eventPoint(event));
-        }}
-        onDoubleClick={() => {
-          if (drawingPolygon) onPolygonComplete();
-        }}
-        style={{
-          position: 'absolute',
-          inset: 0,
-          width: '100%',
-          height: '100%',
-          cursor: drawingRectangle || drawingPolygon ? 'crosshair' : 'default',
-        }}
-      >
-        {layout.blocks.map((block) => (
-          <polygon
-            key={block.id}
-            aria-label={`Block ${block.id}`}
-            points={points(block.box)}
-            fill="rgba(216, 199, 161, 0.08)"
-            stroke="#d8c7a1"
-            strokeWidth={4}
-          />
-        ))}
-        {layout.lines.map((line) => (
-          <polyline
-            key={line.id}
-            aria-label={`Line ${line.id} baseline`}
-            onClick={() => onSelectLine(line.id)}
-            points={points(line.baseline)}
-            fill="none"
-            stroke={line.manual_geometry ? '#58d68d' : '#5dade2'}
-            strokeLinecap="round"
-            strokeWidth={6}
-          />
-        ))}
-        {lines
-          .slice()
-          .sort((a, b) => a.order - b.order)
-          .map((line) => (
-            <polygon
-              key={line.id}
-              aria-label={`Segment ${line.order + 1}`}
-              onClick={() => onSelectSegment(line.id)}
-              points={points(line.points)}
-              fill="rgba(88, 214, 141, 0.14)"
-              stroke="#58d68d"
-              strokeWidth={5}
-            />
-          ))}
-      </svg>
-    </div>
-  );
-}
-
