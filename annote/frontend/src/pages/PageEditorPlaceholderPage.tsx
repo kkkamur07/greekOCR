@@ -1,10 +1,15 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Alert, Button, Space, Spin, Typography } from 'antd';
+import { Button, Space, Typography } from 'antd';
 import { api, type LayoutPoint, type LinePoint } from '../api/client';
 import { ApiError } from '../api/errors';
 import { PageEditorCanvas } from '../components/page-editor/PageEditorCanvas';
 import { PageEditorPairingStrip } from '../components/page-editor/PageEditorPairingStrip';
+import { PageEditorShell } from '../components/page-editor/PageEditorShell';
+import {
+  PageEditorStatusAlerts,
+  hasPageEditorStatusAlerts,
+} from '../components/page-editor/PageEditorStatusAlerts';
 import { PageEditorToolbar } from '../components/page-editor/PageEditorToolbar';
 import { rectanglePoints } from '../components/page-editor/canvasGeometry';
 import {
@@ -181,103 +186,82 @@ export function PageEditorPlaceholderPage() {
     }
   }
 
-  if (loading) {
-    return (
-      <div style={{ padding: 24 }}>
-        <Space>
-          <Spin />
-          <Typography.Text>Loading page...</Typography.Text>
-        </Space>
-      </div>
-    );
-  }
-
-  if (error || !document || !part) {
-    return (
-      <div style={{ padding: 24 }}>
-        <Alert
-          type="warning"
-          showIcon
-          message="Page unavailable"
-          description={error ?? 'This document part was not found.'}
-        />
-      </div>
-    );
-  }
-
-  const statusAlerts = (
-    <div style={{ display: 'grid', gap: 8 }}>
-      {saveMessage && <Alert type="success" showIcon message={saveMessage} />}
-      {transcriptionSaveMessage && <Alert type="success" showIcon message={transcriptionSaveMessage} />}
-      {copyMessage && <Alert type="success" showIcon message={copyMessage} />}
-      {ocrMessage && <Alert type="success" showIcon message={ocrMessage} />}
-      {segmentMessage && <Alert type="success" showIcon message={segmentMessage} />}
-      {mutationError && <Alert type="error" showIcon message={mutationError} />}
-      {pairingError && <Alert type="warning" showIcon message={pairingError} />}
-      {reviewError && <Alert type="warning" showIcon message={reviewError} />}
-      {layoutError && (
-        <Alert type="warning" showIcon message="Layout API unavailable" description={layoutError} />
-      )}
-      {lineError && (
-        <Alert type="warning" showIcon message="Segment API unavailable" description={lineError} />
-      )}
-    </div>
-  );
+  const statusAlertProps = {
+    saveMessage,
+    transcriptionSaveMessage,
+    copyMessage,
+    ocrMessage,
+    segmentMessage,
+    mutationError,
+    pairingError,
+    reviewError,
+    layoutError,
+    lineError,
+  };
 
   return (
-    <div style={{ display: 'flex', height: '100vh', flexDirection: 'column', overflow: 'hidden', background: '#fff' }}>
-      <PageEditorToolbar
-        projectId={projectId}
-        documentId={documentId}
-        document={document}
-        part={part}
-        partIndex={partIndex}
-        editorMode={editorMode}
-        onEditorModeChange={(mode) => {
-          setEditorMode(mode);
-          setDrawMode('none');
-          setActionsOpen(false);
-        }}
-        drawMode={drawMode}
-        onPickDrawMode={pickDrawMode}
-        onPanSelect={() => {
-          setDrawMode('none');
-          setActionsOpen(false);
-        }}
-        lines={lines}
-        pairingProgress={pairingProgress}
-        selectedSegmentId={selectedSegmentId}
-        selectedSegment={selectedSegment}
-        selectedLineId={selectedLineId}
-        pageTranscriptionText={pageTranscriptionText}
-        onPageTranscriptionTextChange={setPageTranscriptionText}
-        onImportPageTranscription={importPageTranscription}
-        textLines={textLines}
-        onPairTextLine={pairTextLine}
-        onMoveSelectedSegmentRight={moveSelectedSegmentRight}
-        onDeleteSelectedSegment={deleteSelectedSegment}
-        onResetSelectedLine={resetSelectedLine}
-        actionsOpen={actionsOpen}
-        onActionsOpenChange={setActionsOpen}
-        useOtsuRefinement={useOtsuRefinement}
-        onUseOtsuRefinementChange={setUseOtsuRefinement}
-        segmenting={segmenting}
-        ocrRunning={ocrRunning}
-        transcribeModels={transcribeModels}
-        selectedTranscribeModelId={selectedTranscribeModelId}
-        onSelectedTranscribeModelIdChange={setSelectedTranscribeModelId}
-        onRunAutoSegment={runAutoSegment}
-        onRunSegmentOcr={runSegmentOcr}
-        onRunPageOcr={runPageOcr}
-        onUpdateReviewStatus={updateReviewStatus}
-      />
-
-      {(saveMessage || transcriptionSaveMessage || copyMessage || ocrMessage || segmentMessage || mutationError || pairingError || reviewError || layoutError || lineError) && (
-        <div style={{ flexShrink: 0, borderBottom: '1px solid #e5e7eb', padding: 8 }}>{statusAlerts}</div>
-      )}
-
-      <main style={{ display: 'flex', minHeight: 0, flex: 1, flexDirection: 'column' }}>
-        <div
+    <PageEditorShell
+      loading={loading}
+      unavailableDescription={
+        error || !document || !part
+          ? (error ?? 'This document part was not found.')
+          : null
+      }
+      showStatusAlerts={hasPageEditorStatusAlerts(statusAlertProps)}
+      statusAlerts={<PageEditorStatusAlerts {...statusAlertProps} />}
+      toolbar={
+        document && part ? (
+          <PageEditorToolbar
+            projectId={projectId}
+            documentId={documentId}
+            document={document}
+            part={part}
+            partIndex={partIndex}
+            editorMode={editorMode}
+            onEditorModeChange={(mode) => {
+              setEditorMode(mode);
+              setDrawMode('none');
+              setActionsOpen(false);
+            }}
+            drawMode={drawMode}
+            onPickDrawMode={pickDrawMode}
+            onPanSelect={() => {
+              setDrawMode('none');
+              setActionsOpen(false);
+            }}
+            lines={lines}
+            pairingProgress={pairingProgress}
+            selectedSegmentId={selectedSegmentId}
+            selectedSegment={selectedSegment}
+            selectedLineId={selectedLineId}
+            pageTranscriptionText={pageTranscriptionText}
+            onPageTranscriptionTextChange={setPageTranscriptionText}
+            onImportPageTranscription={importPageTranscription}
+            textLines={textLines}
+            onPairTextLine={pairTextLine}
+            onMoveSelectedSegmentRight={moveSelectedSegmentRight}
+            onDeleteSelectedSegment={deleteSelectedSegment}
+            onResetSelectedLine={resetSelectedLine}
+            actionsOpen={actionsOpen}
+            onActionsOpenChange={setActionsOpen}
+            useOtsuRefinement={useOtsuRefinement}
+            onUseOtsuRefinementChange={setUseOtsuRefinement}
+            segmenting={segmenting}
+            ocrRunning={ocrRunning}
+            transcribeModels={transcribeModels}
+            selectedTranscribeModelId={selectedTranscribeModelId}
+            onSelectedTranscribeModelIdChange={setSelectedTranscribeModelId}
+            onRunAutoSegment={runAutoSegment}
+            onRunSegmentOcr={runSegmentOcr}
+            onRunPageOcr={runPageOcr}
+            onUpdateReviewStatus={updateReviewStatus}
+          />
+        ) : null
+      }
+    >
+      {document && part && (
+        <>
+          <div
           style={{
             position: 'relative',
             minHeight: 0,
@@ -364,7 +348,8 @@ export function PageEditorPlaceholderPage() {
           onPairTextLine={pairTextLine}
           onSaveApprovedText={saveApprovedText}
         />
-      </main>
-    </div>
+        </>
+      )}
+    </PageEditorShell>
   );
 }
