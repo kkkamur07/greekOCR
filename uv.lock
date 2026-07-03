@@ -1116,6 +1116,16 @@ train = [
 ]
 
 [package.dev-dependencies]
+ml = [
+    { name = "fastapi" },
+    { name = "httpx" },
+    { name = "psycopg2-binary" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+    { name = "pyyaml" },
+    { name = "sqlalchemy" },
+    { name = "uvicorn", extra = ["standard"] },
+]
 platform = [
     { name = "alembic" },
     { name = "asyncpg" },
@@ -1154,6 +1164,16 @@ requires-dist = [
 provides-extras = ["kraken", "train", "calamari"]
 
 [package.metadata.requires-dev]
+ml = [
+    { name = "fastapi", specifier = ">=0.115.0" },
+    { name = "httpx", specifier = ">=0.28.0" },
+    { name = "psycopg2-binary", specifier = ">=2.9.10" },
+    { name = "pydantic", specifier = ">=2.10.0" },
+    { name = "pydantic-settings", specifier = ">=2.6.0" },
+    { name = "pyyaml", specifier = ">=6.0.2" },
+    { name = "sqlalchemy", specifier = ">=2.0.36" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.32.0" },
+]
 platform = [
     { name = "alembic", specifier = ">=1.14.0" },
     { name = "asyncpg", specifier = ">=0.30.0" },
