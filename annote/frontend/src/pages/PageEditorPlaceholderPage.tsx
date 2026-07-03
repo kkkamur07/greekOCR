@@ -243,6 +243,8 @@ export function PageEditorPlaceholderPage() {
         transcription_kind: 'ground_truth',
         text,
         confidence: null,
+        text_source: 'human_edited',
+        character_confidences: null,
       };
       return { ...line, line_transcriptions: [...existing, nextTranscription] };
     });

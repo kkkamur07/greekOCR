@@ -118,6 +118,8 @@ describe('PageEditorPlaceholderPage', () => {
       transcription_kind: 'ground_truth',
       text: 'typed approved text',
       confidence: null,
+      text_source: 'human_edited',
+      character_confidences: null,
     });
     mockedApi.copyToGroundTruth.mockResolvedValue({ copied_line_ids: ['line-1'] });
     mockedApi.updatePartReviewStatus.mockResolvedValue({
@@ -386,6 +388,8 @@ describe('PageEditorPlaceholderPage', () => {
       transcription_kind: 'ground_truth',
       text: 'typed approved text',
       confidence: null,
+      text_source: 'human_edited',
+      character_confidences: null,
     });
 
     renderPageEditor();
@@ -434,6 +438,8 @@ describe('PageEditorPlaceholderPage', () => {
             transcription_kind: 'ground_truth',
             text: 'old approved text',
             confidence: null,
+      text_source: 'human_edited',
+      character_confidences: null,
           },
           {
             id: 'line-tx-2',
@@ -441,6 +447,8 @@ describe('PageEditorPlaceholderPage', () => {
             transcription_kind: 'model',
             text: 'model suggestion',
             confidence: 0.91,
+      text_source: 'model',
+      character_confidences: null,
           },
         ],
         created_at: '2026-06-16T10:00:00Z',
@@ -525,6 +533,8 @@ describe('PageEditorPlaceholderPage', () => {
               transcription_kind: 'model',
               text: 'model suggestion',
               confidence: 0.91,
+      text_source: 'model',
+      character_confidences: null,
             },
           ],
           created_at: '2026-06-16T10:00:00Z',
@@ -554,6 +564,8 @@ describe('PageEditorPlaceholderPage', () => {
               transcription_kind: 'ground_truth',
               text: 'model suggestion',
               confidence: null,
+      text_source: 'human_edited',
+      character_confidences: null,
             },
             {
               id: 'line-tx-model-1',
@@ -561,6 +573,8 @@ describe('PageEditorPlaceholderPage', () => {
               transcription_kind: 'model',
               text: 'model suggestion',
               confidence: 0.91,
+      text_source: 'model',
+      character_confidences: null,
             },
           ],
           created_at: '2026-06-16T10:00:00Z',
@@ -653,6 +667,8 @@ describe('PageEditorPlaceholderPage', () => {
             transcription_kind: 'ground_truth',
             text: 'old approved text',
             confidence: null,
+      text_source: 'human_edited',
+      character_confidences: null,
           },
         ],
         created_at: '2026-06-16T10:00:00Z',

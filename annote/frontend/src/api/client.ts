@@ -24,6 +24,13 @@ export type PublicTranscriptionLayerResponse =
   components['schemas']['PublicTranscriptionLayerResponse'];
 export type TranscriptionLayerResponse = components['schemas']['TranscriptionLayerResponse'];
 export type LineTranscriptionResponse = components['schemas']['LineTranscriptionResponse'];
+export type LineTranscriptionTextSource = components['schemas']['LineTranscriptionTextSource'];
+export type CharacterConfidence = components['schemas']['CharacterConfidence'];
+export type JobCallbackRequest = components['schemas']['JobCallbackRequest'];
+export type TranscribeRunResponse = components['schemas']['TranscribeRunResponse'];
+export type SegmentRunResponse = components['schemas']['SegmentRunResponse'];
+export type MLJobStatus = components['schemas']['MLJobStatus'];
+export type MLTask = components['schemas']['MLTask'];
 export type JobResponse = components['schemas']['JobResponse'];
 export type JobStatus = components['schemas']['JobStatus'];
 export type EnqueueTestJobRequest = components['schemas']['EnqueueTestJobRequest'];
