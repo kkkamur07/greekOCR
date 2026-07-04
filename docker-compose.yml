@@ -18,7 +18,6 @@ services:
       retries: 5
 
   api:
-    image: annote-api:${ANNOTE_VERSION:-0.3.3}
     build:
       context: .
       dockerfile: annote/Dockerfile
@@ -55,10 +54,14 @@ services:
       timeout: 3s
       retries: 24
       start_period: 30s
-    command: poe api
+    command: >
+      sh -c "alembic -c infrastructure/alembic.ini upgrade head
+      && uvicorn backend.core.main:app --host 0.0.0.0 --port 8000 --workers 1"
 
   ml-api:
+    # Calamari runs on CPU here, but tensorflow-addons has no Linux ARM wheel.
     platform: linux/amd64
+    image: nomicous-ml:latest
     build:
       context: .
       dockerfile: ml_service/Dockerfile
@@ -70,6 +73,7 @@ services:
       ML_REGISTRY_PATH: /app/ml_service/registry.yaml
       ML_WEBHOOK_SECRET: dev-ml-webhook-secret
       ML_WEIGHTS_CACHE_DIR: /app/ml_service/weights/cache
+      ML_CALAMARI_NUM_PROCESSES: "1"
     volumes:
       - ./ml_service/weights:/app/ml_service/weights
     depends_on:
@@ -90,16 +94,18 @@ services:
     command: uvicorn ml_service.api.main:app --host 0.0.0.0 --port 8001 --workers 1
 
   ml-worker:
+    # Calamari runs on CPU here, but tensorflow-addons has no Linux ARM wheel.
     platform: linux/amd64
-    build:
-      context: .
-      dockerfile: ml_service/Dockerfile
+    image: nomicous-ml:latest
+    healthcheck:
+      disable: true
     environment:
       DATABASE_URL: postgresql://postgres:dev@db:5432/kalamos
       ML_CALLBACK_URL: http://api:8000/internal/ml/job-complete
       ML_REGISTRY_PATH: /app/ml_service/registry.yaml
       ML_WEBHOOK_SECRET: dev-ml-webhook-secret
       ML_WEIGHTS_CACHE_DIR: /app/ml_service/weights/cache
+      ML_CALAMARI_NUM_PROCESSES: "1"
       ML_WORKER_RUNNING_JOB_TIMEOUT_SECONDS: "1800"
     volumes:
       - ./ml_service/weights:/app/ml_service/weights
@@ -111,7 +117,6 @@ services:
     command: python -m ml_service.jobs.worker
 
   frontend:
-    image: annote-frontend:${ANNOTE_VERSION:-0.3.3}
     build:
       context: ./annote
       dockerfile: frontend/Dockerfile

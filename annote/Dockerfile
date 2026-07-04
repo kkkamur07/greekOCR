@@ -15,7 +15,8 @@ RUN apt-get update \
 COPY pyproject.toml uv.lock /app/
 COPY annote/README.md annote/VERSION /app/
 
-RUN uv sync --frozen --only-group platform
+RUN --mount=type=cache,target=/root/.cache/uv \
+  uv sync --frozen --only-group platform
 
 COPY annote/backend /app/backend
 COPY annote/infrastructure /app/infrastructure

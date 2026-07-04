@@ -6,7 +6,8 @@ COPY --from=ghcr.io/astral-sh/uv:0.11.26 /uv /uvx /bin/
 
 COPY pyproject.toml uv.lock /app/
 
-RUN uv sync --frozen --only-group ml
+RUN --mount=type=cache,target=/root/.cache/uv \
+  uv sync --frozen --only-group ml
 
 
 FROM python:3.11-slim AS runtime
@@ -17,7 +18,6 @@ COPY --from=builder /app/.venv /app/.venv
 COPY pyproject.toml /app/pyproject.toml
 
 COPY ml_service /app/ml_service
-COPY _support_repo/calamari /app/_support_repo/calamari
 
 ENV PATH="/app/.venv/bin:${PATH}" \
     PYTHONPATH=/app
