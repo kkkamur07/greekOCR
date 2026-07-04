@@ -1,7 +1,7 @@
 """Internal ML routes — job completion callbacks from the inference service."""
 
 from fastapi import APIRouter, Depends, Response, status
-from ml.contracts.jobs import JobCallbackRequest
+from ml_service.contracts.jobs import JobCallbackRequest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.jobs.api.dependencies import require_ml_webhook_secret

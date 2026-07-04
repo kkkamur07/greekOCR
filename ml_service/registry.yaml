@@ -1,0 +1,24 @@
+models:
+  syriac-calamariv1:
+    task: transcribe
+    architecture: calamari
+    device: cpu
+    versions:
+      stable:
+        weights_source: file://weights/calamari/syriac-calamariv1/best.ckpt
+
+  greek-calamariv1:
+    task: transcribe
+    architecture: calamari
+    device: cpu
+    versions:
+      stable:
+        weights_source: file://weights/calamari/greek-calamariv1/stable.ckpt
+
+  kraken-blla:
+    task: segment
+    architecture: kraken-segment
+    device: cpu
+    versions:
+      stable:
+        weights_source: package://kraken/blla.mlmodel
