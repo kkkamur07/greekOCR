@@ -2,18 +2,32 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
-ML_ROOT = Path(__file__).resolve().parent.parent
+from ml import ML_ROOT
+
 DEFAULT_WEIGHTS_ROOT = ML_ROOT / "weights"
-DEFAULT_CACHE_ROOT = DEFAULT_WEIGHTS_ROOT / "cache"
+DEFAULT_CACHE_ROOT = Path(os.environ.get("ML_WEIGHTS_CACHE_DIR", DEFAULT_WEIGHTS_ROOT / "cache"))
 
 
 def resolve_weights_source(uri: str, *, ml_root: Path = ML_ROOT) -> Path:
     if not uri.startswith("file://"):
         raise ValueError(f"unsupported weights source scheme: {uri}")
+
     relative = uri.removeprefix("file://")
-    return (ml_root / relative).resolve()
+    source_path = Path(relative)
+    if source_path.is_absolute():
+        raise ValueError("file weights source must be relative to ML_ROOT")
+
+    resolved_root = ml_root.resolve()
+    resolved_path = (resolved_root / source_path).resolve()
+    try:
+        resolved_path.relative_to(resolved_root)
+    except ValueError as exc:
+        raise ValueError("file weights source must stay within ML_ROOT") from exc
+
+    return resolved_path
 
 
 def weight_cache_dir(
@@ -27,15 +41,9 @@ def weight_cache_dir(
 
 
 def bundled_weights_dir(
-    registry_model_id: str,
+    weights_source: str,
     *,
-    weights_root: Path = DEFAULT_WEIGHTS_ROOT,
+    ml_root: Path = ML_ROOT,
 ) -> Path:
-    """Bundled checkpoint layout under weights/<family>/<registry_model_id>/."""
-    for family_dir in weights_root.iterdir():
-        if not family_dir.is_dir() or family_dir.name == "cache":
-            continue
-        candidate = family_dir / registry_model_id
-        if candidate.is_dir():
-            return candidate
-    return weights_root / registry_model_id
+    """Bundled checkpoint directory resolved directly from registry weights_source."""
+    return resolve_weights_source(weights_source, ml_root=ml_root).parent

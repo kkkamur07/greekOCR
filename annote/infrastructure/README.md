@@ -5,7 +5,8 @@ This folder is intentionally small: domain ORM models live in the backend
 bounded contexts, while `infrastructure/` owns the shared SQLAlchemy base,
 engine/session setup, and Alembic migration environment.
 
-Run infrastructure commands from the `annote/` app root.
+Run infrastructure commands from the `annote/` app root. Run Docker Compose
+commands from the repository root, where `docker-compose.yml` lives.
 
 ## Directory Map
 
@@ -44,7 +45,6 @@ Settings live in `backend/core/settings/` and are usually loaded from
 Start only Postgres:
 
 ```bash
-cd annote
 docker compose up db -d
 docker compose ps
 ```
@@ -52,7 +52,6 @@ docker compose ps
 Start the full stack:
 
 ```bash
-cd annote
 docker compose up --build
 ```
 
@@ -68,6 +67,7 @@ Reset local dev data:
 docker compose down
 docker volume rm greekocr_postgres_data
 docker compose up db -d
+cd annote
 PYTHONPATH=. alembic -c infrastructure/alembic.ini upgrade head
 ```
 

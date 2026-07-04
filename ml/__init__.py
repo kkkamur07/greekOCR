@@ -1,3 +1,10 @@
 """Root inference service package (separate deployable from annote)."""
 
-__all__: list[str] = []
+from pathlib import Path
+
+ML_ROOT = Path(__file__).resolve().parent
+
+__all__ = [
+    "ML_ROOT",
+]
+

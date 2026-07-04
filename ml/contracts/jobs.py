@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
@@ -10,6 +10,8 @@ from pydantic import BaseModel, Field, model_validator
 from ml.contracts.common import ImageBytes, MLJobStatus, MLTask
 from ml.contracts.segment import SegmentRunResponse
 from ml.contracts.transcribe import TranscribeRunResponse
+
+SUPPORTED_JOB_TASKS = frozenset({MLTask.segment, MLTask.transcribe})
 
 
 class JobSubmitRequest(BaseModel):
@@ -20,9 +22,31 @@ class JobSubmitRequest(BaseModel):
     image_bytes: ImageBytes
     params: dict[str, Any] = Field(default_factory=dict)
 
+    @model_validator(mode="after")
+    def validate_supported_task(self) -> JobSubmitRequest:
+        if self.task not in SUPPORTED_JOB_TASKS:
+            raise ValueError(f"unsupported job task: {self.task.value}")
+        return self
+
 
 class JobSubmitResponse(BaseModel):
     ml_job_id: UUID
+
+
+class SegmentJobOutput(BaseModel):
+    kind: Literal["segment"]
+    data: SegmentRunResponse
+
+
+class TranscribeJobOutput(BaseModel):
+    kind: Literal["transcribe"]
+    data: TranscribeRunResponse
+
+
+JobOutput = Annotated[
+    SegmentJobOutput | TranscribeJobOutput,
+    Field(discriminator="kind"),
+]
 
 
 class JobCallbackRequest(BaseModel):
@@ -30,18 +54,25 @@ class JobCallbackRequest(BaseModel):
     product_job_id: UUID
     task: MLTask
     status: MLJobStatus
-    output: SegmentRunResponse | TranscribeRunResponse | None = None
+    output: JobOutput | None = None
     error: str | None = None
 
+    # These are request-body contract errors. FastAPI returns them as 422
+    # validation responses when this model is used as an endpoint body.
     @model_validator(mode="after")
     def validate_terminal_payload(self) -> JobCallbackRequest:
+        if self.task not in SUPPORTED_JOB_TASKS:
+            raise ValueError(f"unsupported job task: {self.task.value}")
+
         if self.status == MLJobStatus.done:
             if self.output is None:
                 raise ValueError("done callbacks require structured output")
             if self.error is not None:
                 raise ValueError("done callbacks must not include error")
-            self._validate_output_matches_task()
+            if self.output.kind != self.task.value:
+                raise ValueError(f"{self.task.value} task requires {self.task.value} output")
             return self
+
         if self.status == MLJobStatus.failed:
             if not self.error:
                 raise ValueError("failed callbacks require error message")
@@ -50,10 +81,12 @@ class JobCallbackRequest(BaseModel):
             return self
         raise ValueError("callback status must be done or failed")
 
-    def _validate_output_matches_task(self) -> None:
-        if self.output is None:
-            return
-        if self.task == MLTask.segment and not isinstance(self.output, SegmentRunResponse):
-            raise ValueError("segment task requires SegmentRunResponse output")
-        if self.task == MLTask.transcribe and not isinstance(self.output, TranscribeRunResponse):
-            raise ValueError("transcribe task requires TranscribeRunResponse output")
+__all__ = [
+    "JobCallbackRequest",
+    "JobOutput",
+    "JobSubmitRequest",
+    "JobSubmitResponse",
+    "SegmentJobOutput",
+    "SUPPORTED_JOB_TASKS",
+    "TranscribeJobOutput",
+]

@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import yaml
 from pydantic import BaseModel, Field
 
+from ml import ML_ROOT
 from ml.contracts.common import ComputeDevice, MLTask, RegistryArchitecture
 
-ML_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_REGISTRY_PATH = ML_ROOT / "registry.yaml"
+DEFAULT_REGISTRY_PATH = Path(os.environ.get("ML_REGISTRY_PATH", ML_ROOT / "registry.yaml"))
 
 
 class RegistryVersionEntry(BaseModel):
@@ -31,6 +32,7 @@ class RegistryDocument(BaseModel):
 def load_registry(path: Path | None = None) -> RegistryDocument:
     registry_path = path or DEFAULT_REGISTRY_PATH
     raw = yaml.safe_load(registry_path.read_text(encoding="utf-8"))
+
     return RegistryDocument.model_validate(raw)
 
 
@@ -43,6 +45,7 @@ def get_model_entry(
         model = registry.models[registry_model_id]
     except KeyError as exc:
         raise KeyError(f"unknown registry model id: {registry_model_id}") from exc
+
     try:
         model.versions[registry_tag]
     except KeyError as exc:
