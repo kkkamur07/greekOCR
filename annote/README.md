@@ -44,8 +44,8 @@ npm install
 ### Terminal 1 — API
 
 ```bash
-cd annote
 docker compose up db -d
+cd annote
 uv run --project .. --group platform alembic -c infrastructure/alembic.ini upgrade head
 uv run --project .. --group platform uvicorn backend.core.app:create_app --factory --reload
 ```
@@ -63,9 +63,10 @@ Open [http://localhost:5173](http://localhost:5173).
 
 ## Docker (one command)
 
-Ensure ports **5173**, **8000**, and **5433** are free. From `annote/`:
+Ensure ports **5173**, **8000**, **8001**, and **5433** are free. Run Compose from the repository root:
 
 ```bash
+cd ..
 docker compose up --build      # foreground; Ctrl+C stops the stack
 docker compose up --build -d   # detached background
 ```
@@ -74,9 +75,12 @@ docker compose up --build -d   # detached background
 |---------|-----|
 | Frontend | [http://localhost:5173](http://localhost:5173) |
 | API | [http://localhost:8000](http://localhost:8000) |
+| ML inference API | [http://localhost:8001](http://localhost:8001) (separate service; health only today) |
 | Postgres | `localhost:5433` |
 
-Platform media is mounted at `backend/media/`. The existing `data/` folder is not mounted or migrated by the production platform relocation.
+Platform media is mounted at `annote/backend/media/`. The existing `data/` folder is not mounted or migrated by the production platform relocation.
+
+Compose also starts **`ml-api`** and **`ml-worker`** from the repository-level [`ml/`](../ml/) package. That is a separate inference service we are building (contracts, registry, future segment/transcribe routes). `ml-api` is the HTTP boundary; `ml-worker` is reserved for slow CPU/GPU inference work. The platform API does **not** call it yet — `ML_SERVICE_URL` in Compose is reserved configuration with no matching setting in `backend/core/settings/`. See [`ml/README.md`](../ml/README.md).
 
 Useful after `-d`: `docker compose ps`, `docker compose logs -f`, `docker compose down`.
 
@@ -89,14 +93,15 @@ Rebuild the frontend image if you change `VITE_API_BASE_URL`.
 **Single source of truth:** [`VERSION`](VERSION) at the repo root of `annote/`.
 
 1. Edit `VERSION` (semver, one line — e.g. `0.2.1`).
-2. Export it and rebuild so Compose tags images correctly:
+2. From the repository root, export it and rebuild so Compose tags images correctly:
 
 ```bash
-export ANNOTE_VERSION=$(cat VERSION)
+cd ..
+export ANNOTE_VERSION=$(cat annote/VERSION)
 docker compose up --build -d
 ```
 
-`docker-compose.yml` builds `annote-backend:${ANNOTE_VERSION}` and `annote-frontend:${ANNOTE_VERSION}` and passes `APP_VERSION` into both Dockerfiles (API `/health` and frontend build).
+The root `docker-compose.yml` builds `annote-api:${ANNOTE_VERSION}` and `annote-frontend:${ANNOTE_VERSION}` and passes `APP_VERSION` into both Dockerfiles (API `/health` and frontend build).
 
 3. Verify:
 
@@ -107,7 +112,7 @@ docker images 'annote-*'
 
 **When to bump:** any release you want to distinguish in image tags or `/health` — not required for every code change during dev (rebuild with the same `ANNOTE_VERSION` is fine).
 
-**Optional:** set `ANNOTE_VERSION` in a shell profile or `.env` next to `docker-compose.yml` so you do not export it every time. If `ANNOTE_VERSION` is unset, Compose defaults to `0.1.0` — keep it in sync with `VERSION` when tagging releases.
+**Optional:** set `ANNOTE_VERSION` in a shell profile or root `.env` next to `docker-compose.yml` so you do not export it every time. If `ANNOTE_VERSION` is unset, Compose defaults to `0.3.3` — keep it in sync with `VERSION` when tagging releases.
 
 ## Environment variables
 

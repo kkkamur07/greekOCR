@@ -10,25 +10,17 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends libpq-dev gcc fonts-dejavu-core \
   && rm -rf /var/lib/apt/lists/*
 
-COPY README.md VERSION /app/
-COPY backend/pyproject.toml /app/backend/pyproject.toml
+COPY pyproject.toml uv.lock /app/
+COPY annote/README.md annote/VERSION /app/
 
-RUN python - <<'PY'
-import subprocess
-import sys
-import tomllib
+RUN python -m pip install --no-cache-dir uv \
+  && uv sync --frozen --only-group platform
 
-with open("/app/backend/pyproject.toml", "rb") as handle:
-    metadata = tomllib.load(handle)
+COPY annote/backend /app/backend
+COPY annote/infrastructure /app/infrastructure
 
-dependencies = metadata["project"]["dependencies"]
-subprocess.check_call([sys.executable, "-m", "pip", "install", "--no-cache-dir", *dependencies])
-PY
-
-COPY backend /app/backend
-COPY infrastructure /app/infrastructure
-
-ENV PYTHONPATH=/app
+ENV PATH="/app/.venv/bin:${PATH}" \
+    PYTHONPATH=/app
 
 EXPOSE 8000
 

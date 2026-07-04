@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, model_validator
 
 from ml.contracts.common import ImageBytes
 
@@ -26,19 +26,12 @@ class TranscribeRunResponse(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
     character_confidences: list[CharacterConfidence]
 
-    @field_validator("character_confidences")
-    @classmethod
-    def align_with_text(
-        cls,
-        value: list[CharacterConfidence],
-        info: Any,
-    ) -> list[CharacterConfidence]:
-        text = info.data.get("text")
-        if text is None:
-            return value
-        if len(value) != len(text):
+    @model_validator(mode="after")
+    def align_character_confidences_with_text(self) -> TranscribeRunResponse:
+        if len(self.character_confidences) != len(self.text):
             raise ValueError("character_confidences length must match text length")
-        for index, entry in enumerate(value):
-            if entry.char != text[index]:
+
+        for index, entry in enumerate(self.character_confidences):
+            if entry.char != self.text[index]:
                 raise ValueError(f"character_confidences[{index}].char must match text[{index}]")
-        return value
+        return self
