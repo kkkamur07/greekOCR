@@ -21,8 +21,13 @@ def _truncate_ml_jobs() -> None:
 
 
 @pytest.fixture(autouse=True)
-def isolated_ml_state():
+def isolated_ml_state(request: pytest.FixtureRequest):
     get_ml_settings.cache_clear()
+    if request.node.get_closest_marker("integration") is None:
+        yield
+        get_ml_settings.cache_clear()
+        return
+
     ensure_schema()
     _truncate_ml_jobs()
     yield

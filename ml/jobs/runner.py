@@ -1,13 +1,14 @@
-"""v1 mock inference runner — structured echo output until real runners land."""
+"""v1 mock inference runner -- structured echo output until real runners land."""
 
 from __future__ import annotations
 
 from ml.contracts.common import MLTask
 from ml.contracts.segment import SegmentLine, SegmentRunResponse
 from ml.contracts.transcribe import CharacterConfidence, TranscribeRunResponse
+
 from ml.infrastructure.orm_models import MLJob
 
-
+#! This is not a production behaviour, remove when you have actual code to test.
 def run_mock(job: MLJob) -> SegmentRunResponse | TranscribeRunResponse:
     if job.task == MLTask.segment:
         return SegmentRunResponse(
@@ -36,3 +37,7 @@ def run_mock(job: MLJob) -> SegmentRunResponse | TranscribeRunResponse:
             ],
         )
     raise ValueError(f"unsupported ML task for mock runner: {job.task}")
+
+
+def run_job(job: MLJob) -> SegmentRunResponse | TranscribeRunResponse:
+    return run_mock(job)

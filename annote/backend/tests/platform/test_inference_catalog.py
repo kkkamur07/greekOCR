@@ -12,6 +12,13 @@ from backend.ml.infrastructure.orm_models import (
 )
 from infrastructure.db import SyncSessionLocal
 
+MINIMAL_PNG = (
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
+    b"\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00"
+    b"\x0cIDATx\x9cc\xf8\xcf\xc0\x00\x00\x03\x01\x01\x00\xc9\xfe"
+    b"\x92\xef\x00\x00\x00\x00IEND\xaeB`\x82"
+)
+
 
 @pytest.fixture(autouse=True)
 def _reset_inference_tables() -> None:
@@ -62,7 +69,7 @@ def _create_project_document_part(client, headers) -> tuple[str, str, str]:
     part = client.post(
         f"/projects/{project_id}/documents/{document_id}/parts",
         headers=headers,
-        files={"file": ("folio.png", b"not-empty", "image/png")},
+        files={"file": ("folio.png", MINIMAL_PNG, "image/png")},
     )
     assert part.status_code == 201
     return project_id, document_id, part.json()["id"]

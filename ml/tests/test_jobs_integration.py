@@ -1,9 +1,10 @@
-"""End-to-end ML job queue: submit → worker mock runner → nomicous callback."""
+"""End-to-end ML job queue: submit → worker runner → nomicous callback."""
 
 from __future__ import annotations
 
 import socket
 import threading
+import time
 from uuid import UUID, uuid4
 
 import pytest
@@ -13,10 +14,13 @@ from fastapi.testclient import TestClient
 from ml.api.app import create_app
 from ml.contracts.common import MLJobStatus, MLTask
 from ml.contracts.jobs import JobCallbackRequest
+from ml.contracts.segment import SegmentLine, SegmentRunResponse
 from ml.contracts.webhooks import ML_WEBHOOK_SECRET_HEADER
 from ml.infrastructure.job_repository import get_job_by_id
 from ml.infrastructure.settings import MLSettings
 from ml.jobs.worker import process_next_job
+
+from ml.infrastructure.orm_models import MLJob
 
 pytestmark = pytest.mark.integration
 
@@ -25,6 +29,25 @@ def _free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
         return sock.getsockname()[1]
+
+
+def _run_test_segment_job(job: MLJob) -> SegmentRunResponse:
+    return SegmentRunResponse(
+        lines=[
+            SegmentLine(
+                external_id="test-line-1",
+                order=0,
+                baseline={"type": "LineString", "coordinates": [[0, 0], [10, 0]]},
+                points=[[0, 0], [10, 0], [10, 1], [0, 1]],
+                source_metadata={
+                    "test_runner": True,
+                    "registry_model_id": job.registry_model_id,
+                    "registry_tag": job.registry_tag,
+                    "image_bytes_len": len(job.image_bytes),
+                },
+            )
+        ]
+    )
 
 
 @pytest.fixture
@@ -54,8 +77,13 @@ def nomicous_callback_server(ml_settings: MLSettings):
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
 
-    while not server.started:
-        pass
+    deadline = time.monotonic() + 5.0
+    while not server.started and thread.is_alive() and time.monotonic() < deadline:
+        time.sleep(0.01)
+    if not server.started:
+        server.should_exit = True
+        thread.join(timeout=5)
+        raise RuntimeError("callback test server did not start")
 
     yield received
 
@@ -63,7 +91,12 @@ def nomicous_callback_server(ml_settings: MLSettings):
     thread.join(timeout=5)
 
 
-def test_submit_worker_callback_flow(nomicous_callback_server: list[JobCallbackRequest]):
+def test_submit_worker_callback_flow(
+    nomicous_callback_server: list[JobCallbackRequest],
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr("ml.jobs.worker.run_job", _run_test_segment_job)
+
     product_job_id = uuid4()
     ml_client = TestClient(create_app())
 
@@ -87,7 +120,7 @@ def test_submit_worker_callback_flow(nomicous_callback_server: list[JobCallbackR
     assert job is not None
     assert job.status == MLJobStatus.done
     assert job.output is not None
-    assert job.output["lines"][0]["source_metadata"]["mock"] is True
+    assert job.output["lines"][0]["source_metadata"]["test_runner"] is True
 
     assert len(nomicous_callback_server) == 1
     callback = nomicous_callback_server[0]

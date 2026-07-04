@@ -16,10 +16,12 @@ router = APIRouter(prefix="/ml/v1", tags=["jobs"])
 def submit_job(body: JobSubmitRequest) -> JobSubmitResponse:
     settings = get_ml_settings()
     registry = load_registry(settings.ml_registry_path)
+
     try:
         entry = get_model_entry(registry, body.registry_model_id, body.registry_tag)
     except KeyError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     if entry.task != body.task:
         raise HTTPException(
             status_code=400,
