@@ -8,9 +8,6 @@ from backend.core.settings import get_ml_settings
 from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
 from fastapi.testclient import TestClient
 from infrastructure.db import SyncSessionLocal
-from ml.contracts.common import MLJobStatus, MLTask
-from ml.contracts.jobs import JobCallbackRequest
-from ml.contracts.segment import SegmentLine, SegmentRunResponse
 from ml.contracts.webhooks import ML_WEBHOOK_SECRET_HEADER
 
 CALLBACK_URL = "/internal/ml/job-complete"
@@ -22,23 +19,43 @@ def _segment_done_payload(
     product_job_id: uuid.UUID,
     ml_job_id: uuid.UUID,
 ) -> dict:
-    callback = JobCallbackRequest(
-        ml_job_id=ml_job_id,
-        product_job_id=product_job_id,
-        task=MLTask.segment,
-        status=MLJobStatus.done,
-        output=SegmentRunResponse(
-            lines=[
-                SegmentLine(
-                    external_id="l1",
-                    order=0,
-                    baseline={"type": "LineString", "coordinates": [[1, 1], [2, 1]]},
-                    points=[[1, 1], [2, 1], [2, 2], [1, 2]],
-                )
+    return {
+        "ml_job_id": str(ml_job_id),
+        "product_job_id": str(product_job_id),
+        "task": "segment",
+        "status": "done",
+        "output": {
+            "lines": [
+                {
+                    "external_id": "l1",
+                    "order": 0,
+                    "baseline": {"type": "LineString", "coordinates": [[1, 1], [2, 1]]},
+                    "points": [[1, 1], [2, 1], [2, 2], [1, 2]],
+                }
             ]
-        ),
-    )
-    return callback.model_dump(mode="json")
+        },
+    }
+
+
+def _transcribe_done_payload(
+    *,
+    product_job_id: uuid.UUID,
+    ml_job_id: uuid.UUID,
+) -> dict:
+    return {
+        "ml_job_id": str(ml_job_id),
+        "product_job_id": str(product_job_id),
+        "task": "transcribe",
+        "status": "done",
+        "output": {
+            "text": "Αβ",
+            "confidence": 0.91,
+            "character_confidences": [
+                {"char": "Α", "confidence": 0.93},
+                {"char": "β", "confidence": 0.89},
+            ],
+        },
+    }
 
 
 def _failed_payload(
@@ -46,14 +63,13 @@ def _failed_payload(
     product_job_id: uuid.UUID,
     ml_job_id: uuid.UUID,
 ) -> dict:
-    callback = JobCallbackRequest(
-        ml_job_id=ml_job_id,
-        product_job_id=product_job_id,
-        task=MLTask.segment,
-        status=MLJobStatus.failed,
-        error="weights not found in cache",
-    )
-    return callback.model_dump(mode="json")
+    return {
+        "ml_job_id": str(ml_job_id),
+        "product_job_id": str(product_job_id),
+        "task": "segment",
+        "status": "failed",
+        "error": "weights not found in cache",
+    }
 
 
 def _seed_waiting_job(
@@ -138,6 +154,24 @@ def test_callback_success_marks_job_done(client: TestClient):
     assert job.result["task"] == "segment"
     assert job.result["output"]["lines"][0]["external_id"] == "l1"
     assert job.completed_at is not None
+
+
+def test_callback_transcribe_success_marks_job_done(client: TestClient):
+    product_job_id, ml_job_id = _seed_waiting_job(job_type=JobType.transcribe)
+    response = client.post(
+        CALLBACK_URL,
+        headers=WEBHOOK_HEADERS,
+        json=_transcribe_done_payload(product_job_id=product_job_id, ml_job_id=ml_job_id),
+    )
+    assert response.status_code == 204
+
+    job = _get_job(product_job_id)
+    assert job.status == JobStatus.done
+    assert job.ml_job_id == ml_job_id
+    assert job.result is not None
+    assert job.result["task"] == "transcribe"
+    assert job.result["output"]["text"] == "Αβ"
+    assert job.result["output"]["character_confidences"][0]["char"] == "Α"
 
 
 def test_callback_failure_marks_job_failed(client: TestClient):
