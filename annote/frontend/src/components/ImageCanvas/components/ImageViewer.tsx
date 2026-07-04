@@ -1,6 +1,6 @@
-import { useRef, useState, useCallback, useEffect } from 'react';
-import { TransformWrapper, TransformComponent, ReactZoomPanPinchRef } from 'react-zoom-pan-pinch';
-import { Region, DrawMode, Point, EditingSettings } from '../../../types';
+import { useRef, useState } from 'react';
+import { TransformWrapper, TransformComponent, type ReactZoomPanPinchRef } from 'react-zoom-pan-pinch';
+import type { Region, DrawMode, EditingSettings } from '../../../types';
 import { ZoomControls } from './ZoomControls';
 import { ModeIndicators } from './ModeIndicators';
 import { RegionsOverlay } from './RegionOveraly';
@@ -41,7 +41,7 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
-  const transformRef = useRef<ReactZoomPanPinchRef>(null);
+  const transformRef = useRef<ReactZoomPanPinchRef>(null!);
 
   // Custom hooks for different features
   const drawing = useDrawing(drawMode, regions, onRegionDrawn, imageRef);
@@ -64,7 +64,7 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
     }
 
     drawing.handleMouseDown(e);
-    vertexEditing.handleMouseDown(e);
+    vertexEditing.handleMouseDown();
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
@@ -72,9 +72,9 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
     vertexEditing.handleMouseMove(e);
   };
 
-  const handleMouseUp = (e: React.MouseEvent) => {
-    drawing.handleMouseUp(e);
-    vertexEditing.handleMouseUp(e);
+  const handleMouseUp = () => {
+    drawing.handleMouseUp();
+    vertexEditing.handleMouseUp();
   };
 
   const handleClick = (e: React.MouseEvent) => {

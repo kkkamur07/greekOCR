@@ -1,0 +1,110 @@
+name: nomicous
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: dev
+      POSTGRES_DB: kalamos
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d kalamos"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    image: annote-api:${ANNOTE_VERSION:-0.3.3}
+    build:
+      context: .
+      dockerfile: annote/Dockerfile
+      args:
+        APP_VERSION: ${ANNOTE_VERSION:-0.3.3}
+    ports:
+      - "8000:8000"
+    environment:
+      ENVIRONMENT: development
+      DATABASE_URL: postgresql+asyncpg://postgres:dev@db:5432/kalamos
+      SYNC_DATABASE_URL: postgresql://postgres:dev@db:5432/kalamos
+      JWT_SECRET: dev-secret-change-in-production
+      CORS_ORIGINS: http://localhost:3000,http://localhost:5173
+      MEDIA_ROOT: /app/backend/media
+      ANNOTE_APP_ROOT: /app
+      # Reserved for future HTTP client to ml-api; not read by backend settings yet (see ml/README.md).
+      ML_SERVICE_URL: http://ml-api:8001
+      ML_WEBHOOK_SECRET: dev-ml-webhook-secret
+    volumes:
+      - ./annote/backend/media:/app/backend/media
+    depends_on:
+      db:
+        condition: service_healthy
+      ml-api:
+        condition: service_healthy
+    command: poe api
+
+  ml-api:
+    build:
+      context: .
+      dockerfile: ml/Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      ML_REGISTRY_PATH: /app/ml/registry.yaml
+      ML_WEIGHTS_CACHE_DIR: /app/ml/weights/cache
+    volumes:
+      - ./ml/weights:/app/ml/weights
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=2).read()",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    command: poe ml-api
+
+  ml-worker:
+    build:
+      context: .
+      dockerfile: ml/Dockerfile
+    environment:
+      ML_REGISTRY_PATH: /app/ml/registry.yaml
+      ML_WEIGHTS_CACHE_DIR: /app/ml/weights/cache
+    volumes:
+      - ./ml/weights:/app/ml/weights
+    depends_on:
+      ml-api:
+        condition: service_healthy
+    command: poe ml-worker
+
+  frontend:
+    image: annote-frontend:${ANNOTE_VERSION:-0.3.3}
+    build:
+      context: ./annote
+      dockerfile: frontend/Dockerfile
+      target: dev
+      args:
+        APP_VERSION: ${ANNOTE_VERSION:-0.3.3}
+        VITE_API_BASE_URL: http://localhost:8000
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000
+    # So that we don't need to rebuild the container but later on might need to remove for production.
+    volumes:
+      - ./annote/frontend:/app
+      - frontend_node_modules:/app/node_modules
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
+  frontend_node_modules:

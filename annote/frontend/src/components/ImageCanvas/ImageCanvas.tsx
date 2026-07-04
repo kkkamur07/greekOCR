@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import type { Region, DrawMode, EditingSettings } from '../../types';
+import type { Region, DrawMode, EditingSettings, PointTuple } from '../../types';
 import { Button, Space, Empty, message, Tooltip, Tag } from 'antd';
 import {
   PlusOutlined, DeleteOutlined, EditOutlined, BorderOutlined,
@@ -29,7 +29,6 @@ interface ImageCanvasProps {
 
 const ImageCanvas: React.FC<ImageCanvasProps> = ({
   imageUrl,
-  imageDimensions,
   regions,
   selectedRegionId,
   onSelectRegion,
@@ -101,7 +100,9 @@ const ImageCanvas: React.FC<ImageCanvasProps> = ({
     const region = regions.find(r => r.id === selectedRegionId);
     if (!region) return;
 
-    const newBoundary = region.boundary.map(([x, y]) => [x + dx, y + dy]);
+    const newBoundary = region.boundary.map(
+      ([x, y]): PointTuple => [x + dx, y + dy],
+    );
     const newBbox: [number, number, number, number] = [
       region.bbox[0] + dx,
       region.bbox[1] + dy,

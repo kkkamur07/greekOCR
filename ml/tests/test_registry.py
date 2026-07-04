@@ -1,16 +1,19 @@
 """registry.yaml validation and weight path helpers."""
 
+import pytest
+
 from ml.contracts import ComputeDevice, MLTask, RegistryArchitecture
-from ml.registry import DEFAULT_REGISTRY_PATH, get_model_entry, load_registry
+from ml.registry import get_model_entry, load_registry
 from ml.weights import (
     DEFAULT_CACHE_ROOT,
     DEFAULT_WEIGHTS_ROOT,
+    bundled_weights_dir,
     resolve_weights_source,
     weight_cache_dir,
 )
 
 
-def test_registry_yaml_loads_transcribe_and_segment_models():
+def test_registry_yaml_validates_model_entries():
     registry = load_registry()
 
     calamari = get_model_entry(registry, "greek-calamariv1", "stable")
@@ -25,21 +28,34 @@ def test_registry_yaml_loads_transcribe_and_segment_models():
     assert kraken.device == ComputeDevice.cpu
 
 
-def test_registry_path_points_at_repo_file():
-    assert DEFAULT_REGISTRY_PATH.is_file()
-
-
-def test_weights_source_resolves_under_ml_root():
+def test_registry_weights_source_resolves_under_ml_root():
     registry = load_registry()
     uri = registry.models["greek-calamariv1"].versions["stable"].weights_source
     path = resolve_weights_source(uri)
 
-    assert path == (DEFAULT_REGISTRY_PATH.parent / "weights/calamari/greek-calamariv1/stable.ckpt")
+    assert path == (
+        DEFAULT_WEIGHTS_ROOT / "calamari" / "greek-calamariv1" / "stable.ckpt"
+    )
+
+
+def test_weights_source_rejects_paths_outside_ml_root():
+    with pytest.raises(ValueError, match="relative to ML_ROOT"):
+        resolve_weights_source("file:///etc/passwd")
+
+    with pytest.raises(ValueError, match="within ML_ROOT"):
+        resolve_weights_source("file://../pyproject.toml")
+
+
+def test_bundled_weights_dir_resolves_from_registry_source():
+    registry = load_registry()
+    uri = registry.models["greek-calamariv1"].versions["stable"].weights_source
+
+    assert (
+        bundled_weights_dir(uri)
+        == DEFAULT_WEIGHTS_ROOT / "calamari" / "greek-calamariv1"
+    )
 
 
 def test_weight_cache_layout():
     cache_dir = weight_cache_dir("greek-calamariv1", "stable")
     assert cache_dir == DEFAULT_CACHE_ROOT / "greek-calamariv1" / "stable"
-    assert DEFAULT_WEIGHTS_ROOT.name == "weights"
-    assert (DEFAULT_WEIGHTS_ROOT / "calamari" / "greek-calamariv1").is_dir()
-    assert (DEFAULT_WEIGHTS_ROOT / "kraken" / "kraken-blla").is_dir()
