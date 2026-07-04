@@ -5,14 +5,14 @@ from __future__ import annotations
 import socket
 import threading
 import time
-from base64 import b64encode
+from collections.abc import Callable
+from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
 import uvicorn
 from fastapi import FastAPI, Header, HTTPException, Response
-from fastapi.testclient import TestClient
-from ml_service.api.app import create_app
+from httpx import Response as HttpxResponse
 from ml_service.contracts.common import MLJobStatus, MLTask
 from ml_service.contracts.jobs import JobCallbackRequest
 from ml_service.contracts.segment import SegmentLine, SegmentRunResponse
@@ -29,6 +29,11 @@ MINIMAL_PNG = (
     b"\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00"
     b"\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N"
     b"\x00\x00\x00\x00IEND\xaeB`\x82"
+)
+REPO_ROOT = Path(__file__).resolve().parents[2]
+TRANSCRIBE_IMAGE_PATH = (
+    REPO_ROOT
+    / "annote/data/manuscripts/export/Grec_1360_CONSTANTINUS_Harmenopulus_btv1b10721710m_6_1.jpg"
 )
 
 
@@ -101,21 +106,16 @@ def nomicous_callback_server(ml_settings: MLSettings):
 def test_submit_worker_callback_flow(
     nomicous_callback_server: list[JobCallbackRequest],
     monkeypatch: pytest.MonkeyPatch,
+    submit_ml_job: Callable[..., tuple[HttpxResponse, UUID]],
 ):
     monkeypatch.setattr("ml_service.jobs.worker.run_job", _run_test_segment_job)
 
     product_job_id = uuid4()
-    ml_client = TestClient(create_app())
-
-    submit = ml_client.post(
-        "/ml/v1/jobs",
-        json={
-            "task": "segment",
-            "registry_model_id": "kraken-blla",
-            "registry_tag": "stable",
-            "product_job_id": str(product_job_id),
-            "image_bytes": b64encode(MINIMAL_PNG).decode(),
-        },
+    submit, _ = submit_ml_job(
+        task=MLTask.segment,
+        registry_model_id="kraken-blla",
+        product_job_id=product_job_id,
+        image_bytes=MINIMAL_PNG,
     )
     assert submit.status_code == 201
     ml_job_id = UUID(submit.json()["ml_job_id"])
@@ -143,20 +143,15 @@ def test_submit_worker_callback_flow(
 
 def test_submit_transcribe_worker_callback_flow(
     nomicous_callback_server: list[JobCallbackRequest],
+    submit_ml_job: Callable[..., tuple[HttpxResponse, UUID]],
 ):
     product_job_id = uuid4()
-    ml_client = TestClient(create_app())
-
-    submit = ml_client.post(
-        "/ml/v1/jobs",
-        json={
-            "task": "transcribe",
-            "registry_model_id": "syriac-calamariv1",
-            "registry_tag": "stable",
-            "product_job_id": str(product_job_id),
-            "image_bytes": b64encode(MINIMAL_PNG).decode(),
-            "params": {"line_index": 0},
-        },
+    submit, _ = submit_ml_job(
+        task=MLTask.transcribe,
+        registry_model_id="syriac-calamariv1",
+        product_job_id=product_job_id,
+        image_bytes=TRANSCRIBE_IMAGE_PATH.read_bytes(),
+        params={"line_index": 0},
     )
     assert submit.status_code == 201
     ml_job_id = UUID(submit.json()["ml_job_id"])

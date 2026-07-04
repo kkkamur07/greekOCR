@@ -5,15 +5,14 @@ from __future__ import annotations
 import socket
 import threading
 import time
-from base64 import b64encode
+from collections.abc import Callable
 from pathlib import Path
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import pytest
 import uvicorn
 from fastapi import FastAPI, Header, HTTPException, Response
-from fastapi.testclient import TestClient
-from ml_service.api.app import create_app
+from httpx import Response as HttpxResponse
 from ml_service.contracts.common import MLJobStatus, MLTask
 from ml_service.contracts.jobs import JobCallbackRequest
 from ml_service.contracts.webhooks import ML_WEBHOOK_SECRET_HEADER
@@ -87,28 +86,6 @@ def checkpoint_callback_server(ml_settings: MLSettings):
     thread.join(timeout=5)
 
 
-def _submit_job(
-    client: TestClient,
-    *,
-    task: MLTask,
-    registry_model_id: str,
-    image_bytes: bytes,
-) -> UUID:
-    response = client.post(
-        "/ml/v1/jobs",
-        json={
-            "task": task.value,
-            "registry_model_id": registry_model_id,
-            "registry_tag": "stable",
-            "product_job_id": str(uuid4()),
-            "image_bytes": b64encode(image_bytes).decode(),
-            "params": {"line_index": 0} if task == MLTask.transcribe else {},
-        },
-    )
-    response.raise_for_status()
-    return UUID(response.json()["ml_job_id"])
-
-
 def _process_and_assert_done(ml_job_id: UUID, *, expected_task: MLTask) -> MLJob:
     assert process_next_job() is True
     job = get_job_by_id(ml_job_id)
@@ -121,25 +98,27 @@ def _process_and_assert_done(ml_job_id: UUID, *, expected_task: MLTask) -> MLJob
 
 def test_checkpoint_queue_runs_segment_then_transcribe_and_posts_outputs(
     checkpoint_callback_server: list[JobCallbackRequest],
+    submit_ml_job: Callable[..., tuple[HttpxResponse, UUID]],
 ):
-    client = TestClient(create_app())
-
-    segment_job_id = _submit_job(
-        client,
+    segment_response, _ = submit_ml_job(
         task=MLTask.segment,
         registry_model_id="kraken-blla",
         image_bytes=_read_image_bytes(SEGMENT_IMAGE_PATH),
     )
+    segment_response.raise_for_status()
+    segment_job_id = UUID(segment_response.json()["ml_job_id"])
     segment_job = _process_and_assert_done(segment_job_id, expected_task=MLTask.segment)
     assert "lines" in segment_job.output
     assert segment_job.output["lines"]
 
-    transcribe_job_id = _submit_job(
-        client,
+    transcribe_response, _ = submit_ml_job(
         task=MLTask.transcribe,
         registry_model_id="syriac-calamariv1",
         image_bytes=_read_image_bytes(TRANSCRIBE_IMAGE_PATH),
+        params={"line_index": 0},
     )
+    transcribe_response.raise_for_status()
+    transcribe_job_id = UUID(transcribe_response.json()["ml_job_id"])
     transcribe_job = _process_and_assert_done(
         transcribe_job_id,
         expected_task=MLTask.transcribe,
