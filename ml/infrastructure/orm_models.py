@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, Enum, LargeBinary, Text, func
+from sqlalchemy import DateTime, Enum, Index, LargeBinary, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -16,6 +16,9 @@ from ml.infrastructure.db import Base
 
 class MLJob(Base):
     __tablename__ = "ml_jobs"
+    __table_args__ = (
+        Index("ix_ml_jobs_claim_order", "status", "created_at", "id"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     product_job_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
