@@ -227,6 +227,28 @@
         "title": "Body_upload_part_projects__project_id__documents__document_id__parts_post",
         "type": "object"
       },
+      "CharacterConfidence": {
+        "properties": {
+          "char": {
+            "maxLength": 1,
+            "minLength": 1,
+            "title": "Char",
+            "type": "string"
+          },
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          }
+        },
+        "required": [
+          "char",
+          "confidence"
+        ],
+        "title": "CharacterConfidence",
+        "type": "object"
+      },
       "CopyToGroundTruthRequest": {
         "properties": {
           "line_ids": {
@@ -684,6 +706,59 @@
         ],
         "title": "InferenceTask",
         "type": "string"
+      },
+      "JobCallbackRequest": {
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "ml_job_id": {
+            "format": "uuid",
+            "title": "Ml Job Id",
+            "type": "string"
+          },
+          "output": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SegmentRunResponse"
+              },
+              {
+                "$ref": "#/components/schemas/TranscribeRunResponse"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output"
+          },
+          "product_job_id": {
+            "format": "uuid",
+            "title": "Product Job Id",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/MLJobStatus"
+          },
+          "task": {
+            "$ref": "#/components/schemas/MLTask"
+          }
+        },
+        "required": [
+          "ml_job_id",
+          "product_job_id",
+          "task",
+          "status"
+        ],
+        "title": "JobCallbackRequest",
+        "type": "object"
       },
       "JobResponse": {
         "properties": {
@@ -1174,6 +1249,20 @@
       },
       "LineTranscriptionResponse": {
         "properties": {
+          "character_confidences": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CharacterConfidence"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Character Confidences"
+          },
           "confidence": {
             "anyOf": [
               {
@@ -1194,6 +1283,9 @@
             "title": "Text",
             "type": "string"
           },
+          "text_source": {
+            "$ref": "#/components/schemas/LineTranscriptionTextSource"
+          },
           "transcription_id": {
             "format": "uuid",
             "title": "Transcription Id",
@@ -1208,10 +1300,19 @@
           "transcription_id",
           "transcription_kind",
           "text",
-          "confidence"
+          "confidence",
+          "text_source"
         ],
         "title": "LineTranscriptionResponse",
         "type": "object"
+      },
+      "LineTranscriptionTextSource": {
+        "enum": [
+          "model",
+          "human_edited"
+        ],
+        "title": "LineTranscriptionTextSource",
+        "type": "string"
       },
       "LineUpsertRequest": {
         "properties": {
@@ -1345,6 +1446,25 @@
         ],
         "title": "LoginRequest",
         "type": "object"
+      },
+      "MLJobStatus": {
+        "enum": [
+          "pending",
+          "running",
+          "done",
+          "failed"
+        ],
+        "title": "MLJobStatus",
+        "type": "string"
+      },
+      "MLTask": {
+        "enum": [
+          "segment",
+          "transcribe",
+          "binarize"
+        ],
+        "title": "MLTask",
+        "type": "string"
       },
       "ModelBindingCreateRequest": {
         "properties": {
@@ -1890,6 +2010,147 @@
         "title": "ResolvedModelBindingResponse",
         "type": "object"
       },
+      "SegmentBlock": {
+        "properties": {
+          "box": {
+            "additionalProperties": true,
+            "title": "Box",
+            "type": "object"
+          },
+          "external_id": {
+            "minLength": 1,
+            "title": "External Id",
+            "type": "string"
+          },
+          "order": {
+            "minimum": 0.0,
+            "title": "Order",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "external_id",
+          "order",
+          "box"
+        ],
+        "title": "SegmentBlock",
+        "type": "object"
+      },
+      "SegmentGeometryKind": {
+        "enum": [
+          "polygon",
+          "rectangle"
+        ],
+        "title": "SegmentGeometryKind",
+        "type": "string"
+      },
+      "SegmentLine": {
+        "properties": {
+          "baseline": {
+            "additionalProperties": true,
+            "title": "Baseline",
+            "type": "object"
+          },
+          "block_external_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Block External Id"
+          },
+          "external_id": {
+            "minLength": 1,
+            "title": "External Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SegmentGeometryKind",
+            "default": "polygon"
+          },
+          "kraken_ceiling": {
+            "anyOf": [
+              {
+                "items": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kraken Ceiling"
+          },
+          "mask": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mask"
+          },
+          "order": {
+            "minimum": 0.0,
+            "title": "Order",
+            "type": "integer"
+          },
+          "points": {
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "minItems": 4,
+            "title": "Points",
+            "type": "array"
+          },
+          "source_metadata": {
+            "additionalProperties": true,
+            "title": "Source Metadata",
+            "type": "object"
+          }
+        },
+        "required": [
+          "external_id",
+          "order",
+          "baseline",
+          "points"
+        ],
+        "title": "SegmentLine",
+        "type": "object"
+      },
+      "SegmentRunResponse": {
+        "properties": {
+          "blocks": {
+            "items": {
+              "$ref": "#/components/schemas/SegmentBlock"
+            },
+            "title": "Blocks",
+            "type": "array"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/SegmentLine"
+            },
+            "title": "Lines",
+            "type": "array"
+          }
+        },
+        "title": "SegmentRunResponse",
+        "type": "object"
+      },
       "ShareUserRequest": {
         "properties": {
           "username": {
@@ -1921,6 +2182,34 @@
           "access_token"
         ],
         "title": "TokenResponse",
+        "type": "object"
+      },
+      "TranscribeRunResponse": {
+        "properties": {
+          "character_confidences": {
+            "items": {
+              "$ref": "#/components/schemas/CharacterConfidence"
+            },
+            "title": "Character Confidences",
+            "type": "array"
+          },
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "confidence",
+          "character_confidences"
+        ],
+        "title": "TranscribeRunResponse",
         "type": "object"
       },
       "TranscriptionKind": {
@@ -2548,6 +2837,118 @@
         "summary": "List Inference Models",
         "tags": [
           "ml"
+        ]
+      }
+    },
+    "/internal/ml/job-complete": {
+      "post": {
+        "operationId": "complete_ml_job_internal_ml_job_complete_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-ML-Webhook-Secret",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Ml-Webhook-Secret"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobCallbackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict with current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Complete Ml Job",
+        "tags": [
+          "internal-ml"
         ]
       }
     },

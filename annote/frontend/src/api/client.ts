@@ -24,8 +24,19 @@ export type PublicTranscriptionLayerResponse =
   components['schemas']['PublicTranscriptionLayerResponse'];
 export type TranscriptionLayerResponse = components['schemas']['TranscriptionLayerResponse'];
 export type LineTranscriptionResponse = components['schemas']['LineTranscriptionResponse'];
+export type LineTranscriptionTextSource = components['schemas']['LineTranscriptionTextSource'];
+export type CharacterConfidence = components['schemas']['CharacterConfidence'];
+export type JobCallbackRequest = components['schemas']['JobCallbackRequest'];
+export type TranscribeRunResponse = components['schemas']['TranscribeRunResponse'];
+export type SegmentRunResponse = components['schemas']['SegmentRunResponse'];
+export type MLJobStatus = components['schemas']['MLJobStatus'];
+export type MLTask = components['schemas']['MLTask'];
 export type JobResponse = components['schemas']['JobResponse'];
 export type JobStatus = components['schemas']['JobStatus'];
+export type EnqueueJobResponse = components['schemas']['EnqueueJobResponse'];
+export type InferenceModelResponse = components['schemas']['InferenceModelResponse'];
+export type InferenceTask = components['schemas']['InferenceTask'];
+export type ResolvedModelBindingResponse = components['schemas']['ResolvedModelBindingResponse'];
 export type EnqueueTestJobRequest = components['schemas']['EnqueueTestJobRequest'];
 export type EnqueueTestJobResponse = components['schemas']['EnqueueTestJobResponse'];
 export type LayoutPoint = [number, number];
@@ -174,6 +185,47 @@ export async function apiRequest<T>(
   return (await response.json()) as T;
 }
 
+export async function fetchBinaryApi(
+  path: string,
+  options: RequestOptions = {},
+): Promise<Blob> {
+  const { body, skipAuth, headers: initHeaders, ...rest } = options;
+  const headers = new Headers(initHeaders);
+
+  if (body !== undefined && !(body instanceof FormData)) {
+    headers.set('Content-Type', 'application/json');
+  }
+
+  if (!skipAuth) {
+    const token = getAccessToken();
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...rest,
+    headers,
+    body:
+      body === undefined
+        ? undefined
+        : body instanceof FormData
+          ? body
+          : JSON.stringify(body),
+  });
+
+  if (response.status === 401 && !skipAuth) {
+    redirectToLogin();
+    throw new ApiError('Unauthorized', 401);
+  }
+
+  if (!response.ok) {
+    throw await parseApiError(response);
+  }
+
+  return response.blob();
+}
+
 export function mediaUrl(path: string): string {
   if (path.startsWith('http://') || path.startsWith('https://')) {
     return path;
@@ -183,6 +235,24 @@ export function mediaUrl(path: string): string {
 
 export function publicPartMediaUrl(partId: string): string {
   return `${API_BASE_URL}/public/media/parts/${partId}`;
+}
+
+type TranscribeJobResult = {
+  transcription_id: string;
+  lines: Array<{ line_id: string; text: string; confidence: number }>;
+};
+
+async function pollJobUntilDone(jobId: string, timeoutMs = 120_000): Promise<JobResponse> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const job = await apiRequest<JobResponse>(`/jobs/${jobId}`);
+    if (job.status === 'done') return job;
+    if (job.status === 'failed') {
+      throw new Error(job.error ?? 'Job failed.');
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error('Job timed out.');
 }
 
 export const api = {
@@ -352,6 +422,65 @@ export const api = {
     apiRequest<ExportResponse>(
       `/projects/${projectId}/documents/${documentId}/parts/${partId}/export`,
       { method: 'POST' },
+    ),
+
+  generateTranscriptionPdf: (projectId: string, documentId: string, partId: string) =>
+    fetchBinaryApi(
+      `/projects/${projectId}/documents/${documentId}/parts/${partId}/transcription-pdf`,
+      { method: 'POST' },
+    ),
+
+  segmentPart: (projectId: string, documentId: string, partId: string) =>
+    apiRequest<EnqueueJobResponse>(
+      `/projects/${projectId}/documents/${documentId}/parts/${partId}/segment`,
+      { method: 'POST' },
+    ),
+
+  transcribePart: (projectId: string, documentId: string, partId: string) =>
+    apiRequest<EnqueueJobResponse>(
+      `/projects/${projectId}/documents/${documentId}/parts/${partId}/transcribe`,
+      { method: 'POST' },
+    ),
+
+  ocrPredictPart: async (
+    projectId: string,
+    documentId: string,
+    partId: string,
+    _body: { model_id: string },
+  ): Promise<TranscribeJobResult> => {
+    const enqueued = await apiRequest<EnqueueJobResponse>(
+      `/projects/${projectId}/documents/${documentId}/parts/${partId}/transcribe`,
+      { method: 'POST' },
+    );
+    const job = await pollJobUntilDone(enqueued.job_id);
+    return job.result as TranscribeJobResult;
+  },
+
+  ocrPredictLine: async (
+    projectId: string,
+    documentId: string,
+    partId: string,
+    _lineId: string,
+    _body: { model_id: string },
+  ): Promise<TranscribeJobResult> => {
+    const enqueued = await apiRequest<EnqueueJobResponse>(
+      `/projects/${projectId}/documents/${documentId}/parts/${partId}/transcribe`,
+      { method: 'POST' },
+    );
+    const job = await pollJobUntilDone(enqueued.job_id);
+    return job.result as TranscribeJobResult;
+  },
+
+  listInferenceModels: () => apiRequest<InferenceModelResponse[]>('/inference/models'),
+
+  resolvePartModelBinding: (
+    projectId: string,
+    documentId: string,
+    partId: string,
+    task: InferenceTask,
+  ) =>
+    apiRequest<ResolvedModelBindingResponse>(
+      `/projects/${projectId}/documents/${documentId}/parts/${partId}/model-bindings/resolve?task=${task}`,
     ),
 
   updateGroundTruthLineText: (
