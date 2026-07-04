@@ -49,12 +49,22 @@ def _known_ml_job_ids(job: Job) -> set[uuid.UUID]:
     return ids
 
 
+def _segment_output(callback: JobCallbackRequest) -> SegmentRunResponse:
+    if callback.output is None or callback.output.kind != "segment":
+        raise ValueError("Segment callback missing structured output")
+    return callback.output.data
+
+
+def _transcribe_output(callback: JobCallbackRequest) -> TranscribeRunResponse:
+    if callback.output is None or callback.output.kind != "transcribe":
+        raise TranscribeJobHandlerError("Transcribe callback missing structured output")
+    return callback.output.data
+
+
 def _apply_segment_merge(job: Job, callback: JobCallbackRequest) -> dict:
     if job.document_part_id is None:
         return _serialize_callback_result(callback)
-    if not isinstance(callback.output, SegmentRunResponse):
-        raise ValueError("Segment callback missing structured output")
-    canonical = MlServiceClient.to_canonical_segment(callback.output)
+    canonical = MlServiceClient.to_canonical_segment(_segment_output(callback))
     with SyncSessionLocal() as session:
         summary = SegmentMergeService().apply_sync(
             session,
@@ -116,12 +126,10 @@ def _apply_transcribe_callback(
 ) -> tuple[bool, dict | None]:
     if job.document_id is None or job.document_part_id is None:
         return True, _serialize_callback_result(callback)
-    if not isinstance(callback.output, TranscribeRunResponse):
-        raise TranscribeJobHandlerError("Transcribe callback missing structured output")
 
     payload = dict(job.payload or {})
     line_jobs, line_outputs = _transcribe_line_jobs_and_outputs(payload)
-    line_outputs[str(callback.ml_job_id)] = callback.output.model_dump(mode="json")
+    line_outputs[str(callback.ml_job_id)] = _transcribe_output(callback).model_dump(mode="json")
     payload["ml_line_outputs"] = line_outputs
 
     if not line_jobs:
