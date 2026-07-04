@@ -30,5 +30,5 @@ kraken = ["kraken>=7.0"]
 calamari = ["calamari-ocr>=2.0.0"]
 
 [tool.pytest.ini_options]
-pythonpath = ["."]
+pythonpath = ["../..", "."]
 testpaths = ["tests/platform"]

@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import uuid
 
-from backend.jobs.api.dependencies import ML_WEBHOOK_SECRET_HEADER
+from backend.core.settings import get_ml_settings
 from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
 from fastapi.testclient import TestClient
+from infrastructure.db import SyncSessionLocal
 from ml.contracts.common import MLJobStatus, MLTask
 from ml.contracts.jobs import JobCallbackRequest
 from ml.contracts.segment import SegmentLine, SegmentRunResponse
-
-from infrastructure.db import SyncSessionLocal
+from ml.contracts.webhooks import ML_WEBHOOK_SECRET_HEADER
 
 CALLBACK_URL = "/internal/ml/job-complete"
 WEBHOOK_HEADERS = {ML_WEBHOOK_SECRET_HEADER: "test-ml-webhook-secret"}
@@ -105,6 +105,21 @@ def test_callback_wrong_secret_returns_403(client: TestClient):
     assert response.status_code == 403
 
 
+def test_callback_unconfigured_secret_returns_503(client: TestClient, monkeypatch):
+    monkeypatch.delenv("ML_WEBHOOK_SECRET", raising=False)
+    get_ml_settings.cache_clear()
+    product_job_id, ml_job_id = _seed_waiting_job()
+
+    response = client.post(
+        CALLBACK_URL,
+        headers=WEBHOOK_HEADERS,
+        json=_segment_done_payload(product_job_id=product_job_id, ml_job_id=ml_job_id),
+    )
+
+    assert response.status_code == 503
+    get_ml_settings.cache_clear()
+
+
 def test_callback_success_marks_job_done(client: TestClient):
     product_job_id, ml_job_id = _seed_waiting_job()
     response = client.post(
@@ -156,6 +171,32 @@ def test_callback_on_terminal_job_is_idempotent(client: TestClient):
     assert after_second.completed_at == after_first.completed_at
     assert after_second.result == after_first.result
     assert after_second.error == after_first.error
+
+
+def test_callback_task_mismatch_returns_409(client: TestClient):
+    product_job_id, ml_job_id = _seed_waiting_job(job_type=JobType.transcribe)
+    response = client.post(
+        CALLBACK_URL,
+        headers=WEBHOOK_HEADERS,
+        json=_segment_done_payload(product_job_id=product_job_id, ml_job_id=ml_job_id),
+    )
+    assert response.status_code == 409
+
+
+def test_callback_ml_job_mismatch_returns_409(client: TestClient):
+    product_job_id, seeded_ml_job_id = _seed_waiting_job()
+    callback_ml_job_id = uuid.uuid4()
+    assert callback_ml_job_id != seeded_ml_job_id
+
+    response = client.post(
+        CALLBACK_URL,
+        headers=WEBHOOK_HEADERS,
+        json=_segment_done_payload(
+            product_job_id=product_job_id,
+            ml_job_id=callback_ml_job_id,
+        ),
+    )
+    assert response.status_code == 409
 
 
 def test_callback_unknown_job_returns_404(client: TestClient):

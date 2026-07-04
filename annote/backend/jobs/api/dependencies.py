@@ -5,10 +5,9 @@ from __future__ import annotations
 import secrets
 
 from fastapi import Header, HTTPException, status
+from ml.contracts.webhooks import ML_WEBHOOK_SECRET_HEADER
 
 from backend.core.settings.ml import get_ml_settings
-
-ML_WEBHOOK_SECRET_HEADER = "X-ML-Webhook-Secret"
 
 
 def require_ml_webhook_secret(
