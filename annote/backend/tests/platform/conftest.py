@@ -102,6 +102,7 @@ class MlJobsMock:
         from ml.contracts.common import MLJobStatus
         from ml.contracts.jobs import JobCallbackRequest, JobSubmitRequest
         from ml.contracts.run import MlRunRequest
+        from ml.jobs.callback import _wrap_job_output
 
         if request.method == "POST" and request.url.path == "/ml/v1/jobs":
             if self.fail_submit:
@@ -124,7 +125,7 @@ class MlJobsMock:
                     product_job_id=body.product_job_id,
                     task=body.task,
                     status=MLJobStatus.done,
-                    output=run_output.output,
+                    output=_wrap_job_output(body.task, run_output.output),
                 )
                 self._deliver_callback(callback.model_dump(mode="json"))
             return httpx.Response(201, json={"ml_job_id": str(ml_job_id)})
