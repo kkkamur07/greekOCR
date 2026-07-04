@@ -6,7 +6,7 @@ COPY --from=ghcr.io/astral-sh/uv:0.11.26 /uv /uvx /bin/
 
 COPY pyproject.toml uv.lock /app/
 
-RUN uv sync --frozen --only-group ml
+RUN uv sync --frozen --only-group ml --extra kraken
 
 
 FROM python:3.12-slim AS runtime

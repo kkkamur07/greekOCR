@@ -1,4 +1,4 @@
-"""Deterministic segment runner for tests and local dev without Kraken weights."""
+"""Test-only synthetic inference helpers for lightweight contract tests."""
 
 from __future__ import annotations
 

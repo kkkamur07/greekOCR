@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from io import BytesIO
 from threading import Event, Thread
 from uuid import uuid4
 
 import pytest
+from ml.architectures.mock import mock_segment
 from ml.contracts.common import MLJobStatus, MLTask
 from ml.contracts.jobs import JobSubmitRequest
 from ml.infrastructure.db import JobNotificationListener, SessionLocal
@@ -18,6 +20,7 @@ from ml.infrastructure.job_repository import (
     seconds_until_next_stale_running_job,
 )
 from ml.jobs.worker import run_worker, wait_for_worker_schema
+from PIL import Image
 from sqlalchemy import select
 
 from ml.infrastructure.orm_models import MLJob
@@ -43,15 +46,39 @@ def test_wait_for_worker_schema_returns_after_table_appears(monkeypatch: pytest.
     assert attempts["count"] == 2
 
 
+def _png(width: int = 1, height: int = 1) -> bytes:
+    buffer = BytesIO()
+    Image.new("RGB", (width, height)).save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
 def _submit(product_job_id=None) -> MLJob:
     return create_job(
         JobSubmitRequest(
             task=MLTask.segment,
             registry_model_id="kraken-blla",
             product_job_id=product_job_id or uuid4(),
-            image_bytes=b"page",
+            image_bytes=_png(),
         )
     )
+
+
+@pytest.fixture(autouse=True)
+def synthetic_worker_runner(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _run_job(job: MLJob):
+        if job.task == MLTask.segment:
+            return mock_segment(job.image_bytes)
+        raise ValueError(f"unsupported test task: {job.task}")
+
+    monkeypatch.setattr("ml.jobs.worker.run_job", _run_job)
+
+
+def _assert_synthetic_segment_output(output: dict) -> None:
+    assert output["blocks"][0]["external_id"] == "kraken-block-1"
+    line = output["lines"][0]
+    assert line["external_id"] == "kraken-line-1"
+    assert line["block_external_id"] == "kraken-block-1"
+    assert line["source_metadata"] == {"adapter": "kraken_stub"}
 
 
 def test_worker_claims_only_pending_jobs():
@@ -92,7 +119,7 @@ def test_worker_listens_for_new_jobs_and_processes_notification():
     assert processed is not None
     assert processed.status == MLJobStatus.done
     assert processed.output is not None
-    assert processed.output["lines"][0]["source_metadata"]["mock"] is True
+    _assert_synthetic_segment_output(processed.output)
 
 
 def test_reclaim_stale_running_jobs_moves_expired_jobs_to_pending():
@@ -154,7 +181,7 @@ def test_worker_recovers_stale_running_job_without_notification(
     assert processed is not None
     assert processed.status == MLJobStatus.done
     assert processed.output is not None
-    assert processed.output["lines"][0]["source_metadata"]["mock"] is True
+    _assert_synthetic_segment_output(processed.output)
 
 
 def test_skip_locked_allows_parallel_claims():

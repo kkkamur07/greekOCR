@@ -9,6 +9,8 @@ from io import BytesIO
 import pytest
 from PIL import Image
 
+from backend.jobs.infrastructure.worker import process_one_job
+
 
 def _one_pixel_png() -> bytes:
     buffer = BytesIO()
@@ -68,6 +70,7 @@ def test_member_can_enqueue_segment_job_and_poll_result(client, owner_headers, o
     assert response.status_code == 202
     job_id = response.json()["job_id"]
     uuid.UUID(job_id)
+    assert process_one_job() is True
 
     job = _poll_job(client, job_id, expect="done", headers=owner_headers)
     assert job["type"] == "segment"
@@ -75,6 +78,14 @@ def test_member_can_enqueue_segment_job_and_poll_result(client, owner_headers, o
     assert job["document_part_id"] == part_id
     assert job["result"]["blocks_count"] == 1
     assert job["result"]["lines_count"] == 1
+
+    listed = client.get(f"{base}/{document_id}/parts/{part_id}/lines", headers=owner_headers)
+    assert listed.status_code == 200
+    lines = listed.json()
+    assert len(lines) == 1
+    assert lines[0]["source"] == "kraken"
+    assert lines[0]["manual_geometry"] is False
+    assert lines[0]["points"] == [[0, 0], [1, 0], [1, 1], [0, 1]]
 
 
 @pytest.mark.integration
@@ -118,6 +129,7 @@ def test_segment_merge_preserves_manual_lines_and_prunes_machine_lines(
         json={},
     )
     assert response.status_code == 202
+    assert process_one_job() is True
     job = _poll_job(client, response.json()["job_id"], expect="done", headers=owner_headers)
     assert job["result"]["preserved_manual_lines"] == 1
     assert job["result"]["pruned_lines"] == 1

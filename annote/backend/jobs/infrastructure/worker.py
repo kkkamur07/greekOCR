@@ -35,6 +35,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Registry/binding resolution is deferred; this slice only moves segment execution to ML HTTP.
 _DEFAULT_SEGMENT_REGISTRY_MODEL = "kraken-blla"
 _DEFAULT_SEGMENT_REGISTRY_TAG = "stable"
 _ml_client: MlServiceClient | None = None

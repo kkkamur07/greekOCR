@@ -2,25 +2,26 @@
 
 from __future__ import annotations
 
+import base64
 import socket
 import threading
 import time
+from io import BytesIO
 from uuid import UUID, uuid4
 
 import pytest
 import uvicorn
 from fastapi import FastAPI, Header, HTTPException, Response
 from fastapi.testclient import TestClient
+from ml.architectures.mock import mock_segment
 from ml.api.app import create_app
 from ml.contracts.common import MLJobStatus, MLTask
 from ml.contracts.jobs import JobCallbackRequest
-from ml.contracts.segment import SegmentLine, SegmentRunResponse
 from ml.contracts.webhooks import ML_WEBHOOK_SECRET_HEADER
 from ml.infrastructure.job_repository import get_job_by_id
 from ml.infrastructure.settings import MLSettings
 from ml.jobs.worker import process_next_job
-
-from ml.infrastructure.orm_models import MLJob
+from PIL import Image
 
 pytestmark = pytest.mark.integration
 
@@ -31,23 +32,20 @@ def _free_port() -> int:
         return sock.getsockname()[1]
 
 
-def _run_test_segment_job(job: MLJob) -> SegmentRunResponse:
-    return SegmentRunResponse(
-        lines=[
-            SegmentLine(
-                external_id="test-line-1",
-                order=0,
-                baseline={"type": "LineString", "coordinates": [[0, 0], [10, 0]]},
-                points=[[0, 0], [10, 0], [10, 1], [0, 1]],
-                source_metadata={
-                    "test_runner": True,
-                    "registry_model_id": job.registry_model_id,
-                    "registry_tag": job.registry_tag,
-                    "image_bytes_len": len(job.image_bytes),
-                },
-            )
-        ]
-    )
+def _png(width: int, height: int) -> bytes:
+    buffer = BytesIO()
+    Image.new("RGB", (width, height)).save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+@pytest.fixture(autouse=True)
+def synthetic_worker_runner(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _run_job(job):
+        if job.task == MLTask.segment:
+            return mock_segment(job.image_bytes)
+        raise ValueError(f"unsupported test task: {job.task}")
+
+    monkeypatch.setattr("ml.jobs.worker.run_job", _run_job)
 
 
 @pytest.fixture
@@ -91,12 +89,7 @@ def nomicous_callback_server(ml_settings: MLSettings):
     thread.join(timeout=5)
 
 
-def test_submit_worker_callback_flow(
-    nomicous_callback_server: list[JobCallbackRequest],
-    monkeypatch: pytest.MonkeyPatch,
-):
-    monkeypatch.setattr("ml.jobs.worker.run_job", _run_test_segment_job)
-
+def test_submit_worker_callback_flow(nomicous_callback_server: list[JobCallbackRequest]):
     product_job_id = uuid4()
     ml_client = TestClient(create_app())
 
@@ -107,7 +100,7 @@ def test_submit_worker_callback_flow(
             "registry_model_id": "kraken-blla",
             "registry_tag": "stable",
             "product_job_id": str(product_job_id),
-            "image_bytes": "cGFnZS1ieXRlcw==",
+            "image_bytes": base64.b64encode(_png(10, 20)).decode(),
         },
     )
     assert submit.status_code == 201
@@ -120,7 +113,8 @@ def test_submit_worker_callback_flow(
     assert job is not None
     assert job.status == MLJobStatus.done
     assert job.output is not None
-    assert job.output["lines"][0]["source_metadata"]["test_runner"] is True
+    assert job.output["blocks"][0]["external_id"] == "kraken-block-1"
+    assert job.output["lines"][0]["source_metadata"] == {"adapter": "kraken_stub"}
 
     assert len(nomicous_callback_server) == 1
     callback = nomicous_callback_server[0]
@@ -130,5 +124,6 @@ def test_submit_worker_callback_flow(
     assert callback.status == MLJobStatus.done
     assert callback.output is not None
     assert callback.output.kind == "segment"
-    assert callback.output.data.lines[0].source_metadata.get("test_runner") is True
+    assert callback.output.data.blocks[0].external_id == "kraken-block-1"
+    assert callback.output.data.lines[0].source_metadata == {"adapter": "kraken_stub"}
     assert callback.error is None

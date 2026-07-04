@@ -114,7 +114,8 @@ Settings are loaded by `backend/core/settings/` from environment variables and
 | `MEDIA_ROOT` | Uploaded Document part media | `annote/backend/media` |
 | `ENABLE_TEST_JOB_ROUTES` | Enables dev-only noop job route | `false` in `.env.example` |
 | `TRANSCRIBE_ADAPTER` | Adapter marker used for transcribe jobs | `mock:transcribe` |
-| `SEGMENT_ADAPTER` | Adapter marker used for segment jobs | `kraken_stub` |
+| `SEGMENT_ADAPTER` | Legacy segment job payload marker; execution uses `ML_SERVICE_URL` | `kraken_stub` |
+| `ML_SERVICE_URL` | Root ML inference service used for segment jobs | `http://localhost:8001` |
 | `DEFAULT_SEGMENT_MODEL` | Dev segment model name | `kraken-segment-default` |
 | `DEFAULT_TRANSCRIBE_MODEL` | Dev transcribe model name | `kraken-transcribe-default` |
 | `KRAKEN_MODEL_PATH` | Path to model weights outside annote | `../model/kraken` |
@@ -154,13 +155,22 @@ PYTHONPATH=. pytest backend/tests/platform
 All backend API tests live under `backend/tests/platform/` and exercise the
 platform FastAPI app.
 
-## ML inference service (separate, not integrated)
+## ML inference service
 
-Segment and transcribe jobs today run through **in-process adapters** in this backend (`ml/infrastructure/kraken_adapter.py`, stub/mock adapters, etc.). They do not call the repository-level **`ml/` inference service**.
+Segment jobs call the repository-level **`ml/` inference service** through
+`ML_SERVICE_URL`. The backend owns product job enqueueing, polling, media
+lookup, and canonical layout merge; the ML service owns model registry lookup
+and Kraken segmentation execution.
 
-Compose sets `ML_SERVICE_URL=http://ml-api:8001` on the API container so the variable is ready when we add an HTTP client, but **no settings module or env alias reads it yet**. The standalone service (health check, contracts, registry — see [`ml/README.md`](../../ml/README.md)) is built and run in parallel; wiring the platform API to it is follow-on work.
+Compose sets `ML_SERVICE_URL=http://ml-api:8001` on the API container. In
+platform tests, `httpx.MockTransport` provides an in-process ML HTTP boundary so
+the backend job and merge flow stays deterministic without bundling heavyweight
+Kraken weights into the platform test suite.
 
-Within that standalone service, `ml-api` is the HTTP boundary for health checks and future job submission/status routes. `ml-worker` is the background executor for slow model work, so segmentation/transcription can run without blocking API request workers and can later scale onto different CPU/GPU resources.
+Within the standalone service, `ml-api` is the HTTP boundary for health checks,
+sync runs, and async job submission. `ml-worker` is the background executor for
+queued model work, so segmentation/transcription can run without blocking API
+request workers and can later scale onto different CPU/GPU resources.
 
 ## Special Notes
 

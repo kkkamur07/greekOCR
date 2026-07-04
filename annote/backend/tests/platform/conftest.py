@@ -68,14 +68,22 @@ def wire_in_process_ml_service() -> None:
 
     from backend.jobs.infrastructure import worker as worker_module
     from backend.ml.infrastructure.ml_client import MlServiceClient
-    from ml.api.run import run_ml
+    from ml.architectures.mock import mock_segment
+    from ml.contracts.common import MLTask
     from ml.contracts.run import MlRunRequest
 
     def _ml_run_handler(request: httpx.Request) -> httpx.Response:
         if request.method == "POST" and request.url.path == "/ml/v1/run":
             body = MlRunRequest.model_validate(json.loads(request.content))
-            output = run_ml(body)
-            return httpx.Response(200, json=output.model_dump(mode="json"))
+            if body.task != MLTask.segment:
+                return httpx.Response(422, json={"detail": "test service only supports segment"})
+            return httpx.Response(
+                200,
+                json={
+                    "task": body.task.value,
+                    "output": mock_segment(body.image_bytes).model_dump(mode="json"),
+                },
+            )
         return httpx.Response(404, json={"detail": "not found"})
 
     get_ml_settings.cache_clear()

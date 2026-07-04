@@ -6,15 +6,16 @@ Standalone FastAPI service for manuscript **segment** and **transcribe** inferen
 
 | Piece | State |
 |-------|--------|
-| HTTP API (`ml/api/`) | Health check only (`GET /health`) |
+| HTTP API (`ml/api/`) | Health, sync segment run, async job submit |
 | Request/response contracts (`ml/contracts/`) | Defined for segment and transcribe |
 | Model registry (`ml/registry.yaml`) | Calamari transcribe + Kraken segment entries |
-| Worker (`ml/jobs/worker.py`) | Placeholder loop |
-| Annote backend integration | **Not wired** — see below |
+| Worker (`ml/jobs/worker.py`) | PostgreSQL queue listener + callback delivery |
+| Annote backend integration | Segment jobs use `ML_SERVICE_URL` |
 
-The service is under active development. Inference routes and job processing will land here before the platform API delegates to them.
+The service is under active development. Segment execution is wired first;
+transcription execution remains follow-on work.
 
-## Not wired to Annote yet
+## Annote integration
 
 The root `docker-compose.yml` starts `ml-api` and `ml-worker` alongside the platform API and sets:
 
@@ -22,18 +23,15 @@ The root `docker-compose.yml` starts `ml-api` and `ml-worker` alongside the plat
 ML_SERVICE_URL: http://ml-api:8001
 ```
 
-on the `api` service. **Nothing in `annote/backend/` reads this variable.** There is no `ML_SERVICE_URL` entry in `backend/core/settings/` or `.env.example`.
-
-Today, segment and transcribe jobs still run through in-process adapters in `annote/backend/ml/` (Kraken stubs, mock transcribe, etc.). Do not assume the platform API already calls this service.
-
-When integration lands, the platform API will use `ML_SERVICE_URL` as the base URL for HTTP calls to `ml-api`. Until then, treat the Compose value as reserved forward-looking configuration.
+on the `api` service. Segment jobs are called by the Annote platform through
+that URL. Transcription execution still lands in follow-on slices.
 
 ## Docker Compose
 
 | Service | Port | Role |
 |---------|------|------|
 | `ml-api` | 8001 | Inference HTTP API |
-| `ml-worker` | — | Background job processor (placeholder) |
+| `ml-worker` | — | Background job processor |
 
 ## API vs worker
 
@@ -41,7 +39,7 @@ When integration lands, the platform API will use `ML_SERVICE_URL` as the base U
 
 `ml-worker` is the background executor. It is where long-running CPU/GPU work belongs: Kraken segmentation, Calamari transcription, model loading, retries, and writing job results.
 
-Keeping them separate lets the API and workers scale, restart, and fail independently. It also gives us a path to run workers on different resources later, such as GPU nodes, without changing the HTTP contract. The worker is a placeholder today, but the split is intentional for async ML jobs.
+Keeping them separate lets the API and workers scale, restart, and fail independently. It also gives us a path to run workers on different resources later, such as GPU nodes, without changing the HTTP contract.
 
 ```bash
 docker compose up --build
