@@ -1,29 +1,35 @@
-FROM python:3.12-slim
+FROM python:3.12-slim AS builder
 
 WORKDIR /app
 
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends gcc \
-  && rm -rf /var/lib/apt/lists/*
+COPY --from=ghcr.io/astral-sh/uv:0.11.26 /uv /uvx /bin/
 
+COPY pyproject.toml uv.lock /app/
+
+RUN uv sync --frozen --only-group ml
+
+
+FROM python:3.12-slim AS runtime
+
+WORKDIR /app
+
+COPY --from=builder /app/.venv /app/.venv
 COPY pyproject.toml /app/pyproject.toml
-
-RUN python - <<'PY'
-import subprocess
-import sys
-import tomllib
-
-with open("/app/pyproject.toml", "rb") as handle:
-    metadata = tomllib.load(handle)
-
-deps = metadata["dependency-groups"]["ml"]
-subprocess.check_call([sys.executable, "-m", "pip", "install", "--no-cache-dir", *deps])
-PY
 
 COPY ml /app/ml
 
-ENV PYTHONPATH=/app
+ENV PATH="/app/.venv/bin:${PATH}" \
+    PYTHONPATH=/app
+
+RUN groupadd --system appuser \
+  && useradd --system --gid appuser --home-dir /home/appuser --create-home --shell /usr/sbin/nologin appuser \
+  && mkdir -p /app/ml/weights/cache \
+  && chown -R appuser:appuser /app/ml/weights/cache
+
+USER appuser
 
 EXPOSE 8001
 
-CMD ["uvicorn", "ml.api.main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "1"]
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=3).read()"
+
+CMD ["poe", "ml-api"]

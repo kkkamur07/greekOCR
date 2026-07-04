@@ -1,0 +1,32 @@
+defaults:
+  - _self_
+
+data:
+  pack_dir: data/calamari_pack_greek
+
+model:
+  network: def
+
+training:
+  epochs: 100
+  n_augmentations: 5
+  early_stopping_patience: 20
+  early_stopping_frequency: 1
+  gpu: 0
+
+output:
+  root: outputs/calamari-greek-bible
+
+wandb:
+  enabled: false
+  project: calamari-training
+  entity: null
+  name: null
+  mode: online
+
+hydra:
+  job:
+    chdir: false
+  run:
+    dir: .
+  output_subdir: null

@@ -1,0 +1,67 @@
+defaults:
+  - _self_
+
+dry_run: false
+
+data:
+  root: annotation_data
+  annotations_dir: annotation_data/annotations/pages
+  prefer_processed: false
+  use_kraken_ceiling: false
+  # Fraction of pages used for validation. 0.2 means 80% train / 20% validation.
+  # With the current 6 annotated pages this becomes 5 train pages and 1 validation page.
+  validation_ratio: 0.2
+  seed: 13
+
+classes:
+  region_name: Text_Region
+  baseline_name: DefaultLine
+  start_separator_channel: 0
+  end_separator_channel: 1
+  baseline_channel: 2
+  region_channel: 3
+  pseudo_channels: [0, 1, 2]
+
+model:
+  # null means use Kraken's bundled blla.mlmodel.
+  load: null
+  resize: fail
+  weights_format: safetensors
+
+training:
+  epochs: 20
+  min_epochs: 1
+  lrate: 0.00002
+  weight_decay: 0.00001
+  dice_weight: 0.5
+  num_workers: 0
+  augment: true
+  line_width: 8
+  accelerator: auto
+  devices: auto
+  precision: 32-true
+  freeze_backbone: -1
+  log_every_n_steps: 1
+
+output:
+  root: outputs/kraken_region_finetune
+  checkpoint_dirname: checkpoints
+
+logging:
+  metrics_file: metrics.jsonl
+  terminal_file: log.err
+
+wandb:
+  enabled: true
+  project: OCR
+  entity: null
+  name: polygon-refinement
+  mode: online
+  log_model: false
+
+hydra:
+  job:
+    chdir: false
+  run:
+    dir: ${output.root}/runs/run-${now:%Y%m%d_%H%M%S}
+  output_subdir: hydra

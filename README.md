@@ -65,8 +65,7 @@ The production app lives under [`annote/`](annote/). Its API uses **domain-drive
 ### Quick start (Docker Compose)
 
 ```bash
-cd annote
-cp backend/core/.env.example backend/core/.env
+cp annote/backend/core/.env.example annote/backend/core/.env
 docker compose up --build
 ```
 
@@ -82,8 +81,8 @@ Migrations run on API container start (`alembic upgrade head`).
 ### Local API (DB in Docker only)
 
 ```bash
-cd annote
 docker compose up db -d
+cd annote
 export PYTHONPATH=.
 cp backend/core/.env.example backend/core/.env
 uv run --project ../ --group platform alembic -c infrastructure/alembic.ini upgrade head
@@ -139,10 +138,9 @@ Contributors: see [`issues/`](issues/) (`kanban.md`, `dag.md`) for what to work 
 
 ### Quick start (Docker)
 
-From `annote/`:
+From the repository root:
 
 ```bash
-cd annote
 docker compose up --build      # foreground (logs in terminal; Ctrl+C stops)
 docker compose up --build -d   # detached (runs in background)
 ```
@@ -162,12 +160,11 @@ The repository root `model/` workspace and existing root `data/` contents are in
 2. Rebuild and tag images with that version:
 
 ```bash
-cd annote
-export ANNOTE_VERSION=$(cat VERSION)
+export ANNOTE_VERSION=$(cat annote/VERSION)
 docker compose up --build -d
 ```
 
-Compose tags images as `annote-backend:$ANNOTE_VERSION` and `annote-frontend:$ANNOTE_VERSION`. Confirm with `curl http://localhost:5050/health` (`version` in the JSON). Full details: [annote/README.md](annote/README.md).
+Compose tags images as `annote-api:$ANNOTE_VERSION` and `annote-frontend:$ANNOTE_VERSION`. Confirm with `curl http://localhost:8000/health` (`version` in the JSON). Full details: [annote/README.md](annote/README.md).
 
 
 ### Note :

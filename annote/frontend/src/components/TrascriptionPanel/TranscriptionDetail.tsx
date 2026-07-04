@@ -1,10 +1,18 @@
-import { Button, Input, Space, Typography, Progress, Card, Divider } from 'antd';
-import { DeleteOutlined, SaveOutlined, CloseOutlined, CopyOutlined, ReloadOutlined, ArrowLeftOutlined } from '@ant-design/icons';
-import { Region, Transcription } from '../../types';
-import { useState, useEffect } from 'react';
+import { Button, Input, Space, Typography, Progress, Divider } from 'antd';
+import {
+  DeleteOutlined,
+  EditOutlined,
+  SaveOutlined,
+  CopyOutlined,
+  ReloadOutlined,
+  ArrowLeftOutlined,
+  ThunderboltOutlined,
+} from '@ant-design/icons';
+import type { Region, Transcription } from '../../types';
+import { useState } from 'react';
 
 const { TextArea } = Input;
-const { Title, Text, Paragraph } = Typography;
+const { Text } = Typography;
 
 interface TranscriptionDetailProps {
   region: Region;
@@ -27,11 +35,6 @@ const TranscriptionDetail: React.FC<TranscriptionDetailProps> = ({
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState('');
-
-  // Sync state when transcription changes
-  useEffect(() => {
-    setEditText(transcription?.text || '');
-  }, [transcription]);
 
   const handleSave = () => {
     onUpdateText(editText);
@@ -110,7 +113,16 @@ const TranscriptionDetail: React.FC<TranscriptionDetailProps> = ({
             {!readOnly && !isEditing && transcription && (
               <Space>
                 <Button size="small" icon={<CopyOutlined />} onClick={handleCopy} />
-                <Button size="small" type="primary" ghost icon={<EditOutlined />} onClick={() => setIsEditing(true)}>
+                <Button
+                  size="small"
+                  type="primary"
+                  ghost
+                  icon={<EditOutlined />}
+                  onClick={() => {
+                    setEditText(transcription.text);
+                    setIsEditing(true);
+                  }}
+                >
                   Edit
                 </Button>
               </Space>

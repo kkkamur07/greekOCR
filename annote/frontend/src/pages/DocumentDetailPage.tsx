@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   Alert,
@@ -35,7 +35,7 @@ export function DocumentDetailPage() {
   const [reordering, setReordering] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (!projectId || !documentId) return;
     setLoading(true);
     setError(null);
@@ -54,11 +54,11 @@ export function DocumentDetailPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [projectId, documentId]);
 
   useEffect(() => {
     void load();
-  }, [projectId, documentId]);
+  }, [load]);
 
   const parts = [...(document?.parts ?? [])].sort((a, b) => a.order - b.order);
 
