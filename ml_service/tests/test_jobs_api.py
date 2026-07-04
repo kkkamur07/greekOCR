@@ -1,29 +1,26 @@
 """ML job submit API tests."""
 
+from collections.abc import Callable
 from uuid import UUID, uuid4
 
 import pytest
-from fastapi.testclient import TestClient
-from ml_service.api.app import create_app
+from httpx import Response
 from ml_service.contracts.common import MLJobStatus, MLTask
 from ml_service.infrastructure.job_repository import get_job_by_id
 
 pytestmark = pytest.mark.integration
 
 
-def test_submit_job_returns_ml_job_id():
-    client = TestClient(create_app())
+def test_submit_job_returns_ml_job_id(
+    submit_ml_job: Callable[..., tuple[Response, UUID]],
+):
     product_job_id = uuid4()
 
-    response = client.post(
-        "/ml/v1/jobs",
-        json={
-            "task": "segment",
-            "registry_model_id": "kraken-blla",
-            "registry_tag": "stable",
-            "product_job_id": str(product_job_id),
-            "image_bytes": "cGFnZS1ieXRlcw==",
-        },
+    response, _ = submit_ml_job(
+        task=MLTask.segment,
+        registry_model_id="kraken-blla",
+        product_job_id=product_job_id,
+        image_bytes=b"page-bytes",
     )
 
     assert response.status_code == 201
@@ -36,34 +33,26 @@ def test_submit_job_returns_ml_job_id():
     assert job.image_bytes == b"page-bytes"
 
 
-def test_submit_job_rejects_unknown_registry_model():
-    client = TestClient(create_app())
-
-    response = client.post(
-        "/ml/v1/jobs",
-        json={
-            "task": "segment",
-            "registry_model_id": "missing-model",
-            "product_job_id": str(uuid4()),
-            "image_bytes": "YQ==",
-        },
+def test_submit_job_rejects_unknown_registry_model(
+    submit_ml_job: Callable[..., tuple[Response, UUID]],
+):
+    response, _ = submit_ml_job(
+        task=MLTask.segment,
+        registry_model_id="missing-model",
+        image_bytes=b"a",
     )
 
     assert response.status_code == 400
     assert "unknown registry model" in response.json()["detail"]
 
 
-def test_submit_job_rejects_task_mismatch():
-    client = TestClient(create_app())
-
-    response = client.post(
-        "/ml/v1/jobs",
-        json={
-            "task": "transcribe",
-            "registry_model_id": "kraken-blla",
-            "product_job_id": str(uuid4()),
-            "image_bytes": "YQ==",
-        },
+def test_submit_job_rejects_task_mismatch(
+    submit_ml_job: Callable[..., tuple[Response, UUID]],
+):
+    response, _ = submit_ml_job(
+        task=MLTask.transcribe,
+        registry_model_id="kraken-blla",
+        image_bytes=b"a",
     )
 
     assert response.status_code == 400
