@@ -2,26 +2,19 @@
 
 from __future__ import annotations
 
-import json
-import threading
 import time
 import uuid
 from io import BytesIO
 
-import httpx
 from fastapi.testclient import TestClient
 from PIL import Image
 
 from backend.jobs.api.dependencies import ML_WEBHOOK_SECRET_HEADER
 from backend.jobs.infrastructure import worker as worker_module
 from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
-from backend.ml.infrastructure.ml_client import MlServiceClient
-from backend.tests.platform.conftest import restore_default_ml_jobs_mock
-from backend.tests.platform.test_ml_job_callback import WEBHOOK_HEADERS
-from ml.api.run import run_ml
+from backend.tests.platform.conftest import install_ml_jobs_mock
 from ml.contracts.common import MLJobStatus, MLTask
-from ml.contracts.jobs import JobCallbackRequest, JobSubmitRequest
-from ml.contracts.run import MlRunRequest
+from ml.contracts.jobs import JobCallbackRequest
 
 from infrastructure.db import SyncSessionLocal
 
@@ -30,60 +23,6 @@ def _one_pixel_png() -> bytes:
     buffer = BytesIO()
     Image.new("RGB", (1, 1)).save(buffer, format="PNG")
     return buffer.getvalue()
-
-
-def _install_ml_mock(
-    client: TestClient,
-    *,
-    auto_callback: bool = True,
-    fail_submit: bool = False,
-) -> list[dict]:
-    submitted: list[dict] = []
-
-    def _deliver_callback(payload: dict) -> None:
-        def _post() -> None:
-            time.sleep(0.2)
-            client.post(
-                "/internal/ml/job-complete",
-                headers=WEBHOOK_HEADERS,
-                json=payload,
-            )
-
-        threading.Thread(target=_post, daemon=True).start()
-
-    def _handler(request: httpx.Request) -> httpx.Response:
-        if request.method == "POST" and request.url.path == "/ml/v1/jobs":
-            if fail_submit:
-                return httpx.Response(503, json={"detail": "ml unavailable"})
-            body = JobSubmitRequest.model_validate(json.loads(request.content))
-            ml_job_id = uuid.uuid4()
-            submitted.append(body.model_dump(mode="json"))
-            if auto_callback:
-                run_output = run_ml(
-                    MlRunRequest(
-                        task=body.task,
-                        registry_model_id=body.registry_model_id,
-                        registry_tag=body.registry_tag,
-                        image_bytes=body.image_bytes,
-                        params=body.params,
-                    )
-                )
-                callback = JobCallbackRequest(
-                    ml_job_id=ml_job_id,
-                    product_job_id=body.product_job_id,
-                    task=body.task,
-                    status=MLJobStatus.done,
-                    output=run_output.output,
-                )
-                _deliver_callback(callback.model_dump(mode="json"))
-            return httpx.Response(201, json={"ml_job_id": str(ml_job_id)})
-        return httpx.Response(404, json={"detail": "not found"})
-
-    worker_module._ml_client = MlServiceClient(
-        base_url="http://ml.test",
-        transport=httpx.MockTransport(_handler),
-    )
-    return submitted
 
 
 def _poll_job_status(job_id: uuid.UUID, *, expect: JobStatus, timeout: float = 3.0) -> Job:
@@ -99,10 +38,23 @@ def _poll_job_status(job_id: uuid.UUID, *, expect: JobStatus, timeout: float = 3
     raise AssertionError(f"job {job_id} did not reach {expect.value}")
 
 
+def _drive_worker_once(job_id: uuid.UUID, *, timeout: float = 3.0) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        with SyncSessionLocal() as session:
+            job = session.get(Job, job_id)
+            assert job is not None
+            if job.status != JobStatus.pending:
+                return
+        worker_module.process_one_job()
+        time.sleep(0.02)
+    raise AssertionError(f"worker did not claim job {job_id}")
+
+
 def test_worker_submits_segment_job_to_ml_api(
     client: TestClient, owner_headers: dict[str, str], owner_project: dict
 ):
-    submitted = _install_ml_mock(client, auto_callback=False)
+    ml_mock = install_ml_jobs_mock(client, auto_callback=False)
     project_id = owner_project["id"]
     base = f"/projects/{project_id}/documents"
     create = client.post(base, headers=owner_headers, json={"name": "Submit probe"})
@@ -124,18 +76,18 @@ def test_worker_submits_segment_job_to_ml_api(
     assert response.status_code == 202
     job_id = uuid.UUID(response.json()["job_id"])
 
+    _drive_worker_once(job_id)
     job = _poll_job_status(job_id, expect=JobStatus.waiting)
     assert job.ml_job_id is not None
-    assert len(submitted) == 1
-    assert submitted[0]["task"] == "segment"
-    assert submitted[0]["product_job_id"] == str(job_id)
-    restore_default_ml_jobs_mock(client)
+    assert len(ml_mock.submitted) == 1
+    assert ml_mock.submitted[0]["task"] == "segment"
+    assert ml_mock.submitted[0]["product_job_id"] == str(job_id)
 
 
 def test_ml_submit_failure_marks_job_failed(
     client: TestClient, owner_headers: dict[str, str], owner_project: dict
 ):
-    _install_ml_mock(client, auto_callback=False, fail_submit=True)
+    install_ml_jobs_mock(client, auto_callback=False, fail_submit=True)
     project_id = owner_project["id"]
     base = f"/projects/{project_id}/documents"
     create = client.post(base, headers=owner_headers, json={"name": "Submit failure"})
@@ -157,9 +109,9 @@ def test_ml_submit_failure_marks_job_failed(
     assert response.status_code == 202
     job_id = uuid.UUID(response.json()["job_id"])
 
+    _drive_worker_once(job_id)
     job = _poll_job_status(job_id, expect=JobStatus.failed, timeout=5.0)
     assert job.error == "Job failed"
-    restore_default_ml_jobs_mock(client)
 
 
 def test_segment_submit_and_callback_marks_job_done(
@@ -186,6 +138,7 @@ def test_segment_submit_and_callback_marks_job_done(
     assert response.status_code == 202
     job_id = uuid.UUID(response.json()["job_id"])
 
+    _drive_worker_once(job_id)
     job = _poll_job_status(job_id, expect=JobStatus.done, timeout=5.0)
     assert job.result is not None
     assert job.result["blocks_count"] == 1
@@ -236,6 +189,7 @@ def test_transcribe_submit_and_callbacks_merge_lines(
     assert response.status_code == 202
     job_id = uuid.UUID(response.json()["job_id"])
 
+    _drive_worker_once(job_id)
     job = _poll_job_status(job_id, expect=JobStatus.done, timeout=8.0)
     assert job.result is not None
     assert [line["text"] for line in job.result["lines"]] == [

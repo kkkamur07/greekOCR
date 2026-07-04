@@ -49,6 +49,7 @@ class TranscribeMergeService:
         part_id: UUID,
         job_id: UUID,
         lines_with_output: list[tuple[Line, TranscribeRunResponse]],
+        commit: bool = True,
     ) -> dict:
         part = session.get(DocumentPart, part_id)
         if part is None or part.document_id != document_id:
@@ -81,7 +82,8 @@ class TranscribeMergeService:
                 }
             )
 
-        session.commit()
+        if commit:
+            session.commit()
         return {
             "transcription_id": str(layer.id),
             "lines": result_lines,
