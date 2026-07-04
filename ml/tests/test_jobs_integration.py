@@ -129,4 +129,6 @@ def test_submit_worker_callback_flow(
     assert callback.task == MLTask.segment
     assert callback.status == MLJobStatus.done
     assert callback.output is not None
+    assert callback.output.kind == "segment"
+    assert callback.output.data.lines[0].source_metadata.get("test_runner") is True
     assert callback.error is None
