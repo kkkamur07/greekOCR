@@ -9,7 +9,11 @@ from typing import Any
 import httpx
 
 from ml.contracts.common import MLJobStatus, MLTask
-from ml.contracts.jobs import JobCallbackRequest
+from ml.contracts.jobs import (
+    JobCallbackRequest,
+    SegmentJobOutput,
+    TranscribeJobOutput,
+)
 from ml.contracts.segment import SegmentRunResponse
 from ml.contracts.transcribe import TranscribeRunResponse
 from ml.contracts.webhooks import ML_WEBHOOK_SECRET_HEADER
@@ -22,6 +26,17 @@ CALLBACK_MAX_ATTEMPTS = 4
 CALLBACK_RETRY_DELAY_SECONDS = 0.5
 
 
+def _wrap_job_output(
+    task: MLTask,
+    output: SegmentRunResponse | TranscribeRunResponse,
+) -> SegmentJobOutput | TranscribeJobOutput:
+    if task == MLTask.segment:
+        return SegmentJobOutput(kind="segment", data=output)
+    if task == MLTask.transcribe:
+        return TranscribeJobOutput(kind="transcribe", data=output)
+    raise ValueError(f"unsupported callback task: {task.value}")
+
+
 def _build_callback_payload(
     job: MLJob,
     *,
@@ -29,12 +44,13 @@ def _build_callback_payload(
     output: SegmentRunResponse | TranscribeRunResponse | None = None,
     error: str | None = None,
 ) -> dict[str, Any]:
+    wrapped_output = _wrap_job_output(MLTask(job.task), output) if output is not None else None
     callback = JobCallbackRequest(
         ml_job_id=job.id,
         product_job_id=job.product_job_id,
         task=MLTask(job.task),
         status=status,
-        output=output,
+        output=wrapped_output,
         error=error,
     )
     return callback.model_dump(mode="json")

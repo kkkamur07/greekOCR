@@ -25,14 +25,17 @@ def _segment_done_payload(
         "task": "segment",
         "status": "done",
         "output": {
-            "lines": [
-                {
-                    "external_id": "l1",
-                    "order": 0,
-                    "baseline": {"type": "LineString", "coordinates": [[1, 1], [2, 1]]},
-                    "points": [[1, 1], [2, 1], [2, 2], [1, 2]],
-                }
-            ]
+            "kind": "segment",
+            "data": {
+                "lines": [
+                    {
+                        "external_id": "l1",
+                        "order": 0,
+                        "baseline": {"type": "LineString", "coordinates": [[1, 1], [2, 1]]},
+                        "points": [[1, 1], [2, 1], [2, 2], [1, 2]],
+                    }
+                ]
+            },
         },
     }
 
@@ -48,12 +51,15 @@ def _transcribe_done_payload(
         "task": "transcribe",
         "status": "done",
         "output": {
-            "text": "Αβ",
-            "confidence": 0.91,
-            "character_confidences": [
-                {"char": "Α", "confidence": 0.93},
-                {"char": "β", "confidence": 0.89},
-            ],
+            "kind": "transcribe",
+            "data": {
+                "text": "Αβ",
+                "confidence": 0.91,
+                "character_confidences": [
+                    {"char": "Α", "confidence": 0.93},
+                    {"char": "β", "confidence": 0.89},
+                ],
+            },
         },
     }
 
@@ -152,7 +158,8 @@ def test_callback_success_marks_job_done(client: TestClient):
     assert job.result is not None
     assert job.result["ml_job_id"] == str(ml_job_id)
     assert job.result["task"] == "segment"
-    assert job.result["output"]["lines"][0]["external_id"] == "l1"
+    assert job.result["output"]["kind"] == "segment"
+    assert job.result["output"]["data"]["lines"][0]["external_id"] == "l1"
     assert job.completed_at is not None
 
 
@@ -170,8 +177,9 @@ def test_callback_transcribe_success_marks_job_done(client: TestClient):
     assert job.ml_job_id == ml_job_id
     assert job.result is not None
     assert job.result["task"] == "transcribe"
-    assert job.result["output"]["text"] == "Αβ"
-    assert job.result["output"]["character_confidences"][0]["char"] == "Α"
+    assert job.result["output"]["kind"] == "transcribe"
+    assert job.result["output"]["data"]["text"] == "Αβ"
+    assert job.result["output"]["data"]["character_confidences"][0]["char"] == "Α"
 
 
 def test_callback_failure_marks_job_failed(client: TestClient):
