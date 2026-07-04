@@ -4,10 +4,19 @@ from __future__ import annotations
 
 import time
 import uuid
+from io import BytesIO
 
 import pytest
+from PIL import Image
 
-from backend.tests.platform.test_documents import MINIMAL_PNG
+
+def _one_pixel_png() -> bytes:
+    buffer = BytesIO()
+    Image.new("RGB", (1, 1)).save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+MINIMAL_PNG = _one_pixel_png()
 
 
 def _documents_url(project_id: str) -> str:

@@ -1119,6 +1119,7 @@ train = [
 ml = [
     { name = "fastapi" },
     { name = "httpx" },
+    { name = "pillow" },
     { name = "poethepoet" },
     { name = "psycopg2-binary" },
     { name = "pydantic" },
@@ -1168,15 +1169,16 @@ provides-extras = ["kraken", "train", "calamari"]
 
 [package.metadata.requires-dev]
 ml = [
-    { name = "fastapi" },
-    { name = "httpx" },
+    { name = "fastapi", specifier = ">=0.115.0" },
+    { name = "httpx", specifier = ">=0.28.0" },
+    { name = "pillow", specifier = ">=12.2.0" },
     { name = "poethepoet" },
-    { name = "psycopg2-binary" },
-    { name = "pydantic" },
-    { name = "pydantic-settings" },
-    { name = "pyyaml" },
-    { name = "sqlalchemy" },
-    { name = "uvicorn", extras = ["standard"] },
+    { name = "psycopg2-binary", specifier = ">=2.9.10" },
+    { name = "pydantic", specifier = ">=2.10.0" },
+    { name = "pydantic-settings", specifier = ">=2.6.0" },
+    { name = "pyyaml", specifier = ">=6.0.2" },
+    { name = "sqlalchemy", specifier = ">=2.0.36" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.32.0" },
 ]
 platform = [
     { name = "alembic" },

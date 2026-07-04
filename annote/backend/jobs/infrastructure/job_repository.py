@@ -102,6 +102,15 @@ class JobRepository:
         )
         await self._session.commit()
 
+    async def update_payload(self, job_id: uuid.UUID, payload: dict) -> None:
+        now = datetime.now(UTC)
+        await self._session.execute(
+            update(Job)
+            .where(Job.id == job_id)
+            .values(payload=payload, updated_at=now)
+        )
+        await self._session.commit()
+
 
 def _pending_job_query(*, test_only: bool | None = None):
     query = select(Job).where(Job.status == JobStatus.pending).order_by(Job.created_at)
@@ -148,12 +157,14 @@ def lock_first_pending_job_for_test() -> tuple[object, Job | None]:
 
 
 def count_active_jobs(*, test_payload: bool | None = None) -> int:
-    """Count pending or running jobs (optionally filter by payload test flag)."""
+    """Count pending, running, or waiting jobs (optionally filter by payload test flag)."""
     from sqlalchemy import func
 
     with SyncSessionLocal() as session:
         query = select(func.count()).select_from(Job).where(
-            Job.status.in_((JobStatus.pending, JobStatus.running))
+            Job.status.in_(
+                (JobStatus.pending, JobStatus.running, JobStatus.waiting)
+            )
         )
         if test_payload is True:
             query = query.where(Job.payload.contains({"test": True}))
@@ -176,6 +187,30 @@ def mark_job_done(job_id: uuid.UUID, result: dict | None = None) -> None:
                 updated_at=now,
             )
         )
+        session.commit()
+
+
+def mark_job_waiting(
+    job_id: uuid.UUID,
+    *,
+    ml_job_id: uuid.UUID | None = None,
+    payload_patch: dict | None = None,
+) -> None:
+    now = datetime.now(UTC)
+    with SyncSessionLocal() as session:
+        job = session.get(Job, job_id)
+        if job is None:
+            raise ValueError(f"job {job_id} not found")
+        if job.status in (JobStatus.done, JobStatus.failed):
+            return
+        payload = dict(job.payload or {})
+        if payload_patch:
+            payload.update(payload_patch)
+        job.payload = payload
+        job.status = JobStatus.waiting
+        if ml_job_id is not None:
+            job.ml_job_id = ml_job_id
+        job.updated_at = now
         session.commit()
 
 
