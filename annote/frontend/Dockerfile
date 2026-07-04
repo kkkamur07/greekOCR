@@ -1,3 +1,17 @@
+FROM node:20-alpine AS dev
+
+WORKDIR /app
+
+ENV VITE_API_BASE_URL=http://localhost:8000
+
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+
+EXPOSE 5173
+
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+
+
 FROM node:20-alpine AS builder
 
 # Keep default in sync with ../VERSION; docker compose passes APP_VERSION from ANNOTE_VERSION.

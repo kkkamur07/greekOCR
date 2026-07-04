@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   Alert,
@@ -29,7 +29,7 @@ export function ProjectDashboardPage() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (!projectId) return;
     setLoading(true);
     setError(null);
@@ -53,11 +53,11 @@ export function ProjectDashboardPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [projectId, includeArchived]);
 
   useEffect(() => {
     void load();
-  }, [projectId, includeArchived]);
+  }, [load]);
 
   const handleCreate = async (values: { name: string }) => {
     if (!projectId) return;

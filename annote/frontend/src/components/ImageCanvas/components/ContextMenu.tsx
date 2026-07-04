@@ -10,6 +10,27 @@ interface ContextMenuProps {
   close: () => void;
 }
 
+function MenuItem({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        padding: '8px 16px',
+        cursor: 'pointer',
+        borderBottom: '1px solid #f0f0f0',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = '#f5f5f5';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = 'white';
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 export const ContextMenu: React.FC<ContextMenuProps> = ({
   visible,
   x,
@@ -19,21 +40,6 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
   close,
 }) => {
   if (!visible) return null;
-
-  const MenuItem: React.FC<{ onClick: () => void; children: React.ReactNode }> = ({ onClick, children }) => (
-    <div
-      onClick={onClick}
-      style={{
-        padding: '8px 16px',
-        cursor: 'pointer',
-        borderBottom: '1px solid #f0f0f0',
-      }}
-      onMouseEnter={(e) => e.currentTarget.style.background = '#f5f5f5'}
-      onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
-    >
-      {children}
-    </div>
-  );
 
   return (
     <>

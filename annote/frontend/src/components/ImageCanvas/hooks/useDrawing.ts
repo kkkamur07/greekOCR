@@ -1,14 +1,14 @@
 // /Users/krishuagarwal/Desktop/Programming/python/greek-ocr/frontend/src/components/ImageCanvas/hooks/useDrawing.ts
 
-import { useState, useCallback, useEffect, RefObject } from 'react';
+import { useState, useCallback, useEffect, type RefObject } from 'react';
 import { message } from 'antd';
-import { DrawMode, Region, Point } from '../../../types';
+import { DrawMode, Region, Point, type PointTuple } from '../../../types';
 
 export const useDrawing = (
   drawMode: DrawMode,
   regions: Region[],
   onRegionDrawn: ((region: Region) => void) | undefined,
-  imageRef: RefObject<HTMLImageElement>
+  imageRef: RefObject<HTMLImageElement | null>
 ) => {
   // Box drawing states
   const [isDrawing, setIsDrawing] = useState(false);
@@ -19,7 +19,8 @@ export const useDrawing = (
   const [drawingPoints, setDrawingPoints] = useState<Point[]>([]);
   const [currentMousePos, setCurrentMousePos] = useState<Point | null>(null);
 
-  // Reset when mode changes
+  // Reset local drawing state when the selected tool changes.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     setIsDrawing(false);
     setDrawingPoints([]);
@@ -27,6 +28,7 @@ export const useDrawing = (
     setStartPoint(null);
     setCurrentRect(null);
   }, [drawMode]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const getRelativeCoordinates = useCallback((e: React.MouseEvent): Point | null => {
     if (!imageRef.current) return null;
@@ -109,7 +111,7 @@ export const useDrawing = (
 
   const handlePolygonComplete = useCallback(() => {
     if (drawingPoints.length >= 3 && onRegionDrawn) {
-      const boundary = drawingPoints.map(p => [p.x, p.y]);
+      const boundary: PointTuple[] = drawingPoints.map((p) => [p.x, p.y]);
 
       const xs = drawingPoints.map(p => p.x);
       const ys = drawingPoints.map(p => p.y);
