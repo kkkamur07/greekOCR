@@ -9,9 +9,9 @@ Run backend commands from the `annote/` app root unless a command says otherwise
 ## Quick Start
 
 ```bash
-cd annote
-cp backend/core/.env.example backend/core/.env
+cp annote/backend/core/.env.example annote/backend/core/.env
 docker compose up db -d
+cd annote
 uv run --project .. --group platform alembic -c infrastructure/alembic.ini upgrade head
 uv run --project .. --group platform uvicorn backend.core.app:create_app --factory --reload
 ```
@@ -26,7 +26,6 @@ API URLs:
 
 ```text
 backend/
-  pyproject.toml                  # Backend dependency metadata
   core/                           # FastAPI composition, settings, shared errors
     app.py                        # create_app(), middleware, router wiring
     main.py                       # Uvicorn module entrypoint
@@ -154,6 +153,14 @@ PYTHONPATH=. pytest backend/tests/platform
 
 All backend API tests live under `backend/tests/platform/` and exercise the
 platform FastAPI app.
+
+## ML inference service (separate, not integrated)
+
+Segment and transcribe jobs today run through **in-process adapters** in this backend (`ml/infrastructure/kraken_adapter.py`, stub/mock adapters, etc.). They do not call the repository-level **`ml/` inference service**.
+
+Compose sets `ML_SERVICE_URL=http://ml-api:8001` on the API container so the variable is ready when we add an HTTP client, but **no settings module or env alias reads it yet**. The standalone service (health check, contracts, registry — see [`ml/README.md`](../../ml/README.md)) is built and run in parallel; wiring the platform API to it is follow-on work.
+
+Within that standalone service, `ml-api` is the HTTP boundary for health checks and future job submission/status routes. `ml-worker` is the background executor for slow model work, so segmentation/transcription can run without blocking API request workers and can later scale onto different CPU/GPU resources.
 
 ## Special Notes
 

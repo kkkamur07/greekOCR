@@ -1,5 +1,23 @@
 import React from 'react';
-import { Region, DrawMode, EditingSettings } from '../../../types';
+import { Region, DrawMode, EditingSettings, Point } from '../../../types';
+
+interface DrawingState {
+  isDrawing: boolean;
+  drawingPoints: Point[];
+  currentMousePos: Point | null;
+  currentRect: { x: number; y: number; width: number; height: number } | null;
+}
+
+interface VertexEditingState {
+  editingRegionId: number | null;
+  draggedVertexIndex: number | null;
+  tempBoundary: Region['boundary'] | null;
+  handleVertexDragStart: (
+    regionId: number,
+    vertexIndex: number,
+    event: React.MouseEvent,
+  ) => void;
+}
 
 interface RegionsOverlayProps {
   imageDimensions: { width: number; height: number };
@@ -8,8 +26,8 @@ interface RegionsOverlayProps {
   zoomLevel: number;
   drawMode: DrawMode;
   editMode: 'none' | 'vertices';
-  drawingState: any;
-  vertexEditingState: any;
+  drawingState: DrawingState;
+  vertexEditingState: VertexEditingState;
   settings: EditingSettings;
   onRegionClick: (regionId: number, e: React.MouseEvent) => void;
   onRegionRightClick: (regionId: number, e: React.MouseEvent) => void;
@@ -28,7 +46,7 @@ export const RegionsOverlay: React.FC<RegionsOverlayProps> = ({
   onRegionClick,
   onRegionRightClick,
 }) => {
-  const getBoundaryToRender = (region: Region) => {
+  const getBoundaryToRender = (region: Region): Region['boundary'] => {
     if (vertexEditingState.editingRegionId === region.id && vertexEditingState.tempBoundary) {
       return vertexEditingState.tempBoundary;
     }
@@ -74,8 +92,8 @@ export const RegionsOverlay: React.FC<RegionsOverlayProps> = ({
                 pointerEvents: drawMode === 'none' ? 'all' : 'none',
                 cursor: 'pointer',
               }}
-              onClick={(e) => onRegionClick(region.id, e as any)}
-              onContextMenu={(e) => onRegionRightClick(region.id, e as any)}
+              onClick={(e) => onRegionClick(region.id, e)}
+              onContextMenu={(e) => onRegionRightClick(region.id, e)}
             />
 
             {/* Bounding box (dashed) - THICKER - only show if enabled */}
@@ -142,7 +160,7 @@ export const RegionsOverlay: React.FC<RegionsOverlayProps> = ({
                     pointerEvents: 'all',
                     cursor: 'move',
                   }}
-                  onMouseDown={(e) => vertexEditingState.handleVertexDragStart(region.id, idx, e as any)}
+                  onMouseDown={(e) => vertexEditingState.handleVertexDragStart(region.id, idx, e)}
                 />
                 {/* Vertex number label */}
                 <text
@@ -186,7 +204,7 @@ export const RegionsOverlay: React.FC<RegionsOverlayProps> = ({
       {drawMode === 'polygon' && drawingState.isDrawing && drawingState.drawingPoints.length > 0 && (
         <>
           {/* Lines between points - THICKER */}
-          {drawingState.drawingPoints.map((point: any, idx: number) => {
+          {drawingState.drawingPoints.map((point, idx) => {
             if (idx === 0) return null;
             const prevPoint = drawingState.drawingPoints[idx - 1];
             return (
@@ -232,7 +250,7 @@ export const RegionsOverlay: React.FC<RegionsOverlayProps> = ({
           )}
 
           {/* Points - LARGER */}
-          {drawingState.drawingPoints.map((point: any, idx: number) => (
+          {drawingState.drawingPoints.map((point, idx) => (
             <g key={`point-${idx}`}>
               {/* Point glow */}
               <circle

@@ -19,10 +19,12 @@ npm run dev
 The dev app runs at `http://localhost:5173`. By default it talks to
 `http://localhost:8000`; override with `VITE_API_BASE_URL` in `.env.local`.
 
-Start the backend separately from `annote/`:
+Start the backend separately:
 
 ```bash
+cd ../..
 docker compose up db -d
+cd annote
 PYTHONPATH=. alembic -c infrastructure/alembic.ini upgrade head
 PYTHONPATH=. uvicorn backend.core.app:create_app --factory --reload
 ```
