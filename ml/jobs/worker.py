@@ -7,7 +7,7 @@ import time
 from threading import Event
 
 from ml.contracts.common import MLJobStatus
-from ml.infrastructure.db import JobNotificationListener
+from ml.infrastructure.db import JobNotificationListener, engine
 from ml.infrastructure.job_repository import (
     claim_next_pending_job,
     mark_job_done,
@@ -20,6 +20,33 @@ from ml.jobs.callback import post_job_callback
 from ml.jobs.runner import run_job
 
 logger = logging.getLogger(__name__)
+
+_SCHEMA_READY_TIMEOUT_SECONDS = 120.0
+_SCHEMA_RETRY_INTERVAL_SECONDS = 2.0
+
+
+def ml_jobs_table_ready() -> bool:
+    from sqlalchemy import inspect
+
+    return inspect(engine).has_table("ml_jobs")
+
+
+def wait_for_worker_schema(
+    *,
+    timeout_seconds: float = _SCHEMA_READY_TIMEOUT_SECONDS,
+    retry_interval_seconds: float = _SCHEMA_RETRY_INTERVAL_SECONDS,
+) -> None:
+    """Block until Alembic has created the ml_jobs table."""
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        if ml_jobs_table_ready():
+            return
+        logger.info("waiting for ml_jobs table (platform migrations)")
+        time.sleep(retry_interval_seconds)
+    raise RuntimeError(
+        f"ml_jobs table not found after {timeout_seconds:.0f}s; "
+        "run platform migrations before starting ml-worker"
+    )
 
 
 def execute_claimed_job(job) -> None:
@@ -48,6 +75,7 @@ def process_next_job() -> bool:
 
 def run_worker(*, max_jobs: int | None = None, ready_event: Event | None = None) -> None:
     """Run forever, waking on PostgreSQL notifications or stale-job deadlines."""
+    wait_for_worker_schema()
     settings = get_ml_settings()
     logger.info("ml-worker listening on PostgreSQL channel %s", settings.worker_notify_channel)
 

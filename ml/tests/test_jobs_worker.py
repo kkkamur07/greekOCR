@@ -17,12 +17,30 @@ from ml.infrastructure.job_repository import (
     reclaim_stale_running_jobs,
     seconds_until_next_stale_running_job,
 )
-from ml.jobs.worker import run_worker
+from ml.jobs.worker import run_worker, wait_for_worker_schema
 from sqlalchemy import select
 
 from ml.infrastructure.orm_models import MLJob
 
 pytestmark = pytest.mark.integration
+
+
+def test_wait_for_worker_schema_raises_when_table_never_appears(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr("ml.jobs.worker.ml_jobs_table_ready", lambda: False)
+    with pytest.raises(RuntimeError, match="ml_jobs table not found"):
+        wait_for_worker_schema(timeout_seconds=0.1, retry_interval_seconds=0.01)
+
+
+def test_wait_for_worker_schema_returns_after_table_appears(monkeypatch: pytest.MonkeyPatch):
+    attempts = {"count": 0}
+
+    def ready() -> bool:
+        attempts["count"] += 1
+        return attempts["count"] >= 2
+
+    monkeypatch.setattr("ml.jobs.worker.ml_jobs_table_ready", ready)
+    wait_for_worker_schema(timeout_seconds=1.0, retry_interval_seconds=0.01)
+    assert attempts["count"] == 2
 
 
 def _submit(product_job_id=None) -> MLJob:
