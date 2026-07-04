@@ -10,3 +10,11 @@ def test_health_returns_ok():
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_root_returns_service_message():
+    client = TestClient(create_app())
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert response.json() == {"message": "Nomicous ML inference API"}

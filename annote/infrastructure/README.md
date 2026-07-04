@@ -65,7 +65,7 @@ Reset local dev data:
 
 ```bash
 docker compose down
-docker volume rm greekocr_postgres_data
+docker volume rm nomicous_postgres_data
 docker compose up db -d
 cd annote
 PYTHONPATH=. alembic -c infrastructure/alembic.ini upgrade head

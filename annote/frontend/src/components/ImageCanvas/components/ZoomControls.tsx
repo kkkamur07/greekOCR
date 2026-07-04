@@ -1,16 +1,16 @@
 import React from 'react';
-import { ReactZoomPanPinchRef } from 'react-zoom-pan-pinch';
+import type { ReactZoomPanPinchRef } from 'react-zoom-pan-pinch';
 
 interface ZoomControlsProps {
   zoomLevel: number;
-  transformRef: React.RefObject<ReactZoomPanPinchRef>;
+  transformRef: React.RefObject<ReactZoomPanPinchRef | null>;
 }
 
 export const ZoomControls: React.FC<ZoomControlsProps> = ({ zoomLevel, transformRef }) => {
-  const handleZoomIn = () => transformRef.current?.zoomIn(0.5);
-  const handleZoomOut = () => transformRef.current?.zoomOut(0.5);
+  const handleZoomIn = () => transformRef.current?.zoomIn();
+  const handleZoomOut = () => transformRef.current?.zoomOut();
   const handleReset = () => transformRef.current?.resetTransform();
-  const handleFitToScreen = () => transformRef.current?.centerView(1, 200);
+  const handleFitToScreen = () => transformRef.current?.centerView();
 
   return (
     <div className="zoom-controls">

@@ -1,9 +1,22 @@
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI, status
+from pydantic import BaseModel
 
 from ml.api.health import router as health_router
 
-# Make sure that proper error handling should be there for this in the future PRs. 
+router = APIRouter(tags=["root"])
+
+
+class RootResponse(BaseModel):
+    message: str
+
+
+@router.get("/", response_model=RootResponse, status_code=status.HTTP_200_OK)
+def root() -> RootResponse:
+    return RootResponse(message="Nomicous ML inference API")
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title="nomicous ML inference service", version="0.1.0")
+    app.include_router(router)
     app.include_router(health_router)
     return app

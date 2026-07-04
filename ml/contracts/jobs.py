@@ -86,7 +86,7 @@ __all__ = [
     "JobOutput",
     "JobSubmitRequest",
     "JobSubmitResponse",
-    "SegmentJobOutput",
     "SUPPORTED_JOB_TASKS",
+    "SegmentJobOutput",
     "TranscribeJobOutput",
 ]
