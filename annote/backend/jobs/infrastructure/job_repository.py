@@ -2,17 +2,16 @@
 
 from __future__ import annotations
 
-import infrastructure.models  # noqa: F401 — register all ORM mappers
-
 import uuid
 from datetime import UTC, datetime
 
+import infrastructure.models  # noqa: F401 — register all ORM mappers
+from infrastructure.db import SyncSessionLocal
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.settings.job import get_job_settings
 from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
-from infrastructure.db import SyncSessionLocal
 
 
 class JobRepository:
@@ -59,6 +58,49 @@ class JobRepository:
     async def get_by_id(self, job_id: uuid.UUID) -> Job | None:
         result = await self._session.execute(select(Job).where(Job.id == job_id))
         return result.scalar_one_or_none()
+
+    async def mark_done_from_callback(
+        self,
+        job_id: uuid.UUID,
+        *,
+        ml_job_id: uuid.UUID,
+        result: dict,
+    ) -> None:
+        now = datetime.now(UTC)
+        await self._session.execute(
+            update(Job)
+            .where(Job.id == job_id)
+            .values(
+                status=JobStatus.done,
+                ml_job_id=ml_job_id,
+                result=result,
+                error=None,
+                completed_at=now,
+                updated_at=now,
+            )
+        )
+        await self._session.commit()
+
+    async def mark_failed_from_callback(
+        self,
+        job_id: uuid.UUID,
+        *,
+        ml_job_id: uuid.UUID,
+        error: str,
+    ) -> None:
+        now = datetime.now(UTC)
+        await self._session.execute(
+            update(Job)
+            .where(Job.id == job_id)
+            .values(
+                status=JobStatus.failed,
+                ml_job_id=ml_job_id,
+                error=error,
+                completed_at=now,
+                updated_at=now,
+            )
+        )
+        await self._session.commit()
 
 
 def _pending_job_query(*, test_only: bool | None = None):

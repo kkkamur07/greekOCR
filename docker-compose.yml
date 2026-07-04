@@ -36,6 +36,7 @@ services:
       ANNOTE_APP_ROOT: /app
       # Reserved for future HTTP client to ml-api; not read by backend settings yet (see ml/README.md).
       ML_SERVICE_URL: http://ml-api:8001
+      ML_WEBHOOK_SECRET: dev-ml-webhook-secret
     volumes:
       - ./annote/backend/media:/app/backend/media
     depends_on:

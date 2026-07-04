@@ -14,6 +14,7 @@ from sqlalchemy import text
 os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production-at-least-32-bytes")
 os.environ.setdefault("AUTH_RATE_LIMIT_REQUESTS", "1000")
 os.environ.setdefault("ENABLE_TEST_JOB_ROUTES", "true")
+os.environ.setdefault("ML_WEBHOOK_SECRET", "test-ml-webhook-secret")
 
 import infrastructure.models  # noqa: F401 — register all ORM mappers
 from backend.core.app import create_app
@@ -22,6 +23,7 @@ from backend.core.settings import (
     get_auth_settings,
     get_infrastructure_settings,
     get_job_settings,
+    get_ml_settings,
     get_model_settings,
 )
 from backend.users.api.rate_limit import clear_auth_rate_limit_state
@@ -47,6 +49,7 @@ def isolated_platform_state():
     get_auth_settings.cache_clear()
     get_infrastructure_settings.cache_clear()
     get_job_settings.cache_clear()
+    get_ml_settings.cache_clear()
     get_model_settings.cache_clear()
     clear_auth_rate_limit_state()
     _truncate_database()
