@@ -1,28 +1,28 @@
 from __future__ import annotations
 
-import enum
 import uuid
 from datetime import datetime
+from enum import StrEnum
 from typing import TYPE_CHECKING
 
+from infrastructure.db import Base
 from sqlalchemy import DateTime, Enum, ForeignKey, Index, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-
-from infrastructure.db import Base
 
 if TYPE_CHECKING:
     from backend.ml.infrastructure.orm_models import InferenceModel, ModelBinding
 
 
-class JobStatus(str, enum.Enum):
+class JobStatus(StrEnum):
     pending = "pending"
+    waiting = "waiting"
     running = "running"
     done = "done"
     failed = "failed"
 
 
-class JobType(str, enum.Enum):
+class JobType(StrEnum):
     segment = "segment"
     transcribe = "transcribe"
     binarize = "binarize"
@@ -36,6 +36,9 @@ class Job(Base):
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    ml_job_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True, index=True
+    )
     type: Mapped[JobType] = mapped_column(Enum(JobType, name="job_type"))
     status: Mapped[JobStatus] = mapped_column(
         Enum(JobStatus, name="job_status"), default=JobStatus.pending, index=True
@@ -65,5 +68,5 @@ class Job(Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    model: Mapped["InferenceModel | None"] = relationship("InferenceModel", back_populates="jobs")
-    binding: Mapped["ModelBinding | None"] = relationship("ModelBinding", back_populates="jobs")
+    model: Mapped[InferenceModel | None] = relationship("InferenceModel", back_populates="jobs")
+    binding: Mapped[ModelBinding | None] = relationship("ModelBinding", back_populates="jobs")
