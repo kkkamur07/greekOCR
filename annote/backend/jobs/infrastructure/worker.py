@@ -15,7 +15,10 @@ from typing import TYPE_CHECKING
 from PIL import Image
 
 from backend.core.settings.job import get_job_settings
-from backend.document.application.transcribe_merge_service import TranscribeJobHandlerError
+from backend.document.application.transcribe_merge_service import (
+    TranscribeJobHandlerError,
+    TranscribeMergeService,
+)
 from backend.document.infrastructure.media_store import MediaStore
 from backend.document.infrastructure.orm_models import DocumentPart, Line
 from backend.jobs.infrastructure.handlers import TestJobHandlerError, run_test_handler
@@ -28,7 +31,8 @@ from backend.jobs.infrastructure.job_repository import (
 from backend.jobs.infrastructure.orm_models import Job, JobType
 from backend.ml.infrastructure.ml_client import MlServiceClient
 from infrastructure.db import SyncSessionLocal
-from ml.contracts.common import MLTask
+from ml_service.contracts.common import MLTask
+from ml_service.contracts.jobs import JobSubmitRequest
 
 if TYPE_CHECKING:
     from asyncio import Event
@@ -97,24 +101,30 @@ def execute_claimed_job(job: Job) -> None:
                     raise TranscribeJobHandlerError("Document part not found")
                 lines = TranscribeMergeService.load_lines(session, part.id)
                 image_bytes = MediaStore().absolute_path(part.image_key).read_bytes()
-                lines_with_output = []
+                line_jobs = []
                 for index, line in enumerate(lines):
                     line_image_bytes = _crop_line_image(image_bytes, line)
-                    output = _get_ml_client().run_transcribe(
-                        registry_model_id=_DEFAULT_TRANSCRIBE_REGISTRY_MODEL,
-                        registry_tag=_DEFAULT_TRANSCRIBE_REGISTRY_TAG,
-                        image_bytes=line_image_bytes,
-                        params={"line_index": index, "line_id": str(line.id)},
+                    ml_job = _get_ml_client().submit_job(
+                        JobSubmitRequest(
+                            task=MLTask.transcribe,
+                            registry_model_id=_DEFAULT_TRANSCRIBE_REGISTRY_MODEL,
+                            registry_tag=_DEFAULT_TRANSCRIBE_REGISTRY_TAG,
+                            product_job_id=job.id,
+                            image_bytes=line_image_bytes,
+                            params={"line_index": index, "line_id": str(line.id)},
+                        )
                     )
-                    lines_with_output.append((line, output))
-                result = TranscribeMergeService().apply_sync(
-                    session,
-                    document_id=job.document_id,
-                    part_id=part.id,
-                    job_id=job.id,
-                    lines_with_output=lines_with_output,
-                )
-            mark_job_done(job.id, result)
+                    line_jobs.append(
+                        {
+                            "ml_job_id": str(ml_job.ml_job_id),
+                            "line_id": str(line.id),
+                            "line_index": index,
+                        }
+                    )
+            mark_job_waiting(
+                job.id,
+                payload_patch={"ml_line_jobs": line_jobs, "ml_line_outputs": {}},
+            )
         except TranscribeJobHandlerError as exc:
             logger.warning("Transcribe job %s failed: %s", job.id, exc)
             mark_job_failed(job.id, _public_job_error(exc))
@@ -146,27 +156,18 @@ def execute_claimed_job(job: Job) -> None:
                 if part is None:
                     raise ValueError("Document part not found")
                 image_path = MediaStore().absolute_path(part.image_key)
-                segment_output = _get_ml_client().run_segment(
-                    registry_model_id=_DEFAULT_SEGMENT_REGISTRY_MODEL,
-                    registry_tag=_DEFAULT_SEGMENT_REGISTRY_TAG,
-                    image_bytes=image_path.read_bytes(),
+                ml_job = _get_ml_client().submit_job(
+                    JobSubmitRequest(
+                        task=MLTask.segment,
+                        registry_model_id=_DEFAULT_SEGMENT_REGISTRY_MODEL,
+                        registry_tag=_DEFAULT_SEGMENT_REGISTRY_TAG,
+                        product_job_id=job.id,
+                        image_bytes=image_path.read_bytes(),
+                    )
                 )
-                result = MlServiceClient.to_canonical_segment(segment_output)
-                summary = SegmentMergeService().apply_sync(
-                    session,
-                    part_id=job.document_part_id,
-                    canonical_segment=result,
-                    job_id=job.id,
-                )
-            mark_job_done(
+            mark_job_waiting(
                 job.id,
-                {
-                    "blocks_count": summary.blocks_count,
-                    "lines_count": summary.lines_count,
-                    "added_lines": summary.added_lines,
-                    "pruned_lines": summary.pruned_lines,
-                    "preserved_manual_lines": summary.preserved_manual_lines,
-                },
+                ml_job_id=ml_job.ml_job_id,
             )
             return
         except Exception as exc:

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, status
 
-from ml_service.contracts.common import MLTask
 from ml_service.contracts.run import MlRunRequest, MlRunResponse
 from ml_service.jobs.runner import run_model
 
@@ -13,12 +12,6 @@ router = APIRouter(prefix="/ml/v1", tags=["ml"])
 
 @router.post("/run", response_model=MlRunResponse)
 def run_ml(body: MlRunRequest) -> MlRunResponse:
-    if body.task != MLTask.segment:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"sync run is not supported for task {body.task.value!r}",
-        )
-
     try:
         output = run_model(
             task=body.task,

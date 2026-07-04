@@ -25,6 +25,7 @@ from backend.core.exceptions import (
 )
 from backend.core.schemas.errors import ApiErrorResponse
 from backend.core.settings import get_app_settings
+from backend.core.settings.job import get_job_settings
 from backend.core.version import get_version
 from backend.jobs.api.internal_ml import router as internal_ml_router
 from backend.jobs.api.jobs import router as jobs_router
@@ -147,6 +148,10 @@ def _register_exception_handlers(app: FastAPI) -> None:
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     import asyncio
+
+    if not get_job_settings().job_worker_enabled:
+        yield
+        return
 
     stop_event = asyncio.Event()
     worker_task = asyncio.create_task(worker_loop(stop_event))

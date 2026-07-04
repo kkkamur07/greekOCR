@@ -154,11 +154,11 @@ PYTHONPATH=. pytest backend/tests/platform
 All backend API tests live under `backend/tests/platform/` and exercise the
 platform FastAPI app.
 
-## ML inference service (separate, not integrated)
+## ML inference service
 
-Segment and transcribe jobs today run through **in-process adapters** in this backend (`ml/infrastructure/kraken_adapter.py`, stub/mock adapters, etc.). They do not call the repository-level **`ml/` inference service**.
+Segment and transcribe jobs call the repository-level **`ml_service/` inference service** through the backend ML client.
 
-Compose sets `ML_SERVICE_URL=http://ml-api:8001` on the API container so the variable is ready when we add an HTTP client, but **no settings module or env alias reads it yet**. The standalone service (health check, contracts, registry — see [`ml/README.md`](../../ml/README.md)) is built and run in parallel; wiring the platform API to it is follow-on work.
+Compose sets `ML_SERVICE_URL=http://ml-api:8001` on the API container. The standalone service (health, sync run, async job submission, contracts, registry — see [`ml_service/README.md`](../../ml_service/README.md)) is built and run in parallel.
 
 Within that standalone service, `ml-api` is the HTTP boundary for health checks and future job submission/status routes. `ml-worker` is the background executor for slow model work, so segmentation/transcription can run without blocking API request workers and can later scale onto different CPU/GPU resources.
 

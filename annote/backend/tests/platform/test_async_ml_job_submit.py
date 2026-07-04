@@ -13,8 +13,8 @@ from backend.jobs.api.dependencies import ML_WEBHOOK_SECRET_HEADER
 from backend.jobs.infrastructure import worker as worker_module
 from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
 from backend.tests.platform.conftest import install_ml_jobs_mock
-from ml.contracts.common import MLJobStatus, MLTask
-from ml.contracts.jobs import JobCallbackRequest
+from ml_service.contracts.common import MLJobStatus, MLTask
+from ml_service.contracts.jobs import JobCallbackRequest
 
 from infrastructure.db import SyncSessionLocal
 

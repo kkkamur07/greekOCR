@@ -80,7 +80,7 @@ docker compose up --build -d   # detached background
 
 Platform media is mounted at `annote/backend/media/`. The existing `data/` folder is not mounted or migrated by the production platform relocation.
 
-Compose also starts **`ml-api`** and **`ml-worker`** from the repository-level [`ml/`](../ml/) package. That is a separate inference service we are building (contracts, registry, future segment/transcribe routes). `ml-api` is the HTTP boundary; `ml-worker` is reserved for slow CPU/GPU inference work. The platform API does **not** call it yet — `ML_SERVICE_URL` in Compose is reserved configuration with no matching setting in `backend/core/settings/`. See [`ml/README.md`](../ml/README.md).
+Compose also starts **`ml-api`** and **`ml-worker`** from the repository-level [`ml_service/`](../ml_service/) package. That separate inference service owns contracts, registry-backed sync runs, and async job submission. `ml-api` is the HTTP boundary; `ml-worker` is reserved for slow CPU/GPU inference work. The platform API calls it through `ML_SERVICE_URL`. See [`ml_service/README.md`](../ml_service/README.md).
 
 Useful after `-d`: `docker compose ps`, `docker compose logs -f`, `docker compose down`.
 
