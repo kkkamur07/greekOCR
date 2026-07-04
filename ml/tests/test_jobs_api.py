@@ -1,11 +1,14 @@
 """ML job submit API tests."""
 
-from uuid import uuid4
+from uuid import UUID, uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 from ml.api.app import create_app
 from ml.contracts.common import MLJobStatus, MLTask
 from ml.infrastructure.job_repository import get_job_by_id
+
+pytestmark = pytest.mark.integration
 
 
 def test_submit_job_returns_ml_job_id():
@@ -24,7 +27,7 @@ def test_submit_job_returns_ml_job_id():
     )
 
     assert response.status_code == 201
-    ml_job_id = response.json()["ml_job_id"]
+    ml_job_id = UUID(response.json()["ml_job_id"])
     job = get_job_by_id(ml_job_id)
     assert job is not None
     assert job.product_job_id == product_job_id

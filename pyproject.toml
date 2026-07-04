@@ -75,6 +75,7 @@ ml-api = "uvicorn ml.api.main:app --host 0.0.0.0 --port 8001 --workers 1"
 ml-worker = "python -m ml.jobs.worker"
 
 [tool.pytest.ini_options]
+addopts = ["--import-mode=importlib"]
 pythonpath = ["annote", "."]
 asyncio_mode = "auto"
 testpaths = ["annote/backend/tests/platform", "ml/tests"]

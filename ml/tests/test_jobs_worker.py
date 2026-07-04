@@ -2,15 +2,27 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+from threading import Event, Thread
 from uuid import uuid4
 
+import pytest
 from ml.contracts.common import MLJobStatus, MLTask
 from ml.contracts.jobs import JobSubmitRequest
-from ml.infrastructure.db import SessionLocal
-from ml.infrastructure.job_repository import claim_next_pending_job, create_job
+from ml.infrastructure.db import JobNotificationListener, SessionLocal
+from ml.infrastructure.job_repository import (
+    claim_next_pending_job,
+    create_job,
+    get_job_by_id,
+    reclaim_stale_running_jobs,
+    seconds_until_next_stale_running_job,
+)
+from ml.jobs.worker import run_worker
 from sqlalchemy import select
 
 from ml.infrastructure.orm_models import MLJob
+
+pytestmark = pytest.mark.integration
 
 
 def _submit(product_job_id=None) -> MLJob:
@@ -35,6 +47,98 @@ def test_worker_claims_only_pending_jobs():
     assert second is None
 
 
+def test_create_job_notifies_waiting_workers():
+    with JobNotificationListener() as listener:
+        job = _submit()
+        payloads = listener.wait(timeout_seconds=1.0)
+
+    assert str(job.id) in payloads
+
+
+def test_worker_listens_for_new_jobs_and_processes_notification():
+    ready = Event()
+    worker = Thread(
+        target=run_worker,
+        kwargs={"max_jobs": 1, "ready_event": ready},
+        daemon=True,
+    )
+    worker.start()
+
+    assert ready.wait(timeout=5.0)
+    job = _submit()
+
+    worker.join(timeout=5.0)
+    assert not worker.is_alive()
+
+    processed = get_job_by_id(job.id)
+    assert processed is not None
+    assert processed.status == MLJobStatus.done
+    assert processed.output is not None
+    assert processed.output["lines"][0]["source_metadata"]["mock"] is True
+
+
+def test_reclaim_stale_running_jobs_moves_expired_jobs_to_pending():
+    job = _submit()
+    claimed = claim_next_pending_job()
+    assert claimed is not None
+    assert claimed.id == job.id
+
+    with SessionLocal() as session:
+        running = session.get(MLJob, job.id)
+        assert running is not None
+        running.started_at = datetime.now(UTC) - timedelta(minutes=31)
+        session.commit()
+
+    reclaimed = reclaim_stale_running_jobs(running_timeout_seconds=1800.0)
+    assert reclaimed == 1
+
+    recovered = get_job_by_id(job.id)
+    assert recovered is not None
+    assert recovered.status == MLJobStatus.pending
+    assert recovered.started_at is None
+
+
+def test_worker_recovers_stale_running_job_without_notification(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from ml.infrastructure.settings import MLSettings
+
+    settings = MLSettings()
+    settings.worker_running_job_timeout_seconds = 0.1
+    monkeypatch.setattr("ml.jobs.worker.get_ml_settings", lambda: settings)
+    monkeypatch.setattr("ml.infrastructure.db.get_ml_settings", lambda: settings)
+
+    job = _submit()
+    claimed = claim_next_pending_job()
+    assert claimed is not None
+
+    with SessionLocal() as session:
+        running = session.get(MLJob, job.id)
+        assert running is not None
+        running.started_at = datetime.now(UTC) - timedelta(seconds=1)
+        session.commit()
+
+    assert seconds_until_next_stale_running_job(running_timeout_seconds=0.1) == 0.0
+
+    ready = Event()
+    worker = Thread(
+        target=run_worker,
+        kwargs={"max_jobs": 1, "ready_event": ready},
+        daemon=True,
+    )
+    worker.start()
+
+    assert ready.wait(timeout=5.0)
+    worker.join(timeout=5.0)
+    assert not worker.is_alive()
+
+    processed = get_job_by_id(job.id)
+    assert processed is not None
+    assert processed.status == MLJobStatus.done
+    assert processed.output is not None
+    assert processed.output["lines"][0]["source_metadata"]["mock"] is True
+
+
 def test_skip_locked_allows_parallel_claims():
     first = _submit()
     second = _submit()
@@ -44,7 +148,7 @@ def test_skip_locked_allows_parallel_claims():
         session.execute(
             select(MLJob)
             .where(MLJob.status == MLJobStatus.pending)
-            .order_by(MLJob.created_at)
+            .order_by(MLJob.created_at, MLJob.id)
             .with_for_update()
             .limit(1)
         )
@@ -54,7 +158,8 @@ def test_skip_locked_allows_parallel_claims():
 
     claimed = claim_next_pending_job()
     assert claimed is not None
-    assert claimed.id == second.id if locked.id == first.id else first.id
+    assert claimed.id in {first.id, second.id}
+    assert claimed.id != locked.id
 
     session.rollback()
     session.close()

@@ -2,6 +2,7 @@ from fastapi import APIRouter, FastAPI, status
 from pydantic import BaseModel
 
 from ml.api.health import router as health_router
+from ml.api.jobs import router as jobs_router
 
 router = APIRouter(tags=["root"])
 
@@ -19,4 +20,5 @@ def create_app() -> FastAPI:
     app = FastAPI(title="nomicous ML inference service", version="0.1.0")
     app.include_router(router)
     app.include_router(health_router)
+    app.include_router(jobs_router)
     return app

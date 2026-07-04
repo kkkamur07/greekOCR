@@ -28,9 +28,13 @@ class MLSettings(BaseSettings):
         default=ML_ROOT / "weights" / "cache",
         alias="ML_WEIGHTS_CACHE_DIR",
     )
-    worker_poll_interval_seconds: float = Field(
-        default=1.0,
-        alias="ML_WORKER_POLL_INTERVAL_SECONDS",
+    worker_notify_channel: str = Field(
+        default="ml_jobs",
+        alias="ML_WORKER_NOTIFY_CHANNEL",
+    )
+    worker_running_job_timeout_seconds: float = Field(
+        default=1800.0,
+        alias="ML_WORKER_RUNNING_JOB_TIMEOUT_SECONDS",
     )
 
 

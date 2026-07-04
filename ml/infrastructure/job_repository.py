@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, text, update
 
 from ml.contracts.common import MLJobStatus
 from ml.contracts.jobs import JobSubmitRequest
 from ml.infrastructure.db import SessionLocal
 from ml.infrastructure.orm_models import MLJob
+from ml.infrastructure.settings import get_ml_settings
 
 
 def create_job(request: JobSubmitRequest) -> MLJob:
@@ -26,6 +27,14 @@ def create_job(request: JobSubmitRequest) -> MLJob:
     )
     with SessionLocal() as session:
         session.add(job)
+        session.flush()
+        session.execute(
+            text("SELECT pg_notify(:channel, :payload)"),
+            {
+                "channel": get_ml_settings().worker_notify_channel,
+                "payload": str(job.id),
+            },
+        )
         session.commit()
         session.refresh(job)
         return job
@@ -43,7 +52,7 @@ def claim_next_pending_job() -> MLJob | None:
             session.execute(
                 select(MLJob)
                 .where(MLJob.status == MLJobStatus.pending)
-                .order_by(MLJob.created_at)
+                .order_by(MLJob.created_at, MLJob.id)
                 .with_for_update(skip_locked=True)
                 .limit(1)
             )
@@ -58,6 +67,39 @@ def claim_next_pending_job() -> MLJob | None:
         session.commit()
         session.refresh(job)
         return job
+
+
+def reclaim_stale_running_jobs(*, running_timeout_seconds: float) -> int:
+    """Move crashed-worker jobs back to pending after their running lease expires."""
+    now = datetime.now(UTC)
+    stale_before = now - timedelta(seconds=running_timeout_seconds)
+    with SessionLocal() as session:
+        result = session.execute(
+            update(MLJob)
+            .where(MLJob.status == MLJobStatus.running)
+            .where(MLJob.started_at <= stale_before)
+            .values(
+                status=MLJobStatus.pending,
+                started_at=None,
+                updated_at=now,
+            )
+        )
+        session.commit()
+        return result.rowcount or 0
+
+
+def seconds_until_next_stale_running_job(*, running_timeout_seconds: float) -> float | None:
+    """Return seconds until the oldest running job is eligible for reclaim."""
+    with SessionLocal() as session:
+        oldest_started_at = session.execute(
+            select(func.min(MLJob.started_at)).where(MLJob.status == MLJobStatus.running)
+        ).scalar_one_or_none()
+    if oldest_started_at is None:
+        return None
+
+    now = datetime.now(UTC)
+    reclaim_at = oldest_started_at + timedelta(seconds=running_timeout_seconds)
+    return max((reclaim_at - now).total_seconds(), 0.0)
 
 
 def mark_job_done(job_id: uuid.UUID, output: dict[str, Any]) -> None:
