@@ -7,8 +7,9 @@ import uuid
 from backend.core.settings import get_ml_settings
 from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
 from fastapi.testclient import TestClient
+from ml_service.contracts.webhooks import ML_WEBHOOK_SECRET_HEADER
+
 from infrastructure.db import SyncSessionLocal
-from ml.contracts.webhooks import ML_WEBHOOK_SECRET_HEADER
 
 CALLBACK_URL = "/internal/ml/job-complete"
 WEBHOOK_HEADERS = {ML_WEBHOOK_SECRET_HEADER: "test-ml-webhook-secret"}

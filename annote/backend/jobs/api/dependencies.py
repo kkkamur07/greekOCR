@@ -5,7 +5,7 @@ from __future__ import annotations
 import secrets
 
 from fastapi import Header, HTTPException, status
-from ml.contracts.webhooks import ML_WEBHOOK_SECRET_HEADER
+from ml_service.contracts.webhooks import ML_WEBHOOK_SECRET_HEADER
 
 from backend.core.settings.ml import get_ml_settings
 

@@ -20,7 +20,7 @@ class JobSettings(BaseSettings):
         description="True=only test payloads; False=exclude test; None=claim any pending job",
     )
     transcribe_adapter: str = Field(default="mock:transcribe", alias="TRANSCRIBE_ADAPTER")
-    segment_adapter: str = Field(default="kraken_stub", alias="SEGMENT_ADAPTER")
+    segment_adapter: str = Field(default="kraken", alias="SEGMENT_ADAPTER")
 
 
 @lru_cache

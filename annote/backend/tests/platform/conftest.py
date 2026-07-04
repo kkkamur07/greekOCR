@@ -6,12 +6,14 @@ hits live ``POST /auth/register`` against kalamos.
 
 import json
 import os
+import socket
 import threading
 import time
 import uuid
 
 import httpx
 import pytest
+import uvicorn
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 
@@ -19,7 +21,6 @@ os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production-at-least-32-
 os.environ.setdefault("AUTH_RATE_LIMIT_REQUESTS", "1000")
 os.environ.setdefault("ENABLE_TEST_JOB_ROUTES", "true")
 os.environ.setdefault("ML_WEBHOOK_SECRET", "test-ml-webhook-secret")
-os.environ.setdefault("ML_SERVICE_URL", "http://ml.test")
 
 import infrastructure.models  # noqa: F401 — register all ORM mappers
 from backend.core.app import create_app
@@ -32,10 +33,17 @@ from backend.core.settings import (
     get_model_settings,
 )
 from backend.users.api.rate_limit import clear_auth_rate_limit_state
+
 from infrastructure.db import Base, sync_engine
 
 _ACTIVE_ML_JOBS_MOCK: "MlJobsMock | None" = None
 _WEBHOOK_HEADERS = {"X-ML-Webhook-Secret": os.environ["ML_WEBHOOK_SECRET"]}
+
+
+def _free_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
 
 
 def _truncate_database() -> None:
@@ -216,29 +224,39 @@ def _restore_ml_jobs_mock_after_test(client: TestClient) -> None:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def wire_in_process_ml_service() -> None:
-    """Route segment jobs to the in-process ML run handler."""
-    import json
-
-    import httpx
-
+def real_ml_service_url() -> str:
+    """Run the actual ML FastAPI service for platform integration tests."""
     from backend.jobs.infrastructure import worker as worker_module
-    from backend.ml.infrastructure.ml_client import MlServiceClient
-    from ml.api.run import run_ml
-    from ml.contracts.run import MlRunRequest
+    from ml_service.api.app import create_app as create_ml_app
+    from ml_service.infrastructure.settings import get_ml_settings as get_ml_service_settings
 
-    def _ml_run_handler(request: httpx.Request) -> httpx.Response:
-        if request.method == "POST" and request.url.path == "/ml/v1/run":
-            body = MlRunRequest.model_validate(json.loads(request.content))
-            output = run_ml(body)
-            return httpx.Response(200, json=output.model_dump(mode="json"))
-        return httpx.Response(404, json={"detail": "not found"})
-
+    port = _free_port()
+    url = f"http://127.0.0.1:{port}"
+    os.environ["ML_SERVICE_URL"] = url
     get_ml_settings.cache_clear()
-    worker_module._ml_client = MlServiceClient(
-        base_url="http://ml.test",
-        transport=httpx.MockTransport(_ml_run_handler),
-    )
+    get_ml_service_settings.cache_clear()
+    worker_module._ml_client = None
+
+    config = uvicorn.Config(create_ml_app(), host="127.0.0.1", port=port, log_level="error")
+    server = uvicorn.Server(config)
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+
+    deadline = time.monotonic() + 5.0
+    while not server.started and thread.is_alive() and time.monotonic() < deadline:
+        time.sleep(0.01)
+    if not server.started:
+        server.should_exit = True
+        thread.join(timeout=5)
+        raise RuntimeError("ML service test server did not start")
+
+    yield url
+
+    server.should_exit = True
+    thread.join(timeout=5)
+    worker_module._ml_client = None
+    get_ml_settings.cache_clear()
+    get_ml_service_settings.cache_clear()
 
 
 @pytest.fixture(scope="session")

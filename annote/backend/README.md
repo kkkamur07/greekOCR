@@ -114,7 +114,7 @@ Settings are loaded by `backend/core/settings/` from environment variables and
 | `MEDIA_ROOT` | Uploaded Document part media | `annote/backend/media` |
 | `ENABLE_TEST_JOB_ROUTES` | Enables dev-only noop job route | `false` in `.env.example` |
 | `TRANSCRIBE_ADAPTER` | Adapter marker used for transcribe jobs | `mock:transcribe` |
-| `SEGMENT_ADAPTER` | Adapter marker used for segment jobs | `kraken_stub` |
+| `SEGMENT_ADAPTER` | Adapter marker used for segment jobs | `kraken` |
 | `DEFAULT_SEGMENT_MODEL` | Dev segment model name | `kraken-segment-default` |
 | `DEFAULT_TRANSCRIBE_MODEL` | Dev transcribe model name | `kraken-transcribe-default` |
 | `KRAKEN_MODEL_PATH` | Path to model weights outside annote | `../model/kraken` |

@@ -4,19 +4,16 @@ from __future__ import annotations
 
 import time
 import uuid
-from io import BytesIO
+from pathlib import Path
 
 import pytest
-from PIL import Image
 
-
-def _one_pixel_png() -> bytes:
-    buffer = BytesIO()
-    Image.new("RGB", (1, 1)).save(buffer, format="PNG")
-    return buffer.getvalue()
-
-
-MINIMAL_PNG = _one_pixel_png()
+ANNOTE_ROOT = Path(__file__).resolve().parents[3]
+SEGMENT_IMAGE_PATH = (
+    ANNOTE_ROOT
+    / "data/manuscripts/pages/Grec_1360_CONSTANTINUS_Harmenopulus_btv1b10721710m_6.jpeg"
+)
+SEGMENT_IMAGE_BYTES = SEGMENT_IMAGE_PATH.read_bytes()
 
 
 def _documents_url(project_id: str) -> str:
@@ -32,7 +29,7 @@ def _create_document_with_part(client, owner_headers, owner_project) -> tuple[st
     upload = client.post(
         f"{base}/{document_id}/parts",
         headers=owner_headers,
-        files={"file": ("folio.png", MINIMAL_PNG, "image/png")},
+        files={"file": (SEGMENT_IMAGE_PATH.name, SEGMENT_IMAGE_BYTES, "image/jpeg")},
     )
     assert upload.status_code == 201
     return project_id, document_id, upload.json()["id"]
@@ -69,12 +66,66 @@ def test_member_can_enqueue_segment_job_and_poll_result(client, owner_headers, o
     job_id = response.json()["job_id"]
     uuid.UUID(job_id)
 
-    job = _poll_job(client, job_id, expect="done", headers=owner_headers)
+    job = _poll_job(client, job_id, expect="done", headers=owner_headers, timeout=30.0)
     assert job["type"] == "segment"
     assert job["document_id"] == document_id
     assert job["document_part_id"] == part_id
     assert job["result"]["blocks_count"] == 1
-    assert job["result"]["lines_count"] == 1
+    assert job["result"]["lines_count"] >= 1
+
+
+@pytest.mark.integration
+def test_segment_then_transcribe_jobs_run_real_ml_queue(client, owner_headers, owner_project):
+    project_id, document_id, part_id = _create_document_with_part(
+        client, owner_headers, owner_project
+    )
+    base = _documents_url(project_id)
+
+    segment = client.post(
+        f"{base}/{document_id}/parts/{part_id}/segment",
+        headers=owner_headers,
+        json={},
+    )
+    assert segment.status_code == 202
+    segment_job = _poll_job(
+        client,
+        segment.json()["job_id"],
+        expect="done",
+        headers=owner_headers,
+        timeout=30.0,
+    )
+    assert segment_job["result"]["lines_count"] >= 1
+
+    lines = client.get(f"{base}/{document_id}/parts/{part_id}/lines", headers=owner_headers)
+    assert lines.status_code == 200
+    line_count = len(lines.json())
+    assert line_count == segment_job["result"]["lines_count"]
+
+    transcribe = client.post(
+        f"{base}/{document_id}/parts/{part_id}/transcribe",
+        headers=owner_headers,
+    )
+    assert transcribe.status_code == 202
+    transcribe_job = _poll_job(
+        client,
+        transcribe.json()["job_id"],
+        expect="done",
+        headers=owner_headers,
+        timeout=120.0,
+    )
+    assert transcribe_job["type"] == "transcribe"
+    assert len(transcribe_job["result"]["lines"]) == line_count
+
+    transcribed_lines = client.get(
+        f"{base}/{document_id}/parts/{part_id}/lines",
+        headers=owner_headers,
+    )
+    assert transcribed_lines.status_code == 200
+    for line in transcribed_lines.json():
+        assert any(
+            entry["transcription_kind"] == "model"
+            for entry in line["line_transcriptions"]
+        )
 
 
 @pytest.mark.integration
@@ -131,7 +182,7 @@ def test_segment_merge_preserves_manual_lines_and_prunes_machine_lines(
     assert manual["points"] == [[100, 100], [120, 100], [120, 110], [100, 110]]
     assert manual["manual_geometry"] is True
     assert manual["line_transcriptions"][0]["text"] == "manual text survives"
-    assert sum(1 for line in lines if line["source"] == "kraken") == 1
+    assert sum(1 for line in lines if line["source"] == "kraken") >= 1
 
 
 @pytest.mark.integration
