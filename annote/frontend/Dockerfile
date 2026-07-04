@@ -5,7 +5,8 @@ WORKDIR /app
 ENV VITE_API_BASE_URL=http://localhost:8000
 
 COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm \
+  npm ci
 
 EXPOSE 5173
 
@@ -24,7 +25,8 @@ WORKDIR /app
 
 COPY VERSION ./VERSION
 COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm \
+  npm ci
 
 COPY frontend/ .
 
