@@ -58,6 +58,7 @@ services:
     command: poe api
 
   ml-api:
+    platform: linux/amd64
     build:
       context: .
       dockerfile: ml_service/Dockerfile
@@ -89,6 +90,7 @@ services:
     command: uvicorn ml_service.api.main:app --host 0.0.0.0 --port 8001 --workers 1
 
   ml-worker:
+    platform: linux/amd64
     build:
       context: .
       dockerfile: ml_service/Dockerfile
