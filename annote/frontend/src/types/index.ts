@@ -1,6 +1,6 @@
 export interface Region {
   id: number;
-  boundary: number[][];
+  boundary: PointTuple[];
   bbox: [number, number, number, number];
 }
 
@@ -40,7 +40,9 @@ export interface OCRState {
   error: string | null;
 }
 
-// New types for enhanced interaction
+export type PointTuple = [number, number];
+
+// Types for public document canvas interaction
 export type DrawMode = 'none' | 'box' | 'polygon';
 export type EditMode = 'none' | 'vertices';
 
@@ -67,12 +69,4 @@ export interface EditingSettings {
   showBoundingBoxes: boolean;
   vertexSize: number; // 1-3 scale
   moveStep: number; // pixels to move with arrow keys
-}
-
-export type DrawMode = 'none' | 'box' | 'polygon';
-export type EditMode = 'none' | 'move' | 'vertices';
-
-export interface Point {
-  x: number;
-  y: number;
 }

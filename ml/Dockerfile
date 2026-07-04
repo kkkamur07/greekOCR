@@ -14,6 +14,7 @@ FROM python:3.12-slim AS runtime
 WORKDIR /app
 
 COPY --from=builder /app/.venv /app/.venv
+COPY pyproject.toml /app/pyproject.toml
 
 COPY ml /app/ml
 

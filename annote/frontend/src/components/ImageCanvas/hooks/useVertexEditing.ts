@@ -1,21 +1,22 @@
 // /Users/krishuagarwal/Desktop/Programming/python/greek-ocr/frontend/src/components/ImageCanvas/hooks/useVertexEditing.ts
 
-import { useState, useCallback, useEffect, RefObject } from 'react';
+import { useState, useCallback, useEffect, type RefObject } from 'react';
 import { message } from 'antd';
-import { Region, Point } from '../../../types';
+import { Region, Point, type PointTuple } from '../../../types';
 
 export const useVertexEditing = (
   editMode: 'none' | 'vertices',
   regions: Region[],
   onRegionUpdated: ((region: Region) => void) | undefined,
   onSelectRegion: (id: number | null) => void,
-  imageRef: RefObject<HTMLImageElement>
+  imageRef: RefObject<HTMLImageElement | null>
 ) => {
   const [editingRegionId, setEditingRegionId] = useState<number | null>(null);
   const [draggedVertexIndex, setDraggedVertexIndex] = useState<number | null>(null);
-  const [tempBoundary, setTempBoundary] = useState<number[][] | null>(null);
+  const [tempBoundary, setTempBoundary] = useState<PointTuple[] | null>(null);
 
-  // Reset when edit mode changes
+  // Reset local drag state when vertex editing is turned off.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (editMode === 'none') {
       setEditingRegionId(null);
@@ -23,6 +24,7 @@ export const useVertexEditing = (
       setTempBoundary(null);
     }
   }, [editMode]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const getRelativeCoordinates = useCallback((e: React.MouseEvent): Point | null => {
     if (!imageRef.current) return null;
@@ -58,7 +60,8 @@ export const useVertexEditing = (
     if (!coords) return;
 
     const newBoundary = [...tempBoundary];
-    newBoundary[draggedVertexIndex] = [coords.x, coords.y];
+    const nextPoint: PointTuple = [coords.x, coords.y];
+    newBoundary[draggedVertexIndex] = nextPoint;
     setTempBoundary(newBoundary);
   }, [draggedVertexIndex, tempBoundary, getRelativeCoordinates]);
 

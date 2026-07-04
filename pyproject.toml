@@ -9,16 +9,16 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-kraken = ["kraken"]
+kraken = ["kraken>=7.0.2"]
 train = [
-    "accelerate",
-    "jiwer",
-    "pillow",
-    "torch",
-    "torchvision",
-    "transformers",
+    "accelerate>=1.13.0",
+    "jiwer>=4.0.0",
+    "pillow>=12.2.0",
+    "torch>=2.10.0",
+    "torchvision>=0.25.0",
+    "transformers>=5.11.0",
 ]
-calamari = ["calamari-ocr"]
+calamari = ["calamari-ocr>=2.3.1"]
 
 [dependency-groups]
 # Inference service API (separate container; contracts importable from annote)

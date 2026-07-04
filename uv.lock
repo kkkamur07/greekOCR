@@ -1153,16 +1153,16 @@ platform = [
 
 [package.metadata]
 requires-dist = [
-    { name = "accelerate", marker = "extra == 'train'" },
-    { name = "calamari-ocr", marker = "extra == 'calamari'" },
-    { name = "jiwer", marker = "extra == 'train'" },
-    { name = "kraken", marker = "extra == 'kraken'" },
+    { name = "accelerate", marker = "extra == 'train'", specifier = ">=1.13.0" },
+    { name = "calamari-ocr", marker = "extra == 'calamari'", specifier = ">=2.3.1" },
+    { name = "jiwer", marker = "extra == 'train'", specifier = ">=4.0.0" },
+    { name = "kraken", marker = "extra == 'kraken'", specifier = ">=7.0.2" },
     { name = "numpy" },
     { name = "opencv-python" },
-    { name = "pillow", marker = "extra == 'train'" },
-    { name = "torch", marker = "extra == 'train'" },
-    { name = "torchvision", marker = "extra == 'train'" },
-    { name = "transformers", marker = "extra == 'train'" },
+    { name = "pillow", marker = "extra == 'train'", specifier = ">=12.2.0" },
+    { name = "torch", marker = "extra == 'train'", specifier = ">=2.10.0" },
+    { name = "torchvision", marker = "extra == 'train'", specifier = ">=0.25.0" },
+    { name = "transformers", marker = "extra == 'train'", specifier = ">=5.11.0" },
 ]
 provides-extras = ["kraken", "train", "calamari"]
 

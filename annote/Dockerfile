@@ -6,6 +6,8 @@ LABEL org.opencontainers.image.title="annote-api" \
 
 WORKDIR /app
 
+COPY --from=ghcr.io/astral-sh/uv:0.11.26 /uv /uvx /bin/
+
 RUN apt-get update \
   && apt-get install -y --no-install-recommends libpq-dev gcc fonts-dejavu-core \
   && rm -rf /var/lib/apt/lists/*
@@ -13,8 +15,7 @@ RUN apt-get update \
 COPY pyproject.toml uv.lock /app/
 COPY annote/README.md annote/VERSION /app/
 
-RUN python -m pip install --no-cache-dir uv \
-  && uv sync --frozen --only-group platform
+RUN uv sync --frozen --only-group platform
 
 COPY annote/backend /app/backend
 COPY annote/infrastructure /app/infrastructure
