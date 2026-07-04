@@ -29,6 +29,7 @@ vi.mock('../api/client', async (importOriginal) => {
       replacePartLines: vi.fn(),
       updateLineGeometry: vi.fn(),
       resetPartLayout: vi.fn(),
+      generateTranscriptionPdf: vi.fn(),
     },
   };
 });
@@ -47,6 +48,7 @@ type MockedEditorApi = {
   replacePartLines: ReturnType<typeof vi.fn>;
   updateLineGeometry: ReturnType<typeof vi.fn>;
   resetPartLayout: ReturnType<typeof vi.fn>;
+  generateTranscriptionPdf: ReturnType<typeof vi.fn>;
 };
 
 const mockedApi = api as unknown as MockedEditorApi;
@@ -118,6 +120,8 @@ describe('PageEditorPlaceholderPage', () => {
       transcription_kind: 'ground_truth',
       text: 'typed approved text',
       confidence: null,
+      text_source: 'human_edited',
+      character_confidences: null,
     });
     mockedApi.copyToGroundTruth.mockResolvedValue({ copied_line_ids: ['line-1'] });
     mockedApi.updatePartReviewStatus.mockResolvedValue({
@@ -153,6 +157,43 @@ describe('PageEditorPlaceholderPage', () => {
     expect(screen.getByRole('link', { name: /document parts/i }).getAttribute('href')).toBe(
       '/projects/project-1/documents/doc-1',
     );
+  });
+
+  it('renders classic strip layout with toolbar, canvas, and pairing strip when a Segment is selected', async () => {
+    mockedApi.getDocument.mockResolvedValue(DOCUMENT);
+    mockedApi.listPartLines.mockResolvedValue([
+      {
+        id: 'line-1',
+        part_id: 'part-1',
+        block_id: null,
+        order: 0,
+        kind: 'polygon',
+        points: [
+          [10, 10],
+          [50, 10],
+          [50, 30],
+          [10, 30],
+        ],
+        source: 'manual',
+        source_metadata: null,
+        kraken_ceiling: null,
+        manual_geometry: true,
+        line_transcriptions: [],
+        created_at: '2026-06-16T10:00:00Z',
+      },
+    ]);
+
+    renderPageEditor();
+
+    expect(await screen.findByText('ANNOTE PAGE WORKSPACE')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /rectangle segment/i })).toBeTruthy();
+    expect(screen.getByRole('img', { name: /page geometry canvas/i })).toBeTruthy();
+
+    fireEvent.click(screen.getByLabelText('Segment 1'));
+
+    expect(screen.getByLabelText(/transcription layer/i)).toBeTruthy();
+    expect(screen.getAllByText('Selected Segment 1').length).toBeGreaterThan(0);
+    expect(screen.getByText('Page transcription and pairing')).toBeTruthy();
   });
 
   it('does not render protected media when the API rejects access', async () => {
@@ -386,6 +427,8 @@ describe('PageEditorPlaceholderPage', () => {
       transcription_kind: 'ground_truth',
       text: 'typed approved text',
       confidence: null,
+      text_source: 'human_edited',
+      character_confidences: null,
     });
 
     renderPageEditor();
@@ -434,6 +477,8 @@ describe('PageEditorPlaceholderPage', () => {
             transcription_kind: 'ground_truth',
             text: 'old approved text',
             confidence: null,
+      text_source: 'human_edited',
+      character_confidences: null,
           },
           {
             id: 'line-tx-2',
@@ -441,6 +486,8 @@ describe('PageEditorPlaceholderPage', () => {
             transcription_kind: 'model',
             text: 'model suggestion',
             confidence: 0.91,
+      text_source: 'model',
+      character_confidences: null,
           },
         ],
         created_at: '2026-06-16T10:00:00Z',
@@ -498,7 +545,7 @@ describe('PageEditorPlaceholderPage', () => {
     expect(await screen.findByText('Ground truth text saved')).toBeTruthy();
   });
 
-  it('shows model layer text as read-only and copies the selected Segment to Ground truth', async () => {
+  it('shows model OCR review and saves the selected Segment to Ground truth', async () => {
     mockedApi.getDocument.mockResolvedValue(DOCUMENT);
     mockedApi.listPartLines
       .mockResolvedValueOnce([
@@ -525,6 +572,8 @@ describe('PageEditorPlaceholderPage', () => {
               transcription_kind: 'model',
               text: 'model suggestion',
               confidence: 0.91,
+              text_source: 'model',
+              character_confidences: null,
             },
           ],
           created_at: '2026-06-16T10:00:00Z',
@@ -554,6 +603,8 @@ describe('PageEditorPlaceholderPage', () => {
               transcription_kind: 'ground_truth',
               text: 'model suggestion',
               confidence: null,
+      text_source: 'human_edited',
+      character_confidences: null,
             },
             {
               id: 'line-tx-model-1',
@@ -561,6 +612,8 @@ describe('PageEditorPlaceholderPage', () => {
               transcription_kind: 'model',
               text: 'model suggestion',
               confidence: 0.91,
+              text_source: 'model',
+              character_confidences: null,
             },
           ],
           created_at: '2026-06-16T10:00:00Z',
@@ -602,13 +655,11 @@ describe('PageEditorPlaceholderPage', () => {
       target: { value: 'model-1' },
     });
 
-    expect(screen.getByLabelText(/read-only text for selected segment/i)).toHaveValue(
-      'model suggestion',
-    );
-    expect(screen.getByLabelText(/read-only text for selected segment/i)).toHaveAttribute(
-      'readonly',
-    );
-    fireEvent.click(screen.getByRole('button', { name: /copy selected segment to ground truth/i }));
+    expect(screen.getByText('OCR review · Segment 1')).toBeTruthy();
+    expect(screen.getByLabelText('Line confidence')).toBeTruthy();
+    expect(screen.getByText('91.0%')).toBeTruthy();
+    expect(screen.getByLabelText('OCR text with per-character confidence highlighting')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
 
     await waitFor(() => {
       expect(mockedApi.copyToGroundTruth).toHaveBeenLastCalledWith(
@@ -618,13 +669,80 @@ describe('PageEditorPlaceholderPage', () => {
         { line_ids: ['line-1'] },
       );
     });
-    expect(await screen.findByText('Copied 1 Segment to Ground truth')).toBeTruthy();
-    fireEvent.change(screen.getByLabelText(/transcription layer/i), {
-      target: { value: 'ground-truth-1' },
-    });
+    expect(await screen.findByText('Saved to Ground truth')).toBeTruthy();
+    expect(screen.getByLabelText(/transcription layer/i)).toHaveValue('ground-truth-1');
     expect(screen.getByLabelText(/ground truth text for selected segment/i)).toHaveValue(
       'model suggestion',
     );
+  });
+
+  it('shows OCR review on Ground truth when text_source is model', async () => {
+    mockedApi.getDocument.mockResolvedValue(DOCUMENT);
+    mockedApi.listPartLines.mockResolvedValue([
+      {
+        id: 'line-1',
+        part_id: 'part-1',
+        block_id: null,
+        order: 0,
+        kind: 'polygon',
+        points: [[10, 10], [50, 10], [50, 30], [10, 30]],
+        source: 'manual',
+        source_metadata: null,
+        kraken_ceiling: null,
+        manual_geometry: true,
+        line_transcriptions: [
+          {
+            id: 'line-tx-ground-1',
+            transcription_id: 'ground-truth-1',
+            transcription_kind: 'ground_truth',
+            text: 'model suggestion',
+            confidence: null,
+            text_source: 'model',
+          },
+          {
+            id: 'line-tx-model-1',
+            transcription_id: 'model-1',
+            transcription_kind: 'model',
+            text: 'model suggestion',
+            confidence: 0.91,
+            text_source: 'model',
+            character_confidences: [
+              { char: 'm', confidence: 0.95 },
+              { char: 'o', confidence: 0.62 },
+            ],
+          },
+        ],
+        created_at: '2026-06-16T10:00:00Z',
+      },
+    ]);
+    mockedApi.listTranscriptions.mockResolvedValue([
+      {
+        id: 'ground-truth-1',
+        document_id: 'doc-1',
+        name: 'Ground truth',
+        kind: 'ground_truth',
+        created_by_job_id: null,
+        created_at: '2026-06-16T10:00:00Z',
+      },
+      {
+        id: 'model-1',
+        document_id: 'doc-1',
+        name: 'Kraken run',
+        kind: 'model',
+        created_by_job_id: 'job-1',
+        created_at: '2026-06-16T10:01:00Z',
+      },
+    ]);
+
+    renderPageEditor();
+
+    fireEvent.click(await screen.findByRole('button', { name: /transcription edit/i }));
+    fireEvent.click(screen.getByLabelText('Segment 1'));
+
+    expect(screen.getByText('OCR review · Segment 1')).toBeTruthy();
+    expect(screen.getByLabelText('Line confidence')).toBeTruthy();
+    expect(screen.queryByLabelText(/ground truth text for selected segment/i)).toBeNull();
+    expect(screen.getByRole('button', { name: /^save$/i })).toBeTruthy();
   });
 
   it('surfaces Ground truth save API errors and keeps the typed text visible', async () => {
@@ -653,6 +771,8 @@ describe('PageEditorPlaceholderPage', () => {
             transcription_kind: 'ground_truth',
             text: 'old approved text',
             confidence: null,
+      text_source: 'human_edited',
+      character_confidences: null,
           },
         ],
         created_at: '2026-06-16T10:00:00Z',
@@ -1062,5 +1182,32 @@ describe('PageEditorPlaceholderPage', () => {
     expect(screen.getByLabelText('Line line-1 baseline').getAttribute('points')).toBe(
       '60,140 300,150',
     );
+  });
+
+  it('opens the transcription PDF side pane from the toolbar', async () => {
+    mockedApi.getDocument.mockResolvedValue(DOCUMENT);
+    mockedApi.generateTranscriptionPdf.mockResolvedValue(
+      new Blob(['%PDF'], { type: 'application/pdf' }),
+    );
+    vi.stubGlobal('URL', {
+      createObjectURL: vi.fn(() => 'blob:preview'),
+      revokeObjectURL: vi.fn(),
+    });
+
+    renderPageEditor();
+
+    expect(await screen.findByText('ANNOTE PAGE WORKSPACE')).toBeTruthy();
+    fireEvent.click(screen.getAllByRole('button', { name: /^transcription pdf$/i })[0]);
+
+    expect(await screen.findByLabelText('Transcription PDF preview')).toBeTruthy();
+    await waitFor(() => {
+      expect(mockedApi.generateTranscriptionPdf).toHaveBeenCalledWith(
+        'project-1',
+        'doc-1',
+        'part-1',
+      );
+    });
+
+    vi.unstubAllGlobals();
   });
 });

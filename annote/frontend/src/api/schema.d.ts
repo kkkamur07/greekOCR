@@ -89,6 +89,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/internal/ml/job-complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Complete Ml Job */
+        post: operations["complete_ml_job_internal_ml_job_complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/jobs/test": {
         parameters: {
             query?: never;
@@ -908,6 +925,13 @@ export interface components {
             /** File */
             file: string;
         };
+        /** CharacterConfidence */
+        CharacterConfidence: {
+            /** Char */
+            char: string;
+            /** Confidence */
+            confidence: number;
+        };
         /** CopyToGroundTruthRequest */
         CopyToGroundTruthRequest: {
             /** Line Ids */
@@ -1120,6 +1144,25 @@ export interface components {
          * @enum {string}
          */
         InferenceTask: "segment" | "transcribe" | "binarize";
+        /** JobCallbackRequest */
+        JobCallbackRequest: {
+            /** Error */
+            error?: string | null;
+            /**
+             * Ml Job Id
+             * Format: uuid
+             */
+            ml_job_id: string;
+            /** Output */
+            output?: components["schemas"]["SegmentRunResponse"] | components["schemas"]["TranscribeRunResponse"] | null;
+            /**
+             * Product Job Id
+             * Format: uuid
+             */
+            product_job_id: string;
+            status: components["schemas"]["MLJobStatus"];
+            task: components["schemas"]["MLTask"];
+        };
         /** JobResponse */
         JobResponse: {
             /** Completed At */
@@ -1279,6 +1322,8 @@ export interface components {
         };
         /** LineTranscriptionResponse */
         LineTranscriptionResponse: {
+            /** Character Confidences */
+            character_confidences?: components["schemas"]["CharacterConfidence"][] | null;
             /** Confidence */
             confidence: number | null;
             /**
@@ -1288,6 +1333,7 @@ export interface components {
             id: string;
             /** Text */
             text: string;
+            text_source: components["schemas"]["LineTranscriptionTextSource"];
             /**
              * Transcription Id
              * Format: uuid
@@ -1295,6 +1341,11 @@ export interface components {
             transcription_id: string;
             transcription_kind: components["schemas"]["TranscriptionKind"];
         };
+        /**
+         * LineTranscriptionTextSource
+         * @enum {string}
+         */
+        LineTranscriptionTextSource: "model" | "human_edited";
         /** LineUpsertRequest */
         LineUpsertRequest: {
             /** Approved Text */
@@ -1333,6 +1384,16 @@ export interface components {
             /** Password */
             password: string;
         };
+        /**
+         * MLJobStatus
+         * @enum {string}
+         */
+        MLJobStatus: "pending" | "running" | "done" | "failed";
+        /**
+         * MLTask
+         * @enum {string}
+         */
+        MLTask: "segment" | "transcribe" | "binarize";
         /** ModelBindingCreateRequest */
         ModelBindingCreateRequest: {
             /**
@@ -1549,6 +1610,56 @@ export interface components {
             };
             model: components["schemas"]["InferenceModelResponse"];
         };
+        /** SegmentBlock */
+        SegmentBlock: {
+            /** Box */
+            box: {
+                [key: string]: unknown;
+            };
+            /** External Id */
+            external_id: string;
+            /** Order */
+            order: number;
+        };
+        /**
+         * SegmentGeometryKind
+         * @enum {string}
+         */
+        SegmentGeometryKind: "polygon" | "rectangle";
+        /** SegmentLine */
+        SegmentLine: {
+            /** Baseline */
+            baseline: {
+                [key: string]: unknown;
+            };
+            /** Block External Id */
+            block_external_id?: string | null;
+            /** External Id */
+            external_id: string;
+            /** @default polygon */
+            kind: components["schemas"]["SegmentGeometryKind"];
+            /** Kraken Ceiling */
+            kraken_ceiling?: number[][] | null;
+            /** Mask */
+            mask?: {
+                [key: string]: unknown;
+            } | null;
+            /** Order */
+            order: number;
+            /** Points */
+            points: number[][];
+            /** Source Metadata */
+            source_metadata?: {
+                [key: string]: unknown;
+            };
+        };
+        /** SegmentRunResponse */
+        SegmentRunResponse: {
+            /** Blocks */
+            blocks?: components["schemas"]["SegmentBlock"][];
+            /** Lines */
+            lines?: components["schemas"]["SegmentLine"][];
+        };
         /** ShareUserRequest */
         ShareUserRequest: {
             /** Username */
@@ -1563,6 +1674,15 @@ export interface components {
              * @default bearer
              */
             token_type: string;
+        };
+        /** TranscribeRunResponse */
+        TranscribeRunResponse: {
+            /** Character Confidences */
+            character_confidences: components["schemas"]["CharacterConfidence"][];
+            /** Confidence */
+            confidence: number;
+            /** Text */
+            text: string;
         };
         /**
          * TranscriptionKind
@@ -1997,6 +2117,93 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["InferenceModelResponse"][];
                 };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Not authorized */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Conflict with current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    complete_ml_job_internal_ml_job_complete_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-ML-Webhook-Secret"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobCallbackRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Not authenticated */
             401: {

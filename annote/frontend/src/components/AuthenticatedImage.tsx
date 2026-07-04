@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties, type SyntheticEvent } from 'react';
 import { Image, Spin } from 'antd';
 import { API_BASE_URL } from '../api/client';
 import { getAccessToken } from '../auth/storage';
@@ -7,10 +7,16 @@ export function AuthenticatedImage({
   src,
   alt,
   width = 120,
+  compact = false,
+  onLoad,
+  style,
 }: {
   src: string;
   alt: string;
   width?: number;
+  compact?: boolean;
+  onLoad?: (event: SyntheticEvent<HTMLImageElement>) => void;
+  style?: CSSProperties;
 }) {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -49,6 +55,9 @@ export function AuthenticatedImage({
   }
   if (!blobUrl) {
     return <span>—</span>;
+  }
+  if (compact) {
+    return <img src={blobUrl} alt={alt} onLoad={onLoad} style={style} />;
   }
   return <Image src={blobUrl} alt={alt} width={width} preview />;
 }
