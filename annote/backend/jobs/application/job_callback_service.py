@@ -9,6 +9,7 @@ from ml.contracts.common import MLJobStatus, MLTask
 from ml.contracts.jobs import JobCallbackRequest
 from ml.contracts.segment import SegmentRunResponse
 from ml.contracts.transcribe import TranscribeRunResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.exceptions import ConflictError, NotFoundError
@@ -70,16 +71,56 @@ def _apply_segment_merge(job: Job, callback: JobCallbackRequest) -> dict:
     }
 
 
-def _apply_transcribe_callback(job: Job, callback: JobCallbackRequest) -> tuple[bool, dict | None]:
+def _transcribe_line_jobs_and_outputs(
+    payload: dict,
+) -> tuple[list[dict[str, object]], dict[str, object]]:
+    return (
+        list(payload.get("ml_line_jobs", [])),
+        dict(payload.get("ml_line_outputs", {})),
+    )
+
+
+def _apply_transcribe_merge_sync(
+    session,
+    *,
+    job: Job,
+    line_jobs: list[dict[str, object]],
+    line_outputs: dict[str, object],
+) -> dict:
+    if job.document_id is None or job.document_part_id is None:
+        raise TranscribeJobHandlerError("Transcribe job is missing its target document part")
+
+    lines_with_output: list[tuple[Line, TranscribeRunResponse]] = []
+    for entry in sorted(line_jobs, key=lambda item: int(item["line_index"])):
+        line = session.get(Line, uuid.UUID(str(entry["line_id"])))
+        if line is None:
+            raise TranscribeJobHandlerError("Document line not found")
+        output = TranscribeRunResponse.model_validate(
+            line_outputs[str(entry["ml_job_id"])]
+        )
+        lines_with_output.append((line, output))
+    return TranscribeMergeService().apply_sync(
+        session,
+        document_id=job.document_id,
+        part_id=job.document_part_id,
+        job_id=job.id,
+        lines_with_output=lines_with_output,
+        commit=False,
+    )
+
+
+def _apply_transcribe_callback(
+    session,
+    job: Job,
+    callback: JobCallbackRequest,
+) -> tuple[bool, dict | None]:
     if job.document_id is None or job.document_part_id is None:
         return True, _serialize_callback_result(callback)
     if not isinstance(callback.output, TranscribeRunResponse):
         raise TranscribeJobHandlerError("Transcribe callback missing structured output")
 
     payload = dict(job.payload or {})
-    line_jobs: list[dict[str, object]] = list(payload.get("ml_line_jobs", []))
-
-    line_outputs = dict(payload.get("ml_line_outputs", {}))
+    line_jobs, line_outputs = _transcribe_line_jobs_and_outputs(payload)
     line_outputs[str(callback.ml_job_id)] = callback.output.model_dump(mode="json")
     payload["ml_line_outputs"] = line_outputs
 
@@ -89,57 +130,79 @@ def _apply_transcribe_callback(job: Job, callback: JobCallbackRequest) -> tuple[
     if len(line_outputs) < len(line_jobs):
         return False, payload
 
-    lines_with_output: list[tuple[Line, TranscribeRunResponse]] = []
-    with SyncSessionLocal() as session:
-        for entry in sorted(line_jobs, key=lambda item: int(item["line_index"])):
-            line = session.get(Line, uuid.UUID(str(entry["line_id"])))
-            if line is None:
-                raise TranscribeJobHandlerError("Document line not found")
-            output = TranscribeRunResponse.model_validate(
-                line_outputs[str(entry["ml_job_id"])]
-            )
-            lines_with_output.append((line, output))
-        result = TranscribeMergeService().apply_sync(
-            session,
-            document_id=job.document_id,
-            part_id=job.document_part_id,
-            job_id=job.id,
-            lines_with_output=lines_with_output,
-        )
+    result = _apply_transcribe_merge_sync(
+        session,
+        job=job,
+        line_jobs=line_jobs,
+        line_outputs=line_outputs,
+    )
     return True, result
+
+
+def _apply_transcribe_callback_locked(callback: JobCallbackRequest) -> bool:
+    with SyncSessionLocal() as session:
+        job = session.execute(
+            select(Job)
+            .where(Job.id == callback.product_job_id)
+            .with_for_update()
+        ).scalar_one_or_none()
+        if job is None:
+            raise NotFoundError(f"job {callback.product_job_id} not found")
+        if job.status in _TERMINAL_STATUSES:
+            return False
+        if job.type != JobType.transcribe:
+            raise ConflictError(
+                f"job {job.id} type {job.type.value} "
+                f"does not match callback task {callback.task.value}"
+            )
+
+        known_ids = _known_ml_job_ids(job)
+        if known_ids and callback.ml_job_id not in known_ids:
+            raise ConflictError(
+                f"job {job.id} does not recognize callback ml_job_id {callback.ml_job_id}"
+            )
+
+        completed, payload_or_result = _apply_transcribe_callback(session, job, callback)
+        now = datetime.now(UTC)
+        if not completed:
+            assert isinstance(payload_or_result, dict)
+            job.payload = payload_or_result
+            job.updated_at = now
+            session.commit()
+            return True
+
+        job.status = JobStatus.done
+        job.ml_job_id = callback.ml_job_id
+        job.result = payload_or_result or {}
+        job.error = None
+        job.completed_at = now
+        job.updated_at = now
+        session.commit()
+        return True
 
 
 def try_complete_transcribe_job(job_id: uuid.UUID) -> bool:
     """Complete a transcribe job when all ML line callbacks were buffered early."""
     with SyncSessionLocal() as session:
-        job = session.get(Job, job_id)
+        job = session.execute(
+            select(Job).where(Job.id == job_id).with_for_update()
+        ).scalar_one_or_none()
         if job is None or job.type != JobType.transcribe:
             return False
         if job.status in _TERMINAL_STATUSES:
             return False
         payload = dict(job.payload or {})
-        line_jobs: list[dict[str, object]] = list(payload.get("ml_line_jobs", []))
-        line_outputs = dict(payload.get("ml_line_outputs", {}))
+        line_jobs, line_outputs = _transcribe_line_jobs_and_outputs(payload)
         if not line_jobs or len(line_outputs) < len(line_jobs):
             return False
         if job.document_id is None or job.document_part_id is None:
             return False
 
-        lines_with_output: list[tuple[Line, TranscribeRunResponse]] = []
-        for entry in sorted(line_jobs, key=lambda item: int(item["line_index"])):
-            line = session.get(Line, uuid.UUID(str(entry["line_id"])))
-            if line is None:
-                raise TranscribeJobHandlerError("Document line not found")
-            output = TranscribeRunResponse.model_validate(
-                line_outputs[str(entry["ml_job_id"])]
-            )
-            lines_with_output.append((line, output))
-        result = TranscribeMergeService().apply_sync(
+        result = _apply_transcribe_merge_sync(
             session,
-            document_id=job.document_id,
-            part_id=job.document_part_id,
-            job_id=job.id,
-            lines_with_output=lines_with_output,
+            job=job,
+            line_jobs=line_jobs,
+            line_outputs=line_outputs,
         )
         now = datetime.now(UTC)
         job.status = JobStatus.done
@@ -195,17 +258,7 @@ class JobCallbackService:
             return True
 
         if job.type == JobType.transcribe:
-            completed, payload_or_result = _apply_transcribe_callback(job, callback)
-            if not completed:
-                assert isinstance(payload_or_result, dict)
-                await self._repo.update_payload(job.id, payload_or_result)
-                return True
-            await self._repo.mark_done_from_callback(
-                job.id,
-                ml_job_id=callback.ml_job_id,
-                result=payload_or_result or {},
-            )
-            return True
+            return _apply_transcribe_callback_locked(callback)
 
         await self._repo.mark_done_from_callback(
             job.id,
