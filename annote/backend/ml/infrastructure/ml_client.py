@@ -6,6 +6,7 @@ from typing import Any
 
 import httpx
 from ml_service.contracts.common import MLTask
+from ml_service.contracts.jobs import JobSubmitRequest, JobSubmitResponse
 from ml_service.contracts.run import MlRunRequest, MlRunResponse
 from ml_service.contracts.segment import SegmentRunResponse
 from ml_service.contracts.transcribe import TranscribeRunResponse
@@ -40,6 +41,19 @@ class MlServiceClient:
             )
             response.raise_for_status()
             return MlRunResponse.model_validate(response.json())
+
+    def submit_job(self, request: JobSubmitRequest) -> JobSubmitResponse:
+        with httpx.Client(
+            base_url=self._base_url,
+            transport=self._transport,
+            timeout=self._timeout,
+        ) as client:
+            response = client.post(
+                "/ml/v1/jobs",
+                json=request.model_dump(mode="json"),
+            )
+            response.raise_for_status()
+            return JobSubmitResponse.model_validate(response.json())
 
     def run_segment(
         self,

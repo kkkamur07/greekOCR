@@ -12,6 +12,7 @@ class JobSettings(BaseSettings):
     model_config = env_settings_config()
 
     enable_test_job_routes: bool = Field(default=False, alias="ENABLE_TEST_JOB_ROUTES")
+    job_worker_enabled: bool = Field(default=True, alias="JOB_WORKER_ENABLED")
     job_poll_interval_seconds: float = Field(default=0.25, alias="JOB_POLL_INTERVAL_SECONDS")
     job_poll_max_interval_seconds: float = Field(default=2.0, alias="JOB_POLL_MAX_INTERVAL_SECONDS")
     job_worker_claim_test_only: bool | None = Field(

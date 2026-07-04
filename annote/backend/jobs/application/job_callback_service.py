@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
+import uuid
+from datetime import UTC, datetime
+
 from ml_service.contracts.common import MLJobStatus, MLTask
 from ml_service.contracts.jobs import JobCallbackRequest
+from ml_service.contracts.segment import SegmentRunResponse
+from ml_service.contracts.transcribe import TranscribeRunResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.exceptions import ConflictError, NotFoundError

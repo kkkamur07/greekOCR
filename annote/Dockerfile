@@ -19,7 +19,7 @@ RUN uv sync --frozen --only-group platform
 
 COPY annote/backend /app/backend
 COPY annote/infrastructure /app/infrastructure
-COPY ml /app/ml
+COPY ml_service /app/ml_service
 
 ENV PATH="/app/.venv/bin:${PATH}" \
     PYTHONPATH=/app

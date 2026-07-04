@@ -20,6 +20,7 @@ from sqlalchemy import text
 os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production-at-least-32-bytes")
 os.environ.setdefault("AUTH_RATE_LIMIT_REQUESTS", "1000")
 os.environ.setdefault("ENABLE_TEST_JOB_ROUTES", "true")
+os.environ.setdefault("JOB_WORKER_ENABLED", "false")
 os.environ.setdefault("ML_WEBHOOK_SECRET", "test-ml-webhook-secret")
 
 import infrastructure.models  # noqa: F401 — register all ORM mappers
@@ -87,14 +88,40 @@ class MlJobsMock:
             transport=httpx.MockTransport(self._handle_request),
         )
 
-    def _deliver_callback(self, payload: dict) -> None:
+    def _deliver_callback(self, body, ml_job_id: uuid.UUID) -> None:
         def _post() -> None:
+            from ml_service.contracts.common import MLJobStatus
+            from ml_service.contracts.jobs import JobCallbackRequest
+            from ml_service.contracts.transcribe import CharacterConfidence, TranscribeRunResponse
+            from ml_service.architectures.mock import mock_segment
+            from ml_service.jobs.callback import _wrap_job_output
+
             try:
                 time.sleep(self.callback_delay)
+                if body.task.value == "segment":
+                    output = mock_segment(body.image_bytes)
+                else:
+                    line_index = int(body.params.get("line_index", 0))
+                    text = f"mock transcription {line_index + 1}"
+                    output = TranscribeRunResponse(
+                        text=text,
+                        confidence=0.99,
+                        character_confidences=[
+                            CharacterConfidence(char=char, confidence=0.99)
+                            for char in text
+                        ],
+                    )
+                callback = JobCallbackRequest(
+                    ml_job_id=ml_job_id,
+                    product_job_id=body.product_job_id,
+                    task=body.task,
+                    status=MLJobStatus.done,
+                    output=_wrap_job_output(body.task, output),
+                )
                 self.client.post(
                     "/internal/ml/job-complete",
                     headers=_WEBHOOK_HEADERS,
-                    json=payload,
+                    json=callback.model_dump(mode="json"),
                 )
             except BaseException as exc:  # pragma: no cover - surfaced by wait_for_callbacks
                 with self._lock:
@@ -106,11 +133,7 @@ class MlJobsMock:
         thread.start()
 
     def _handle_request(self, request: httpx.Request) -> httpx.Response:
-        from ml.api.run import run_ml
-        from ml.contracts.common import MLJobStatus
-        from ml.contracts.jobs import JobCallbackRequest, JobSubmitRequest
-        from ml.contracts.run import MlRunRequest
-        from ml.jobs.callback import _wrap_job_output
+        from ml_service.contracts.jobs import JobSubmitRequest
 
         if request.method == "POST" and request.url.path == "/ml/v1/jobs":
             if self.fail_submit:
@@ -119,23 +142,7 @@ class MlJobsMock:
             ml_job_id = uuid.uuid4()
             self.submitted.append(body.model_dump(mode="json"))
             if self.auto_callback:
-                run_output = run_ml(
-                    MlRunRequest(
-                        task=body.task,
-                        registry_model_id=body.registry_model_id,
-                        registry_tag=body.registry_tag,
-                        image_bytes=body.image_bytes,
-                        params=body.params,
-                    )
-                )
-                callback = JobCallbackRequest(
-                    ml_job_id=ml_job_id,
-                    product_job_id=body.product_job_id,
-                    task=body.task,
-                    status=MLJobStatus.done,
-                    output=_wrap_job_output(body.task, run_output.output),
-                )
-                self._deliver_callback(callback.model_dump(mode="json"))
+                self._deliver_callback(body, ml_job_id)
             return httpx.Response(201, json={"ml_job_id": str(ml_job_id)})
 
         return httpx.Response(404, json={"detail": "not found"})
