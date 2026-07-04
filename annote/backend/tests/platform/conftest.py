@@ -4,9 +4,13 @@ No DB mocking: ``unique_user`` only generates unique credentials; ``registered_u
 hits live ``POST /auth/register`` against kalamos.
 """
 
+import json
 import os
+import threading
+import time
 import uuid
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
@@ -15,6 +19,7 @@ os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production-at-least-32-
 os.environ.setdefault("AUTH_RATE_LIMIT_REQUESTS", "1000")
 os.environ.setdefault("ENABLE_TEST_JOB_ROUTES", "true")
 os.environ.setdefault("ML_WEBHOOK_SECRET", "test-ml-webhook-secret")
+os.environ.setdefault("ML_SERVICE_URL", "http://ml.test")
 
 import infrastructure.models  # noqa: F401 — register all ORM mappers
 from backend.core.app import create_app
@@ -28,6 +33,9 @@ from backend.core.settings import (
 )
 from backend.users.api.rate_limit import clear_auth_rate_limit_state
 from infrastructure.db import Base, sync_engine
+
+_ACTIVE_ML_JOBS_MOCK: "MlJobsMock | None" = None
+_WEBHOOK_HEADERS = {"X-ML-Webhook-Secret": os.environ["ML_WEBHOOK_SECRET"]}
 
 
 def _truncate_database() -> None:
@@ -43,8 +51,135 @@ def _truncate_database() -> None:
         )
 
 
+class MlJobsMock:
+    def __init__(
+        self,
+        client: TestClient,
+        *,
+        auto_callback: bool = True,
+        fail_submit: bool = False,
+        callback_delay: float = 0.2,
+    ) -> None:
+        self.client = client
+        self.auto_callback = auto_callback
+        self.fail_submit = fail_submit
+        self.callback_delay = callback_delay
+        self.submitted: list[dict] = []
+        self._errors: list[BaseException] = []
+        self._threads: list[threading.Thread] = []
+        self._lock = threading.Lock()
+
+    def install(self) -> None:
+        from backend.jobs.infrastructure import worker as worker_module
+        from backend.ml.infrastructure.ml_client import MlServiceClient
+
+        get_ml_settings.cache_clear()
+        worker_module._ml_client = MlServiceClient(
+            base_url="http://ml.test",
+            transport=httpx.MockTransport(self._handle_request),
+        )
+
+    def _deliver_callback(self, payload: dict) -> None:
+        def _post() -> None:
+            try:
+                time.sleep(self.callback_delay)
+                self.client.post(
+                    "/internal/ml/job-complete",
+                    headers=_WEBHOOK_HEADERS,
+                    json=payload,
+                )
+            except BaseException as exc:  # pragma: no cover - surfaced by wait_for_callbacks
+                with self._lock:
+                    self._errors.append(exc)
+
+        thread = threading.Thread(target=_post, daemon=True)
+        with self._lock:
+            self._threads.append(thread)
+        thread.start()
+
+    def _handle_request(self, request: httpx.Request) -> httpx.Response:
+        from ml.api.run import run_ml
+        from ml.contracts.common import MLJobStatus
+        from ml.contracts.jobs import JobCallbackRequest, JobSubmitRequest
+        from ml.contracts.run import MlRunRequest
+        from ml.jobs.callback import _wrap_job_output
+
+        if request.method == "POST" and request.url.path == "/ml/v1/jobs":
+            if self.fail_submit:
+                return httpx.Response(503, json={"detail": "ml unavailable"})
+            body = JobSubmitRequest.model_validate(json.loads(request.content))
+            ml_job_id = uuid.uuid4()
+            self.submitted.append(body.model_dump(mode="json"))
+            if self.auto_callback:
+                run_output = run_ml(
+                    MlRunRequest(
+                        task=body.task,
+                        registry_model_id=body.registry_model_id,
+                        registry_tag=body.registry_tag,
+                        image_bytes=body.image_bytes,
+                        params=body.params,
+                    )
+                )
+                callback = JobCallbackRequest(
+                    ml_job_id=ml_job_id,
+                    product_job_id=body.product_job_id,
+                    task=body.task,
+                    status=MLJobStatus.done,
+                    output=_wrap_job_output(body.task, run_output.output),
+                )
+                self._deliver_callback(callback.model_dump(mode="json"))
+            return httpx.Response(201, json={"ml_job_id": str(ml_job_id)})
+
+        return httpx.Response(404, json={"detail": "not found"})
+
+    def wait_for_callbacks(self, *, timeout: float = 5.0) -> None:
+        deadline = time.monotonic() + timeout
+        while True:
+            with self._lock:
+                threads = list(self._threads)
+                self._threads.clear()
+            if not threads:
+                break
+            for thread in threads:
+                remaining = max(0.0, deadline - time.monotonic())
+                thread.join(timeout=remaining)
+                if thread.is_alive():
+                    raise AssertionError("ML callback thread did not finish before teardown")
+
+        with self._lock:
+            errors = list(self._errors)
+            self._errors.clear()
+        if errors:
+            raise AssertionError("ML callback thread failed") from errors[0]
+
+
+def install_ml_jobs_mock(
+    client: TestClient,
+    *,
+    auto_callback: bool = True,
+    fail_submit: bool = False,
+    callback_delay: float = 0.2,
+) -> MlJobsMock:
+    global _ACTIVE_ML_JOBS_MOCK
+    mock = MlJobsMock(
+        client,
+        auto_callback=auto_callback,
+        fail_submit=fail_submit,
+        callback_delay=callback_delay,
+    )
+    mock.install()
+    _ACTIVE_ML_JOBS_MOCK = mock
+    return mock
+
+
+def _wait_for_active_ml_jobs_mock() -> None:
+    if _ACTIVE_ML_JOBS_MOCK is not None:
+        _ACTIVE_ML_JOBS_MOCK.wait_for_callbacks()
+
+
 @pytest.fixture(autouse=True)
 def isolated_platform_state():
+    _wait_for_active_ml_jobs_mock()
     get_app_settings.cache_clear()
     get_auth_settings.cache_clear()
     get_infrastructure_settings.cache_clear()
@@ -54,8 +189,30 @@ def isolated_platform_state():
     clear_auth_rate_limit_state()
     _truncate_database()
     yield
+    _wait_for_active_ml_jobs_mock()
     clear_auth_rate_limit_state()
     _truncate_database()
+
+def _install_ml_jobs_mock(client: TestClient) -> None:
+    """Submit segment/transcribe jobs to mocked ``POST /ml/v1/jobs`` and auto-callback."""
+    install_ml_jobs_mock(client)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def wire_mock_ml_jobs_service(client: TestClient) -> None:
+    _install_ml_jobs_mock(client)
+
+
+def restore_default_ml_jobs_mock(client: TestClient) -> MlJobsMock:
+    """Re-install the session autouse ML jobs mock after per-test overrides."""
+    return install_ml_jobs_mock(client)
+
+
+@pytest.fixture(autouse=True)
+def _restore_ml_jobs_mock_after_test(client: TestClient) -> None:
+    yield
+    _wait_for_active_ml_jobs_mock()
+    restore_default_ml_jobs_mock(client)
 
 
 @pytest.fixture(scope="session")
