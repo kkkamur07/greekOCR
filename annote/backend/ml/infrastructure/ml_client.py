@@ -5,14 +5,14 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
+from ml_service.contracts.common import MLTask
+from ml_service.contracts.run import MlRunRequest, MlRunResponse
+from ml_service.contracts.segment import SegmentRunResponse
+from ml_service.contracts.transcribe import TranscribeRunResponse
 
 from backend.core.settings.ml import get_ml_settings
 from backend.document.infrastructure.orm_models import LineGeometryKind
 from backend.ml.domain.segment import CanonicalBlock, CanonicalLine, CanonicalSegmentResult
-from ml.contracts.common import MLTask
-from ml.contracts.run import MlRunRequest, MlRunResponse
-from ml.contracts.segment import SegmentRunResponse
-from ml.contracts.transcribe import TranscribeRunResponse
 
 
 class MlServiceClient:

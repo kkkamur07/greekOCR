@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from ml.contracts.common import MLJobStatus, MLTask
-from ml.contracts.jobs import JobCallbackRequest
+from ml_service.contracts.common import MLJobStatus, MLTask
+from ml_service.contracts.jobs import JobCallbackRequest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.exceptions import ConflictError, NotFoundError

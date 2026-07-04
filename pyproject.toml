@@ -2,10 +2,10 @@
 name = "greekocr"
 version = "0.1.0"
 description = "OCR and processing for Greek documents"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.12"
 dependencies = [
-    "numpy",
-    "opencv-python",
+    "numpy>=1.24.4,<2",
+    "opencv-python>=4.8,<4.13",
 ]
 
 [project.optional-dependencies]
@@ -18,7 +18,16 @@ train = [
     "torchvision>=0.25.0",
     "transformers>=5.11.0",
 ]
-calamari = ["calamari-ocr>=2.3.1"]
+calamari = [
+    "edit-distance>=1.0.7",
+    "h5py>=3.10.0",
+    "lxml>=5.0.0",
+    "ocrd-fork-tfaip>=1.2.7",
+    "python-bidi>=0.6.6,<0.7",
+    "tensorflow>=2.14.0",
+    "tensorflow-macos>=2.14.0 ; sys_platform == 'darwin'",
+    "xlsxwriter>=3.0.0",
+]
 
 [dependency-groups]
 # Inference service API (separate container; contracts importable from annote)
@@ -32,37 +41,42 @@ ml = [
     "pyyaml>=6.0.2",
     "sqlalchemy>=2.0.36",
     "uvicorn[standard]>=0.32.0",
+    "kraken>=7.0.2",
+    "edit-distance>=1.0.7",
+    "h5py>=3.16.0",
+    "lxml>=6.1.1",
+    "ocrd-fork-tfaip>=1.2.7",
+    "python-bidi>=0.6.6,<0.7",
+    "tensorflow>=2.14.0",
+    "tensorflow-macos>=2.14.0 ; sys_platform == 'darwin'",
+    "xlsxwriter>=3.2.9",
 ]
 # Annote platform API + Postgres + tests (deps only — repo is not installed as a package)
 platform = [
-    "alembic",
-    "asyncpg",
-    "bcrypt",
-    "email-validator",
-    "fastapi",
-    "httpx",
-    "numpy",
-    "opencv-python-headless",
-    "pillow",
-    "poethepoet",
-    "psycopg2-binary",
-    "pydantic",
-    "pydantic-settings",
-    "PyJWT",
-    "python-multipart",
-    "reportlab",
-    "sqlalchemy[asyncio]",
-    "uvicorn[standard]",
-    "pytest",
-    "pytest-asyncio",
-    "pypdf",
+    "alembic>=1.14.0",
+    "asyncpg>=0.30.0",
+    "fastapi>=0.115.0",
+    "httpx>=0.28.0",
+    "bcrypt>=4.2.0",
+    "email-validator>=2.2.0",
+    "psycopg2-binary>=2.9.10",
+    "pydantic-settings>=2.6.0",
+    "pydantic>=2.10.0",
+    "PyJWT>=2.10.0",
+    "python-multipart>=0.0.18",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "uvicorn[standard]>=0.32.0",
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "pypdf>=6.13.2",
+    "pillow>=12.2.0",
+    "opencv-python-headless>=4.8,<4.13",
+    "reportlab>=5.0.0",
 ]
 
 [tool.uv]
 package = false
-# ML extras pull incompatible stacks (e.g. kraken vs calamari); resolve separately.
 conflicts = [
-    [{ extra = "kraken" }, { extra = "calamari" }],
     [{ extra = "kraken" }, { extra = "train" }],
     [{ extra = "calamari" }, { extra = "train" }],
 ]
@@ -71,20 +85,20 @@ conflicts = [
 migrate = { shell = "cd ${ANNOTE_APP_ROOT:-annote} && alembic -c infrastructure/alembic.ini upgrade head" }
 serve = { shell = "cd ${ANNOTE_APP_ROOT:-annote} && uvicorn backend.core.main:app --host 0.0.0.0 --port 8000 --workers 1" }
 api = { sequence = ["migrate", "serve"] }
-ml-api = "uvicorn ml.api.main:app --host 0.0.0.0 --port 8001 --workers 1"
-ml-worker = "python -m ml.jobs.worker"
+ml-api = "uvicorn ml_service.api.main:app --host 0.0.0.0 --port 8001 --workers 1"
+ml-worker = "python -m ml_service.jobs.worker"
 
 [tool.pytest.ini_options]
 addopts = ["--import-mode=importlib"]
 pythonpath = ["annote", "."]
 asyncio_mode = "auto"
-testpaths = ["annote/backend/tests/platform", "ml/tests"]
+testpaths = ["annote/backend/tests/platform", "ml_service/tests"]
 markers = ["integration: requires Postgres"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-src = ["annote/backend", "ml"]
+src = ["annote/backend", "ml_service"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]

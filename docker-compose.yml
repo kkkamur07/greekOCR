@@ -60,17 +60,17 @@ services:
   ml-api:
     build:
       context: .
-      dockerfile: ml/Dockerfile
+      dockerfile: ml_service/Dockerfile
     ports:
       - "8001:8001"
     environment:
       DATABASE_URL: postgresql://postgres:dev@db:5432/kalamos
       ML_CALLBACK_URL: http://api:8000/internal/ml/job-complete
-      ML_REGISTRY_PATH: /app/ml/registry.yaml
+      ML_REGISTRY_PATH: /app/ml_service/registry.yaml
       ML_WEBHOOK_SECRET: dev-ml-webhook-secret
-      ML_WEIGHTS_CACHE_DIR: /app/ml/weights/cache
+      ML_WEIGHTS_CACHE_DIR: /app/ml_service/weights/cache
     volumes:
-      - ./ml/weights:/app/ml/weights
+      - ./ml_service/weights:/app/ml_service/weights
     depends_on:
       db:
         condition: service_healthy
@@ -86,27 +86,27 @@ services:
       timeout: 3s
       retries: 12
       start_period: 5s
-    command: poe ml-api
+    command: uvicorn ml_service.api.main:app --host 0.0.0.0 --port 8001 --workers 1
 
   ml-worker:
     build:
       context: .
-      dockerfile: ml/Dockerfile
+      dockerfile: ml_service/Dockerfile
     environment:
       DATABASE_URL: postgresql://postgres:dev@db:5432/kalamos
       ML_CALLBACK_URL: http://api:8000/internal/ml/job-complete
-      ML_REGISTRY_PATH: /app/ml/registry.yaml
+      ML_REGISTRY_PATH: /app/ml_service/registry.yaml
       ML_WEBHOOK_SECRET: dev-ml-webhook-secret
-      ML_WEIGHTS_CACHE_DIR: /app/ml/weights/cache
+      ML_WEIGHTS_CACHE_DIR: /app/ml_service/weights/cache
       ML_WORKER_RUNNING_JOB_TIMEOUT_SECONDS: "1800"
     volumes:
-      - ./ml/weights:/app/ml/weights
+      - ./ml_service/weights:/app/ml_service/weights
     depends_on:
       db:
         condition: service_healthy
       api:
         condition: service_healthy
-    command: poe ml-worker
+    command: python -m ml_service.jobs.worker
 
   frontend:
     image: annote-frontend:${ANNOTE_VERSION:-0.3.3}
