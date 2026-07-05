@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:clean": "rm -rf node_modules/.vite && vite --force",
     "build": "npm run typecheck:api && vite build",
     "typecheck": "tsc -b",
     "typecheck:api": "tsc --noEmit -p tsconfig.api.json",

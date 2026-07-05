@@ -1,33 +1,34 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Button, Layout, Result, Space, Tabs, Typography } from 'antd';
-import { EditOutlined } from '@ant-design/icons';
 import {
   api,
   publicPartMediaUrl,
   type DocumentWithPartsResponse,
   type PublicLayoutResponse,
-  type PublicTranscriptionLayerResponse,
 } from '../api/client';
 import { ApiError } from '../api/errors';
 import { getAccessToken } from '../auth/storage';
 import ImageCanvas from '../components/ImageCanvas/ImageCanvas';
-import TranscriptionPanel from '../components/TrascriptionPanel/TranscriptionPanel';
+import { PublicDocumentDownloads } from '../components/public/PublicDocumentDownloads';
+import { PublicPartTabs } from '../components/public/PublicPartTabs';
+import { PublicTranscriptPanel } from '../components/public/PublicTranscriptPanel';
 import { WorkflowBadge } from '../components/WorkflowBadge';
-import type { Region, Transcription } from '../types';
-
-const { Header, Content } = Layout;
+import {
+  linesForPart,
+  publicLinesToRegions,
+  publicLinesToTranscriptions,
+} from '../utils/publicLayout';
 
 export function PublicDocumentPage() {
   const { projectId, documentId } = useParams<{ projectId: string; documentId: string }>();
   const [document, setDocument] = useState<DocumentWithPartsResponse | null>(null);
   const [layout, setLayout] = useState<PublicLayoutResponse | null>(null);
-  const [layers, setLayers] = useState<PublicTranscriptionLayerResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [activePartId, setActivePartId] = useState<string | null>(null);
-  const [selectedRegionId, setSelectedRegionId] = useState<number | null>(null);
+  const [selectedLineIndex, setSelectedLineIndex] = useState<number | null>(null);
+  const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
 
   const isLoggedIn = !!getAccessToken();
 
@@ -40,15 +41,13 @@ export function PublicDocumentPage() {
       setNotFound(false);
       setErrorMessage(null);
       try {
-        const [doc, layoutRes, layerList] = await Promise.all([
+        const [doc, layoutRes] = await Promise.all([
           api.getPublicDocument(projectId, documentId),
           api.getPublicLayout(projectId, documentId),
-          api.listPublicTranscriptions(projectId, documentId),
         ]);
         if (cancelled) return;
         setDocument(doc);
         setLayout(layoutRes);
-        setLayers(layerList);
         const sorted = [...(doc.parts ?? [])].sort((a, b) => a.order - b.order);
         setActivePartId(sorted[0]?.id ?? null);
       } catch (err) {
@@ -73,147 +72,181 @@ export function PublicDocumentPage() {
     [document],
   );
 
-  const activePart = parts.find((p) => p.id === activePartId) ?? parts[0] ?? null;
+  const activePart = parts.find((part) => part.id === activePartId) ?? parts[0] ?? null;
+  const activePartIndex = activePart ? parts.findIndex((part) => part.id === activePart.id) + 1 : 1;
 
-  const regions: Region[] = [];
-  const transcriptions: Transcription[] = [];
+  const partTabs = parts.map((part, index) => ({
+    id: part.id,
+    label: `Page ${index + 1}`,
+  }));
 
+  const partLines = useMemo(
+    () => (activePart ? linesForPart(layout?.lines, activePart.id) : []),
+    [layout, activePart],
+  );
+
+  const regions = useMemo(() => publicLinesToRegions(partLines), [partLines]);
+  const transcriptions = useMemo(
+    () => publicLinesToTranscriptions(partLines, null),
+    [partLines],
+  );
+
+  const selectedRegionId =
+    selectedLineIndex !== null && selectedLineIndex >= 0 ? selectedLineIndex + 1 : null;
+
+  const totalLines = layout?.lines?.length ?? 0;
   const imageUrl = activePart ? publicPartMediaUrl(activePart.id) : null;
   const imageDimensions = {
     width: activePart?.width ?? 0,
     height: activePart?.height ?? 0,
   };
 
+  useEffect(() => {
+    setSelectedLineIndex(null);
+    setPdfPreviewOpen(false);
+  }, [activePartId]);
+
   if (notFound) {
     return (
-      <Layout style={{ minHeight: '100vh' }}>
-        <Content style={{ padding: 48, maxWidth: 720, margin: '0 auto' }}>
-          <Result
-            status="404"
-            title="Document not available"
-            subTitle="This document is not published or does not exist. Only published documents can be viewed without signing in."
-          />
-        </Content>
-      </Layout>
+      <div className="page">
+        <main className="content-wrap">
+          <div className="notice-banner" role="alert">
+            <strong>Document not available</strong>
+            This document is not published or does not exist.
+          </div>
+        </main>
+      </div>
     );
   }
 
   if (errorMessage) {
     return (
-      <Layout style={{ minHeight: '100vh' }}>
-        <Content style={{ padding: 48, maxWidth: 720, margin: '0 auto' }}>
-          <Result status="error" title="Could not load document" subTitle={errorMessage} />
-        </Content>
-      </Layout>
+      <div className="page">
+        <main className="content-wrap">
+          <div className="notice-banner" role="alert">
+            <strong>Could not load document</strong>
+            {errorMessage}
+          </div>
+        </main>
+      </div>
     );
   }
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Header
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 16,
-          padding: '0 24px',
-          background: '#001529',
-        }}
-      >
-        <Typography.Title level={4} style={{ color: '#fff', margin: 0 }}>
-          <Link to="/" style={{ color: 'inherit' }}>
-            greekOCR
-          </Link>
-        </Typography.Title>
-        <Typography.Text style={{ color: 'rgba(255,255,255,0.65)' }}>Public view</Typography.Text>
-        <div style={{ flex: 1 }} />
-        {isLoggedIn && projectId && documentId && (
-          <Link to={`/projects/${projectId}/documents/${documentId}`}>
-            <Button type="primary" icon={<EditOutlined />}>
-              Open in editor
-            </Button>
-          </Link>
-        )}
-        {!isLoggedIn && (
-          <Link to="/login">
-            <Button style={{ color: '#fff' }} type="link">
+    <div className="page">
+      <nav className="topnav" aria-label="Main navigation">
+        <Link to="/" className="topnav-logo" aria-label="nomicous home">
+          <img src="/nomos.svg" alt="" />
+          <span>nomicous</span>
+        </Link>
+        <div className="topnav-sep" aria-hidden="true" />
+        <div className="topnav-breadcrumb">
+          <span className="current" aria-current="page">
+            Public view
+          </span>
+        </div>
+        <div className="topnav-spacer" />
+        <div className="topnav-actions">
+          {isLoggedIn && projectId && documentId && (
+            <Link
+              to={`/projects/${projectId}/documents/${documentId}`}
+              className="btn btn-outline btn-sm"
+            >
+              Editor
+            </Link>
+          )}
+          {!isLoggedIn && (
+            <Link to="/login" className="btn btn-ghost btn-sm">
               Sign in
-            </Button>
-          </Link>
-        )}
-      </Header>
-
-      <Content style={{ padding: 24, background: '#f0f2f5' }}>
-        <Space direction="vertical" size="middle" style={{ width: '100%', marginBottom: 16 }}>
-          <Typography.Title level={3} style={{ margin: 0 }}>
-            {document?.name ?? 'Document'}
-          </Typography.Title>
-          {document && <WorkflowBadge workflow={document.workflow} />}
-          {layers.length > 0 && (
-            <Typography.Text type="secondary">
-              Transcription layers: {layers.map((l) => l.name).join(', ')}
-            </Typography.Text>
+            </Link>
           )}
-          {layout && (layout.blocks?.length ?? 0) + (layout.lines?.length ?? 0) > 0 && (
-            <Typography.Text type="secondary">
-              Layout: {layout.blocks?.length ?? 0} blocks, {layout.lines?.length ?? 0} lines
-            </Typography.Text>
-          )}
-        </Space>
+        </div>
+      </nav>
 
-        {parts.length > 1 && (
-          <Tabs
-            activeKey={activePart?.id}
-            onChange={setActivePartId}
-            items={parts.map((part, index) => ({
-              key: part.id,
-              label: `Part ${index + 1}`,
-            }))}
-            style={{ marginBottom: 16 }}
+      <header className="pub-header">
+        <div className="pub-header__main">
+          <div className="flex items-center gap-2">
+            <h1>{document?.name ?? 'Document'}</h1>
+            {document && <WorkflowBadge workflow={document.workflow} />}
+          </div>
+          <p className="meta">
+            {parts.length} page{parts.length === 1 ? '' : 's'}
+            {activePart && ` · Page ${activePartIndex}: ${partLines.length} line${partLines.length === 1 ? '' : 's'}`}
+            {totalLines > 0 && ` · ${totalLines} lines total`}
+          </p>
+        </div>
+        {projectId && documentId && activePart && (
+          <PublicDocumentDownloads
+            projectId={projectId}
+            documentId={documentId}
+            partId={activePart.id}
+            partIndex={activePartIndex}
+            pdfPreviewOpen={pdfPreviewOpen}
+            onPdfPreviewOpenChange={setPdfPreviewOpen}
           />
         )}
+      </header>
 
-        <div style={{ display: 'flex', gap: 24, minHeight: 'calc(100vh - 220px)' }}>
+      <PublicPartTabs
+        parts={partTabs}
+        activeId={activePart?.id ?? null}
+        onChange={setActivePartId}
+      />
+
+      <main className="content-wrap">
+        <div className="pub-split">
           <div
-            style={{
-              flex: '0 0 65%',
-              background: '#fff',
-              borderRadius: 8,
-              overflow: 'hidden',
-              opacity: loading ? 0.6 : 1,
-            }}
+            className="pub-canvas"
+            role="img"
+            aria-label={
+              activePart ? `Manuscript page ${activePartIndex}` : 'Manuscript page'
+            }
+            style={{ opacity: loading ? 0.6 : 1 }}
           >
-            <ImageCanvas
-              readOnly
-              imageUrl={imageUrl}
-              imageDimensions={imageDimensions}
-              regions={regions}
-              selectedRegionId={selectedRegionId}
-              onSelectRegion={setSelectedRegionId}
-              onAddRegion={() => {}}
-              onUpdateRegion={() => {}}
-              onDeleteRegion={() => {}}
-              onTranscribeRegion={() => {}}
-            />
+            {imageUrl && imageDimensions.width > 0 ? (
+              <ImageCanvas
+                readOnly
+                imageUrl={imageUrl}
+                imageDimensions={imageDimensions}
+                regions={regions}
+                selectedRegionId={selectedRegionId}
+                onSelectRegion={(regionId) => {
+                  setSelectedLineIndex(regionId === null ? null : regionId - 1);
+                }}
+                onAddRegion={() => {}}
+                onUpdateRegion={() => {}}
+                onDeleteRegion={() => {}}
+                onTranscribeRegion={() => {}}
+              />
+            ) : (
+              <>
+                <p>Manuscript image</p>
+                <p className="text-muted text-sm">No page image available</p>
+              </>
+            )}
           </div>
-          <div style={{ flex: '0 0 35%', background: '#fff', borderRadius: 8, overflow: 'hidden' }}>
-            <TranscriptionPanel
-              readOnly
-              regions={regions}
-              transcriptions={transcriptions}
-              selectedRegionId={selectedRegionId}
-              onSelectRegion={setSelectedRegionId}
-              onUpdateTranscription={() => {}}
-              onDeleteRegion={() => {}}
+
+          {activePart && (
+            <PublicTranscriptPanel
+              partId={activePart.id}
+              layout={layout}
+              selectedLineIndex={selectedLineIndex}
+              onSelectLine={setSelectedLineIndex}
             />
-          </div>
+          )}
         </div>
 
         {!loading && parts.length === 0 && (
-          <Typography.Text type="secondary">
-            This published document has no page images yet.
-          </Typography.Text>
+          <p className="list-hint">This published document has no page images yet.</p>
         )}
-      </Content>
-    </Layout>
+
+        {transcriptions.length === 0 && partLines.length > 0 && !loading && (
+          <p className="list-hint">
+            Line geometry is visible on the canvas. Add ground-truth transcriptions in the editor
+            to populate this panel.
+          </p>
+        )}
+      </main>
+    </div>
   );
 }

@@ -10,7 +10,7 @@ RUN --mount=type=cache,target=/root/.npm \
 
 EXPOSE 5173
 
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+CMD ["sh", "-c", "rm -rf node_modules/.vite && npm run dev -- --host 0.0.0.0 --force"]
 
 
 FROM node:20-alpine AS builder

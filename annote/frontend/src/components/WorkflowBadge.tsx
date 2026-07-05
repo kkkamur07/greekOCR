@@ -1,12 +1,19 @@
-import { Tag } from 'antd';
-import type { DocumentWorkflow } from '../api/client';
+import type { DocumentWorkflow } from '../../api/client';
 
-const WORKFLOW_COLORS: Record<DocumentWorkflow, string> = {
-  draft: 'default',
-  published: 'green',
-  archived: 'orange',
+const WORKFLOW_CLASS: Record<DocumentWorkflow, string> = {
+  draft: 'badge-draft',
+  published: 'badge-published',
+  archived: 'badge-archived',
 };
 
 export function WorkflowBadge({ workflow }: { workflow: DocumentWorkflow }) {
-  return <Tag color={WORKFLOW_COLORS[workflow]}>{workflow}</Tag>;
+  return <span className={`badge ${WORKFLOW_CLASS[workflow]}`}>{workflow}</span>;
+}
+
+export function ReviewBadge({ reviewed }: { reviewed: boolean }) {
+  return (
+    <span className={`badge ${reviewed ? 'badge-reviewed' : 'badge-unreviewed'}`}>
+      {reviewed ? 'reviewed' : 'unreviewed'}
+    </span>
+  );
 }

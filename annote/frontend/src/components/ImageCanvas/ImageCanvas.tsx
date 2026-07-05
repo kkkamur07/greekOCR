@@ -148,7 +148,7 @@ const ImageCanvas: React.FC<ImageCanvasProps> = ({
                 type={drawMode === 'box' ? 'primary' : 'default'}
                 disabled={!imageUrl}
               >
-                Box <Tag color="blue">{KEYBOARD_SHORTCUTS.DRAW_BOX}</Tag>
+                <Tag>{KEYBOARD_SHORTCUTS.DRAW_BOX}</Tag>
               </Button>
             </Tooltip>
             <Tooltip title={`Draw Polygon (${KEYBOARD_SHORTCUTS.DRAW_POLYGON})`}>
@@ -158,7 +158,7 @@ const ImageCanvas: React.FC<ImageCanvasProps> = ({
                 type={drawMode === 'polygon' ? 'primary' : 'default'}
                 disabled={!imageUrl}
               >
-                Polygon <Tag color="blue">{KEYBOARD_SHORTCUTS.DRAW_POLYGON}</Tag>
+                Polygon <Tag>{KEYBOARD_SHORTCUTS.DRAW_POLYGON}</Tag>
               </Button>
             </Tooltip>
           </Space.Compact>
@@ -171,7 +171,7 @@ const ImageCanvas: React.FC<ImageCanvasProps> = ({
               type={editMode === 'vertices' ? 'primary' : 'default'}
               disabled={!imageUrl || regions.length === 0}
             >
-              Edit Vertices <Tag color="blue">{KEYBOARD_SHORTCUTS.EDIT_VERTICES}</Tag>
+              Edit Vertices <Tag>{KEYBOARD_SHORTCUTS.EDIT_VERTICES}</Tag>
             </Button>
           </Tooltip>
 

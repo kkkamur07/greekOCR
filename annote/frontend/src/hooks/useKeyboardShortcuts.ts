@@ -6,6 +6,7 @@ interface ShortcutHandlers {
   onEditVertices?: () => void;
   onDelete?: () => void;
   onEscape?: () => void;
+  onEnter?: () => void;
   onUndo?: () => void;
   onRedo?: () => void;
   onMoveUp?: () => void;
@@ -49,6 +50,10 @@ export const useKeyboardShortcuts = (handlers: ShortcutHandlers) => {
       else if (key === 'escape') {
         e.preventDefault();
         handlers.onEscape?.();
+      }
+      // Enter - Complete (e.g. polygon)
+      else if (key === 'enter') {
+        handlers.onEnter?.();
       }
       // Ctrl+Z - Undo
       else if (ctrl && key === 'z' && !e.shiftKey) {

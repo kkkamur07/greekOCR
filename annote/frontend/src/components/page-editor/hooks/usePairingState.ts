@@ -1,14 +1,22 @@
 import { useEffect, useState, type ChangeEvent, type Dispatch, type SetStateAction } from 'react';
 import {
   api,
+  waitForJob,
+  type JobResponse,
   type LineResponse,
   type TranscriptionLayerResponse,
 } from '../../../api/client';
+import type { PageEditorJobKind } from '../jobProgress';
 import {
   lineTextForLayer,
   modelLayerIdForPromotion,
   withLocalGroundTruth,
 } from './utils';
+
+type TranscribeJobResult = {
+  transcription_id: string;
+  lines: Array<{ line_id: string; text: string; confidence: number }>;
+};
 
 type PairingStateInput = {
   projectId: string | undefined;
@@ -29,6 +37,10 @@ type PairingStateInput = {
   >;
   setPairingError: Dispatch<SetStateAction<string | null>>;
   selectedTranscribeModelId: string | null;
+  trackJobAndWait?: (
+    jobId: string,
+    meta: { label: string; kind: PageEditorJobKind },
+  ) => Promise<JobResponse>;
 };
 
 export function usePairingState({
@@ -46,12 +58,14 @@ export function usePairingState({
   setPairingProgress,
   setPairingError,
   selectedTranscribeModelId,
+  trackJobAndWait,
 }: PairingStateInput) {
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
   const [pageTranscriptionText, setPageTranscriptionText] = useState('');
   const [approvedTextDraft, setApprovedTextDraft] = useState('');
   const [transcriptionSaveMessage, setTranscriptionSaveMessage] = useState<string | null>(null);
   const [ocrRunning, setOcrRunning] = useState(false);
+  const [ocrScope, setOcrScope] = useState<'segment' | 'page' | null>(null);
   const [ocrMessage, setOcrMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -191,45 +205,109 @@ export function usePairingState({
     }
   }
 
+  async function applyTranscribeResult(job: JobResponse) {
+    const result = job.result as TranscribeJobResult | null;
+    if (!result?.transcription_id) {
+      throw new Error('Transcribe job returned no result.');
+    }
+    setLines((current) =>
+      current.map((line) => {
+        const output = result.lines.find((entry) => entry.line_id === line.id);
+        if (!output) return line;
+        const withoutLayer = line.line_transcriptions.filter(
+          (transcription) => transcription.transcription_id !== result.transcription_id,
+        );
+        return {
+          ...line,
+          line_transcriptions: [
+            ...withoutLayer,
+            {
+              id: `ocr-${line.id}-${result.transcription_id}`,
+              transcription_id: result.transcription_id,
+              transcription_kind: 'model' as const,
+              text: output.text,
+              confidence: output.confidence,
+              text_source: 'model' as const,
+              character_confidences: null,
+            },
+          ],
+        };
+      }),
+    );
+    await refreshAfterOcr(result.transcription_id);
+    return result;
+  }
+
   async function runSegmentOcr() {
-    if (!projectId || !documentId || !partId || !selectedSegmentId || !selectedTranscribeModelId) {
+    if (!projectId || !documentId || !partId) {
+      setPairingError('Page context is missing — reload and try again.');
+      return;
+    }
+    if (!selectedSegmentId) {
+      setPairingError('Select a segment on the canvas first.');
+      return;
+    }
+    if (!selectedTranscribeModelId) {
+      setPairingError('Select an HTR model before running OCR.');
       return;
     }
     setOcrRunning(true);
+    setOcrScope('segment');
     setOcrMessage(null);
     setPairingError(null);
     try {
-      const result = await api.ocrPredictLine(
-        projectId,
-        documentId,
-        partId,
-        selectedSegmentId,
-        { model_id: selectedTranscribeModelId },
-      );
-      await refreshAfterOcr(result.transcription_id);
+      const enqueued = await api.enqueueTranscribePart(projectId, documentId, partId, {
+        model_id: selectedTranscribeModelId,
+        line_ids: [selectedSegmentId],
+      });
+      const job = trackJobAndWait
+        ? await trackJobAndWait(enqueued.job_id, {
+            label: selectedSegmentNumber
+              ? `Segment ${selectedSegmentNumber}`
+              : 'Selected segment',
+            kind: 'transcription-segment',
+          })
+        : await waitForJob(enqueued.job_id);
+      await applyTranscribeResult(job);
       setOcrMessage('OCR prediction completed for selected Segment.');
     } catch (err) {
       setPairingError(err instanceof Error ? err.message : 'Segment OCR failed.');
     } finally {
       setOcrRunning(false);
+      setOcrScope(null);
     }
   }
 
   async function runPageOcr() {
-    if (!projectId || !documentId || !partId || !selectedTranscribeModelId) return;
+    if (!projectId || !documentId || !partId) {
+      setPairingError('Page context is missing — reload and try again.');
+      return;
+    }
+    if (!selectedTranscribeModelId) {
+      setPairingError('Select an HTR model before running OCR.');
+      return;
+    }
     setOcrRunning(true);
+    setOcrScope('page');
     setOcrMessage(null);
     setPairingError(null);
     try {
-      const result = await api.ocrPredictPart(projectId, documentId, partId, {
+      const enqueued = await api.enqueueTranscribePart(projectId, documentId, partId, {
         model_id: selectedTranscribeModelId,
       });
-      await refreshAfterOcr(result.transcription_id);
+      const job = trackJobAndWait
+        ? await trackJobAndWait(enqueued.job_id, {
+            label: 'Full page',
+            kind: 'transcription-page',
+          })
+        : await waitForJob(enqueued.job_id);
+      const result = await applyTranscribeResult(job);
       setOcrMessage(`OCR prediction completed for ${result.lines.length} Segment(s).`);
     } catch (err) {
       setPairingError(err instanceof Error ? err.message : 'Page OCR failed.');
     } finally {
       setOcrRunning(false);
+      setOcrScope(null);
     }
   }
 
@@ -275,6 +353,26 @@ export function usePairingState({
     );
   }
 
+  function navigateSegment(direction: -1 | 1) {
+    const sorted = [...lines].sort((a, b) => a.order - b.order);
+    if (sorted.length === 0) return;
+
+    const currentIndex = selectedSegmentId
+      ? sorted.findIndex((line) => line.id === selectedSegmentId)
+      : -1;
+
+    let nextIndex: number;
+    if (currentIndex < 0) {
+      nextIndex = direction === 1 ? 0 : sorted.length - 1;
+    } else {
+      nextIndex = Math.min(Math.max(currentIndex + direction, 0), sorted.length - 1);
+    }
+
+    if (nextIndex !== currentIndex) {
+      selectSegment(sorted[nextIndex].id);
+    }
+  }
+
   return {
     selectedSegmentId,
     setSelectedSegmentId,
@@ -284,6 +382,7 @@ export function usePairingState({
     setApprovedTextDraft,
     transcriptionSaveMessage,
     ocrRunning,
+    ocrScope,
     ocrMessage,
     selectedSegment,
     selectedSegmentNumber,
@@ -298,5 +397,6 @@ export function usePairingState({
     runPageOcr,
     promoteSelectedSegmentToGroundTruth,
     selectSegment,
+    navigateSegment,
   };
 }

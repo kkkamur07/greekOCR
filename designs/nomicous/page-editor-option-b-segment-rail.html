@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Page editor — Option B: segment rail — nomicous</title>
+  <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="page-editor.css" />
+</head>
+<body class="pe-shell">
+
+  <header class="pe-toolbar">
+    <a href="../index.html" class="pe-toolbar__logo" aria-label="nomicous home">
+      <img src="../assets/nomos.svg" alt="" />
+    </a>
+    <div class="pe-toolbar__title">
+      <a href="document-detail.html" class="pe-toolbar__back">←</a>
+      <div class="pe-toolbar__sep"></div>
+      <h1 class="pe-toolbar__doc">Grec 1360<span class="pe-toolbar__doc-page"> · p.12</span></h1>
+    </div>
+    <div class="pe-toolbar__center">
+      <span class="pe-toolbar__stat"><strong>6</strong> segs · <strong>4</strong> paired</span>
+    </div>
+    <div class="pe-toolbar__actions">
+      <div class="pe-toolbar__modes">
+        <button type="button" class="pe-toolbar__mode">Layout</button>
+        <button type="button" class="pe-toolbar__mode pe-toolbar__mode--active">Transcription</button>
+      </div>
+      <div class="pe-toolbar__cluster">
+        <label class="pe-model">
+          <span class="pe-model__label">HTR</span>
+          <select class="pe-model__select"><option selected>greek-calamariv1</option><option>syriac-calamariv1</option></select>
+        </label>
+      </div>
+      <div class="pe-toolbar__cluster">
+        <button type="button" class="pe-tb-btn">Process ▾</button>
+        <button type="button" class="pe-tb-btn">PDF</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="pe-workspace">
+    <div class="pe-body">
+      <!-- Left rail: scrollable segment list with pairing + OCR preview -->
+      <aside class="pe-seg-rail" aria-label="Segments on this page">
+        <div class="pe-seg-rail__head">Segments · 6</div>
+        <div class="pe-seg-rail__list" id="seg-rail-list">
+          <button type="button" class="pe-seg-rail__item pe-seg-rail__item--paired" data-seg="1">
+            <span class="pe-seg-rail__num">1</span>
+            <span class="pe-seg-rail__body">
+              <span class="pe-seg-rail__preview">Ἀριστοτέλης περὶ ψυχῆς</span>
+              <span class="pe-seg-rail__status pe-seg-rail__status--paired">Paired · line 1</span>
+            </span>
+          </button>
+          <button type="button" class="pe-seg-rail__item pe-seg-rail__item--paired" data-seg="2">
+            <span class="pe-seg-rail__num">2</span>
+            <span class="pe-seg-rail__body">
+              <span class="pe-seg-rail__preview">τὸ μὲν οὖν σῶμα</span>
+              <span class="pe-seg-rail__status pe-seg-rail__status--paired">Paired · line 2</span>
+            </span>
+          </button>
+          <button type="button" class="pe-seg-rail__item" data-seg="3">
+            <span class="pe-seg-rail__num">3</span>
+            <span class="pe-seg-rail__body">
+              <span class="pe-seg-rail__preview">— no OCR yet —</span>
+              <span class="pe-seg-rail__status pe-seg-rail__status--unpaired">Unpaired</span>
+            </span>
+          </button>
+          <button type="button" class="pe-seg-rail__item pe-seg-rail__item--selected" data-seg="4">
+            <span class="pe-seg-rail__num">4</span>
+            <span class="pe-seg-rail__body">
+              <span class="pe-seg-rail__preview">Ἀριστοτέλης</span>
+              <span class="pe-seg-rail__status pe-seg-rail__status--unpaired">OCR ready · unpaired</span>
+            </span>
+          </button>
+          <button type="button" class="pe-seg-rail__item pe-seg-rail__item--paired" data-seg="5">
+            <span class="pe-seg-rail__num">5</span>
+            <span class="pe-seg-rail__body">
+              <span class="pe-seg-rail__preview">ψυχὴ δὲ τὸ αἴτιον</span>
+              <span class="pe-seg-rail__status pe-seg-rail__status--paired">Paired · line 5</span>
+            </span>
+          </button>
+          <button type="button" class="pe-seg-rail__item pe-seg-rail__item--paired" data-seg="6">
+            <span class="pe-seg-rail__num">6</span>
+            <span class="pe-seg-rail__body">
+              <span class="pe-seg-rail__preview">τῆς κινήσεως</span>
+              <span class="pe-seg-rail__status pe-seg-rail__status--paired">Paired · line 6</span>
+            </span>
+          </button>
+        </div>
+      </aside>
+
+      <div class="pe-canvas-pane">
+        <div class="pe-canvas-stage">
+          <div class="pe-canvas-img-wrap">
+            <div class="pe-canvas-img">
+              <div class="pe-seg pe-seg--paired" style="top:7%;left:9%;width:82%;height:5.5%" data-canvas-seg="1"><span class="pe-seg-num">1</span></div>
+              <div class="pe-seg pe-seg--paired" style="top:14%;left:9%;width:82%;height:5.5%" data-canvas-seg="2"><span class="pe-seg-num">2</span></div>
+              <div class="pe-seg" style="top:21%;left:9%;width:82%;height:5.5%" data-canvas-seg="3"><span class="pe-seg-num">3</span></div>
+              <div class="pe-seg pe-seg--selected" style="top:28%;left:9%;width:82%;height:5.5%" data-canvas-seg="4"><span class="pe-seg-num">4</span></div>
+              <div class="pe-seg pe-seg--paired" style="top:35%;left:9%;width:82%;height:5.5%" data-canvas-seg="5"><span class="pe-seg-num">5</span></div>
+              <div class="pe-seg pe-seg--paired" style="top:42%;left:9%;width:82%;height:5.5%" data-canvas-seg="6"><span class="pe-seg-num">6</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <section class="pe-strip" style="height:200px">
+      <header class="pe-strip__bar">
+        <h2 class="pe-strip__heading">
+          <span class="pe-strip__badge" id="b-badge">4</span>
+          <span id="b-title">Segment 4 · edit &amp; pair</span>
+        </h2>
+        <span class="pe-strip__model-chip">greek-calamariv1</span>
+        <span class="pe-strip__bar-spacer"></span>
+        <button type="button" class="btn btn-accent btn-xs">Accept transcription</button>
+        <button type="button" class="btn btn-outline btn-xs">Pair to text line 4</button>
+      </header>
+      <div class="pe-strip__content">
+        <div class="pe-tx-stack">
+          <div class="pe-tx-block pe-tx-block--model">
+            <div class="pe-tx-block__head"><span class="pe-tx-block__label">OCR output</span></div>
+            <div class="pe-model-preview">
+              <span class="ch-high">Ἀ</span><span class="ch-high">ρ</span><span class="ch-mid">ι</span><span class="ch-high">σ</span><span class="ch-low">τ</span><span class="ch-high">ο</span><span class="ch-high">τ</span><span class="ch-high">έ</span><span class="ch-mid">λ</span><span class="ch-high">η</span><span class="ch-high">ς</span>
+            </div>
+          </div>
+          <div class="pe-tx-divider"></div>
+          <div class="pe-tx-block pe-tx-block--edit">
+            <div class="pe-tx-block__head"><label class="pe-tx-block__label" for="b-edit">Your transcription</label></div>
+            <textarea class="pe-strip__edit" id="b-edit" spellcheck="false">Ἀριστοτέλης</textarea>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <nav class="design-variant-nav" aria-label="Design variants">
+    <a href="page-editor-option-a-registry.html">A · Registry toolbar</a>
+    <span>·</span>
+    <span class="is-current">B · Segment rail</span>
+    <span>·</span>
+    <a href="page-editor-option-c-pairing-split.html">C · Pairing split</a>
+    <span>·</span>
+    <a href="../index.html">Gallery</a>
+  </nav>
+
+  <script>
+    function selectSeg(n) {
+      document.querySelectorAll('.pe-seg-rail__item').forEach((el) => {
+        el.classList.toggle('pe-seg-rail__item--selected', el.dataset.seg === n);
+      });
+      document.querySelectorAll('[data-canvas-seg]').forEach((el) => {
+        el.classList.toggle('pe-seg--selected', el.dataset.canvasSeg === n);
+      });
+      document.getElementById('b-badge').textContent = n;
+      document.getElementById('b-title').textContent = 'Segment ' + n + ' · edit & pair';
+    }
+    document.querySelectorAll('.pe-seg-rail__item, [data-canvas-seg]').forEach((el) => {
+      el.addEventListener('click', () => selectSeg(el.dataset.seg || el.dataset.canvasSeg));
+    });
+  </script>
+</body>
+</html>

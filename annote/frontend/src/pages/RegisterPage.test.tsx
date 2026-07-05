@@ -63,7 +63,7 @@ describe('RegisterPage', () => {
     fireEvent.change(screen.getByLabelText('Username'), {
       target: { value: 'new-researcher' },
     });
-    fireEvent.change(screen.getByLabelText('Password'), {
+    fireEvent.change(screen.getByLabelText(/^password/i), {
       target: { value: 'correct-password' },
     });
     fireEvent.click(screen.getByRole('button', { name: /create account/i }));

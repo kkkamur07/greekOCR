@@ -20,6 +20,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 COPY annote/backend /app/backend
 COPY annote/infrastructure /app/infrastructure
+COPY annote/scripts /app/scripts
 COPY ml_service /app/ml_service
 
 ENV PATH="/app/.venv/bin:${PATH}" \

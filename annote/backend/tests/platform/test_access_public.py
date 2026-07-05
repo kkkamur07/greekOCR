@@ -132,3 +132,26 @@ def test_anonymous_gets_layout_and_transcriptions(client, published_document):
     layers = client.get(f"{base}/transcriptions")
     assert layers.status_code == 200
     assert layers.json()[0]["kind"] == "ground_truth"
+
+
+@pytest.mark.integration
+def test_anonymous_can_download_published_part_artifacts(client, published_document, owner_headers):
+    project_id = published_document["project_id"]
+    document_id = published_document["document_id"]
+    part_id = published_document["part_id"]
+    base = f"/public/projects/{project_id}/documents/{document_id}/parts/{part_id}"
+
+    pdf = client.get(f"{base}/transcription-pdf")
+    assert pdf.status_code == 200
+    assert pdf.headers["content-type"] == "application/pdf"
+    assert pdf.content.startswith(b"%PDF")
+
+    xml = client.get(f"{base}/page-xml")
+    assert xml.status_code == 200
+    assert xml.headers["content-type"] == "application/xml"
+    assert xml.content.startswith(b"<?xml")
+
+    draft_pdf = client.get(
+        f"/projects/{project_id}/documents/{document_id}/parts/{part_id}/transcription-pdf"
+    )
+    assert draft_pdf.status_code == 401

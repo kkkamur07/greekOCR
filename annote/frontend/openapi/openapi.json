@@ -396,6 +396,11 @@
             "title": "Name",
             "type": "string"
           },
+          "part_count": {
+            "default": 0,
+            "title": "Part Count",
+            "type": "integer"
+          },
           "project_id": {
             "format": "uuid",
             "title": "Project Id",
@@ -452,6 +457,11 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "part_count": {
+            "default": 0,
+            "title": "Part Count",
+            "type": "integer"
           },
           "parts": {
             "items": {
@@ -728,10 +738,21 @@
           "output": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/SegmentRunResponse"
-              },
-              {
-                "$ref": "#/components/schemas/TranscribeRunResponse"
+                "discriminator": {
+                  "mapping": {
+                    "segment": "#/components/schemas/SegmentJobOutput",
+                    "transcribe": "#/components/schemas/TranscribeJobOutput"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/SegmentJobOutput"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TranscribeJobOutput"
+                  }
+                ]
               },
               {
                 "type": "null"
@@ -893,6 +914,7 @@
       "JobStatus": {
         "enum": [
           "pending",
+          "waiting",
           "running",
           "done",
           "failed"
@@ -1249,20 +1271,6 @@
       },
       "LineTranscriptionResponse": {
         "properties": {
-          "character_confidences": {
-            "anyOf": [
-              {
-                "items": {
-                  "$ref": "#/components/schemas/CharacterConfidence"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Character Confidences"
-          },
           "confidence": {
             "anyOf": [
               {
@@ -1283,9 +1291,6 @@
             "title": "Text",
             "type": "string"
           },
-          "text_source": {
-            "$ref": "#/components/schemas/LineTranscriptionTextSource"
-          },
           "transcription_id": {
             "format": "uuid",
             "title": "Transcription Id",
@@ -1300,19 +1305,10 @@
           "transcription_id",
           "transcription_kind",
           "text",
-          "confidence",
-          "text_source"
+          "confidence"
         ],
         "title": "LineTranscriptionResponse",
         "type": "object"
-      },
-      "LineTranscriptionTextSource": {
-        "enum": [
-          "model",
-          "human_edited"
-        ],
-        "title": "LineTranscriptionTextSource",
-        "type": "string"
       },
       "LineUpsertRequest": {
         "properties": {
@@ -1742,6 +1738,11 @@
             "title": "Created At",
             "type": "string"
           },
+          "document_count": {
+            "default": 0,
+            "title": "Document Count",
+            "type": "integer"
+          },
           "guidelines": {
             "anyOf": [
               {
@@ -2044,6 +2045,24 @@
         "title": "SegmentGeometryKind",
         "type": "string"
       },
+      "SegmentJobOutput": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SegmentRunResponse"
+          },
+          "kind": {
+            "const": "segment",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "data"
+        ],
+        "title": "SegmentJobOutput",
+        "type": "object"
+      },
       "SegmentLine": {
         "properties": {
           "baseline": {
@@ -2182,6 +2201,42 @@
           "access_token"
         ],
         "title": "TokenResponse",
+        "type": "object"
+      },
+      "TranscribeJobOutput": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/TranscribeRunResponse"
+          },
+          "kind": {
+            "const": "transcribe",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "data"
+        ],
+        "title": "TranscribeJobOutput",
+        "type": "object"
+      },
+      "TranscribePartRequest": {
+        "properties": {
+          "model_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
+          }
+        },
+        "title": "TranscribePartRequest",
         "type": "object"
       },
       "TranscribeRunResponse": {
@@ -7721,6 +7776,135 @@
         ]
       }
     },
+    "/projects/{project_id}/documents/{document_id}/parts/{part_id}/page-xml": {
+      "get": {
+        "operationId": "export_part_page_xml_projects__project_id__documents__document_id__parts__part_id__page_xml_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Part Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/xml": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "PAGE XML bytes"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict with current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Export Part Page Xml",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
     "/projects/{project_id}/documents/{document_id}/parts/{part_id}/pairing": {
       "get": {
         "operationId": "get_page_pairing_projects__project_id__documents__document_id__parts__part_id__pairing_get",
@@ -8150,6 +8334,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/TranscribePartRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {

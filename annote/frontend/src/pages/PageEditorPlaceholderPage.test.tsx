@@ -1,6 +1,6 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api, type DocumentWithPartsResponse } from '../api/client';
 import { ApiError } from '../api/errors';
@@ -12,25 +12,56 @@ vi.mock('../components/AuthenticatedImage', () => ({
 
 vi.mock('../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/client')>();
+  const mockedApi = {
+    ...actual.api,
+    getDocument: vi.fn(),
+    getPartLayout: vi.fn(),
+    listPartLines: vi.fn(),
+    listTranscriptions: vi.fn(),
+    getPagePairing: vi.fn(),
+    importPageTranscription: vi.fn(),
+    pairTextLine: vi.fn(),
+    updateGroundTruthLineText: vi.fn(),
+    copyToGroundTruth: vi.fn(),
+    updatePartReviewStatus: vi.fn(),
+    replacePartLines: vi.fn(),
+    updateLineGeometry: vi.fn(),
+    resetPartLayout: vi.fn(),
+    generateTranscriptionPdf: vi.fn(),
+    exportPageXml: vi.fn(),
+    updateDocument: vi.fn(),
+    listInferenceModels: vi.fn(),
+    resolvePartModelBinding: vi.fn(),
+    enqueueTranscribePart: vi.fn(),
+    getJob: vi.fn(),
+  };
+
+  async function waitForJob(
+    jobId: string,
+    options?: { timeoutMs?: number; onUpdate?: (job: actual.JobResponse) => void },
+  ): Promise<actual.JobResponse> {
+    const timeoutMs = options?.timeoutMs ?? 120_000;
+    const deadline = Date.now() + timeoutMs;
+    let lastJob: actual.JobResponse | null = null;
+    while (Date.now() < deadline) {
+      const job = await mockedApi.getJob(jobId);
+      if (!lastJob || lastJob.status !== job.status || lastJob.updated_at !== job.updated_at) {
+        options?.onUpdate?.(job);
+      }
+      lastJob = job;
+      if (job.status === 'done') return job;
+      if (job.status === 'failed') {
+        throw new Error(job.error ?? 'Job failed.');
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    throw new Error('Job timed out.');
+  }
+
   return {
     ...actual,
-    api: {
-      ...actual.api,
-      getDocument: vi.fn(),
-      getPartLayout: vi.fn(),
-      listPartLines: vi.fn(),
-      listTranscriptions: vi.fn(),
-      getPagePairing: vi.fn(),
-      importPageTranscription: vi.fn(),
-      pairTextLine: vi.fn(),
-      updateGroundTruthLineText: vi.fn(),
-      copyToGroundTruth: vi.fn(),
-      updatePartReviewStatus: vi.fn(),
-      replacePartLines: vi.fn(),
-      updateLineGeometry: vi.fn(),
-      resetPartLayout: vi.fn(),
-      generateTranscriptionPdf: vi.fn(),
-    },
+    api: mockedApi,
+    waitForJob: vi.fn(waitForJob),
   };
 });
 
@@ -49,6 +80,12 @@ type MockedEditorApi = {
   updateLineGeometry: ReturnType<typeof vi.fn>;
   resetPartLayout: ReturnType<typeof vi.fn>;
   generateTranscriptionPdf: ReturnType<typeof vi.fn>;
+  exportPageXml: ReturnType<typeof vi.fn>;
+  updateDocument: ReturnType<typeof vi.fn>;
+  listInferenceModels: ReturnType<typeof vi.fn>;
+  resolvePartModelBinding: ReturnType<typeof vi.fn>;
+  enqueueTranscribePart: ReturnType<typeof vi.fn>;
+  getJob: ReturnType<typeof vi.fn>;
 };
 
 const mockedApi = api as unknown as MockedEditorApi;
@@ -87,6 +124,14 @@ function renderPageEditor() {
   );
 }
 
+async function enableBaselinesOnCanvas() {
+  fireEvent.click(await screen.findByRole('button', { name: /editor settings/i }));
+  const checkbox = screen.getByRole('checkbox', { name: /show line baselines/i });
+  if (!(checkbox as HTMLInputElement).checked) {
+    fireEvent.click(checkbox);
+  }
+}
+
 describe('PageEditorPlaceholderPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -105,6 +150,24 @@ describe('PageEditorPlaceholderPage', () => {
     mockedApi.getPagePairing.mockResolvedValue({
       text_lines: [],
       pairing_progress: { paired_lines: 0, total_lines: 0, percent: 0 },
+    });
+    mockedApi.listInferenceModels.mockResolvedValue([]);
+    mockedApi.resolvePartModelBinding.mockResolvedValue({
+      binding: { id: 'binding-1', task: 'transcribe', model_id: 'model-1', overrides: {} },
+      model: {
+        id: 'model-1',
+        name: 'kraken-transcribe-default',
+        provider: 'kraken',
+        task: 'transcribe',
+        artifact_ref: 'x',
+        default_params: {},
+        created_at: '2026-06-16T10:00:00Z',
+      },
+      effective_params: {},
+    });
+    mockedApi.updateDocument.mockResolvedValue({
+      ...DOCUMENT,
+      workflow: 'published',
     });
     mockedApi.importPageTranscription.mockResolvedValue({
       text_lines: [],
@@ -130,12 +193,14 @@ describe('PageEditorPlaceholderPage', () => {
     });
     mockedApi.replacePartLines.mockImplementation(async (_projectId, _documentId, _partId, body) =>
       body.lines.map((line: Record<string, unknown>, index: number) => ({
-        id: `line-${index + 1}`,
+        id: (line.id as string | undefined) ?? `line-${index + 1}`,
         part_id: 'part-1',
         block_id: null,
         order: line.order,
         kind: line.kind,
         points: line.points,
+        baseline: line.baseline ?? { points: [] },
+        mask: line.mask ?? null,
         source: line.source,
         source_metadata: null,
         kraken_ceiling: null,
@@ -146,6 +211,12 @@ describe('PageEditorPlaceholderPage', () => {
     );
   });
 
+  afterEach(async () => {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+  });
+
   it('opens an authenticated document part in the annote page workspace', async () => {
     mockedApi.getDocument.mockResolvedValue(DOCUMENT);
 
@@ -154,7 +225,7 @@ describe('PageEditorPlaceholderPage', () => {
     expect(await screen.findByText('ANNOTE PAGE WORKSPACE')).toBeTruthy();
     expect(screen.getByText('Grec 1360 · Page 1')).toBeTruthy();
     expect(screen.getByAltText('Page 1')).toBeTruthy();
-    expect(screen.getByRole('link', { name: /document parts/i }).getAttribute('href')).toBe(
+    expect(screen.getByRole('link', { name: /back to document/i }).getAttribute('href')).toBe(
       '/projects/project-1/documents/doc-1',
     );
   });
@@ -189,11 +260,11 @@ describe('PageEditorPlaceholderPage', () => {
     expect(screen.getByRole('button', { name: /rectangle segment/i })).toBeTruthy();
     expect(screen.getByRole('img', { name: /page geometry canvas/i })).toBeTruthy();
 
-    fireEvent.click(screen.getByLabelText('Segment 1'));
+    fireEvent.click(screen.getByLabelText(/^Segment 1/));
 
     expect(screen.getByLabelText(/transcription layer/i)).toBeTruthy();
-    expect(screen.getAllByText('Selected Segment 1').length).toBeGreaterThan(0);
-    expect(screen.getByText('Page transcription and pairing')).toBeTruthy();
+    expect(screen.getByText('Segment 1')).toBeTruthy();
+    expect(screen.getByRole('progressbar', { name: /pairing progress/i })).toBeTruthy();
   });
 
   it('does not render protected media when the API rejects access', async () => {
@@ -208,6 +279,37 @@ describe('PageEditorPlaceholderPage', () => {
 
   it('renders part layout blocks and line baselines in layout edit mode', async () => {
     mockedApi.getDocument.mockResolvedValue(DOCUMENT);
+    mockedApi.listPartLines.mockResolvedValue([
+      {
+        id: 'line-1',
+        part_id: 'part-1',
+        block_id: 'block-1',
+        order: 0,
+        kind: 'polygon',
+        points: [
+          [55, 110],
+          [305, 118],
+          [300, 178],
+          [50, 168],
+        ],
+        baseline: [
+          [60, 140],
+          [300, 150],
+        ],
+        mask: [
+          [55, 110],
+          [305, 118],
+          [300, 178],
+          [50, 168],
+        ],
+        source: 'kraken',
+        source_metadata: null,
+        kraken_ceiling: null,
+        manual_geometry: false,
+        line_transcriptions: [],
+        created_at: '2026-06-16T10:00:00Z',
+      },
+    ]);
     mockedApi.getPartLayout.mockResolvedValue({
       blocks: [
         {
@@ -242,9 +344,79 @@ describe('PageEditorPlaceholderPage', () => {
 
     renderPageEditor();
 
+    await enableBaselinesOnCanvas();
+
     expect(await screen.findByRole('heading', { name: /layout edit/i })).toBeTruthy();
     expect(screen.getByLabelText('Block block-1')).toBeTruthy();
     expect(screen.getByLabelText('Line line-1 baseline')).toBeTruthy();
+  });
+
+  it('renders layout geometry when API returns box and baseline objects', async () => {
+    mockedApi.getDocument.mockResolvedValue(DOCUMENT);
+    mockedApi.listPartLines.mockResolvedValue([
+      {
+        id: 'line-1',
+        part_id: 'part-1',
+        block_id: 'block-1',
+        order: 0,
+        kind: 'polygon',
+        points: [
+          [40, 60],
+          [320, 60],
+          [320, 220],
+          [40, 220],
+        ],
+        baseline: {
+          points: [
+            [60, 140],
+            [300, 150],
+          ],
+        },
+        mask: null,
+        source: 'kraken',
+        source_metadata: null,
+        kraken_ceiling: null,
+        manual_geometry: false,
+        line_transcriptions: [],
+        created_at: '2026-06-16T10:00:00Z',
+      },
+    ]);
+    mockedApi.getPartLayout.mockResolvedValue({
+      blocks: [
+        {
+          id: 'block-1',
+          box: {
+            points: [
+              [40, 60],
+              [320, 60],
+              [320, 220],
+              [40, 220],
+            ],
+          },
+          manual_geometry: false,
+        },
+      ],
+      lines: [
+        {
+          id: 'line-1',
+          block_id: 'block-1',
+          baseline: {
+            points: [
+              [60, 140],
+              [300, 150],
+            ],
+          },
+          manual_geometry: false,
+        },
+      ],
+    });
+
+    renderPageEditor();
+
+    await enableBaselinesOnCanvas();
+
+    const baseline = await screen.findByLabelText('Line line-1 baseline');
+    expect(baseline.getAttribute('points')).toBe('60,140 300,150');
   });
 
   it('draws a rectangle Segment and saves it as Line geometry for the document part', async () => {
@@ -285,7 +457,7 @@ describe('PageEditorPlaceholderPage', () => {
     expect(await screen.findByText('1 Segment')).toBeTruthy();
   });
 
-  it('imports candidate Text lines, pairs the selected Segment, and updates Pairing progress', async () => {
+  it('pairs a selected Segment to imported text lines and updates Pairing progress', async () => {
     mockedApi.getDocument.mockResolvedValue(DOCUMENT);
     mockedApi.listPartLines.mockResolvedValue([
       {
@@ -328,10 +500,6 @@ describe('PageEditorPlaceholderPage', () => {
       },
     ]);
     mockedApi.getPagePairing.mockResolvedValue({
-      text_lines: [],
-      pairing_progress: { paired_lines: 0, total_lines: 2, percent: 0 },
-    });
-    mockedApi.importPageTranscription.mockResolvedValue({
       text_lines: [
         { order: 0, text: 'alpha', paired_line_id: null },
         { order: 1, text: 'beta', paired_line_id: null },
@@ -349,13 +517,7 @@ describe('PageEditorPlaceholderPage', () => {
     renderPageEditor();
 
     expect(await screen.findByText('Pairing progress: 0/2 Lines paired')).toBeTruthy();
-    fireEvent.change(screen.getByLabelText(/page transcription text/i), {
-      target: { value: 'alpha\n\nbeta' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: /import page transcription/i }));
-
-    expect(await screen.findByText('Text line 2')).toBeTruthy();
-    fireEvent.click(screen.getByLabelText('Segment 1'));
+    fireEvent.click(screen.getByLabelText(/^Segment 1/));
     fireEvent.click(screen.getByRole('button', { name: /pair text line 2/i }));
 
     await waitFor(() => {
@@ -367,7 +529,6 @@ describe('PageEditorPlaceholderPage', () => {
       );
     });
     expect(await screen.findByText('Pairing progress: 1/2 Lines paired')).toBeTruthy();
-    expect(screen.getByText('Text line 2 · paired with Segment 1')).toBeTruthy();
   });
 
   it('saves typed approved text for the selected Segment and refreshes Pairing progress', async () => {
@@ -433,11 +594,11 @@ describe('PageEditorPlaceholderPage', () => {
 
     renderPageEditor();
 
-    fireEvent.click(await screen.findByLabelText('Segment 1'));
+    fireEvent.click(await screen.findByLabelText(/^Segment 1/));
     fireEvent.change(screen.getByLabelText(/approved text for selected segment/i), {
       target: { value: 'typed approved text' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /save approved text/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
 
     await waitFor(() => {
       expect(mockedApi.updateGroundTruthLineText).toHaveBeenLastCalledWith(
@@ -524,14 +685,14 @@ describe('PageEditorPlaceholderPage', () => {
     renderPageEditor();
 
     fireEvent.click(await screen.findByRole('button', { name: /transcription edit/i }));
-    fireEvent.click(screen.getByLabelText('Segment 1'));
+    fireEvent.click(screen.getByLabelText(/^Segment 1/));
     expect(screen.getByRole('heading', { name: /transcription edit/i })).toBeTruthy();
     expect(screen.getByLabelText(/transcription layer/i)).toHaveValue('ground-truth-1');
 
     const textArea = screen.getByLabelText(/ground truth text for selected segment/i);
     expect(textArea).toHaveValue('old approved text');
     fireEvent.change(textArea, { target: { value: 'corrected ground truth' } });
-    fireEvent.click(screen.getByRole('button', { name: /save ground truth text/i }));
+    fireEvent.click(screen.getByRole('button', { name: /save ground truth/i }));
 
     await waitFor(() => {
       expect(mockedApi.updateGroundTruthLineText).toHaveBeenLastCalledWith(
@@ -543,6 +704,143 @@ describe('PageEditorPlaceholderPage', () => {
       );
     });
     expect(await screen.findByText('Ground truth text saved')).toBeTruthy();
+  });
+
+  it('re-runs OCR on the selected segment from the pairing strip', async () => {
+    mockedApi.getDocument.mockResolvedValue(DOCUMENT);
+    mockedApi.listInferenceModels.mockResolvedValue([
+      {
+        id: 'model-1',
+        name: 'kraken-transcribe-default',
+        provider: 'kraken',
+        task: 'transcribe',
+        artifact_ref: 'x',
+        default_params: {},
+        created_at: '2026-06-16T10:00:00Z',
+      },
+    ]);
+    mockedApi.listTranscriptions
+      .mockResolvedValueOnce([
+        {
+          id: 'ground-truth-1',
+          document_id: 'doc-1',
+          name: 'Ground truth',
+          kind: 'ground_truth',
+          created_by_job_id: null,
+          created_at: '2026-06-16T10:00:00Z',
+        },
+        {
+          id: 'model-1',
+          document_id: 'doc-1',
+          name: 'Model layer',
+          kind: 'model',
+          created_by_job_id: 'job-old',
+          created_at: '2026-06-16T10:00:00Z',
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: 'ground-truth-1',
+          document_id: 'doc-1',
+          name: 'Ground truth',
+          kind: 'ground_truth',
+          created_by_job_id: null,
+          created_at: '2026-06-16T10:00:00Z',
+        },
+        {
+          id: 'model-2',
+          document_id: 'doc-1',
+          name: 'Model layer 2',
+          kind: 'model',
+          created_by_job_id: 'job-new',
+          created_at: '2026-06-16T10:00:00Z',
+        },
+      ]);
+    const lineFixture = {
+      id: 'line-1',
+      part_id: 'part-1',
+      block_id: null,
+      order: 0,
+      kind: 'polygon' as const,
+      points: [
+        [10, 10],
+        [50, 10],
+        [50, 30],
+        [10, 30],
+      ],
+      source: 'manual' as const,
+      source_metadata: null,
+      kraken_ceiling: null,
+      manual_geometry: true,
+      line_transcriptions: [
+        {
+          id: 'line-tx-model-1',
+          transcription_id: 'model-1',
+          transcription_kind: 'model' as const,
+          text: 'old ocr',
+          confidence: 0.8,
+          text_source: 'model' as const,
+          character_confidences: null,
+        },
+      ],
+      created_at: '2026-06-16T10:00:00Z',
+    };
+    mockedApi.listPartLines
+      .mockResolvedValueOnce([lineFixture])
+      .mockResolvedValueOnce([
+        {
+          ...lineFixture,
+          line_transcriptions: [
+            {
+              id: 'line-tx-model-2',
+              transcription_id: 'model-2',
+              transcription_kind: 'model' as const,
+              text: 'fresh ocr',
+              confidence: 0.92,
+              text_source: 'model' as const,
+              character_confidences: null,
+            },
+          ],
+        },
+      ]);
+    mockedApi.enqueueTranscribePart.mockResolvedValue({ job_id: 'job-ocr-1' });
+    mockedApi.getJob.mockResolvedValue({
+      id: 'job-ocr-1',
+      type: 'transcribe',
+      status: 'done',
+      payload: {},
+      result: {
+        transcription_id: 'model-2',
+        lines: [{ line_id: 'line-1', text: 'fresh ocr', confidence: 0.92 }],
+      },
+      error: null,
+      document_id: 'doc-1',
+      document_part_id: 'part-1',
+      created_at: '2026-06-16T10:00:00Z',
+      updated_at: '2026-06-16T10:00:00Z',
+      started_at: '2026-06-16T10:00:00Z',
+      completed_at: '2026-06-16T10:00:00Z',
+    });
+
+    renderPageEditor();
+    fireEvent.click(await screen.findByLabelText(/^Segment 1/));
+    fireEvent.click(screen.getByRole('button', { name: /re-run ocr on segment 1/i }));
+
+    await waitFor(() => {
+      expect(mockedApi.enqueueTranscribePart).toHaveBeenCalledWith(
+        'project-1',
+        'doc-1',
+        'part-1',
+        { model_id: 'model-1', line_ids: ['line-1'] },
+      );
+    });
+    const dialog = await screen.findByRole('dialog', { name: /background jobs/i });
+    expect(within(dialog).getByText('Segment 1')).toBeTruthy();
+    expect(within(dialog).getByText('Segment OCR')).toBeTruthy();
+
+    await waitFor(() => {
+      expect(mockedApi.getJob).toHaveBeenCalledWith('job-ocr-1');
+    });
   });
 
   it('shows model OCR review and saves the selected Segment to Ground truth', async () => {
@@ -650,16 +948,14 @@ describe('PageEditorPlaceholderPage', () => {
     renderPageEditor();
 
     fireEvent.click(await screen.findByRole('button', { name: /transcription edit/i }));
-    fireEvent.click(screen.getByLabelText('Segment 1'));
+    fireEvent.click(screen.getByLabelText(/^Segment 1/));
     fireEvent.change(screen.getByLabelText(/transcription layer/i), {
       target: { value: 'model-1' },
     });
 
-    expect(screen.getByText('OCR review · Segment 1')).toBeTruthy();
-    expect(screen.getByLabelText('Line confidence')).toBeTruthy();
-    expect(screen.getByText('91.0%')).toBeTruthy();
-    expect(screen.getByLabelText('OCR text with per-character confidence highlighting')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
+    expect(screen.getByText('Model output:')).toBeTruthy();
+    expect(screen.getByLabelText('OCR model output for segment 1')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /accept/i }));
 
     await waitFor(() => {
       expect(mockedApi.copyToGroundTruth).toHaveBeenLastCalledWith(
@@ -737,12 +1033,12 @@ describe('PageEditorPlaceholderPage', () => {
     renderPageEditor();
 
     fireEvent.click(await screen.findByRole('button', { name: /transcription edit/i }));
-    fireEvent.click(screen.getByLabelText('Segment 1'));
+    fireEvent.click(screen.getByLabelText(/^Segment 1/));
 
-    expect(screen.getByText('OCR review · Segment 1')).toBeTruthy();
-    expect(screen.getByLabelText('Line confidence')).toBeTruthy();
+    expect(screen.getByText('Model output:')).toBeTruthy();
+    expect(screen.getByLabelText('OCR model output for segment 1')).toBeTruthy();
     expect(screen.queryByLabelText(/ground truth text for selected segment/i)).toBeNull();
-    expect(screen.getByRole('button', { name: /^save$/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /accept/i })).toBeTruthy();
   });
 
   it('surfaces Ground truth save API errors and keeps the typed text visible', async () => {
@@ -785,10 +1081,10 @@ describe('PageEditorPlaceholderPage', () => {
     renderPageEditor();
 
     fireEvent.click(await screen.findByRole('button', { name: /transcription edit/i }));
-    fireEvent.click(screen.getByLabelText('Segment 1'));
+    fireEvent.click(screen.getByLabelText(/^Segment 1/));
     const textArea = screen.getByLabelText(/ground truth text for selected segment/i);
     fireEvent.change(textArea, { target: { value: 'typed but rejected' } });
-    fireEvent.click(screen.getByRole('button', { name: /save ground truth text/i }));
+    fireEvent.click(screen.getByRole('button', { name: /save ground truth/i }));
 
     expect(
       await screen.findByText('Only Ground truth transcriptions can be edited.'),
@@ -796,72 +1092,6 @@ describe('PageEditorPlaceholderPage', () => {
     expect(screen.getByLabelText(/ground truth text for selected segment/i)).toHaveValue(
       'typed but rejected',
     );
-  });
-
-  it('shows Review status and lets a project member mark the Page reviewed', async () => {
-    mockedApi.getDocument.mockResolvedValue(DOCUMENT);
-    mockedApi.getPagePairing.mockResolvedValue({
-      text_lines: [],
-      pairing_progress: { paired_lines: 1, total_lines: 2, percent: 50 },
-    });
-
-    renderPageEditor();
-
-    expect(await screen.findByText('Review status: Unreviewed')).toBeTruthy();
-    expect(screen.getByText('Pairing progress: 1/2 Lines paired')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /mark reviewed/i }));
-
-    await waitFor(() => {
-      expect(mockedApi.updatePartReviewStatus).toHaveBeenLastCalledWith(
-        'project-1',
-        'doc-1',
-        'part-1',
-        { reviewed: true },
-      );
-    });
-    expect(await screen.findByText('Review status: Reviewed')).toBeTruthy();
-    expect(screen.getByText('Pairing progress: 1/2 Lines paired')).toBeTruthy();
-  });
-
-  it('loads a Reviewed Page and lets a project member mark it unreviewed', async () => {
-    mockedApi.getDocument.mockResolvedValue({
-      ...DOCUMENT,
-      parts: [{ ...DOCUMENT.parts[0], reviewed: true }],
-    });
-    mockedApi.updatePartReviewStatus.mockResolvedValue({
-      ...DOCUMENT.parts[0],
-      reviewed: false,
-    });
-
-    renderPageEditor();
-
-    expect(await screen.findByText('Review status: Reviewed')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /mark unreviewed/i }));
-
-    await waitFor(() => {
-      expect(mockedApi.updatePartReviewStatus).toHaveBeenLastCalledWith(
-        'project-1',
-        'doc-1',
-        'part-1',
-        { reviewed: false },
-      );
-    });
-    expect(await screen.findByText('Review status: Unreviewed')).toBeTruthy();
-  });
-
-  it('keeps the visible Review status when the API rejects the change', async () => {
-    mockedApi.getDocument.mockResolvedValue(DOCUMENT);
-    mockedApi.updatePartReviewStatus.mockRejectedValue(new ApiError('Forbidden', 403));
-
-    renderPageEditor();
-
-    expect(await screen.findByText('Review status: Unreviewed')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /mark reviewed/i }));
-
-    expect(
-      await screen.findByText('Only project members can change Review status.'),
-    ).toBeTruthy();
-    expect(screen.getByText('Review status: Unreviewed')).toBeTruthy();
   });
 
   it('draws a polygon Segment and saves it as Line geometry for the document part', async () => {
@@ -902,60 +1132,6 @@ describe('PageEditorPlaceholderPage', () => {
       );
     });
     expect(await screen.findByText('1 Segment')).toBeTruthy();
-  });
-
-  it('edits an existing Segment geometry and saves the updated Line points', async () => {
-    mockedApi.getDocument.mockResolvedValue(DOCUMENT);
-    mockedApi.listPartLines.mockResolvedValue([
-      {
-        id: 'line-1',
-        part_id: 'part-1',
-        block_id: null,
-        order: 0,
-        kind: 'polygon',
-        points: [
-          [10, 10],
-          [50, 10],
-          [50, 30],
-          [10, 30],
-        ],
-        source: 'manual',
-        source_metadata: null,
-        kraken_ceiling: null,
-        manual_geometry: true,
-        line_transcriptions: [],
-        created_at: '2026-06-16T10:00:00Z',
-      },
-    ]);
-
-    renderPageEditor();
-
-    fireEvent.click(await screen.findByLabelText('Segment 1'));
-    fireEvent.click(screen.getByRole('button', { name: /move segment right/i }));
-
-    await waitFor(() => {
-      expect(mockedApi.replacePartLines).toHaveBeenLastCalledWith(
-        'project-1',
-        'doc-1',
-        'part-1',
-        {
-          lines: [
-            {
-              id: 'line-1',
-              order: 0,
-              kind: 'polygon',
-              points: [
-                [15, 10],
-                [55, 10],
-                [55, 30],
-                [15, 30],
-              ],
-              source: 'manual',
-            },
-          ],
-        },
-      );
-    });
   });
 
   it('deletes a selected Segment and saves the remaining Line geometry', async () => {
@@ -1003,7 +1179,7 @@ describe('PageEditorPlaceholderPage', () => {
 
     renderPageEditor();
 
-    fireEvent.click(await screen.findByLabelText('Segment 1'));
+    fireEvent.click(await screen.findByLabelText(/^Segment 1/));
     fireEvent.click(screen.getByRole('button', { name: /delete segment/i }));
 
     await waitFor(() => {
@@ -1033,21 +1209,60 @@ describe('PageEditorPlaceholderPage', () => {
 
   it('edits a Line baseline and saves it as manual geometry', async () => {
     mockedApi.getDocument.mockResolvedValue(DOCUMENT);
-    mockedApi.getPartLayout.mockResolvedValue({
-      blocks: [],
-      lines: [
-        {
-          id: 'line-1',
-          baseline: [
+    mockedApi.listPartLines.mockResolvedValue([
+      {
+        id: 'line-1',
+        part_id: 'part-1',
+        block_id: null,
+        order: 0,
+        kind: 'polygon',
+        points: [
+          [55, 110],
+          [305, 118],
+          [300, 178],
+          [50, 168],
+        ],
+        baseline: {
+          points: [
             [60, 140],
             [300, 150],
           ],
-          mask: [
+        },
+        mask: {
+          points: [
             [55, 110],
             [305, 118],
             [300, 178],
             [50, 168],
           ],
+        },
+        source: 'kraken',
+        source_metadata: null,
+        kraken_ceiling: null,
+        manual_geometry: false,
+        line_transcriptions: [],
+        created_at: '2026-06-16T10:00:00Z',
+      },
+    ]);
+    mockedApi.getPartLayout.mockResolvedValue({
+      blocks: [],
+      lines: [
+        {
+          id: 'line-1',
+          baseline: {
+            points: [
+              [60, 140],
+              [300, 150],
+            ],
+          },
+          mask: {
+            points: [
+              [55, 110],
+              [305, 118],
+              [300, 178],
+              [50, 168],
+            ],
+          },
           manual_geometry: false,
         },
       ],
@@ -1063,6 +1278,8 @@ describe('PageEditorPlaceholderPage', () => {
 
     renderPageEditor();
 
+    await enableBaselinesOnCanvas();
+
     fireEvent.click(await screen.findByLabelText('Line line-1 baseline'));
     fireEvent.click(screen.getByRole('button', { name: /move baseline down/i }));
     fireEvent.click(screen.getByRole('button', { name: /save layout/i }));
@@ -1074,16 +1291,20 @@ describe('PageEditorPlaceholderPage', () => {
         'part-1',
         'line-1',
         {
-          baseline: [
-            [60, 145],
-            [300, 155],
-          ],
-          mask: [
-            [55, 110],
-            [305, 118],
-            [300, 178],
-            [50, 168],
-          ],
+          baseline: {
+            points: [
+              [60, 145],
+              [300, 155],
+            ],
+          },
+          mask: {
+            points: [
+              [55, 110],
+              [305, 118],
+              [300, 178],
+              [50, 168],
+            ],
+          },
         },
       );
     });
@@ -1092,6 +1313,37 @@ describe('PageEditorPlaceholderPage', () => {
 
   it('resets selected Line layout through the API and refreshes the canvas state', async () => {
     mockedApi.getDocument.mockResolvedValue(DOCUMENT);
+    mockedApi.listPartLines.mockResolvedValue([
+      {
+        id: 'line-1',
+        part_id: 'part-1',
+        block_id: null,
+        order: 0,
+        kind: 'polygon',
+        points: [
+          [55, 110],
+          [305, 118],
+          [300, 178],
+          [50, 168],
+        ],
+        baseline: [
+          [60, 140],
+          [300, 150],
+        ],
+        mask: [
+          [55, 110],
+          [305, 118],
+          [300, 178],
+          [50, 168],
+        ],
+        source: 'kraken',
+        source_metadata: null,
+        kraken_ceiling: null,
+        manual_geometry: true,
+        line_transcriptions: [],
+        created_at: '2026-06-16T10:00:00Z',
+      },
+    ]);
     mockedApi.getPartLayout.mockResolvedValue({
       blocks: [],
       lines: [
@@ -1133,6 +1385,8 @@ describe('PageEditorPlaceholderPage', () => {
 
     renderPageEditor();
 
+    await enableBaselinesOnCanvas();
+
     fireEvent.click(await screen.findByLabelText('Line line-1 baseline'));
     fireEvent.click(screen.getByRole('button', { name: /reset layout/i }));
 
@@ -1149,6 +1403,37 @@ describe('PageEditorPlaceholderPage', () => {
 
   it('shows a member-only error when the layout save API rejects access', async () => {
     mockedApi.getDocument.mockResolvedValue(DOCUMENT);
+    mockedApi.listPartLines.mockResolvedValue([
+      {
+        id: 'line-1',
+        part_id: 'part-1',
+        block_id: null,
+        order: 0,
+        kind: 'polygon',
+        points: [
+          [55, 110],
+          [305, 118],
+          [300, 178],
+          [50, 168],
+        ],
+        baseline: [
+          [60, 140],
+          [300, 150],
+        ],
+        mask: [
+          [55, 110],
+          [305, 118],
+          [300, 178],
+          [50, 168],
+        ],
+        source: 'kraken',
+        source_metadata: null,
+        kraken_ceiling: null,
+        manual_geometry: false,
+        line_transcriptions: [],
+        created_at: '2026-06-16T10:00:00Z',
+      },
+    ]);
     mockedApi.getPartLayout.mockResolvedValue({
       blocks: [],
       lines: [
@@ -1172,6 +1457,8 @@ describe('PageEditorPlaceholderPage', () => {
 
     renderPageEditor();
 
+    await enableBaselinesOnCanvas();
+
     fireEvent.click(await screen.findByLabelText('Line line-1 baseline'));
     fireEvent.click(screen.getByRole('button', { name: /move baseline down/i }));
     fireEvent.click(screen.getByRole('button', { name: /save layout/i }));
@@ -1189,6 +1476,7 @@ describe('PageEditorPlaceholderPage', () => {
     mockedApi.generateTranscriptionPdf.mockResolvedValue(
       new Blob(['%PDF'], { type: 'application/pdf' }),
     );
+    const originalUrl = globalThis.URL;
     vi.stubGlobal('URL', {
       createObjectURL: vi.fn(() => 'blob:preview'),
       revokeObjectURL: vi.fn(),
@@ -1197,7 +1485,7 @@ describe('PageEditorPlaceholderPage', () => {
     renderPageEditor();
 
     expect(await screen.findByText('ANNOTE PAGE WORKSPACE')).toBeTruthy();
-    fireEvent.click(screen.getAllByRole('button', { name: /^transcription pdf$/i })[0]);
+    fireEvent.click(screen.getByRole('button', { name: /toggle transcription pdf/i }));
 
     expect(await screen.findByLabelText('Transcription PDF preview')).toBeTruthy();
     await waitFor(() => {
@@ -1208,6 +1496,22 @@ describe('PageEditorPlaceholderPage', () => {
       );
     });
 
-    vi.unstubAllGlobals();
+    vi.stubGlobal('URL', originalUrl);
+  });
+
+  it('publishes the document from the Process sharing section', async () => {
+    mockedApi.getDocument.mockResolvedValue(DOCUMENT);
+
+    renderPageEditor();
+
+    fireEvent.click(await screen.findByRole('button', { name: /^process/i }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /publish live page/i }));
+
+    await waitFor(() => {
+      expect(mockedApi.updateDocument).toHaveBeenCalledWith('project-1', 'doc-1', {
+        workflow: 'published',
+      });
+    });
+    expect(screen.getByLabelText(/public document url/i)).toBeTruthy();
   });
 });

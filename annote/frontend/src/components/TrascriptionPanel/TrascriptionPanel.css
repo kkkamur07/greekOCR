@@ -36,7 +36,7 @@
 }
 
 .transcription-item.compact:hover {
-  border-color: #1890ff;
+  border-color: #44403c;
   background: #f0f7ff;
 }
 
@@ -60,7 +60,7 @@
 /* ================= EXPANDED ITEM ================= */
 .transcription-item.expanded {
   background: #fff;
-  border: 2px solid #1890ff;
+  border: 2px solid #44403c;
   border-radius: 8px;
   padding: 20px;
   margin: 16px 0; /* Add Breathing room */

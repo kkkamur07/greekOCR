@@ -1,43 +1,42 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import {
-  Alert,
-  Button,
-  Checkbox,
-  Form,
-  Input,
-  List,
-  Modal,
-  Space,
-  Typography,
-  notification,
-} from 'antd';
-import { PlusOutlined, ArrowLeftOutlined } from '@ant-design/icons';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { toast } from '../components/ui/toast';
 import { api, type DocumentResponse, type ProjectResponse } from '../api/client';
 import { ApiError } from '../api/errors';
-import { AppLayout } from '../components/AppLayout';
-import { WorkflowBadge } from '../components/WorkflowBadge';
+import { AppPageShell } from '../components/layout/AppPageShell';
+import { DocumentsTable } from '../components/projects/DocumentsTable';
+import { ProjectSettingsPanel } from '../components/sharing/ProjectSettingsPanel';
+import { FormModal } from '../components/ui/FormModal';
 
 export function ProjectDashboardPage() {
   const navigate = useNavigate();
   const { projectId } = useParams<{ projectId: string }>();
   const [project, setProject] = useState<ProjectResponse | null>(null);
   const [documents, setDocuments] = useState<DocumentResponse[]>([]);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [username, setUsername] = useState<string | null>(null);
   const [includeArchived, setIncludeArchived] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [titlePanelOpen, setTitlePanelOpen] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [deletingProject, setDeletingProject] = useState(false);
+  const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [newDocName, setNewDocName] = useState('');
 
   const load = useCallback(async () => {
     if (!projectId) return;
     setLoading(true);
     setError(null);
     try {
-      const [proj, docs] = await Promise.all([
+      const [me, proj, docs] = await Promise.all([
+        api.me(),
         api.getProject(projectId),
         api.listDocuments(projectId, includeArchived),
       ]);
+      setUserId(me.id);
+      setUsername(me.username);
       setProject(proj);
       setDocuments(docs);
     } catch (err) {
@@ -49,7 +48,7 @@ export function ProjectDashboardPage() {
           ? 'This project is not available to your account.'
           : msg,
       );
-      notification.error({ message: msg });
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -59,102 +58,173 @@ export function ProjectDashboardPage() {
     void load();
   }, [load]);
 
-  const handleCreate = async (values: { name: string }) => {
-    if (!projectId) return;
+  const isOwner = Boolean(project && userId && project.owner_id === userId);
+
+  const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!projectId || !newDocName.trim()) return;
     setCreating(true);
     try {
-      const doc = await api.createDocument(projectId, { name: values.name });
-      notification.success({ message: 'Document created' });
-      setModalOpen(false);
+      const doc = await api.createDocument(projectId, { name: newDocName.trim() });
+      toast.success('Document created');
+      setCreateModalOpen(false);
+      setNewDocName('');
       navigate(`/projects/${projectId}/documents/${doc.id}`);
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : 'Failed to create document';
-      notification.error({ message: msg });
+      toast.error(msg);
     } finally {
       setCreating(false);
     }
   };
 
+  const handleDeleteProject = async () => {
+    if (!projectId || !project) return;
+    const confirmed = window.confirm(
+      `Delete project "${project.name}"? All documents in this project will be removed.`,
+    );
+    if (!confirmed) return;
+
+    setDeletingProject(true);
+    try {
+      await api.deleteProject(projectId);
+      toast.success('Project deleted');
+      navigate('/projects');
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Failed to delete project';
+      toast.error(msg);
+    } finally {
+      setDeletingProject(false);
+    }
+  };
+
+  const handleDeleteDocument = async (documentId: string) => {
+    if (!projectId) return;
+    const document = documents.find((item) => item.id === documentId);
+    if (!document) return;
+    const confirmed = window.confirm(
+      `Delete document "${document.name}"? All parts and transcriptions will be removed.`,
+    );
+    if (!confirmed) return;
+
+    setDeletingDocumentId(documentId);
+    try {
+      await api.deleteDocument(projectId, documentId);
+      toast.success('Document deleted');
+      await load();
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Failed to delete document';
+      toast.error(msg);
+    } finally {
+      setDeletingDocumentId(null);
+    }
+  };
+
+  const docCountLabel =
+    documents.length === 1 ? '1 document' : `${documents.length} documents`;
+
   return (
-    <AppLayout
+    <AppPageShell
+      breadcrumb={[
+        { label: 'Projects', href: '/projects' },
+        { label: project?.name ?? 'Project' },
+      ]}
+      username={username}
       title={project?.name ?? 'Project'}
-      extra={
-        <Link to="/projects">
-          <Button icon={<ArrowLeftOutlined />}>Projects</Button>
-        </Link>
+      subtitle={project ? docCountLabel : undefined}
+      titleEditable={Boolean(isOwner && project && projectId)}
+      titlePanelOpen={titlePanelOpen}
+      onTitlePanelToggle={() => setTitlePanelOpen((open) => !open)}
+      titlePanelLabel="Project settings"
+      titlePanel={
+        project && projectId ? (
+          <ProjectSettingsPanel
+            projectId={projectId}
+            name={project.name}
+            guidelines={project.guidelines ?? null}
+            onUpdated={(patch) => {
+              setProject((current) =>
+                current
+                  ? {
+                      ...current,
+                      name: patch.name,
+                      guidelines: patch.guidelines,
+                    }
+                  : current,
+              );
+            }}
+          />
+        ) : null
+      }
+      headerActions={
+        project ? (
+          <>
+            <label className="field-check">
+              <input
+                type="checkbox"
+                id="show-archived"
+                checked={includeArchived}
+                onChange={(e) => setIncludeArchived(e.target.checked)}
+              />
+              Show archived
+            </label>
+            {isOwner && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm btn--danger-ghost"
+                disabled={deletingProject}
+                onClick={() => void handleDeleteProject()}
+              >
+                Delete project
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={() => setCreateModalOpen(true)}
+            >
+              New document
+            </button>
+          </>
+        ) : undefined
       }
     >
       {error && (
-        <Alert
-          type="warning"
-          showIcon
-          message="Project unavailable"
-          description={error}
-          style={{ marginBottom: 16 }}
-        />
+        <div className="notice-banner" role="alert">
+          <strong>Project unavailable</strong>
+          {error}
+        </div>
       )}
 
       {project && (
-        <Space style={{ marginBottom: 16 }}>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
-            New document
-          </Button>
-          <Checkbox
-            checked={includeArchived}
-            onChange={(e) => setIncludeArchived(e.target.checked)}
-          >
-            Show archived
-          </Checkbox>
-        </Space>
-      )}
-
-      {project && (
-        <List
+        <DocumentsTable
+          projectId={projectId!}
+          documents={documents}
           loading={loading}
-          dataSource={documents}
-          locale={{ emptyText: 'No documents yet' }}
-          renderItem={(doc) => (
-            <List.Item
-              actions={[
-                <Link key="open" to={`/projects/${projectId}/documents/${doc.id}`}>
-                  Open
-                </Link>,
-              ]}
-            >
-              <List.Item.Meta
-                title={
-                  <Space>
-                    <Link to={`/projects/${projectId}/documents/${doc.id}`}>{doc.name}</Link>
-                    <WorkflowBadge workflow={doc.workflow} />
-                  </Space>
-                }
-                description={
-                  <Typography.Text type="secondary">
-                    Updated {new Date(doc.updated_at).toLocaleString()}
-                  </Typography.Text>
-                }
-              />
-            </List.Item>
-          )}
+          emptyText="No documents yet"
+          onDelete={(documentId) => void handleDeleteDocument(documentId)}
+          deletingDocumentId={deletingDocumentId}
         />
       )}
 
-      <Modal
+      <FormModal
+        open={createModalOpen}
         title="New document"
-        open={modalOpen}
-        onCancel={() => setModalOpen(false)}
-        footer={null}
-        destroyOnHidden
+        onClose={() => setCreateModalOpen(false)}
+        onSubmit={handleCreate}
+        submitLabel="Create"
+        loading={creating}
       >
-        <Form layout="vertical" onFinish={handleCreate}>
-          <Form.Item name="name" label="Name" rules={[{ required: true }]}>
-            <Input />
-          </Form.Item>
-          <Button type="primary" htmlType="submit" loading={creating} block>
-            Create
-          </Button>
-        </Form>
-      </Modal>
-    </AppLayout>
+        <div className="field">
+          <label htmlFor="document-name">Name</label>
+          <input
+            id="document-name"
+            required
+            value={newDocName}
+            onChange={(e) => setNewDocName(e.target.value)}
+          />
+        </div>
+      </FormModal>
+    </AppPageShell>
   );
 }

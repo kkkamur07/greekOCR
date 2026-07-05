@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Register — Nomicous</title>
+  <link rel="stylesheet" href="theme.css" />
+</head>
+<body>
+  <div class="auth-page">
+    <aside class="auth-brand" aria-label="About nomicous">
+      <a href="../index.html" class="auth-brand-logo" aria-label="nomicous home">
+        <img src="../assets/nomos.svg" alt="" />
+        <span>nomicous</span>
+      </a>
+      <div class="auth-brand-body">
+        <h2>Nomicous platform for HTR</h2>
+        <p>Built for the NOMOS project. Upload pages, pair transcriptions to segments, pick the HTR model for each script, and share finished work as a live public page.</p>
+      </div>
+      <div class="auth-brand-footer">
+        <p>© nomicous 2026</p>
+      </div>
+    </aside>
+
+    <main class="auth-panel">
+      <div class="auth-form-wrap">
+        <a class="mobile-logo auth-brand-logo" href="../index.html" aria-label="nomicous home">
+          <img src="../assets/nomos.svg" alt="" />
+          <span>nomicous</span>
+        </a>
+        <h1>Register</h1>
+        <p class="auth-sub">Create your account</p>
+        <form action="#" method="post">
+          <div class="field">
+            <label for="email">Email</label>
+            <input id="email" type="email" placeholder="you@institution.edu" autocomplete="email" required />
+          </div>
+          <div class="field">
+            <label for="username">Username</label>
+            <input id="username" type="text" placeholder="dr-smith" autocomplete="username" required />
+          </div>
+          <div class="field">
+            <label for="password">Password <span class="text-muted" id="password-hint">(8+ chars)</span></label>
+            <input id="password" type="password" autocomplete="new-password" placeholder="••••••••" aria-describedby="password-hint" minlength="8" required />
+          </div>
+          <button type="submit" class="btn btn-primary btn-block mt-4">Create account</button>
+        </form>
+        <p class="auth-footer-link">Have an account? <a href="login.html">Sign in</a></p>
+      </div>
+    </main>
+  </div>
+  <nav class="page-nav" aria-label="Design navigation">
+    <a href="login.html">Sign in</a>
+    <span class="dot">·</span>
+    <a href="projects.html">Projects</a>
+    <span class="dot">·</span>
+    <a href="../index.html">Gallery</a>
+  </nav>
+</body>
+</html>

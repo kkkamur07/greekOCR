@@ -12,13 +12,28 @@ from backend.project.api.schemas import (
     ProjectUpdateRequest,
     ShareUserRequest,
 )
+from backend.project.api.responses import project_response
 from backend.project.application.project_service import ProjectService
+from backend.document.infrastructure.document_repository import DocumentRepository
 from backend.users.api.dependencies import get_current_user
 from backend.users.infrastructure.orm_models import User
 from infrastructure.db import get_db
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 _service = ProjectService()
+_document_repo = DocumentRepository()
+
+
+async def _projects_with_counts(
+    db: AsyncSession, projects: list
+) -> list[ProjectResponse]:
+    document_counts = await _document_repo.count_documents_by_project_ids(
+        db, [project.id for project in projects]
+    )
+    return [
+        project_response(project, document_count=document_counts.get(project.id, 0))
+        for project in projects
+    ]
 
 
 @router.get("", response_model=list[ProjectResponse])
@@ -27,7 +42,7 @@ async def list_projects(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> list[ProjectResponse]:
     projects = await _service.list_projects(db, current_user)
-    return [ProjectResponse.model_validate(p) for p in projects]
+    return await _projects_with_counts(db, projects)
 
 
 @router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
@@ -43,7 +58,12 @@ async def create_project(
         slug=body.slug,
         guidelines=body.guidelines,
     )
-    return ProjectResponse.model_validate(project)
+    return project_response(project, document_count=0)
+
+
+async def _project_with_count(db: AsyncSession, project) -> ProjectResponse:
+    document_counts = await _document_repo.count_documents_by_project_ids(db, [project.id])
+    return project_response(project, document_count=document_counts.get(project.id, 0))
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
@@ -53,7 +73,7 @@ async def get_project(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> ProjectResponse:
     project = await _service.get_project(db, current_user, project_id)
-    return ProjectResponse.model_validate(project)
+    return await _project_with_count(db, project)
 
 
 @router.patch("/{project_id}", response_model=ProjectResponse)
@@ -65,7 +85,7 @@ async def update_project(
 ) -> ProjectResponse:
     updates = body.model_dump(exclude_unset=True)
     project = await _service.update_project(db, current_user, project_id, **updates)
-    return ProjectResponse.model_validate(project)
+    return await _project_with_count(db, project)
 
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)

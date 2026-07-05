@@ -119,7 +119,7 @@ describe('PageEditorTranscriptionPdfPane', () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole('button', { name: /download/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /download pdf/i }));
 
     await waitFor(() => {
       expect(mockedGenerateTranscriptionPdf).toHaveBeenCalledTimes(2);

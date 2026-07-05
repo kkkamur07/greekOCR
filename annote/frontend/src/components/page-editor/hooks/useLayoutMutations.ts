@@ -1,7 +1,9 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 import {
   api,
-  type LayoutPoint,
+  waitForJob,
+  type JobResponse,
+  type LayoutLineResponse,
   type LinePoint,
   type LineResponse,
   type LineUpsertRequest,
@@ -9,7 +11,9 @@ import {
   type PartLayoutResponse,
 } from '../../../api/client';
 import { ApiError } from '../../../api/errors';
-import { upsertLineRequest } from './utils';
+import { cleanPolygonPoints, offsetGeometry } from '../canvasGeometry';
+import type { PageEditorJobKind } from '../jobProgress';
+import { upsertLineRequest, applyLayoutLineGeometryToSegments, syncLayoutLinesFromSegments } from './utils';
 
 function layoutMutationMessage(error: unknown): string {
   if (error instanceof ApiError && error.status === 403) {
@@ -38,6 +42,10 @@ type LayoutMutationsInput = {
   setSelectedSegmentId: Dispatch<SetStateAction<string | null>>;
   setApprovedTextDraft: Dispatch<SetStateAction<string>>;
   onDrawComplete: () => void;
+  trackJobAndWait?: (
+    jobId: string,
+    meta: { label: string; kind: PageEditorJobKind },
+  ) => Promise<JobResponse>;
 };
 
 export function useLayoutMutations({
@@ -56,16 +64,18 @@ export function useLayoutMutations({
   setSelectedSegmentId,
   setApprovedTextDraft,
   onDrawComplete,
+  trackJobAndWait,
 }: LayoutMutationsInput) {
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
   const [selectedLineSnapshot, setSelectedLineSnapshot] = useState<{
-    baseline?: LayoutPoint[] | null;
-    mask?: LayoutPoint[] | null;
+    baseline?: LayoutLineResponse['baseline'];
+    mask?: LayoutLineResponse['mask'];
   } | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [segmenting, setSegmenting] = useState(false);
-  const [useOtsuRefinement, setUseOtsuRefinement] = useState(true);
+  const [useOtsuRefinement, setUseOtsuRefinement] = useState(false);
+  const [otsuSphereRadius, setOtsuSphereRadius] = useState(4);
   const [segmentMessage, setSegmentMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -82,17 +92,18 @@ export function useLayoutMutations({
     if (!selectedLineId) return;
     setSaveMessage(null);
     setMutationError(null);
-    setLayout((current) => ({
-      ...current,
-      lines: current.lines.map((line) =>
+    setLayout((current) => {
+      const nextLayoutLines = current.lines.map((line) =>
         line.id === selectedLineId
           ? {
               ...line,
-              baseline: (line.baseline ?? []).map(([x, y]) => [x, y + deltaY]),
+              baseline: offsetGeometry(line.baseline, deltaY),
             }
           : line,
-      ),
-    }));
+      );
+      setLines((segments) => applyLayoutLineGeometryToSegments(segments, nextLayoutLines));
+      return { ...current, lines: nextLayoutLines };
+    });
   }
 
   async function saveSelectedLine() {
@@ -111,6 +122,18 @@ export function useLayoutMutations({
           line.id === selectedLineId ? { ...line, manual_geometry: true } : line,
         ),
       }));
+      setLines((current) =>
+        current.map((line) =>
+          line.id === selectedLineId
+            ? {
+                ...line,
+                baseline: selectedLine.baseline ?? line.baseline,
+                mask: selectedLine.mask ?? line.mask,
+                manual_geometry: true,
+              }
+            : line,
+        ),
+      );
       setMutationError(null);
       setSaveMessage('Manual geometry saved');
       setSelectedLineSnapshot({
@@ -131,6 +154,15 @@ export function useLayoutMutations({
               : line,
           ),
         }));
+        setLines((current) =>
+          applyLayoutLineGeometryToSegments(current, [
+            {
+              id: selectedLineId,
+              baseline: selectedLineSnapshot.baseline,
+              mask: selectedLineSnapshot.mask,
+            },
+          ]),
+        );
       }
       setSaveMessage(null);
       setMutationError(layoutMutationMessage(err));
@@ -142,7 +174,9 @@ export function useLayoutMutations({
     const resetLayout = await api.resetPartLayout(projectId, documentId, partId, {
       line_ids: [selectedLineId],
     });
-    setLayout(resetLayout ?? { blocks: [], lines: [] });
+    const nextLayout = resetLayout ?? { blocks: [], lines: [] };
+    setLayout(nextLayout);
+    setLines((current) => applyLayoutLineGeometryToSegments(current, nextLayout.lines));
     setSelectedLineSnapshot(null);
     setSaveMessage('Layout reset');
   }
@@ -162,10 +196,41 @@ export function useLayoutMutations({
     try {
       const saved = await api.replacePartLines(projectId, documentId, partId, body);
       setLines(saved);
+      setLayout((current) => syncLayoutLinesFromSegments(current, saved));
       setLineError(null);
       onDrawComplete();
     } catch (err) {
       setLineError(err instanceof Error ? err.message : 'Failed to save Segment geometry.');
+    }
+  }
+
+  async function updateSegmentPoints(segmentId: string, points: LinePoint[]) {
+    if (!projectId || !documentId || !partId) return;
+    const cleanedPoints = cleanPolygonPoints(points);
+    if (cleanedPoints.length < 3) {
+      setLineError('A segment needs at least 3 points.');
+      return;
+    }
+    const previousLines = lines;
+    const optimisticLines = lines.map((line) =>
+      line.id === segmentId ? { ...line, points: cleanedPoints, source: 'manual' as const } : line,
+    );
+    setLines(optimisticLines);
+    setLayout((current) => syncLayoutLinesFromSegments(current, optimisticLines));
+    try {
+      const updatedLines = [...optimisticLines]
+        .sort((a, b) => a.order - b.order)
+        .map<LineUpsertRequest>((line, order) => upsertLineRequest(line, order));
+      const saved = await api.replacePartLines(projectId, documentId, partId, {
+        lines: updatedLines,
+      });
+      setLines(saved);
+      setLayout((current) => syncLayoutLinesFromSegments(current, saved));
+      setLineError(null);
+    } catch (err) {
+      setLines(previousLines);
+      setLayout((current) => syncLayoutLinesFromSegments(current, previousLines));
+      setLineError(layoutMutationMessage(err));
     }
   }
 
@@ -206,19 +271,6 @@ export function useLayoutMutations({
     setSelectedSegmentId(null);
   }
 
-  async function pollJobUntilDone(jobId: string): Promise<void> {
-    const deadline = Date.now() + 30_000;
-    while (Date.now() < deadline) {
-      const job = await api.getJob(jobId);
-      if (job.status === 'done') return;
-      if (job.status === 'failed') {
-        throw new Error(job.error ?? 'Segment job failed.');
-      }
-      await new Promise((resolve) => setTimeout(resolve, 250));
-    }
-    throw new Error('Segment job timed out.');
-  }
-
   async function runAutoSegment() {
     if (!projectId || !documentId || !partId) return;
     if (
@@ -233,8 +285,18 @@ export function useLayoutMutations({
     setSegmentMessage(null);
     setPairingError(null);
     try {
-      const enqueued = await api.segmentPart(projectId, documentId, partId);
-      await pollJobUntilDone(enqueued.job_id);
+      const enqueued = await api.segmentPart(projectId, documentId, partId, {
+        use_otsu_refinement: useOtsuRefinement,
+        otsu_sphere_radius: otsuSphereRadius,
+      });
+      if (trackJobAndWait) {
+        await trackJobAndWait(enqueued.job_id, {
+          label: 'Kraken line segmentation',
+          kind: 'segmentation',
+        });
+      } else {
+        await waitForJob(enqueued.job_id);
+      }
       const [reloadedLines, reloadedLayout, pairing] = await Promise.all([
         api.listPartLines(projectId, documentId, partId),
         api.getPartLayout(projectId, documentId, partId),
@@ -250,7 +312,7 @@ export function useLayoutMutations({
       setPairingProgress(pairing.pairing_progress);
       setSegmentMessage(
         useOtsuRefinement
-          ? `Kraken segmentation completed with Otsu refinement (${reloadedLines.length} Segment(s)).`
+          ? `Kraken segmentation completed with Otsu refinement (${otsuSphereRadius}px sphere, ${reloadedLines.length} Segment(s)).`
           : `Kraken segmentation completed using raw Kraken boundaries (${reloadedLines.length} Segment(s)).`,
       );
     } catch (err) {
@@ -271,11 +333,14 @@ export function useLayoutMutations({
     segmenting,
     useOtsuRefinement,
     setUseOtsuRefinement,
+    otsuSphereRadius,
+    setOtsuSphereRadius,
     segmentMessage,
     moveSelectedBaseline,
     saveSelectedLine,
     resetSelectedLine,
     replaceWithManualLine,
+    updateSegmentPoints,
     moveSelectedSegmentRight,
     deleteSelectedSegment,
     runAutoSegment,

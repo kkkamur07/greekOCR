@@ -20,11 +20,11 @@ const BASE_TRANSCRIPTION: LineTranscriptionWithCharacterConfidence = {
 
 describe('characterConfidence', () => {
   it('maps confidence values to highlight and label colors', () => {
-    expect(confidenceHighlightColor(0.95)).toBe('#b7eb8f');
-    expect(confidenceHighlightColor(0.8)).toBe('#91caff');
-    expect(confidenceHighlightColor(0.6)).toBe('#ffe58f');
-    expect(confidenceHighlightColor(0.2)).toBe('#ffa39e');
-    expect(confidenceLabelColor(0.95)).toBe('#389e0d');
+    expect(confidenceHighlightColor(0.95)).toBe('#059669');
+    expect(confidenceHighlightColor(0.8)).toBe('#d97706');
+    expect(confidenceHighlightColor(0.6)).toBe('#d97706');
+    expect(confidenceHighlightColor(0.2)).toBe('#dc2626');
+    expect(confidenceLabelColor(0.95)).toBe('#059669');
     expect(formatConfidencePercent(0.825)).toBe('82.5%');
   });
 

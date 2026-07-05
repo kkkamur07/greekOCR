@@ -53,7 +53,7 @@ const TranscriptionDetail: React.FC<TranscriptionDetailProps> = ({
 
     let color = '#ff4d4f'; // Default red/error
     if (pct > 90) color = '#52c41a'; // Green
-    else if (pct > 70) color = '#1890ff'; // Blue
+    else if (pct > 70) color = '#44403c';
     else if (pct > 50) color = '#faad14'; // Yellow
 
     return { color, percent: pct, label: `${pct.toFixed(1)}%` };

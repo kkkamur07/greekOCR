@@ -21,7 +21,7 @@ const TranscriptionItem: React.FC<TranscriptionItemProps> = ({
   const getStatusColor = () => {
     if (!transcription) return '#d9d9d9'; // Grey
     if (transcription.confidence > 0.9) return '#52c41a'; // Green
-    if (transcription.confidence > 0.7) return '#1890ff'; // Blue
+    if (transcription.confidence > 0.7) return '#44403c';
     return '#faad14'; // Orange
   };
 

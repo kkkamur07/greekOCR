@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Button, Card, List, Space, Tag, Typography, notification } from 'antd';
+import { Button, Card, List, Space, Tag, Typography } from 'antd';
 import { ThunderboltOutlined } from '@ant-design/icons';
 import { api, type JobResponse, type JobStatus } from '../../api/client';
 import { ApiError } from '../../api/errors';
+import { toast } from '../ui/toast';
 
 const TERMINAL_STATUSES: JobStatus[] = ['done', 'failed'];
 
@@ -86,10 +87,7 @@ export function JobsPanel({ enableTestJobs = false }: JobsPanelProps) {
             !failedNotifiedRef.current.has(job.id)
           ) {
             failedNotifiedRef.current.add(job.id);
-            notification.error({
-              message: 'Job failed',
-              description: job.error,
-            });
+            toast.error(job.error ? `Job failed: ${job.error}` : 'Job failed');
             if (import.meta.env.DEV) {
               console.error('[JobsPanel] job failed', job);
             }
@@ -112,14 +110,11 @@ export function JobsPanel({ enableTestJobs = false }: JobsPanelProps) {
     try {
       const { job_id } = await api.enqueueTestJob();
       trackJob(job_id);
-      notification.success({
-        message: 'Test job enqueued',
-        description: shortId(job_id),
-      });
+      toast.success(`Test job enqueued (${shortId(job_id)})`);
     } catch (err) {
       const msg =
         err instanceof ApiError ? err.message : 'Failed to enqueue test job';
-      notification.error({ message: msg });
+      toast.error(msg);
     } finally {
       setEnqueueing(false);
     }
@@ -146,7 +141,7 @@ export function JobsPanel({ enableTestJobs = false }: JobsPanelProps) {
       {trackedJobs.length === 0 ? (
         <Typography.Text type="secondary">
           {enableTestJobs
-            ? 'No jobs yet — run a test job to verify the worker.'
+            ? 'No jobs yet. Run a test job to verify the worker.'
             : 'Background jobs for this document will appear here.'}
         </Typography.Text>
       ) : (

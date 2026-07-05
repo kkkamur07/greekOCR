@@ -104,7 +104,7 @@ export const RegionsOverlay: React.FC<RegionsOverlayProps> = ({
                 width={x2 - x1}
                 height={y2 - y1}
                 fill="transparent"
-                stroke={isSelected ? '#fadb14' : '#1890ff'}
+                stroke={isSelected ? '#fadb14' : '#44403c'}
                 strokeWidth={getStrokeWidth(2)}
                 strokeDasharray={`${8 / zoomLevel},${4 / zoomLevel}`}
                 style={{ pointerEvents: 'none' }}
@@ -153,7 +153,7 @@ export const RegionsOverlay: React.FC<RegionsOverlayProps> = ({
                   cx={x}
                   cy={y}
                   r={getVertexRadius()}
-                  fill={vertexEditingState.draggedVertexIndex === idx ? '#ff4d4f' : '#1890ff'}
+                  fill={vertexEditingState.draggedVertexIndex === idx ? '#ff4d4f' : '#44403c'}
                   stroke="white"
                   strokeWidth={getStrokeWidth(3)}
                   style={{
@@ -166,7 +166,7 @@ export const RegionsOverlay: React.FC<RegionsOverlayProps> = ({
                 <text
                   x={x}
                   y={y - getVertexRadius() - 5}
-                  fill="#1890ff"
+                  fill="#44403c"
                   fontSize={getFontSize() * 0.7}
                   fontWeight="bold"
                   textAnchor="middle"
@@ -193,7 +193,7 @@ export const RegionsOverlay: React.FC<RegionsOverlayProps> = ({
           width={drawingState.currentRect.width}
           height={drawingState.currentRect.height}
           fill="rgba(24, 144, 255, 0.15)"
-          stroke="#1890ff"
+          stroke="#44403c"
           strokeWidth={getStrokeWidth(4)}
           strokeDasharray={`${12 / zoomLevel},${6 / zoomLevel}`}
           style={{ pointerEvents: 'none' }}
@@ -214,7 +214,7 @@ export const RegionsOverlay: React.FC<RegionsOverlayProps> = ({
                 y1={prevPoint.y}
                 x2={point.x}
                 y2={point.y}
-                stroke="#1890ff"
+                stroke="#44403c"
                 strokeWidth={getStrokeWidth(4)}
               />
             );
@@ -228,7 +228,7 @@ export const RegionsOverlay: React.FC<RegionsOverlayProps> = ({
                 y1={drawingState.drawingPoints[drawingState.drawingPoints.length - 1].y}
                 x2={drawingState.currentMousePos.x}
                 y2={drawingState.currentMousePos.y}
-                stroke="#1890ff"
+                stroke="#44403c"
                 strokeWidth={getStrokeWidth(3)}
                 strokeDasharray={`${8 / zoomLevel},${4 / zoomLevel}`}
               />
@@ -264,7 +264,7 @@ export const RegionsOverlay: React.FC<RegionsOverlayProps> = ({
                 cx={point.x}
                 cy={point.y}
                 r={getVertexRadius()}
-                fill={idx === 0 ? '#52c41a' : '#1890ff'}
+                fill={idx === 0 ? '#52c41a' : '#44403c'}
                 stroke="white"
                 strokeWidth={getStrokeWidth(3)}
               />
@@ -272,7 +272,7 @@ export const RegionsOverlay: React.FC<RegionsOverlayProps> = ({
               <text
                 x={point.x}
                 y={point.y - getVertexRadius() - 5}
-                fill={idx === 0 ? '#52c41a' : '#1890ff'}
+                fill={idx === 0 ? '#52c41a' : '#44403c'}
                 fontSize={getFontSize() * 0.8}
                 fontWeight="bold"
                 textAnchor="middle"

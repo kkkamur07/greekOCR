@@ -35,8 +35,12 @@ services:
       ANNOTE_APP_ROOT: /app
       ML_SERVICE_URL: http://ml-api:8001
       ML_WEBHOOK_SECRET: dev-ml-webhook-secret
+      ANNOTATED_DATA_ROOT: /data/annotated/data
     volumes:
       - ./annote/backend/media:/app/backend/media
+      - ./annote/backend:/app/backend
+      - ./annote/scripts:/app/scripts
+      - ./data:/data:ro
     depends_on:
       db:
         condition: service_healthy
@@ -56,7 +60,11 @@ services:
       start_period: 30s
     command: >
       sh -c "alembic -c infrastructure/alembic.ini upgrade head
-      && uvicorn backend.core.main:app --host 0.0.0.0 --port 8000 --workers 1"
+      && python scripts/seed_dev_annote.py
+      && uvicorn backend.core.main:app --host 0.0.0.0 --port 8000 --workers 1 --reload --reload-dir /app/backend"
+    # Seed runs on API container start only (never restarts Postgres). If you wipe or
+    # recreate the DB volume while the API keeps running, hit /health or restart api —
+    # development health checks recreate the dev login user when it is missing.
 
   ml-api:
     # Calamari runs on CPU here, but tensorflow-addons has no Linux ARM wheel.
@@ -128,6 +136,8 @@ services:
       - "5173:5173"
     environment:
       VITE_API_BASE_URL: http://localhost:8000
+      VITE_DEV_PROXY_TARGET: http://api:8000
+    command: sh -c "rm -rf node_modules/.vite && npm run dev -- --host 0.0.0.0 --force"
     volumes:
       - ./annote/frontend:/app
       - frontend_node_modules:/app/node_modules

@@ -12,9 +12,11 @@ export type LoginRequest = components['schemas']['LoginRequest'];
 export type RegisterRequest = components['schemas']['RegisterRequest'];
 export type ProjectResponse = components['schemas']['ProjectResponse'];
 export type ProjectCreateRequest = components['schemas']['ProjectCreateRequest'];
+export type ProjectUpdateRequest = components['schemas']['ProjectUpdateRequest'];
 export type DocumentResponse = components['schemas']['DocumentResponse'];
 export type DocumentWithPartsResponse = components['schemas']['DocumentWithPartsResponse'];
 export type DocumentCreateRequest = components['schemas']['DocumentCreateRequest'];
+export type DocumentUpdateRequest = components['schemas']['DocumentUpdateRequest'];
 export type DocumentPartResponse = components['schemas']['DocumentPartResponse'];
 export type DocumentPartUpdateRequest = components['schemas']['DocumentPartUpdateRequest'];
 export type DocumentWorkflow = components['schemas']['DocumentWorkflow'];
@@ -24,7 +26,6 @@ export type PublicTranscriptionLayerResponse =
   components['schemas']['PublicTranscriptionLayerResponse'];
 export type TranscriptionLayerResponse = components['schemas']['TranscriptionLayerResponse'];
 export type LineTranscriptionResponse = components['schemas']['LineTranscriptionResponse'];
-export type LineTranscriptionTextSource = components['schemas']['LineTranscriptionTextSource'];
 export type CharacterConfidence = components['schemas']['CharacterConfidence'];
 export type JobCallbackRequest = components['schemas']['JobCallbackRequest'];
 export type TranscribeRunResponse = components['schemas']['TranscribeRunResponse'];
@@ -34,22 +35,38 @@ export type MLTask = components['schemas']['MLTask'];
 export type JobResponse = components['schemas']['JobResponse'];
 export type JobStatus = components['schemas']['JobStatus'];
 export type EnqueueJobResponse = components['schemas']['EnqueueJobResponse'];
+export type SegmentPartRequest = {
+  use_otsu_refinement?: boolean;
+  otsu_sphere_radius?: number;
+  target_max_points?: number;
+  min_iou?: number;
+  min_area_ratio?: number;
+  split_large_lines?: boolean;
+  split_vertical_gap_px?: number;
+};
 export type InferenceModelResponse = components['schemas']['InferenceModelResponse'];
 export type InferenceTask = components['schemas']['InferenceTask'];
 export type ResolvedModelBindingResponse = components['schemas']['ResolvedModelBindingResponse'];
 export type EnqueueTestJobRequest = components['schemas']['EnqueueTestJobRequest'];
 export type EnqueueTestJobResponse = components['schemas']['EnqueueTestJobResponse'];
 export type LayoutPoint = [number, number];
+export type GeometryValue =
+  | LayoutPoint[]
+  | {
+      points?: LayoutPoint[];
+      type?: string;
+      coordinates?: LayoutPoint[];
+    };
 export type LayoutBlockResponse = {
   id: string;
-  box?: LayoutPoint[] | null;
+  box?: GeometryValue | null;
   manual_geometry?: boolean | null;
 };
 export type LayoutLineResponse = {
   id: string;
   block_id?: string | null;
-  baseline?: LayoutPoint[] | null;
-  mask?: LayoutPoint[] | null;
+  baseline?: GeometryValue | null;
+  mask?: GeometryValue | null;
   manual_geometry?: boolean | null;
 };
 export type PartLayoutResponse = {
@@ -66,6 +83,8 @@ export type LineResponse = {
   order: number;
   kind: LineGeometryKind;
   points: LinePoint[];
+  baseline: GeometryValue;
+  mask: GeometryValue | null;
   source: LineSource;
   source_metadata: Record<string, unknown> | null;
   kraken_ceiling: LinePoint[] | null;
@@ -79,14 +98,16 @@ export type LineUpsertRequest = {
   kind: LineGeometryKind;
   points: LinePoint[];
   source: LineSource;
+  baseline?: GeometryValue | null;
+  mask?: GeometryValue | null;
   approved_text?: string | null;
 };
 export type LinesReplaceRequest = {
   lines: LineUpsertRequest[];
 };
 export type UpdateLineGeometryRequest = {
-  baseline?: LayoutPoint[] | null;
-  mask?: LayoutPoint[] | null;
+  baseline?: GeometryValue | null;
+  mask?: GeometryValue | null;
 };
 export type ResetPartLayoutRequest = {
   line_ids?: string[] | null;
@@ -242,19 +263,6 @@ type TranscribeJobResult = {
   lines: Array<{ line_id: string; text: string; confidence: number }>;
 };
 
-async function pollJobUntilDone(jobId: string, timeoutMs = 120_000): Promise<JobResponse> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const job = await apiRequest<JobResponse>(`/jobs/${jobId}`);
-    if (job.status === 'done') return job;
-    if (job.status === 'failed') {
-      throw new Error(job.error ?? 'Job failed.');
-    }
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  throw new Error('Job timed out.');
-}
-
 export const api = {
   login: (body: LoginRequest) =>
     apiRequest<TokenResponse>('/auth/login', { method: 'POST', body, skipAuth: true }),
@@ -272,6 +280,12 @@ export const api = {
   getProject: (projectId: string) =>
     apiRequest<ProjectResponse>(`/projects/${projectId}`),
 
+  updateProject: (projectId: string, body: ProjectUpdateRequest) =>
+    apiRequest<ProjectResponse>(`/projects/${projectId}`, { method: 'PATCH', body }),
+
+  deleteProject: (projectId: string) =>
+    apiRequest<void>(`/projects/${projectId}`, { method: 'DELETE' }),
+
   listDocuments: (projectId: string, includeArchived = false) =>
     apiRequest<DocumentResponse[]>(
       `/projects/${projectId}/documents?include_archived=${includeArchived}`,
@@ -287,6 +301,17 @@ export const api = {
     apiRequest<DocumentWithPartsResponse>(
       `/projects/${projectId}/documents/${documentId}`,
     ),
+
+  updateDocument: (projectId: string, documentId: string, body: DocumentUpdateRequest) =>
+    apiRequest<DocumentResponse>(`/projects/${projectId}/documents/${documentId}`, {
+      method: 'PATCH',
+      body,
+    }),
+
+  deleteDocument: (projectId: string, documentId: string) =>
+    apiRequest<void>(`/projects/${projectId}/documents/${documentId}`, {
+      method: 'DELETE',
+    }),
 
   listTranscriptions: (projectId: string, documentId: string) =>
     apiRequest<TranscriptionLayerResponse[]>(
@@ -430,29 +455,41 @@ export const api = {
       { method: 'POST' },
     ),
 
-  segmentPart: (projectId: string, documentId: string, partId: string) =>
-    apiRequest<EnqueueJobResponse>(
-      `/projects/${projectId}/documents/${documentId}/parts/${partId}/segment`,
-      { method: 'POST' },
+  exportPageXml: (projectId: string, documentId: string, partId: string) =>
+    fetchBinaryApi(
+      `/projects/${projectId}/documents/${documentId}/parts/${partId}/page-xml`,
     ),
 
-  transcribePart: (projectId: string, documentId: string, partId: string) =>
+  segmentPart: (
+    projectId: string,
+    documentId: string,
+    partId: string,
+    body?: SegmentPartRequest,
+  ) =>
+    apiRequest<EnqueueJobResponse>(
+      `/projects/${projectId}/documents/${documentId}/parts/${partId}/segment`,
+      { method: 'POST', body: body ?? {} },
+    ),
+
+  enqueueTranscribePart: (
+    projectId: string,
+    documentId: string,
+    partId: string,
+    body?: { model_id?: string; line_ids?: string[] },
+  ) =>
     apiRequest<EnqueueJobResponse>(
       `/projects/${projectId}/documents/${documentId}/parts/${partId}/transcribe`,
-      { method: 'POST' },
+      { method: 'POST', body: body ?? {} },
     ),
 
   ocrPredictPart: async (
     projectId: string,
     documentId: string,
     partId: string,
-    _body: { model_id: string },
+    body: { model_id: string },
   ): Promise<TranscribeJobResult> => {
-    const enqueued = await apiRequest<EnqueueJobResponse>(
-      `/projects/${projectId}/documents/${documentId}/parts/${partId}/transcribe`,
-      { method: 'POST' },
-    );
-    const job = await pollJobUntilDone(enqueued.job_id);
+    const enqueued = await api.enqueueTranscribePart(projectId, documentId, partId, body);
+    const job = await waitForJob(enqueued.job_id);
     return job.result as TranscribeJobResult;
   },
 
@@ -460,14 +497,14 @@ export const api = {
     projectId: string,
     documentId: string,
     partId: string,
-    _lineId: string,
-    _body: { model_id: string },
+    lineId: string,
+    body: { model_id: string },
   ): Promise<TranscribeJobResult> => {
-    const enqueued = await apiRequest<EnqueueJobResponse>(
-      `/projects/${projectId}/documents/${documentId}/parts/${partId}/transcribe`,
-      { method: 'POST' },
-    );
-    const job = await pollJobUntilDone(enqueued.job_id);
+    const enqueued = await api.enqueueTranscribePart(projectId, documentId, partId, {
+      model_id: body.model_id,
+      line_ids: [lineId],
+    });
+    const job = await waitForJob(enqueued.job_id);
     return job.result as TranscribeJobResult;
   },
 
@@ -524,8 +561,42 @@ export const api = {
       { skipAuth: true },
     ),
 
+  getPublicTranscriptionPdf: (projectId: string, documentId: string, partId: string) =>
+    fetchBinaryApi(
+      `/public/projects/${projectId}/documents/${documentId}/parts/${partId}/transcription-pdf`,
+      { skipAuth: true },
+    ),
+
+  getPublicPageXml: (projectId: string, documentId: string, partId: string) =>
+    fetchBinaryApi(
+      `/public/projects/${projectId}/documents/${documentId}/parts/${partId}/page-xml`,
+      { skipAuth: true },
+    ),
+
   enqueueTestJob: (body: EnqueueTestJobRequest = { handler: 'noop' }) =>
     apiRequest<EnqueueTestJobResponse>('/jobs/test', { method: 'POST', body }),
 
   getJob: (jobId: string) => apiRequest<JobResponse>(`/jobs/${jobId}`),
 };
+
+export async function waitForJob(
+  jobId: string,
+  options?: { timeoutMs?: number; onUpdate?: (job: JobResponse) => void },
+): Promise<JobResponse> {
+  const timeoutMs = options?.timeoutMs ?? 120_000;
+  const deadline = Date.now() + timeoutMs;
+  let lastJob: JobResponse | null = null;
+  while (Date.now() < deadline) {
+    const job = await api.getJob(jobId);
+    if (!lastJob || lastJob.status !== job.status || lastJob.updated_at !== job.updated_at) {
+      options?.onUpdate?.(job);
+    }
+    lastJob = job;
+    if (job.status === 'done') return job;
+    if (job.status === 'failed') {
+      throw new Error(job.error ?? 'Job failed.');
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error('Job timed out.');
+}
