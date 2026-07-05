@@ -1,5 +1,7 @@
 # TODO
 
+- Move logging to [loguru](https://github.com/Delgan/loguru) across the Python services (`annote/backend`, `ml_service`, `ml/`, scripts). Replace stdlib `logging` and SQLAlchemy `echo=True` dev noise with structured, level-controlled loguru output.
+- Fix noisy Docker health checks: `docker-compose.yml` polls `/health` every 5s from inside each container, and the api health route runs `SELECT 1` (with SQLAlchemy `echo=True` in dev), flooding logs. Consider a lightweight liveness endpoint without DB, turning off SQL echo for health traffic, longer intervals in dev, and/or filtering health-check access logs.
 - Think through the `ml/` directory structure before it grows further. In particular, clarify the boundary between public API/job contracts in `ml/contracts/` and internal model registry schema/loaders in `ml/registry/`; registry-specific types such as architecture/device probably should not live in a generic contracts schema.
 - Design the future remote weight source flow separately from local `file://` registry resolution. Local paths should stay constrained under `ML_ROOT`; server-backed weights should go through an explicit downloader/cache layer with allowed schemes, integrity checks, and clear cache layout.
-- Use celery and `BackgroundTasks` to handle the background tasks later on. 
+- Longer term plan is to port calamari ocr architecture i.e. the model and forward pass to ml_service architecture we can create a different folder if required, because it uses tensor flow and because of that we need to build the docker containers with tensorflow in linux/arm64 which takes a ot of time. Remember now the 

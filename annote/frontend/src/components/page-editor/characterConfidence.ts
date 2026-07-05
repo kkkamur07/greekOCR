@@ -10,18 +10,31 @@ export type LineTranscriptionWithCharacterConfidence = LineTranscriptionResponse
   character_confidences?: CharacterConfidence[] | null;
 };
 
+export function confidenceTierClass(confidence: number): string {
+  if (confidence > 0.9) return 'ch-high';
+  if (confidence > 0.5) return 'ch-mid';
+  return 'ch-low';
+}
+
+/** Human-readable tier for aria / tooltips (matches strip legend). */
+export function confidenceTierLabel(confidence: number): string {
+  if (confidence > 0.9) return 'high';
+  if (confidence > 0.5) return 'mid';
+  return 'low';
+}
+
 export function confidenceHighlightColor(confidence: number): string {
-  if (confidence > 0.9) return '#b7eb8f';
-  if (confidence > 0.7) return '#91caff';
-  if (confidence > 0.5) return '#ffe58f';
-  return '#ffa39e';
+  if (confidence > 0.9) return '#059669';
+  if (confidence > 0.7) return '#d97706';
+  if (confidence > 0.5) return '#d97706';
+  return '#dc2626';
 }
 
 export function confidenceLabelColor(confidence: number): string {
-  if (confidence > 0.9) return '#389e0d';
-  if (confidence > 0.7) return '#0958d9';
-  if (confidence > 0.5) return '#d48806';
-  return '#cf1322';
+  if (confidence > 0.9) return '#059669';
+  if (confidence > 0.7) return '#d97706';
+  if (confidence > 0.5) return '#d97706';
+  return '#dc2626';
 }
 
 export function formatConfidencePercent(confidence: number): string {

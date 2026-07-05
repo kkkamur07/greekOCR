@@ -36,6 +36,7 @@ class ProjectResponse(BaseModel):
     slug: str
     guidelines: str | None
     owner_id: UUID | None
+    document_count: int = 0
     created_at: datetime
     updated_at: datetime
 

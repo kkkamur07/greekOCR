@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Button, Space, Typography } from 'antd';
 import { api } from '../../api/client';
 import { ApiError } from '../../api/errors';
+import { CloseIcon, DownloadIcon, IconButton, RefreshIcon } from './EditorIcons';
 
 type PageEditorTranscriptionPdfPaneProps = {
   projectId: string;
@@ -90,93 +90,31 @@ export function PageEditorTranscriptionPdfPane({
   }
 
   return (
-    <aside
-      aria-label="Transcription PDF preview"
-      style={{
-        display: 'flex',
-        minHeight: 0,
-        minWidth: 0,
-        width: '50%',
-        flexDirection: 'column',
-        borderLeft: '1px solid #e5e7eb',
-        background: '#f9fafb',
-      }}
-    >
-      <div
-        style={{
-          display: 'flex',
-          flexShrink: 0,
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 8,
-          borderBottom: '1px solid #e5e7eb',
-          background: '#fff',
-          padding: '8px 12px',
-        }}
-      >
-        <div style={{ minWidth: 0 }}>
-          <Typography.Text strong>Transcription PDF</Typography.Text>
-          <Typography.Paragraph type="secondary" style={{ marginBottom: 0, fontSize: 12 }}>
-            Paired ground truth text at segment positions on a blank page
-          </Typography.Paragraph>
+    <aside className="pe-pdf-pane" aria-label="Transcription PDF preview">
+      <div className="pe-pdf-pane__header">
+        <span>Transcription PDF</span>
+        <div className="pe-pdf-pane__actions">
+          <IconButton label="Refresh PDF" onClick={onRefresh} disabled={loading}>
+            <RefreshIcon />
+          </IconButton>
+          <IconButton
+            label="Download PDF"
+            onClick={() => void handleDownload()}
+            disabled={downloading}
+          >
+            <DownloadIcon />
+          </IconButton>
+          <IconButton label="Close PDF pane" onClick={onClose}>
+            <CloseIcon />
+          </IconButton>
         </div>
-        <Space size={4} wrap>
-          <Button size="small" onClick={onRefresh} disabled={loading}>
-            Refresh
-          </Button>
-          <Button size="small" loading={downloading} onClick={() => void handleDownload()}>
-            Download
-          </Button>
-          <Button size="small" onClick={onClose}>
-            Close
-          </Button>
-        </Space>
       </div>
 
-      <div
-        style={{
-          display: 'flex',
-          minHeight: 0,
-          flex: 1,
-          flexDirection: 'column',
-          overflow: 'hidden',
-          padding: 8,
-        }}
-      >
-        <Typography.Paragraph type="secondary" style={{ marginBottom: 8, fontSize: 12 }}>
-          Live preview from current pairing and ground truth. Refresh after saving changes.
-        </Typography.Paragraph>
-
-        {loading && (
-          <div
-            style={{
-              display: 'flex',
-              flex: 1,
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#6b7280',
-            }}
-          >
-            Loading PDF…
-          </div>
-        )}
-
+      <div className="pe-pdf-pane__body" style={{ padding: 8, alignItems: 'stretch' }}>
+        {loading && <span>Loading PDF…</span>}
         {error && !loading && (
-          <div
-            style={{
-              display: 'flex',
-              flex: 1,
-              alignItems: 'center',
-              justifyContent: 'center',
-              paddingInline: 16,
-              textAlign: 'center',
-              color: '#b91c1c',
-            }}
-          >
-            {error}
-          </div>
+          <span style={{ color: '#991b1b', padding: 16, textAlign: 'center' }}>{error}</span>
         )}
-
         {blobUrl && !loading && !error && (
           <object
             key={blobUrl}
@@ -187,14 +125,14 @@ export function PageEditorTranscriptionPdfPane({
             style={{
               minHeight: 0,
               flex: 1,
-              border: '1px solid #e5e7eb',
+              border: '1px solid var(--border)',
               borderRadius: 6,
               background: '#fff',
             }}
           >
-            <Typography.Paragraph type="secondary" style={{ padding: 16, textAlign: 'center' }}>
+            <p style={{ padding: 16, textAlign: 'center', color: 'var(--text-3)' }}>
               Your browser cannot display PDFs inline. Use Download instead.
-            </Typography.Paragraph>
+            </p>
           </object>
         )}
       </div>

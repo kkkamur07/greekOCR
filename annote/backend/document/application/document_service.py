@@ -8,8 +8,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from backend.annotation.application.line_geometry import resolve_line_baseline_and_mask
 from backend.core.exceptions import AccessDeniedError, ConflictError, NotFoundError, ValidationError
 from backend.core.settings.job import get_job_settings
+from backend.document.domain.access import require_can_read
 from backend.document.infrastructure.document_repository import DocumentRepository
 from backend.document.infrastructure.media_store import MediaStore
 from backend.document.infrastructure.orm_models import (
@@ -25,8 +27,9 @@ from backend.document.infrastructure.orm_models import (
     Transcription,
     TranscriptionKind,
 )
-from backend.document.domain.access import require_can_read
 from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
+from backend.ml.application.model_service import InferenceModelService
+from backend.ml.infrastructure.orm_models import InferenceTask
 from backend.project.domain.access import is_member
 from backend.project.infrastructure.orm_models import Project
 from backend.project.infrastructure.project_repository import ProjectRepository
@@ -46,10 +49,12 @@ class DocumentService:
         documents: DocumentRepository | None = None,
         projects: ProjectRepository | None = None,
         media: MediaStore | None = None,
+        inference_models: InferenceModelService | None = None,
     ) -> None:
         self._documents = documents or DocumentRepository()
         self._projects = projects or ProjectRepository()
         self._media = media or MediaStore()
+        self._inference_models = inference_models or InferenceModelService()
         self._job_settings = get_job_settings()
 
     async def list_documents(
@@ -97,6 +102,16 @@ class DocumentService:
         document = await self._load_document_in_project(session, project, document_id)
         require_can_read(document, project, None)
         return document
+
+    async def get_published_part(
+        self,
+        session: AsyncSession,
+        project_id: UUID,
+        document_id: UUID,
+        part_id: UUID,
+    ) -> DocumentPart:
+        document = await self.get_document_public(session, project_id, document_id)
+        return await self._document_part_or_404(session, document, part_id)
 
     async def update_document(
         self,
@@ -435,9 +450,13 @@ class DocumentService:
                 f"Page transcription cannot exceed {MAX_PAGE_TRANSCRIPTION_LINES} non-empty lines"
             )
         existing = await self._list_page_transcription_lines(session, part.id)
-        paired_line_ids = {text_line.paired_line_id for text_line in existing if text_line.paired_line_id}
+        paired_line_ids = {
+            text_line.paired_line_id for text_line in existing if text_line.paired_line_id
+        }
         if paired_line_ids:
-            ground_truth = await self._documents.get_ground_truth_transcription(session, document.id)
+            ground_truth = await self._documents.get_ground_truth_transcription(
+                session, document.id
+            )
             if ground_truth is not None:
                 for paired_line_id in paired_line_ids:
                     paired_line = await self._line_or_404(session, part.id, paired_line_id)
@@ -516,7 +535,9 @@ class DocumentService:
         allow_new_ids: bool = False,
     ) -> list[Line]:
         if len(lines) > MAX_REPLACE_PART_LINES:
-            raise ValidationError(f"Cannot replace more than {MAX_REPLACE_PART_LINES} lines at once")
+            raise ValidationError(
+                f"Cannot replace more than {MAX_REPLACE_PART_LINES} lines at once"
+            )
         document = await self.get_document(session, user, project_id, document_id)
         part = await self._document_part_or_404(session, document, part_id)
         ground_truth = await self._ensure_ground_truth_transcription(session, document)
@@ -528,7 +549,9 @@ class DocumentService:
         existing = await self._documents.list_part_lines(session, part.id)
         existing_by_id = {line.id: line for line in existing}
         if not allow_new_ids:
-            new_supplied_ids = [line_id for line_id in requested_ids if line_id not in existing_by_id]
+            new_supplied_ids = [
+                line_id for line_id in requested_ids if line_id not in existing_by_id
+            ]
             if new_supplied_ids:
                 raise ValidationError("New line ids are server-generated")
         requested_id_set = set(requested_ids)
@@ -538,7 +561,8 @@ class DocumentService:
 
         for data in lines:
             line_id = data.get("id")
-            line = existing_by_id.get(line_id) if line_id is not None else None
+            prior = existing_by_id.get(line_id) if line_id is not None else None
+            line = prior
             if line is None:
                 line = Line(part_id=part.id, baseline={}, mask=None)
                 if line_id is not None:
@@ -553,12 +577,19 @@ class DocumentService:
             line.order = data["order"]
             line.kind = data["kind"]
             line.points = points
-            line.baseline = {"points": points}
-            line.mask = {"points": points}
+            line.baseline, line.mask = resolve_line_baseline_and_mask(
+                points=points,
+                payload_baseline=data.get("baseline"),
+                payload_mask=data.get("mask"),
+                existing_baseline=prior.baseline if prior is not None else None,
+                existing_mask=prior.mask if prior is not None else None,
+            )
             line.source = data["source"]
             line.source_metadata = data.get("source_metadata")
             line.kraken_ceiling = data.get("kraken_ceiling")
-            source_value = data["source"].value if hasattr(data["source"], "value") else data["source"]
+            source_value = (
+                data["source"].value if hasattr(data["source"], "value") else data["source"]
+            )
             line.manual_geometry = source_value == "manual"
 
             await self._set_ground_truth_text(
@@ -575,19 +606,58 @@ class DocumentService:
         project_id: UUID,
         document_id: UUID,
         part_id: UUID,
+        *,
+        model_id: UUID | None = None,
+        line_ids: list[UUID] | None = None,
     ) -> Job:
         document = await self.get_document(session, user, project_id, document_id)
         part = await self._document_part_or_404(session, document, part_id)
         lines = await self._documents.list_part_lines(session, part.id)
         if not lines:
             raise ConflictError("Cannot transcribe a document part without layout lines")
+        if line_ids is not None:
+            selected_ids = set(line_ids)
+            known_ids = {line.id for line in lines}
+            if selected_ids - known_ids:
+                raise NotFoundError("Line not found")
+            if not selected_ids:
+                raise ValidationError("At least one line must be selected for transcription")
+        binding_id: UUID | None = None
+        selected_model_id = model_id
+        ml_params: dict = {}
+        if selected_model_id is not None:
+            model = await self._inference_models.get_model_for_task(
+                session, selected_model_id, InferenceTask.transcribe
+            )
+            ml_params = dict(model.default_params or {})
+        else:
+            try:
+                resolved = await self._inference_models.resolve_for_part(
+                    session,
+                    user,
+                    project_id,
+                    document_id,
+                    part_id,
+                    task=InferenceTask.transcribe,
+                )
+            except NotFoundError:
+                selected_model_id = None
+            else:
+                selected_model_id = resolved.model.id
+                binding_id = resolved.binding.id
+                ml_params = dict(resolved.effective_params)
+        payload: dict = {"adapter": self._job_settings.transcribe_adapter, "ml_params": ml_params}
+        if line_ids is not None:
+            payload["line_ids"] = [str(line_id) for line_id in line_ids]
         job = Job(
             type=JobType.transcribe,
             status=JobStatus.pending,
             user_id=user.id,
             document_id=document.id,
             document_part_id=part.id,
-            payload={"adapter": self._job_settings.transcribe_adapter},
+            model_id=selected_model_id,
+            binding_id=binding_id,
+            payload=payload,
         )
         session.add(job)
         await session.commit()
@@ -601,6 +671,7 @@ class DocumentService:
         project_id: UUID,
         document_id: UUID,
         part_id: UUID,
+        ml_params: dict | None = None,
     ) -> Job:
         document = await self.get_document(session, user, project_id, document_id)
         part = await self._document_part_or_404(session, document, part_id)
@@ -610,7 +681,10 @@ class DocumentService:
             user_id=user.id,
             document_id=document.id,
             document_part_id=part.id,
-            payload={"adapter": self._job_settings.segment_adapter},
+            payload={
+                "adapter": self._job_settings.segment_adapter,
+                "ml_params": ml_params or {},
+            },
         )
         session.add(job)
         await session.commit()

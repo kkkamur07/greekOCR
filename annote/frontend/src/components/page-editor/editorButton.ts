@@ -1,3 +1,3 @@
 export function editorButton(active: boolean): string {
-  return active ? 'btn btn--primary btn--sm' : 'btn btn--ghost btn--sm';
+  return active ? 'pe-tb-btn pe-tb-btn--active' : 'pe-tb-btn';
 }

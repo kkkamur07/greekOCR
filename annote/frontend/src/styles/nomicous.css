@@ -1,0 +1,28 @@
+@import './theme-shell.css';
+@import './page-editor.css';
+
+/* Page editor status bar */
+.pe-status-bar {
+  flex-shrink: 0;
+  background: var(--green-banner-bg);
+  border-bottom: 1px solid var(--green-banner-border);
+  padding: 8px 14px;
+  font-size: .875rem;
+  color: #065f46;
+}
+.pe-status-bar .pe-status-alerts { display: flex; flex-direction: column; gap: 4px; }
+.pe-status-bar .pe-status-item { display: flex; align-items: center; gap: 8px; }
+.pe-status-bar .pe-status-item--error { color: #991b1b; }
+.pe-status-bar .pe-status-item--warning { color: #92400e; }
+
+.pe-baseline-bar {
+  flex-shrink: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: .875rem;
+}
+.pe-baseline-bar span { color: var(--text-2); font-weight: 500; }

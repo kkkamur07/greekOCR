@@ -59,7 +59,7 @@ def test_member_can_enqueue_segment_job_and_poll_result(client, owner_headers, o
     response = client.post(
         f"{base}/{document_id}/parts/{part_id}/segment",
         headers=owner_headers,
-        json={},
+        json={"use_otsu_refinement": True, "otsu_sphere_radius": 6},
     )
 
     assert response.status_code == 202
@@ -70,6 +70,8 @@ def test_member_can_enqueue_segment_job_and_poll_result(client, owner_headers, o
     assert job["type"] == "segment"
     assert job["document_id"] == document_id
     assert job["document_part_id"] == part_id
+    assert job["payload"]["ml_params"]["use_otsu_refinement"] is True
+    assert job["payload"]["ml_params"]["otsu_sphere_radius"] == 6.0
     assert job["result"]["blocks_count"] == 1
     assert job["result"]["lines_count"] >= 1
 

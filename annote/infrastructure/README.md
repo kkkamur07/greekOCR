@@ -277,17 +277,39 @@ curl -s http://localhost:8000/health | python -m json.tool
 
 ## Seed Helpers
 
-Create a dev user:
+Create a dev user (default login: `dev@example.com` / `dev-pass-123`):
 
 ```bash
 cd annote
 PYTHONPATH=. python scripts/seed_dev_user.py
 ```
 
+Use `dev@example.com`, not `*.local` addresses — the API rejects reserved TLDs such as `.local`.
+
 Seed ML catalog defaults:
 
 ```bash
 PYTHONPATH=. python scripts/seed_dev_inference.py
+```
+
+Import the legacy on-disk annotated corpus into the dev user (from
+`data/annotated/data/` at the repository root). Includes current annotations
+and restorable history snapshots from `annotations/history/`:
+
+```bash
+PYTHONPATH=. python scripts/seed_dev_annotated_data.py
+```
+
+Re-import when documents already exist:
+
+```bash
+PYTHONPATH=. python scripts/seed_dev_annotated_data.py --force
+```
+
+Skip history snapshots (annotations only):
+
+```bash
+PYTHONPATH=. python scripts/seed_dev_annotated_data.py --skip-history
 ```
 
 Relevant env values:
@@ -302,6 +324,36 @@ The seed records artifact references only; it does not download or modify model
 weights.
 
 ## Troubleshooting
+
+### Dev login fails after restarting Postgres
+
+Default credentials are **`dev@example.com`** / **`dev-pass-123`** (hyphens, not spaces).
+
+Seeding scripts **do not restart Postgres**. They only insert/update rows. Login breaks when the
+database was reset or emptied while the API container kept running — seed runs on **API startup**,
+not on every DB restart.
+
+Fix (pick one):
+
+```bash
+# Recreate dev user immediately (does not restart Postgres)
+docker compose exec api python scripts/seed_dev_user.py
+
+# Or restart the API container (re-runs migrations + full seed)
+docker compose restart api
+
+# In development, /health also recreates the dev user when it is missing
+curl -s http://localhost:8000/health
+```
+
+If you only run Postgres in Docker and the API locally, run migrations then seed after a DB reset:
+
+```bash
+docker compose up db -d
+cd annote
+PYTHONPATH=. alembic -c infrastructure/alembic.ini upgrade head
+PYTHONPATH=. python scripts/seed_dev_user.py
+```
 
 ### Port 5433 Already Allocated
 

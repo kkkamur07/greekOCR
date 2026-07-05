@@ -2,6 +2,7 @@ import type {
   LineResponse,
   LineTranscriptionResponse,
   LineUpsertRequest,
+  PartLayoutResponse,
   TranscriptionLayerResponse,
 } from '../../../api/client';
 
@@ -21,6 +22,15 @@ export function approvedText(line: LineResponse): string | null {
   );
 }
 
+export function segmentHasGroundTruth(line: LineResponse): boolean {
+  const text = approvedText(line);
+  return Boolean(text?.trim());
+}
+
+export function segmentIdsWithGroundTruth(lines: LineResponse[]): Set<string> {
+  return new Set(lines.filter(segmentHasGroundTruth).map((line) => line.id));
+}
+
 export function lineTextForLayer(line: LineResponse, transcriptionLayerId: string | null): string {
   if (!transcriptionLayerId) return '';
   return lineTranscriptionForLayer(line, transcriptionLayerId)?.text ?? '';
@@ -38,12 +48,21 @@ export function lineTranscriptionForLayer(
   );
 }
 
-export function modelTranscriptionForLine(line: LineResponse): LineTranscriptionResponse | null {
-  return (
-    line.line_transcriptions.find(
-      (transcription) => transcription.transcription_kind === 'model',
-    ) ?? null
+export function modelTranscriptionForLine(
+  line: LineResponse,
+  preferredLayerId?: string | null,
+): LineTranscriptionResponse | null {
+  const modelTranscriptions = line.line_transcriptions.filter(
+    (transcription) => transcription.transcription_kind === 'model',
   );
+  if (modelTranscriptions.length === 0) return null;
+  if (preferredLayerId) {
+    const preferred = modelTranscriptions.find(
+      (transcription) => transcription.transcription_id === preferredLayerId,
+    );
+    if (preferred) return preferred;
+  }
+  return modelTranscriptions[modelTranscriptions.length - 1] ?? null;
 }
 
 export function showsModelSourceReview(
@@ -87,6 +106,8 @@ export function upsertLineRequest(line: LineResponse, order: number): LineUpsert
     kind: line.kind,
     points: line.points,
     source: line.source,
+    baseline: line.baseline,
+    mask: line.mask,
   };
   if (text !== null) {
     request.approved_text = text;
@@ -119,5 +140,54 @@ export function withLocalGroundTruth(
       character_confidences: null,
     };
     return { ...line, line_transcriptions: [...existing, nextTranscription] };
+  });
+}
+
+export function syncLayoutLinesFromSegments(
+  layout: PartLayoutResponse,
+  segments: LineResponse[],
+): PartLayoutResponse {
+  const byId = new Map(segments.map((line) => [line.id, line]));
+  const synced = layout.lines.map((layoutLine) => {
+    const segment = byId.get(layoutLine.id);
+    if (!segment) return layoutLine;
+    return {
+      ...layoutLine,
+      block_id: segment.block_id,
+      baseline: segment.baseline,
+      mask: segment.mask,
+      manual_geometry: segment.manual_geometry,
+    };
+  });
+
+  for (const segment of segments) {
+    if (synced.some((line) => line.id === segment.id)) continue;
+    synced.push({
+      id: segment.id,
+      block_id: segment.block_id,
+      baseline: segment.baseline,
+      mask: segment.mask,
+      manual_geometry: segment.manual_geometry,
+    });
+  }
+
+  return { ...layout, lines: synced };
+}
+
+export function applyLayoutLineGeometryToSegments(
+  segments: LineResponse[],
+  layoutLines: PartLayoutResponse['lines'],
+): LineResponse[] {
+  const byId = new Map(layoutLines.map((line) => [line.id, line]));
+  return segments.map((segment) => {
+    const layoutLine = byId.get(segment.id);
+    if (!layoutLine) return segment;
+    return {
+      ...segment,
+      block_id: layoutLine.block_id ?? segment.block_id,
+      baseline: layoutLine.baseline ?? segment.baseline,
+      mask: layoutLine.mask ?? segment.mask,
+      manual_geometry: layoutLine.manual_geometry ?? segment.manual_geometry,
+    };
   });
 }

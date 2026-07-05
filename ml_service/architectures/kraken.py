@@ -10,6 +10,15 @@ from typing import Any
 from PIL import Image
 
 from ml_service.contracts.segment import SegmentBlock, SegmentLine, SegmentRunResponse
+from ml_service.preprocessing.segment_geometry import simplify_kraken_boundary
+from ml_service.preprocessing.segment_refinement import (
+    MIN_AREA_RATIO,
+    MIN_IOU,
+    SPLIT_VERTICAL_GAP_PX,
+    TARGET_MAX_POINTS,
+    SegmentRefinementResult,
+    refine_segment_candidates,
+)
 
 
 class KrakenUnavailableError(RuntimeError):
@@ -101,19 +110,61 @@ def _run_blla_segment(image: Image.Image, model: Any) -> Any:
     return blla.segment(image, model=model, raise_on_error=True)
 
 
+def _bool_param(params: dict[str, Any], key: str, default: bool = False) -> bool:
+    value = params.get(key, default)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
+
+
+def _positive_float_param(params: dict[str, Any], key: str, default: float) -> float:
+    value = params.get(key, default)
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else default
+
+
+def _positive_int_param(params: dict[str, Any], key: str, default: int) -> int:
+    value = params.get(key, default)
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else default
+
+
 def run_kraken_segment(
     image_bytes: bytes,
     *,
     model_path: Path,
+    params: dict[str, Any] | None = None,
 ) -> SegmentRunResponse:
     if not model_path.exists():
         raise FileNotFoundError(f"Kraken model not found: {model_path}")
+
+    params = params or {}
+    use_otsu_refinement = _bool_param(params, "use_otsu_refinement")
+    otsu_sphere_radius = _positive_float_param(params, "otsu_sphere_radius", 4.0)
+    target_max_points = _positive_int_param(params, "target_max_points", TARGET_MAX_POINTS)
+    min_iou = _positive_float_param(params, "min_iou", MIN_IOU)
+    min_area_ratio = _positive_float_param(params, "min_area_ratio", MIN_AREA_RATIO)
+    split_large_lines = _bool_param(params, "split_large_lines", True)
+    split_vertical_gap_px = _positive_float_param(
+        params,
+        "split_vertical_gap_px",
+        SPLIT_VERTICAL_GAP_PX,
+    )
 
     model = _load_segmentation_model(str(model_path))
     with Image.open(BytesIO(image_bytes)) as image:
         image = image.convert("RGB")
         width, height = image.size
         raw_result = _run_blla_segment(image, model)
+        refinement_image = image.copy()
 
     block = SegmentBlock(
         external_id="kraken-block-1",
@@ -131,25 +182,58 @@ def run_kraken_segment(
     lines: list[SegmentLine] = []
     for order, item in enumerate(_line_items(raw_result)):
         baseline = _coerce_points(_line_value(item, "baseline"))
-        points = _coerce_points(_line_value(item, "boundary", "bounds", "polygon", "bbox"))
+        raw_points = _coerce_points(_line_value(item, "boundary", "bounds", "polygon", "bbox"))
+        points = raw_points
         if not points and baseline:
             points = _polygon_from_baseline(baseline)
+        kraken_ceiling = points
         if not baseline:
             baseline = points
         if len(points) < 4 or len(baseline) < 2:
             continue
 
-        lines.append(
-            SegmentLine(
-                external_id=f"kraken-line-{order + 1}",
-                order=order,
-                block_external_id=block.external_id,
-                baseline={"points": baseline},
-                mask={"points": points},
-                points=points,
-                kraken_ceiling=points,
-                source_metadata={"adapter": "kraken", "raw_order": order},
+        source_metadata: dict[str, Any] = {"adapter": "kraken", "raw_order": order}
+        if use_otsu_refinement:
+            refinements = refine_segment_candidates(
+                refinement_image,
+                points,
+                baseline=baseline,
+                margin_px=otsu_sphere_radius,
+                target_max_points=target_max_points,
+                min_iou=min_iou,
+                min_area_ratio=min_area_ratio,
+                split_large_lines=split_large_lines,
+                split_vertical_gap_px=split_vertical_gap_px,
             )
-        )
+        else:
+            simplified_points, simplify_metrics = simplify_kraken_boundary(points)
+            source_metadata.update(simplify_metrics)
+            refinements = [
+                SegmentRefinementResult(
+                    points=simplified_points,
+                    baseline=baseline,
+                    metadata=source_metadata,
+                )
+            ]
+
+        for split_index, refinement in enumerate(refinements):
+            refined_points = refinement.points
+            line_baseline = refinement.baseline or baseline
+            line_metadata = {
+                **source_metadata,
+                **refinement.metadata,
+            }
+            lines.append(
+                SegmentLine(
+                    external_id=f"kraken-line-{order + 1}-{split_index + 1}",
+                    order=len(lines),
+                    block_external_id=block.external_id,
+                    baseline={"points": line_baseline},
+                    mask={"points": refined_points},
+                    points=refined_points,
+                    kraken_ceiling=kraken_ceiling,
+                    source_metadata=line_metadata,
+                )
+            )
 
     return SegmentRunResponse(blocks=[block] if lines else [], lines=lines)

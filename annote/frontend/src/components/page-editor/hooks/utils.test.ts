@@ -3,7 +3,10 @@ import { describe, expect, it } from 'vitest';
 import type { LineResponse, TranscriptionLayerResponse } from '../../../api/client';
 import {
   modelLayerIdForPromotion,
+  segmentHasGroundTruth,
+  segmentIdsWithGroundTruth,
   showsModelSourceReview,
+  syncLayoutLinesFromSegments,
   transcriptionForOcrReview,
 } from './utils';
 
@@ -32,6 +35,8 @@ const LINE = {
   order: 0,
   kind: 'polygon',
   points: [[10, 10], [50, 10], [50, 30], [10, 30]],
+  baseline: { points: [[10, 30], [50, 30]] },
+  mask: { points: [[10, 10], [50, 10], [50, 30], [10, 30]] },
   source: 'manual',
   source_metadata: null,
   kraken_ceiling: null,
@@ -72,5 +77,42 @@ describe('page editor transcription utils', () => {
   it('resolves the model layer id used for ground truth promotion', () => {
     expect(modelLayerIdForPromotion(LINE, MODEL_LAYER)).toBe('model-1');
     expect(modelLayerIdForPromotion(LINE, GROUND_TRUTH_LAYER)).toBe('model-1');
+  });
+
+  it('treats segments with saved ground truth text as paired on the canvas', () => {
+    expect(segmentHasGroundTruth(LINE)).toBe(true);
+    expect(segmentIdsWithGroundTruth([LINE])).toEqual(new Set(['line-1']));
+    expect(
+      segmentHasGroundTruth({
+        ...LINE,
+        id: 'line-2',
+        line_transcriptions: [],
+      }),
+    ).toBe(false);
+  });
+
+  it('syncs layout line geometry from segment state', () => {
+    const layout = syncLayoutLinesFromSegments(
+      {
+        blocks: [],
+        lines: [
+          {
+            id: 'line-1',
+            baseline: { points: [[0, 0], [10, 0]] },
+            manual_geometry: false,
+          },
+        ],
+      },
+      [
+        {
+          ...LINE,
+          baseline: { points: [[60, 140], [300, 150]] },
+          manual_geometry: true,
+        },
+      ],
+    );
+
+    expect(layout.lines[0]?.baseline).toEqual({ points: [[60, 140], [300, 150]] });
+    expect(layout.lines[0]?.manual_geometry).toBe(true);
   });
 });

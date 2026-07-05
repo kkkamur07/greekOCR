@@ -1,38 +1,22 @@
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import {
-  Alert,
-  Button,
-  Form,
-  Input,
-  List,
-  Modal,
-  Space,
-  Tag,
-  Typography,
-  notification,
-} from 'antd';
-import { PlusOutlined } from '@ant-design/icons';
+import { useEffect, useState, type FormEvent } from 'react';
+import { toast } from '../components/ui/toast';
 import { api, type ProjectResponse } from '../api/client';
 import { ApiError } from '../api/errors';
-import { AppLayout } from '../components/AppLayout';
-
-function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 512) || 'project';
-}
+import { AppPageShell } from '../components/layout/AppPageShell';
+import { ProjectsTable } from '../components/projects/ProjectsTable';
+import { FormModal } from '../components/ui/FormModal';
+import { slugify } from '../utils/slugify';
 
 export function ProjectsPage() {
   const [projects, setProjects] = useState<ProjectResponse[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
+  const [username, setUsername] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [newName, setNewName] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -40,13 +24,15 @@ export function ProjectsPage() {
     try {
       const [me, list] = await Promise.all([api.me(), api.listProjects()]);
       setUserId(me.id);
+      setUsername(me.username);
       setProjects(list);
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : 'Failed to load projects';
       setProjects([]);
       setUserId(null);
+      setUsername(null);
       setError(msg);
-      notification.error({ message: msg });
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -56,88 +42,116 @@ export function ProjectsPage() {
     void load();
   }, []);
 
-  const owned = projects.filter((p) => p.owner_id === userId);
-  const shared = projects.filter((p) => p.owner_id !== userId);
-
-  const handleCreate = async (values: { name: string }) => {
+  const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!newName.trim()) return;
     setCreating(true);
     try {
-      await api.createProject({ name: values.name, slug: slugify(values.name) });
-      notification.success({ message: 'Project created' });
-      setModalOpen(false);
+      await api.createProject({ name: newName.trim(), slug: slugify(newName) });
+      toast.success('Project created');
+      setCreateModalOpen(false);
+      setNewName('');
       await load();
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : 'Failed to create project';
-      notification.error({ message: msg });
+      toast.error(msg);
     } finally {
       setCreating(false);
     }
   };
 
-  const renderList = (items: ProjectResponse[], emptyText: string) => (
-    <List
-      loading={loading}
-      dataSource={items}
-      locale={{ emptyText }}
-      renderItem={(project) => (
-        <List.Item>
-          <List.Item.Meta
-            title={<Link to={`/projects/${project.id}`}>{project.name}</Link>}
-            description={
-              <Space>
-                <Typography.Text type="secondary">{project.slug}</Typography.Text>
-                {project.owner_id !== userId && <Tag>shared</Tag>}
-              </Space>
-            }
-          />
-        </List.Item>
-      )}
-    />
-  );
+  const owned = projects.filter((p) => p.owner_id === userId);
+  const shared = projects.filter((p) => p.owner_id !== userId);
+
+  const handleDeleteProject = async (projectId: string) => {
+    const project = projects.find((item) => item.id === projectId);
+    if (!project) return;
+    const confirmed = window.confirm(
+      `Delete project "${project.name}"? All documents in this project will be removed.`,
+    );
+    if (!confirmed) return;
+
+    setDeletingProjectId(projectId);
+    try {
+      await api.deleteProject(projectId);
+      toast.success('Project deleted');
+      await load();
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Failed to delete project';
+      toast.error(msg);
+    } finally {
+      setDeletingProjectId(null);
+    }
+  };
 
   return (
-    <AppLayout
+    <AppPageShell
+      currentLabel="Projects"
+      username={username}
       title="Projects"
-      extra={
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
+      subtitle="Owned and shared"
+      headerActions={
+        <button
+          type="button"
+          className="btn btn-primary btn-sm"
+          onClick={() => setCreateModalOpen(true)}
+        >
           New project
-        </Button>
+        </button>
       }
     >
       {error && (
-        <Alert
-          type="warning"
-          showIcon
-          message="Projects unavailable"
-          description={error}
-          style={{ marginBottom: 16 }}
-        />
+        <div className="notice-banner" role="alert">
+          <strong>Projects unavailable</strong>
+          {error}
+        </div>
       )}
 
-      <Typography.Title level={5}>Owned</Typography.Title>
-      {renderList(owned, 'No owned projects yet')}
+      <p className="section-label" id="owned-label">
+        Owned
+      </p>
+      <ProjectsTable
+        id="owned-label"
+        caption="Owned projects"
+        projects={owned}
+        userId={userId}
+        loading={loading}
+        emptyText="No owned projects yet"
+        onDelete={(projectId) => void handleDeleteProject(projectId)}
+        deletingProjectId={deletingProjectId}
+      />
 
-      <Typography.Title level={5} style={{ marginTop: 24 }}>
-        Shared with me
-      </Typography.Title>
-      {renderList(shared, 'No shared projects')}
+      <p className="section-label" id="shared-label">
+        Shared
+      </p>
+      <ProjectsTable
+        id="shared-label"
+        caption="Shared projects"
+        projects={shared}
+        userId={userId}
+        loading={loading}
+        emptyText="No shared projects"
+        showOwner
+      />
 
-      <Modal
+      <FormModal
+        open={createModalOpen}
         title="New project"
-        open={modalOpen}
-        onCancel={() => setModalOpen(false)}
-        footer={null}
-        destroyOnHidden
+        onClose={() => setCreateModalOpen(false)}
+        onSubmit={handleCreate}
+        submitLabel="Create"
+        loading={creating}
       >
-        <Form layout="vertical" onFinish={handleCreate}>
-          <Form.Item name="name" label="Name" rules={[{ required: true }]}>
-            <Input />
-          </Form.Item>
-          <Button type="primary" htmlType="submit" loading={creating} block>
-            Create
-          </Button>
-        </Form>
-      </Modal>
-    </AppLayout>
+        <div className="field">
+          <label htmlFor="project-name">Name</label>
+          <input
+            id="project-name"
+            required
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+          />
+        </div>
+      </FormModal>
+    </AppPageShell>
   );
 }

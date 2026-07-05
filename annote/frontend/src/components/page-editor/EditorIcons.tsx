@@ -1,0 +1,64 @@
+import type { ReactNode } from 'react';
+
+type IconButtonProps = {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  children: ReactNode;
+};
+
+export function IconButton({ label, onClick, disabled, children }: IconButtonProps) {
+  return (
+    <button
+      type="button"
+      className="pe-icon-btn"
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+}
+
+export function RefreshIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+      <path
+        fillRule="evenodd"
+        d="M15.312 11.424a5.5 5.5 0 0 1-9.201 2.466l-.312-.311h2.433a.75.75 0 0 0 0-1.5H4.189a.75.75 0 0 0-.75.75v4.243a.75.75 0 0 0 1.5 0v-2.43l.31.31a7 7 0 0 0 11.712-3.138.75.75 0 0 0-1.449-.39Zm1.23-3.723a.75.75 0 0 0-1.449-.39 5.5 5.5 0 0 0-9.201 2.466l-.31-.31h2.433a.75.75 0 0 0 0-1.5H4.189a.75.75 0 0 0-.75.75v4.243a.75.75 0 0 0 1.5 0v-2.43l.312-.31a7 7 0 0 1 11.712 3.138.75.75 0 0 0 1.449.39Z"
+        clipRule="evenodd"
+      />
+    </svg>
+  );
+}
+
+export function DownloadIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+      <path d="M10.75 2.75a.75.75 0 0 0-1.5 0v8.614L6.295 8.235a.75.75 0 1 0-1.09 1.03l4.25 4.5a.75.75 0 0 0 1.09 0l4.25-4.5a.75.75 0 1 0-1.09-1.03l-2.955 3.129V2.75Z" />
+      <path d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z" />
+    </svg>
+  );
+}
+
+export function CloseIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+      <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+    </svg>
+  );
+}
+
+export function SettingsIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+      <path
+        fillRule="evenodd"
+        d="M8.34 1.804A1 1 0 0 1 9.32 1h1.36a1 1 0 0 1 .98.804l.295 1.473c.497.144.971.342 1.416.587l1.397-1.098a1 1 0 0 1 1.298.062l.962.962a1 1 0 0 1 .062 1.298l-1.098 1.397c.245.445.443.919.587 1.416l1.473.295a1 1 0 0 1 .804.98v1.361a1 1 0 0 1-.804.98l-1.473.295a6.95 6.95 0 0 1-.587 1.416l1.098 1.397a1 1 0 0 1-.062 1.298l-.962.962a1 1 0 0 1-1.298.062l-1.397-1.098a6.95 6.95 0 0 1-1.416.587l-.295 1.473a1 1 0 0 1-.98.804H9.32a1 1 0 0 1-.98-.804l-.295-1.473a6.95 6.95 0 0 1-1.416-.587l-1.397 1.098a1 1 0 0 1-1.298-.062l-.962-.962a1 1 0 0 1-.062-1.298l1.098-1.397a6.95 6.95 0 0 1-.587-1.416L1.804 10.68a1 1 0 0 1-.804-.98V8.34a1 1 0 0 1 .804-.98l1.473-.295c.144-.497.342-.971.587-1.416L2.766 4.252a1 1 0 0 1 .062-1.298l.962-.962a1 1 0 0 1 1.298-.062l1.397 1.098c.445-.245.919-.443 1.416-.587l.295-1.473ZM10 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"
+        clipRule="evenodd"
+      />
+    </svg>
+  );
+}

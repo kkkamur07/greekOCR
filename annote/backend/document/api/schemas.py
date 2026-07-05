@@ -39,6 +39,7 @@ class DocumentResponse(BaseModel):
     project_id: UUID
     name: str
     workflow: DocumentWorkflow
+    part_count: int = 0
     created_at: datetime
     updated_at: datetime
 
@@ -122,6 +123,8 @@ class LineUpsertRequest(BaseModel):
     source: LineSource = LineSource.manual
     source_metadata: dict[str, object] | None = None
     kraken_ceiling: list[list[float]] | None = None
+    baseline: dict | None = None
+    mask: dict | None = None
     approved_text: str | None = None
 
     @field_validator("points", "kraken_ceiling")
@@ -192,6 +195,21 @@ class LinePatchRequest(BaseModel):
 
 class LayoutResetRequest(BaseModel):
     line_ids: list[UUID] | None = None
+
+
+class TranscribePartRequest(BaseModel):
+    model_id: UUID | None = None
+    line_ids: list[UUID] | None = None
+
+
+class SegmentPartRequest(BaseModel):
+    use_otsu_refinement: bool = False
+    otsu_sphere_radius: float = Field(default=4.0, gt=0, le=128)
+    target_max_points: int = Field(default=80, gt=3, le=500)
+    min_iou: float = Field(default=0.97, gt=0, le=1)
+    min_area_ratio: float = Field(default=0.95, gt=0, le=2)
+    split_large_lines: bool = True
+    split_vertical_gap_px: float = Field(default=12.0, gt=0, le=256)
 
 
 class LayoutResponse(BaseModel):

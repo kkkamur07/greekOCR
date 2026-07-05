@@ -1,23 +1,20 @@
-import { type CSSProperties } from 'react';
+import { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import type { DocumentWithPartsResponse, InferenceModelResponse, LineResponse } from '../../api/client';
+import { PageEditorBackLink } from './PageEditorNavHeader';
 import { editorButton } from './editorButton';
-
-const toolbarClusterStyle = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 4,
-  paddingInline: 4,
-  borderLeft: '1px solid #e5e7eb',
-} satisfies CSSProperties;
-
-type TextLine = { order: number; text: string; paired_line_id: string | null };
+import { PageEditorModelSelect } from './PageEditorModelSelect';
+import { PageEditorSharingMenu } from './PageEditorSharingMenu';
+import { SettingsIcon } from './EditorIcons';
+import { PageEditorSettingsPanel } from './PageEditorSettingsPanel';
+import { PAGE_EDITOR_SHORTCUTS } from './pageEditorShortcuts';
+import type { PageEditorCanvasSettings } from './pageEditorSettings';
+import { ToolbarKbd } from './ToolbarKbd';
 
 type PageEditorToolbarProps = {
   projectId: string | undefined;
   documentId: string | undefined;
   document: DocumentWithPartsResponse;
-  part: DocumentWithPartsResponse['parts'][number];
   partIndex: number;
   editorMode: 'layout' | 'transcription';
   onEditorModeChange: (mode: 'layout' | 'transcription') => void;
@@ -26,50 +23,44 @@ type PageEditorToolbarProps = {
   onPanSelect: () => void;
   lines: LineResponse[];
   pairingProgress: { paired_lines: number; total_lines: number; percent: number };
+  partId: string;
   selectedSegmentId: string | null;
-  selectedSegment: LineResponse | null;
   selectedLineId: string | null;
-  pageTranscriptionText: string;
-  onPageTranscriptionTextChange: (value: string) => void;
-  onImportPageTranscription: () => void;
-  textLines: TextLine[];
+  textLines: { order: number; text: string; paired_line_id: string | null }[];
   onPairTextLine: (order: number) => void;
-  onMoveSelectedSegmentRight: () => void;
+  onDocumentWorkflowChange: (workflow: DocumentWithPartsResponse['workflow']) => void;
   onDeleteSelectedSegment: () => void;
   onResetSelectedLine: () => void;
   actionsOpen: boolean;
   onActionsOpenChange: (open: boolean) => void;
   useOtsuRefinement: boolean;
   onUseOtsuRefinementChange: (value: boolean) => void;
+  otsuSphereRadius: number;
+  onOtsuSphereRadiusChange: (value: number) => void;
   segmenting: boolean;
   ocrRunning: boolean;
+  ocrScope?: 'segment' | 'page' | null;
   transcribeModels: InferenceModelResponse[];
   selectedTranscribeModelId: string | null;
   onSelectedTranscribeModelIdChange: (modelId: string | null) => void;
   onRunAutoSegment: () => void;
   onRunSegmentOcr: () => void;
   onRunPageOcr: () => void;
-  onUpdateReviewStatus: (reviewed: boolean) => void;
   transcriptionPdfOpen: boolean;
   onOpenTranscriptionPdf: () => void;
   onCloseTranscriptionPdf: () => void;
+  settingsOpen: boolean;
+  onSettingsOpenChange: (open: boolean) => void;
+  canvasSettings: PageEditorCanvasSettings;
+  onCanvasSettingsChange: (settings: PageEditorCanvasSettings) => void;
 };
-
-function pairedSegmentLabel(textLine: TextLine, lines: LineResponse[]): string {
-  const pairedIndex = textLine.paired_line_id
-    ? [...lines]
-        .sort((a, b) => a.order - b.order)
-        .findIndex((line) => line.id === textLine.paired_line_id)
-    : -1;
-  return pairedIndex >= 0 ? ` · paired with Segment ${pairedIndex + 1}` : '';
-}
 
 export function PageEditorToolbar({
   projectId,
   documentId,
   document,
-  part,
   partIndex,
+  partId,
   editorMode,
   onEditorModeChange,
   drawMode,
@@ -78,371 +69,369 @@ export function PageEditorToolbar({
   lines,
   pairingProgress,
   selectedSegmentId,
-  selectedSegment,
   selectedLineId,
-  pageTranscriptionText,
-  onPageTranscriptionTextChange,
-  onImportPageTranscription,
   textLines,
   onPairTextLine,
-  onMoveSelectedSegmentRight,
+  onDocumentWorkflowChange,
   onDeleteSelectedSegment,
   onResetSelectedLine,
   actionsOpen,
   onActionsOpenChange,
   useOtsuRefinement,
   onUseOtsuRefinementChange,
+  otsuSphereRadius,
+  onOtsuSphereRadiusChange,
   segmenting,
   ocrRunning,
+  ocrScope = null,
   transcribeModels,
   selectedTranscribeModelId,
   onSelectedTranscribeModelIdChange,
   onRunAutoSegment,
   onRunSegmentOcr,
   onRunPageOcr,
-  onUpdateReviewStatus,
   transcriptionPdfOpen,
   onOpenTranscriptionPdf,
   onCloseTranscriptionPdf,
+  settingsOpen,
+  onSettingsOpenChange,
+  canvasSettings,
+  onCanvasSettingsChange,
 }: PageEditorToolbarProps) {
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const settingsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!actionsOpen && !settingsOpen) return;
+    function handleClick(event: MouseEvent) {
+      const target = event.target as Node;
+      if (actionsOpen && dropdownRef.current && !dropdownRef.current.contains(target)) {
+        onActionsOpenChange(false);
+      }
+      if (settingsOpen && settingsRef.current && !settingsRef.current.contains(target)) {
+        onSettingsOpenChange(false);
+      }
+    }
+    globalThis.document.addEventListener('click', handleClick);
+    return () => globalThis.document.removeEventListener('click', handleClick);
+  }, [actionsOpen, settingsOpen, onActionsOpenChange, onSettingsOpenChange]);
+
+  const segmentLabel = lines.length === 1 ? 'seg' : 'segs';
+  const pairingPercent =
+    pairingProgress.total_lines > 0
+      ? Math.round((pairingProgress.paired_lines / pairingProgress.total_lines) * 100)
+      : 0;
+  const processing = segmenting || ocrRunning;
+  const processingLabel = segmenting
+    ? 'Segmenting'
+    : ocrRunning
+      ? ocrScope === 'page'
+        ? 'Transcribing page'
+        : 'Transcribing'
+      : null;
+
   return (
-    <header
-      style={{
-        display: 'flex',
-        flexShrink: 0,
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 12,
-        borderBottom: '1px solid #e5e7eb',
-        padding: '8px 12px',
-      }}
-    >
+    <header className="pe-toolbar" role="banner">
       <span className="visually-hidden">ANNOTE PAGE WORKSPACE</span>
-      <h2 className="visually-hidden">{editorMode === 'layout' ? 'Layout edit' : 'Transcription edit'}</h2>
+      <h2 className="visually-hidden">
+        {editorMode === 'layout' ? 'Layout edit' : 'Transcription edit'}
+      </h2>
       <span className="visually-hidden">
-        Review status: {part.reviewed ? 'Reviewed' : 'Unreviewed'}
+        Pairing progress: {pairingProgress.paired_lines}/{pairingProgress.total_lines} Lines paired
       </span>
-      {!selectedSegment && editorMode !== 'transcription' && (
-        <span className="visually-hidden">
-          Pairing progress: {pairingProgress.paired_lines}/{pairingProgress.total_lines} Lines paired
-        </span>
-      )}
       <span className="visually-hidden">
         {lines.length} {lines.length === 1 ? 'Segment' : 'Segments'}
       </span>
+
       <div className="visually-hidden">
-        <label>
-          Page transcription text
-          <textarea
-            aria-label="Page transcription text"
-            value={pageTranscriptionText}
-            onChange={(event) => onPageTranscriptionTextChange(event.target.value)}
-          />
-        </label>
-        <button type="button" onClick={() => void onImportPageTranscription()}>
-          Import page transcription
-        </button>
-        {!selectedSegmentId &&
+        {selectedSegmentId &&
           textLines.map((textLine) => (
-            <div key={textLine.order}>
-              <span>
-                Text line {textLine.order + 1}
-                {pairedSegmentLabel(textLine, lines)}
-              </span>
-              <button
-                type="button"
-                disabled={!selectedSegmentId}
-                onClick={() => void onPairTextLine(textLine.order)}
-              >
-                Pair Text line {textLine.order + 1}
-              </button>
-            </div>
+            <button
+              key={textLine.order}
+              type="button"
+              disabled={!selectedSegmentId}
+              onClick={() => void onPairTextLine(textLine.order)}
+            >
+              Pair Text line {textLine.order + 1}
+            </button>
           ))}
       </div>
-      <div style={{ display: 'flex', minWidth: 0, alignItems: 'center', gap: 8 }}>
+
+      <span className="visually-hidden">
+        {document.name} · Page {partIndex}
+      </span>
+
+      <Link to="/projects" className="pe-toolbar__logo" aria-label="nomicous home">
+        <img src="/nomos.svg" alt="" />
+        <span>nomicous</span>
+      </Link>
+
+      <div className="pe-toolbar__title">
         {projectId && documentId && (
-          <Link
-            to={`/projects/${projectId}/documents/${documentId}`}
-            aria-label="Document parts"
-            style={{ flexShrink: 0, color: '#6b7280', fontSize: 14 }}
-          >
-            ← Back
-          </Link>
+          <PageEditorBackLink to={`/projects/${projectId}/documents/${documentId}`} />
         )}
-        <h1
-          title={`${document.name} · Page ${partIndex}`}
-          style={{
-            margin: 0,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            fontSize: 16,
-            fontWeight: 500,
-          }}
-        >
-          {document.name} · Page {partIndex}
+        <div className="pe-toolbar__sep" aria-hidden="true" />
+        <h1 className="pe-toolbar__doc" title={`${document.name} · Page ${partIndex}`}>
+          {document.name}
+          <span className="pe-toolbar__doc-page"> · p.{partIndex}</span>
         </h1>
-        <span style={{ color: '#92400e', fontSize: 12 }}>
-          {part.reviewed ? 'reviewed' : 'unreviewed'}
-        </span>
       </div>
 
-      <div style={{ display: 'flex', minWidth: 0, flex: 1, justifyContent: 'center', paddingInline: 8 }}>
-        <div style={{ color: '#6b7280', fontSize: 13 }}>
-          Pairing {pairingProgress.paired_lines}/{pairingProgress.total_lines} · {lines.length}{' '}
-          {lines.length === 1 ? 'segment' : 'segments'}
+      <div className="pe-toolbar__center" aria-label="Page statistics">
+        {processingLabel && (
+          <div className="pe-toolbar__processing" role="status" aria-live="polite">
+            <span className="pe-toolbar__processing-dot" aria-hidden="true" />
+            {processingLabel}
+          </div>
+        )}
+        <div className="pe-toolbar__stat">
+          <strong>{lines.length}</strong> {segmentLabel}
+        </div>
+        <div
+          className="pe-toolbar__progress"
+          title={`${pairingProgress.paired_lines} of ${pairingProgress.total_lines} lines paired`}
+        >
+          <span className="pe-toolbar__stat">
+            <strong>{pairingProgress.paired_lines}</strong>/{pairingProgress.total_lines}
+          </span>
+          <div
+            className="pe-toolbar__progress-track"
+            role="progressbar"
+            aria-valuenow={pairingPercent}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label="Pairing progress"
+          >
+            <div className="pe-toolbar__progress-fill" style={{ width: `${pairingPercent}%` }} />
+          </div>
         </div>
       </div>
 
-      <div style={{ display: 'flex', flexShrink: 0, alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
-        <button type="button" onClick={onPanSelect} className={editorButton(drawMode === 'none' && editorMode === 'layout')}>
-          Pan
-        </button>
-        <button type="button" onClick={onPanSelect} className={editorButton(drawMode === 'none' && editorMode === 'layout')}>
-          Select
-        </button>
-        <button
-          type="button"
-          aria-label="Rectangle segment"
-          onClick={() => onPickDrawMode('rectangle')}
-          className={editorButton(drawMode === 'rectangle')}
-        >
-          Rect
-        </button>
-        <button
-          type="button"
-          aria-label="Polygon segment"
-          onClick={() => onPickDrawMode('polygon')}
-          className={editorButton(drawMode === 'polygon')}
-        >
-          Poly
-        </button>
-        <button
-          type="button"
-          aria-label="Transcription edit"
-          onClick={() => onEditorModeChange(editorMode === 'transcription' ? 'layout' : 'transcription')}
-          className={editorButton(editorMode === 'transcription')}
-        >
-          Text
-        </button>
-        <div style={toolbarClusterStyle}>
+      <div className="pe-toolbar__actions">
+        <div className="pe-toolbar__modes" role="group" aria-label="Editor mode">
           <button
             type="button"
-            aria-label="Move segment right"
-            disabled={!selectedSegmentId}
-            onClick={() => void onMoveSelectedSegmentRight()}
-            className={editorButton(false)}
+            className={`pe-toolbar__mode ${editorMode === 'layout' ? 'pe-toolbar__mode--active' : ''}`}
+            aria-pressed={editorMode === 'layout'}
+            onClick={() => onEditorModeChange('layout')}
           >
-            Move
+            Layout
           </button>
           <button
             type="button"
-            aria-label={selectedSegmentId ? 'Delete Segment' : 'Delete'}
+            className={`pe-toolbar__mode ${editorMode === 'transcription' ? 'pe-toolbar__mode--active' : ''}`}
+            aria-label="Transcription edit"
+            aria-pressed={editorMode === 'transcription'}
+            onClick={() => onEditorModeChange('transcription')}
+          >
+            Transcription
+          </button>
+        </div>
+
+        <div className="pe-toolbar__cluster" role="group" aria-label="Drawing tools">
+          <button
+            type="button"
+            onClick={onPanSelect}
+            className={editorButton(drawMode === 'none' && editorMode === 'layout')}
+            title={`Select / pan (${PAGE_EDITOR_SHORTCUTS.SELECT})`}
+            aria-keyshortcuts={PAGE_EDITOR_SHORTCUTS.SELECT}
+          >
+            Select
+          </button>
+          <button
+            type="button"
+            aria-label={`Rectangle segment (${PAGE_EDITOR_SHORTCUTS.RECTANGLE})`}
+            aria-keyshortcuts={PAGE_EDITOR_SHORTCUTS.RECTANGLE}
+            title={`Draw rectangle segment (${PAGE_EDITOR_SHORTCUTS.RECTANGLE})`}
+            onClick={() => onPickDrawMode('rectangle')}
+            className={editorButton(drawMode === 'rectangle')}
+          >
+            Rect
+            <ToolbarKbd>{PAGE_EDITOR_SHORTCUTS.RECTANGLE}</ToolbarKbd>
+          </button>
+          <button
+            type="button"
+            aria-label={`Polygon segment (${PAGE_EDITOR_SHORTCUTS.POLYGON})`}
+            aria-keyshortcuts={PAGE_EDITOR_SHORTCUTS.POLYGON}
+            title={`Draw polygon segment (${PAGE_EDITOR_SHORTCUTS.POLYGON})`}
+            onClick={() => onPickDrawMode('polygon')}
+            className={editorButton(drawMode === 'polygon')}
+          >
+            Poly
+            <ToolbarKbd>{PAGE_EDITOR_SHORTCUTS.POLYGON}</ToolbarKbd>
+          </button>
+          <button
+            type="button"
+            aria-label={`Delete segment (${PAGE_EDITOR_SHORTCUTS.DELETE})`}
+            aria-keyshortcuts={PAGE_EDITOR_SHORTCUTS.DELETE}
             disabled={!selectedSegmentId && !selectedLineId}
             onClick={() => {
               if (selectedSegmentId) void onDeleteSelectedSegment();
               if (selectedLineId) void onResetSelectedLine();
             }}
-            className="btn btn--danger-ghost btn--sm"
+            className="pe-tb-btn"
+            title={`Delete selected (${PAGE_EDITOR_SHORTCUTS.DELETE})`}
           >
             Del
+            <ToolbarKbd>{PAGE_EDITOR_SHORTCUTS.DELETE}</ToolbarKbd>
           </button>
         </div>
-        <div style={toolbarClusterStyle}>
-          <button type="button" className={editorButton(true)}>
-            Lines
-          </button>
-          <button type="button" disabled className={editorButton(false)}>
-            Ceiling
-          </button>
+
+        <div className="pe-toolbar__cluster">
+          <PageEditorModelSelect
+            transcribeModels={transcribeModels}
+            selectedTranscribeModelId={selectedTranscribeModelId}
+            onSelectedTranscribeModelIdChange={onSelectedTranscribeModelIdChange}
+            disabled={processing}
+          />
         </div>
-        <div style={{ ...toolbarClusterStyle, position: 'relative' }}>
+
+        <div className="pe-toolbar__cluster pe-dropdown-wrap" ref={dropdownRef}>
           <button
             type="button"
             aria-haspopup="menu"
             aria-expanded={actionsOpen}
             onClick={() => onActionsOpenChange(!actionsOpen)}
-            className="btn btn--ghost btn--sm"
+            className={`pe-tb-btn${actionsOpen ? ' pe-tb-btn--on' : ''}`}
           >
-            Process
+            Process ▾
           </button>
           {actionsOpen && (
-            <div
-              role="menu"
-              aria-label="Page processing actions"
-              style={{
-                position: 'absolute',
-                top: 'calc(100% + 6px)',
-                right: 0,
-                zIndex: 20,
-                display: 'grid',
-                gap: 6,
-                width: 240,
-                padding: 8,
-                border: '1px solid #d1d5db',
-                borderRadius: 8,
-                background: '#fff',
-                boxShadow: '0 12px 32px rgba(15, 23, 42, 0.18)',
-              }}
-            >
-              <div
-                style={{
-                  padding: '2px 6px',
-                  fontSize: 11,
-                  fontWeight: 600,
-                  color: '#6b7280',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.04em',
-                }}
-              >
-                Segmentation
-              </div>
-              <button type="button" role="menuitem" disabled className="btn btn--ghost btn--sm">
-                Binarize
-              </button>
-              <label
-                role="menuitem"
-                className="btn btn--ghost btn--sm"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
-              >
+            <div className="pe-dropdown" role="menu" aria-label="Processing actions">
+              <div className="pe-dd-section">Segment</div>
+              <p className="pe-dd-model">
+                Engine <strong>kraken-blla</strong> (fixed)
+              </p>
+              <label className="pe-dd-check">
                 <input
                   type="checkbox"
-                  aria-label="Refine Kraken segments with Otsu"
                   checked={useOtsuRefinement}
-                  disabled={segmenting}
+                  disabled={processing}
+                  aria-label="Refine Kraken segments with Otsu"
                   onChange={(event) => onUseOtsuRefinementChange(event.target.checked)}
+                  onClick={(event) => event.stopPropagation()}
                 />
-                Otsu refine
+                Otsu refinement
               </label>
+              <div className="pe-dd-field">
+                <label htmlFor="otsu-sphere-px">Sphere (px)</label>
+                <input
+                  id="otsu-sphere-px"
+                  type="number"
+                  className="pe-dd-field__input"
+                  aria-label="Otsu morphological sphere radius in pixels"
+                  min={1}
+                  step={1}
+                  value={otsuSphereRadius}
+                  disabled={!useOtsuRefinement || processing}
+                  onClick={(event) => event.stopPropagation()}
+                  onChange={(event) => {
+                    const next = event.target.valueAsNumber;
+                    if (Number.isFinite(next) && next > 0) {
+                      onOtsuSphereRadiusChange(next);
+                    }
+                  }}
+                  onBlur={(event) => {
+                    const next = event.target.valueAsNumber;
+                    if (!Number.isFinite(next) || next <= 0) {
+                      onOtsuSphereRadiusChange(4);
+                    }
+                  }}
+                />
+              </div>
               <button
                 type="button"
                 role="menuitem"
-                disabled={segmenting || ocrRunning}
+                disabled={processing}
                 onClick={() => {
                   onActionsOpenChange(false);
                   void onRunAutoSegment();
                 }}
-                className="btn btn--ghost btn--sm"
+                className="pe-dd-item"
               >
-                {segmenting ? 'Segmenting…' : 'Auto segment'}
+                {segmenting ? 'Segmenting…' : 'Auto segment page'}
               </button>
-              <div style={{ height: 1, background: '#e5e7eb', marginBlock: 2 }} />
-              <div
-                style={{
-                  padding: '2px 6px',
-                  fontSize: 11,
-                  fontWeight: 600,
-                  color: '#6b7280',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.04em',
-                }}
-              >
-                OCR
-              </div>
-              {transcribeModels.length > 0 && (
-                <label
-                  className="btn btn--ghost btn--sm"
-                  style={{ display: 'inline-flex', justifyContent: 'space-between', gap: 8 }}
-                >
-                  <span>OCR model</span>
-                  <select
-                    aria-label="OCR model"
-                    value={selectedTranscribeModelId ?? ''}
-                    disabled={ocrRunning}
-                    onChange={(event) =>
-                      onSelectedTranscribeModelIdChange(event.target.value || null)
-                    }
-                    style={{ minWidth: 0, flex: 1 }}
-                  >
-                    {transcribeModels.map((model) => (
-                      <option key={model.id} value={model.id}>
-                        {model.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
+              <div className="pe-dd-divider" />
+              <div className="pe-dd-section">HTR</div>
+              <p className="pe-dd-model">
+                Model{' '}
+                <strong>
+                  {transcribeModels.find((m) => m.id === selectedTranscribeModelId)?.name ??
+                    'not selected'}
+                </strong>
+              </p>
               <button
                 type="button"
                 role="menuitem"
-                disabled={!selectedSegmentId || ocrRunning || segmenting || !selectedTranscribeModelId}
+                disabled={
+                  !selectedSegmentId || processing || !selectedTranscribeModelId
+                }
                 onClick={() => {
                   onActionsOpenChange(false);
                   void onRunSegmentOcr();
                 }}
-                className="btn btn--ghost btn--sm"
+                className="pe-dd-item"
               >
-                {ocrRunning ? 'OCR…' : 'OCR segment'}
+                {ocrRunning ? 'OCR…' : 'OCR selected segment'}
               </button>
               <button
                 type="button"
                 role="menuitem"
-                disabled={ocrRunning || segmenting || lines.length === 0 || !selectedTranscribeModelId}
+                disabled={processing || lines.length === 0 || !selectedTranscribeModelId}
                 onClick={() => {
                   onActionsOpenChange(false);
                   void onRunPageOcr();
                 }}
-                className="btn btn--ghost btn--sm"
+                className="pe-dd-item"
               >
-                {ocrRunning ? 'OCR…' : 'OCR page'}
+                {ocrRunning ? 'OCR…' : 'OCR full page'}
               </button>
-              <div style={{ height: 1, background: '#e5e7eb', marginBlock: 2 }} />
-              <div
-                style={{
-                  padding: '2px 6px',
-                  fontSize: 11,
-                  fontWeight: 600,
-                  color: '#6b7280',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.04em',
-                }}
-              >
-                Artifacts
-              </div>
-              <button
-                type="button"
-                role="menuitem"
-                aria-pressed={transcriptionPdfOpen}
-                onClick={() => {
-                  onActionsOpenChange(false);
-                  if (transcriptionPdfOpen) {
-                    onCloseTranscriptionPdf();
-                  } else {
-                    onOpenTranscriptionPdf();
-                  }
-                }}
-                className={editorButton(transcriptionPdfOpen)}
-              >
-                Transcription PDF
-              </button>
+              {projectId && documentId && (
+                <PageEditorSharingMenu
+                  projectId={projectId}
+                  documentId={documentId}
+                  workflow={document.workflow}
+                  onWorkflowChange={onDocumentWorkflowChange}
+                  disabled={processing}
+                />
+              )}
             </div>
           )}
         </div>
-        <div style={toolbarClusterStyle}>
+
+        <div className="pe-toolbar__cluster">
           <button
             type="button"
-            onClick={() => void onUpdateReviewStatus(!part.reviewed)}
-            className="btn btn--ghost btn--sm"
-          >
-            {part.reviewed ? 'Mark unreviewed' : 'Mark reviewed'}
-          </button>
-          <button
-            type="button"
+            className={`pe-tb-btn${transcriptionPdfOpen ? ' pe-tb-btn--on' : ''}`}
             aria-pressed={transcriptionPdfOpen}
+            aria-label="Toggle transcription PDF"
+            title="Toggle transcription PDF"
             onClick={() => {
-              if (transcriptionPdfOpen) {
-                onCloseTranscriptionPdf();
-              } else {
-                onOpenTranscriptionPdf();
-              }
+              if (transcriptionPdfOpen) onCloseTranscriptionPdf();
+              else onOpenTranscriptionPdf();
             }}
-            className={editorButton(transcriptionPdfOpen)}
           >
-            Transcription PDF
+            PDF
           </button>
-          <button type="button" disabled className="btn btn--primary btn--sm">
-            Export
-          </button>
+          <div className="pe-dropdown-wrap" ref={settingsRef}>
+            <button
+              type="button"
+              className={`pe-tb-btn pe-tb-btn--icon${settingsOpen ? ' pe-tb-btn--on' : ''}`}
+              aria-haspopup="dialog"
+              aria-expanded={settingsOpen}
+              aria-label="Editor settings"
+              title="Editor settings"
+              onClick={() => onSettingsOpenChange(!settingsOpen)}
+            >
+              <SettingsIcon />
+            </button>
+            {settingsOpen && (
+              <PageEditorSettingsPanel
+                settings={canvasSettings}
+                onSettingsChange={onCanvasSettingsChange}
+              />
+            )}
+          </div>
         </div>
       </div>
     </header>

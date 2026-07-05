@@ -43,6 +43,11 @@ class InferenceModelService:
     async def list_models(self, session: AsyncSession) -> list[InferenceModel]:
         return await self._inference.list_models(session)
 
+    async def get_model_for_task(
+        self, session: AsyncSession, model_id: UUID, task: InferenceTask
+    ) -> InferenceModel:
+        return await self._require_model_for_task(session, model_id, task)
+
     async def list_project_bindings(
         self, session: AsyncSession, user: User, project_id: UUID
     ) -> list[ModelBinding]:

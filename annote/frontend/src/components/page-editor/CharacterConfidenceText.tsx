@@ -1,5 +1,9 @@
 import type { CharacterConfidence } from './characterConfidence';
-import { confidenceHighlightColor, formatConfidencePercent } from './characterConfidence';
+import {
+  confidenceTierClass,
+  confidenceTierLabel,
+  formatConfidencePercent,
+} from './characterConfidence';
 
 type CharacterConfidenceTextProps = {
   characterConfidences: CharacterConfidence[];
@@ -11,32 +15,22 @@ export function CharacterConfidenceText({
   ariaLabel,
 }: CharacterConfidenceTextProps) {
   return (
-    <div
-      aria-label={ariaLabel}
-      style={{
-        border: '1px solid #3b4350',
-        borderRadius: 6,
-        padding: '10px 12px',
-        background: '#1a1f27',
-        lineHeight: 1.8,
-        fontFamily: 'Georgia, "Times New Roman", serif',
-        fontSize: 18,
-        wordBreak: 'break-word',
-      }}
-    >
-      {characterConfidences.map((entry, index) => (
-        <span
-          key={`${index}-${entry.char}`}
-          title={`${entry.char}: ${formatConfidencePercent(entry.confidence)}`}
-          style={{
-            backgroundColor: confidenceHighlightColor(entry.confidence),
-            borderRadius: 2,
-            padding: '0 1px',
-          }}
-        >
-          {entry.char}
-        </span>
-      ))}
-    </div>
+    <span className="pe-confidence-text" aria-label={ariaLabel}>
+      {characterConfidences.map((entry, index) => {
+        const tier = confidenceTierLabel(entry.confidence);
+        const pct = formatConfidencePercent(entry.confidence);
+        return (
+          <span
+            key={`${index}-${entry.char}`}
+            className={confidenceTierClass(entry.confidence)}
+            data-conf={Math.round(entry.confidence * 100)}
+            data-tier={tier}
+            title={`${pct} confidence (${tier})`}
+          >
+            {entry.char}
+          </span>
+        );
+      })}
+    </span>
   );
 }

@@ -10,8 +10,15 @@ from PIL.Image import DecompressionBombError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.annotation.application.export_service import AnnotationExportService
+from backend.annotation.application.page_xml_export_service import PageXmlExportService
 from backend.annotation.application.transcription_pdf_service import TranscriptionPdfService
 from backend.core.exceptions import ValidationError
+from backend.document.api.line_responses import line_response
+from backend.document.api.responses import (
+    document_response,
+    document_with_parts_response,
+    part_response,
+)
 from backend.document.api.schemas import (
     BlockCreateRequest,
     BlockPatchRequest,
@@ -38,14 +45,15 @@ from backend.document.api.schemas import (
     PagePairingResponse,
     PageTranscriptionImportRequest,
     PageTranscriptionTextLineResponse,
-    PairTextLineRequest,
     PairingProgressResponse,
+    PairTextLineRequest,
     ReorderPartsRequest,
+    SegmentPartRequest,
+    TranscribePartRequest,
     TranscriptionLayerResponse,
 )
-from backend.document.api.line_responses import line_response
-from backend.document.api.responses import part_response
 from backend.document.application.document_service import DocumentService
+from backend.document.infrastructure.document_repository import DocumentRepository
 from backend.document.infrastructure.orm_models import Block
 from backend.jobs.api.schemas import EnqueueJobResponse
 from backend.users.api.dependencies import get_current_user
@@ -54,7 +62,9 @@ from infrastructure.db import get_db
 
 router = APIRouter(prefix="/projects/{project_id}/documents", tags=["documents"])
 _service = DocumentService()
+_document_repo = DocumentRepository()
 _export_service = AnnotationExportService()
+_page_xml_export_service = PageXmlExportService()
 _transcription_pdf_service = TranscriptionPdfService()
 MAX_UPLOAD_BYTES = 100 * 1024 * 1024
 Image.MAX_IMAGE_PIXELS = 200_000_000
@@ -64,6 +74,14 @@ PDF_RESPONSE = {
             "application/pdf": {"schema": {"type": "string", "format": "binary"}}
         },
         "description": "Transcription PDF bytes",
+    }
+}
+XML_RESPONSE = {
+    200: {
+        "content": {
+            "application/xml": {"schema": {"type": "string", "format": "binary"}}
+        },
+        "description": "PAGE XML bytes",
     }
 }
 
@@ -125,7 +143,13 @@ async def list_documents(
     documents = await _service.list_documents(
         db, current_user, project_id, include_archived=include_archived
     )
-    return [DocumentResponse.model_validate(d) for d in documents]
+    part_counts = await _document_repo.count_parts_by_document_ids(
+        db, [document.id for document in documents]
+    )
+    return [
+        document_response(document, part_count=part_counts.get(document.id, 0))
+        for document in documents
+    ]
 
 
 @router.post("", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
@@ -138,7 +162,7 @@ async def create_document(
     document = await _service.create_document(
         db, current_user, project_id, name=body.name
     )
-    return DocumentResponse.model_validate(document)
+    return document_response(document, part_count=0)
 
 
 @router.get("/{document_id}", response_model=DocumentWithPartsResponse)
@@ -149,11 +173,7 @@ async def get_document(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> DocumentWithPartsResponse:
     document = await _service.get_document(db, current_user, project_id, document_id)
-    parts = sorted(document.parts, key=lambda p: p.order)
-    return DocumentWithPartsResponse(
-        **DocumentResponse.model_validate(document).model_dump(),
-        parts=[part_response(p) for p in parts],
-    )
+    return document_with_parts_response(document)
 
 
 @router.patch("/{document_id}", response_model=DocumentResponse)
@@ -168,7 +188,8 @@ async def update_document(
     document = await _service.update_document(
         db, current_user, project_id, document_id, **updates
     )
-    return DocumentResponse.model_validate(document)
+    part_counts = await _document_repo.count_parts_by_document_ids(db, [document.id])
+    return document_response(document, part_count=part_counts.get(document.id, 0))
 
 
 @router.get("/{document_id}/transcriptions", response_model=list[TranscriptionLayerResponse])
@@ -549,6 +570,32 @@ async def generate_transcription_pdf(
     )
 
 
+@router.get(
+    "/{document_id}/parts/{part_id}/page-xml",
+    response_class=Response,
+    responses=XML_RESPONSE,
+)
+async def export_part_page_xml(
+    project_id: UUID,
+    document_id: UUID,
+    part_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> Response:
+    xml_bytes = await _page_xml_export_service.export_part(
+        db,
+        current_user,
+        project_id,
+        document_id,
+        part_id,
+    )
+    return Response(
+        content=xml_bytes,
+        media_type="application/xml",
+        headers={"Content-Disposition": 'attachment; filename="page.xml"'},
+    )
+
+
 @router.post(
     "/{document_id}/parts/{part_id}/segment",
     response_model=EnqueueJobResponse,
@@ -560,9 +607,16 @@ async def segment_part(
     part_id: UUID,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    body: SegmentPartRequest | None = None,
 ) -> EnqueueJobResponse:
+    body = body or SegmentPartRequest()
     job = await _service.enqueue_segment_part(
-        db, current_user, project_id, document_id, part_id
+        db,
+        current_user,
+        project_id,
+        document_id,
+        part_id,
+        ml_params=body.model_dump(),
     )
     return EnqueueJobResponse(job_id=job.id)
 
@@ -578,9 +632,11 @@ async def transcribe_part(
     part_id: UUID,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    body: TranscribePartRequest | None = None,
 ) -> EnqueueJobResponse:
+    body = body or TranscribePartRequest()
     job = await _service.enqueue_transcribe_part(
-        db, current_user, project_id, document_id, part_id
+        db, current_user, project_id, document_id, part_id, model_id=body.model_id, line_ids=body.line_ids
     )
     return EnqueueJobResponse(job_id=job.id)
 

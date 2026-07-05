@@ -1,5 +1,3 @@
-import { Alert } from 'antd';
-
 type PageEditorStatusAlertsProps = {
   saveMessage: string | null;
   transcriptionSaveMessage: string | null;
@@ -7,10 +5,26 @@ type PageEditorStatusAlertsProps = {
   segmentMessage: string | null;
   mutationError: string | null;
   pairingError: string | null;
-  reviewError: string | null;
   layoutError: string | null;
   lineError: string | null;
 };
+
+function StatusItem({
+  message,
+  variant = 'success',
+}: {
+  message: string;
+  variant?: 'success' | 'error' | 'warning';
+}) {
+  return (
+    <div className={`pe-status-item pe-status-item--${variant}`}>
+      {variant === 'success' && <span aria-hidden="true">✓</span>}
+      {variant === 'error' && <span aria-hidden="true">✕</span>}
+      {variant === 'warning' && <span aria-hidden="true">!</span>}
+      <span>{message}</span>
+    </div>
+  );
+}
 
 export function PageEditorStatusAlerts({
   saveMessage,
@@ -19,26 +33,22 @@ export function PageEditorStatusAlerts({
   segmentMessage,
   mutationError,
   pairingError,
-  reviewError,
   layoutError,
   lineError,
 }: PageEditorStatusAlertsProps) {
   return (
-    <div style={{ display: 'grid', gap: 8 }}>
-      {saveMessage && <Alert type="success" showIcon message={saveMessage} />}
-      {transcriptionSaveMessage && (
-        <Alert type="success" showIcon message={transcriptionSaveMessage} />
-      )}
-      {ocrMessage && <Alert type="success" showIcon message={ocrMessage} />}
-      {segmentMessage && <Alert type="success" showIcon message={segmentMessage} />}
-      {mutationError && <Alert type="error" showIcon message={mutationError} />}
-      {pairingError && <Alert type="warning" showIcon message={pairingError} />}
-      {reviewError && <Alert type="warning" showIcon message={reviewError} />}
+    <div className="pe-status-alerts">
+      {saveMessage && <StatusItem message={saveMessage} />}
+      {transcriptionSaveMessage && <StatusItem message={transcriptionSaveMessage} />}
+      {ocrMessage && <StatusItem message={ocrMessage} />}
+      {segmentMessage && <StatusItem message={segmentMessage} />}
+      {mutationError && <StatusItem message={mutationError} variant="error" />}
+      {pairingError && <StatusItem message={pairingError} variant="warning" />}
       {layoutError && (
-        <Alert type="warning" showIcon message="Layout API unavailable" description={layoutError} />
+        <StatusItem message={`Layout API unavailable: ${layoutError}`} variant="warning" />
       )}
       {lineError && (
-        <Alert type="warning" showIcon message="Segment API unavailable" description={lineError} />
+        <StatusItem message={`Segment API unavailable: ${lineError}`} variant="warning" />
       )}
     </div>
   );
@@ -52,7 +62,6 @@ export function hasPageEditorStatusAlerts(props: PageEditorStatusAlertsProps): b
       props.segmentMessage ||
       props.mutationError ||
       props.pairingError ||
-      props.reviewError ||
       props.layoutError ||
       props.lineError,
   );

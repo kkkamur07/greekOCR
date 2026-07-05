@@ -1,8 +1,6 @@
-import { Layout, Button, Typography } from 'antd';
+import { Button } from 'antd';
 import { Link, useNavigate } from 'react-router-dom';
 import { clearAccessToken } from '../auth/storage';
-
-const { Header, Content } = Layout;
 
 export function AppLayout({
   title,
@@ -21,30 +19,21 @@ export function AppLayout({
   };
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Header
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 16,
-          padding: '0 24px',
-        }}
-      >
-        <Typography.Title level={4} style={{ color: '#fff', margin: 0 }}>
-          <Link to="/projects" style={{ color: 'inherit' }}>
-            greekOCR
-          </Link>
-        </Typography.Title>
-        <div style={{ flex: 1 }} />
+    <div className="app-page">
+      <header className="app-topnav">
+        <Link to="/projects" className="app-topnav__logo" aria-label="nomicous home">
+          <img src="/nomos.svg" alt="" />
+        </Link>
+        <div className="app-topnav__spacer" />
         {extra}
-        <Button type="link" onClick={handleLogout} style={{ color: '#fff' }}>
+        <Button type="text" onClick={handleLogout} style={{ color: 'var(--text-3)' }}>
           Log out
         </Button>
-      </Header>
-      <Content style={{ padding: 24, maxWidth: 1100, margin: '0 auto', width: '100%' }}>
-        <Typography.Title level={3}>{title}</Typography.Title>
+      </header>
+      <main className="app-content">
+        <h1>{title}</h1>
         {children}
-      </Content>
-    </Layout>
+      </main>
+    </div>
   );
 }

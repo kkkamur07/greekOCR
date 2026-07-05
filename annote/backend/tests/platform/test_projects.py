@@ -26,6 +26,7 @@ def test_owner_create_read_update_delete(client, owner_headers):
     assert body["slug"] == slug
     assert body["name"] == "My Manuscripts"
     assert body["guidelines"] == "Use polytonic Greek"
+    assert body["document_count"] == 0
     assert "owner_id" in body
 
     read = client.get(f"/projects/{project_id}", headers=owner_headers)

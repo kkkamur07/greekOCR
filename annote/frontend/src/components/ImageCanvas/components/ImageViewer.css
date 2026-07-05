@@ -49,8 +49,8 @@
 
 .zoom-controls button:hover {
   background: #f0f0f0;
-  border-color: #1890ff;
-  color: #1890ff;
+  border-color: #44403c;
+  color: #44403c;
   transform: translateY(-1px);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }

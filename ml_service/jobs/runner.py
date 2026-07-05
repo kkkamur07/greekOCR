@@ -37,6 +37,7 @@ def run_model(
             return run_kraken_segment(
                 image_bytes,
                 model_path=weights_path,
+                params=params,
             )
         raise ValueError(f"unsupported segment architecture: {entry.architecture.value}")
 

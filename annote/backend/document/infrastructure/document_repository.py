@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -41,6 +41,30 @@ class DocumentRepository:
         stmt = stmt.order_by(Document.created_at.desc())
         result = await session.execute(stmt)
         return list(result.scalars().all())
+
+    async def count_parts_by_document_ids(
+        self, session: AsyncSession, document_ids: list[UUID]
+    ) -> dict[UUID, int]:
+        if not document_ids:
+            return {}
+        result = await session.execute(
+            select(DocumentPart.document_id, func.count())
+            .where(DocumentPart.document_id.in_(document_ids))
+            .group_by(DocumentPart.document_id)
+        )
+        return {document_id: int(count) for document_id, count in result.all()}
+
+    async def count_documents_by_project_ids(
+        self, session: AsyncSession, project_ids: list[UUID]
+    ) -> dict[UUID, int]:
+        if not project_ids:
+            return {}
+        result = await session.execute(
+            select(Document.project_id, func.count())
+            .where(Document.project_id.in_(project_ids))
+            .group_by(Document.project_id)
+        )
+        return {project_id: int(count) for project_id, count in result.all()}
 
     async def create(
         self,

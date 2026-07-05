@@ -528,6 +528,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{project_id}/documents/{document_id}/parts/{part_id}/page-xml": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Part Page Xml */
+        get: operations["export_part_page_xml_projects__project_id__documents__document_id__parts__part_id__page_xml_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{project_id}/documents/{document_id}/parts/{part_id}/pairing": {
         parameters: {
             query?: never;
@@ -995,6 +1012,11 @@ export interface components {
             /** Name */
             name: string;
             /**
+             * Part Count
+             * @default 0
+             */
+            part_count: number;
+            /**
              * Project Id
              * Format: uuid
              */
@@ -1027,6 +1049,11 @@ export interface components {
             id: string;
             /** Name */
             name: string;
+            /**
+             * Part Count
+             * @default 0
+             */
+            part_count: number;
             /** Parts */
             parts: components["schemas"]["DocumentPartResponse"][];
             /**
@@ -1154,7 +1181,7 @@ export interface components {
              */
             ml_job_id: string;
             /** Output */
-            output?: components["schemas"]["SegmentRunResponse"] | components["schemas"]["TranscribeRunResponse"] | null;
+            output?: (components["schemas"]["SegmentJobOutput"] | components["schemas"]["TranscribeJobOutput"]) | null;
             /**
              * Product Job Id
              * Format: uuid
@@ -1207,7 +1234,7 @@ export interface components {
          * JobStatus
          * @enum {string}
          */
-        JobStatus: "pending" | "running" | "done" | "failed";
+        JobStatus: "pending" | "waiting" | "running" | "done" | "failed";
         /**
          * JobType
          * @enum {string}
@@ -1322,8 +1349,6 @@ export interface components {
         };
         /** LineTranscriptionResponse */
         LineTranscriptionResponse: {
-            /** Character Confidences */
-            character_confidences?: components["schemas"]["CharacterConfidence"][] | null;
             /** Confidence */
             confidence: number | null;
             /**
@@ -1333,7 +1358,6 @@ export interface components {
             id: string;
             /** Text */
             text: string;
-            text_source: components["schemas"]["LineTranscriptionTextSource"];
             /**
              * Transcription Id
              * Format: uuid
@@ -1341,11 +1365,6 @@ export interface components {
             transcription_id: string;
             transcription_kind: components["schemas"]["TranscriptionKind"];
         };
-        /**
-         * LineTranscriptionTextSource
-         * @enum {string}
-         */
-        LineTranscriptionTextSource: "model" | "human_edited";
         /** LineUpsertRequest */
         LineUpsertRequest: {
             /** Approved Text */
@@ -1500,6 +1519,11 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Document Count
+             * @default 0
+             */
+            document_count: number;
             /** Guidelines */
             guidelines: string | null;
             /**
@@ -1626,6 +1650,15 @@ export interface components {
          * @enum {string}
          */
         SegmentGeometryKind: "polygon" | "rectangle";
+        /** SegmentJobOutput */
+        SegmentJobOutput: {
+            data: components["schemas"]["SegmentRunResponse"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "segment";
+        };
         /** SegmentLine */
         SegmentLine: {
             /** Baseline */
@@ -1674,6 +1707,22 @@ export interface components {
              * @default bearer
              */
             token_type: string;
+        };
+        /** TranscribeJobOutput */
+        TranscribeJobOutput: {
+            data: components["schemas"]["TranscribeRunResponse"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "transcribe";
+        };
+        /** TranscribePartRequest */
+        TranscribePartRequest: {
+            /** Model Id */
+            model_id?: string | null;
+            /** Line Ids */
+            line_ids?: string[] | null;
         };
         /** TranscribeRunResponse */
         TranscribeRunResponse: {
@@ -5610,6 +5659,93 @@ export interface operations {
             };
         };
     };
+    export_part_page_xml_projects__project_id__documents__document_id__parts__part_id__page_xml_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                document_id: string;
+                part_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description PAGE XML bytes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/xml": string;
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Not authorized */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Conflict with current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
     get_page_pairing_projects__project_id__documents__document_id__parts__part_id__pairing_get: {
         parameters: {
             query?: never;
@@ -5886,7 +6022,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TranscribePartRequest"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             202: {

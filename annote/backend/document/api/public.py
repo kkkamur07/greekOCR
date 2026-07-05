@@ -3,11 +3,13 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.document.api.responses import part_response
+from backend.annotation.application.page_xml_export_service import PageXmlExportService
+from backend.annotation.application.transcription_pdf_service import TranscriptionPdfService
+from backend.document.api.responses import document_with_parts_response, part_response
 from backend.document.api.schemas import (
-    DocumentResponse,
     DocumentWithPartsResponse,
     LineTranscriptionResponse,
     PublicBlockResponse,
@@ -20,6 +22,25 @@ from infrastructure.db import get_db
 
 router = APIRouter(prefix="/public", tags=["public"])
 _service = DocumentService()
+_transcription_pdf_service = TranscriptionPdfService()
+_page_xml_export_service = PageXmlExportService()
+
+PDF_RESPONSE = {
+    200: {
+        "content": {
+            "application/pdf": {"schema": {"type": "string", "format": "binary"}}
+        },
+        "description": "Transcription PDF bytes",
+    }
+}
+XML_RESPONSE = {
+    200: {
+        "content": {
+            "application/xml": {"schema": {"type": "string", "format": "binary"}}
+        },
+        "description": "PAGE XML bytes",
+    }
+}
 
 
 def _public_line_response(line) -> PublicLineResponse:
@@ -51,11 +72,7 @@ async def get_published_document(
     db: AsyncSession = Depends(get_db),
 ) -> DocumentWithPartsResponse:
     document = await _service.get_document_public(db, project_id, document_id)
-    parts = sorted(document.parts, key=lambda p: p.order)
-    return DocumentWithPartsResponse(
-        **DocumentResponse.model_validate(document).model_dump(),
-        parts=[part_response(p, public=True) for p in parts],
-    )
+    return document_with_parts_response(document, public=True)
 
 
 @router.get(
@@ -93,3 +110,51 @@ async def list_published_transcriptions(
 ) -> list[PublicTranscriptionLayerResponse]:
     transcriptions = await _service.list_transcriptions_public(db, project_id, document_id)
     return [PublicTranscriptionLayerResponse.model_validate(t) for t in transcriptions]
+
+
+@router.get(
+    "/projects/{project_id}/documents/{document_id}/parts/{part_id}/transcription-pdf",
+    response_class=Response,
+    responses=PDF_RESPONSE,
+)
+async def get_published_transcription_pdf(
+    project_id: UUID,
+    document_id: UUID,
+    part_id: UUID,
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    pdf_bytes = await _transcription_pdf_service.generate_part_pdf_public(
+        db,
+        project_id,
+        document_id,
+        part_id,
+    )
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'attachment; filename="transcription.pdf"'},
+    )
+
+
+@router.get(
+    "/projects/{project_id}/documents/{document_id}/parts/{part_id}/page-xml",
+    response_class=Response,
+    responses=XML_RESPONSE,
+)
+async def get_published_page_xml(
+    project_id: UUID,
+    document_id: UUID,
+    part_id: UUID,
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    xml_bytes = await _page_xml_export_service.export_part_public(
+        db,
+        project_id,
+        document_id,
+        part_id,
+    )
+    return Response(
+        content=xml_bytes,
+        media_type="application/xml",
+        headers={"Content-Disposition": 'attachment; filename="page.xml"'},
+    )

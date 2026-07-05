@@ -1,5 +1,7 @@
 """Health check routes."""
 
+import logging
+
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
@@ -7,8 +9,11 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.schemas.health import HealthResponse
+from backend.core.settings import get_infrastructure_settings
+from backend.dev.bootstrap import ensure_dev_user_exists
 from infrastructure.db import get_db
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["health"])
 
 
@@ -23,4 +28,12 @@ async def health(db: AsyncSession = Depends(get_db)) -> HealthResponse | JSONRes
     except SQLAlchemyError:
         body = HealthResponse(status="degraded", database="error")
         return JSONResponse(status_code=503, content=body.model_dump())
+
+    if get_infrastructure_settings().environment == "development":
+        try:
+            if await ensure_dev_user_exists(db):
+                logger.info("Recreated missing dev login user after database reset")
+        except SQLAlchemyError:
+            logger.exception("Failed to ensure dev user exists")
+
     return HealthResponse(status="ok", database="ok")

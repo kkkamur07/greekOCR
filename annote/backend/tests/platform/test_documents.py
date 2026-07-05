@@ -43,10 +43,12 @@ def test_member_create_list_read_update_delete_document(client, owner_headers, o
     document_id = doc["id"]
     assert doc["name"] == "Codex A"
     assert doc["workflow"] == "draft"
+    assert doc["part_count"] == 0
 
     listed = client.get(base, headers=owner_headers)
     assert listed.status_code == 200
-    assert any(d["id"] == document_id for d in listed.json())
+    listed_doc = next(d for d in listed.json() if d["id"] == document_id)
+    assert listed_doc["part_count"] == 0
 
     read = client.get(f"{base}/{document_id}", headers=owner_headers)
     assert read.status_code == 200
@@ -141,6 +143,13 @@ def test_upload_reorder_delete_part_and_serve_media(client, owner_headers, owner
     part_b = upload_b.json()
     assert part_b["order"] == 1
 
+    listed = client.get(base, headers=owner_headers)
+    listed_doc = next(d for d in listed.json() if d["id"] == document_id)
+    assert listed_doc["part_count"] == 2
+
+    project = client.get(f"/projects/{project_id}", headers=owner_headers)
+    assert project.json()["document_count"] >= 1
+
     reorder = client.patch(
         f"{base}/{document_id}/parts/reorder",
         headers=owner_headers,
@@ -158,6 +167,7 @@ def test_upload_reorder_delete_part_and_serve_media(client, owner_headers, owner
 
     dashboard = client.get(f"{base}/{document_id}", headers=owner_headers)
     assert dashboard.status_code == 200
+    assert dashboard.json()["part_count"] == 2
     assert len(dashboard.json()["parts"]) == 2
 
     delete_part = client.delete(
@@ -167,6 +177,7 @@ def test_upload_reorder_delete_part_and_serve_media(client, owner_headers, owner
     assert delete_part.status_code == 204
 
     after = client.get(f"{base}/{document_id}", headers=owner_headers)
+    assert after.json()["part_count"] == 1
     assert len(after.json()["parts"]) == 1
 
 
@@ -323,6 +334,8 @@ def test_replace_part_lines_persists_segment_geometry_and_approved_text(
     assert lines[1]["source"] == "kraken"
     assert lines[1]["kraken_ceiling"] == [[-1, 9], [11, 9], [11, 16], [-1, 16]]
     assert lines[1]["line_transcriptions"] == []
+    assert lines[0]["baseline"]["points"] == [[0, 5], [10, 5]]
+    assert lines[1]["baseline"]["points"] == [[0, 15], [10, 15]]
 
     listed = client.get(
         f"{base}/{document_id}/parts/{part_id}/lines",
@@ -330,6 +343,53 @@ def test_replace_part_lines_persists_segment_geometry_and_approved_text(
     )
     assert listed.status_code == 200
     assert listed.json() == lines
+
+
+@pytest.mark.integration
+def test_replace_part_lines_preserves_existing_kraken_baseline(
+    client, owner_headers, owner_project
+):
+    project_id, document_id, part_id = _create_document_with_part(
+        client, owner_headers, owner_project
+    )
+    base = _documents_url(project_id)
+    kraken_baseline = {"points": [[1, 7], [5, 7.5], [9, 7]]}
+    seed = client.put(
+        f"{base}/{document_id}/parts/{part_id}/lines",
+        headers=owner_headers,
+        json={
+            "lines": [
+                {
+                    "order": 0,
+                    "kind": "polygon",
+                    "points": [[0, 0], [10, 0], [10, 8], [0, 8]],
+                    "source": "kraken",
+                    "baseline": kraken_baseline,
+                    "mask": {"points": [[0, 0], [10, 0], [10, 8], [0, 8]]},
+                }
+            ]
+        },
+    )
+    assert seed.status_code == 200
+    line_id = seed.json()[0]["id"]
+
+    updated = client.put(
+        f"{base}/{document_id}/parts/{part_id}/lines",
+        headers=owner_headers,
+        json={
+            "lines": [
+                {
+                    "id": line_id,
+                    "order": 0,
+                    "kind": "polygon",
+                    "points": [[1, 1], [11, 1], [11, 9], [1, 9]],
+                    "source": "kraken",
+                }
+            ]
+        },
+    )
+    assert updated.status_code == 200
+    assert updated.json()[0]["baseline"] == kraken_baseline
 
 
 @pytest.mark.integration

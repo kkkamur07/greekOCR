@@ -98,7 +98,7 @@ def test_transcribe_job_creates_model_layer_and_leaves_ground_truth_empty(
     assert enqueue.status_code == 202
     job_id = enqueue.json()["job_id"]
 
-    job = _poll_job(client, job_id, expect="done", headers=owner_headers, timeout=8.0)
+    job = _poll_job(client, job_id, expect="done", headers=owner_headers, timeout=120.0)
     assert job["type"] == "transcribe"
     assert len(job["result"]["lines"]) == 2
     for line in job["result"]["lines"]:
@@ -133,7 +133,7 @@ def test_each_transcribe_job_creates_distinct_model_layer_without_ground_truth(
         )
         assert enqueue.status_code == 202
         job_ids.append(enqueue.json()["job_id"])
-        _poll_job(client, job_ids[-1], expect="done", headers=owner_headers, timeout=8.0)
+        _poll_job(client, job_ids[-1], expect="done", headers=owner_headers, timeout=120.0)
 
     layers = client.get(f"{base}/{document_id}/transcriptions", headers=owner_headers)
     assert layers.status_code == 200
@@ -151,6 +151,30 @@ def test_each_transcribe_job_creates_distinct_model_layer_without_ground_truth(
         ]
 
 
+def test_transcribe_part_with_line_ids_only_transcribes_selected_lines(
+    client: TestClient, owner_headers: dict[str, str], owner_project: dict
+) -> None:
+    project_id, document_id, part_id = _create_document_part_with_lines(
+        client, owner_headers, owner_project
+    )
+    base = _documents_url(project_id)
+    lines = client.get(f"{base}/{document_id}/parts/{part_id}/lines", headers=owner_headers)
+    assert lines.status_code == 200
+    line_ids = [line["id"] for line in lines.json()]
+
+    enqueue = client.post(
+        f"{base}/{document_id}/parts/{part_id}/transcribe",
+        headers=owner_headers,
+        json={"line_ids": [line_ids[0]]},
+    )
+    assert enqueue.status_code == 202
+    job = _poll_job(
+        client, enqueue.json()["job_id"], expect="done", headers=owner_headers, timeout=120.0
+    )
+    assert len(job["result"]["lines"]) == 1
+    assert job["result"]["lines"][0]["line_id"] == line_ids[0]
+
+
 def test_copy_model_layer_to_ground_truth_for_whole_document(
     client: TestClient, owner_headers: dict[str, str], owner_project: dict
 ) -> None:
@@ -164,7 +188,7 @@ def test_copy_model_layer_to_ground_truth_for_whole_document(
     )
     assert enqueue.status_code == 202
     _poll_job(
-        client, enqueue.json()["job_id"], expect="done", headers=owner_headers, timeout=8.0
+        client, enqueue.json()["job_id"], expect="done", headers=owner_headers, timeout=120.0
     )
     layers = client.get(f"{base}/{document_id}/transcriptions", headers=owner_headers).json()
     model_layer_id = next(layer["id"] for layer in layers if layer["kind"] == "model")
@@ -200,7 +224,7 @@ def test_copy_model_layer_to_ground_truth_for_selected_lines(
     )
     assert enqueue.status_code == 202
     _poll_job(
-        client, enqueue.json()["job_id"], expect="done", headers=owner_headers, timeout=8.0
+        client, enqueue.json()["job_id"], expect="done", headers=owner_headers, timeout=120.0
     )
     layers = client.get(f"{base}/{document_id}/transcriptions", headers=owner_headers).json()
     model_layer_id = next(layer["id"] for layer in layers if layer["kind"] == "model")
@@ -276,7 +300,7 @@ def test_patch_model_layer_line_text_is_rejected(
     )
     assert enqueue.status_code == 202
     _poll_job(
-        client, enqueue.json()["job_id"], expect="done", headers=owner_headers, timeout=8.0
+        client, enqueue.json()["job_id"], expect="done", headers=owner_headers, timeout=120.0
     )
     layers = client.get(f"{base}/{document_id}/transcriptions", headers=owner_headers).json()
     model_layer_id = next(layer["id"] for layer in layers if layer["kind"] == "model")

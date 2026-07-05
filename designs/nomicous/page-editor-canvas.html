@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Page editor — canvas — nomicous</title>
+  <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="page-editor.css" />
+</head>
+<body class="pe-shell">
+
+  <header class="pe-toolbar">
+    <a href="../index.html" class="pe-toolbar__logo" aria-label="nomicous home">
+      <img src="../assets/nomos.svg" alt="" />
+      <span>nomicous</span>
+    </a>
+
+    <div class="pe-toolbar__title">
+      <a href="document-detail.html" class="pe-toolbar__back" aria-label="Back to document">←</a>
+      <div class="pe-toolbar__sep"></div>
+      <h1 class="pe-toolbar__doc">Grec 1360<span class="pe-toolbar__doc-page"> · p.12</span></h1>
+      <span class="badge badge-reviewed">reviewed</span>
+    </div>
+
+    <div class="pe-toolbar__center">
+      <span class="pe-toolbar__stat"><strong>23</strong> seg</span>
+      <div class="pe-toolbar__progress">
+        <span class="pe-toolbar__stat"><strong>23</strong>/23</span>
+        <div class="pe-toolbar__progress-track" role="progressbar" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100" aria-label="Pairing progress, 23 of 23 segments">
+          <div class="pe-toolbar__progress-fill" style="width:100%"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pe-toolbar__actions">
+      <div class="pe-toolbar__modes" role="group" aria-label="Editor mode">
+        <button type="button" class="pe-toolbar__mode pe-toolbar__mode--active">Layout</button>
+        <button type="button" class="pe-toolbar__mode">Transcription</button>
+      </div>
+      <div class="pe-toolbar__cluster" role="group" aria-label="Drawing tools">
+        <button type="button" class="pe-tb-btn pe-tb-btn--active">Select</button>
+        <button type="button" class="pe-tb-btn">Rect<kbd class="pe-kbd">B</kbd></button>
+        <button type="button" class="pe-tb-btn">Poly<kbd class="pe-kbd">P</kbd></button>
+        <button type="button" class="pe-tb-btn">Verts<kbd class="pe-kbd">V</kbd></button>
+        <button type="button" class="pe-tb-btn" title="Delete selected">Del<kbd class="pe-kbd">⌫</kbd></button>
+      </div>
+      <div class="pe-toolbar__cluster">
+        <label class="pe-model">
+          <span class="pe-model__label">Model</span>
+          <select class="pe-model__select" aria-label="OCR transcription model">
+            <option selected>kraken-transcribe</option>
+          </select>
+        </label>
+      </div>
+      <div class="pe-toolbar__cluster">
+        <button type="button" class="pe-tb-btn" id="pdf-toggle" aria-pressed="false" title="Toggle transcription PDF">PDF</button>
+        <button type="button" class="pe-tb-btn" aria-haspopup="menu" aria-expanded="false">Process ▾</button>
+        <button type="button" class="pe-tb-btn">Unreview</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Full viewport canvas — no bottom strip until segment selected -->
+  <div class="pe-workspace">
+    <div class="pe-body">
+      <div class="pe-canvas-pane">
+        <div class="pe-canvas-stage">
+          <div class="pe-canvas-img-wrap">
+            <div class="pe-canvas-img" role="img" aria-label="Manuscript page">
+              <div class="pe-seg pe-seg--paired" style="top:7%;left:9%;width:82%;height:5.5%" role="button" tabindex="0" aria-label="Segment 1, paired" aria-pressed="false"><span class="pe-seg-num" aria-hidden="true">1</span></div>
+              <div class="pe-seg pe-seg--paired" style="top:14%;left:9%;width:82%;height:5.5%" role="button" tabindex="0" aria-label="Segment 2, paired" aria-pressed="false"><span class="pe-seg-num" aria-hidden="true">2</span></div>
+              <div class="pe-seg" style="top:21%;left:9%;width:82%;height:5.5%" role="button" tabindex="0" aria-label="Segment 3, unpaired" aria-pressed="false"><span class="pe-seg-num" aria-hidden="true">3</span></div>
+              <div class="pe-seg" style="top:28%;left:9%;width:82%;height:5.5%" role="button" tabindex="0" aria-label="Segment 4, unpaired" aria-pressed="false"><span class="pe-seg-num" aria-hidden="true">4</span></div>
+              <div class="pe-seg pe-seg--paired" style="top:35%;left:9%;width:82%;height:5.5%" role="button" tabindex="0" aria-label="Segment 5, paired" aria-pressed="false"><span class="pe-seg-num" aria-hidden="true">5</span></div>
+              <div class="pe-seg pe-seg--paired" style="top:42%;left:9%;width:82%;height:5.5%" role="button" tabindex="0" aria-label="Segment 6, paired" aria-pressed="false"><span class="pe-seg-num" aria-hidden="true">6</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="pe-seg-legend" aria-label="Segment pairing">
+          <div class="pe-seg-legend__item"><span class="pe-seg-legend__swatch pe-seg-legend__swatch--paired"></span> paired</div>
+          <div class="pe-seg-legend__item"><span class="pe-seg-legend__swatch pe-seg-legend__swatch--unpaired"></span> unpaired</div>
+        </div>
+        <p class="pe-canvas-hint" id="canvas-hint" role="status">Select a segment to view transcription</p>
+        <div class="pe-zoom" aria-label="Zoom controls">
+          <button type="button" class="pe-zoom__btn" aria-label="Zoom out">−</button>
+          <span class="pe-zoom__label" aria-live="polite">100%</span>
+          <button type="button" class="pe-zoom__btn" aria-label="Zoom in">+</button>
+        </div>
+      </div>
+
+      <div class="pe-pdf-wrap pe-pdf-wrap--collapsed" id="pdf-wrap" style="width:280px">
+        <div class="pe-pdf-resizer" id="pdf-resizer" role="separator" aria-orientation="vertical" aria-label="Resize PDF pane" tabindex="0"></div>
+        <aside class="pe-pdf-pane" id="pdf-pane">
+          <div class="pe-pdf-pane__header">
+            <span>Transcription PDF</span>
+            <button type="button" class="pe-tb-btn" id="pdf-close" aria-label="Close PDF pane">✕</button>
+          </div>
+          <div class="pe-pdf-pane__body">
+            <div class="pe-pdf-pane__mock">PDF preview</div>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <!-- Hidden until segment click — resizable transcription panel -->
+    <section class="pe-strip pe-strip--hidden" id="strip" style="height:220px" aria-labelledby="strip-heading">
+      <div class="pe-strip__resizer" id="strip-resizer" role="separator" aria-orientation="horizontal" aria-label="Resize transcription panel" tabindex="0"></div>
+      <header class="pe-strip__bar">
+        <h2 class="pe-strip__heading" id="strip-heading">
+          <span class="pe-strip__badge" id="strip-badge" aria-hidden="true">—</span>
+          <span id="strip-heading-text" aria-live="polite">Segment —</span>
+        </h2>
+        <span class="pe-strip__model-chip">kraken-transcribe</span>
+        <span class="pe-strip__bar-spacer"></span>
+        <button type="button" class="pe-tb-btn" id="strip-hide" aria-label="Hide transcription panel" title="Hide panel">✕</button>
+      </header>
+      <div class="pe-strip__content" id="strip-content">
+        <div class="pe-tx-stack">
+          <div class="pe-tx-block pe-tx-block--model">
+            <div class="pe-tx-block__head">
+              <span class="pe-tx-block__label" id="model-output-label">Model output</span>
+              <button type="button" class="btn btn-ghost btn-xs" id="copy-model">Copy</button>
+            </div>
+            <div class="pe-model-preview" role="text" aria-labelledby="model-output-label" aria-describedby="confidence-legend">
+              <span class="ch-high" data-conf="96" title="96% confidence">Ἀ</span><span class="ch-high" data-conf="94" title="94% confidence">ρ</span><span class="ch-mid" data-conf="71" title="71% confidence">ι</span><span class="ch-high" data-conf="92" title="92% confidence">σ</span><span class="ch-low" data-conf="48" title="48% confidence — low">τ</span><span class="ch-high" data-conf="89" title="89% confidence">ο</span><span class="ch-high" data-conf="91" title="91% confidence">τ</span><span class="ch-high" data-conf="88" title="88% confidence">έ</span><span class="ch-mid" data-conf="67" title="67% confidence">λ</span><span class="ch-high" data-conf="95" title="95% confidence">η</span><span class="ch-high" data-conf="93" title="93% confidence">ς</span>
+            </div>
+          </div>
+          <div class="pe-tx-divider" aria-hidden="true"></div>
+          <div class="pe-tx-block pe-tx-block--edit">
+            <div class="pe-tx-block__head">
+              <label class="pe-tx-block__label" for="strip-edit">Transcription</label>
+            </div>
+            <textarea class="pe-strip__edit" id="strip-edit" aria-label="Edit transcription" spellcheck="false" placeholder="Click a segment, then edit or paste…"></textarea>
+          </div>
+        </div>
+        <footer class="pe-strip__footer">
+          <div class="pe-strip__legend" id="confidence-legend" aria-label="Confidence thresholds">
+            <span><i class="dot dot--high" aria-hidden="true"></i> high &gt;90%</span>
+            <span><i class="dot dot--mid" aria-hidden="true"></i> mid 51–90%</span>
+            <span><i class="dot dot--low" aria-hidden="true"></i> low ≤50%</span>
+          </div>
+          <div class="pe-strip__footer-actions">
+            <button type="button" class="btn btn-accent btn-xs">Accept</button>
+            <button type="button" class="btn btn-outline btn-xs">Re-run OCR</button>
+          </div>
+        </footer>
+      </div>
+    </section>
+  </div>
+
+  <nav class="page-nav" aria-label="Design navigation">
+    <a href="page-editor.html">With PDF + strip</a>
+    <span class="dot">·</span>
+    <span>Default</span>
+    <span class="dot">·</span>
+    <a href="../index.html">Gallery</a>
+  </nav>
+
+  <script>
+    const pdfWrap = document.getElementById('pdf-wrap');
+    document.getElementById('pdf-toggle').addEventListener('click', function () {
+      const open = pdfWrap.classList.toggle('pe-pdf-wrap--collapsed');
+      this.classList.toggle('pe-tb-btn--on', !open);
+      this.setAttribute('aria-pressed', String(!open));
+    });
+    document.getElementById('pdf-close').addEventListener('click', () => {
+      pdfWrap.classList.add('pe-pdf-wrap--collapsed');
+      document.getElementById('pdf-toggle').classList.remove('pe-tb-btn--on');
+      document.getElementById('pdf-toggle').setAttribute('aria-pressed', 'false');
+    });
+
+    let dragging = false;
+    const resizer = document.getElementById('pdf-resizer');
+    resizer.addEventListener('mousedown', (e) => { dragging = true; e.preventDefault(); });
+    window.addEventListener('mousemove', (e) => {
+      if (!dragging) return;
+      const rect = pdfWrap.parentElement.getBoundingClientRect();
+      const w = rect.right - e.clientX;
+      if (w >= 180 && w <= window.innerWidth * 0.5) pdfWrap.style.width = w + 'px';
+    });
+    window.addEventListener('mouseup', () => { dragging = false; });
+
+    const workspace = document.querySelector('.pe-workspace');
+    const strip = document.getElementById('strip');
+    const stripResizer = document.getElementById('strip-resizer');
+
+    let stripDragging = false;
+    stripResizer.addEventListener('mousedown', (e) => {
+      stripDragging = true;
+      stripResizer.classList.add('is-dragging');
+      document.body.style.cursor = 'row-resize';
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+    });
+    window.addEventListener('mousemove', (e) => {
+      if (!stripDragging) return;
+      const rect = workspace.getBoundingClientRect();
+      const newH = rect.bottom - e.clientY;
+      if (newH >= 128 && newH <= window.innerHeight * 0.45) {
+        strip.style.height = newH + 'px';
+      }
+    });
+    window.addEventListener('mouseup', () => {
+      if (!stripDragging) return;
+      stripDragging = false;
+      stripResizer.classList.remove('is-dragging');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    });
+
+    function selectSegment(seg) {
+      document.querySelectorAll('.pe-seg').forEach((s) => {
+        s.classList.remove('pe-seg--selected');
+        s.setAttribute('aria-pressed', 'false');
+      });
+      seg.classList.add('pe-seg--selected');
+      seg.setAttribute('aria-pressed', 'true');
+      strip.classList.remove('pe-strip--hidden');
+      const num = seg.querySelector('.pe-seg-num').textContent;
+      document.getElementById('strip-badge').textContent = num;
+      document.getElementById('strip-heading-text').textContent = 'Segment ' + num;
+      document.getElementById('canvas-hint').textContent = 'Segment ' + num + ' selected';
+      const edit = document.getElementById('strip-edit');
+      if (!edit.value) edit.value = 'Ἀριστοτέλης';
+    }
+
+    document.querySelectorAll('.pe-seg').forEach((seg) => {
+      seg.addEventListener('click', () => selectSegment(seg));
+      seg.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          selectSegment(seg);
+        }
+      });
+    });
+    document.getElementById('strip-hide').addEventListener('click', () => {
+      document.getElementById('strip').classList.add('pe-strip--hidden');
+      document.getElementById('canvas-hint').textContent = 'Select a segment to view transcription';
+    });
+    document.getElementById('copy-model').addEventListener('click', () => {
+      const preview = document.querySelector('.pe-model-preview');
+      const edit = document.getElementById('strip-edit');
+      edit.value = preview.textContent.trim();
+      edit.focus();
+      edit.select();
+    });
+  </script>
+</body>
+</html>

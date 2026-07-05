@@ -126,24 +126,29 @@ export function usePageEditorData(
           );
         }
         try {
-          const catalog = await api.listInferenceModels();
-          const models = catalog.filter((model) => model.task === 'transcribe');
-          setTranscribeModels(models);
-          if (models.length === 0) {
-            setSelectedTranscribeModelId(null);
-          } else {
-            try {
-              const resolved = await api.resolvePartModelBinding(
-                projectId,
-                documentId,
-                partId,
-                'transcribe',
-              );
-              setSelectedTranscribeModelId(resolved.model.id);
-            } catch {
-              setSelectedTranscribeModelId(models[0]?.id ?? null);
-            }
+          let models: InferenceModelResponse[] = [];
+          try {
+            const catalog = await api.listInferenceModels();
+            models = catalog.filter((model) => model.task === 'transcribe');
+          } catch {
+            models = [];
           }
+
+          try {
+            const resolved = await api.resolvePartModelBinding(
+              projectId,
+              documentId,
+              partId,
+              'transcribe',
+            );
+            setSelectedTranscribeModelId(resolved.model.id);
+            if (!models.some((model) => model.id === resolved.model.id)) {
+              models = [resolved.model, ...models];
+            }
+          } catch {
+            setSelectedTranscribeModelId(models[0]?.id ?? null);
+          }
+          setTranscribeModels(models);
         } catch {
           setTranscribeModels([]);
           setSelectedTranscribeModelId(null);

@@ -1,10 +1,13 @@
 import type { ReactNode } from 'react';
-import { Alert, Space, Spin, Typography } from 'antd';
+import { Spin, Typography } from 'antd';
+import { PageEditorNavHeader } from './PageEditorNavHeader';
 
 type PageEditorShellProps = {
   loading: boolean;
   unavailableDescription: string | null;
+  backHref: string;
   toolbar: ReactNode;
+  processingBanner?: ReactNode;
   statusAlerts?: ReactNode;
   showStatusAlerts?: boolean;
   children: ReactNode;
@@ -13,56 +16,50 @@ type PageEditorShellProps = {
 export function PageEditorShell({
   loading,
   unavailableDescription,
+  backHref,
   toolbar,
+  processingBanner,
   statusAlerts,
   showStatusAlerts = false,
   children,
 }: PageEditorShellProps) {
   if (loading) {
     return (
-      <div style={{ padding: 24 }}>
-        <Space>
+      <div className="pe-shell">
+        <PageEditorNavHeader backHref={backHref} />
+        <div className="pe-shell__message">
           <Spin />
-          <Typography.Text>Loading page...</Typography.Text>
-        </Space>
+          <Typography.Text>Loading page…</Typography.Text>
+        </div>
       </div>
     );
   }
 
   if (unavailableDescription) {
     return (
-      <div style={{ padding: 24 }}>
-        <Alert
-          type="warning"
-          showIcon
-          message="Page unavailable"
-          description={unavailableDescription}
-        />
+      <div className="pe-shell">
+        <PageEditorNavHeader backHref={backHref} />
+        <div className="pe-shell__message">
+          <Typography.Title level={4}>Page unavailable</Typography.Title>
+          <Typography.Text type="secondary">{unavailableDescription}</Typography.Text>
+        </div>
       </div>
     );
   }
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        height: '100vh',
-        flexDirection: 'column',
-        overflow: 'hidden',
-        background: '#fff',
-      }}
-    >
+    <div className="pe-shell">
       {toolbar}
 
+      {processingBanner}
+
       {showStatusAlerts && statusAlerts && (
-        <div style={{ flexShrink: 0, borderBottom: '1px solid #e5e7eb', padding: 8 }}>
+        <div className="pe-status-bar" role="status" aria-live="polite">
           {statusAlerts}
         </div>
       )}
 
-      <main style={{ display: 'flex', minHeight: 0, flex: 1, flexDirection: 'column' }}>
-        {children}
-      </main>
+      <main className="pe-main">{children}</main>
     </div>
   );
 }

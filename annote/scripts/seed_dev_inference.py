@@ -18,14 +18,16 @@ from backend.ml.infrastructure.orm_models import (  # noqa: E402
 )
 from backend.project.infrastructure.orm_models import Project  # noqa: E402
 from backend.users.infrastructure.orm_models import User  # noqa: E402
+
+from infrastructure import models as _orm_models  # noqa: E402, F401 — register all mappers
 from infrastructure.db import AsyncSessionLocal  # noqa: E402
 
-DEFAULT_SEGMENT_MODEL = os.environ.get("DEFAULT_SEGMENT_MODEL", "kraken-segment-default")
-DEFAULT_TRANSCRIBE_MODEL = os.environ.get("DEFAULT_TRANSCRIBE_MODEL", "kraken-transcribe-default")
+DEFAULT_SEGMENT_MODEL = os.environ.get("DEFAULT_SEGMENT_MODEL", "kraken-blla")
+DEFAULT_TRANSCRIBE_MODEL = os.environ.get("DEFAULT_TRANSCRIBE_MODEL", "syriac-calamariv1")
 KRAKEN_MODEL_PATH = Path(os.environ.get("KRAKEN_MODEL_PATH", "../model/kraken"))
 DEV_PROJECT_SLUG = os.environ.get("DEV_INFERENCE_PROJECT_SLUG", "dev-inference")
 DEV_PROJECT_NAME = os.environ.get("DEV_INFERENCE_PROJECT_NAME", "Dev inference defaults")
-DEV_USER_EMAIL = os.environ.get("DEV_USER_EMAIL", "dev@kalamos.local")
+DEV_USER_EMAIL = os.environ.get("DEV_USER_EMAIL", "dev@example.com")
 
 
 async def _upsert_model(
@@ -111,13 +113,19 @@ async def main() -> None:
     segment_model = await _upsert_model(
         name=DEFAULT_SEGMENT_MODEL,
         task=InferenceTask.segment,
-        artifact_ref=str(KRAKEN_MODEL_PATH / "segment.mlmodel"),
+        artifact_ref="registry://kraken-blla?tag=stable",
         default_params={"device": "cpu"},
     )
     transcribe_model = await _upsert_model(
         name=DEFAULT_TRANSCRIBE_MODEL,
         task=InferenceTask.transcribe,
-        artifact_ref=str(KRAKEN_MODEL_PATH / "transcribe.mlmodel"),
+        artifact_ref=f"registry://{DEFAULT_TRANSCRIBE_MODEL}?tag=stable",
+        default_params={"device": "cpu"},
+    )
+    greek_transcribe_model = await _upsert_model(
+        name="greek-calamariv1",
+        task=InferenceTask.transcribe,
+        artifact_ref="registry://greek-calamariv1?tag=stable",
         default_params={"device": "cpu"},
     )
     project = await _ensure_dev_project()
@@ -134,6 +142,10 @@ async def main() -> None:
 
     print(f"Seeded segment model: {segment_model.name} -> {segment_model.artifact_ref}")
     print(f"Seeded transcribe model: {transcribe_model.name} -> {transcribe_model.artifact_ref}")
+    print(
+        "Seeded additional transcribe model: "
+        f"{greek_transcribe_model.name} -> {greek_transcribe_model.artifact_ref}"
+    )
     print(f"Seeded project: {project.slug} ({project.id})")
     print(f"Segment binding: {segment_binding.id}")
     print(f"Transcribe binding: {transcribe_binding.id}")

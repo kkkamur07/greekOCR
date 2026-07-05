@@ -63,6 +63,26 @@ class TranscriptionPdfService:
             lines=await self._documents.list_part_lines(session, part.id),
         )
 
+    async def generate_part_pdf_public(
+        self,
+        session: AsyncSession,
+        project_id: UUID,
+        document_id: UUID,
+        part_id: UUID,
+    ) -> bytes:
+        part = await self._document_service.get_published_part(
+            session, project_id, document_id, part_id
+        )
+        image_path = self._media.absolute_path(part.image_key)
+        with Image.open(image_path) as page_image:
+            width, height = page_image.size
+
+        return self._render_pdf(
+            width=width,
+            height=height,
+            lines=await self._documents.list_part_lines(session, part.id),
+        )
+
     def _render_pdf(self, *, width: int, height: int, lines: list[Line]) -> bytes:
         font_path = resolve_unicode_font()
         font_name = _ensure_font(font_path)

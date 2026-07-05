@@ -1,63 +1,76 @@
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Button, Card, Form, Input, Typography, notification } from 'antd';
+import { toast } from '../components/ui/toast';
 import { api, type LoginRequest } from '../api/client';
 import { ApiError } from '../api/errors';
 import { authRedirectTarget } from '../auth/redirect';
 import { setAccessToken } from '../auth/storage';
+import { AuthFormWrap, AuthLayout } from '../components/layout/AuthLayout';
+import { PasswordInput } from '../components/ui/PasswordInput';
 
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [loading, setLoading] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const from = authRedirectTarget(location.state);
 
-  const onFinish = async (values: LoginRequest) => {
+  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     setLoading(true);
+    const values: LoginRequest = { email, password };
     try {
       const token = await api.login(values);
       setAccessToken(token.access_token);
-      notification.success({ message: 'Signed in' });
+      toast.success('Signed in');
       navigate(from, { replace: true });
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : 'Login failed';
-      notification.error({ message: msg });
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: '#f0f2f5',
-      }}
+    <AuthLayout
+      headline="Nomicous platform for HTR"
+      tagline="Segment pages, run multiple HTR models, and review transcriptions in one editor. Publish live public pages when a document is ready."
     >
-      <Card style={{ width: 400 }}>
-        <Typography.Title level={3}>Sign in</Typography.Title>
-        <Form layout="vertical" onFinish={onFinish}>
-          <Form.Item
-            name="email"
-            label="Email"
-            rules={[{ required: true, type: 'email' }]}
-          >
-            <Input autoComplete="email" />
-          </Form.Item>
-          <Form.Item name="password" label="Password" rules={[{ required: true }]}>
-            <Input.Password autoComplete="current-password" />
-          </Form.Item>
-          <Button type="primary" htmlType="submit" loading={loading} block>
-            Sign in
-          </Button>
-        </Form>
-        <Typography.Paragraph style={{ marginTop: 16, marginBottom: 0 }}>
+      <AuthFormWrap>
+        <h1>Sign in</h1>
+        <p className="auth-sub">Your workspace</p>
+        <form onSubmit={onSubmit}>
+          <div className="field">
+            <label htmlFor="email">Email</label>
+            <input
+              id="email"
+              type="email"
+              placeholder="you@institution.edu"
+              autoComplete="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="password">Password</label>
+            <PasswordInput
+              id="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </div>
+          <button type="submit" className="btn btn-primary btn-block mt-4" disabled={loading}>
+            {loading ? 'Signing in…' : 'Sign in'}
+          </button>
+        </form>
+        <p className="auth-footer-link">
           No account? <Link to="/register" state={location.state}>Register</Link>
-        </Typography.Paragraph>
-      </Card>
-    </div>
+        </p>
+      </AuthFormWrap>
+    </AuthLayout>
   );
 }

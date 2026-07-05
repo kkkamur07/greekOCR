@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 from io import BytesIO
+from xml.etree import ElementTree
 
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -136,6 +137,71 @@ def test_outsider_cannot_generate_transcription_pdf(
 
     response = client.post(
         f"{base}/{document_id}/parts/{part_id}/transcription-pdf",
+        headers=outsider_headers,
+    )
+
+    assert response.status_code in (403, 404)
+
+
+def test_member_exports_page_xml_with_transcription_polygon_and_baseline(
+    client: TestClient, owner_headers: dict[str, str], owner_project: dict
+) -> None:
+    project_id, document_id, part_id, _line_ids = _create_document_part_with_segments(
+        client, owner_headers, owner_project
+    )
+    base = _documents_url(project_id)
+    replace = client.put(
+        f"{base}/{document_id}/parts/{part_id}/lines",
+        headers=owner_headers,
+        json={
+            "lines": [
+                {
+                    "order": 0,
+                    "kind": "polygon",
+                    "points": [[10, 10], [120, 10], [120, 30], [10, 30]],
+                    "source": "kraken",
+                    "approved_text": "alpha",
+                },
+            ]
+        },
+    )
+    assert replace.status_code == 200
+
+    response = client.get(
+        f"{base}/{document_id}/parts/{part_id}/page-xml",
+        headers=owner_headers,
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/xml")
+    root = ElementTree.fromstring(response.content)
+    ns = {"page": "http://schema.primaresearch.org/PAGE/gts/pagecontent/2019-07-15"}
+    text_line = root.find(".//page:TextLine", ns)
+    assert text_line is not None
+    coords = text_line.find("page:Coords", ns)
+    baseline = text_line.find("page:Baseline", ns)
+    text = text_line.find("page:TextEquiv/page:Unicode", ns)
+    assert coords is not None
+    assert baseline is not None
+    assert text is not None
+    assert coords.attrib["points"] == "10,10 120,10 120,30 10,30"
+    assert baseline.attrib["points"] == "10,10 120,10 120,30 10,30"
+    assert text.text == "alpha"
+
+
+def test_outsider_cannot_export_page_xml(
+    client: TestClient,
+    owner_headers: dict[str, str],
+    outsider_headers: dict[str, str],
+    owner_project: dict,
+) -> None:
+    project_id, document_id, part_id, _line_ids = _create_document_part_with_segments(
+        client, owner_headers, owner_project
+    )
+    base = _documents_url(project_id)
+
+    response = client.get(
+        f"{base}/{document_id}/parts/{part_id}/page-xml",
         headers=outsider_headers,
     )
 
