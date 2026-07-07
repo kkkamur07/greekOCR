@@ -1,0 +1,44 @@
+"""ML-owned Postgres models — only the ML service reads/writes these tables."""
+
+from __future__ import annotations
+
+import uuid
+from datetime import datetime
+from typing import Any
+
+from sqlalchemy import DateTime, Enum, Index, LargeBinary, Text, func
+from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.orm import Mapped, mapped_column
+
+from inference.contracts.common import InferenceJobStatus, InferenceTask
+from inference.infrastructure.db import Base
+
+
+class InferenceJob(Base):
+    __tablename__ = "inference_jobs"
+    __table_args__ = (
+        Index("ix_inference_jobs_claim_order", "status", "created_at", "id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    product_job_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
+    task: Mapped[InferenceTask] = mapped_column(Enum(InferenceTask, name="inference_task"))
+    registry_model_id: Mapped[str] = mapped_column(Text)
+    registry_tag: Mapped[str] = mapped_column(Text, default="stable")
+    status: Mapped[InferenceJobStatus] = mapped_column(
+        Enum(InferenceJobStatus, name="inference_job_status"),
+        default=InferenceJobStatus.pending,
+        index=True,
+    )
+    image_bytes: Mapped[bytes] = mapped_column(LargeBinary)
+    params: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+    output: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

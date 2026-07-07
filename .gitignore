@@ -20,7 +20,7 @@ outputs/
 output/
 model/data/
 model/outputs/
-annote/data/
+nomicous/data/
 
 # Experiments and local artifacts
 notebooks/

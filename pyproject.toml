@@ -31,8 +31,8 @@ calamari = [
 ]
 
 [dependency-groups]
-# Inference service API (separate container; contracts importable from annote)
-ml = [
+# Inference service API (separate container; contracts importable from nomicous)
+inference = [
     "fastapi>=0.115.0",
     "httpx>=0.28.0",
     "pillow>=12.2.0",
@@ -53,7 +53,7 @@ ml = [
     "xlsxwriter>=3.2.9",
     "calamari-ocr>=1.0.7",
 ]
-# Annote platform API + Postgres + tests (deps only — repo is not installed as a package)
+# Nomicous platform API + Postgres + tests (deps only — repo is not installed as a package)
 platform = [
     "alembic>=1.14.0",
     "asyncpg>=0.30.0",
@@ -97,23 +97,38 @@ url = "https://download.pytorch.org/whl/cpu"
 explicit = true
 
 [tool.poe.tasks]
-migrate = { shell = "cd ${ANNOTE_APP_ROOT:-annote} && alembic -c infrastructure/alembic.ini upgrade head" }
-serve = { shell = "cd ${ANNOTE_APP_ROOT:-annote} && uvicorn backend.core.main:app --host 0.0.0.0 --port 8000 --workers 1" }
+migrate = { shell = "cd ${NOMICOUS_APP_ROOT:-nomicous} && alembic -c infrastructure/alembic.ini upgrade head" }
+serve = { shell = "cd ${NOMICOUS_APP_ROOT:-nomicous} && uvicorn backend.core.main:app --host 0.0.0.0 --port 8000 --workers 1" }
 api = { sequence = ["migrate", "serve"] }
-ml-api = "uvicorn ml_service.api.main:app --host 0.0.0.0 --port 8001 --workers 1"
-ml-worker = "python -m ml_service.jobs.worker"
+inference-api = "uvicorn inference.api.main:app --host 0.0.0.0 --port 8001 --workers 1"
+inference-worker = "python -m inference.jobs.worker"
+test-fast = { shell = "uv run --group platform --group inference pytest tests/nomicous -m \"not integration and not ml\"" }
+test-integration = { shell = "uv run --group platform --group inference pytest tests/nomicous -m integration" }
+test-ml = { shell = "uv run --group platform --group inference pytest tests/nomicous -m ml" }
+test-inference = { shell = "uv run --group platform --group inference pytest tests/inference" }
 
 [tool.pytest.ini_options]
 addopts = ["--import-mode=importlib"]
-pythonpath = ["annote", "."]
+pythonpath = ["nomicous", "."]
 asyncio_mode = "auto"
-testpaths = ["annote/backend/tests/platform", "ml_service/tests"]
-markers = ["integration: requires Postgres"]
+testpaths = ["tests/nomicous", "tests/inference"]
+filterwarnings = [
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.:starlette.exceptions.StarletteDeprecationWarning",
+    "ignore:ml_dtypes\\.float8_e4m3b11 is deprecated.*:DeprecationWarning:tensorflow\\.python\\.framework\\.dtypes",
+    "ignore:`TorchVGSLModel\\.load_model` is deprecated.*:DeprecationWarning:kraken\\.lib\\.vgsl\\.model",
+    "ignore:You will not be able to run predict\\(\\) on this Core ML model.*:RuntimeWarning:coremltools\\.models\\.model",
+    "ignore:`blla\\.segment\\(\\)` is deprecated.*:DeprecationWarning:kraken\\.blla",
+    "ignore::UserWarning:tensorflow_addons\\.utils\\.tfa_eol_msg",
+]
+markers = [
+    "integration: requires Postgres",
+    "ml: runs real Kraken/Calamari weights (slow)",
+]
 
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-src = ["annote/backend", "ml_service"]
+src = ["nomicous/backend", "inference"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
