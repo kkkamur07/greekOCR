@@ -711,7 +711,7 @@ train = [
 ]
 
 [package.dev-dependencies]
-ml = [
+inference = [
     { name = "calamari-ocr" },
     { name = "edit-distance" },
     { name = "fastapi" },
@@ -780,7 +780,7 @@ requires-dist = [
 provides-extras = ["kraken", "train", "calamari"]
 
 [package.metadata.requires-dev]
-ml = [
+inference = [
     { name = "calamari-ocr", specifier = ">=1.0.7" },
     { name = "edit-distance", specifier = ">=1.0.7" },
     { name = "fastapi", specifier = ">=0.115.0" },

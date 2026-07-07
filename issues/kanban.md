@@ -53,5 +53,5 @@ _(empty)_
 
 ## Backlog
 
-- [ ] [future-fixes](future-fixes.md) — post-027 code review follow-ups (F1–F27)
+_(empty — post-027 follow-ups closed; use GitHub issues for new debt)_
 

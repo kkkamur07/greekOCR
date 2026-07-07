@@ -20,9 +20,9 @@ services:
   api:
     build:
       context: .
-      dockerfile: annote/Dockerfile
+      dockerfile: nomicous/Dockerfile
       args:
-        APP_VERSION: ${ANNOTE_VERSION:-0.3.3}
+        APP_VERSION: ${NOMICOUS_VERSION:-0.3.3}
     ports:
       - "8000:8000"
     environment:
@@ -32,19 +32,20 @@ services:
       JWT_SECRET: dev-secret-change-in-production
       CORS_ORIGINS: http://localhost:3000,http://localhost:5173
       MEDIA_ROOT: /app/backend/media
-      ANNOTE_APP_ROOT: /app
-      ML_SERVICE_URL: http://ml-api:8001
-      ML_WEBHOOK_SECRET: dev-ml-webhook-secret
+      NOMICOUS_APP_ROOT: /app
+      INFERENCE_URL: http://inference-api:8001
+      INFERENCE_WEBHOOK_SECRET: dev-inference-webhook-secret
       ANNOTATED_DATA_ROOT: /data/annotated/data
     volumes:
-      - ./annote/backend/media:/app/backend/media
-      - ./annote/backend:/app/backend
-      - ./annote/scripts:/app/scripts
+      - ./nomicous/backend/media:/app/backend/media
+      - ./nomicous/backend:/app/backend
+      - ./nomicous/scripts:/app/scripts
+      - ./inference:/app/inference
       - ./data:/data:ro
     depends_on:
       db:
         condition: service_healthy
-      ml-api:
+      inference-api:
         condition: service_healthy
     healthcheck:
       test:
@@ -60,30 +61,30 @@ services:
       start_period: 30s
     command: >
       sh -c "alembic -c infrastructure/alembic.ini upgrade head
-      && python scripts/seed_dev_annote.py
+      && python scripts/seed_dev_nomicous.py
       && uvicorn backend.core.main:app --host 0.0.0.0 --port 8000 --workers 1 --reload --reload-dir /app/backend"
     # Seed runs on API container start only (never restarts Postgres). If you wipe or
     # recreate the DB volume while the API keeps running, hit /health or restart api —
     # development health checks recreate the dev login user when it is missing.
 
-  ml-api:
+  inference-api:
     # Calamari runs on CPU here, but tensorflow-addons has no Linux ARM wheel.
     platform: linux/amd64
-    image: nomicous-ml:latest
+    image: nomicous-inference:latest
     build:
       context: .
-      dockerfile: ml_service/Dockerfile
+      dockerfile: inference/Dockerfile
     ports:
       - "8001:8001"
     environment:
       DATABASE_URL: postgresql://postgres:dev@db:5432/kalamos
-      ML_CALLBACK_URL: http://api:8000/internal/ml/job-complete
-      ML_REGISTRY_PATH: /app/ml_service/registry.yaml
-      ML_WEBHOOK_SECRET: dev-ml-webhook-secret
-      ML_WEIGHTS_CACHE_DIR: /app/ml_service/weights/cache
-      ML_CALAMARI_NUM_PROCESSES: "1"
+      INFERENCE_CALLBACK_URL: http://api:8000/internal/inference/job-complete
+      INFERENCE_REGISTRY_PATH: /app/inference/registry.yaml
+      INFERENCE_WEBHOOK_SECRET: dev-inference-webhook-secret
+      INFERENCE_WEIGHTS_CACHE_DIR: /app/inference/weights/cache
+      INFERENCE_CALAMARI_NUM_PROCESSES: "1"
     volumes:
-      - ./ml_service/weights:/app/ml_service/weights
+      - ./inference/weights:/app/inference/weights
     depends_on:
       db:
         condition: service_healthy
@@ -99,38 +100,38 @@ services:
       timeout: 3s
       retries: 12
       start_period: 5s
-    command: uvicorn ml_service.api.main:app --host 0.0.0.0 --port 8001 --workers 1
+    command: uvicorn inference.api.main:app --host 0.0.0.0 --port 8001 --workers 1
 
-  ml-worker:
+  inference-worker:
     # Calamari runs on CPU here, but tensorflow-addons has no Linux ARM wheel.
     platform: linux/amd64
-    image: nomicous-ml:latest
+    image: nomicous-inference:latest
     healthcheck:
       disable: true
     environment:
       DATABASE_URL: postgresql://postgres:dev@db:5432/kalamos
-      ML_CALLBACK_URL: http://api:8000/internal/ml/job-complete
-      ML_REGISTRY_PATH: /app/ml_service/registry.yaml
-      ML_WEBHOOK_SECRET: dev-ml-webhook-secret
-      ML_WEIGHTS_CACHE_DIR: /app/ml_service/weights/cache
-      ML_CALAMARI_NUM_PROCESSES: "1"
-      ML_WORKER_RUNNING_JOB_TIMEOUT_SECONDS: "1800"
+      INFERENCE_CALLBACK_URL: http://api:8000/internal/inference/job-complete
+      INFERENCE_REGISTRY_PATH: /app/inference/registry.yaml
+      INFERENCE_WEBHOOK_SECRET: dev-inference-webhook-secret
+      INFERENCE_WEIGHTS_CACHE_DIR: /app/inference/weights/cache
+      INFERENCE_CALAMARI_NUM_PROCESSES: "1"
+      INFERENCE_WORKER_RUNNING_JOB_TIMEOUT_SECONDS: "1800"
     volumes:
-      - ./ml_service/weights:/app/ml_service/weights
+      - ./inference/weights:/app/inference/weights
     depends_on:
       db:
         condition: service_healthy
       api:
         condition: service_healthy
-    command: python -m ml_service.jobs.worker
+    command: python -m inference.jobs.worker
 
   frontend:
     build:
-      context: ./annote
+      context: ./nomicous
       dockerfile: frontend/Dockerfile
       target: dev
       args:
-        APP_VERSION: ${ANNOTE_VERSION:-0.3.3}
+        APP_VERSION: ${NOMICOUS_VERSION:-0.3.3}
         VITE_API_BASE_URL: http://localhost:8000
     ports:
       - "5173:5173"
@@ -139,7 +140,7 @@ services:
       VITE_DEV_PROXY_TARGET: http://api:8000
     command: sh -c "rm -rf node_modules/.vite && npm run dev -- --host 0.0.0.0 --force"
     volumes:
-      - ./annote/frontend:/app
+      - ./nomicous/frontend:/app
       - frontend_node_modules:/app/node_modules
     depends_on:
       - api

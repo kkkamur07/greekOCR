@@ -16,5 +16,5 @@
 agent-transcripts
 issues
 _support_repo
-annote/backend/media
-ml_service/weights
+nomicous/backend/media
+inference/weights
