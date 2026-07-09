@@ -100,6 +100,7 @@ Config: [`nomicous/frontend/vercel.json`](../nomicous/frontend/vercel.json).
 | Root Directory | `deploy/platform` |
 | Install Command | *(empty / default)* |
 | Build Command | `bash build.sh` |
+| Output Directory | `.` |
 | Domain | `api.nomicous.com` |
 
 Environment variables: copy from [`nomicous/backend/core/.env.production.example`](../nomicous/backend/core/.env.production.example).
