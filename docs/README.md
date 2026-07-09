@@ -23,6 +23,7 @@ Hosted environments and infrastructure.
 |-----|--------|
 | [deployment/supabase.md](deployment/supabase.md) | Supabase Postgres + Storage — env vars, migrations, Docker override |
 | [deployment/production.md](deployment/production.md) | Production layout: Vercel (landing, app, API) + inference workers |
+| [deployment/vercel-platform-api.md](deployment/vercel-platform-api.md) | Vercel platform API settings, Python runtime, bundle trimming |
 | [deployment/docker-build-optimization.md](deployment/docker-build-optimization.md) | Image sizes, multi-stage builds, `.dockerignore` |
 
 Related deploy configs (not under `docs/`):

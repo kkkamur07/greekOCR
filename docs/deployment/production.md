@@ -119,6 +119,8 @@ Environment variables: copy from [`nomicous/backend/core/.env.production.example
 Job progress in the browser falls back to **HTTP polling** when SSE is unavailable (already implemented in the frontend).
 
 Config: [`deploy/platform/vercel.json`](../../deploy/platform/vercel.json).
+Vercel-specific Python runtime, bundle-size, and dependency notes:
+[`vercel-platform-api.md`](vercel-platform-api.md).
 
 ---
 
