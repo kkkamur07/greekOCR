@@ -5,9 +5,6 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 DEST="$(cd "$(dirname "$0")" && pwd)"
 
-cd "$ROOT"
-uv export --only-group platform-prod --no-hashes -o "$DEST/requirements.txt"
-
 rm -rf "$DEST/nomicous" "$DEST/inference"
 mkdir -p "$DEST/nomicous" "$DEST/inference"
 

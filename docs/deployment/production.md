@@ -98,7 +98,7 @@ Config: [`nomicous/frontend/vercel.json`](../nomicous/frontend/vercel.json).
 | Setting | Value |
 |---------|-------|
 | Root Directory | `deploy/platform` |
-| Install Command | `pip install -r requirements.txt` |
+| Install Command | `bash install.sh` |
 | Build Command | `bash build.sh` |
 | Domain | `api.nomicous.com` |
 
