@@ -42,6 +42,7 @@ class HelperSettings(BaseSettings):
     hf_cache_root: Path = Field(default=DEFAULT_HF_CACHE_ROOT, alias="HF_CACHE_ROOT")
     helper_cors_origins: list[str] = Field(
         default_factory=lambda: [
+            "https://app.nomicous.com",
             "http://localhost:5173",
             "http://127.0.0.1:5173",
             "http://localhost:8000",
