@@ -2,7 +2,7 @@
 param(
   [string]$CorsOrigin = "https://app.nomicous.example",
   [string]$RegistryUrl = "https://api.nomicous.example/inference/v1/registry",
-  # Authenticode signing (all optional — omit for an unsigned build).
+  # Authenticode signing (all optional - omit for an unsigned build).
   [string]$SigningThumbprint = $env:WINDOWS_SIGNING_THUMBPRINT,   # cert in the local store
   [string]$SigningCertPath = $env:WINDOWS_SIGNING_CERT,           # or path to a .pfx
   [string]$SigningCertPassword = $env:WINDOWS_SIGNING_CERT_PASSWORD,
@@ -29,7 +29,7 @@ function Resolve-SignTool {
 
 function Invoke-AuthenticodeSign([string[]]$Paths) {
   if (-not $SigningThumbprint -and -not $SigningCertPath) {
-    Write-Warning "No signing cert provided (WINDOWS_SIGNING_THUMBPRINT / WINDOWS_SIGNING_CERT) — building UNSIGNED. SmartScreen will warn on install."
+    Write-Warning "No signing cert provided (WINDOWS_SIGNING_THUMBPRINT / WINDOWS_SIGNING_CERT) - building UNSIGNED. SmartScreen will warn on install."
     return
   }
   $signtool = Resolve-SignTool
