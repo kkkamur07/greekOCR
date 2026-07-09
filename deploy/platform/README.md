@@ -9,7 +9,7 @@ Vercel's **Root Directory** for the `nomicous-api` project. At build time `build
 | Path | Purpose |
 |------|---------|
 | `api/index.py` | ASGI entrypoint (`app` export) |
-| `install.sh` | Export `requirements.txt` + install deps for Vercel Python 3.12 |
+| `requirements.txt` | Platform API runtime dependencies |
 | `build.sh` | Bundle backend sources into this tree |
 | `vercel.json` | Rewrites, 60s function timeout |
 
@@ -27,7 +27,7 @@ PYTHONPATH=".:nomicous" python -c "from api.index import app; print(app.title)"
 |---------|-------|
 | Root Directory | `deploy/platform` |
 | Framework | Other |
-| Install Command | `bash install.sh` |
+| Install Command | *(empty / default)* |
 | Build Command | `bash build.sh` |
 | Domain | `api.nomicous.com` |
 
