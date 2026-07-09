@@ -1,0 +1,87 @@
+name: Release Inference Helper
+
+# Builds the native Inference Helper installers on each OS's own runner
+# (PyInstaller cannot cross-compile) and uploads the artifacts to the
+# matching GitHub Release. Trigger by pushing a tag `inference-helper-v*`
+# or manually via "Run workflow" against an existing tag.
+
+on:
+  push:
+    tags:
+      - "inference-helper-v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to attach artifacts to (e.g. inference-helper-v0.1.0)"
+        required: true
+        type: string
+      cors_origin:
+        description: "HELPER_CORS_ORIGINS baked into the build (production SPA origin)"
+        required: false
+        default: "https://app.nomicous.example"
+        type: string
+      registry_url:
+        description: "HELPER_REGISTRY_URL baked into the build"
+        required: false
+        default: "https://api.nomicous.example/inference/v1/registry"
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-helper-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            artifact: nomicous-inference-helper-macos.dmg
+            build: bash packaging/helper/macos/build-dmg.sh
+          - os: ubuntu-latest
+            artifact: nomicous-inference-helper-linux.tar.gz
+            build: bash packaging/helper/linux/build-tarball.sh
+          - os: windows-latest
+            artifact: nomicous-inference-helper-windows.zip
+            build: powershell -ExecutionPolicy Bypass -File packaging/helper/windows/build-installer.ps1 -CorsOrigin "$env:HELPER_CORS_ORIGINS" -RegistryUrl "$env:HELPER_REGISTRY_URL"
+    runs-on: ${{ matrix.os }}
+    env:
+      HELPER_CORS_ORIGINS: ${{ inputs.cors_origin || 'https://app.nomicous.example' }}
+      HELPER_REGISTRY_URL: ${{ inputs.registry_url || 'https://api.nomicous.example/inference/v1/registry' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build installer
+        shell: bash
+        run: ${{ matrix.build }}
+
+      - name: Verify artifact exists
+        shell: bash
+        run: |
+          test -f "packaging/helper/dist/${{ matrix.artifact }}" \
+            || { echo "Missing packaging/helper/dist/${{ matrix.artifact }}"; ls -la packaging/helper/dist || true; exit 1; }
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: packaging/helper/dist/${{ matrix.artifact }}
+          if-no-files-found: error
+
+      - name: Attach to release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          gh release upload "$RELEASE_TAG" \
+            "packaging/helper/dist/${{ matrix.artifact }}" --clobber
