@@ -245,10 +245,13 @@ class LayoutServiceMixin(DocumentServiceSharedMixin):
                 session.add(line)
 
             points = data["points"]
-            block_id = data.get("block_id")
-            if block_id is not None:
-                await self._block_or_404(session, part.id, block_id)
-            line.block_id = block_id
+            if "block_id" in data:
+                block_id = data["block_id"]
+                if block_id is not None:
+                    await self._block_or_404(session, part.id, block_id)
+                line.block_id = block_id
+            elif prior is not None:
+                line.block_id = prior.block_id
             line.order = data["order"]
             line.kind = data["kind"]
             line.points = points
@@ -260,8 +263,14 @@ class LayoutServiceMixin(DocumentServiceSharedMixin):
                 existing_mask=prior.mask if prior is not None else None,
             )
             line.source = data["source"]
-            line.source_metadata = data.get("source_metadata")
-            line.kraken_ceiling = data.get("kraken_ceiling")
+            if "source_metadata" in data:
+                line.source_metadata = data["source_metadata"]
+            elif prior is not None:
+                line.source_metadata = prior.source_metadata
+            if "kraken_ceiling" in data:
+                line.kraken_ceiling = data["kraken_ceiling"]
+            elif prior is not None:
+                line.kraken_ceiling = prior.kraken_ceiling
             source_value = (
                 data["source"].value if hasattr(data["source"], "value") else data["source"]
             )

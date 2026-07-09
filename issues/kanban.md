@@ -1,12 +1,11 @@
 # Kanban
 
-> Regenerated 2026-06-16
+> Regenerated 2026-07-09
 
-**WIP limits:** In progress <= **4** | Review <= **5** | Parallel AFK lanes without approval <= **2**
+**WIP limits:** In progress <= **4** | Review <= **5** | Parallel AFK lanes <= **2**
 
 ## Ready (AFK)
 
-_(empty)_
 
 ## Ready (HITL)
 
@@ -14,11 +13,14 @@ _(empty)_
 
 ## In progress
 
-_(empty)_
 
 ## Review
 
-_(empty)_
+
+## Backlog
+
+- [ ] [ml-callback-replay-sweeper](029-ml-callback-replay-sweeper.md)
+- [ ] [hf-dataset-staging-publish](034-hf-dataset-staging-publish.md)
 
 ## Done
 
@@ -50,8 +52,9 @@ _(empty)_
 - [x] [export-approved-line-artifacts](done/025-export-approved-line-artifacts.md)
 - [x] [transcription-pdf-artifact](done/026-transcription-pdf-artifact.md)
 - [x] [remove-root-app-duplicates](done/027-remove-root-app-duplicates.md)
-
-## Backlog
-
-_(empty — post-027 follow-ups closed; use GitHub issues for new debt)_
-
+- [x] [hf-uri-resolve-and-cache](done/030-hf-uri-resolve-and-cache.md)
+- [x] [hf-local-bundled-offline-path](done/031-hf-local-bundled-offline-path.md)
+- [x] [hf-remote-transcribe-tracer](done/032-hf-remote-transcribe-tracer.md)
+- [x] [hf-publish-model-from-staging](done/033-hf-publish-model-from-staging.md)
+- [x] [hf-collection-sync](done/035-hf-collection-sync.md)
+- [x] [hf-registry-id-migration](done/036-hf-registry-id-migration.md)

@@ -5,6 +5,7 @@ type PublicPartTabsProps = {
   activeId: string | null;
   onChange: (id: string) => void;
   maxVisible?: number;
+  variant?: 'default' | 'workspace';
 };
 
 export function PublicPartTabs({
@@ -12,6 +13,7 @@ export function PublicPartTabs({
   activeId,
   onChange,
   maxVisible = 6,
+  variant = 'default',
 }: PublicPartTabsProps) {
   const tabsRef = useRef<(HTMLButtonElement | null)[]>([]);
 
@@ -41,8 +43,11 @@ export function PublicPartTabs({
 
   if (parts.length === 0) return null;
 
+  const wrapClass =
+    variant === 'workspace' ? 'pub-workspace__tabs' : 'pub-tabs-wrap';
+
   return (
-    <div className="pub-tabs-wrap">
+    <div className={wrapClass}>
       <div className="tabs" role="tablist" aria-label="Document parts">
         {visible.map((part, index) => {
           const selected = part.id === activeId;

@@ -74,7 +74,8 @@ def execute_inference_job(job) -> None:
         output = run_job(job)
     except Exception as exc:
         logger.exception("inference job %s failed", job.id, exc_info=exc)
-        finalize_job(job, status=InferenceJobStatus.failed, error="Inference job failed")
+        error_message = str(exc).strip() or "Inference job failed"
+        finalize_job(job, status=InferenceJobStatus.failed, error=error_message)
         return
 
     finalize_job(job, status=InferenceJobStatus.done, output=output)

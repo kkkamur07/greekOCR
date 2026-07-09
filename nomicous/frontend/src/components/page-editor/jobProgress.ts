@@ -2,6 +2,9 @@ import type { JobResponse, JobStatus } from '../../api/client';
 
 export type PageEditorJobKind = 'segmentation' | 'transcription-page' | 'transcription-segment';
 
+/** Kraken segment on large pages can exceed the default 120s job wait. */
+export const SEGMENT_JOB_TIMEOUT_MS = 200_000;
+
 export function jobStatusLabel(job: JobResponse): string {
   if (job.status === 'pending') return 'Queued';
   if (job.status === 'running') return 'Starting…';

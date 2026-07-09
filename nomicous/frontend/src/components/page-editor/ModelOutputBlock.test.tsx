@@ -36,7 +36,7 @@ describe('ModelOutputBlock', () => {
   it('shows a placeholder when no transcription is available', () => {
     render(<ModelOutputBlock segmentNumber={1} transcription={null} />);
 
-    expect(screen.getByText('No OCR yet — run OCR on this segment.')).toBeTruthy();
+    expect(screen.getByText('No OCR yet. Run OCR on this segment.')).toBeTruthy();
   });
 
   it('shows guidance when OCR ran but returned empty text', () => {

@@ -92,9 +92,9 @@ demo files; fix or scope those separately when touching that surface.
 Backend routes are the source of truth. When FastAPI schemas or routes change:
 
 ```bash
-cd nomicous
-PYTHONPATH=. python scripts/export_openapi.py
-cd frontend
+# from repository root
+python scripts/platform/export_openapi.py
+cd nomicous/frontend
 npm run codegen:api
 npm run typecheck:api
 ```
@@ -135,7 +135,9 @@ queries that describe user-visible behavior rather than component internals.
 - Marking the Page reviewed/unreviewed independently from Pairing progress.
 - Working with Transcription layers: Ground truth is editable; model layers are read-only and copyable into Ground truth.
 - Triggering Export/PDF artifact behavior when exposed by the active branch.
-- Polling jobs through `JobsNotice` and the page editor job queue (`jobPolling.ts`: 250 ms blocking wait, 1.5 s background notice). Target: SSE per [`docs/decisions/001-platform-job-status-push.md`](../../docs/decisions/001-platform-job-status-push.md).
+- Tracking background jobs via SSE (`GET /jobs/{id}/events`) with poll fallback
+  (`jobPolling.ts`, `useJobPolling`, `BackgroundJobsProvider`). See backend
+  **Job status notifications** in [`backend/README.md`](../backend/README.md).
 
 Domain language follows `nomicous/CONTEXT.md`: Page, Document part, Segment, Text
 line, Page transcription, Line transcription, Pairing, Human review, Export,

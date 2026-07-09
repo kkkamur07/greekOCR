@@ -73,7 +73,12 @@ def run_model(
     )
 
     version = entry.versions[registry_tag]
-    weights_path = resolve_weights_source(version.weights_source)
+    weights_path = resolve_weights_source(
+        version.weights_source,
+        registry_model_id=registry_model_id,
+        registry_tag=registry_tag,
+        architecture=entry.architecture.value,
+    )
 
     if task == InferenceTask.segment:
         if entry.architecture == RegistryArchitecture.kraken_segment:

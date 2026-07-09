@@ -1,12 +1,14 @@
 import { useNavigate } from 'react-router-dom';
-import type { DocumentPartResponse } from '../../api/client';
+import type { DocumentPartResponse, DocumentWithPartsResponse } from '../../api/client';
 import { ReviewBadge } from '../WorkflowBadge';
 import { AuthenticatedImage } from '../AuthenticatedImage';
+import type { PageEditorLocationState } from '../../pages/pageEditorNavigation';
 
 type PartListProps = {
   parts: DocumentPartResponse[];
   projectId: string;
   documentId: string;
+  document?: DocumentWithPartsResponse | null;
   loading?: boolean;
   onMoveUp?: (index: number) => void;
   onMoveDown?: (index: number) => void;
@@ -20,6 +22,7 @@ export function PartList({
   parts,
   projectId,
   documentId,
+  document = null,
   loading = false,
   onMoveUp,
   onMoveDown,
@@ -42,6 +45,7 @@ export function PartList({
           total={parts.length}
           projectId={projectId}
           documentId={documentId}
+          document={document}
           onMoveUp={onMoveUp ? () => onMoveUp(index) : undefined}
           onMoveDown={onMoveDown ? () => onMoveDown(index) : undefined}
           onDelete={onDelete ? () => onDelete(part.id) : undefined}
@@ -62,6 +66,7 @@ type PartRowProps = {
   total: number;
   projectId: string;
   documentId: string;
+  document?: DocumentWithPartsResponse | null;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
   onDelete?: () => void;
@@ -76,6 +81,7 @@ function PartRow({
   total,
   projectId,
   documentId,
+  document = null,
   onMoveUp,
   onMoveDown,
   onDelete,
@@ -89,7 +95,8 @@ function PartRow({
   const editorPath = `/projects/${projectId}/documents/${documentId}/parts/${part.id}`;
 
   const openEditor = () => {
-    void navigate(editorPath);
+    const state: PageEditorLocationState | undefined = document ? { document } : undefined;
+    void navigate(editorPath, { state });
   };
 
   const onRowKeyDown = (event: React.KeyboardEvent) => {

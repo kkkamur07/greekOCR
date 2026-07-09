@@ -20,7 +20,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 COPY nomicous/backend /app/backend
 COPY nomicous/infrastructure /app/infrastructure
-COPY nomicous/scripts /app/scripts
+COPY scripts/platform /app/scripts/platform
 COPY inference /app/inference
 
 ENV PATH="/app/.venv/bin:${PATH}" \

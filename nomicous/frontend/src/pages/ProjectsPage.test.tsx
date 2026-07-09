@@ -3,7 +3,20 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '../api/client';
+import { ApiError } from '../api/errors';
+import * as session from '../auth/session';
 import { ProjectsPage } from './ProjectsPage';
+
+const navigateMock = vi.fn();
+
+vi.mock('react-router-dom', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('react-router-dom')>();
+  return {
+    ...actual,
+    useNavigate: () => navigateMock,
+    useLocation: () => ({ pathname: '/projects', search: '', hash: '' }),
+  };
+});
 
 vi.mock('../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/client')>();
@@ -22,6 +35,8 @@ vi.mock('../api/client', async (importOriginal) => {
 describe('ProjectsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(session, 'hasAccessToken').mockReturnValue(true);
+    vi.spyOn(session, 'navigateToLogin').mockImplementation(() => {});
     vi.mocked(api.me).mockResolvedValue({
       id: 'user-1',
       email: 'dev@example.com',
@@ -60,4 +75,33 @@ describe('ProjectsPage', () => {
     });
   });
 
+  it('redirects to login when the session is unauthorized', async () => {
+    vi.mocked(api.me).mockRejectedValue(new ApiError('Unauthorized', 401));
+
+    render(
+      <MemoryRouter>
+        <ProjectsPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(session.navigateToLogin).toHaveBeenCalled();
+    });
+    expect(screen.queryByText('Projects unavailable')).toBeNull();
+  });
+
+  it('redirects to login when no access token is present', async () => {
+    vi.spyOn(session, 'hasAccessToken').mockReturnValue(false);
+
+    render(
+      <MemoryRouter>
+        <ProjectsPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(session.navigateToLogin).toHaveBeenCalled();
+    });
+    expect(api.me).not.toHaveBeenCalled();
+  });
 });

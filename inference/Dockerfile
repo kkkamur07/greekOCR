@@ -18,7 +18,7 @@ COPY --from=builder /app/.venv /app/.venv
 COPY pyproject.toml /app/pyproject.toml
 
 COPY inference /app/inference
-COPY src/model/calamari /app/_support_repo/calamari
+COPY src/hf /app/src/hf
 
 ENV PATH="/app/.venv/bin:${PATH}" \
     PYTHONPATH=/app

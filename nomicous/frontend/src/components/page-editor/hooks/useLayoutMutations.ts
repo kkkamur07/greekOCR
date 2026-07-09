@@ -5,14 +5,12 @@ import {
   type LayoutLineResponse,
   type LinePoint,
   type LineResponse,
-  type LineUpsertRequest,
-  type LinesReplaceRequest,
   type PartLayoutResponse,
 } from '../../../api/client';
 import { ApiError } from '../../../api/errors';
 import { cleanPolygonPoints, offsetGeometry } from '../canvasGeometry';
-import type { PageEditorJobKind } from '../jobProgress';
-import { upsertLineRequest, applyLayoutLineGeometryToSegments, syncLayoutLinesFromSegments } from './utils';
+import { SEGMENT_JOB_TIMEOUT_MS, type PageEditorJobKind } from '../jobProgress';
+import { applyLayoutLineGeometryToSegments, mergeSavedLine, syncLayoutLinesFromSegments } from './utils';
 
 function layoutMutationMessage(error: unknown): string {
   if (error instanceof ApiError && error.status === 403) {
@@ -44,6 +42,7 @@ type LayoutMutationsInput = {
   trackJobAndWait: (
     jobId: string,
     meta: { label: string; kind: PageEditorJobKind },
+    options?: { timeoutMs?: number },
   ) => Promise<JobResponse>;
 };
 
@@ -182,20 +181,15 @@ export function useLayoutMutations({
 
   async function replaceWithManualLine(kind: 'rectangle' | 'polygon', points: LinePoint[]) {
     if (!projectId || !documentId || !partId) return;
-    const existing = sortedLines.map<LineUpsertRequest>(upsertLineRequest);
-    const newLine: LineUpsertRequest = {
-      order: existing.length,
-      kind,
-      points,
-      source: 'manual',
-    };
-    const body: LinesReplaceRequest = {
-      lines: [...existing, newLine],
-    };
     try {
-      const saved = await api.replacePartLines(projectId, documentId, partId, body);
-      setLines(saved);
-      setLayout((current) => syncLayoutLinesFromSegments(current, saved));
+      const saved = await api.createPartLine(projectId, documentId, partId, {
+        order: sortedLines.length,
+        kind,
+        points,
+      });
+      const nextLines = mergeSavedLine(lines, saved);
+      setLines(nextLines);
+      setLayout((current) => syncLayoutLinesFromSegments(current, nextLines));
       setLineError(null);
       onDrawComplete();
     } catch (err) {
@@ -217,14 +211,12 @@ export function useLayoutMutations({
     setLines(optimisticLines);
     setLayout((current) => syncLayoutLinesFromSegments(current, optimisticLines));
     try {
-      const updatedLines = [...optimisticLines]
-        .sort((a, b) => a.order - b.order)
-        .map<LineUpsertRequest>((line, order) => upsertLineRequest(line, order));
-      const saved = await api.replacePartLines(projectId, documentId, partId, {
-        lines: updatedLines,
+      const saved = await api.patchPartLine(projectId, documentId, partId, segmentId, {
+        points: cleanedPoints,
       });
-      setLines(saved);
-      setLayout((current) => syncLayoutLinesFromSegments(current, saved));
+      const nextLines = mergeSavedLine(optimisticLines, saved);
+      setLines(nextLines);
+      setLayout((current) => syncLayoutLinesFromSegments(current, nextLines));
       setLineError(null);
     } catch (err) {
       setLines(previousLines);
@@ -235,39 +227,40 @@ export function useLayoutMutations({
 
   async function moveSelectedSegmentRight() {
     if (!projectId || !documentId || !partId || !selectedSegmentId) return;
-    const updatedLines = [...lines]
-      .sort((a, b) => a.order - b.order)
-      .map<LineUpsertRequest>((line, order) => ({
-        ...upsertLineRequest(line, order),
-        points:
-          line.id === selectedSegmentId
-            ? line.points.map(([x, y]) => [x + 5, y])
-            : line.points,
-      }));
-    const saved = await api.replacePartLines(projectId, documentId, partId, {
-      lines: updatedLines,
+    const selectedLine = lines.find((line) => line.id === selectedSegmentId);
+    if (!selectedLine) return;
+    const nextPoints = selectedLine.points.map(([x, y]) => [x + 5, y] as LinePoint);
+    const saved = await api.patchPartLine(projectId, documentId, partId, selectedSegmentId, {
+      points: nextPoints,
     });
-    setLines(
-      saved ??
-        lines.map((line) =>
-          line.id === selectedSegmentId
-            ? { ...line, points: line.points.map(([x, y]) => [x + 5, y]) }
-            : line,
-        ),
-    );
+    const nextLines = mergeSavedLine(lines, saved);
+    setLines(nextLines);
+    setLayout((current) => syncLayoutLinesFromSegments(current, nextLines));
   }
 
   async function deleteSelectedSegment() {
     if (!projectId || !documentId || !partId || !selectedSegmentId) return;
-    const remainingLines = [...lines]
-      .sort((a, b) => a.order - b.order)
-      .filter((line) => line.id !== selectedSegmentId)
-      .map<LineUpsertRequest>(upsertLineRequest);
-    const saved = await api.replacePartLines(projectId, documentId, partId, {
-      lines: remainingLines,
-    });
-    setLines(saved ?? lines.filter((line) => line.id !== selectedSegmentId));
+    const deletedId = selectedSegmentId;
+    const previousLines = lines;
+    const previousLayout = layout;
+    const optimisticLines = lines.filter((line) => line.id !== deletedId);
+    setLines(optimisticLines);
+    setLayout((current) => ({
+      ...current,
+      lines: current.lines.filter((line) => line.id !== deletedId),
+    }));
     setSelectedSegmentId(null);
+    try {
+      await api.deletePartLine(projectId, documentId, partId, deletedId);
+      setLineError(null);
+      const pairing = await api.getPagePairing(projectId, documentId, partId);
+      setTextLines(pairing.text_lines);
+      setPairingProgress(pairing.pairing_progress);
+    } catch (err) {
+      setLines(previousLines);
+      setLayout(previousLayout);
+      setLineError(layoutMutationMessage(err));
+    }
   }
 
   async function runAutoSegment() {
@@ -288,10 +281,14 @@ export function useLayoutMutations({
         use_otsu_refinement: useOtsuRefinement,
         otsu_sphere_radius: otsuSphereRadius,
       });
-      await trackJobAndWait(enqueued.job_id, {
-        label: 'Kraken line segmentation',
-        kind: 'segmentation',
-      });
+      await trackJobAndWait(
+        enqueued.job_id,
+        {
+          label: 'Kraken line segmentation',
+          kind: 'segmentation',
+        },
+        { timeoutMs: SEGMENT_JOB_TIMEOUT_MS },
+      );
       const [reloadedLines, reloadedLayout, pairing] = await Promise.all([
         api.listPartLines(projectId, documentId, partId),
         api.getPartLayout(projectId, documentId, partId),

@@ -52,7 +52,7 @@ def _submit_segment(product_job_id=None) -> InferenceJob:
     return create_job(
         JobSubmitRequest(
             task=InferenceTask.segment,
-            registry_model_id="kraken-blla",
+            registry_model_id="greek-kraken-segment-v1",
             product_job_id=product_job_id or uuid4(),
             image_bytes=segment_page_bytes(),
         )
@@ -64,7 +64,7 @@ def _submit_transcribe(product_job_id=None) -> InferenceJob:
     return create_job(
         JobSubmitRequest(
             task=InferenceTask.transcribe,
-            registry_model_id="syriac-calamariv1",
+            registry_model_id="syriac-calamari-v1",
             product_job_id=product_job_id or uuid4(),
             image_bytes=transcribe_line_bytes(),
             params={"lines": [{"line_index": 0}]},

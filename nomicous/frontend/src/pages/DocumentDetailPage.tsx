@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { toast } from '../components/ui/toast';
 import { api, type DocumentWithPartsResponse } from '../api/client';
 import { ApiError } from '../api/errors';
+import { hasAccessToken, isUnauthorized, navigateToLogin } from '../auth/session';
 import { JobsNotice } from '../components/document/JobsNotice';
 import { PartList } from '../components/document/PartList';
 import { UploadZone } from '../components/document/UploadZone';
@@ -22,6 +23,8 @@ function formatUpdated(iso: string): string {
 }
 
 export function DocumentDetailPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const { projectId, documentId } = useParams<{ projectId: string; documentId: string }>();
   const [document, setDocument] = useState<DocumentWithPartsResponse | null>(null);
   const [projectName, setProjectName] = useState<string | null>(null);
@@ -35,6 +38,10 @@ export function DocumentDetailPage() {
 
   const load = useCallback(async () => {
     if (!projectId || !documentId) return;
+    if (!hasAccessToken()) {
+      navigateToLogin(navigate, location);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -47,6 +54,10 @@ export function DocumentDetailPage() {
       setProjectName(proj.name);
       setDocument(doc);
     } catch (err) {
+      if (isUnauthorized(err)) {
+        navigateToLogin(navigate, location);
+        return;
+      }
       const msg = err instanceof ApiError ? err.message : 'Failed to load document';
       setDocument(null);
       setError(
@@ -58,7 +69,7 @@ export function DocumentDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [projectId, documentId]);
+  }, [projectId, documentId, location, navigate]);
 
   useEffect(() => {
     void load();
@@ -198,6 +209,7 @@ export function DocumentDetailPage() {
             parts={parts}
             projectId={projectId!}
             documentId={documentId!}
+            document={document}
             loading={loading}
             onMoveUp={(i) => movePart(i, -1)}
             onMoveDown={(i) => movePart(i, 1)}

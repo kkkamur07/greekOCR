@@ -3,7 +3,9 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { ConfigProvider } from 'antd';
 import App from './App.tsx';
+import { BackgroundJobsPanel } from './components/BackgroundJobsPanel.tsx';
 import { ToastProvider } from './components/ui/ToastProvider.tsx';
+import { BackgroundJobsProvider } from './context/BackgroundJobsContext.tsx';
 import './index.css';
 import './styles/nomicous.css';
 
@@ -30,7 +32,10 @@ createRoot(document.getElementById('root')!).render(
     >
       <BrowserRouter>
         <ToastProvider>
-          <App />
+          <BackgroundJobsProvider>
+            <App />
+            <BackgroundJobsPanel />
+          </BackgroundJobsProvider>
         </ToastProvider>
       </BrowserRouter>
     </ConfigProvider>

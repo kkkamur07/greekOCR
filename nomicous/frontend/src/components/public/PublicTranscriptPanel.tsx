@@ -8,6 +8,12 @@ type PublicTranscriptPanelProps = {
   onSelectLine: (index: number | null) => void;
 };
 
+function previewText(text: string, max = 72): string {
+  const trimmed = text.trim();
+  if (trimmed.length <= max) return trimmed;
+  return `${trimmed.slice(0, max - 1)}…`;
+}
+
 export function PublicTranscriptPanel({
   partId,
   layout,
@@ -19,41 +25,55 @@ export function PublicTranscriptPanel({
     selectedLineIndex !== null && selectedLineIndex >= 0
       ? (partLines[selectedLineIndex] ?? null)
       : null;
+  const selectedText = selectedLine ? lineTextForLayer(selectedLine, null) : null;
 
   return (
     <aside className="pub-transcript" aria-labelledby="transcript-heading">
-      <h2 className="pub-transcript__heading" id="transcript-heading">
-        {selectedLine ? `Line ${selectedLine.order + 1}` : 'Transcription'}
-      </h2>
+      <header className="pub-transcript__head">
+        <h2 className="pub-transcript__heading" id="transcript-heading">
+          Transcription
+        </h2>
+        <span className="pub-transcript__count">
+          {partLines.length} line{partLines.length === 1 ? '' : 's'}
+        </span>
+      </header>
+
+      {selectedLine && (
+        <div className="pub-transcript__focus" aria-live="polite">
+          <span className="pub-transcript__focus-label">Line {selectedLine.order + 1}</span>
+          <p className="pub-transcript__focus-text">
+            {selectedText ?? (
+              <span className="text-block__empty">No transcription for this line</span>
+            )}
+          </p>
+        </div>
+      )}
 
       {partLines.length === 0 ? (
-        <p className="text-sm text-muted">No line geometry on this page yet.</p>
+        <p className="pub-transcript__empty">No line geometry on this page yet.</p>
       ) : (
-        <div className="pub-line-list" role="list" aria-label="Page transcription lines">
+        <ol className="pub-line-index" aria-label="Page transcription lines">
           {partLines.map((line, index) => {
             const text = lineTextForLayer(line, null);
             const selected = selectedLineIndex === index;
             return (
-              <button
-                key={line.id}
-                type="button"
-                role="listitem"
-                className={`text-block text-block--interactive${selected ? ' text-block--selected' : ''}`}
-                aria-pressed={selected}
-                onClick={() => onSelectLine(selected ? null : index)}
-              >
-                {text ?? (
-                  <span className="text-block__empty">No transcription for this line</span>
-                )}
-              </button>
+              <li key={line.id}>
+                <button
+                  type="button"
+                  className={`pub-line-index__item${selected ? ' pub-line-index__item--selected' : ''}`}
+                  aria-pressed={selected}
+                  onClick={() => onSelectLine(selected ? null : index)}
+                >
+                  <span className="pub-line-index__num">{line.order + 1}</span>
+                  <span className="pub-line-index__text">
+                    {text ? previewText(text) : '-'}
+                  </span>
+                </button>
+              </li>
             );
           })}
-        </div>
+        </ol>
       )}
-
-      <p className="pub-transcript__hint">
-        {partLines.length} line{partLines.length === 1 ? '' : 's'} on this page
-      </p>
     </aside>
   );
 }

@@ -73,7 +73,7 @@ export function DocumentsTable({
                   <span className="row-title">{doc.name}</span>
                   <span className="row-sub">{doc.id.slice(0, 8)}</span>
                 </td>
-                <td>
+                <td className="col-status">
                   <WorkflowBadge workflow={doc.workflow} />
                 </td>
                 <td className="col-muted">{doc.part_count}</td>

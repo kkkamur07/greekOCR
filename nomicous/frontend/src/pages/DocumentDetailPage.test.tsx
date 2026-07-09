@@ -197,7 +197,7 @@ describe('DocumentDetailPage', () => {
 
     renderDocumentPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: /grec 1360 — click to edit/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /grec 1360, click to edit/i }));
     fireEvent.click(screen.getByRole('button', { name: /publish live page/i }));
 
     await waitFor(() => {
@@ -221,7 +221,7 @@ describe('DocumentDetailPage', () => {
 
     renderDocumentPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: /grec 1360 — click to edit/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /grec 1360, click to edit/i }));
     fireEvent.change(screen.getByLabelText('Name'), {
       target: { value: 'MS Or. 1445 — Genesis' },
     });

@@ -280,8 +280,7 @@ curl -s http://localhost:8000/health | python -m json.tool
 Create a dev user (default login: `dev@example.com` / `dev-pass-123`):
 
 ```bash
-cd nomicous
-PYTHONPATH=. python scripts/seed_dev_user.py
+python scripts/platform/seed_dev_user.py
 ```
 
 Use `dev@example.com`, not `*.local` addresses — the API rejects reserved TLDs such as `.local`.
@@ -289,7 +288,7 @@ Use `dev@example.com`, not `*.local` addresses — the API rejects reserved TLDs
 Seed ML catalog defaults:
 
 ```bash
-PYTHONPATH=. python scripts/seed_dev_inference.py
+python scripts/platform/seed_dev_inference.py
 ```
 
 Import the legacy on-disk annotated corpus into the dev user (from
@@ -297,19 +296,19 @@ Import the legacy on-disk annotated corpus into the dev user (from
 and restorable history snapshots from `annotations/history/`:
 
 ```bash
-PYTHONPATH=. python scripts/seed_dev_annotated_data.py
+python scripts/platform/seed_dev_annotated_data.py
 ```
 
 Re-import when documents already exist:
 
 ```bash
-PYTHONPATH=. python scripts/seed_dev_annotated_data.py --force
+python scripts/platform/seed_dev_annotated_data.py --force
 ```
 
 Skip history snapshots (annotations only):
 
 ```bash
-PYTHONPATH=. python scripts/seed_dev_annotated_data.py --skip-history
+python scripts/platform/seed_dev_annotated_data.py --skip-history
 ```
 
 Relevant env values:
@@ -337,7 +336,7 @@ Fix (pick one):
 
 ```bash
 # Recreate dev user immediately (does not restart Postgres)
-docker compose exec api python scripts/seed_dev_user.py
+docker compose exec api python scripts/platform/seed_dev_user.py
 
 # Or restart the API container (re-runs migrations + full seed)
 docker compose restart api
@@ -352,7 +351,7 @@ If you only run Postgres in Docker and the API locally, run migrations then seed
 docker compose up db -d
 cd nomicous
 PYTHONPATH=. alembic -c infrastructure/alembic.ini upgrade head
-PYTHONPATH=. python scripts/seed_dev_user.py
+python ../scripts/platform/seed_dev_user.py
 ```
 
 ### Port 5433 Already Allocated

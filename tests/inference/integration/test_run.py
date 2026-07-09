@@ -25,7 +25,7 @@ def test_run_segment_returns_kraken_layout(inference_client: TestClient) -> None
         "/inference/v1/run",
         json={
             "task": "segment",
-            "registry_model_id": "kraken-blla",
+            "registry_model_id": "greek-kraken-segment-v1",
             "registry_tag": "stable",
             "image_bytes": _image_payload(SEGMENT_PAGE),
         },
@@ -49,7 +49,7 @@ def test_run_transcribe_returns_calamari_output(inference_client: TestClient) ->
         "/inference/v1/run",
         json={
             "task": "transcribe",
-            "registry_model_id": "syriac-calamariv1",
+            "registry_model_id": "syriac-calamari-v1",
             "registry_tag": "stable",
             "image_bytes": _image_payload(TRANSCRIBE_LINE),
             "params": {"line_index": 0},

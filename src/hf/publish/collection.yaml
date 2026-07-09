@@ -1,0 +1,17 @@
+namespace: nomicous
+slug: nomos
+title: Nomicous Manuscript HTR
+description: |
+  Handwritten text recognition models and labelled manuscript line datasets for
+  ancient and medieval scripts published by the nomicous project.
+# Full Hub collection slug (namespace/slug-<id>). Set after creating the collection
+# on Hugging Face, then commit before running sync_collection.py with --upload.
+hub_slug: null
+models:
+  - slug: greek-htr-calamari
+    note: Greek Calamari transcribe checkpoint (registry tag stable)
+datasets: []
+# Add dataset slugs here after publishing, for example:
+# datasets:
+#   - slug: greek-manuscript-lines
+#     note: Sample Greek line crops for HTR training

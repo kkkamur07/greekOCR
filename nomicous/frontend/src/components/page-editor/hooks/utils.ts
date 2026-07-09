@@ -98,14 +98,25 @@ export function modelLayerIdForPromotion(
   return modelTranscriptionForLine(line)?.transcription_id ?? null;
 }
 
-export function upsertLineRequest(line: LineResponse, order: number): LineUpsertRequest {
+export function mergeSavedLine(lines: LineResponse[], saved: LineResponse): LineResponse[] {
+  const index = lines.findIndex((line) => line.id === saved.id);
+  if (index === -1) {
+    return [...lines, saved].sort((a, b) => a.order - b.order);
+  }
+  return lines.map((line) => (line.id === saved.id ? saved : line));
+}
+
+export function upsertLineRequest(line: LineResponse, order?: number): LineUpsertRequest {
   const text = approvedText(line);
   const request: LineUpsertRequest = {
     id: line.id,
-    order,
+    order: order ?? line.order,
     kind: line.kind,
     points: line.points,
+    block_id: line.block_id,
     source: line.source,
+    source_metadata: line.source_metadata,
+    kraken_ceiling: line.kraken_ceiling,
     baseline: line.baseline,
     mask: line.mask,
   };

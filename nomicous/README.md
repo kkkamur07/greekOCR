@@ -138,7 +138,7 @@ project-level defaults:
 ```bash
 cd nomicous
 alembic -c infrastructure/alembic.ini upgrade head
-PYTHONPATH=. python scripts/seed_dev_inference.py
+python ../scripts/platform/seed_dev_inference.py
 ```
 
 ## Tests (TDD)
@@ -154,9 +154,9 @@ See [`docs/testing.md`](../docs/testing.md) for the ML lane and full-suite comma
 ## OpenAPI
 
 ```bash
-PYTHONPATH=. python scripts/export_openapi.py
+python scripts/platform/export_openapi.py
 
-cd frontend
+cd nomicous/frontend
 npm run codegen:api
 ```
 

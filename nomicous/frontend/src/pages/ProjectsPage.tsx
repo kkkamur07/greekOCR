@@ -1,13 +1,17 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from '../components/ui/toast';
 import { api, type ProjectResponse } from '../api/client';
 import { ApiError } from '../api/errors';
+import { hasAccessToken, isUnauthorized, navigateToLogin } from '../auth/session';
 import { AppPageShell } from '../components/layout/AppPageShell';
 import { ProjectsTable } from '../components/projects/ProjectsTable';
 import { FormModal } from '../components/ui/FormModal';
 import { slugify } from '../utils/slugify';
 
 export function ProjectsPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [projects, setProjects] = useState<ProjectResponse[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [username, setUsername] = useState<string | null>(null);
@@ -19,6 +23,11 @@ export function ProjectsPage() {
   const [newName, setNewName] = useState('');
 
   const load = async () => {
+    if (!hasAccessToken()) {
+      navigateToLogin(navigate, location);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
@@ -27,6 +36,10 @@ export function ProjectsPage() {
       setUsername(me.username);
       setProjects(list);
     } catch (err) {
+      if (isUnauthorized(err)) {
+        navigateToLogin(navigate, location);
+        return;
+      }
       const msg = err instanceof ApiError ? err.message : 'Failed to load projects';
       setProjects([]);
       setUserId(null);

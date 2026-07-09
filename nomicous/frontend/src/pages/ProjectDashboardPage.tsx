@@ -1,15 +1,18 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useCallback, useEffect, useState } from 'react';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { toast } from '../components/ui/toast';
 import { api, type DocumentResponse, type ProjectResponse } from '../api/client';
 import { ApiError } from '../api/errors';
+import { hasAccessToken, isUnauthorized, navigateToLogin } from '../auth/session';
 import { AppPageShell } from '../components/layout/AppPageShell';
 import { DocumentsTable } from '../components/projects/DocumentsTable';
+import { ProjectJobsPanel } from '../components/projects/ProjectJobsPanel';
 import { ProjectSettingsPanel } from '../components/sharing/ProjectSettingsPanel';
 import { FormModal } from '../components/ui/FormModal';
 
 export function ProjectDashboardPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { projectId } = useParams<{ projectId: string }>();
   const [project, setProject] = useState<ProjectResponse | null>(null);
   const [documents, setDocuments] = useState<DocumentResponse[]>([]);
@@ -27,6 +30,10 @@ export function ProjectDashboardPage() {
 
   const load = useCallback(async () => {
     if (!projectId) return;
+    if (!hasAccessToken()) {
+      navigateToLogin(navigate, location);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -40,6 +47,10 @@ export function ProjectDashboardPage() {
       setProject(proj);
       setDocuments(docs);
     } catch (err) {
+      if (isUnauthorized(err)) {
+        navigateToLogin(navigate, location);
+        return;
+      }
       const msg = err instanceof ApiError ? err.message : 'Failed to load project';
       setProject(null);
       setDocuments([]);
@@ -52,7 +63,7 @@ export function ProjectDashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [projectId, includeArchived]);
+  }, [projectId, includeArchived, location, navigate]);
 
   useEffect(() => {
     void load();
@@ -197,14 +208,18 @@ export function ProjectDashboardPage() {
       )}
 
       {project && (
-        <DocumentsTable
-          projectId={projectId!}
-          documents={documents}
-          loading={loading}
-          emptyText="No documents yet"
-          onDelete={(documentId) => void handleDeleteDocument(documentId)}
-          deletingDocumentId={deletingDocumentId}
-        />
+        <>
+          <DocumentsTable
+            projectId={projectId!}
+            documents={documents}
+            loading={loading}
+            emptyText="No documents yet"
+            onDelete={(documentId) => void handleDeleteDocument(documentId)}
+            deletingDocumentId={deletingDocumentId}
+          />
+
+          <ProjectJobsPanel projectId={projectId!} documents={documents} />
+        </>
       )}
 
       <FormModal

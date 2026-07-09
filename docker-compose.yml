@@ -39,7 +39,7 @@ services:
     volumes:
       - ./nomicous/backend/media:/app/backend/media
       - ./nomicous/backend:/app/backend
-      - ./nomicous/scripts:/app/scripts
+      - ./scripts/platform:/app/scripts/platform
       - ./inference:/app/inference
       - ./data:/data:ro
     depends_on:
@@ -61,15 +61,13 @@ services:
       start_period: 30s
     command: >
       sh -c "alembic -c infrastructure/alembic.ini upgrade head
-      && python scripts/seed_dev_nomicous.py
+      && python scripts/platform/seed_dev_nomicous.py
       && uvicorn backend.core.main:app --host 0.0.0.0 --port 8000 --workers 1 --reload --reload-dir /app/backend"
     # Seed runs on API container start only (never restarts Postgres). If you wipe or
     # recreate the DB volume while the API keeps running, hit /health or restart api —
     # development health checks recreate the dev login user when it is missing.
 
   inference-api:
-    # Calamari runs on CPU here, but tensorflow-addons has no Linux ARM wheel.
-    platform: linux/amd64
     image: nomicous-inference:latest
     build:
       context: .
@@ -85,6 +83,7 @@ services:
       INFERENCE_CALAMARI_NUM_PROCESSES: "1"
     volumes:
       - ./inference/weights:/app/inference/weights
+      - ./src/hf:/app/src/hf
     depends_on:
       db:
         condition: service_healthy
@@ -103,8 +102,6 @@ services:
     command: uvicorn inference.api.main:app --host 0.0.0.0 --port 8001 --workers 1
 
   inference-worker:
-    # Calamari runs on CPU here, but tensorflow-addons has no Linux ARM wheel.
-    platform: linux/amd64
     image: nomicous-inference:latest
     healthcheck:
       disable: true
@@ -118,6 +115,7 @@ services:
       INFERENCE_WORKER_RUNNING_JOB_TIMEOUT_SECONDS: "1800"
     volumes:
       - ./inference/weights:/app/inference/weights
+      - ./src/hf:/app/src/hf
     depends_on:
       db:
         condition: service_healthy

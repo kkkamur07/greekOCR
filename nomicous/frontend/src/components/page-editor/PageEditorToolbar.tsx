@@ -300,7 +300,7 @@ export function PageEditorToolbar({
             <div className="pe-dropdown" role="menu" aria-label="Processing actions">
               <div className="pe-dd-section">Segment</div>
               <p className="pe-dd-model">
-                Engine <strong>kraken-blla</strong> (fixed)
+                Engine <strong>greek-kraken-segment-v1</strong> (fixed)
               </p>
               <label className="pe-dd-check">
                 <input

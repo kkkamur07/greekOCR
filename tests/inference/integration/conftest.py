@@ -66,6 +66,7 @@ def submit_inference_job(
         registry_tag: str = "stable",
         params: dict[str, object] | None = None,
     ) -> tuple[Response, UUID]:
+    
         resolved_product_job_id = product_job_id or uuid4()
         response = inference_client.post(
             "/inference/v1/jobs",

@@ -8,16 +8,13 @@ import {
 } from '../api/client';
 import { ApiError } from '../api/errors';
 import { getAccessToken } from '../auth/storage';
-import ImageCanvas from '../components/ImageCanvas/ImageCanvas';
-import { PublicDocumentDownloads } from '../components/public/PublicDocumentDownloads';
+import { PublicCanvasPdfView } from '../components/public/PublicCanvasPdfView';
+import { PublicDocumentExports } from '../components/public/PublicDocumentExports';
+import { PublicPageCanvas } from '../components/public/PublicPageCanvas';
 import { PublicPartTabs } from '../components/public/PublicPartTabs';
 import { PublicTranscriptPanel } from '../components/public/PublicTranscriptPanel';
 import { WorkflowBadge } from '../components/WorkflowBadge';
-import {
-  linesForPart,
-  publicLinesToRegions,
-  publicLinesToTranscriptions,
-} from '../utils/publicLayout';
+import { linesForPart, publicLinesToRegions } from '../utils/publicLayout';
 
 export function PublicDocumentPage() {
   const { projectId, documentId } = useParams<{ projectId: string; documentId: string }>();
@@ -28,7 +25,7 @@ export function PublicDocumentPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [activePartId, setActivePartId] = useState<string | null>(null);
   const [selectedLineIndex, setSelectedLineIndex] = useState<number | null>(null);
-  const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
+  const [canvasView, setCanvasView] = useState<'image' | 'pdf'>('image');
 
   const isLoggedIn = !!getAccessToken();
 
@@ -86,15 +83,10 @@ export function PublicDocumentPage() {
   );
 
   const regions = useMemo(() => publicLinesToRegions(partLines), [partLines]);
-  const transcriptions = useMemo(
-    () => publicLinesToTranscriptions(partLines, null),
-    [partLines],
-  );
 
   const selectedRegionId =
     selectedLineIndex !== null && selectedLineIndex >= 0 ? selectedLineIndex + 1 : null;
 
-  const totalLines = layout?.lines?.length ?? 0;
   const imageUrl = activePart ? publicPartMediaUrl(activePart.id) : null;
   const imageDimensions = {
     width: activePart?.width ?? 0,
@@ -103,7 +95,7 @@ export function PublicDocumentPage() {
 
   useEffect(() => {
     setSelectedLineIndex(null);
-    setPdfPreviewOpen(false);
+    setCanvasView('image');
   }, [activePartId]);
 
   if (notFound) {
@@ -133,7 +125,7 @@ export function PublicDocumentPage() {
   }
 
   return (
-    <div className="page">
+    <div className="page page--public">
       <nav className="topnav" aria-label="Main navigation">
         <Link to="/" className="topnav-logo" aria-label="nomicous home">
           <img src="/nomos.svg" alt="" />
@@ -163,66 +155,89 @@ export function PublicDocumentPage() {
         </div>
       </nav>
 
-      <header className="pub-header">
+      <header className="pub-header pub-header--compact">
         <div className="pub-header__main">
-          <div className="flex items-center gap-2">
+          <div className="pub-header__title-row">
             <h1>{document?.name ?? 'Document'}</h1>
             {document && <WorkflowBadge workflow={document.workflow} />}
           </div>
-          <p className="meta">
+          <p className="pub-header__meta">
             {parts.length} page{parts.length === 1 ? '' : 's'}
-            {activePart && ` · Page ${activePartIndex}: ${partLines.length} line${partLines.length === 1 ? '' : 's'}`}
-            {totalLines > 0 && ` · ${totalLines} lines total`}
           </p>
         </div>
-        {projectId && documentId && activePart && (
-          <PublicDocumentDownloads
-            projectId={projectId}
-            documentId={documentId}
-            partId={activePart.id}
-            partIndex={activePartIndex}
-            pdfPreviewOpen={pdfPreviewOpen}
-            onPdfPreviewOpenChange={setPdfPreviewOpen}
-          />
-        )}
       </header>
 
-      <PublicPartTabs
-        parts={partTabs}
-        activeId={activePart?.id ?? null}
-        onChange={setActivePartId}
-      />
+      <main className="pub-workspace content-wrap">
+        <div className="pub-workspace__toolbar">
+          <PublicPartTabs
+            parts={partTabs}
+            activeId={activePart?.id ?? null}
+            onChange={setActivePartId}
+            variant="workspace"
+          />
 
-      <main className="content-wrap">
-        <div className="pub-split">
+          <div className="pub-workspace__tools">
+            <div className="pub-segment" role="tablist" aria-label="Page view">
+              <button
+                type="button"
+                role="tab"
+                className={`pub-segment__btn${canvasView === 'image' ? ' pub-segment__btn--active' : ''}`}
+                aria-selected={canvasView === 'image'}
+                onClick={() => setCanvasView('image')}
+              >
+                Image
+              </button>
+              <button
+                type="button"
+                role="tab"
+                className={`pub-segment__btn${canvasView === 'pdf' ? ' pub-segment__btn--active' : ''}`}
+                aria-selected={canvasView === 'pdf'}
+                onClick={() => setCanvasView('pdf')}
+              >
+                PDF
+              </button>
+            </div>
+
+            {projectId && documentId && activePart && (
+              <PublicDocumentExports
+                projectId={projectId}
+                documentId={documentId}
+                partId={activePart.id}
+                partIndex={activePartIndex}
+              />
+            )}
+          </div>
+        </div>
+
+        <div className="pub-split" style={{ opacity: loading ? 0.6 : 1 }}>
           <div
             className="pub-canvas"
             role="img"
             aria-label={
               activePart ? `Manuscript page ${activePartIndex}` : 'Manuscript page'
             }
-            style={{ opacity: loading ? 0.6 : 1 }}
           >
-            {imageUrl && imageDimensions.width > 0 ? (
-              <ImageCanvas
-                readOnly
+            {canvasView === 'pdf' && projectId && documentId && activePart ? (
+              <PublicCanvasPdfView
+                projectId={projectId}
+                documentId={documentId}
+                partId={activePart.id}
+              />
+            ) : imageUrl && imageDimensions.width > 0 ? (
+              <PublicPageCanvas
                 imageUrl={imageUrl}
-                imageDimensions={imageDimensions}
+                layoutWidth={imageDimensions.width}
+                layoutHeight={imageDimensions.height}
                 regions={regions}
                 selectedRegionId={selectedRegionId}
                 onSelectRegion={(regionId) => {
                   setSelectedLineIndex(regionId === null ? null : regionId - 1);
                 }}
-                onAddRegion={() => {}}
-                onUpdateRegion={() => {}}
-                onDeleteRegion={() => {}}
-                onTranscribeRegion={() => {}}
               />
             ) : (
-              <>
-                <p>Manuscript image</p>
-                <p className="text-muted text-sm">No page image available</p>
-              </>
+              <div className="pub-canvas__empty">
+                <p>No page image available</p>
+              </div>
             )}
           </div>
 
@@ -238,13 +253,6 @@ export function PublicDocumentPage() {
 
         {!loading && parts.length === 0 && (
           <p className="list-hint">This published document has no page images yet.</p>
-        )}
-
-        {transcriptions.length === 0 && partLines.length > 0 && !loading && (
-          <p className="list-hint">
-            Line geometry is visible on the canvas. Add ground-truth transcriptions in the editor
-            to populate this panel.
-          </p>
         )}
       </main>
     </div>

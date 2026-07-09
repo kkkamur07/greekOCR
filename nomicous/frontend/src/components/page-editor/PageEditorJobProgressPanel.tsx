@@ -1,15 +1,15 @@
-import type { TrackedPageEditorJob } from './hooks/usePageEditorJobQueue';
+import type { TrackedBackgroundJob } from '../../context/BackgroundJobsContext';
 import { isTerminalJobStatus, pageEditorJobKindLabel } from './jobProgress';
 
 type PageEditorJobProgressPanelProps = {
-  jobs: TrackedPageEditorJob[];
+  jobs: TrackedBackgroundJob[];
   activeCount: number;
   expanded: boolean;
   onExpandedChange: (expanded: boolean) => void;
   onDismissCompleted: () => void;
 };
 
-function statusClass(status: TrackedPageEditorJob['status']): string {
+function statusClass(status: TrackedBackgroundJob['status']): string {
   if (status === 'done') return 'pe-job-item--done';
   if (status === 'failed') return 'pe-job-item--failed';
   return 'pe-job-item--active';
@@ -54,7 +54,7 @@ export function PageEditorJobProgressPanel({
           <h2 className="pe-job-panel__title">Background jobs</h2>
           <p className="pe-job-panel__subtitle">
             {activeCount > 0
-              ? `${activeCount} in progress — you can keep editing other segments.`
+              ? `${activeCount} in progress. You can keep editing other segments.`
               : 'Recent jobs'}
           </p>
         </div>

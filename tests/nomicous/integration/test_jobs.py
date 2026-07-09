@@ -108,6 +108,15 @@ def test_get_job_requires_auth(client: TestClient, registered_user: dict[str, st
     assert response.status_code == 401
 
 
+def test_job_events_requires_auth(client: TestClient, registered_user: dict[str, str]):
+    auth_headers = {"Authorization": f"Bearer {registered_user['access_token']}"}
+    created = client.post("/jobs/test", headers=auth_headers)
+    job_id = created.json()["job_id"]
+
+    response = client.get(f"/jobs/{job_id}/events")
+    assert response.status_code == 401
+
+
 # --- Test job lifecycle ---
 # Tests enqueue, poll, and status fields for noop handler. Does not test real ML jobs.
 
@@ -139,6 +148,24 @@ def test_get_job_returns_status_and_timestamps(client: TestClient, registered_us
 
     missing = client.get(f"/jobs/{uuid.uuid4()}", headers=auth_headers)
     assert missing.status_code == 404
+
+
+def test_job_events_streams_current_snapshot(client: TestClient, registered_user: dict[str, str]):
+    auth_headers = {"Authorization": f"Bearer {registered_user['access_token']}"}
+    created = client.post("/jobs/test", headers=auth_headers)
+    job_id = created.json()["job_id"]
+    poll_job(client, job_id, expect_status="done", headers=auth_headers)
+
+    with client.stream("GET", f"/jobs/{job_id}/events", headers=auth_headers) as response:
+        body = "".join(response.iter_text())
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert response.headers["cache-control"] == "no-cache"
+    assert response.headers["x-accel-buffering"] == "no"
+    assert "event: job" in body
+    assert f'"id":"{job_id}"' in body
+    assert '"status":"done"' in body
 
 
 # --- Job access control ---

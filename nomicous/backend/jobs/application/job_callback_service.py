@@ -19,6 +19,7 @@ from backend.document.application.transcribe_merge_service import (
     TranscribeMergeService,
 )
 from backend.document.infrastructure.orm_models import Line
+from backend.jobs.infrastructure.notifications import notify_platform_job_status_changed
 from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
 from backend.ml.infrastructure.ml_client import InferenceClient
 from infrastructure.db import SyncSessionLocal
@@ -169,6 +170,7 @@ def _apply_callback_locked(callback: JobCallbackRequest) -> bool:
         if callback.status == InferenceJobStatus.failed:
             _mark_failed_from_callback_sync(job, callback)
             session.commit()
+            notify_platform_job_status_changed(job.id, job.status)
             return True
 
         if job.type == JobType.segment:
@@ -180,6 +182,7 @@ def _apply_callback_locked(callback: JobCallbackRequest) -> bool:
 
         _mark_done_from_callback_sync(job, callback, result)
         session.commit()
+        notify_platform_job_status_changed(job.id, job.status)
         return True
 
 

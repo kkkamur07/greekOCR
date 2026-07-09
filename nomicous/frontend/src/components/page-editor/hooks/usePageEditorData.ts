@@ -9,12 +9,65 @@ import {
   type TranscriptionLayerResponse,
 } from '../../../api/client';
 import { ApiError } from '../../../api/errors';
+import { isUnauthorized, redirectToLogin } from '../../../auth/session';
 
 function accessMessage(error: ApiError): string {
+  if (error.status === 401) {
+    redirectToLogin();
+    return '';
+  }
   if (error.status === 403 || error.status === 404) {
     return 'This page is not available to your account.';
   }
   return error.message;
+}
+
+function sortedParts(document: DocumentWithPartsResponse): DocumentPartResponse[] {
+  return [...document.parts].sort((a, b) => a.order - b.order);
+}
+
+function resolvePart(
+  document: DocumentWithPartsResponse,
+  partId: string,
+): DocumentPartResponse | null {
+  return sortedParts(document).find((item) => item.id === partId) ?? null;
+}
+
+function canReuseDocument(
+  document: DocumentWithPartsResponse | null | undefined,
+  projectId: string,
+  documentId: string,
+): document is DocumentWithPartsResponse {
+  return document?.project_id === projectId && document.id === documentId;
+}
+
+async function loadTranscribeModels(
+  projectId: string,
+  documentId: string,
+  partId: string,
+): Promise<{ models: InferenceModelResponse[]; selectedModelId: string | null }> {
+  let models: InferenceModelResponse[] = [];
+  try {
+    const catalog = await api.listInferenceModels();
+    models = catalog.filter((model) => model.task === 'transcribe');
+  } catch {
+    models = [];
+  }
+
+  try {
+    const resolved = await api.resolvePartModelBinding(
+      projectId,
+      documentId,
+      partId,
+      'transcribe',
+    );
+    if (!models.some((model) => model.id === resolved.model.id)) {
+      models = [resolved.model, ...models];
+    }
+    return { models, selectedModelId: resolved.model.id };
+  } catch {
+    return { models, selectedModelId: models[0]?.id ?? null };
+  }
 }
 
 export function usePageEditorData(
@@ -22,6 +75,7 @@ export function usePageEditorData(
   documentId: string | undefined,
   partId: string | undefined,
   onRouteChange?: () => void,
+  initialDocument?: DocumentWithPartsResponse | null,
 ) {
   const [document, setDocument] = useState<DocumentWithPartsResponse | null>(null);
   const [part, setPart] = useState<DocumentPartResponse | null>(null);
@@ -57,6 +111,13 @@ export function usePageEditorData(
       return;
     }
 
+    let cancelled = false;
+    const apply = <T,>(setter: (value: T) => void, value: T) => {
+      if (!cancelled) {
+        setter(value);
+      }
+    };
+
     setLoading(true);
     setError(null);
     setLayoutError(null);
@@ -73,22 +134,47 @@ export function usePageEditorData(
     setPairingError(null);
     onRouteChange?.();
 
-    (async () => {
+    void (async () => {
       try {
-        const doc = await api.getDocument(projectId, documentId);
-        const sortedParts = [...doc.parts].sort((a, b) => a.order - b.order);
-        const selectedPart = sortedParts.find((item) => item.id === partId);
+        const doc = canReuseDocument(initialDocument, projectId, documentId)
+          ? initialDocument
+          : await api.getDocument(projectId, documentId);
+        if (cancelled) return;
+
+        const selectedPart = resolvePart(doc, partId);
         if (!selectedPart) {
-          setError('This document part was not found.');
+          apply(setError, 'This document part was not found.');
           return;
         }
-        setDocument(doc);
-        setPart(selectedPart);
-        try {
-          const loadedLayout = await api.getPartLayout(projectId, documentId, partId);
-          setLayout(loadedLayout ?? { blocks: [], lines: [] });
-        } catch (err) {
-          setLayoutError(
+
+        apply(setDocument, doc);
+        apply(setPart, selectedPart);
+
+        const [
+          layoutResult,
+          linesResult,
+          transcriptionsResult,
+          pairingResult,
+          modelsResult,
+        ] = await Promise.allSettled([
+          api.getPartLayout(projectId, documentId, partId),
+          api.listPartLines(projectId, documentId, partId),
+          api.listTranscriptions(projectId, documentId),
+          api.getPagePairing(projectId, documentId, partId),
+          loadTranscribeModels(projectId, documentId, partId),
+        ]);
+        if (cancelled) return;
+
+        if (layoutResult.status === 'fulfilled') {
+          apply(setLayout, layoutResult.value ?? { blocks: [], lines: [] });
+        } else {
+          const err = layoutResult.reason;
+          if (isUnauthorized(err)) {
+            redirectToLogin();
+            return;
+          }
+          apply(
+            setLayoutError,
             err instanceof ApiError && (err.status === 403 || err.status === 404)
               ? 'Layout editing is not available for this page.'
               : err instanceof Error
@@ -96,10 +182,17 @@ export function usePageEditorData(
                 : 'Failed to load layout.',
           );
         }
-        try {
-          setLines(await api.listPartLines(projectId, documentId, partId));
-        } catch (err) {
-          setLineError(
+
+        if (linesResult.status === 'fulfilled') {
+          apply(setLines, linesResult.value);
+        } else {
+          const err = linesResult.reason;
+          if (isUnauthorized(err)) {
+            redirectToLogin();
+            return;
+          }
+          apply(
+            setLineError,
             err instanceof ApiError && (err.status === 403 || err.status === 404)
               ? 'Segment geometry is not available for this page.'
               : err instanceof Error
@@ -107,17 +200,21 @@ export function usePageEditorData(
                 : 'Failed to load Segment geometry.',
           );
         }
-        try {
-          const layers = await api.listTranscriptions(projectId, documentId);
+
+        if (transcriptionsResult.status === 'fulfilled') {
+          const layers = transcriptionsResult.value;
           const groundTruth = layers.find((layer) => layer.kind === 'ground_truth');
-          setTranscriptionLayers(layers);
-          setGroundTruthTranscriptionId(groundTruth?.id ?? null);
-          setSelectedTranscriptionLayerId(groundTruth?.id ?? layers[0]?.id ?? null);
-          const pairing = await api.getPagePairing(projectId, documentId, partId);
-          setTextLines(pairing.text_lines);
-          setPairingProgress(pairing.pairing_progress);
-        } catch (err) {
-          setPairingError(
+          apply(setTranscriptionLayers, layers);
+          apply(setGroundTruthTranscriptionId, groundTruth?.id ?? null);
+          apply(setSelectedTranscriptionLayerId, groundTruth?.id ?? layers[0]?.id ?? null);
+        } else {
+          const err = transcriptionsResult.reason;
+          if (isUnauthorized(err)) {
+            redirectToLogin();
+            return;
+          }
+          apply(
+            setPairingError,
             err instanceof ApiError && (err.status === 403 || err.status === 404)
               ? 'Pairing is not available for this page.'
               : err instanceof Error
@@ -125,48 +222,60 @@ export function usePageEditorData(
                 : 'Failed to load Pairing progress.',
           );
         }
-        try {
-          let models: InferenceModelResponse[] = [];
-          try {
-            const catalog = await api.listInferenceModels();
-            models = catalog.filter((model) => model.task === 'transcribe');
-          } catch {
-            models = [];
-          }
 
-          try {
-            const resolved = await api.resolvePartModelBinding(
-              projectId,
-              documentId,
-              partId,
-              'transcribe',
-            );
-            setSelectedTranscribeModelId(resolved.model.id);
-            if (!models.some((model) => model.id === resolved.model.id)) {
-              models = [resolved.model, ...models];
-            }
-          } catch {
-            setSelectedTranscribeModelId(models[0]?.id ?? null);
+        if (pairingResult.status === 'fulfilled') {
+          apply(setTextLines, pairingResult.value.text_lines);
+          apply(setPairingProgress, pairingResult.value.pairing_progress);
+        } else {
+          const err = pairingResult.reason;
+          if (isUnauthorized(err)) {
+            redirectToLogin();
+            return;
           }
-          setTranscribeModels(models);
-        } catch {
-          setTranscribeModels([]);
-          setSelectedTranscribeModelId(null);
+          apply(
+            setPairingError,
+            err instanceof ApiError && (err.status === 403 || err.status === 404)
+              ? 'Pairing is not available for this page.'
+              : err instanceof Error
+                ? err.message
+                : 'Failed to load Pairing progress.',
+          );
+        }
+
+        if (modelsResult.status === 'fulfilled') {
+          apply(setTranscribeModels, modelsResult.value.models);
+          apply(setSelectedTranscribeModelId, modelsResult.value.selectedModelId);
+        } else {
+          apply(setTranscribeModels, []);
+          apply(setSelectedTranscribeModelId, null);
         }
       } catch (err) {
-        setError(err instanceof ApiError ? accessMessage(err) : 'Failed to load page.');
+        if (isUnauthorized(err)) {
+          redirectToLogin();
+          return;
+        }
+        apply(
+          setError,
+          err instanceof ApiError ? accessMessage(err) : 'Failed to load page.',
+        );
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     })();
+
+    return () => {
+      cancelled = true;
+    };
     // onRouteChange resets page-local UI state when route params change; omit from deps intentionally.
+    // initialDocument is only read on first mount for the current route key.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- route-keyed reset only
   }, [projectId, documentId, partId]);
 
   const partIndex =
     document && part
-      ? [...document.parts].sort((a, b) => a.order - b.order).findIndex((item) => item.id === part.id) +
-        1
+      ? sortedParts(document).findIndex((item) => item.id === part.id) + 1
       : null;
 
   return {
