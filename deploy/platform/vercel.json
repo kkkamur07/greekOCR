@@ -1,7 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "bash build.sh",
-  "installCommand": "bash install.sh",
   "functions": {
     "api/index.py": {
       "maxDuration": 60
