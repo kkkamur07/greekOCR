@@ -79,6 +79,7 @@ class Document(Base):
 
 class DocumentPart(Base):
     __tablename__ = "document_parts"
+    __table_args__ = (Index("ix_document_parts_document_order", "document_id", "order"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     document_id: Mapped[uuid.UUID] = mapped_column(
@@ -120,6 +121,7 @@ class Block(Base):
 
 class Line(Base):
     __tablename__ = "lines"
+    __table_args__ = (Index("ix_lines_part_order", "part_id", "order", "created_at"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     part_id: Mapped[uuid.UUID] = mapped_column(

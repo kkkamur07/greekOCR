@@ -1,7 +1,7 @@
 """Document and part use cases with project membership checks."""
 
 from backend.document.infrastructure.document_repository import DocumentRepository
-from backend.document.infrastructure.media_store import MediaStore
+from backend.document.infrastructure.media_store import MediaStore, get_media_store
 from backend.ml.application.model_service import InferenceModelService
 from backend.project.infrastructure.project_repository import ProjectRepository
 
@@ -32,5 +32,5 @@ class DocumentService(
     ) -> None:
         self._documents = documents or DocumentRepository()
         self._projects = projects or ProjectRepository()
-        self._media = media or MediaStore()
+        self._media = media or get_media_store()
         self._inference_models = inference_models or InferenceModelService()

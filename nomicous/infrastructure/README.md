@@ -74,6 +74,11 @@ PYTHONPATH=. alembic -c infrastructure/alembic.ini upgrade head
 Use reset only for disposable local databases; it deletes the Compose Postgres
 volume.
 
+## Supabase test deploy
+
+For a shared Supabase Postgres + Storage profile (migrations still via Alembic),
+see [`docs/deployment/supabase.md`](../../docs/deployment/supabase.md) and [ADR 003](../../docs/decisions/003-supabase-hosted-postgres-and-storage.md).
+
 ## Migration Commands
 
 Apply all migrations:

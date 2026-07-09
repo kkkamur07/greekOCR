@@ -21,8 +21,17 @@ class ProjectService:
         self._projects = project_repo or ProjectRepository()
         self._users = user_repo or UserRepository()
 
-    async def list_projects(self, session: AsyncSession, user: User) -> list[Project]:
-        return await self._projects.list_for_user(session, user.id)
+    async def list_projects(
+        self,
+        session: AsyncSession,
+        user: User,
+        *,
+        limit: int = 50,
+        cursor=None,
+    ) -> list[Project]:
+        return await self._projects.list_for_user(
+            session, user.id, limit=limit, cursor=cursor
+        )
 
     async def create_project(
         self,

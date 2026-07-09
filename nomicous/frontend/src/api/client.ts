@@ -155,6 +155,30 @@ export type LineTranscriptionPatchRequest = {
 export type CopyToGroundTruthRequest = components['schemas']['CopyToGroundTruthRequest'];
 export type CopyToGroundTruthResponse = components['schemas']['CopyToGroundTruthResponse'];
 
+export type PageResponse<T> = {
+  items: T[];
+  next_cursor: string | null;
+};
+
+async function fetchAllPages<T>(
+  buildPath: (params: URLSearchParams) => string,
+): Promise<T[]> {
+  const items: T[] = [];
+  let cursor: string | null = null;
+  for (;;) {
+    const params = new URLSearchParams();
+    if (cursor) {
+      params.set('cursor', cursor);
+    }
+    const page = await apiRequest<PageResponse<T>>(buildPath(params));
+    items.push(...page.items);
+    cursor = page.next_cursor;
+    if (!cursor) {
+      return items;
+    }
+  }
+}
+
 export const API_BASE_URL =
   (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') ||
   'http://localhost:8000';
@@ -284,7 +308,12 @@ export const api = {
 
   me: () => apiRequest<UserResponse>('/me'),
 
-  listProjects: () => apiRequest<ProjectResponse[]>('/projects'),
+  listProjects: () =>
+    fetchAllPages<ProjectResponse>((params) => {
+      const query = params.toString();
+      return query ? `/projects?${query}` : '/projects';
+    }),
+
 
   createProject: (body: ProjectCreateRequest) =>
     apiRequest<ProjectResponse>('/projects', { method: 'POST', body }),
@@ -299,9 +328,10 @@ export const api = {
     apiRequest<void>(`/projects/${projectId}`, { method: 'DELETE' }),
 
   listDocuments: (projectId: string, includeArchived = false) =>
-    apiRequest<DocumentResponse[]>(
-      `/projects/${projectId}/documents?include_archived=${includeArchived}`,
-    ),
+    fetchAllPages<DocumentResponse>((params) => {
+      params.set('include_archived', String(includeArchived));
+      return `/projects/${projectId}/documents?${params.toString()}`;
+    }),
 
   createDocument: (projectId: string, body: DocumentCreateRequest) =>
     apiRequest<DocumentResponse>(`/projects/${projectId}/documents`, {
@@ -490,6 +520,52 @@ export const api = {
       { method: 'POST', body: body ?? {} },
     ),
 
+  persistLocalTranscribe: (
+    projectId: string,
+    documentId: string,
+    partId: string,
+    body: {
+      registry_model_id: string;
+      registry_tag?: string;
+      lines: Array<{
+        line_id: string;
+        text: string;
+        confidence: number;
+        character_confidences?: Array<{ char: string; confidence: number }>;
+      }>;
+    },
+  ) =>
+    apiRequest<{
+      job_id: string;
+      transcription_id: string;
+      lines: Array<{ line_id: string; text: string; confidence: number }>;
+    }>(
+      `/projects/${projectId}/documents/${documentId}/parts/${partId}/local-inference/transcribe`,
+      { method: 'POST', body },
+    ),
+
+  persistLocalSegment: (
+    projectId: string,
+    documentId: string,
+    partId: string,
+    body: {
+      registry_model_id: string;
+      registry_tag?: string;
+      output: Record<string, unknown>;
+    },
+  ) =>
+    apiRequest<{
+      job_id: string;
+      blocks_count: number;
+      lines_count: number;
+      added_lines: number;
+      pruned_lines: number;
+      preserved_manual_lines: number;
+    }>(
+      `/projects/${projectId}/documents/${documentId}/parts/${partId}/local-inference/segment`,
+      { method: 'POST', body },
+    ),
+
   listInferenceModels: () => apiRequest<InferenceModelResponse[]>('/inference/models'),
 
   resolvePartModelBinding: (
@@ -561,7 +637,11 @@ export const api = {
   getJob: (jobId: string) => apiRequest<JobResponse>(`/jobs/${jobId}`),
 
   listProjectJobs: (projectId: string) =>
-    apiRequest<JobResponse[]>(`/projects/${projectId}/jobs`),
+    fetchAllPages<JobResponse>((params) => {
+      const query = params.toString();
+      const suffix = query ? `?${query}` : '';
+      return `/projects/${projectId}/jobs${suffix}`;
+    }),
 };
 
 export async function waitForJob(

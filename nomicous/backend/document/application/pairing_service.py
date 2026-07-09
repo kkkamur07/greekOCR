@@ -46,6 +46,7 @@ class PairingServiceMixin(DocumentServiceSharedMixin):
                     await self._set_ground_truth_text(paired_line, ground_truth, None, session)
         for text_line in existing:
             await session.delete(text_line)
+        await session.flush()
         for order, line_text in enumerate(text_lines):
             session.add(PageTranscriptionLine(part_id=part.id, order=order, text=line_text))
         await session.commit()

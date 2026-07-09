@@ -3,6 +3,7 @@ models:
     task: transcribe
     architecture: calamari
     device: cpu
+    host_eligibility: local
     versions:
       stable:
         weights_source: hf://kkkamur07/syriac-htr-calamari@stable
@@ -11,14 +12,16 @@ models:
     task: transcribe
     architecture: calamari
     device: cpu
+    host_eligibility: local
     versions:
       stable:
-        weights_source: hf://nomicous/greek-htr-calamari@stable
+        weights_source: hf://kkkamur07/greek-htr-calamari@stable
 
   greek-kraken-segment-v1:
     task: segment
     architecture: kraken-segment
     device: cpu
+    host_eligibility: local
     versions:
       stable:
         weights_source: package://kraken/blla.mlmodel

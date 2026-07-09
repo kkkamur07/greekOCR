@@ -13,6 +13,11 @@ class JobSettings(BaseSettings):
 
     enable_test_job_routes: bool = Field(default=False, alias="ENABLE_TEST_JOB_ROUTES")
     job_worker_enabled: bool = Field(default=True, alias="JOB_WORKER_ENABLED")
+    job_sse_notifications_enabled: bool = Field(
+        default=True,
+        alias="JOB_SSE_NOTIFICATIONS_ENABLED",
+        description="Postgres NOTIFY listener for SSE; disable on serverless API hosts.",
+    )
     job_poll_interval_seconds: float = Field(default=0.25, alias="JOB_POLL_INTERVAL_SECONDS")
     job_poll_max_interval_seconds: float = Field(default=2.0, alias="JOB_POLL_MAX_INTERVAL_SECONDS")
     platform_job_notify_channel: str = Field(
@@ -24,6 +29,10 @@ class JobSettings(BaseSettings):
         default=None,
         alias="JOB_WORKER_CLAIM_TEST_ONLY",
         description="True=only test payloads; False=exclude test; None=claim any pending job",
+    )
+    job_worker_running_timeout_seconds: float = Field(
+        default=1800.0,
+        alias="JOB_WORKER_RUNNING_TIMEOUT_SECONDS",
     )
 
 

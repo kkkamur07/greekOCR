@@ -3,12 +3,21 @@
 from __future__ import annotations
 
 import time
+from functools import lru_cache
 
 from fastapi.testclient import TestClient
 
 from tests.fixtures.paths import MINIMAL_PNG
 
-__all__ = ["MINIMAL_PNG", "documents_url", "poll_job"]
+__all__ = ["MINIMAL_PNG", "documents_url", "poll_job", "stored_minimal_page_bytes"]
+
+
+@lru_cache
+def stored_minimal_page_bytes() -> bytes:
+    """Bytes expected after upload normalization to stored WebP."""
+    from backend.document.infrastructure.media_store.encoding import encode_part_image
+
+    return encode_part_image(MINIMAL_PNG)
 
 
 def documents_url(project_id: str) -> str:

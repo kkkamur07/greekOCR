@@ -10,26 +10,26 @@ from backend.ml.infrastructure.orm_models import (
     InferenceTask,
     ModelBinding,
 )
-from infrastructure.db import SyncSessionLocal
+from infrastructure.db import sync_system_session
 
 from tests.fixtures.paths import MINIMAL_PNG
 
 
 @pytest.fixture(autouse=True)
 def _reset_inference_tables() -> None:
-    with SyncSessionLocal() as session:
+    with sync_system_session() as session:
         session.execute(delete(ModelBinding))
         session.execute(delete(InferenceModel))
         session.commit()
     yield
-    with SyncSessionLocal() as session:
+    with sync_system_session() as session:
         session.execute(delete(ModelBinding))
         session.execute(delete(InferenceModel))
         session.commit()
 
 
 def _seed_model(*, name: str, task: InferenceTask) -> InferenceModel:
-    with SyncSessionLocal() as session:
+    with sync_system_session() as session:
         model = InferenceModel(
             name=name,
             provider="kraken",

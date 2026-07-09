@@ -54,7 +54,7 @@ ensure_nomicous_on_path()
 from backend.annotation.infrastructure.orm_models import AnnotationHistorySnapshot
 from backend.core.settings._env import REPO_ROOT
 from backend.document.application.document_service import DocumentService
-from backend.document.infrastructure.media_store import MediaStore
+from backend.document.infrastructure.media_store import MediaStore, get_media_store
 from backend.document.infrastructure.orm_models import (
     Document,
     DocumentPart,
@@ -66,7 +66,7 @@ from backend.project.infrastructure.orm_models import Project
 from backend.users.application.auth_service import AuthService
 from backend.users.infrastructure.orm_models import User
 from infrastructure import models as _orm_models  # noqa: F401 — register all mappers
-from infrastructure.db import AsyncSessionLocal
+from infrastructure.db import system_session
 
 log = logging.getLogger("seed_dev_annotated_data")
 
@@ -587,7 +587,7 @@ async def run_seed(*, force: bool, import_history: bool) -> ImportStats:
 
     document_groups = _group_pages_by_document(page_stems)
     document_service = DocumentService()
-    media = MediaStore()
+    media = get_media_store()
     totals = ImportStats()
 
     log.info("Data root: %s", ANNOTATED_DATA_ROOT)
@@ -597,7 +597,7 @@ async def run_seed(*, force: bool, import_history: bool) -> ImportStats:
     else:
         log.info("History import: skipped (--skip-history)")
 
-    async with AsyncSessionLocal() as session:
+    async with system_session() as session:
         user = await _ensure_dev_user(session)
         project = await _ensure_project(session, user)
         log.info("Dev user: %s (id=%s)", DEV_EMAIL, user.id)

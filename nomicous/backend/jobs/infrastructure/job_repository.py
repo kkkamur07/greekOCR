@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import infrastructure.models  # noqa: F401 — register all ORM mappers
-from infrastructure.db import SyncSessionLocal
-from sqlalchemy import select, update
+from infrastructure.db import sync_system_session
+from sqlalchemy import func, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.api.pagination import PageCursor
 from backend.document.infrastructure.orm_models import Document
 from backend.jobs.infrastructure.notifications import notify_platform_job_status_changed
 from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
@@ -31,6 +32,41 @@ class JobRepository:
         await self._session.refresh(job)
         return job
 
+    async def record_local_job(
+        self,
+        *,
+        user_id: uuid.UUID,
+        document_id: uuid.UUID,
+        document_part_id: uuid.UUID,
+        job_type: JobType,
+        registry_model_id: str,
+        registry_tag: str,
+        result: dict,
+    ) -> Job:
+        """Record a browser-orchestrated local inference run for project job history."""
+        from datetime import UTC, datetime
+
+        now = datetime.now(UTC)
+        job = Job(
+            type=job_type,
+            status=JobStatus.done,
+            user_id=user_id,
+            document_id=document_id,
+            document_part_id=document_part_id,
+            payload={
+                "execution": "local",
+                "registry_model_id": registry_model_id,
+                "registry_tag": registry_tag,
+            },
+            result=result,
+            started_at=now,
+            completed_at=now,
+        )
+        self._session.add(job)
+        await self._session.commit()
+        await self._session.refresh(job)
+        return job
+
     async def get_by_id(self, job_id: uuid.UUID) -> Job | None:
         result = await self._session.execute(select(Job).where(Job.id == job_id))
         return result.scalar_one_or_none()
@@ -40,21 +76,30 @@ class JobRepository:
         project_id: uuid.UUID,
         *,
         limit: int = 50,
+        cursor: PageCursor | None = None,
     ) -> list[Job]:
         query = (
             select(Job)
             .join(Document, Job.document_id == Document.id)
             .where(Document.project_id == project_id)
             .where(~Job.payload.contains({"test": True}))
-            .order_by(Job.created_at.desc())
-            .limit(limit)
+            .order_by(Job.created_at.desc(), Job.id.desc())
         )
+        if cursor is not None:
+            query = query.where(
+                tuple_(Job.created_at, Job.id) < (cursor.created_at, cursor.id)
+            )
+        query = query.limit(limit)
         result = await self._session.execute(query)
         return list(result.scalars().all())
 
 
 def _pending_job_query(*, test_only: bool | None = None):
-    query = select(Job).where(Job.status == JobStatus.pending).order_by(Job.created_at)
+    query = (
+        select(Job)
+        .where(Job.status == JobStatus.pending)
+        .order_by(Job.created_at, Job.id)
+    )
     if test_only is True:
         query = query.where(Job.payload.contains({"test": True}))
     elif test_only is False:
@@ -64,7 +109,7 @@ def _pending_job_query(*, test_only: bool | None = None):
 
 def claim_next_pending_job(*, test_only: bool | None = None) -> Job | None:
     """Claim one pending job using FOR UPDATE SKIP LOCKED (sync session)."""
-    with SyncSessionLocal() as session:
+    with sync_system_session() as session:
         job = session.execute(_pending_job_query(test_only=test_only)).scalar_one_or_none()
         if job is None:
             return None
@@ -82,7 +127,7 @@ def count_active_jobs(*, test_payload: bool | None = None) -> int:
     """Count pending, running, or waiting jobs (optionally filter by payload test flag)."""
     from sqlalchemy import func
 
-    with SyncSessionLocal() as session:
+    with sync_system_session() as session:
         query = select(func.count()).select_from(Job).where(
             Job.status.in_(
                 (JobStatus.pending, JobStatus.running, JobStatus.waiting)
@@ -95,9 +140,42 @@ def count_active_jobs(*, test_payload: bool | None = None) -> int:
         return session.execute(query).scalar_one()
 
 
+def reclaim_stale_running_jobs(*, running_timeout_seconds: float) -> int:
+    """Move crashed-worker jobs back to pending after their running lease expires."""
+    now = datetime.now(UTC)
+    stale_before = now - timedelta(seconds=running_timeout_seconds)
+    with sync_system_session() as session:
+        result = session.execute(
+            update(Job)
+            .where(Job.status == JobStatus.running)
+            .where(Job.started_at <= stale_before)
+            .values(
+                status=JobStatus.pending,
+                started_at=None,
+                updated_at=now,
+            )
+        )
+        session.commit()
+        return result.rowcount or 0
+
+
+def seconds_until_next_stale_running_job(*, running_timeout_seconds: float) -> float | None:
+    """Return seconds until the oldest running job is eligible for reclaim."""
+    with sync_system_session() as session:
+        oldest_started_at = session.execute(
+            select(func.min(Job.started_at)).where(Job.status == JobStatus.running)
+        ).scalar_one_or_none()
+    if oldest_started_at is None:
+        return None
+
+    now = datetime.now(UTC)
+    reclaim_at = oldest_started_at + timedelta(seconds=running_timeout_seconds)
+    return max((reclaim_at - now).total_seconds(), 0.0)
+
+
 def mark_job_done(job_id: uuid.UUID, result: dict | None = None) -> None:
     now = datetime.now(UTC)
-    with SyncSessionLocal() as session:
+    with sync_system_session() as session:
         update_result = session.execute(
             update(Job)
             .where(Job.id == job_id)
@@ -121,7 +199,7 @@ def mark_job_waiting(
     payload_patch: dict | None = None,
 ) -> None:
     now = datetime.now(UTC)
-    with SyncSessionLocal() as session:
+    with sync_system_session() as session:
         job = session.get(Job, job_id)
         if job is None:
             raise ValueError(f"job {job_id} not found")
@@ -141,7 +219,7 @@ def mark_job_waiting(
 
 def mark_job_failed(job_id: uuid.UUID, error: str) -> None:
     now = datetime.now(UTC)
-    with SyncSessionLocal() as session:
+    with sync_system_session() as session:
         update_result = session.execute(
             update(Job)
             .where(Job.id == job_id)

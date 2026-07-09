@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.nomicous.inference-helper</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__INSTALL_DIR__/nomicous-inference-helper</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>__HOME__/.nomicous/logs/inference-helper.log</string>
+  <key>StandardErrorPath</key>
+  <string>__HOME__/.nomicous/logs/inference-helper.log</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HF_CACHE_ROOT</key>
+    <string>__HOME__/.nomicous/hf/cache</string>
+    <key>HELPER_REGISTRY_URL</key>
+    <string>__REGISTRY_URL__</string>
+  </dict>
+</dict>
+</plist>

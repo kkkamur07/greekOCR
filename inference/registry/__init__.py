@@ -7,7 +7,7 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, Field
 
-from inference.contracts.common import ComputeDevice, InferenceTask, RegistryArchitecture
+from inference.contracts.common import ComputeDevice, HostEligibility, InferenceTask, RegistryArchitecture
 
 INFERENCE_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_REGISTRY_PATH = INFERENCE_ROOT / "registry.yaml"
@@ -21,6 +21,7 @@ class RegistryModelEntry(BaseModel):
     task: InferenceTask
     architecture: RegistryArchitecture
     device: ComputeDevice
+    host_eligibility: HostEligibility = HostEligibility.local
     versions: dict[str, RegistryVersionEntry] = Field(min_length=1)
 
 

@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 from io import BytesIO
-from typing import Any
-
-from PIL import Image
+from typing import TYPE_CHECKING, Any
 
 from inference.architectures.calamari import run_calamari_transcribe, run_calamari_transcribe_many
 from inference.architectures.kraken import run_kraken_segment
@@ -17,8 +15,11 @@ from inference.contracts.transcribe import (
     TranscribeLineRegion,
     TranscribeRunResponse,
 )
-from inference.infrastructure.orm_models import InferenceJob
 from inference.infrastructure.settings import get_inference_settings
+from PIL import Image
+
+if TYPE_CHECKING:
+    from inference.infrastructure.orm_models import InferenceJob
 from inference.registry.resolve import resolve_registry_entry
 from inference.weights import resolve_weights_source
 
@@ -119,7 +120,9 @@ def run_model(
     raise ValueError(f"unsupported ML task for runner: {task.value}")
 
 
-def run_job(job: InferenceJob) -> SegmentRunResponse | TranscribeRunResponse | TranscribeBatchRunResponse:
+def run_job(
+    job: InferenceJob,
+) -> SegmentRunResponse | TranscribeRunResponse | TranscribeBatchRunResponse:
     return run_model(
         task=InferenceTask(job.task),
         registry_model_id=job.registry_model_id,

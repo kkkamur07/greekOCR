@@ -8,6 +8,7 @@ type PageEditorShellProps = {
   backHref: string;
   toolbar: ReactNode;
   processingBanner?: ReactNode;
+  inferenceBanner?: ReactNode;
   statusAlerts?: ReactNode;
   showStatusAlerts?: boolean;
   children: ReactNode;
@@ -19,6 +20,7 @@ export function PageEditorShell({
   backHref,
   toolbar,
   processingBanner,
+  inferenceBanner,
   statusAlerts,
   showStatusAlerts = false,
   children,
@@ -50,6 +52,8 @@ export function PageEditorShell({
   return (
     <div className="pe-shell">
       {toolbar}
+
+      {inferenceBanner}
 
       {processingBanner}
 

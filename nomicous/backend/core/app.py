@@ -36,6 +36,7 @@ from backend.document.api.media import router as media_router
 from backend.document.api.public import router as public_router
 from backend.document.api.public_media import router as public_media_router
 from backend.ml.api.models import router as ml_models_router
+from backend.ml.api.registry import router as ml_registry_router
 from backend.project.api.projects import router as projects_router
 from backend.users.api.auth import router as auth_router
 
@@ -150,22 +151,34 @@ def _register_exception_handlers(app: FastAPI) -> None:
 async def _lifespan(app: FastAPI):
     import asyncio
 
+    from infrastructure.db import engine, sync_engine
+
     stop_event = asyncio.Event()
-    notification_task = asyncio.create_task(platform_job_notification_loop(stop_event))
+    job_settings = get_job_settings()
+    notification_task = (
+        asyncio.create_task(platform_job_notification_loop(stop_event))
+        if job_settings.job_sse_notifications_enabled
+        else None
+    )
     worker_task = (
         asyncio.create_task(worker_loop(stop_event))
-        if get_job_settings().job_worker_enabled
+        if job_settings.job_worker_enabled
         else None
     )
     yield
     stop_event.set()
     if worker_task is not None:
         worker_task.cancel()
-    with suppress(asyncio.CancelledError):
-        await notification_task
+    if notification_task is not None:
+        notification_task.cancel()
+    if notification_task is not None:
+        with suppress(asyncio.CancelledError):
+            await notification_task
     if worker_task is not None:
         with suppress(asyncio.CancelledError):
             await worker_task
+    await engine.dispose()
+    sync_engine.dispose()
 
 
 def create_app() -> FastAPI:
@@ -207,6 +220,7 @@ def create_app() -> FastAPI:
     app.include_router(public_router)
     app.include_router(public_media_router)
     app.include_router(ml_models_router)
+    app.include_router(ml_registry_router)
     app.include_router(jobs_router)
     app.include_router(internal_inference_router)
     return app

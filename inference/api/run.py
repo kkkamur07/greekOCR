@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
+from inference.api.dependencies import require_inference_service_secret
 from inference.contracts.run import InferenceRunRequest, InferenceRunResponse
 from inference.jobs.runner import run_model
 
-router = APIRouter(prefix="/inference/v1", tags=["ml"])
+router = APIRouter(
+    prefix="/inference/v1",
+    tags=["ml"],
+    dependencies=[Depends(require_inference_service_secret)],
+)
 
 
 @router.post("/run", response_model=InferenceRunResponse)

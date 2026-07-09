@@ -4,23 +4,23 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.security import HTTPAuthorizationCredentials
 from jwt import InvalidTokenError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.exceptions import NotFoundError
 from backend.core.settings.auth import get_auth_settings
+from backend.users.api.security import bearer_scheme
 from backend.users.application.auth_service import AuthService
 from backend.users.application.jwt_tokens import decode_access_token
 from backend.users.infrastructure.orm_models import User
 from infrastructure.db import get_db
 
-_bearer = HTTPBearer(auto_error=False)
 _auth = AuthService()
 
 
 async def get_current_user(
-    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> User:
     if credentials is None or credentials.scheme.lower() != "bearer":

@@ -41,3 +41,8 @@ class ProjectResponse(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ProjectPageResponse(BaseModel):
+    items: list[ProjectResponse]
+    next_cursor: str | None = None

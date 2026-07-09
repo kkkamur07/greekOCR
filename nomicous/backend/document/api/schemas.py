@@ -46,6 +46,11 @@ class DocumentResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class DocumentPageResponse(BaseModel):
+    items: list[DocumentResponse]
+    next_cursor: str | None = None
+
+
 class DocumentPartResponse(BaseModel):
     id: UUID
     document_id: UUID
@@ -283,6 +288,40 @@ class CopyToGroundTruthResponse(BaseModel):
 
 class LineTranscriptionPatchRequest(BaseModel):
     text: str
+
+
+class LocalTranscribeLinePersistRequest(BaseModel):
+    line_id: UUID
+    text: str
+    confidence: float = Field(ge=0.0, le=1.0)
+    character_confidences: list[dict[str, object]] | None = None
+
+
+class LocalTranscribePersistRequest(BaseModel):
+    registry_model_id: str = Field(min_length=1)
+    registry_tag: str = Field(default="stable", min_length=1)
+    lines: list[LocalTranscribeLinePersistRequest] = Field(min_length=1)
+
+
+class LocalTranscribePersistResponse(BaseModel):
+    job_id: UUID
+    transcription_id: UUID
+    lines: list[dict[str, object]]
+
+
+class LocalSegmentPersistRequest(BaseModel):
+    registry_model_id: str = Field(min_length=1)
+    registry_tag: str = Field(default="stable", min_length=1)
+    output: dict[str, object]
+
+
+class LocalSegmentPersistResponse(BaseModel):
+    job_id: UUID
+    blocks_count: int
+    lines_count: int
+    added_lines: int
+    pruned_lines: int
+    preserved_manual_lines: int
 
 
 class PublicBlockResponse(BaseModel):

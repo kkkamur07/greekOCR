@@ -13,11 +13,11 @@ from backend.document.application.transcribe_merge_service import (
     TranscribeJobHandlerError,
     TranscribeMergeService,
 )
-from backend.document.infrastructure.media_store import MediaStore
+from backend.document.infrastructure.media_store import get_media_store
 from backend.document.infrastructure.orm_models import DocumentPart
 from backend.jobs.infrastructure.orm_models import Job, JobType
 from backend.ml.infrastructure.orm_models import InferenceModel, InferenceTask
-from infrastructure.db import SyncSessionLocal
+from infrastructure.db import sync_system_session
 
 _DEFAULT_SEGMENT_REGISTRY_MODEL = "greek-kraken-segment-v1"
 _DEFAULT_SEGMENT_REGISTRY_TAG = "stable"
@@ -64,7 +64,7 @@ def _job_registry_selection(
 
 
 def _build_segment_request(job: Job) -> JobSubmitRequest:
-    with SyncSessionLocal() as session:
+    with sync_system_session() as session:
         if job.document_part_id is None:
             raise ValueError("Segment job is missing its target document part")
         part = session.get(DocumentPart, job.document_part_id)
@@ -77,14 +77,14 @@ def _build_segment_request(job: Job) -> JobSubmitRequest:
             fallback_model_id=_DEFAULT_SEGMENT_REGISTRY_MODEL,
             fallback_tag=_DEFAULT_SEGMENT_REGISTRY_TAG,
         )
-        image_path = MediaStore().absolute_path(part.image_key)
+        image_bytes = get_media_store().read(part.image_key)
         params = dict((job.payload or {}).get("ml_params") or {})
         return JobSubmitRequest(
             task=WireInferenceTask.segment,
             registry_model_id=selection.model_id,
             registry_tag=selection.tag,
             product_job_id=job.id,
-            image_bytes=image_path.read_bytes(),
+            image_bytes=image_bytes,
             params=params,
         )
 
@@ -93,7 +93,7 @@ def _build_transcribe_request(job: Job) -> JobSubmitRequest:
     if job.document_id is None or job.document_part_id is None:
         raise TranscribeJobHandlerError("Transcribe job is missing its target document part")
 
-    with SyncSessionLocal() as session:
+    with sync_system_session() as session:
         part = session.get(DocumentPart, job.document_part_id)
         if part is None or part.document_id != job.document_id:
             raise TranscribeJobHandlerError("Document part not found")
@@ -113,7 +113,7 @@ def _build_transcribe_request(job: Job) -> JobSubmitRequest:
             if not lines:
                 raise TranscribeJobHandlerError("No matching lines to transcribe")
 
-        image_bytes = MediaStore().absolute_path(part.image_key).read_bytes()
+        image_bytes = get_media_store().read(part.image_key)
         base_params = dict((job.payload or {}).get("ml_params") or {})
         line_regions = [
             {

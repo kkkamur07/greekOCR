@@ -2,7 +2,7 @@
 
 AI-assisted transcription platform for manuscript pages. `nomicous/` is the production app root: the Postgres-backed backend, Vite frontend, and migration infrastructure live here, while the repository-level `model/` workspace remains outside nomicous.
 
-See `CONTEXT.md` for domain glossary and `issues/prd.md` for requirements.
+See `CONTEXT.md` for domain glossary, [`docs/README.md`](../docs/README.md) for guides and deployment, and [`issues/README.md`](../issues/README.md) for backlog and archived work.
 
 ## Data layout
 
@@ -63,6 +63,8 @@ Open [http://localhost:5173](http://localhost:5173).
 
 ## Docker (one command)
 
+See [`docs/deployment/docker-build-optimization.md`](../docs/deployment/docker-build-optimization.md) for image sizes, `.dockerignore` rationale, multi-stage layout, and production build commands.
+
 Ensure ports **5173**, **8000**, **8001**, and **5433** are free. Run Compose from the repository root:
 
 ```bash
@@ -75,7 +77,7 @@ docker compose up --build -d   # detached background
 |---------|-----|
 | Frontend | [http://localhost:5173](http://localhost:5173) |
 | API | [http://localhost:8000](http://localhost:8000) |
-| ML inference API | [http://localhost:8001](http://localhost:8001) (separate service; health only today) |
+| ML inference API | [http://localhost:8010](http://localhost:8010) (host port; container listens on 8001. Host 8001 is reserved for the local inference helper) |
 | Postgres | `localhost:5433` |
 
 Platform media is mounted at `nomicous/backend/media/`. The existing `data/` folder is not mounted or migrated by the production platform relocation.
@@ -149,7 +151,7 @@ uv run --group platform pytest tests/nomicous/unit
 uv run --group platform pytest tests/nomicous/integration -m "not ml"
 ```
 
-See [`docs/testing.md`](../docs/testing.md) for the ML lane and full-suite commands.
+See [`docs/guides/testing.md`](../docs/guides/testing.md) for the ML lane and full-suite commands.
 
 ## OpenAPI
 

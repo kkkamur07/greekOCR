@@ -11,7 +11,7 @@ from backend.project.infrastructure.orm_models import Project
 from fastapi.testclient import TestClient
 from inference.contracts.webhooks import INFERENCE_WEBHOOK_SECRET_HEADER
 
-from infrastructure.db import SyncSessionLocal
+from infrastructure.db import sync_system_session
 
 CALLBACK_URL = "/internal/inference/job-complete"
 WEBHOOK_HEADERS = {INFERENCE_WEBHOOK_SECRET_HEADER: "test-inference-webhook-secret"}
@@ -100,7 +100,7 @@ def _seed_waiting_job(
     inference_job_id = inference_job_id or uuid.uuid4()
     document_id = None
     part_id = None
-    with SyncSessionLocal() as session:
+    with sync_system_session() as session:
         if job_type == JobType.segment:
             project_id = uuid.uuid4()
             document_id = uuid.uuid4()
@@ -149,7 +149,7 @@ def _seed_transcribe_waiting_job(
     document_id = uuid.uuid4()
     part_id = uuid.uuid4()
     line_id = uuid.uuid4()
-    with SyncSessionLocal() as session:
+    with sync_system_session() as session:
         session.add(Project(id=project_id, name="Callback test", slug=f"callback-{uuid.uuid4().hex}"))
         session.flush()
         session.add(
@@ -194,7 +194,7 @@ def _seed_transcribe_waiting_job(
 
 
 def _get_job(job_id: uuid.UUID) -> Job:
-    with SyncSessionLocal() as session:
+    with sync_system_session() as session:
         job = session.get(Job, job_id)
         assert job is not None
         session.expunge(job)

@@ -5,6 +5,8 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Query, Response, UploadFile, status
+from inference.contracts.segment import SegmentRunResponse
+from inference.contracts.transcribe import CharacterConfidence, TranscribeRunResponse
 from PIL import Image, UnidentifiedImageError
 from PIL.Image import DecompressionBombError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.annotation.application.export_service import AnnotationExportService
 from backend.annotation.application.page_xml_export_service import PageXmlExportService
 from backend.annotation.application.transcription_pdf_service import TranscriptionPdfService
+from backend.core.api.pagination import decode_cursor, paginate_rows
 from backend.core.exceptions import ValidationError
 from backend.document.api.line_responses import line_response
 from backend.document.api.responses import (
@@ -26,6 +29,7 @@ from backend.document.api.schemas import (
     CopyToGroundTruthRequest,
     CopyToGroundTruthResponse,
     DocumentCreateRequest,
+    DocumentPageResponse,
     DocumentPartResponse,
     DocumentPartUpdateRequest,
     DocumentResponse,
@@ -42,6 +46,10 @@ from backend.document.api.schemas import (
     LinesReplaceRequest,
     LineTranscriptionPatchRequest,
     LineTranscriptionResponse,
+    LocalSegmentPersistRequest,
+    LocalSegmentPersistResponse,
+    LocalTranscribePersistRequest,
+    LocalTranscribePersistResponse,
     PagePairingResponse,
     PageTranscriptionImportRequest,
     PageTranscriptionTextLineResponse,
@@ -53,6 +61,7 @@ from backend.document.api.schemas import (
     TranscriptionLayerResponse,
 )
 from backend.document.application.document_service import DocumentService
+from backend.document.application.local_inference_service import LocalInferenceService
 from backend.document.infrastructure.document_repository import DocumentRepository
 from backend.document.infrastructure.orm_models import Block
 from backend.jobs.api.schemas import EnqueueJobResponse
@@ -62,6 +71,7 @@ from infrastructure.db import get_db
 
 router = APIRouter(prefix="/projects/{project_id}/documents", tags=["documents"])
 _service = DocumentService()
+_local_inference_service = LocalInferenceService()
 _document_repo = DocumentRepository()
 _export_service = AnnotationExportService()
 _page_xml_export_service = PageXmlExportService()
@@ -133,23 +143,40 @@ def _export_response(result) -> ExportResponse:
     )
 
 
-@router.get("", response_model=list[DocumentResponse])
+@router.get("", response_model=DocumentPageResponse)
 async def list_documents(
     project_id: UUID,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
     include_archived: bool = Query(default=False),
-) -> list[DocumentResponse]:
+    limit: int = Query(default=50, ge=1, le=200),
+    cursor: str | None = Query(default=None),
+) -> DocumentPageResponse:
+    page_cursor = decode_cursor(cursor) if cursor else None
     documents = await _service.list_documents(
-        db, current_user, project_id, include_archived=include_archived
+        db,
+        current_user,
+        project_id,
+        include_archived=include_archived,
+        limit=limit + 1,
+        cursor=page_cursor,
+    )
+    page, next_cursor = paginate_rows(
+        documents,
+        limit=limit,
+        created_at_getter=lambda document: document.created_at,
+        id_getter=lambda document: document.id,
     )
     part_counts = await _document_repo.count_parts_by_document_ids(
-        db, [document.id for document in documents]
+        db, [document.id for document in page]
     )
-    return [
-        document_response(document, part_count=part_counts.get(document.id, 0))
-        for document in documents
-    ]
+    return DocumentPageResponse(
+        items=[
+            document_response(document, part_count=part_counts.get(document.id, 0))
+            for document in page
+        ],
+        next_cursor=next_cursor,
+    )
 
 
 @router.post("", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
@@ -448,7 +475,7 @@ async def replace_part_lines(
         project_id,
         document_id,
         part_id,
-        lines=[line.model_dump() for line in body.lines],
+        lines=[line.model_dump(exclude_unset=True) for line in body.lines],
     )
     return [line_response(line) for line in lines]
 
@@ -544,17 +571,12 @@ async def export_approved_line_artifacts(
     return _export_response(result)
 
 
-@router.post(
-    "/{document_id}/parts/{part_id}/transcription-pdf",
-    response_class=Response,
-    responses=PDF_RESPONSE,
-)
-async def generate_transcription_pdf(
+async def _member_transcription_pdf_response(
+    db: AsyncSession,
+    current_user: User,
     project_id: UUID,
     document_id: UUID,
     part_id: UUID,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
     pdf_bytes = await _transcription_pdf_service.generate_part_pdf(
         db,
@@ -567,6 +589,40 @@ async def generate_transcription_pdf(
         content=pdf_bytes,
         media_type="application/pdf",
         headers={"Content-Disposition": 'attachment; filename="transcription.pdf"'},
+    )
+
+
+@router.get(
+    "/{document_id}/parts/{part_id}/transcription-pdf",
+    response_class=Response,
+    responses=PDF_RESPONSE,
+)
+async def get_transcription_pdf(
+    project_id: UUID,
+    document_id: UUID,
+    part_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> Response:
+    return await _member_transcription_pdf_response(
+        db, current_user, project_id, document_id, part_id
+    )
+
+
+@router.post(
+    "/{document_id}/parts/{part_id}/transcription-pdf",
+    response_class=Response,
+    responses=PDF_RESPONSE,
+)
+async def generate_transcription_pdf(
+    project_id: UUID,
+    document_id: UUID,
+    part_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> Response:
+    return await _member_transcription_pdf_response(
+        db, current_user, project_id, document_id, part_id
     )
 
 
@@ -640,6 +696,88 @@ async def transcribe_part(
         db, current_user, project_id, document_id, part_id, model_id=body.model_id, line_ids=body.line_ids
     )
     return EnqueueJobResponse(job_id=job.id)
+
+
+@router.post(
+    "/{document_id}/parts/{part_id}/local-inference/transcribe",
+    response_model=LocalTranscribePersistResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def persist_local_transcribe(
+    project_id: UUID,
+    document_id: UUID,
+    part_id: UUID,
+    body: LocalTranscribePersistRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> LocalTranscribePersistResponse:
+    lines = [
+        (
+            line.line_id,
+            TranscribeRunResponse(
+                text=line.text,
+                confidence=line.confidence,
+                character_confidences=[
+                    CharacterConfidence.model_validate(entry)
+                    for entry in (line.character_confidences or [])
+                ]
+                or [
+                    CharacterConfidence(char=character, confidence=line.confidence)
+                    for character in line.text
+                ],
+            ),
+        )
+        for line in body.lines
+    ]
+    result = await _local_inference_service.persist_local_transcribe(
+        db,
+        current_user,
+        project_id,
+        document_id,
+        part_id,
+        registry_model_id=body.registry_model_id,
+        registry_tag=body.registry_tag,
+        lines=lines,
+    )
+    return LocalTranscribePersistResponse(
+        job_id=UUID(result["job_id"]),
+        transcription_id=UUID(result["transcription_id"]),
+        lines=result["lines"],
+    )
+
+
+@router.post(
+    "/{document_id}/parts/{part_id}/local-inference/segment",
+    response_model=LocalSegmentPersistResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def persist_local_segment(
+    project_id: UUID,
+    document_id: UUID,
+    part_id: UUID,
+    body: LocalSegmentPersistRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> LocalSegmentPersistResponse:
+    output = SegmentRunResponse.model_validate(body.output)
+    result = await _local_inference_service.persist_local_segment(
+        db,
+        current_user,
+        project_id,
+        document_id,
+        part_id,
+        registry_model_id=body.registry_model_id,
+        registry_tag=body.registry_tag,
+        output=output,
+    )
+    return LocalSegmentPersistResponse(
+        job_id=UUID(result["job_id"]),
+        blocks_count=result["blocks_count"],
+        lines_count=result["lines_count"],
+        added_lines=result["added_lines"],
+        pruned_lines=result["pruned_lines"],
+        preserved_manual_lines=result["preserved_manual_lines"],
+    )
 
 
 @router.post(

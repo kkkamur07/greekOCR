@@ -9,7 +9,7 @@ import {
   type TranscriptionLayerResponse,
 } from '../../../api/client';
 import { ApiError } from '../../../api/errors';
-import { isUnauthorized, redirectToLogin } from '../../../auth/session';
+import { hasAccessToken, isUnauthorized, redirectToLogin } from '../../../auth/session';
 
 function accessMessage(error: ApiError): string {
   if (error.status === 401) {
@@ -108,6 +108,10 @@ export function usePageEditorData(
     if (!projectId || !documentId || !partId) {
       setLoading(false);
       setError('Page route is incomplete.');
+      return;
+    }
+    if (!hasAccessToken()) {
+      redirectToLogin();
       return;
     }
 

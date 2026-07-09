@@ -72,6 +72,22 @@ _Avoid_: revision file alone (insufficient when artifact bytes change)
 Python code under `src/hf/` that resolves `hf://` URIs, checks **Hub cache**, and downloads missing artifacts. Used by `inference` at inference time and by `scripts/hf/`.
 _Avoid_: huggingface module (too generic)
 
+**Inference host**:
+The machine where model weights are cached and inference executes — either the researcher's machine (**local inference**) or a hosted server (**remote inference**).
+_Avoid_: Runtime (too generic), worker node (infra jargon)
+
+**Lite model tier**:
+A registry model id sized for CPU on a typical researcher laptop; eligible for **local inference** via **Inference helper**.
+_Avoid_: Small model (vague), edge model (mobile jargon)
+
+**Server model tier**:
+A registry model id for **remote inference** only — too large or too slow for typical laptops.
+_Avoid_: Large model (vague), cloud model (ambiguous with Hub hosting)
+
+**Host eligibility**:
+Whether a registry model id may run on the researcher's machine (`local`), only on a hosted server (`remote`), or either (`any`). Distinct from **Compute device** (`cpu` / `cuda`), which says what hardware to use once a host is chosen. All `local` models — transcribe and segment — run on **Inference helper** when it is present; cloud is fallback only.
+_Avoid_: device (already means cpu/cuda), tier alone (ambiguous)
+
 **Hub namespace**:
 The Hugging Face account or org that owns **Hub model repos** and **Hub dataset repos**. Starts under a personal username; may later move to the `nomicous` org without changing repo slugs.
 _Avoid_: org (when meaning the namespace generically)

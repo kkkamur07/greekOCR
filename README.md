@@ -7,6 +7,8 @@ Two main pieces:
 1. **Recognition models** — train and evaluate line-level Greek OCR (Calamari, legacy TrOCR/Kraken experiments).
 2. **Nomicous production app** — FastAPI + Postgres backend and a React editor under [`nomicous/`](nomicous/) (eScriptorium-style hierarchy: projects → documents → parts → layout → transcriptions).
 
+**Documentation:** [`docs/README.md`](docs/README.md) — guides, deployment, inference, architecture, ADRs.
+
 ---
 
 ## Recognition quality (Calamari)
@@ -35,7 +37,7 @@ Recognition work is split between **training** at the repo root and **inference*
 
 ```text
 src/
-  model/calamari/     # Vendored Calamari OCR library (canonical; see docs/calamari-vendored-architecture.md)
+  model/calamari/     # Vendored Calamari OCR library (canonical; see docs/architecture/calamari-vendored-architecture.md)
   model/kraken/       # Kraken finetuning helpers
   train/calamari/     # Hydra training entry points (train.py, finetune.py, finetune.sh)
   preprocessing_data/ # Dataset pack builders
@@ -55,7 +57,7 @@ Training entry points:
 - **Calamari finetune** — `src/train/calamari/finetune.sh` (config `configs/calamari_finetune.yaml`)
 - **Kraken finetune** — `src/model/kraken/finetuning.py` (config `configs/kraken_seg.yaml`)
 
-Checkpoints default to `outputs/calamari-greek-bible/` (override via Hydra `output.root` in the config files). For production inference, weights live under `inference/weights/` and are registered in `inference/registry.yaml` — see [`inference/README.md`](inference/README.md). Calamari **code** is vendored under `src/model/calamari/` (not the PyPI package at runtime): [`docs/calamari-vendored-architecture.md`](docs/calamari-vendored-architecture.md).
+Checkpoints default to `outputs/calamari-greek-bible/` (override via Hydra `output.root` in the config files). For production inference, weights live under `inference/weights/` and are registered in `inference/registry.yaml` — see [`inference/README.md`](inference/README.md). Calamari **code** is vendored under `src/model/calamari/` (not the PyPI package at runtime): [`docs/architecture/calamari-vendored-architecture.md`](docs/architecture/calamari-vendored-architecture.md).
 
 ---
 
@@ -84,7 +86,7 @@ docker compose up --build
 | API | http://localhost:8000 |
 | Health | http://localhost:8000/health |
 | OpenAPI | http://localhost:8000/docs |
-| ML inference API | http://localhost:8001 |
+| ML inference API | http://localhost:8010 (host port; container listens on 8001) |
 | Postgres | `localhost:5433` — user `postgres`, password `dev`, database **`kalamos`** |
 
 Also started: **`inference-worker`** (background inference jobs; no host port). The platform API calls `inference-api` via `INFERENCE_URL`. See [`inference/README.md`](inference/README.md).
@@ -103,7 +105,7 @@ uv run --project ../ --group platform uvicorn backend.core.main:app --reload --h
 uv run --project ../ --group platform pytest tests/nomicous -q
 ```
 
-Full suite (platform + ML service + unit), prerequisites, and known failure notes: [docs/testing.md](docs/testing.md).
+Full suite (platform + ML service + unit), prerequisites, and known failure notes: [docs/guides/testing.md](docs/guides/testing.md).
 
 More detail: [nomicous/infrastructure/README.md](nomicous/infrastructure/README.md) (DB, migrations), [nomicous/backend/core/README.md](nomicous/backend/core/README.md) (settings, DTOs, routes), and [nomicous/README.md](nomicous/README.md) (app operations).
 
@@ -143,7 +145,7 @@ The editor reuses interaction patterns from [eScriptorium](https://github.com/PS
 - Models that researchers can actually trust on their material
 - Expert-in-the-loop annotation — compare runs, correct lines, publish read-only views
 
-Contributors: see [`issues/`](issues/) (`kanban.md`, `dag.md`) for what to work on next.
+Contributors: see [`issues/README.md`](issues/README.md) for backlog and [`issues/kanban.md`](issues/kanban.md) for board state.
 
 ---
 
@@ -166,7 +168,7 @@ After a detached start: `docker compose ps`, `docker compose logs -f`, `docker c
 |---------|-----|
 | Editor | http://localhost:5173 |
 | API | http://localhost:8000 |
-| ML inference API | http://localhost:8001 |
+| ML inference API | http://localhost:8010 (host port; container listens on 8001) |
 
 Training code (`src/`), root `data/`, and inference weights (`inference/weights/`) are intentionally separate from the production app. Nomicous platform media is stored under `nomicous/backend/media/`.
 

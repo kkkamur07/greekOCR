@@ -7,12 +7,18 @@ COPY --from=ghcr.io/astral-sh/uv:0.11.26 /uv /uvx /bin/
 COPY pyproject.toml uv.lock /app/
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-  uv sync --frozen --only-group inference
+  uv sync --frozen --only-group inference \
+  && find /app/.venv -type d -name __pycache__ -prune -exec rm -rf {} + \
+  && find /app/.venv -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
 
 
 FROM python:3.11-slim AS runtime
 
 WORKDIR /app
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends libgomp1 \
+  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/.venv /app/.venv
 COPY pyproject.toml /app/pyproject.toml

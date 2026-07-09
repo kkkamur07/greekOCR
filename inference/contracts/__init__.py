@@ -2,6 +2,7 @@
 
 from inference.contracts.common import (
     ComputeDevice,
+    HostEligibility,
     ImageBytes,
     InferenceJobStatus,
     InferenceTask,
@@ -32,6 +33,7 @@ from inference.contracts.transcribe import (
 __all__ = [
     "CharacterConfidence",
     "ComputeDevice",
+    "HostEligibility",
     "ImageBytes",
     "JobCallbackRequest",
     "JobOutput",

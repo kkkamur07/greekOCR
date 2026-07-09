@@ -17,6 +17,7 @@ def test_registry_yaml_validates_model_entries():
     assert syriac.task == InferenceTask.transcribe
     assert syriac.architecture == RegistryArchitecture.calamari
     assert syriac.device == ComputeDevice.cpu
+    assert syriac.host_eligibility.value == "local"
     assert syriac.versions["stable"].weights_source.startswith("hf://")
 
     calamari = get_model_entry(registry, "greek-calamari-v1", "stable")

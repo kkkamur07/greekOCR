@@ -740,6 +740,23 @@ button { cursor: pointer; }
 .project-jobs-panel__status--done { color: var(--green); }
 .project-jobs-panel__status--failed { color: #dc2626; }
 .project-jobs-panel__status--pending { color: var(--text-3); }
+.project-jobs-panel__host {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  text-transform: uppercase;
+}
+.project-jobs-panel__host--local {
+  color: var(--navy);
+  background: color-mix(in srgb, var(--navy) 12%, transparent);
+}
+.project-jobs-panel__host--cloud {
+  color: var(--text-2);
+  background: var(--surface-2);
+}
 
 .public-page-canvas__overlay {
   position: absolute; top: 0; left: 0; pointer-events: none;

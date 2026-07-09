@@ -13,7 +13,7 @@ import pytest
 def test_list_projects_empty_for_new_user(client, auth_headers):
     response = client.get("/projects", headers=auth_headers)
     assert response.status_code == 200
-    assert response.json() == []
+    assert response.json() == {"items": [], "next_cursor": None}
 
 
 @pytest.mark.integration
@@ -48,7 +48,7 @@ def test_owner_create_read_update_delete(client, owner_headers):
 
     listed = client.get("/projects", headers=owner_headers)
     assert listed.status_code == 200
-    ids = [p["id"] for p in listed.json()]
+    ids = [p["id"] for p in listed.json()["items"]]
     assert project_id in ids
 
     delete = client.delete(f"/projects/{project_id}", headers=owner_headers)
@@ -103,7 +103,7 @@ def test_share_and_collaborator_list_read(client, owner_headers, collaborator_he
 
     collab_list = client.get("/projects", headers=collaborator_headers)
     assert collab_list.status_code == 200
-    assert any(p["id"] == project_id for p in collab_list.json())
+    assert any(p["id"] == project_id for p in collab_list.json()["items"])
 
     collab_read = client.get(f"/projects/{project_id}", headers=collaborator_headers)
     assert collab_read.status_code == 200
@@ -117,7 +117,7 @@ def test_share_and_collaborator_list_read(client, owner_headers, collaborator_he
 
     collab_list_after = client.get("/projects", headers=collaborator_headers)
     assert collab_list_after.status_code == 200
-    assert not any(p["id"] == project_id for p in collab_list_after.json())
+    assert not any(p["id"] == project_id for p in collab_list_after.json()["items"])
 
     collab_read_after = client.get(f"/projects/{project_id}", headers=collaborator_headers)
     assert collab_read_after.status_code in (403, 404)

@@ -1,6 +1,6 @@
-"""Shared OpenAPI + FileResponse helpers for part image routes."""
+"""Shared OpenAPI + response helpers for part image routes."""
 
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 
 from backend.core.schemas.errors import ApiErrorResponse
 from backend.document.application.document_service import DocumentService
@@ -30,6 +30,6 @@ def media_type_for_image_key(image_key: str) -> str:
     return "application/octet-stream"
 
 
-def part_image_file_response(service: DocumentService, part: DocumentPart) -> FileResponse:
-    path = service.resolve_part_image_path(part)
-    return FileResponse(path, media_type=media_type_for_image_key(part.image_key))
+def part_image_response(service: DocumentService, part: DocumentPart) -> Response:
+    data = service.read_part_bytes(part)
+    return Response(content=data, media_type=media_type_for_image_key(part.image_key))

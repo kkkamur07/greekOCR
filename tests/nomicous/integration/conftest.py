@@ -5,17 +5,39 @@ boots the platform and inference services over real HTTP.
 """
 
 import os
+import time
 import uuid
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
 
 os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production-at-least-32-bytes")
+os.environ.setdefault(
+    "DATABASE_URL",
+    "postgresql+asyncpg://postgres:dev@localhost:5433/kalamos",
+)
+os.environ.setdefault(
+    "SYNC_DATABASE_URL",
+    "postgresql://postgres:dev@localhost:5433/kalamos",
+)
+os.environ.setdefault(
+    "INFERENCE_DATABASE_URL",
+    "postgresql://postgres:dev@localhost:5433/kalamos",
+)
 os.environ.setdefault("AUTH_RATE_LIMIT_REQUESTS", "1000")
 os.environ.setdefault("ENABLE_TEST_JOB_ROUTES", "true")
 os.environ.setdefault("JOB_WORKER_ENABLED", "true")
 os.environ.setdefault("INFERENCE_WEBHOOK_SECRET", "test-inference-webhook-secret")
+os.environ.setdefault("INFERENCE_SERVICE_SECRET", "test-inference-webhook-secret")
+os.environ.setdefault(
+    "MIGRATOR_DATABASE_URL",
+    os.environ.get(
+        "MIGRATOR_DATABASE_URL",
+        "postgresql://postgres:dev@localhost:5433/kalamos",
+    ),
+)
 os.environ.setdefault(
     "INFERENCE_REGISTRY_PATH",
     os.path.abspath(
@@ -36,18 +58,32 @@ from backend.users.api.rate_limit import clear_auth_rate_limit_state
 
 from infrastructure.db import Base, sync_engine
 
+_truncate_engine = sync_engine
+_TRUNCATE_ADVISORY_LOCK_ID = 73450123
+
 
 def _truncate_database() -> None:
     table_names = [
         sync_engine.dialect.identifier_preparer.quote(table.name)
         for table in reversed(Base.metadata.sorted_tables)
     ]
-    with sync_engine.begin() as connection:
-        if table_names:
-            connection.execute(
-                text(f"TRUNCATE TABLE {', '.join(table_names)} RESTART IDENTITY CASCADE")
-            )
-        connection.execute(text("TRUNCATE TABLE inference_jobs RESTART IDENTITY CASCADE"))
+    for attempt in range(8):
+        try:
+            with _truncate_engine.begin() as connection:
+                connection.execute(
+                    text("SELECT pg_advisory_xact_lock(:lock_id)"),
+                    {"lock_id": _TRUNCATE_ADVISORY_LOCK_ID},
+                )
+                if table_names:
+                    connection.execute(
+                        text(f"TRUNCATE TABLE {', '.join(table_names)} RESTART IDENTITY CASCADE")
+                    )
+                connection.execute(text("TRUNCATE TABLE inference_jobs RESTART IDENTITY CASCADE"))
+            return
+        except OperationalError as exc:
+            if "deadlock" not in str(exc).lower() or attempt == 7:
+                raise
+            time.sleep(0.1 * (attempt + 1))
 
 
 @pytest.fixture(scope="session")
@@ -74,8 +110,6 @@ def isolated_platform_state(client: TestClient):
     yield
     clear_auth_rate_limit_state()
     worker_module._inference_client = None
-
-    _truncate_database()
 
 
 @pytest.fixture

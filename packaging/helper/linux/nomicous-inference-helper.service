@@ -1,0 +1,14 @@
+[Unit]
+Description=Nomicous Inference Helper
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=__INSTALL_DIR__/nomicous-inference-helper --no-tray
+WorkingDirectory=__INSTALL_DIR__
+Restart=on-failure
+Environment=HF_CACHE_ROOT=__HOME__/.nomicous/hf/cache
+Environment=HELPER_REGISTRY_URL=__REGISTRY_URL__
+
+[Install]
+WantedBy=default.target

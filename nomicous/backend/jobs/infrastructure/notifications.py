@@ -15,7 +15,7 @@ from sqlalchemy import text
 from backend.core.settings import get_infrastructure_settings
 from backend.core.settings.job import get_job_settings
 from backend.jobs.infrastructure.orm_models import JobStatus
-from infrastructure.db import SyncSessionLocal
+from infrastructure.db import sync_system_session
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ def notify_platform_job_status_changed(
     """Emit a committed platform job status change to Postgres listeners."""
     payload = json.dumps({"job_id": str(job_id), "status": _status_value(status)})
     try:
-        with SyncSessionLocal() as session:
+        with sync_system_session() as session:
             session.execute(
                 text("SELECT pg_notify(:channel, :payload)"),
                 {

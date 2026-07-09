@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from inference.contracts.common import InferenceJobStatus, InferenceTask as WireInferenceTask
@@ -22,9 +23,18 @@ from backend.document.infrastructure.orm_models import Line
 from backend.jobs.infrastructure.notifications import notify_platform_job_status_changed
 from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
 from backend.ml.infrastructure.ml_client import InferenceClient
-from infrastructure.db import SyncSessionLocal
+from infrastructure.db import sync_system_session
 
 _TERMINAL_STATUSES = frozenset({JobStatus.done, JobStatus.failed})
+
+
+@dataclass(frozen=True)
+class _MergeContext:
+    job_id: uuid.UUID
+    job_type: JobType
+    document_id: uuid.UUID | None
+    document_part_id: uuid.UUID | None
+    inference_job_id: uuid.UUID
 
 
 def _job_type_for_task(task: WireInferenceTask) -> JobType:
@@ -53,15 +63,25 @@ def _transcribe_output(callback: JobCallbackRequest) -> TranscribeBatchRunRespon
     return data
 
 
-def _apply_segment_merge(session, job: Job, callback: JobCallbackRequest) -> dict:
-    if job.document_part_id is None:
+def _merge_context(job: Job, callback: JobCallbackRequest) -> _MergeContext:
+    return _MergeContext(
+        job_id=job.id,
+        job_type=job.type,
+        document_id=job.document_id,
+        document_part_id=job.document_part_id,
+        inference_job_id=callback.inference_job_id,
+    )
+
+
+def _apply_segment_merge(session, context: _MergeContext, callback: JobCallbackRequest) -> dict:
+    if context.document_part_id is None:
         raise ValueError("Segment job is missing its target document part")
     canonical = InferenceClient.to_canonical_segment(_segment_output(callback))
     summary = SegmentMergeService().apply_sync(
         session,
-        part_id=job.document_part_id,
+        part_id=context.document_part_id,
         canonical_segment=canonical,
-        job_id=job.id,
+        job_id=context.job_id,
         commit=False,
     )
     return {
@@ -76,10 +96,10 @@ def _apply_segment_merge(session, job: Job, callback: JobCallbackRequest) -> dic
 def _apply_transcribe_merge_sync(
     session,
     *,
-    job: Job,
+    context: _MergeContext,
     output: TranscribeBatchRunResponse,
 ) -> dict:
-    if job.document_id is None or job.document_part_id is None:
+    if context.document_id is None or context.document_part_id is None:
         raise TranscribeJobHandlerError("Transcribe job is missing its target document part")
 
     lines_with_output = []
@@ -91,33 +111,35 @@ def _apply_transcribe_merge_sync(
         except ValueError as exc:
             raise TranscribeJobHandlerError("Transcribe callback line_id is invalid") from exc
         line = session.get(Line, line_id)
-        if line is None or line.part_id != job.document_part_id:
+        if line is None or line.part_id != context.document_part_id:
             raise TranscribeJobHandlerError("Document line not found")
         lines_with_output.append((line, result.output))
     return TranscribeMergeService().apply_sync(
         session,
-        document_id=job.document_id,
-        part_id=job.document_part_id,
-        job_id=job.id,
+        document_id=context.document_id,
+        part_id=context.document_part_id,
+        job_id=context.job_id,
         lines_with_output=lines_with_output,
         commit=False,
     )
 
 
-def _apply_transcribe_callback(
-    session,
-    job: Job,
-    callback: JobCallbackRequest,
-) -> dict:
-    if job.document_id is None or job.document_part_id is None:
-        raise TranscribeJobHandlerError("Transcribe job is missing its target document part")
-
-    output = _transcribe_output(callback)
-    return _apply_transcribe_merge_sync(
-        session,
-        job=job,
-        output=output,
-    )
+def _run_merge(context: _MergeContext, callback: JobCallbackRequest) -> dict:
+    with sync_system_session() as session:
+        if context.job_type == JobType.segment:
+            result = _apply_segment_merge(session, context, callback)
+        elif context.job_type == JobType.transcribe:
+            result = _apply_transcribe_merge_sync(
+                session,
+                context=context,
+                output=_transcribe_output(callback),
+            )
+        else:
+            raise ConflictError(
+                f"job {context.job_id} type {context.job_type.value} cannot receive inference callbacks"
+            )
+        session.commit()
+        return result
 
 
 def _mark_failed_from_callback_sync(job: Job, callback: JobCallbackRequest) -> None:
@@ -144,7 +166,11 @@ def _assert_callback_matches_job(job: Job, callback: JobCallbackRequest) -> None
         )
 
 
-def _mark_done_from_callback_sync(job: Job, callback: JobCallbackRequest, result: dict) -> None:
+def _mark_done_from_callback_sync(
+    job: Job,
+    callback: JobCallbackRequest,
+    result: dict,
+) -> None:
     now = datetime.now(UTC)
     job.status = JobStatus.done
     job.inference_job_id = callback.inference_job_id
@@ -154,8 +180,23 @@ def _mark_done_from_callback_sync(job: Job, callback: JobCallbackRequest, result
     job.updated_at = now
 
 
-def _apply_callback_locked(callback: JobCallbackRequest) -> bool:
-    with SyncSessionLocal() as session:
+def _mark_failed_after_merge(job_id: uuid.UUID, error: str) -> None:
+    now = datetime.now(UTC)
+    with sync_system_session() as session:
+        job = session.get(Job, job_id)
+        if job is None or job.status in _TERMINAL_STATUSES:
+            return
+        job.status = JobStatus.failed
+        job.error = error
+        job.completed_at = now
+        job.updated_at = now
+        session.commit()
+        notify_platform_job_status_changed(job.id, job.status)
+
+
+def _validate_callback(callback: JobCallbackRequest) -> tuple[bool, _MergeContext | None]:
+    """Short transaction: lock job, validate, or mark failed. Returns merge context when needed."""
+    with sync_system_session() as session:
         job = session.execute(
             select(Job)
             .where(Job.id == callback.product_job_id)
@@ -164,26 +205,54 @@ def _apply_callback_locked(callback: JobCallbackRequest) -> bool:
         if job is None:
             raise NotFoundError(f"job {callback.product_job_id} not found")
         if job.status in _TERMINAL_STATUSES:
-            return False
+            return False, None
         _assert_callback_matches_job(job, callback)
 
         if callback.status == InferenceJobStatus.failed:
             _mark_failed_from_callback_sync(job, callback)
             session.commit()
             notify_platform_job_status_changed(job.id, job.status)
-            return True
+            return True, None
 
-        if job.type == JobType.segment:
-            result = _apply_segment_merge(session, job, callback)
-        elif job.type == JobType.transcribe:
-            result = _apply_transcribe_callback(session, job, callback)
-        else:
-            raise ConflictError(f"job {job.id} type {job.type.value} cannot receive inference callbacks")
+        if job.status != JobStatus.waiting:
+            raise ConflictError(f"job {job.id} is not waiting for an inference callback")
 
+        context = _merge_context(job, callback)
+        session.commit()
+        return True, context
+
+
+def _finalize_successful_callback(context: _MergeContext, callback: JobCallbackRequest, result: dict) -> bool:
+    with sync_system_session() as session:
+        job = session.execute(
+            select(Job)
+            .where(Job.id == context.job_id)
+            .with_for_update()
+        ).scalar_one_or_none()
+        if job is None:
+            raise NotFoundError(f"job {context.job_id} not found")
+        if job.status in _TERMINAL_STATUSES:
+            return False
+        if job.status != JobStatus.waiting:
+            raise ConflictError(f"job {job.id} is no longer waiting for an inference callback")
         _mark_done_from_callback_sync(job, callback, result)
         session.commit()
         notify_platform_job_status_changed(job.id, job.status)
         return True
+
+
+def _apply_callback_locked(callback: JobCallbackRequest) -> bool:
+    applied, context = _validate_callback(callback)
+    if not applied or context is None:
+        return applied
+
+    try:
+        result = _run_merge(context, callback)
+    except Exception as exc:
+        _mark_failed_after_merge(context.job_id, str(exc).strip() or "Callback merge failed")
+        raise
+
+    return _finalize_successful_callback(context, callback, result)
 
 
 class JobCallbackService:

@@ -33,6 +33,12 @@ class Job(Base):
     __tablename__ = "jobs"
     __table_args__ = (
         Index("ix_jobs_payload_gin", "payload", postgresql_using="gin"),
+        Index(
+            "ix_jobs_claim_pending",
+            "created_at",
+            "id",
+            postgresql_where="status = 'pending'",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -56,7 +62,7 @@ class Job(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     document_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("documents.id", ondelete="SET NULL"), nullable=True
+        UUID(as_uuid=True), ForeignKey("documents.id", ondelete="SET NULL"), nullable=True, index=True
     )
     document_part_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("document_parts.id", ondelete="SET NULL"), nullable=True

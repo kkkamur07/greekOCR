@@ -29,10 +29,16 @@ class DocumentCrudMixin(DocumentServiceSharedMixin):
         project_id: UUID,
         *,
         include_archived: bool = False,
+        limit: int = 50,
+        cursor=None,
     ) -> list[Document]:
         await self._require_member(session, project_id, user.id)
         return await self._documents.list_for_project(
-            session, project_id, include_archived=include_archived
+            session,
+            project_id,
+            include_archived=include_archived,
+            limit=limit,
+            cursor=cursor,
         )
 
     async def create_document(
@@ -135,9 +141,6 @@ class DocumentCrudMixin(DocumentServiceSharedMixin):
         document_id: UUID,
     ) -> tuple[list[Block], list[Line]]:
         document = await self.get_document_public(session, project_id, document_id)
-        blocks: list[Block] = []
-        lines: list[Line] = []
-        for part in sorted(document.parts, key=lambda item: item.order):
-            blocks.extend(await self._list_part_blocks(session, part.id))
-            lines.extend(await self._documents.list_part_lines(session, part.id))
+        blocks = await self._documents.list_blocks_for_document(session, document.id)
+        lines = await self._documents.list_lines_for_document(session, document.id)
         return blocks, lines

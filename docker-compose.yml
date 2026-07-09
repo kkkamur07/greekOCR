@@ -29,12 +29,14 @@ services:
       ENVIRONMENT: development
       DATABASE_URL: postgresql+asyncpg://postgres:dev@db:5432/kalamos
       SYNC_DATABASE_URL: postgresql://postgres:dev@db:5432/kalamos
+      MIGRATOR_DATABASE_URL: postgresql://postgres:dev@db:5432/kalamos
       JWT_SECRET: dev-secret-change-in-production
       CORS_ORIGINS: http://localhost:3000,http://localhost:5173
       MEDIA_ROOT: /app/backend/media
       NOMICOUS_APP_ROOT: /app
       INFERENCE_URL: http://inference-api:8001
       INFERENCE_WEBHOOK_SECRET: dev-inference-webhook-secret
+      INFERENCE_SERVICE_SECRET: dev-inference-webhook-secret
       ANNOTATED_DATA_ROOT: /data/annotated/data
     volumes:
       - ./nomicous/backend/media:/app/backend/media
@@ -72,13 +74,19 @@ services:
     build:
       context: .
       dockerfile: inference/Dockerfile
+    # Host port 8001 is reserved for the local Inference helper (the browser probes
+    # http://127.0.0.1:8001 directly — see docs/deployment/supabase.md). Publish the cloud
+    # inference API on 8010 so it never shadows a locally installed helper. The
+    # container still listens on 8001, so INFERENCE_URL (docker network) is unchanged.
     ports:
-      - "8001:8001"
+      - "8010:8001"
     environment:
       DATABASE_URL: postgresql://postgres:dev@db:5432/kalamos
+      INFERENCE_DATABASE_URL: postgresql://postgres:dev@db:5432/kalamos
       INFERENCE_CALLBACK_URL: http://api:8000/internal/inference/job-complete
       INFERENCE_REGISTRY_PATH: /app/inference/registry.yaml
       INFERENCE_WEBHOOK_SECRET: dev-inference-webhook-secret
+      INFERENCE_SERVICE_SECRET: dev-inference-webhook-secret
       INFERENCE_WEIGHTS_CACHE_DIR: /app/inference/weights/cache
       INFERENCE_CALAMARI_NUM_PROCESSES: "1"
     volumes:
@@ -107,9 +115,11 @@ services:
       disable: true
     environment:
       DATABASE_URL: postgresql://postgres:dev@db:5432/kalamos
+      INFERENCE_DATABASE_URL: postgresql://postgres:dev@db:5432/kalamos
       INFERENCE_CALLBACK_URL: http://api:8000/internal/inference/job-complete
       INFERENCE_REGISTRY_PATH: /app/inference/registry.yaml
       INFERENCE_WEBHOOK_SECRET: dev-inference-webhook-secret
+      INFERENCE_SERVICE_SECRET: dev-inference-webhook-secret
       INFERENCE_WEIGHTS_CACHE_DIR: /app/inference/weights/cache
       INFERENCE_CALAMARI_NUM_PROCESSES: "1"
       INFERENCE_WORKER_RUNNING_JOB_TIMEOUT_SECONDS: "1800"

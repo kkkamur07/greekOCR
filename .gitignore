@@ -9,6 +9,12 @@ wheels/
 # Virtual environments
 .venv/
 
+# Secrets and local env files (never commit; templates are allowed)
+.env
+.env.*
+!.env.example
+!.env.*.example
+
 # Local datasets and outputs
 data/9
 data/19

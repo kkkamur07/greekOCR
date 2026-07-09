@@ -9,7 +9,12 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.settings.job import get_job_settings
-from backend.jobs.api.schemas import EnqueueTestJobRequest, EnqueueTestJobResponse, JobResponse
+from backend.jobs.api.schemas import (
+    EnqueueTestJobRequest,
+    EnqueueTestJobResponse,
+    JobResponse,
+    job_response_from_orm,
+)
 from backend.jobs.application.job_service import JobService
 from backend.jobs.infrastructure.notifications import job_status_broadcaster
 from backend.jobs.infrastructure.orm_models import JobStatus
@@ -42,7 +47,7 @@ async def _load_authorized_job(job_id: UUID, current_user: User) -> JobResponse:
     async with AsyncSessionLocal() as session:
         job = await JobService(session).get_job(job_id)
         _assert_job_access(job, current_user)
-        return JobResponse.model_validate(job)
+        return job_response_from_orm(job)
 
 
 async def _job_events(job_id: UUID, current_user: User, request: Request) -> AsyncIterator[str]:
@@ -92,7 +97,7 @@ async def get_job(
 ) -> JobResponse:
     job = await service.get_job(job_id)
     _assert_job_access(job, current_user)
-    return JobResponse.model_validate(job)
+    return job_response_from_orm(job)
 
 
 @router.get("/{job_id}/events", response_class=StreamingResponse)

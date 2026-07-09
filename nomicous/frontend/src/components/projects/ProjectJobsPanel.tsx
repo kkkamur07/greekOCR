@@ -36,6 +36,16 @@ function formatWhen(iso: string): string {
   });
 }
 
+function formatExecution(execution: JobResponse['execution']): string {
+  if (execution === 'local') return 'Local';
+  return 'Cloud';
+}
+
+function executionClass(execution: JobResponse['execution']): string {
+  if (execution === 'local') return 'project-jobs-panel__host--local';
+  return 'project-jobs-panel__host--cloud';
+}
+
 function statusClass(status: JobResponse['status']): string {
   if (status === 'failed') return 'project-jobs-panel__status--failed';
   if (status === 'done') return 'project-jobs-panel__status--done';
@@ -161,6 +171,7 @@ export function ProjectJobsPanel({ projectId, documents }: ProjectJobsPanelProps
               <thead>
                 <tr>
                   <th scope="col">Job</th>
+                  <th scope="col">Host</th>
                   <th scope="col">Document</th>
                   <th scope="col">Status</th>
                   <th scope="col">Started</th>
@@ -176,6 +187,13 @@ export function ProjectJobsPanel({ projectId, documents }: ProjectJobsPanelProps
                       <td>
                         <span className="row-title">{formatJobType(job.type)}</span>
                         <span className="row-sub">{job.id.slice(0, 8)}</span>
+                      </td>
+                      <td>
+                        <span
+                          className={`project-jobs-panel__host ${executionClass(job.execution)}`}
+                        >
+                          {formatExecution(job.execution)}
+                        </span>
                       </td>
                       <td className="col-muted">
                         {job.document_id ? (

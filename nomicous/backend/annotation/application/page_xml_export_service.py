@@ -109,7 +109,7 @@ class PageXmlExportService:
         )
         SubElement(text_line, _page_tag("Coords"), {"points": _points(line.points)})
 
-        baseline_points = _geometry_points(line.baseline)
+        baseline_points = _baseline_export_points(line)
         if baseline_points:
             SubElement(text_line, _page_tag("Baseline"), {"points": _points(baseline_points)})
 
@@ -133,6 +133,17 @@ def _format_coord(value: float) -> str:
     if float(value).is_integer():
         return str(int(value))
     return str(value)
+
+
+def _baseline_export_points(line: Line) -> list[list[float]]:
+    """Prefer mask polygon for PAGE Baseline; fall back to stored baseline or coords."""
+    mask_points = _geometry_points(line.mask)
+    if mask_points:
+        return mask_points
+    baseline_points = _geometry_points(line.baseline)
+    if baseline_points:
+        return baseline_points
+    return [[float(point[0]), float(point[1])] for point in line.points]
 
 
 def _geometry_points(geometry: dict | None) -> list[list[float]]:

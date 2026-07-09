@@ -7,16 +7,22 @@ import infrastructure.models  # noqa: F401 — register all ORM mappers
 import time
 import uuid
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
 from fastapi.testclient import TestClient
 from inference.contracts.jobs import JobSubmitRequest, JobSubmitResponse
 
+from sqlalchemy import update
+
 from backend.jobs.infrastructure.job_repository import (
+    claim_next_pending_job,
     count_active_jobs,
+    reclaim_stale_running_jobs,
 )
 from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
 from backend.jobs.infrastructure.worker import execute_claimed_job
-from infrastructure.db import SyncSessionLocal
+from infrastructure.db import sync_system_session
 from tests.nomicous.integration.helpers import MINIMAL_PNG, documents_url, poll_job
 
 
@@ -195,7 +201,7 @@ def test_get_job_denies_access_to_other_users_job(client: TestClient):
 
 def test_get_job_denies_access_to_ownerless_job(client: TestClient, registered_user: dict[str, str]):
     job_id = uuid.uuid4()
-    with SyncSessionLocal() as session:
+    with sync_system_session() as session:
         session.add(
             Job(
                 id=job_id,
@@ -271,7 +277,7 @@ def test_transcribe_job_submits_one_batched_inference_job(
         headers=owner_headers,
         timeout=8.0,
     )
-    with SyncSessionLocal() as session:
+    with sync_system_session() as session:
         job = session.get(Job, uuid.UUID(body["id"]))
         assert job is not None
         assert job.inference_job_id == stub_client.inference_job_id
@@ -288,9 +294,53 @@ def test_transcribe_job_submits_one_batched_inference_job(
 # Tests unknown job types fail cleanly. Does not test registered handlers.
 
 
+def test_reclaim_stale_running_jobs_moves_expired_jobs_to_pending():
+    job_id = uuid.uuid4()
+    with sync_system_session() as session:
+        session.add(
+            Job(
+                id=job_id,
+                type=JobType.pipeline,
+                status=JobStatus.pending,
+                payload={"handler": "noop", "test": True},
+            )
+        )
+        session.commit()
+
+    claimed = claim_next_pending_job(test_only=True)
+    assert claimed is not None
+    assert claimed.id == job_id
+
+    with sync_system_session() as session:
+        running = session.get(Job, job_id)
+        assert running is not None
+        running.started_at = datetime.now(UTC) - timedelta(minutes=31)
+        session.commit()
+
+    reclaimed = reclaim_stale_running_jobs(running_timeout_seconds=1800.0)
+    assert reclaimed == 1
+
+    with sync_system_session() as session:
+        recovered = session.get(Job, job_id)
+        assert recovered is not None
+        assert recovered.status == JobStatus.pending
+        assert recovered.started_at is None
+
+    with sync_system_session() as session:
+        session.execute(
+            update(Job)
+            .where(Job.id == job_id)
+            .values(
+                status=JobStatus.failed,
+                completed_at=datetime.now(UTC),
+            )
+        )
+        session.commit()
+
+
 def test_execute_claimed_job_marks_unknown_handler_failed():
     job_id = uuid.uuid4()
-    with SyncSessionLocal() as session:
+    with sync_system_session() as session:
         job = Job(
             id=job_id,
             type=JobType.binarize,
@@ -303,7 +353,7 @@ def test_execute_claimed_job_marks_unknown_handler_failed():
 
     execute_claimed_job(job)
 
-    with SyncSessionLocal() as session:
+    with sync_system_session() as session:
         row = session.get(Job, job_id)
         assert row is not None
         assert row.status == JobStatus.failed

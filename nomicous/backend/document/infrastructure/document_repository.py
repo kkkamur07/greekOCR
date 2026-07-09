@@ -2,11 +2,13 @@
 
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from backend.core.api.pagination import PageCursor
 from backend.document.infrastructure.orm_models import (
+    Block,
     Document,
     DocumentPart,
     DocumentWorkflow,
@@ -34,11 +36,18 @@ class DocumentRepository:
         project_id: UUID,
         *,
         include_archived: bool = False,
+        limit: int = 50,
+        cursor: PageCursor | None = None,
     ) -> list[Document]:
         stmt = select(Document).where(Document.project_id == project_id)
         if not include_archived:
             stmt = stmt.where(Document.workflow != DocumentWorkflow.archived)
-        stmt = stmt.order_by(Document.created_at.desc())
+        stmt = stmt.order_by(Document.created_at.desc(), Document.id.desc())
+        if cursor is not None:
+            stmt = stmt.where(
+                tuple_(Document.created_at, Document.id) < (cursor.created_at, cursor.id)
+            )
+        stmt = stmt.limit(limit)
         result = await session.execute(stmt)
         return list(result.scalars().all())
 
@@ -143,6 +152,31 @@ class DocumentRepository:
             )
             .where(Line.part_id == part_id)
             .order_by(Line.order, Line.created_at)
+        )
+        return list(result.scalars().all())
+
+    async def list_blocks_for_document(
+        self, session: AsyncSession, document_id: UUID
+    ) -> list[Block]:
+        result = await session.execute(
+            select(Block)
+            .join(DocumentPart, Block.part_id == DocumentPart.id)
+            .where(DocumentPart.document_id == document_id)
+            .order_by(DocumentPart.order, Block.order, Block.created_at)
+        )
+        return list(result.scalars().all())
+
+    async def list_lines_for_document(
+        self, session: AsyncSession, document_id: UUID
+    ) -> list[Line]:
+        result = await session.execute(
+            select(Line)
+            .options(
+                selectinload(Line.transcriptions).selectinload(LineTranscription.transcription)
+            )
+            .join(DocumentPart, Line.part_id == DocumentPart.id)
+            .where(DocumentPart.document_id == document_id)
+            .order_by(DocumentPart.order, Line.order, Line.created_at)
         )
         return list(result.scalars().all())
 
