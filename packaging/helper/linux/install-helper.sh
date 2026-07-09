@@ -13,7 +13,7 @@ mkdir -p "$(dirname "$UNIT_DST")"
 sed \
   -e "s|__INSTALL_DIR__|$INSTALL_ROOT|g" \
   -e "s|__HOME__|$HOME|g" \
-  -e "s|__REGISTRY_URL__|${HELPER_REGISTRY_URL:-https://api.nomicous.example/inference/v1/registry}|g" \
+  -e "s|__REGISTRY_URL__|${HELPER_REGISTRY_URL:-https://api.nomicous.com/inference/v1/registry}|g" \
   "$SCRIPT_DIR/nomicous-inference-helper.service" > "$UNIT_DST"
 
 systemctl --user daemon-reload

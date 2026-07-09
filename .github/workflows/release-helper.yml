@@ -18,12 +18,12 @@ on:
       cors_origin:
         description: "HELPER_CORS_ORIGINS baked into the build (production SPA origin)"
         required: false
-        default: "https://app.nomicous.example"
+        default: "https://app.nomicous.com"
         type: string
       registry_url:
         description: "HELPER_REGISTRY_URL baked into the build"
         required: false
-        default: "https://api.nomicous.example/inference/v1/registry"
+        default: "https://api.nomicous.com/inference/v1/registry"
         type: string
 
 permissions:
@@ -50,8 +50,8 @@ jobs:
             build: powershell -ExecutionPolicy Bypass -File packaging/helper/windows/build-installer.ps1 -CorsOrigin "$HELPER_CORS_ORIGINS" -RegistryUrl "$HELPER_REGISTRY_URL"
     runs-on: ${{ matrix.os }}
     env:
-      HELPER_CORS_ORIGINS: ${{ inputs.cors_origin || 'https://app.nomicous.example' }}
-      HELPER_REGISTRY_URL: ${{ inputs.registry_url || 'https://api.nomicous.example/inference/v1/registry' }}
+      HELPER_CORS_ORIGINS: ${{ inputs.cors_origin || 'https://app.nomicous.com' }}
+      HELPER_REGISTRY_URL: ${{ inputs.registry_url || 'https://api.nomicous.com/inference/v1/registry' }}
     steps:
       - uses: actions/checkout@v4
 

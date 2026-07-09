@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 param(
-  [string]$CorsOrigin = "https://app.nomicous.example",
-  [string]$RegistryUrl = "https://api.nomicous.example/inference/v1/registry",
+  [string]$CorsOrigin = "https://app.nomicous.com",
+  [string]$RegistryUrl = "https://api.nomicous.com/inference/v1/registry",
   # Authenticode signing (all optional - omit for an unsigned build).
   [string]$SigningThumbprint = $env:WINDOWS_SIGNING_THUMBPRINT,   # cert in the local store
   [string]$SigningCertPath = $env:WINDOWS_SIGNING_CERT,           # or path to a .pfx

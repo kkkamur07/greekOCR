@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 # Install Nomicous Inference Helper from the extracted Windows zip.
 param(
-  [string]$RegistryUrl = "https://api.nomicous.example/inference/v1/registry"
+  [string]$RegistryUrl = "https://api.nomicous.com/inference/v1/registry"
 )
 
 $ErrorActionPreference = "Stop"
