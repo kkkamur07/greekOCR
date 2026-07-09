@@ -10,6 +10,8 @@ from infrastructure.db import SyncSessionLocal
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.document.infrastructure.orm_models import Document
+from backend.jobs.infrastructure.notifications import notify_platform_job_status_changed
 from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
 
 
@@ -33,6 +35,23 @@ class JobRepository:
         result = await self._session.execute(select(Job).where(Job.id == job_id))
         return result.scalar_one_or_none()
 
+    async def list_for_project(
+        self,
+        project_id: uuid.UUID,
+        *,
+        limit: int = 50,
+    ) -> list[Job]:
+        query = (
+            select(Job)
+            .join(Document, Job.document_id == Document.id)
+            .where(Document.project_id == project_id)
+            .where(~Job.payload.contains({"test": True}))
+            .order_by(Job.created_at.desc())
+            .limit(limit)
+        )
+        result = await self._session.execute(query)
+        return list(result.scalars().all())
+
 
 def _pending_job_query(*, test_only: bool | None = None):
     query = select(Job).where(Job.status == JobStatus.pending).order_by(Job.created_at)
@@ -55,6 +74,7 @@ def claim_next_pending_job(*, test_only: bool | None = None) -> Job | None:
         job.updated_at = now
         session.commit()
         session.refresh(job)
+        notify_platform_job_status_changed(job.id, job.status)
         return job
 
 
@@ -78,7 +98,7 @@ def count_active_jobs(*, test_payload: bool | None = None) -> int:
 def mark_job_done(job_id: uuid.UUID, result: dict | None = None) -> None:
     now = datetime.now(UTC)
     with SyncSessionLocal() as session:
-        session.execute(
+        update_result = session.execute(
             update(Job)
             .where(Job.id == job_id)
             .values(
@@ -90,6 +110,8 @@ def mark_job_done(job_id: uuid.UUID, result: dict | None = None) -> None:
             )
         )
         session.commit()
+    if update_result.rowcount:
+        notify_platform_job_status_changed(job_id, JobStatus.done)
 
 
 def mark_job_waiting(
@@ -114,12 +136,13 @@ def mark_job_waiting(
             job.inference_job_id = inference_job_id
         job.updated_at = now
         session.commit()
+        notify_platform_job_status_changed(job.id, job.status)
 
 
 def mark_job_failed(job_id: uuid.UUID, error: str) -> None:
     now = datetime.now(UTC)
     with SyncSessionLocal() as session:
-        session.execute(
+        update_result = session.execute(
             update(Job)
             .where(Job.id == job_id)
             .values(
@@ -130,3 +153,5 @@ def mark_job_failed(job_id: uuid.UUID, error: str) -> None:
             )
         )
         session.commit()
+    if update_result.rowcount:
+        notify_platform_job_status_changed(job_id, JobStatus.failed)

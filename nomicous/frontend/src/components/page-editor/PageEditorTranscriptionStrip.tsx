@@ -10,6 +10,7 @@ import {
   showsModelSourceReview,
   transcriptionForOcrReview,
 } from './hooks/utils';
+import { groundTruthLayer } from '../../utils/transcriptionLayerLabel';
 
 type PageEditorTranscriptionStripProps = {
   visible: boolean;
@@ -40,8 +41,8 @@ type PageEditorTranscriptionStripProps = {
 export function PageEditorTranscriptionStrip({
   visible,
   transcriptionLayers,
-  selectedTranscriptionLayerId,
-  onSelectTranscriptionLayer,
+  selectedTranscriptionLayerId: _selectedTranscriptionLayerId,
+  onSelectTranscriptionLayer: _onSelectTranscriptionLayer,
   selectedSegmentNumber,
   selectedSegment,
   selectedTranscriptionLayer,
@@ -64,21 +65,21 @@ export function PageEditorTranscriptionStrip({
 }: PageEditorTranscriptionStripProps) {
   const { height, onPointerDown, onPointerMove, onPointerUp } = useStripResize(240);
 
+  const activeGroundTruthLayer = groundTruthLayer(transcriptionLayers) ?? selectedTranscriptionLayer;
+  const groundTruthTranscription =
+    selectedSegment && activeGroundTruthLayer?.kind === 'ground_truth'
+      ? lineTranscriptionForLayer(selectedSegment, activeGroundTruthLayer.id)
+      : null;
   const modelName =
     transcribeModels.find((m) => m.id === selectedTranscribeModelId)?.name ?? 'HTR model';
   const segmentOcrRunning = ocrRunning && ocrScope === 'segment' && !backgroundJobsActive;
   const rerunDisabled = !selectedSegmentId || !selectedTranscribeModelId || ocrRunning;
-
-  const groundTruthTranscription =
-    selectedSegment && selectedTranscriptionLayer?.kind === 'ground_truth'
-      ? lineTranscriptionForLayer(selectedSegment, selectedTranscriptionLayer.id)
-      : null;
   const showGroundTruthEditor =
     Boolean(groundTruthTranscription) && !showsModelSourceReview(groundTruthTranscription);
   const modelOutputTranscription = selectedSegment
     ? modelTranscriptionForLine(
         selectedSegment,
-        selectedTranscriptionLayer?.kind === 'model' ? selectedTranscriptionLayerId : null,
+        selectedTranscriptionLayer?.kind === 'model' ? selectedTranscriptionLayer.id : null,
       )
     : null;
   const ocrReviewTranscription =
@@ -180,21 +181,8 @@ export function PageEditorTranscriptionStrip({
         <div className="pe-tx-block pe-tx-block--edit pe-tx-block--compact">
           <div className="pe-tx-block__head">
             <label className="pe-tx-block__label" htmlFor="strip-edit">
-              Transcription
+              Ground truth
             </label>
-            <select
-              className="pe-model__select"
-              aria-label="Transcription layer"
-              value={selectedTranscriptionLayerId ?? ''}
-              onChange={onSelectTranscriptionLayer}
-              style={{ fontSize: '0.6875rem', padding: '2px 6px' }}
-            >
-              {transcriptionLayers.map((layer) => (
-                <option key={layer.id} value={layer.id}>
-                  {layer.name}
-                </option>
-              ))}
-            </select>
           </div>
           <textarea
             className="pe-strip__edit"

@@ -22,7 +22,7 @@ def test_submit_job_returns_inference_job_id(
 
     response, _ = submit_inference_job(
         task=InferenceTask.segment,
-        registry_model_id="kraken-blla",
+        registry_model_id="greek-kraken-segment-v1",
         product_job_id=product_job_id,
         image_bytes=b"page-bytes",
     )
@@ -60,7 +60,7 @@ def test_submit_job_rejects_task_mismatch(
 ):
     response, _ = submit_inference_job(
         task=InferenceTask.transcribe,
-        registry_model_id="kraken-blla",
+        registry_model_id="greek-kraken-segment-v1",
         image_bytes=b"a",
         params={"lines": [{"line_index": 0}]},
     )

@@ -34,17 +34,31 @@ docker compose up --build
 curl -s http://localhost:8001/health
 ```
 
-## Weights layout (interim)
+## Weights layout
 
-Today, bundled checkpoints live under `inference/weights/` and are referenced from `registry.yaml` via `file://` or `package://` URIs. Docker Compose mounts `inference/weights/` at `/app/inference/weights`. Registry path defaults to `/app/inference/registry.yaml`.
+### Local bundled weights (`src/hf/local/`)
 
-### Calamari (vendored, not PyPI)
+Bundled checkpoints for offline dev and Docker live under `src/hf/local/{script}/{architecture}/{model_version}/{registry_tag}/`. Registry entries reference them with `file://` URIs relative to `src/hf/` (for example `file://local/syriac/calamari/v1/stable/best.pt`).
 
-Transcribe uses a **vendored** Calamari tree (`src/model/calamari`), copied into the image at `/app/_support_repo/calamari`. We do not import the PyPI `calamari-ocr` package as the runtime `calamari_ocr` source. TensorFlow and related deps still come from the `inference` uv group.
+Docker Compose mounts `./src/hf` at `/app/src/hf` on `inference-api` and `inference-worker`. No Hub credentials are required for models that use local bundled weights.
 
-Full migration notes, Docker rebuild steps, and troubleshooting: [`docs/calamari-vendored-architecture.md`](../docs/calamari-vendored-architecture.md).
+**Migrated:** `syriac-calamari-v1` (`stable`) — served from `src/hf/local/syriac/calamari/v1/stable/`.
 
-**Target architecture (planned, not implemented):** Hub integration under `src/hf/`, remote `hf://` weight sources, Hub cache under `src/hf/cache/`, publish tooling under `scripts/hf/`, and local bundled weights under `src/hf/local/`. See `inference/CONTEXT.md` for domain terminology.
+### Interim layout (`inference/weights/`)
+
+Legacy checkpoints still under `inference/weights/` use `file://` URIs relative to `inference/` (interim layout). Docker Compose continues to mount `inference/weights/` at `/app/inference/weights`. These paths will move to `src/hf/local/` as models are migrated.
+
+Runtime weight cache for resolved remote weights: `src/hf/cache/<registry_model_id>/<registry_tag>/` (Hub integration). Interim `inference/weights/cache/` remains the default for `INFERENCE_WEIGHTS_CACHE_DIR` until all models use Hub cache.
+
+### Calamari (PyTorch runtime)
+
+Transcribe uses the local PyTorch Calamari implementation under `inference/architectures/calamari/`.
+Runtime artifacts are converted `.pt` checkpoints, so inference images do not install TensorFlow
+or copy the vendored Calamari source tree.
+
+Historical migration notes: [`docs/calamari-vendored-architecture.md`](../docs/calamari-vendored-architecture.md).
+
+**Hub integration:** `hf://` weight sources, Hub cache, and prefetch tooling live under `src/hf/` and `scripts/hf/`. See `inference/CONTEXT.md` for domain terminology and [`scripts/hf/README.md`](../scripts/hf/README.md) for the Hub publish runbook.
 
 ## Run locally (without Compose)
 
@@ -60,7 +74,14 @@ Environment:
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `INFERENCE_REGISTRY_PATH` | `inference/registry.yaml` | Model catalog file |
-| `INFERENCE_WEIGHTS_CACHE_DIR` | `inference/weights/cache` | Runtime cache directory for resolved weights |
+| `INFERENCE_WEIGHTS_CACHE_DIR` | `inference/weights/cache` | Interim runtime cache directory (Hub cache uses `src/hf/cache/`) |
+| `HF_TOKEN` | unset | Required only for **private** or gated Hub repos; all nomicous inference repos are public |
+
+Prefetch Hub weights without running inference:
+
+```bash
+PYTHONPATH=. python scripts/hf/fetch_model.py greek-calamari-v1 --registry-tag stable
+```
 
 ## Contracts
 
@@ -78,15 +99,15 @@ Job callbacks use a tagged output union: `output.kind` is either `segment` or `t
 
 `inference/registry.yaml` lists available models and weight locations. Example entries:
 
-- `greek-calamariv1` — transcribe, Calamari architecture
-- `kraken-blla` — segment, Kraken BLLA
+- `greek-calamari-v1` — transcribe, Calamari architecture
+- `greek-kraken-segment-v1` — segment, Kraken BLLA
 
-Weights are resolved at runtime from `inference/weights/` (interim layout; not copied into Nomicous's Postgres catalog).
+Weights are resolved at runtime from `src/hf/local/` (bundled), `src/hf/cache/` (Hub), `inference/weights/` (interim), or `package://` (Kraken).
 
 ## Tests
 
 ```bash
-uv run --group inference pytest tests/inference
+uv run --group inference pytest tests/inference tests/hf
 ```
 
 Stop the Compose `inference-worker` before local integration runs (`docker stop nomicous-inference-worker-1`).

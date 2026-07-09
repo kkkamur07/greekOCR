@@ -23,3 +23,6 @@ class JobService:
         if job is None:
             raise NotFoundError(f"job {job_id} not found")
         return job
+
+    async def list_project_jobs(self, project_id: uuid.UUID, *, limit: int = 50) -> list[Job]:
+        return await self._repo.list_for_project(project_id, limit=limit)

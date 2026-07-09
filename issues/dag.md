@@ -1,37 +1,31 @@
 # Issue DAG
 
-> Regenerated 2026-06-16
+> Regenerated 2026-07-09
 
 ## Warnings
 
-- Existing pre-merge issues `005` through `017` still reference `issues/prd.md`; new annote merge issues `018` through `028` reference `issues/prd-annote-merge.md`.
+- None
 
 ## Stats
 
 | Metric | Count |
 |--------|------:|
-| Total issues | 29 |
+| Total | 37 |
+| Ready Afk | 0 |
+| Ready Hitl | 1 |
+| Blocked | 7 |
+| In Progress | 0 |
+| Review | 1 |
 | Done | 28 |
-| Ready (AFK) | 0 |
-| Ready (HITL) | 1 |
-| Backlog | 0 |
-| In progress | 0 |
-| Review | 0 |
 
 ## Parallel lanes (ready now)
 
-| Lane | Issues | Status |
-|------|--------|--------|
-| _none_ | _No AFK lanes ready_ | _All available AFK work is complete_ |
+- _(none)_
 
 ## Mermaid
 
 ```mermaid
 flowchart TD
-  I015["015 frontend-transcription-editor"]
-  I026["026 transcription-pdf-artifact ✓"]
-  I027["027 remove-root-app-duplicates ✓"]
-  I028["028 ocr-prediction-execution-design HITL"]
   I000["000 platform-foundation ✓"]
   I001["001 user-auth-jwt ✓"]
   I002["002 projects-sharing ✓"]
@@ -47,6 +41,7 @@ flowchart TD
   I012["012 nextjs-openapi-codegen ✓"]
   I013["013 frontend-projects-documents ✓"]
   I014["014 frontend-layout-editor ✓"]
+  I015["015 frontend-transcription-editor ✓"]
   I016["016 frontend-jobs-panel ✓"]
   I017["017 frontend-public-published-view ✓"]
   I018["018 annote-production-root ✓"]
@@ -57,50 +52,68 @@ flowchart TD
   I023["023 page-review-status ✓"]
   I024["024 annotation-history-restore ✓"]
   I025["025 export-approved-line-artifacts ✓"]
-  I010 --> I015
-  I012 --> I015
-  I022 --> I026
-  I019 --> I027
-  I023 --> I027
-  I024 --> I027
-  I025 --> I027
-  I026 --> I027
-  I022 --> I028
+  I026["026 transcription-pdf-artifact ✓"]
+  I027["027 remove-root-app-duplicates ✓"]
+  I028["028 ocr-prediction-execution-design HITL"]
+  I029["029 ml-callback-replay-sweeper"]
+  I030["030 hf-uri-resolve-and-cache"]
+  I031["031 hf-local-bundled-offline-path"]
+  I032["032 hf-remote-transcribe-tracer"]
+  I033["033 hf-publish-model-from-staging"]
+  I034["034 hf-dataset-staging-publish"]
+  I035["035 hf-collection-sync"]
+  I036["036 hf-registry-id-migration"]
   I000 --> I001
-  I001 --> I002
-  I002 --> I003
   I000 --> I004
   I000 --> I005
-  I003 --> I006
-  I004 --> I006
-  I005 --> I006
-  I006 --> I007
-  I007 --> I008
-  I007 --> I009
-  I005 --> I009
-  I003 --> I009
-  I009 --> I010
-  I003 --> I011
+  I001 --> I002
   I001 --> I011
   I001 --> I012
-  I003 --> I013
-  I012 --> I013
+  I002 --> I003
   I002 --> I013
-  I008 --> I014
-  I012 --> I014
+  I003 --> I006
+  I003 --> I009
+  I003 --> I011
+  I003 --> I013
+  I004 --> I006
   I004 --> I016
-  I012 --> I016
+  I005 --> I006
+  I005 --> I009
+  I006 --> I007
   I006 --> I016
+  I007 --> I008
+  I007 --> I009
+  I008 --> I014
+  I009 --> I010
+  I010 --> I015
   I011 --> I017
+  I012 --> I013
+  I012 --> I014
+  I012 --> I015
+  I012 --> I016
   I012 --> I017
   I018 --> I019
   I018 --> I020
   I019 --> I021
+  I019 --> I027
   I020 --> I021
   I021 --> I022
   I022 --> I023
   I022 --> I024
   I022 --> I025
-  classDef hitl stroke-dasharray: 5 5
-  class I028,I005,I014 hitl
+  I022 --> I026
+  I022 --> I028
+  I023 --> I027
+  I024 --> I027
+  I025 --> I027
+  I026 --> I027
+  I028 --> I029
+  I030 --> I031
+  I030 --> I032
+  I031 --> I032
+  I032 --> I033
+  I032 --> I036
+  I033 --> I034
+  I033 --> I035
+classDef hitl stroke-dasharray: 5 5
 ```

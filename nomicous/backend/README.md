@@ -36,7 +36,7 @@ backend/
   document/                       # documents, parts, layout, transcriptions
   annotation/                     # history snapshots, export, PDF artifacts
   ml/                             # model catalog, bindings, ML adapters
-  jobs/                           # enqueue, status (poll today; SSE target), workers, job persistence
+  jobs/                           # enqueue, status, NOTIFY→SSE push, workers, job persistence
   tests/platform/                 # Postgres-backed platform integration tests
 ```
 
@@ -69,9 +69,164 @@ Important rules:
 | `document` | Documents, Document parts, media, layout Blocks/Lines, Transcriptions, Pairing progress | `document/api/documents.py`, `document/application/document_service.py` |
 | `annotation` | Annotation history, Export artifacts, Transcription PDF artifacts | `annotation/api/history.py`, `annotation/application/export_service.py`, `annotation/application/transcription_pdf_service.py` |
 | `ml` | ML model catalog, model bindings, ML service client, canonical model outputs | `ml/api/models.py`, `ml/application/model_service.py`, `ml/infrastructure/ml_client.py` |
-| `jobs` | Async job enqueueing, status reads (`GET /jobs/{id}`), claiming, worker execution, failure persistence | `jobs/api/jobs.py`, `jobs/application/job_service.py`, `jobs/infrastructure/worker.py` |
+| `jobs` | Async job enqueueing, status reads (`GET /jobs/{id}`), SSE push (`GET /jobs/{id}/events`), claiming, worker execution, failure persistence | `jobs/api/jobs.py`, `jobs/application/job_service.py`, `jobs/infrastructure/notifications.py`, `jobs/infrastructure/worker.py` |
 
-**Job status to the browser:** The frontend polls until `done` or `failed` today. Inference uses Postgres `NOTIFY` for worker wakeups only. Recommended push design (NOTIFY on `jobs` updates + SSE): [`docs/decisions/001-platform-job-status-push.md`](../../docs/decisions/001-platform-job-status-push.md).
+## Job status notifications
+
+Platform jobs (segment, transcribe, test noop) push status updates to the browser
+with **Postgres `NOTIFY` for detection** and **Server-Sent Events (SSE) for
+delivery**. Polling (`GET /jobs/{id}`) remains as a fallback when SSE is
+unavailable.
+
+Design background: [`docs/decisions/001-platform-job-status-push.md`](../../docs/decisions/001-platform-job-status-push.md).
+
+### End-to-end flow
+
+```mermaid
+flowchart TB
+  subgraph writers [Status writers]
+    W[Platform job worker]
+    CB[Inference callback]
+    JR[job_repository helpers]
+  end
+
+  subgraph postgres [Postgres]
+    JT[(jobs table)]
+    CH[[NOTIFY platform_jobs]]
+  end
+
+  subgraph api [nomicous-api process]
+    EMIT[notify_platform_job_status_changed]
+    LOOP[platform_job_notification_loop<br/>asyncpg LISTEN]
+    BROAD[JobStatusBroadcaster]
+    SSE[GET /jobs/id/events]
+  end
+
+  subgraph browser [Browser]
+    FE[watchJobViaSse / useJobPolling]
+    POLL[GET /jobs/id poll fallback]
+  end
+
+  W --> JR
+  CB --> JR
+  JR -->|UPDATE + commit| JT
+  JR --> EMIT
+  EMIT --> CH
+  CH --> LOOP
+  LOOP --> BROAD
+  BROAD --> SSE
+  SSE --> FE
+  POLL -.->|if SSE unavailable| FE
+```
+
+**Segment / transcribe job (happy path):**
+
+```mermaid
+sequenceDiagram
+  participant B as Browser
+  participant API as nomicous-api
+  participant PG as Postgres
+  participant INF as inference-worker
+
+  B->>API: POST …/segment or …/transcribe
+  API-->>B: job_id
+  API->>PG: claim job → running
+  Note over API,PG: pg_notify(platform_jobs)
+  B->>API: GET /jobs/{id}/events (SSE)
+  API-->>B: event: job (running)
+  API->>INF: POST /inference/v1/jobs
+  API->>PG: status → waiting
+  Note over API,PG: pg_notify(platform_jobs)
+  API-->>B: event: job (waiting)
+  INF->>INF: Kraken / Calamari
+  INF->>API: POST /internal/inference/job-complete
+  API->>PG: merge result → done
+  Note over API,PG: pg_notify(platform_jobs)
+  API-->>B: event: job (done)
+```
+
+**Detection vs delivery** (two separate layers):
+
+```mermaid
+flowchart LR
+  subgraph detect [1. Detection]
+    A[Job row committed] --> B[pg_notify]
+    B --> C[API LISTEN loop]
+  end
+  subgraph deliver [2. Delivery]
+    D[In-process broadcaster] --> E[SSE stream]
+    E --> F[Browser UI]
+  end
+  C --> D
+```
+
+1. **Emit** — After a committed `jobs` status change, code calls
+   `notify_platform_job_status_changed()` (`jobs/infrastructure/notifications.py`),
+   which runs `SELECT pg_notify(:channel, :payload)` on a sync session.
+2. **Listen** — The FastAPI lifespan starts `platform_job_notification_loop()` in
+   `backend/core/app.py`. It opens a dedicated **asyncpg** connection (using
+   `SYNC_DATABASE_URL`, not the SQLAlchemy `postgresql+asyncpg://` URL) and
+   `LISTEN`s on `PLATFORM_JOB_NOTIFY_CHANNEL` (default `platform_jobs`).
+3. **Fan-out** — Each notification is parsed and passed to
+   `job_status_broadcaster`, an in-memory registry of per-job `asyncio.Queue`s
+   owned by active SSE handlers in that API process.
+4. **Deliver** — `GET /jobs/{job_id}/events` (`jobs/api/jobs.py`) subscribes the
+   client queue, sends the current `JobResponse` snapshot immediately, then
+   streams further `job` events when the broadcaster receives NOTIFY payloads.
+   Heartbeat comments (`: heartbeat`) are sent every `JOB_SSE_HEARTBEAT_SECONDS`
+   (default 30) while waiting. The stream closes after `done` or `failed`.
+
+### When NOTIFY fires
+
+| Trigger | Location | Typical new status |
+|---------|----------|-------------------|
+| Platform worker claims a job | `jobs/infrastructure/job_repository.py` → `claim_next_pending_job` | `running` |
+| Job submitted to inference | `mark_job_waiting` | `waiting` |
+| Job completes | `mark_job_done` | `done` |
+| Job fails | `mark_job_failed` | `failed` |
+| Inference callback updates product job | `jobs/application/job_callback_service.py` | `done` / `failed` |
+
+Test noop jobs follow the same path when the in-process worker handles them.
+
+### Frontend consumption
+
+The React app opens `GET /jobs/{job_id}/events` via `watchJobViaSse` /
+`waitForJob` (`nomicous/frontend/src/utils/jobPolling.ts`). If SSE cannot be
+opened, it falls back to polling `GET /jobs/{id}` every 250 ms. Background job
+panels use `useJobPolling`, which prefers SSE and degrades to 1.5 s polling per
+job when needed.
+
+### Configuration
+
+| Variable | Purpose | Default |
+|----------|---------|---------|
+| `PLATFORM_JOB_NOTIFY_CHANNEL` | Postgres `NOTIFY` channel name | `platform_jobs` |
+| `JOB_SSE_HEARTBEAT_SECONDS` | SSE keep-alive interval while idle | `30` |
+| `SYNC_DATABASE_URL` | DSN for the asyncpg notification listener | `postgresql://…` |
+
+The notification listener must use a plain `postgresql://` DSN (`SYNC_DATABASE_URL`).
+`DATABASE_URL` (`postgresql+asyncpg://…`) is for SQLAlchemy only.
+
+### Operations
+
+- On startup, a healthy listener logs:
+  `Listening for platform job notifications on platform_jobs`.
+- If the listener fails to connect, the API still serves requests; clients rely on
+  poll fallback until the loop reconnects (1 s backoff between attempts).
+- Each API process has its own listener and broadcaster. `NOTIFY` is
+  database-global, so every replica wakes; only SSE clients connected to that
+  process receive the fan-out. Sticky sessions or a single worker avoid split
+  clients in multi-replica deployments.
+
+### Tests
+
+- `tests/nomicous/integration/test_jobs.py` — `GET /jobs/{id}/events` auth and
+  snapshot streaming.
+
+**Inference worker notifications (separate channel):** The `inference/` service uses
+its own `inference_jobs` Postgres channel to wake `inference-worker`. That path
+does not talk to the browser; the platform callback updates `jobs` and triggers
+`platform_jobs` NOTIFY above.
 
 ## API Surface
 
@@ -87,15 +242,15 @@ Major route families:
 - `POST/GET /.../parts/{part_id}/history`, `POST /.../history/{snapshot_id}/restore`
 - `POST /.../parts/{part_id}/export`
 - `POST /.../parts/{part_id}/transcription-pdf`
-- `GET /inference/models`, model binding routes, `GET /jobs/{job_id}`
+- `GET /inference/models`, model binding routes, `GET /jobs/{job_id}`, `GET /jobs/{job_id}/events`
 - Public read-only routes under `/public/...`
 
 After API changes, regenerate frontend contracts:
 
 ```bash
-cd nomicous
-PYTHONPATH=. python scripts/export_openapi.py
-cd frontend
+# from repository root
+python scripts/platform/export_openapi.py
+cd nomicous/frontend
 npm run codegen:api
 ```
 
@@ -115,6 +270,9 @@ Settings are loaded by `backend/core/settings/` from environment variables and
 | `CORS_ORIGINS` | Browser origins | `http://localhost:3000,http://localhost:5173` |
 | `MEDIA_ROOT` | Uploaded Document part media | `nomicous/backend/media` |
 | `ENABLE_TEST_JOB_ROUTES` | Enables dev-only noop job route | `false` in `.env.example` |
+| `PLATFORM_JOB_NOTIFY_CHANNEL` | Postgres channel for platform job status NOTIFY | `platform_jobs` |
+| `JOB_SSE_HEARTBEAT_SECONDS` | SSE idle heartbeat interval for `/jobs/{id}/events` | `30` |
+| `JOB_WORKER_ENABLED` | Start in-process platform job worker on API boot | `true` |
 | `TRANSCRIBE_ADAPTER` | Adapter marker used for transcribe jobs | `calamari` |
 | `SEGMENT_ADAPTER` | Adapter marker used for segment jobs | `kraken` |
 | `DEFAULT_SEGMENT_MODEL` | Dev segment model name | `kraken-segment-default` |
@@ -165,7 +323,8 @@ Compose sets `INFERENCE_URL=http://inference-api:8001` on the API container. The
 ## Special Notes
 
 - The production platform is `backend/core` plus bounded contexts.
-- Job workers are started by the FastAPI lifespan in `backend/core/app.py`.
+- Job workers and the Postgres notification listener are started by the FastAPI
+  lifespan in `backend/core/app.py` (see **Job status notifications** above).
 - `Page transcription` candidate Text lines are helpers; Ground truth lives in
   `line_transcriptions` under a `ground_truth` Transcription layer.
 - `Review status` is a boolean on `document_parts`, independent from Pairing

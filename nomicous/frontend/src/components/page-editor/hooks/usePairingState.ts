@@ -235,7 +235,7 @@ export function usePairingState({
 
   async function runSegmentOcr() {
     if (!projectId || !documentId || !partId) {
-      setPairingError('Page context is missing — reload and try again.');
+      setPairingError('Page context is missing. Reload and try again.');
       return;
     }
     if (!selectedSegmentId) {
@@ -278,7 +278,7 @@ export function usePairingState({
 
   async function runPageOcr() {
     if (!projectId || !documentId || !partId) {
-      setPairingError('Page context is missing — reload and try again.');
+      setPairingError('Page context is missing. Reload and try again.');
       return;
     }
     if (!selectedTranscribeModelId) {

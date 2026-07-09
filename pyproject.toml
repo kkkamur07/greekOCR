@@ -18,40 +18,23 @@ train = [
     "torchvision>=0.25.0",
     "transformers>=5.11.0",
 ]
-calamari = [
-    "calamari-ocr>=1.0.7",
-    "edit-distance>=1.0.7",
-    "h5py>=3.10.0",
-    "lxml>=5.0.0",
-    "ocrd-fork-tfaip>=1.2.7",
-    "python-bidi>=0.6.6,<0.7",
-    "tensorflow>=2.14.0",
-    "tensorflow-macos>=2.14.0 ; sys_platform == 'darwin'",
-    "xlsxwriter>=3.0.0",
-]
 
 [dependency-groups]
 # Inference service API (separate container; contracts importable from nomicous)
 inference = [
     "fastapi>=0.115.0",
     "httpx>=0.28.0",
+    "opencv-python-headless>=4.8,<4.13",
     "pillow>=12.2.0",
     "pydantic>=2.10.0",
     "pydantic-settings>=2.6.0",
     "psycopg2-binary>=2.9.10",
     "pyyaml>=6.0.2",
     "sqlalchemy>=2.0.36",
+    "torch>=2.10.0",
     "uvicorn[standard]>=0.32.0",
     "kraken>=7.0.2",
-    "edit-distance>=1.0.7",
-    "h5py>=3.16.0",
-    "lxml>=6.1.1",
-    "ocrd-fork-tfaip>=1.2.7",
-    "python-bidi>=0.6.6,<0.7",
-    "tensorflow>=2.14.0",
-    "tensorflow-macos>=2.14.0 ; sys_platform == 'darwin'",
-    "xlsxwriter>=3.2.9",
-    "calamari-ocr>=1.0.7",
+    "huggingface-hub>=0.27.0",
 ]
 # Nomicous platform API + Postgres + tests (deps only — repo is not installed as a package)
 platform = [
@@ -80,7 +63,6 @@ platform = [
 package = false
 conflicts = [
     [{ extra = "kraken" }, { extra = "train" }],
-    [{ extra = "calamari" }, { extra = "train" }],
 ]
 
 [tool.uv.sources]
@@ -106,19 +88,18 @@ test-fast = { shell = "uv run --group platform --group inference pytest tests/no
 test-integration = { shell = "uv run --group platform --group inference pytest tests/nomicous -m integration" }
 test-ml = { shell = "uv run --group platform --group inference pytest tests/nomicous -m ml" }
 test-inference = { shell = "uv run --group platform --group inference pytest tests/inference" }
+test-hf = { shell = "uv run --group inference pytest tests/hf" }
 
 [tool.pytest.ini_options]
 addopts = ["--import-mode=importlib"]
 pythonpath = ["nomicous", "."]
 asyncio_mode = "auto"
-testpaths = ["tests/nomicous", "tests/inference"]
+testpaths = ["tests/nomicous", "tests/inference", "tests/hf"]
 filterwarnings = [
     "ignore:Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.:starlette.exceptions.StarletteDeprecationWarning",
-    "ignore:ml_dtypes\\.float8_e4m3b11 is deprecated.*:DeprecationWarning:tensorflow\\.python\\.framework\\.dtypes",
     "ignore:`TorchVGSLModel\\.load_model` is deprecated.*:DeprecationWarning:kraken\\.lib\\.vgsl\\.model",
     "ignore:You will not be able to run predict\\(\\) on this Core ML model.*:RuntimeWarning:coremltools\\.models\\.model",
     "ignore:`blla\\.segment\\(\\)` is deprecated.*:DeprecationWarning:kraken\\.blla",
-    "ignore::UserWarning:tensorflow_addons\\.utils\\.tfa_eol_msg",
 ]
 markers = [
     "integration: requires Postgres",

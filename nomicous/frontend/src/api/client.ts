@@ -1,10 +1,12 @@
 /**
  * Platform API client — JWT from localStorage, OpenAPI-aligned types.
- * Regenerate types: `npm run codegen:api` (after `python scripts/export_openapi.py`).
+ * Regenerate types: `npm run codegen:api` (after `python scripts/platform/export_openapi.py`).
  */
-import { clearAccessToken, getAccessToken } from '../auth/storage';
-import { pollJobUntilTerminal } from '../utils/jobPolling';
+import { redirectToLogin } from '../auth/session';
+import { getAccessToken } from '../auth/storage';
+import { pollJobUntilTerminal, waitForJobViaSse } from '../utils/jobPolling';
 import { ApiError, parseApiError } from './errors';
+import { dedupedGet } from './getCache';
 import type { components } from './schema';
 
 export type TokenResponse = components['schemas']['TokenResponse'];
@@ -88,12 +90,30 @@ export type LineResponse = {
   line_transcriptions: LineTranscriptionResponse[];
   created_at: string;
 };
+export type LineCreateRequest = {
+  order: number;
+  kind: LineGeometryKind;
+  points: LinePoint[];
+  block_id?: string | null;
+  baseline?: GeometryValue | null;
+  mask?: GeometryValue | null;
+};
+export type LinePatchRequest = {
+  order?: number;
+  block_id?: string | null;
+  baseline?: GeometryValue | null;
+  mask?: GeometryValue | null;
+  points?: LinePoint[];
+};
 export type LineUpsertRequest = {
   id?: string;
   order: number;
   kind: LineGeometryKind;
   points: LinePoint[];
+  block_id?: string | null;
   source: LineSource;
+  source_metadata?: Record<string, unknown> | null;
+  kraken_ceiling?: LinePoint[] | null;
   baseline?: GeometryValue | null;
   mask?: GeometryValue | null;
   approved_text?: string | null;
@@ -139,23 +159,24 @@ export const API_BASE_URL =
   (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') ||
   'http://localhost:8000';
 
-function redirectToLogin(): void {
-  clearAccessToken();
-  const loginPath = '/login';
-  if (window.location.pathname !== loginPath && window.location.pathname !== '/register') {
-    window.location.assign(loginPath);
-  }
-}
-
 type RequestOptions = Omit<RequestInit, 'body'> & {
   body?: unknown;
   skipAuth?: boolean;
+  /** Bypass in-flight GET deduplication (default: dedupe GETs). */
+  skipDedup?: boolean;
 };
 
 export async function apiRequest<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<T> {
+  const method = (options.method ?? 'GET').toUpperCase();
+  if (method === 'GET' && !options.skipDedup) {
+    return dedupedGet(`GET ${path}`, () =>
+      apiRequest<T>(path, { ...options, skipDedup: true }),
+    );
+  }
+
   const { body, skipAuth, headers: initHeaders, ...rest } = options;
   const headers = new Headers(initHeaders);
 
@@ -351,6 +372,17 @@ export const api = {
       `/projects/${projectId}/documents/${documentId}/parts/${partId}/lines`,
     ),
 
+  createPartLine: (
+    projectId: string,
+    documentId: string,
+    partId: string,
+    body: LineCreateRequest,
+  ) =>
+    apiRequest<LineResponse>(
+      `/projects/${projectId}/documents/${documentId}/parts/${partId}/lines`,
+      { method: 'POST', body },
+    ),
+
   replacePartLines: (
     projectId: string,
     documentId: string,
@@ -360,6 +392,24 @@ export const api = {
     apiRequest<LineResponse[]>(
       `/projects/${projectId}/documents/${documentId}/parts/${partId}/lines`,
       { method: 'PUT', body },
+    ),
+
+  deletePartLine: (projectId: string, documentId: string, partId: string, lineId: string) =>
+    apiRequest<void>(
+      `/projects/${projectId}/documents/${documentId}/parts/${partId}/lines/${lineId}`,
+      { method: 'DELETE' },
+    ),
+
+  patchPartLine: (
+    projectId: string,
+    documentId: string,
+    partId: string,
+    lineId: string,
+    body: LinePatchRequest,
+  ) =>
+    apiRequest<LineResponse>(
+      `/projects/${projectId}/documents/${documentId}/parts/${partId}/lines/${lineId}`,
+      { method: 'PATCH', body },
     ),
 
   updateLineGeometry: (
@@ -509,11 +559,25 @@ export const api = {
     apiRequest<EnqueueTestJobResponse>('/jobs/test', { method: 'POST', body }),
 
   getJob: (jobId: string) => apiRequest<JobResponse>(`/jobs/${jobId}`),
+
+  listProjectJobs: (projectId: string) =>
+    apiRequest<JobResponse[]>(`/projects/${projectId}/jobs`),
 };
 
 export async function waitForJob(
   jobId: string,
   options?: { timeoutMs?: number; onUpdate?: (job: JobResponse) => void },
 ): Promise<JobResponse> {
-  return pollJobUntilTerminal(api.getJob, jobId, options);
+  try {
+    return await waitForJobViaSse(jobId, {
+      ...options,
+      eventsUrl: `${API_BASE_URL}/jobs/${jobId}/events`,
+      token: getAccessToken(),
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message === 'Job timed out.') {
+      throw err;
+    }
+    return pollJobUntilTerminal(api.getJob, jobId, options);
+  }
 }

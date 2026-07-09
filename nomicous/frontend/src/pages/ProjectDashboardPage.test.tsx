@@ -105,7 +105,7 @@ describe('ProjectDashboardPage', () => {
 
     renderProjectDashboard();
 
-    fireEvent.click(await screen.findByRole('button', { name: /test project — click to edit/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /test project, click to edit/i }));
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'ByzantineGreekCorpus' } });
     fireEvent.change(screen.getByLabelText('Guidelines'), {
       target: { value: 'Updated notes' },

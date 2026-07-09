@@ -46,7 +46,7 @@ export function PageHeader({
               className="page-header__title-btn"
               aria-expanded={titlePanelOpen}
               aria-haspopup="dialog"
-              aria-label={`${title} — click to edit`}
+              aria-label={`${title}, click to edit`}
               onClick={(event) => {
                 event.stopPropagation();
                 onTitlePanelToggle?.();

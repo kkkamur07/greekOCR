@@ -7,10 +7,10 @@ import { LoginPage } from './pages/LoginPage';
 import { ProjectDashboardPage } from './pages/ProjectDashboardPage';
 import { ProjectsPage } from './pages/ProjectsPage';
 import { RegisterPage } from './pages/RegisterPage';
-import { getAccessToken } from './auth/storage';
+import { hasAccessToken } from './auth/session';
 
 function App() {
-  const isAuthed = !!getAccessToken();
+  const isAuthed = hasAccessToken();
 
   return (
     <Routes>

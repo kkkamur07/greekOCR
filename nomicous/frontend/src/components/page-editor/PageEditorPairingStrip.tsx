@@ -6,6 +6,7 @@ import {
   showsModelSourceReview,
   transcriptionForOcrReview,
 } from './hooks/utils';
+import { formatTranscriptionLayerLabel } from '../../utils/transcriptionLayerLabel';
 
 type TextLine = { order: number; text: string; paired_line_id: string | null };
 
@@ -76,6 +77,7 @@ export function PageEditorPairingStrip({
   onSaveApprovedText,
 }: PageEditorPairingStripProps) {
   const hasPairingWork = textLines.length > 0 || pairingProgress.total_lines > 0;
+  const modelLayers = transcriptionLayers.filter((layer) => layer.kind === 'model');
   const [activeTab, setActiveTab] = useState<DrawerTab>(() =>
     defaultTab(editorMode, hasPairingWork),
   );
@@ -195,23 +197,24 @@ export function PageEditorPairingStrip({
           ) : (
             <p className="pe-pairing__muted">Select a segment on the canvas.</p>
           )}
-          <label className="pe-pairing__label" style={{ marginTop: 4 }}>
-            Layer
-            <select
-              className="pe-pairing__select"
-              aria-label="Transcription layer"
-              value={selectedTranscriptionLayerId ?? ''}
-              onChange={onSelectTranscriptionLayer}
-              style={{ marginTop: 4, maxWidth: 280 }}
-            >
-              {transcriptionLayers.map((layer) => (
-                <option key={layer.id} value={layer.id}>
-                  {layer.name}
-                  {layer.kind === 'model' ? ' (read-only)' : ''}
-                </option>
-              ))}
-            </select>
-          </label>
+          {modelLayers.length > 0 && (
+            <label className="pe-pairing__label" style={{ marginTop: 4 }}>
+              Model history
+              <select
+                className="pe-pairing__select"
+                aria-label="Model transcription history"
+                value={selectedTranscriptionLayerId ?? ''}
+                onChange={onSelectTranscriptionLayer}
+                style={{ marginTop: 4, maxWidth: 280 }}
+              >
+                {modelLayers.map((layer) => (
+                  <option key={layer.id} value={layer.id}>
+                    {formatTranscriptionLayerLabel(layer, transcriptionLayers)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {selectedSegment && showOcrReview && (
             <>
               <PageEditorOcrReviewPane

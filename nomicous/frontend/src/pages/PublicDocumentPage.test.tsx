@@ -9,8 +9,8 @@ import {
 } from '../api/client';
 import { PublicDocumentPage } from './PublicDocumentPage';
 
-vi.mock('../components/ImageCanvas/ImageCanvas', () => ({
-  default: ({
+vi.mock('../components/public/PublicPageCanvas', () => ({
+  PublicPageCanvas: ({
     regions,
     selectedRegionId,
     onSelectRegion,
@@ -19,7 +19,7 @@ vi.mock('../components/ImageCanvas/ImageCanvas', () => ({
     selectedRegionId: number | null;
     onSelectRegion: (id: number | null) => void;
   }) => (
-    <div data-testid="image-canvas">
+    <div data-testid="public-page-canvas">
       <span>Regions: {regions.length}</span>
       <span>Selected: {selectedRegionId ?? 'none'}</span>
       <button type="button" onClick={() => onSelectRegion(1)}>
@@ -118,16 +118,19 @@ describe('PublicDocumentPage', () => {
     vi.mocked(api.getPublicPageXml).mockResolvedValue(new Blob(['xml'], { type: 'application/xml' }));
   });
 
-  it('shows line geometry, transcription text, and download actions', async () => {
+  it('shows line geometry, transcription text, and export actions', async () => {
     renderPublicPage();
 
     expect(await screen.findByRole('heading', { name: 'MS Or. 1445 — Genesis' })).toBeInTheDocument();
-    expect(screen.getByText(/1 page · Page 1: 1 line · 1 lines total/)).toBeInTheDocument();
-    expect(screen.getByTestId('image-canvas')).toHaveTextContent('Regions: 1');
+    expect(screen.getByText('Live')).toBeInTheDocument();
+    expect(screen.getByText('1 page')).toBeInTheDocument();
+    expect(screen.getByTestId('public-page-canvas')).toHaveTextContent('Regions: 1');
     expect(screen.getByText('alpha beta')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Preview PDF' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Download PDF' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Download PAGE XML' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Export' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+    expect(screen.getByRole('menuitem', { name: 'Transcription PDF' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'PAGE XML' })).toBeInTheDocument();
   });
 
   it('syncs canvas selection with the transcript panel', async () => {
@@ -137,8 +140,8 @@ describe('PublicDocumentPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Select line 1' }));
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Line 1' })).toBeInTheDocument();
+      expect(screen.getByText('Line 1')).toBeInTheDocument();
     });
-    expect(screen.getByTestId('image-canvas')).toHaveTextContent('Selected: 1');
+    expect(screen.getByTestId('public-page-canvas')).toHaveTextContent('Selected: 1');
   });
 });

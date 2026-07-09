@@ -29,6 +29,7 @@ from backend.core.settings.job import get_job_settings
 from backend.core.version import get_version
 from backend.jobs.api.internal_inference import router as internal_inference_router
 from backend.jobs.api.jobs import router as jobs_router
+from backend.jobs.infrastructure.notifications import platform_job_notification_loop
 from backend.jobs.infrastructure.worker import worker_loop
 from backend.document.api.documents import router as documents_router
 from backend.document.api.media import router as media_router
@@ -149,17 +150,22 @@ def _register_exception_handlers(app: FastAPI) -> None:
 async def _lifespan(app: FastAPI):
     import asyncio
 
-    if not get_job_settings().job_worker_enabled:
-        yield
-        return
-
     stop_event = asyncio.Event()
-    worker_task = asyncio.create_task(worker_loop(stop_event))
+    notification_task = asyncio.create_task(platform_job_notification_loop(stop_event))
+    worker_task = (
+        asyncio.create_task(worker_loop(stop_event))
+        if get_job_settings().job_worker_enabled
+        else None
+    )
     yield
     stop_event.set()
-    worker_task.cancel()
+    if worker_task is not None:
+        worker_task.cancel()
     with suppress(asyncio.CancelledError):
-        await worker_task
+        await notification_task
+    if worker_task is not None:
+        with suppress(asyncio.CancelledError):
+            await worker_task
 
 
 def create_app() -> FastAPI:

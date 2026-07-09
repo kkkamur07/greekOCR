@@ -15,6 +15,8 @@ from backend.project.api.schemas import (
 from backend.project.api.responses import project_response
 from backend.project.application.project_service import ProjectService
 from backend.document.infrastructure.document_repository import DocumentRepository
+from backend.jobs.api.schemas import JobResponse
+from backend.jobs.application.job_service import JobService
 from backend.users.api.dependencies import get_current_user
 from backend.users.infrastructure.orm_models import User
 from infrastructure.db import get_db
@@ -22,6 +24,10 @@ from infrastructure.db import get_db
 router = APIRouter(prefix="/projects", tags=["projects"])
 _service = ProjectService()
 _document_repo = DocumentRepository()
+
+
+def _job_service(db: AsyncSession = Depends(get_db)) -> JobService:
+    return JobService(db)
 
 
 async def _projects_with_counts(
@@ -74,6 +80,18 @@ async def get_project(
 ) -> ProjectResponse:
     project = await _service.get_project(db, current_user, project_id)
     return await _project_with_count(db, project)
+
+
+@router.get("/{project_id}/jobs", response_model=list[JobResponse])
+async def list_project_jobs(
+    project_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    job_service: JobService = Depends(_job_service),
+) -> list[JobResponse]:
+    await _service.get_project(db, current_user, project_id)
+    jobs = await job_service.list_project_jobs(project_id)
+    return [JobResponse.model_validate(job) for job in jobs]
 
 
 @router.patch("/{project_id}", response_model=ProjectResponse)

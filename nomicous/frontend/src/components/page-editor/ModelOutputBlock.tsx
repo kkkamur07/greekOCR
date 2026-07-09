@@ -44,7 +44,7 @@ export function ModelOutputBlock({
     ? 'Select a segment to view model output.'
     : hasTranscription && !hasText
       ? 'OCR finished with no text for this segment.'
-      : 'No OCR yet — run OCR on this segment.';
+      : 'No OCR yet. Run OCR on this segment.';
   const ocrButtonLabel = hasText
     ? ocrRunning
       ? 'Running…'

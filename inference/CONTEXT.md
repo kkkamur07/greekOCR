@@ -33,7 +33,7 @@ A URI telling the inference service where to find checkpoint files for one regis
 _Avoid_: artifact path, model path
 
 **Hub model repo**:
-A Hugging Face **model** repository holding inference weights and a model card for one **registry model id** (e.g. `nomicous/greek-calamariv1`).
+A Hugging Face **model** repository holding inference weights and a model card for one **registry model id** (e.g. `nomicous/greek-htr-calamari` for `greek-calamari-v1`).
 _Avoid_: model folder, checkpoint repo
 
 **Hub dataset slug**:
@@ -41,7 +41,7 @@ The single-segment name of a **Hub dataset repo**, optimized for search: `{scrip
 _Avoid_: mirroring registry model id, generic `dataset-v1`
 
 **Hub collection**:
-A Hugging Face collection grouping **Hub model repos** and **Hub dataset repos** for discovery. Source of truth: `src/hf/collection.yaml`; synced via `scripts/hf/sync_collection.py`. Collection slug: `nomos`.
+A Hugging Face collection grouping **Hub model repos** and **Hub dataset repos** for discovery. Source of truth: `src/hf/publish/collection.yaml`; synced via `scripts/hf/sync_collection.py`. Collection slug: `nomos`.
 _Avoid_: monorepo, model bundle
 
 **Hub revision**:
@@ -49,7 +49,7 @@ The git tag (or commit) on a **Hub model repo** that a **registry tag** resolves
 _Avoid_: version (too generic), release branch
 
 **Hub artifact**:
-The checkpoint files published inside a **Hub model repo** at one **Hub revision** — Calamari uses a SavedModel directory + JSON sidecar (e.g. `best.ckpt/`, `best.ckpt.json`); Kraken may use `.mlmodel` or `.safetensors`.
+The checkpoint files published inside a **Hub model repo** at one **Hub revision** — Calamari inference uses converted PyTorch `.pt` checkpoints; Kraken may use `.mlmodel` or `.safetensors`.
 _Avoid_: weights (too generic), model file
 
 **Local bundled weights**:
@@ -90,7 +90,7 @@ _Avoid_: org (when meaning the namespace generically)
 - One **registry tag** resolves to one **Hub revision** on that repo
 - Training output is copied into **Hub staging tree** when ready to publish
 - One **Hub dataset repo** may train many **registry model ids** over time
-- A **Hub collection** (`nomos`) links to many **Hub model repos** and **Hub dataset repos**; defined in `src/hf/collection.yaml`
+- A **Hub collection** (`nomos`) links to many **Hub model repos** and **Hub dataset repos**; defined in `src/hf/publish/collection.yaml`
 
 ## Example dialogue
 
@@ -101,8 +101,8 @@ _Avoid_: org (when meaning the namespace generically)
 
 - "data" was used to mean both weights and training material — resolved: use **Hub model repo** vs **Hub dataset repo**.
 - "kalamos" vs "nomicous" as public product name — resolved for Hub: product is **nomicous**; **Hub namespace** may be personal until the org exists.
-- Checkpoint filename at repo root — resolved: use architecture-native names (**Hub artifact**), e.g. Calamari `best.ckpt`, not a forced `model.ckpt` rename.
-- Calamari **Hub artifact** format is TensorFlow SavedModel (`.ckpt/` directory), not `.safetensors`; Kraken may use `.safetensors` or `.mlmodel`.
+- Checkpoint filename at repo root — resolved: use architecture-native names (**Hub artifact**), e.g. Calamari `best.pt`, not a forced `model.ckpt` rename.
+- Calamari **Hub artifact** format is a converted PyTorch checkpoint (`.pt`); Kraken may use `.safetensors` or `.mlmodel`.
 - Legacy registry ids (`greek-calamariv1`) — resolved: migrate to `{script}-{architecture}-{model_version}` (e.g. `greek-calamari-v1`); **Hub repo slug** uses hybrid `{script}-htr-{architecture}` pattern.
 - **Hub cache** invalidation — resolved: manifest hash (not files-exist-only).
 
@@ -112,20 +112,19 @@ _Avoid_: org (when meaning the namespace generically)
 
 - Sync inference: `POST /inference/v1/run` via `inference/api/run.py` and `inference/jobs/runner.py`
 - Async jobs: `POST /inference/v1/jobs` plus `inference/jobs/worker.py` (Postgres queue, LISTEN/NOTIFY, callbacks)
-- Architectures implemented: **Calamari** (`inference/architectures/calamari.py`) and **Kraken segment** (`inference/architectures/kraken.py`)
-- **Calamari source**: vendored `src/model/calamari` → runtime `_support_repo/calamari` (not PyPI `calamari_ocr`); see [`docs/calamari-vendored-architecture.md`](../docs/calamari-vendored-architecture.md)
-- Weight resolution: `file://` and `package://` only (`inference/weights/` interim layout; see `inference/weights/__init__.py`)
-- Runtime cache: `inference/weights/cache/<registry_model_id>/<registry_tag>/`
+- Architectures implemented: **Calamari** (`inference/architectures/calamari/`) and **Kraken segment** (`inference/architectures/kraken.py`)
+- **Calamari runtime**: local PyTorch graph + local preprocessing; no TensorFlow or vendored `calamari_ocr` import at inference time.
+- Weight resolution: `file://`, `hf://`, and `package://` (`src/hf/` local/cache layout; see `inference/weights/__init__.py`)
+- Runtime cache: `src/hf/cache/<registry_model_id>/<registry_tag>/`
 
-### Target (planned — not yet in repo)
+### Hub layout (`src/hf/`)
 
-| Piece | Planned location |
-|-------|------------------|
-| Hub integration (`hf://` resolution, download, cache manifest) | `src/hf/` |
+| Piece | Location |
+|-------|----------|
+| `hf://` resolution, download, cache manifest | `src/hf/resolve/` |
+| Publish staging validation, model cards, collection sync | `src/hf/publish/` |
 | Local bundled weights for offline dev | `src/hf/local/` |
 | Publish-ready staging tree | `src/hf/staging/` |
 | Hub runtime cache | `src/hf/cache/` |
-| Collection metadata | `src/hf/collection.yaml` |
-| Upload/fetch/sync scripts | `scripts/hf/` |
-
-Until `src/hf/` lands, treat **Local bundled weights**, **Hub cache**, and **Hub integration** entries above as target vocabulary — not the live on-disk layout.
+| Collection metadata | `src/hf/publish/collection.yaml` |
+| CLI entrypoints | `scripts/hf/` |

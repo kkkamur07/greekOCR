@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useLocation, useParams } from 'react-router-dom';
 import { type LayoutPoint, type LinePoint } from '../api/client';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { PageEditorCanvas } from '../components/page-editor/PageEditorCanvas';
@@ -27,11 +27,11 @@ import {
   usePageEditorJobQueue,
   usePairingState,
 } from '../components/page-editor/hooks';
-import { PageEditorJobProgressPanel } from '../components/page-editor/PageEditorJobProgressPanel';
 import {
   segmentHasGroundTruth,
   segmentIdsWithGroundTruth,
 } from '../components/page-editor/hooks/utils';
+import { readPageEditorDocument } from './pageEditorNavigation';
 
 export function PageEditorPlaceholderPage() {
   const { projectId, documentId, partId } = useParams<{
@@ -39,6 +39,11 @@ export function PageEditorPlaceholderPage() {
     documentId: string;
     partId: string;
   }>();
+  const location = useLocation();
+  const initialDocument =
+    projectId && documentId
+      ? readPageEditorDocument(location.state, projectId, documentId)
+      : null;
 
   const [editorMode, setEditorMode] = useState<'layout' | 'transcription'>('layout');
   const [drawMode, setDrawMode] = useState<'none' | 'rectangle' | 'polygon'>('none');
@@ -56,7 +61,7 @@ export function PageEditorPlaceholderPage() {
     setDrawMode('none');
     setDraftPolygon([]);
     setDraftStart(null);
-  });
+  }, initialDocument);
   const {
     document,
     setDocument,
@@ -476,13 +481,6 @@ export function PageEditorPlaceholderPage() {
           />
         </div>
       )}
-      <PageEditorJobProgressPanel
-        jobs={jobQueue.jobs}
-        activeCount={jobQueue.activeCount}
-        expanded={jobQueue.panelExpanded}
-        onExpandedChange={jobQueue.setPanelExpanded}
-        onDismissCompleted={jobQueue.dismissCompleted}
-      />
     </PageEditorShell>
   );
 }

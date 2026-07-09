@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api, type DocumentWorkflow } from '../../api/client';
 import { ApiError } from '../../api/errors';
 import { toast } from '../ui/toast';
+import { WorkflowBadge } from '../WorkflowBadge';
 import { publicDocumentPath, publicDocumentUrl } from '../../utils/publicDocumentUrl';
 
 type DocumentLiveSharingControlsProps = {
@@ -38,7 +39,7 @@ export function DocumentLiveSharingControls({
       onWorkflowChange(updated.workflow);
       toast.success(
         nextWorkflow === 'published'
-          ? 'Document published — public link is live'
+          ? 'Document published. Public link is live'
           : 'Document returned to draft',
       );
     } catch (err) {
@@ -59,15 +60,16 @@ export function DocumentLiveSharingControls({
     }
   }
 
-  const statusClass = compact ? 'entity-panel__meta' : 'entity-panel__status';
+  const statusClass = compact ? 'entity-panel__meta' : 'entity-panel__status-row';
   const urlClass = compact ? 'pe-dd-share__url' : 'entity-panel__url';
   const actionsClass = compact ? 'pe-dd-share__actions' : 'entity-panel__actions';
 
   return (
     <>
-      <p className={statusClass}>
-        Status <strong>{isPublished ? 'published' : isArchived ? 'archived' : 'draft'}</strong>
-      </p>
+      <div className={statusClass}>
+        {!compact && <span className="entity-panel__status-label">Status</span>}
+        <WorkflowBadge workflow={workflow} />
+      </div>
       {isPublished && (
         <div className={compact ? 'pe-dd-share' : 'entity-panel__share-block'}>
           <label className="entity-panel__label" htmlFor={`public-url-${documentId}`}>

@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api, type DocumentWithPartsResponse } from '../api/client';
 import { ApiError } from '../api/errors';
+import { BackgroundJobsProvider } from '../context/BackgroundJobsContext';
+import { BackgroundJobsPanel } from '../components/BackgroundJobsPanel';
 import { PageEditorPlaceholderPage } from './PageEditorPlaceholderPage';
 
 vi.mock('../components/AuthenticatedImage', () => ({
@@ -25,6 +27,9 @@ vi.mock('../api/client', async (importOriginal) => {
     copyToGroundTruth: vi.fn(),
     updatePartReviewStatus: vi.fn(),
     replacePartLines: vi.fn(),
+    createPartLine: vi.fn(),
+    patchPartLine: vi.fn(),
+    deletePartLine: vi.fn(),
     updateLineGeometry: vi.fn(),
     resetPartLayout: vi.fn(),
     generateTranscriptionPdf: vi.fn(),
@@ -76,6 +81,9 @@ type MockedEditorApi = {
   copyToGroundTruth: ReturnType<typeof vi.fn>;
   updatePartReviewStatus: ReturnType<typeof vi.fn>;
   replacePartLines: ReturnType<typeof vi.fn>;
+  createPartLine: ReturnType<typeof vi.fn>;
+  patchPartLine: ReturnType<typeof vi.fn>;
+  deletePartLine: ReturnType<typeof vi.fn>;
   updateLineGeometry: ReturnType<typeof vi.fn>;
   resetPartLayout: ReturnType<typeof vi.fn>;
   generateTranscriptionPdf: ReturnType<typeof vi.fn>;
@@ -112,12 +120,15 @@ const DOCUMENT: DocumentWithPartsResponse = {
 function renderPageEditor() {
   return render(
     <MemoryRouter initialEntries={['/projects/project-1/documents/doc-1/parts/part-1']}>
-      <Routes>
-        <Route
-          path="/projects/:projectId/documents/:documentId/parts/:partId"
-          element={<PageEditorPlaceholderPage />}
-        />
-      </Routes>
+      <BackgroundJobsProvider>
+        <Routes>
+          <Route
+            path="/projects/:projectId/documents/:documentId/parts/:partId"
+            element={<PageEditorPlaceholderPage />}
+          />
+        </Routes>
+        <BackgroundJobsPanel />
+      </BackgroundJobsProvider>
     </MemoryRouter>,
   );
 }
@@ -189,6 +200,7 @@ describe('PageEditorPlaceholderPage', () => {
       ...DOCUMENT.parts[0],
       reviewed: true,
     });
+    mockedApi.deletePartLine.mockResolvedValue(undefined);
     mockedApi.replacePartLines.mockImplementation(async (_projectId, _documentId, _partId, body) =>
       body.lines.map((line: Record<string, unknown>, index: number) => ({
         id: (line.id as string | undefined) ?? `line-${index + 1}`,
@@ -1132,7 +1144,7 @@ describe('PageEditorPlaceholderPage', () => {
     expect(await screen.findByText('1 Segment')).toBeTruthy();
   });
 
-  it('deletes a selected Segment and saves the remaining Line geometry', async () => {
+  it('deletes a selected Segment without replacing every line', async () => {
     mockedApi.getDocument.mockResolvedValue(DOCUMENT);
     mockedApi.listPartLines.mockResolvedValue([
       {
@@ -1181,28 +1193,15 @@ describe('PageEditorPlaceholderPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /delete segment/i }));
 
     await waitFor(() => {
-      expect(mockedApi.replacePartLines).toHaveBeenLastCalledWith(
+      expect(mockedApi.deletePartLine).toHaveBeenLastCalledWith(
         'project-1',
         'doc-1',
         'part-1',
-        {
-          lines: [
-            {
-              id: 'line-2',
-              order: 0,
-              kind: 'polygon',
-              points: [
-                [80, 20],
-                [120, 20],
-                [120, 50],
-                [80, 50],
-              ],
-              source: 'manual',
-            },
-          ],
-        },
+        'line-1',
       );
     });
+    expect(mockedApi.replacePartLines).not.toHaveBeenCalled();
+    expect(mockedApi.getPagePairing).toHaveBeenCalled();
   });
 
   it('edits a Line baseline and saves it as manual geometry', async () => {
