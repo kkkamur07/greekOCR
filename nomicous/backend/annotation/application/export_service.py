@@ -8,7 +8,6 @@ from io import BytesIO
 from pathlib import Path
 from uuid import UUID
 
-import numpy as np
 from PIL import Image
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -79,7 +78,7 @@ class AnnotationExportService:
 
             raise NotFoundError("Part not found")
 
-        page_image, source_image = self._load_page_image(part.image_key)
+        source_image = self._load_page_image(part.image_key)
         try:
             page_stem = self._page_stem(part.image_key)
             export_steps = steps if steps is not None else ["rectify"]
@@ -98,7 +97,6 @@ class AnnotationExportService:
                 if text_order is not None:
                     paired_text_orders.add(text_order)
                 image_base64 = self._processed_image_base64(
-                    page_image,
                     source_image,
                     line,
                     export_steps,
@@ -131,12 +129,12 @@ class AnnotationExportService:
         finally:
             source_image.close()
 
-    def _load_page_image(self, image_key: str) -> tuple[np.ndarray, Image.Image]:
+    def _load_page_image(self, image_key: str) -> Image.Image:
         raw = self._media.read(image_key)
         pil = Image.open(BytesIO(raw))
         rgb = pil.convert("RGB")
         pil.close()
-        return np.array(rgb), rgb
+        return rgb
 
     def _page_stem(self, image_key: str) -> str:
         return Path(image_key).stem
@@ -160,12 +158,11 @@ class AnnotationExportService:
 
     def _processed_image_base64(
         self,
-        page_image: np.ndarray,
         source_image: Image.Image,
         line: Line,
         steps: list[str],
     ) -> str:
-        image = page_image
+        image = source_image
         segment = {"points": line.points, "kind": line.kind.value}
         for step in steps:
             image = apply_step(image, segment, step)
@@ -179,6 +176,5 @@ class AnnotationExportService:
         dpi = source_image.info.get("dpi")
         if isinstance(dpi, tuple) and len(dpi) >= 2:
             save_kwargs["dpi"] = (int(round(dpi[0])), int(round(dpi[1])))
-        with Image.fromarray(image) as pil:
-            pil.save(buf, **save_kwargs)
+        image.save(buf, **save_kwargs)
         return base64.b64encode(buf.getvalue()).decode("ascii")

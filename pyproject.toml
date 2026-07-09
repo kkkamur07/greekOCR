@@ -79,10 +79,7 @@ platform-prod = [
     "PyJWT>=2.10.0",
     "python-multipart>=0.0.18",
     "sqlalchemy[asyncio]>=2.0.36",
-    "uvicorn[standard]>=0.32.0",
-    "pypdf>=6.13.2",
     "pillow>=12.2.0",
-    "opencv-python-headless>=4.8,<4.13",
     "reportlab>=5.0.0",
     "supabase>=2.13.0",
 ]
