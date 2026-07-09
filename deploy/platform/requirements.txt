@@ -82,6 +82,7 @@ pyjwt==2.13.0
 python-dotenv==1.2.2
     # via pydantic-settings
 python-multipart==0.0.32
+pyyaml==6.0.3
 realtime==2.31.0
     # via supabase
 reportlab==5.0.0
