@@ -2,53 +2,51 @@
 
 from collections.abc import Callable
 
-import numpy as np
+from PIL import Image, ImageDraw
 
 SUPPORTED_STEPS = {"rectify"}
 StepCallback = Callable[[str], None]
 
 
-def _mask_bbox_rectify(page_image: np.ndarray, points: np.ndarray) -> np.ndarray:
-    h, w = page_image.shape[:2]
-    xs, ys = points[:, 0], points[:, 1]
-    x0 = int(np.floor(np.clip(xs.min(), 0, w - 1)))
-    y0 = int(np.floor(np.clip(ys.min(), 0, h - 1)))
-    x1 = int(np.ceil(np.clip(xs.max(), x0 + 1, w)))
-    y1 = int(np.ceil(np.clip(ys.max(), y0 + 1, h)))
-
-    crop = page_image[y0:y1, x0:x1].copy()
-    crop_h, crop_w = crop.shape[:2]
-
-    try:
-        import cv2
-
-        shifted = points.copy()
-        shifted[:, 0] -= x0
-        shifted[:, 1] -= y0
-        mask = np.zeros((crop_h, crop_w), dtype=np.uint8)
-        cv2.fillPoly(mask, [shifted.astype(np.int32)], 255)
-        white = np.full_like(crop, 255)
-        return np.where(mask[:, :, None] > 0, crop, white)
-    except ImportError:
-        return crop
+def _clamp(value: float, low: int, high: int) -> float:
+    return min(max(value, low), high)
 
 
-def rectify(page_image: np.ndarray, segment: dict) -> np.ndarray:
+def _bbox(points: list[tuple[float, float]], width: int, height: int) -> tuple[int, int, int, int]:
+    xs = [point[0] for point in points]
+    ys = [point[1] for point in points]
+    x0 = int(_clamp(min(xs), 0, width - 1))
+    y0 = int(_clamp(min(ys), 0, height - 1))
+    x1 = int(_clamp(max(xs), x0 + 1, width))
+    y1 = int(_clamp(max(ys), y0 + 1, height))
+    return x0, y0, x1, y1
+
+
+def _mask_bbox_rectify(page_image: Image.Image, points: list[tuple[float, float]]) -> Image.Image:
+    x0, y0, x1, y1 = _bbox(points, page_image.width, page_image.height)
+    crop = page_image.crop((x0, y0, x1, y1))
+
+    shifted = [(x - x0, y - y0) for x, y in points]
+    mask = Image.new("L", crop.size, 0)
+    ImageDraw.Draw(mask).polygon(shifted, fill=255)
+
+    white = Image.new(crop.mode, crop.size, "white")
+    white.paste(crop, mask=mask)
+    return white
+
+
+def rectify(page_image: Image.Image, segment: dict) -> Image.Image:
     raw_points = segment.get("points") or []
-    points = np.array(raw_points, dtype=np.float32)
-    if points.size == 0:
+    points = [(float(x), float(y)) for x, y in raw_points]
+    if not points:
         raise ValueError("Segment has no points")
     if len(points) < 3:
-        xs, ys = points[:, 0], points[:, 1]
-        x0, y0 = int(max(xs.min(), 0)), int(max(ys.min(), 0))
-        x1 = int(min(xs.max(), page_image.shape[1]))
-        y1 = int(min(ys.max(), page_image.shape[0]))
-        return page_image[y0:y1, x0:x1]
+        return page_image.crop(_bbox(points, page_image.width, page_image.height))
 
     return _mask_bbox_rectify(page_image, points)
 
 
-def apply_step(image: np.ndarray, segment: dict, step: str) -> np.ndarray:
+def apply_step(image: Image.Image, segment: dict, step: str) -> Image.Image:
     if step not in SUPPORTED_STEPS:
         raise ValueError(f"Unsupported processing step: {step}")
     if step == "rectify":
@@ -57,12 +55,12 @@ def apply_step(image: np.ndarray, segment: dict, step: str) -> np.ndarray:
 
 
 def process(
-    image: np.ndarray,
+    image: Image.Image,
     segment: dict,
     steps: list[str],
     *,
     on_step: StepCallback | None = None,
-) -> np.ndarray:
+) -> Image.Image:
     result = image
     for step in steps:
         if on_step is not None:
