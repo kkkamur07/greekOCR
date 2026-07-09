@@ -112,7 +112,7 @@ def test_projects_without_auth_returns_401(client):
 def test_projects_with_auth_returns_empty_list(client, auth_headers):
     response = client.get("/projects", headers=auth_headers)
     assert response.status_code == 200
-    assert response.json() == []
+    assert response.json() == {"items": [], "next_cursor": None}
 
 
 # --- Auth settings ---

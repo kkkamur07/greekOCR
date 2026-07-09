@@ -1,12 +1,12 @@
 """Document part upload, ordering, review, and media access."""
 
-from pathlib import Path
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.exceptions import NotFoundError, ValidationError
 from backend.document.domain.access import require_can_read
+from backend.document.infrastructure.media_store import DEFAULT_PART_IMAGE_SUFFIX, encode_part_image
 from backend.document.infrastructure.orm_models import DocumentPart
 from backend.document.application.document_service_shared import DocumentServiceSharedMixin
 from backend.users.infrastructure.orm_models import User
@@ -35,18 +35,20 @@ class PartServiceMixin(DocumentServiceSharedMixin):
     ) -> DocumentPart:
         document = await self.get_document(session, user, project_id, document_id)
         order = await self._documents.next_part_order(session, document.id)
-        suffix = "bin"
         filename_stem: str | None = None
         if filename and "." in filename:
-            path = Path(filename)
-            suffix = path.suffix.lstrip(".").lower()[:16]
-            filename_stem = path.stem
+            filename_stem = filename.rsplit(".", 1)[0]
+        encoded = encode_part_image(data)
         part = DocumentPart(document_id=document.id, order=order, image_key="pending")
         session.add(part)
         await session.flush()
-        image_key = self._media.part_image_key(part.id, suffix=suffix, filename_stem=filename_stem)
+        image_key = self._media.part_image_key(
+            part.id,
+            suffix=DEFAULT_PART_IMAGE_SUFFIX,
+            filename_stem=filename_stem,
+        )
         try:
-            self._media.write(image_key, data)
+            self._media.write(image_key, encoded)
             part.image_key = image_key
             await session.commit()
         except Exception:
@@ -132,16 +134,6 @@ class PartServiceMixin(DocumentServiceSharedMixin):
         project = await self._load_project(session, document.project_id)
         require_can_read(document, project, None)
         return part
-
-    def resolve_part_image_path(self, part: DocumentPart) -> Path:
-        """Resolved on-disk path for streaming; raises NotFoundError if missing."""
-        try:
-            path = self._media.absolute_path(part.image_key)
-        except (ValueError, FileNotFoundError):
-            raise NotFoundError("Part image not found") from None
-        if not path.is_file():
-            raise NotFoundError("Part image not found")
-        return path
 
     def read_part_bytes(self, part: DocumentPart) -> bytes:
         try:

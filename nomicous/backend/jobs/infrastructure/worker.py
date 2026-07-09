@@ -24,6 +24,7 @@ from backend.jobs.infrastructure.job_repository import (
     mark_job_done,
     mark_job_failed,
     mark_job_waiting,
+    reclaim_stale_running_jobs,
 )
 from backend.jobs.infrastructure.orm_models import Job, JobType
 from backend.ml.infrastructure.ml_client import InferenceClient
@@ -93,6 +94,11 @@ def execute_claimed_job(job: Job) -> None:
 def process_one_job() -> bool:
     """Claim and execute at most one job. Returns True if work was done."""
     settings = get_job_settings()
+    reclaimed = reclaim_stale_running_jobs(
+        running_timeout_seconds=settings.job_worker_running_timeout_seconds
+    )
+    if reclaimed:
+        logger.warning("reclaimed %s stale platform job(s)", reclaimed)
     job = claim_next_pending_job(test_only=settings.job_worker_claim_test_only)
     if job is None:
         return False

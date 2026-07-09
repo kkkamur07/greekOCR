@@ -2,6 +2,62 @@
 @import './page-editor.css';
 
 /* Page editor status bar */
+.pe-inference-banner {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--accent-bg);
+  border-bottom: 1px solid var(--border);
+  padding: 8px 14px;
+  font-size: .875rem;
+  color: var(--text-2);
+}
+.pe-inference-banner--active {
+  background: var(--green-banner-bg);
+  border-bottom-color: var(--green-banner-border);
+  color: #065f46;
+}
+.pe-helper-install-overlay {
+  z-index: 400;
+}
+.pe-helper-install-modal {
+  max-width: 480px;
+}
+.pe-helper-install-modal__lead {
+  margin: 0 0 16px;
+  color: var(--text-2);
+  font-size: .9375rem;
+  line-height: 1.5;
+}
+.pe-helper-install-modal__steps {
+  margin: 0 0 20px;
+  padding-left: 1.25rem;
+  color: var(--text-2);
+  font-size: .875rem;
+  line-height: 1.55;
+}
+.pe-helper-install-modal__steps li + li {
+  margin-top: 8px;
+}
+.pe-helper-install-modal__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pe-inference-banner__action {
+  border: 1px solid var(--green-banner-border);
+  background: #fff;
+  color: #065f46;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: .8125rem;
+  cursor: pointer;
+}
+.pe-inference-banner__action:hover {
+  background: #ecfdf5;
+}
 .pe-status-bar {
   flex-shrink: 0;
   background: var(--green-banner-bg);

@@ -1,0 +1,77 @@
+# Docker Compose override: Supabase Postgres + Storage (no local db container).
+#
+# Prereq: nomicous/backend/core/.env.supabase filled in (see .env.supabase.example).
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.supabase.yml up --build
+#
+# Open http://localhost:5173 — login dev@example.com / dev-pass-123
+
+name: nomicous
+
+services:
+  # Local Postgres is not used in this profile.
+  db:
+    profiles: ["local-db-only"]
+
+  api:
+    env_file:
+      - ./nomicous/backend/core/.env.supabase
+    # !override drops base compose DATABASE_URL (local db:5432/kalamos) so env_file wins.
+    environment: !override
+      NOMICOUS_APP_ROOT: /app
+      INFERENCE_URL: http://inference-api:8001
+      INFERENCE_WEBHOOK_SECRET: dev-inference-webhook-secret
+      INFERENCE_SERVICE_SECRET: dev-inference-webhook-secret
+      CORS_ORIGINS: http://localhost:3000,http://localhost:5173
+      ANNOTATED_DATA_ROOT: /data/annotated/data
+    # !override replaces the base depends_on (which includes the local `db`
+    # service). In the Supabase profile `db` is disabled, so a plain merge would
+    # keep a dangling dependency on an undefined service.
+    depends_on: !override
+      inference-api:
+        condition: service_healthy
+    volumes:
+      - ./nomicous/backend:/app/backend
+      - ./scripts/platform:/app/scripts/platform
+      - ./inference:/app/inference
+      - ./data:/data:ro
+    # Migrations: run `./scripts/platform/migrate_supabase.sh` on the host first.
+    # In-container alembic uses MIGRATOR_DATABASE_URL (direct host) which often fails
+    # from Docker (IPv6 / network). Seed only on API start.
+    command: >
+      sh -c "python scripts/platform/seed_dev_nomicous.py
+      && uvicorn backend.core.main:app --host 0.0.0.0 --port 8000 --workers 1 --reload --reload-dir /app/backend"
+
+  inference-api:
+    env_file:
+      - ./nomicous/backend/core/.env.supabase
+    environment: !override
+      INFERENCE_CALLBACK_URL: http://api:8000/internal/inference/job-complete
+      INFERENCE_WEBHOOK_SECRET: dev-inference-webhook-secret
+      INFERENCE_SERVICE_SECRET: dev-inference-webhook-secret
+      INFERENCE_REGISTRY_PATH: /app/inference/registry.yaml
+      INFERENCE_WEIGHTS_CACHE_DIR: /app/inference/weights/cache
+      INFERENCE_CALAMARI_NUM_PROCESSES: "1"
+    # Supabase profile has no local `db`; drop the base dependency entirely.
+    depends_on: !reset null
+
+  inference-worker:
+    env_file:
+      - ./nomicous/backend/core/.env.supabase
+    environment: !override
+      INFERENCE_CALLBACK_URL: http://api:8000/internal/inference/job-complete
+      INFERENCE_WEBHOOK_SECRET: dev-inference-webhook-secret
+      INFERENCE_SERVICE_SECRET: dev-inference-webhook-secret
+      INFERENCE_REGISTRY_PATH: /app/inference/registry.yaml
+      INFERENCE_WEIGHTS_CACHE_DIR: /app/inference/weights/cache
+      INFERENCE_CALAMARI_NUM_PROCESSES: "1"
+      INFERENCE_WORKER_RUNNING_JOB_TIMEOUT_SECONDS: "1800"
+    # !override replaces the base depends_on (which includes `db`); keep only api.
+    depends_on: !override
+      api:
+        condition: service_healthy
+
+  frontend:
+    depends_on:
+      - api

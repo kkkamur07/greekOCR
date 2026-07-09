@@ -80,7 +80,7 @@ export type WatchJobSseOptions = {
   onUnavailable?: () => void;
 };
 
-export function watchJobViaSse(jobId: string, options: WatchJobSseOptions): () => void {
+export function watchJobViaSse(_jobId: string, options: WatchJobSseOptions): () => void {
   if (typeof fetch === 'undefined' || typeof ReadableStream === 'undefined') {
     options.onUnavailable?.();
     return () => {};

@@ -82,11 +82,13 @@ Default CI and local dry-runs do **not** call the Hub upload API unless `--uploa
      --upload
    ```
 
-4. **Point the Registry** at the published revision, for example:
+4. **Point the Registry** at the published revision in [`inference/registry.yaml`](../inference/registry.yaml), for example:
 
    ```yaml
    weights_source: hf://nomicous/greek-htr-calamari@stable
    ```
+
+   Then complete the platform catalog and deploy steps in [`docs/inference/adding-inference-models.md`](../docs/inference/adding-inference-models.md).
 
 5. **Prefetch** to warm the **Hub cache**:
 

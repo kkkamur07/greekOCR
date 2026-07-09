@@ -32,26 +32,17 @@ COPY frontend/ .
 
 RUN npm run build
 
-FROM node:20-alpine AS runner
+
+FROM nginx:1.27-alpine AS runner
 
 # Keep default in sync with ../VERSION; docker compose passes APP_VERSION from NOMICOUS_VERSION.
 ARG APP_VERSION=0.3.2
 LABEL org.opencontainers.image.title="nomicous-frontend" \
       org.opencontainers.image.version="${APP_VERSION}"
 
-WORKDIR /app
-
-ENV NODE_ENV=production
-ENV PORT=5173
-
-RUN npm install -g serve@14 \
-  && addgroup --system --gid 1001 nodejs \
-  && adduser --system --uid 1001 vite
-
-COPY --from=builder --chown=vite:nodejs /app/dist ./dist
-
-USER vite
+COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=builder /app/dist /usr/share/nginx/html
 
 EXPOSE 5173
 
-CMD ["serve", "-s", "dist", "-l", "5173"]
+CMD ["nginx", "-g", "daemon off;"]

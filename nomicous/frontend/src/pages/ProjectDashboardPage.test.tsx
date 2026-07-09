@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '../api/client';
 import { ApiError } from '../api/errors';
+import * as session from '../auth/session';
 import { ProjectDashboardPage } from './ProjectDashboardPage';
 
 vi.mock('../api/client', async (importOriginal) => {
@@ -37,6 +38,8 @@ function renderProjectDashboard() {
 describe('ProjectDashboardPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(session, 'hasAccessToken').mockReturnValue(true);
+    vi.spyOn(session, 'navigateToLogin').mockImplementation(() => {});
     vi.mocked(api.me).mockResolvedValue({
       id: 'user-1',
       email: 'dev@example.com',
@@ -120,5 +123,27 @@ describe('ProjectDashboardPage', () => {
       });
     });
     expect(screen.getByRole('heading', { name: 'ByzantineGreekCorpus' })).toBeTruthy();
+  });
+
+  it('redirects to login when the session is unauthorized', async () => {
+    vi.mocked(api.getProject).mockRejectedValue(new ApiError('Unauthorized', 401));
+
+    renderProjectDashboard();
+
+    await waitFor(() => {
+      expect(session.navigateToLogin).toHaveBeenCalled();
+    });
+    expect(screen.queryByText('Project unavailable')).toBeNull();
+  });
+
+  it('redirects to login when no access token is present', async () => {
+    vi.spyOn(session, 'hasAccessToken').mockReturnValue(false);
+
+    renderProjectDashboard();
+
+    await waitFor(() => {
+      expect(session.navigateToLogin).toHaveBeenCalled();
+    });
+    expect(api.getProject).not.toHaveBeenCalled();
   });
 });

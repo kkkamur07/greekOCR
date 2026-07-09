@@ -1205,6 +1205,8 @@ export interface components {
             document_part_id: string | null;
             /** Error */
             error: string | null;
+            /** Execution */
+            execution?: "local" | "cloud" | null;
             /**
              * Id
              * Format: uuid

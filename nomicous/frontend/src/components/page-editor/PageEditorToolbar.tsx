@@ -7,7 +7,10 @@ import { PageEditorModelSelect } from './PageEditorModelSelect';
 import { PageEditorSharingMenu } from './PageEditorSharingMenu';
 import { SettingsIcon } from './EditorIcons';
 import { PageEditorSettingsPanel } from './PageEditorSettingsPanel';
+import { PageEditorInferenceStatus } from './PageEditorInferenceStatus';
 import { PAGE_EDITOR_SHORTCUTS } from './pageEditorShortcuts';
+import type { InferencePreference } from '../../inference/preference';
+import type { HostEligibility } from '../../inference/types';
 import type { PageEditorCanvasSettings } from './pageEditorSettings';
 import { ToolbarKbd } from './ToolbarKbd';
 
@@ -53,6 +56,12 @@ type PageEditorToolbarProps = {
   onSettingsOpenChange: (open: boolean) => void;
   canvasSettings: PageEditorCanvasSettings;
   onCanvasSettingsChange: (settings: PageEditorCanvasSettings) => void;
+  inferencePreference: InferencePreference;
+  onInferencePreferenceChange: (preference: InferencePreference) => void;
+  helperAvailable: boolean;
+  helperProbing: boolean;
+  preferCloud: boolean;
+  selectedModelHostEligibility: HostEligibility | null;
 };
 
 export function PageEditorToolbar({
@@ -97,6 +106,12 @@ export function PageEditorToolbar({
   onSettingsOpenChange,
   canvasSettings,
   onCanvasSettingsChange,
+  inferencePreference,
+  onInferencePreferenceChange,
+  helperAvailable,
+  helperProbing,
+  preferCloud,
+  selectedModelHostEligibility,
 }: PageEditorToolbarProps) {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const settingsRef = useRef<HTMLDivElement>(null);
@@ -178,6 +193,11 @@ export function PageEditorToolbar({
       </div>
 
       <div className="pe-toolbar__center" aria-label="Page statistics">
+        <PageEditorInferenceStatus
+          probing={helperProbing}
+          helperAvailable={helperAvailable}
+          preferCloud={preferCloud}
+        />
         {processingLabel && (
           <div className="pe-toolbar__processing" role="status" aria-live="polite">
             <span className="pe-toolbar__processing-dot" aria-hidden="true" />
@@ -429,6 +449,10 @@ export function PageEditorToolbar({
               <PageEditorSettingsPanel
                 settings={canvasSettings}
                 onSettingsChange={onCanvasSettingsChange}
+                inferencePreference={inferencePreference}
+                onInferencePreferenceChange={onInferencePreferenceChange}
+                helperAvailable={helperAvailable}
+                selectedModelHostEligibility={selectedModelHostEligibility}
               />
             )}
           </div>

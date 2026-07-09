@@ -3,11 +3,13 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.api.pagination import PageResponse, decode_cursor, paginate_rows
 from backend.project.api.schemas import (
     ProjectCreateRequest,
+    ProjectPageResponse,
     ProjectResponse,
     ProjectUpdateRequest,
     ShareUserRequest,
@@ -15,7 +17,7 @@ from backend.project.api.schemas import (
 from backend.project.api.responses import project_response
 from backend.project.application.project_service import ProjectService
 from backend.document.infrastructure.document_repository import DocumentRepository
-from backend.jobs.api.schemas import JobResponse
+from backend.jobs.api.schemas import JobPageResponse, JobResponse, job_response_from_orm
 from backend.jobs.application.job_service import JobService
 from backend.users.api.dependencies import get_current_user
 from backend.users.infrastructure.orm_models import User
@@ -42,13 +44,28 @@ async def _projects_with_counts(
     ]
 
 
-@router.get("", response_model=list[ProjectResponse])
+@router.get("", response_model=ProjectPageResponse)
 async def list_projects(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
-) -> list[ProjectResponse]:
-    projects = await _service.list_projects(db, current_user)
-    return await _projects_with_counts(db, projects)
+    limit: int = Query(default=50, ge=1, le=200),
+    cursor: str | None = Query(default=None),
+) -> ProjectPageResponse:
+    page_cursor = decode_cursor(cursor) if cursor else None
+    projects = await _service.list_projects(
+        db,
+        current_user,
+        limit=limit + 1,
+        cursor=page_cursor,
+    )
+    page, next_cursor = paginate_rows(
+        projects,
+        limit=limit,
+        created_at_getter=lambda project: project.created_at,
+        id_getter=lambda project: project.id,
+    )
+    items = await _projects_with_counts(db, page)
+    return ProjectPageResponse(items=items, next_cursor=next_cursor)
 
 
 @router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
@@ -82,16 +99,32 @@ async def get_project(
     return await _project_with_count(db, project)
 
 
-@router.get("/{project_id}/jobs", response_model=list[JobResponse])
+@router.get("/{project_id}/jobs", response_model=JobPageResponse)
 async def list_project_jobs(
     project_id: UUID,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
     job_service: JobService = Depends(_job_service),
-) -> list[JobResponse]:
+    limit: int = Query(default=50, ge=1, le=200),
+    cursor: str | None = Query(default=None),
+) -> JobPageResponse:
     await _service.get_project(db, current_user, project_id)
-    jobs = await job_service.list_project_jobs(project_id)
-    return [JobResponse.model_validate(job) for job in jobs]
+    page_cursor = decode_cursor(cursor) if cursor else None
+    jobs = await job_service.list_project_jobs(
+        project_id,
+        limit=limit + 1,
+        cursor=page_cursor,
+    )
+    page, next_cursor = paginate_rows(
+        jobs,
+        limit=limit,
+        created_at_getter=lambda job: job.created_at,
+        id_getter=lambda job: job.id,
+    )
+    return JobPageResponse(
+        items=[job_response_from_orm(job) for job in page],
+        next_cursor=next_cursor,
+    )
 
 
 @router.patch("/{project_id}", response_model=ProjectResponse)

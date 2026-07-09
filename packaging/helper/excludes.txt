@@ -1,0 +1,36 @@
+# PyInstaller excludes for the Inference Helper bundle.
+# One import name per line; lines starting with # are ignored.
+# Goal: ship only Calamari transcribe + Kraken segment on CPU.
+
+matplotlib
+notebook
+jupyter
+IPython
+tkinter
+PyQt5
+PyQt6
+PySide2
+PySide6
+tensorflow
+tensorboard
+pandas
+nomicous
+alembic
+asyncpg
+pytest
+transformers
+accelerate
+datasets
+gradio
+# Postgres job queue + platform API (helper is sync /run only)
+psycopg2
+sqlalchemy
+inference.infrastructure.db
+inference.infrastructure.orm_models
+inference.infrastructure.job_repository
+inference.jobs.worker
+inference.jobs.callback
+inference.api.jobs
+inference.api.dependencies
+inference.api.main
+src.hf.publish

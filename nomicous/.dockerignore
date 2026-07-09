@@ -5,11 +5,13 @@
 **/.ruff_cache
 **/.next
 **/node_modules
+**/dist
 **/.env
 **/.env.local
 .git
 .gitignore
 .cursor
 issues
-backend/tests
+backend/
+infrastructure/
 frontend/.gitignore

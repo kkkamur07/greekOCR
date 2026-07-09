@@ -8,7 +8,7 @@ from _bootstrap import ensure_nomicous_on_path
 
 ensure_nomicous_on_path()
 
-from infrastructure.db import AsyncSessionLocal
+from infrastructure.db import system_session
 from infrastructure import models as _orm_models  # noqa: F401 — register all mappers
 from backend.dev.bootstrap import DEV_EMAIL, DEV_PASSWORD, reset_dev_user_password
 from backend.users.application.auth_service import AuthService
@@ -16,7 +16,7 @@ PRINT_TOKEN = os.environ.get("SEED_DEV_PRINT_TOKEN", "").lower() in ("1", "true"
 
 
 async def main() -> None:
-    async with AsyncSessionLocal() as session:
+    async with system_session() as session:
         user_before = await AuthService().find_by_email(session, DEV_EMAIL)
         await reset_dev_user_password(session)
         if user_before is None:

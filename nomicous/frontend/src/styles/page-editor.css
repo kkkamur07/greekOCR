@@ -151,6 +151,49 @@
   animation: pe-processing-pulse 1.2s ease-in-out infinite;
 }
 
+.pe-infstat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: .75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-3);
+}
+.pe-infstat__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-3);
+  flex-shrink: 0;
+}
+.pe-infstat__sep { color: var(--border-2); }
+.pe-infstat__state { font-weight: 600; }
+.pe-infstat--connected {
+  color: var(--green);
+  background: var(--green-bg);
+  border-color: var(--green-banner-border);
+}
+.pe-infstat--connected .pe-infstat__dot { background: var(--green); }
+.pe-infstat--checking {
+  color: var(--amber);
+  background: var(--amber-bg);
+  border-color: rgba(180, 83, 9, 0.25);
+}
+.pe-infstat--checking .pe-infstat__dot {
+  background: var(--amber);
+  animation: pe-processing-pulse 1.2s ease-in-out infinite;
+}
+.pe-infstat--unavailable .pe-infstat__dot { background: var(--border-2); }
+
+@media (prefers-reduced-motion: reduce) {
+  .pe-infstat--checking .pe-infstat__dot { animation: none; }
+}
+
 .pe-processing-banner {
   flex-shrink: 0;
   display: flex;

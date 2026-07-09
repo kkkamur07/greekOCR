@@ -16,5 +16,27 @@
 agent-transcripts
 issues
 _support_repo
-nomicous/backend/media
+
+# Large local-only trees (mounted as volumes in compose, not needed in images)
+data/
+packaging/
+
+# Tests and docs are not shipped in production images
+tests/
+docs/
+configs/
+
+# Model weights are mounted at runtime, not baked into images
 inference/weights
+
+# HF helpers are only required by the inference image
+src/**
+!src/hf/
+
+# Frontend is built from nomicous/ context; exclude from repo-root API/inference builds
+nomicous/frontend/
+nomicous/backend/media
+nomicous/data/
+
+# Dev-only paths under nomicous
+nomicous/backend/tests

@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api, type DocumentWithPartsResponse } from '../api/client';
 import { ApiError } from '../api/errors';
+import * as session from '../auth/session';
 import { DocumentDetailPage } from './DocumentDetailPage';
 
 vi.mock('../components/AuthenticatedImage', () => ({
@@ -83,6 +84,8 @@ function renderDocumentPage(initialPath = '/projects/project-1/documents/doc-1')
 describe('DocumentDetailPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(session, 'hasAccessToken').mockReturnValue(true);
+    vi.spyOn(session, 'navigateToLogin').mockImplementation(() => {});
     vi.mocked(api.me).mockResolvedValue({
       id: 'user-1',
       email: 'dev@example.com',
@@ -233,5 +236,27 @@ describe('DocumentDetailPage', () => {
       });
     });
     expect(screen.getByRole('heading', { name: 'MS Or. 1445 — Genesis' })).toBeTruthy();
+  });
+
+  it('redirects to login when the session is unauthorized', async () => {
+    vi.mocked(api.getDocument).mockRejectedValue(new ApiError('Unauthorized', 401));
+
+    renderDocumentPage();
+
+    await waitFor(() => {
+      expect(session.navigateToLogin).toHaveBeenCalled();
+    });
+    expect(screen.queryByText('This document is not available to your account.')).toBeNull();
+  });
+
+  it('redirects to login when no access token is present', async () => {
+    vi.spyOn(session, 'hasAccessToken').mockReturnValue(false);
+
+    renderDocumentPage();
+
+    await waitFor(() => {
+      expect(session.navigateToLogin).toHaveBeenCalled();
+    });
+    expect(api.getDocument).not.toHaveBeenCalled();
   });
 });

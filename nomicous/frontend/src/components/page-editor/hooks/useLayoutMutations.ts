@@ -1,6 +1,7 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 import {
   api,
+  fetchBinaryApi,
   type JobResponse,
   type LayoutLineResponse,
   type LinePoint,
@@ -8,6 +9,13 @@ import {
   type PartLayoutResponse,
 } from '../../../api/client';
 import { ApiError } from '../../../api/errors';
+import {
+  blobToBase64,
+  DEFAULT_SEGMENT_REGISTRY_MODEL_ID,
+  runLocalInference,
+  type LocalInferenceCallbacks,
+  isAbortError,
+} from '../../../inference';
 import { cleanPolygonPoints, offsetGeometry } from '../canvasGeometry';
 import { SEGMENT_JOB_TIMEOUT_MS, type PageEditorJobKind } from '../jobProgress';
 import { applyLayoutLineGeometryToSegments, mergeSavedLine, syncLayoutLinesFromSegments } from './utils';
@@ -39,11 +47,19 @@ type LayoutMutationsInput = {
   setSelectedSegmentId: Dispatch<SetStateAction<string | null>>;
   setApprovedTextDraft: Dispatch<SetStateAction<string>>;
   onDrawComplete: () => void;
+  partImageUrl: string | null;
+  shouldUseLocalPath: (registryModelId: string) => boolean;
+  segmentRegistryModelId?: string | null;
+  localInference: LocalInferenceCallbacks;
   trackJobAndWait: (
     jobId: string,
     meta: { label: string; kind: PageEditorJobKind },
     options?: { timeoutMs?: number },
   ) => Promise<JobResponse>;
+  trackLocalTask: <T>(
+    meta: { label: string; kind: PageEditorJobKind },
+    run: () => Promise<T>,
+  ) => Promise<T>;
 };
 
 export function useLayoutMutations({
@@ -62,7 +78,12 @@ export function useLayoutMutations({
   setSelectedSegmentId,
   setApprovedTextDraft,
   onDrawComplete,
+  partImageUrl,
+  shouldUseLocalPath,
+  segmentRegistryModelId,
+  localInference,
   trackJobAndWait,
+  trackLocalTask,
 }: LayoutMutationsInput) {
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
   const [selectedLineSnapshot, setSelectedLineSnapshot] = useState<{
@@ -277,6 +298,70 @@ export function useLayoutMutations({
     setSegmentMessage(null);
     setPairingError(null);
     try {
+      const resolvedSegmentModelId = segmentRegistryModelId ?? DEFAULT_SEGMENT_REGISTRY_MODEL_ID;
+      if (shouldUseLocalPath(resolvedSegmentModelId)) {
+        try {
+          await trackLocalTask(
+            {
+              label: 'Kraken line segmentation',
+              kind: 'segmentation',
+            },
+            async () => {
+              if (!partImageUrl) {
+                throw new Error('Page image is not available for local segmentation.');
+              }
+              await localInference.onStart(resolvedSegmentModelId);
+              try {
+                const imageBytes = await blobToBase64(await fetchBinaryApi(partImageUrl));
+                const response = await runLocalInference({
+                  task: 'segment',
+                  registry_model_id: resolvedSegmentModelId,
+                  image_bytes: imageBytes,
+                  signal: localInference.getSignal(),
+                  params: {
+                    use_otsu_refinement: useOtsuRefinement,
+                    otsu_sphere_radius: otsuSphereRadius,
+                  },
+                });
+                if (response.task !== 'segment') {
+                  throw new Error('Local segment returned an unexpected response.');
+                }
+                await api.persistLocalSegment(projectId, documentId, partId, {
+                  registry_model_id: resolvedSegmentModelId,
+                  output: response.output,
+                });
+              } finally {
+                localInference.onEnd();
+              }
+            },
+          );
+          const [reloadedLines, reloadedLayout, pairing] = await Promise.all([
+            api.listPartLines(projectId, documentId, partId),
+            api.getPartLayout(projectId, documentId, partId),
+            api.getPagePairing(projectId, documentId, partId),
+          ]);
+          setLines(reloadedLines);
+          setLayout(reloadedLayout ?? { blocks: [], lines: [] });
+          setSelectedLineId(null);
+          setSelectedSegmentId(null);
+          setSelectedLineSnapshot(null);
+          setApprovedTextDraft('');
+          setTextLines(pairing.text_lines);
+          setPairingProgress(pairing.pairing_progress);
+          setSegmentMessage(
+            useOtsuRefinement
+              ? `Kraken segmentation completed locally with Otsu refinement (${otsuSphereRadius}px sphere, ${reloadedLines.length} Segment(s)).`
+              : `Kraken segmentation completed locally using raw Kraken boundaries (${reloadedLines.length} Segment(s)).`,
+          );
+          return;
+        } catch (err) {
+          if (!(isAbortError(err) && localInference.shouldFallbackToCloud())) {
+            throw err;
+          }
+          localInference.clearFallbackToCloud();
+        }
+      }
+
       const enqueued = await api.segmentPart(projectId, documentId, partId, {
         use_otsu_refinement: useOtsuRefinement,
         otsu_sphere_radius: otsuSphereRadius,

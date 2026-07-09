@@ -1,6 +1,13 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
-import { type LayoutPoint, type LinePoint } from '../api/client';
+import { type LayoutPoint, type LinePoint, api } from '../api/client';
+import {
+  DEFAULT_SEGMENT_REGISTRY_MODEL_ID,
+  fetchLocalCacheStatus,
+  isModelRemoteOnly,
+  registrySelectionFromArtifactRef,
+  useInferenceHost,
+} from '../inference';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { PageEditorCanvas } from '../components/page-editor/PageEditorCanvas';
 import { PageEditorTranscriptionStrip } from '../components/page-editor/PageEditorTranscriptionStrip';
@@ -13,9 +20,10 @@ import {
   PageEditorStatusAlerts,
   hasPageEditorStatusAlerts,
 } from '../components/page-editor/PageEditorStatusAlerts';
+import { PageEditorInferenceBanner } from '../components/page-editor/PageEditorInferenceBanner';
+import { PageEditorLocalInferenceBanner } from '../components/page-editor/PageEditorLocalInferenceBanner';
 import { PageEditorToolbar } from '../components/page-editor/PageEditorToolbar';
 import {
-  PageEditorProcessingBanner,
   getPageEditorProcessingLabel,
   type PageEditorProcessingKind,
 } from '../components/page-editor/PageEditorProcessingBanner';
@@ -93,6 +101,87 @@ export function PageEditorPlaceholderPage() {
   } = editorData;
 
   const jobQueue = usePageEditorJobQueue();
+  const inferenceHost = useInferenceHost();
+  const [segmentRegistryModelId, setSegmentRegistryModelId] = useState<string | null>(null);
+  const [localInferenceModelId, setLocalInferenceModelId] = useState<string | null>(null);
+  const localInferenceAbortRef = useRef<AbortController | null>(null);
+  const switchToCloudRef = useRef(false);
+
+  const localInference = useMemo(
+    () => ({
+      onStart: async (registryModelId: string, registryTag = 'stable') => {
+        localInferenceAbortRef.current?.abort();
+        localInferenceAbortRef.current = new AbortController();
+        // Only surface the download banner the first time a model is used on this
+        // machine. Once the weights are cached locally, the run proceeds silently.
+        const cached = await fetchLocalCacheStatus(registryModelId, registryTag);
+        setLocalInferenceModelId(cached === false ? registryModelId : null);
+      },
+      onEnd: () => {
+        setLocalInferenceModelId(null);
+        localInferenceAbortRef.current = null;
+      },
+      getSignal: () => localInferenceAbortRef.current?.signal,
+      shouldFallbackToCloud: () => switchToCloudRef.current,
+      clearFallbackToCloud: () => {
+        switchToCloudRef.current = false;
+      },
+    }),
+    [],
+  );
+
+  function useCloudInstead() {
+    switchToCloudRef.current = true;
+    localInferenceAbortRef.current?.abort();
+    inferenceHost.setInferencePreference('cloud');
+    setLocalInferenceModelId(null);
+  }
+
+  useEffect(() => {
+    if (!projectId || !documentId || !partId) {
+      setSegmentRegistryModelId(null);
+      return;
+    }
+    let cancelled = false;
+    void api
+      .resolvePartModelBinding(projectId, documentId, partId, 'segment')
+      .then((resolved) => {
+        if (cancelled) return;
+        const { registryModelId } = registrySelectionFromArtifactRef(resolved.model.artifact_ref);
+        setSegmentRegistryModelId(registryModelId);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSegmentRegistryModelId(DEFAULT_SEGMENT_REGISTRY_MODEL_ID);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, documentId, partId]);
+
+  const partImageUrl = part?.image_url ?? null;
+  const shouldUseLocalPath = useCallback(
+    (registryModelId: string) => inferenceHost.shouldUseLocalPath(registryModelId),
+    [inferenceHost],
+  );
+
+  const selectedModelHostEligibility = useMemo(() => {
+    const model = transcribeModels.find((entry) => entry.id === selectedTranscribeModelId);
+    if (!model) return null;
+    try {
+      const { registryModelId } = registrySelectionFromArtifactRef(model.artifact_ref);
+      if (isModelRemoteOnly(inferenceHost.catalog, registryModelId)) {
+        return 'remote' as const;
+      }
+      if (inferenceHost.shouldUseLocalPath(registryModelId)) {
+        return 'local' as const;
+      }
+      return 'any' as const;
+    } catch {
+      return null;
+    }
+  }, [inferenceHost.catalog, inferenceHost.shouldUseLocalPath, selectedTranscribeModelId, transcribeModels]);
 
   const pairing = usePairingState({
     projectId,
@@ -109,7 +198,12 @@ export function PageEditorPlaceholderPage() {
     setPairingProgress,
     setPairingError,
     selectedTranscribeModelId,
+    transcribeModels,
+    partImageUrl,
+    shouldUseLocalPath,
+    localInference,
     trackJobAndWait: jobQueue.trackAndWait,
+    trackLocalTask: jobQueue.trackLocalTask,
   });
 
   const layoutMutations = useLayoutMutations({
@@ -128,7 +222,12 @@ export function PageEditorPlaceholderPage() {
     setSelectedSegmentId: pairing.setSelectedSegmentId,
     setApprovedTextDraft: pairing.setApprovedTextDraft,
     onDrawComplete: () => setDrawMode('none'),
+    partImageUrl,
+    shouldUseLocalPath,
+    segmentRegistryModelId,
+    localInference,
     trackJobAndWait: jobQueue.trackAndWait,
+    trackLocalTask: jobQueue.trackLocalTask,
   });
 
   const {
@@ -292,10 +391,20 @@ export function PageEditorPlaceholderPage() {
       }
       showStatusAlerts={hasPageEditorStatusAlerts(statusAlertProps)}
       statusAlerts={<PageEditorStatusAlerts {...statusAlertProps} />}
-      processingBanner={
-        jobQueue.activeCount === 0 ? (
-          <PageEditorProcessingBanner kind={processingKind} />
-        ) : null
+      processingBanner={null}
+      inferenceBanner={
+        <>
+          <PageEditorLocalInferenceBanner
+            registryModelId={localInferenceModelId}
+            onUseCloudInstead={useCloudInstead}
+          />
+          <PageEditorInferenceBanner
+            helperAvailable={inferenceHost.helperAvailable}
+            probing={inferenceHost.probing}
+            preferCloud={inferenceHost.preferCloud}
+            onUseCloudInstead={useCloudInstead}
+          />
+        </>
       }
       toolbar={
         document && part ? (
@@ -347,6 +456,12 @@ export function PageEditorPlaceholderPage() {
             onSettingsOpenChange={setSettingsOpen}
             canvasSettings={canvasSettings}
             onCanvasSettingsChange={handleCanvasSettingsChange}
+            inferencePreference={inferenceHost.preference}
+            onInferencePreferenceChange={inferenceHost.setInferencePreference}
+            helperAvailable={inferenceHost.helperAvailable}
+            helperProbing={inferenceHost.probing}
+            preferCloud={inferenceHost.preferCloud}
+            selectedModelHostEligibility={selectedModelHostEligibility}
           />
         ) : null
       }
@@ -393,13 +508,6 @@ export function PageEditorPlaceholderPage() {
             }
             onSegmentPointsChange={updateSegmentPoints}
           />
-              {processingKind && jobQueue.activeCount === 0 && (
-                <div className="pe-canvas-processing" aria-hidden="true">
-                  <span className="pe-canvas-processing__label">
-                    {getPageEditorProcessingLabel(processingKind)}
-                  </span>
-                </div>
-              )}
               <p
                 className={`pe-canvas-hint${processingKind ? ' pe-canvas-hint--processing' : ''}`}
                 id="canvas-hint"

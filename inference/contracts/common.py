@@ -33,6 +33,12 @@ class ComputeDevice(StrEnum):
     cuda = "cuda"
     any = "any"
 
+
+class HostEligibility(StrEnum):
+    local = "local"
+    remote = "remote"
+    any = "any"
+
 def _coerce_image_bytes(value: Any) -> bytes:
     if isinstance(value, bytes):
         return value
@@ -60,6 +66,7 @@ ImageBytes = Annotated[
 
 __all__ = [
     "ComputeDevice",
+    "HostEligibility",
     "ImageBytes",
     "InferenceJobStatus",
     "InferenceTask",

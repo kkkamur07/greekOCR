@@ -56,7 +56,7 @@ Transcribe uses the local PyTorch Calamari implementation under `inference/archi
 Runtime artifacts are converted `.pt` checkpoints, so inference images do not install TensorFlow
 or copy the vendored Calamari source tree.
 
-Historical migration notes: [`docs/calamari-vendored-architecture.md`](../docs/calamari-vendored-architecture.md).
+Historical migration notes: [`docs/architecture/calamari-vendored-architecture.md`](../docs/architecture/calamari-vendored-architecture.md).
 
 **Hub integration:** `hf://` weight sources, Hub cache, and prefetch tooling live under `src/hf/` and `scripts/hf/`. See `inference/CONTEXT.md` for domain terminology and [`scripts/hf/README.md`](../scripts/hf/README.md) for the Hub publish runbook.
 
@@ -104,6 +104,25 @@ Job callbacks use a tagged output union: `output.kind` is either `segment` or `t
 
 Weights are resolved at runtime from `src/hf/local/` (bundled), `src/hf/cache/` (Hub), `inference/weights/` (interim), or `package://` (Kraken).
 
+**Adding a model:** step-by-step checklist in [`docs/inference/adding-inference-models.md`](../docs/inference/adding-inference-models.md).
+
+## Inference helper (local CPU on researcher machines)
+
+For hosted SPA + local inference, run the slim helper sidecar (no Postgres, no job queue):
+
+```bash
+HELPER_REGISTRY_URL=http://localhost:8000/inference/v1/registry \
+HF_CACHE_ROOT=~/.nomicous/hf/cache uv run --group inference python -m inference.helper
+curl -s http://127.0.0.1:8001/health
+curl -s http://127.0.0.1:8001/inference/v1/catalog
+```
+
+On startup the helper fetches `registry.yaml` from the hosted platform (`GET /inference/v1/registry`, public, ETag-aware) into `~/.nomicous/registry.yaml`. The bundled copy in the installer is only a fallback when offline. Model **weights** still download on first `/run` via existing `hf://` resolution.
+
+The browser probes `localhost:8001`, calls `/inference/v1/run`, and persists results through the hosted platform API. Set `HELPER_CORS_ORIGINS` to your SPA origin(s).
+
+Packaging for `.dmg` / `.msi` / Linux installers: [`packaging/helper/README.md`](../packaging/helper/README.md) — PyInstaller spec excludes training stacks, platform API, and unused torch backends so installers ship only Calamari + Kraken runtime.
+
 ## Tests
 
 ```bash
@@ -111,7 +130,7 @@ uv run --group inference pytest tests/inference tests/hf
 ```
 
 Stop the Compose `inference-worker` before local integration runs (`docker stop nomicous-inference-worker-1`).
-Full-suite layout, `DATABASE_URL` caveats, and failure analysis: [`docs/testing.md`](../docs/testing.md).
+Full-suite layout, `DATABASE_URL` caveats, and failure analysis: [`docs/guides/testing.md`](../docs/guides/testing.md).
 
 ## Related docs
 

@@ -77,6 +77,10 @@ def real_inference_url(real_platform_url: str) -> str:
     os.environ["INFERENCE_CALLBACK_URL"] = (
         f"{real_platform_url}/internal/inference/job-complete"
     )
+    os.environ.setdefault(
+        "INFERENCE_DATABASE_URL",
+        "postgresql://postgres:dev@localhost:5433/kalamos",
+    )
 
     port = _free_port()
     url = f"http://127.0.0.1:{port}"

@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nomicous</title>
+    <meta
+      name="description"
+      content="Annotation platform and open HTR models for historical manuscripts."
+    />
+    <link rel="icon" href="assets/nomos.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="header">
+      <a class="header__logo" href="/" aria-label="Nomicous home">
+        <img src="assets/nomos.svg" alt="" width="48" height="71" />
+      </a>
+      <nav class="nav" aria-label="Site">
+        <a href="#about">About</a>
+        <a href="#features">Features</a>
+        <a href="#models">Models</a>
+        <a class="btn btn--nav" href="https://app.nomicous.com">
+          <img class="btn__icon" src="assets/nomos.svg" alt="" width="16" height="24" />
+          App
+        </a>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section class="hero-split" aria-label="Introduction">
+        <div class="hero-split__inner">
+          <div class="hero-split__copy">
+            <a class="hero__logo" href="/" aria-label="Nomicous home">
+              <img src="assets/nomos.svg" alt="" width="96" height="141" />
+            </a>
+            <h1>Manuscript annotation and handwritten text recognition</h1>
+            <p class="hero__lead">
+              Segment folio images, run line-level HTR, and export training-ready data.
+              Built for Greek, Syriac, and related historical scripts in the NOMOS research
+              ecosystem.
+            </p>
+            <p class="hero__cta">
+              <a class="btn" href="https://app.nomicous.com">Open the platform</a>
+            </p>
+          </div>
+          <figure class="hero-split__media">
+            <img
+              src="assets/screenshots/editor-1280.webp"
+              srcset="
+                assets/screenshots/editor-640.webp 640w,
+                assets/screenshots/editor-960.webp 960w,
+                assets/screenshots/editor-1280.webp 1280w
+              "
+              sizes="(min-width: 56rem) min(48vw, 34rem), calc(100vw - 2rem)"
+              alt="Page editor showing a manuscript folio with line segments and the transcription panel"
+              width="1280"
+              height="758"
+              fetchpriority="high"
+              decoding="async"
+            />
+            <figcaption class="hero-split__caption">
+              Segment lines, run HTR, and review model output on each page.
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="section section--wide" id="features" aria-labelledby="features-title">
+        <div class="section--wide__inner">
+          <p class="eyebrow">Features</p>
+          <h2 class="section-title" id="features-title">Built for manuscript HTR workflows</h2>
+
+          <ul class="feature-list">
+            <li class="feature">
+              <h3 class="feature__title">Page editor</h3>
+              <p class="feature__text">
+                Draw line regions on each folio, pair transcriptions with segments, and
+                compare ground truth against model output on the same canvas.
+              </p>
+            </li>
+            <li class="feature">
+              <h3 class="feature__title">Segmentation and transcribe</h3>
+              <p class="feature__text">
+                Run layout segmentation and line OCR from the editor. Switch models per
+                task and keep results as separate transcription layers.
+              </p>
+            </li>
+            <li class="feature">
+              <h3 class="feature__title">Local or cloud inference</h3>
+              <p class="feature__text">
+                Use hosted inference by default, or install the Inference Helper to run
+                OCR and segmentation on your CPU with models cached on disk.
+              </p>
+            </li>
+            <li class="feature">
+              <h3 class="feature__title">Projects and export</h3>
+              <p class="feature__text">
+                Organize work into projects and documents, publish live pages, and export
+                line crops plus transcriptions for training pipelines.
+              </p>
+            </li>
+          </ul>
+
+          <div class="shots">
+            <figure class="shot">
+              <img
+                src="assets/screenshots/projects-1280.webp"
+                srcset="
+                  assets/screenshots/projects-640.webp 640w,
+                  assets/screenshots/projects-960.webp 960w,
+                  assets/screenshots/projects-1280.webp 1280w
+                "
+                sizes="(min-width: 1024px) 448px, (min-width: 720px) 46vw, calc(100vw - 32px)"
+                alt="Projects list with manuscript documents and upload controls"
+                width="1280"
+                height="753"
+                loading="lazy"
+                decoding="async"
+              />
+              <figcaption>Projects and document upload.</figcaption>
+            </figure>
+            <figure class="shot">
+              <img
+                src="assets/screenshots/home-1280.webp"
+                srcset="
+                  assets/screenshots/home-640.webp 640w,
+                  assets/screenshots/home-960.webp 960w,
+                  assets/screenshots/home-1280.webp 1280w
+                "
+                sizes="(min-width: 1024px) 448px, (min-width: 720px) 46vw, calc(100vw - 32px)"
+                alt="Document detail view with page thumbnails and part list"
+                width="1280"
+                height="763"
+                loading="lazy"
+                decoding="async"
+              />
+              <figcaption>Page list and editor entry.</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <div class="main-narrow">
+        <section class="section" id="about">
+          <p class="eyebrow">About</p>
+          <h2 class="section-title">Open research tooling</h2>
+          <p>
+            Nomicous is the annotation platform behind the NOMOS project: a hosted editor,
+            open HTR models on Hugging Face, and an optional local inference helper. Weights
+            sync from the registry so new models do not require reinstalling the helper.
+          </p>
+        </section>
+
+        <section class="section" id="models">
+          <div class="section__head">
+            <div>
+              <p class="eyebrow">Models</p>
+              <h2 class="section-title">Published on Hugging Face</h2>
+            </div>
+            <a
+              class="hf-badge"
+              href="https://huggingface.co/nomicous"
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Nomicous on Hugging Face"
+            >
+              <img src="assets/huggingface.svg" alt="" width="32" height="30" />
+            </a>
+          </div>
+          <ul class="links">
+            <li>
+              <a href="https://huggingface.co/nomicous/greek-htr-calamari" target="_blank" rel="noreferrer">
+                greek-htr-calamari
+              </a>
+              <span>Greek line HTR, Calamari</span>
+            </li>
+            <li>
+              <a href="https://huggingface.co/nomicous/syriac-htr-calamari" target="_blank" rel="noreferrer">
+                syriac-htr-calamari
+              </a>
+              <span>Syriac line HTR, Calamari</span>
+            </li>
+          </ul>
+        </section>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <p>
+        Nomicous, 2026,
+        <a href="https://nomosproject.de" target="_blank" rel="noreferrer">NOMOS project</a>
+      </p>
+    </footer>
+  </body>
+</html>

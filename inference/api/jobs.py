@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from inference.api.dependencies import require_inference_service_secret
 from inference.contracts.jobs import JobSubmitRequest, JobSubmitResponse
 from inference.infrastructure.job_repository import create_job
 from inference.infrastructure.settings import get_inference_settings
 from inference.registry.resolve import resolve_registry_entry
 
-router = APIRouter(prefix="/inference/v1", tags=["jobs"])
+router = APIRouter(
+    prefix="/inference/v1",
+    tags=["jobs"],
+    dependencies=[Depends(require_inference_service_secret)],
+)
 
 
 @router.post("/jobs", response_model=JobSubmitResponse, status_code=201)

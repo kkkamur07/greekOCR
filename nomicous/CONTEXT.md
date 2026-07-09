@@ -254,6 +254,26 @@ Annotation is resumable across sessions. **Export** produces processed `.jpg`/`.
 A background job the platform queues for the user (segment, transcribe, or future task types). The user tracks one product job — not separate "segment done" vs "transcribe done" notifications. Work may be delegated to inference; when inference reports back once, the platform merges the result and marks that product job done.
 _Avoid_: Inference job (internal delegate), ML job, per-task completion events
 
+**Local inference**:
+Running segment or transcribe models on the researcher's own machine, using that machine's CPU (or GPU when available).
+_Avoid_: Client-side (ambiguous with browser), on-device (mobile jargon)
+
+**Remote inference**:
+Running segment or transcribe models on a hosted inference service the platform calls when local inference is off, unavailable, or too slow.
+_Avoid_: Cloud OCR (too narrow), server-side ML (too generic)
+
+**Inference sidecar**:
+A native process on the researcher's machine that runs the inference service (health, job runner, model load) and is called over localhost.
+_Avoid_: Browser inference, embedded WASM model
+
+**Inference helper**:
+The installable app that runs the **Inference sidecar** on a researcher's machine — one-click install, auto-starts on login, no Docker or terminal. Required for **local inference** when the platform is hosted in the browser.
+_Avoid_: Docker Compose (developer-only), manual setup
+
+**Inference preference**:
+Whether OCR and segment jobs use **local inference** (via **Inference helper**) or **remote inference** (hosted server). Researchers toggle with a single setting; default follows **registry host eligibility** for the selected model.
+_Avoid_: Sync vs async (execution mode, not host)
+
 **Product job status delivery (browser)**:
 Today the frontend polls `GET /jobs/{id}` (250 ms while blocking on an editor action; 1.5 s in the jobs notice). Postgres `NOTIFY` is used for the **inference** queue (`inference_jobs` → `inference-worker`), not for the browser. Target design: `NOTIFY` on platform `jobs` status changes → API listener → **SSE** to the client. See [`docs/decisions/001-platform-job-status-push.md`](../docs/decisions/001-platform-job-status-push.md).
 
@@ -265,7 +285,7 @@ Today the frontend polls `GET /jobs/{id}` (250 ms while blocking on an editor ac
 - "line" alone is ambiguous — use **Segment** (image) or **Text line** (transcription).
 - "page transcription" vs canonical transcription — resolved: Page transcription is an import/pairing helper; approved per-line **Line transcription** is canonical.
 - frontend stack — resolved: port the platform frontend into `nomicous/frontend` and keep annote's editor theme.
-- OCR prediction execution — resolved: job-backed via inference; one **Product job** per user action, one callback, one completion.
+- OCR prediction execution — resolved: job-backed via inference; one **Product job** per user action, one callback, one completion. **Local inference** uses **Inference helper** + browser-orchestrated `/inference/v1/run`; **remote inference** uses the same job path on hosted servers. Researchers choose via **Inference preference** (default local when helper is present).
 - Segment model selection UI — deferred; backend uses the same model-resolution path as transcribe with a Kraken default until the picker ships.
 - Transcribe job progress UI — resolved: keep batched Calamari inference; banner may show total segment count and "Processing…" until the product job completes. No live per-line counter (1/10, 2/10).
 - Inference naming — resolved: rename Python types (`MLJob` → `InferenceJob`, etc.) in code; internal callbacks now use `/internal/inference` and `X-Inference-Webhook-Secret`.

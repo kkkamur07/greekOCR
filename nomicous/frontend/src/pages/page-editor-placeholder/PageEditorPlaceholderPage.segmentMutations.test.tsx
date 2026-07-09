@@ -1,0 +1,151 @@
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { ApiError } from '../../api/errors';
+import {
+  DOCUMENT,
+  enableBaselinesOnCanvas,
+  flushPageEditorEffects,
+  mockedApi,
+  renderPageEditor,
+  resetPageEditorApiMocks,
+} from './testSupport';
+
+describe('PageEditorPlaceholderPage segment mutations', () => {
+  beforeEach(() => {
+    resetPageEditorApiMocks();
+  });
+
+  afterEach(async () => {
+    await flushPageEditorEffects();
+  });
+
+  it('draws a rectangle Segment and saves it as Line geometry for the document part', async () => {
+    mockedApi.getDocument.mockResolvedValue(DOCUMENT);
+
+    renderPageEditor();
+
+    expect(await screen.findByText('ANNOTE PAGE WORKSPACE')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /rectangle segment/i }));
+
+    const canvas = screen.getByRole('img', { name: /page geometry canvas/i });
+    fireEvent.mouseDown(canvas, { clientX: 20, clientY: 30 });
+    fireEvent.mouseMove(canvas, { clientX: 120, clientY: 80 });
+    fireEvent.mouseUp(canvas, { clientX: 120, clientY: 80 });
+
+    await waitFor(() => {
+      expect(mockedApi.createPartLine).toHaveBeenLastCalledWith(
+        'project-1',
+        'doc-1',
+        'part-1',
+        {
+          order: 0,
+          kind: 'rectangle',
+          points: [
+            [20, 30],
+            [120, 30],
+            [120, 80],
+            [20, 80],
+          ],
+        },
+      );
+    });
+    expect(mockedApi.replacePartLines).not.toHaveBeenCalled();
+    expect(await screen.findByText('1 Segment')).toBeTruthy();
+  });
+  it('draws a polygon Segment and saves it as Line geometry for the document part', async () => {
+    mockedApi.getDocument.mockResolvedValue(DOCUMENT);
+
+    renderPageEditor();
+
+    expect(await screen.findByText('ANNOTE PAGE WORKSPACE')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /polygon segment/i }));
+
+    const canvas = screen.getByRole('img', { name: /page geometry canvas/i });
+    fireEvent.click(canvas, { clientX: 40, clientY: 40 });
+    fireEvent.click(canvas, { clientX: 160, clientY: 45 });
+    fireEvent.click(canvas, { clientX: 150, clientY: 90 });
+    fireEvent.click(canvas, { clientX: 35, clientY: 85 });
+    fireEvent.doubleClick(canvas);
+
+    await waitFor(() => {
+      expect(mockedApi.createPartLine).toHaveBeenLastCalledWith(
+        'project-1',
+        'doc-1',
+        'part-1',
+        {
+          order: 0,
+          kind: 'polygon',
+          points: [
+            [40, 40],
+            [160, 45],
+            [150, 90],
+            [35, 85],
+          ],
+        },
+      );
+    });
+    expect(mockedApi.replacePartLines).not.toHaveBeenCalled();
+    expect(await screen.findByText('1 Segment')).toBeTruthy();
+  });
+
+  it('deletes a selected Segment without replacing every line', async () => {
+    mockedApi.getDocument.mockResolvedValue(DOCUMENT);
+    mockedApi.listPartLines.mockResolvedValue([
+      {
+        id: 'line-1',
+        part_id: 'part-1',
+        block_id: null,
+        order: 0,
+        kind: 'rectangle',
+        points: [
+          [10, 10],
+          [50, 10],
+          [50, 30],
+          [10, 30],
+        ],
+        source: 'manual',
+        source_metadata: null,
+        kraken_ceiling: null,
+        manual_geometry: true,
+        line_transcriptions: [],
+        created_at: '2026-06-16T10:00:00Z',
+      },
+      {
+        id: 'line-2',
+        part_id: 'part-1',
+        block_id: null,
+        order: 1,
+        kind: 'polygon',
+        points: [
+          [80, 20],
+          [120, 20],
+          [120, 50],
+          [80, 50],
+        ],
+        source: 'manual',
+        source_metadata: null,
+        kraken_ceiling: null,
+        manual_geometry: true,
+        line_transcriptions: [],
+        created_at: '2026-06-16T10:00:00Z',
+      },
+    ]);
+
+    renderPageEditor();
+
+    fireEvent.click(await screen.findByLabelText(/^Segment 1/));
+    fireEvent.click(screen.getByRole('button', { name: /delete segment/i }));
+
+    await waitFor(() => {
+      expect(mockedApi.deletePartLine).toHaveBeenLastCalledWith(
+        'project-1',
+        'doc-1',
+        'part-1',
+        'line-1',
+      );
+    });
+    expect(mockedApi.replacePartLines).not.toHaveBeenCalled();
+    expect(mockedApi.getPagePairing).toHaveBeenCalled();
+  });
+});

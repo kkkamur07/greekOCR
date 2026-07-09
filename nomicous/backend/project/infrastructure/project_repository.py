@@ -2,10 +2,11 @@
 
 from uuid import UUID
 
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from backend.core.api.pagination import PageCursor
 from backend.project.infrastructure.orm_models import Project, project_shared_users
 
 
@@ -22,15 +23,28 @@ class ProjectRepository:
         result = await session.execute(select(Project).where(Project.slug == slug))
         return result.scalar_one_or_none()
 
-    async def list_for_user(self, session: AsyncSession, user_id: UUID) -> list[Project]:
+    async def list_for_user(
+        self,
+        session: AsyncSession,
+        user_id: UUID,
+        *,
+        limit: int = 50,
+        cursor: PageCursor | None = None,
+    ) -> list[Project]:
         shared_ids = select(project_shared_users.c.project_id).where(
             project_shared_users.c.user_id == user_id
         )
-        result = await session.execute(
+        stmt = (
             select(Project)
             .where(or_(Project.owner_id == user_id, Project.id.in_(shared_ids)))
-            .order_by(Project.created_at.desc())
+            .order_by(Project.created_at.desc(), Project.id.desc())
         )
+        if cursor is not None:
+            stmt = stmt.where(
+                tuple_(Project.created_at, Project.id) < (cursor.created_at, cursor.id)
+            )
+        stmt = stmt.limit(limit)
+        result = await session.execute(stmt)
         return list(result.scalars().all())
 
     async def create(

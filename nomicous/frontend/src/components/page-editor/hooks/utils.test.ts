@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import type { LineResponse, TranscriptionLayerResponse } from '../../../api/client';
 import {
+  mergeSavedLine,
   modelLayerIdForPromotion,
   segmentHasGroundTruth,
   segmentIdsWithGroundTruth,
   showsModelSourceReview,
   syncLayoutLinesFromSegments,
   transcriptionForOcrReview,
+  upsertLineRequest,
 } from './utils';
 
 const MODEL_LAYER: TranscriptionLayerResponse = {
@@ -114,5 +116,68 @@ describe('page editor transcription utils', () => {
 
     expect(layout.lines[0]?.baseline).toEqual({ points: [[60, 140], [300, 150]] });
     expect(layout.lines[0]?.manual_geometry).toBe(true);
+  });
+
+  it('merges a saved line into segment state by id or appends in order', () => {
+    const krakenLine = {
+      ...LINE,
+      id: 'line-2',
+      order: 1,
+      block_id: 'block-1',
+      source: 'kraken',
+      source_metadata: { model: 'kraken:blla' },
+      kraken_ceiling: [[-1, 9], [11, 9], [11, 16], [-1, 16]],
+    } as LineResponse;
+
+    expect(mergeSavedLine([LINE], { ...LINE, points: [[12, 12], [52, 12], [52, 32], [12, 32]] })).toEqual([
+      { ...LINE, points: [[12, 12], [52, 12], [52, 32], [12, 32]] },
+    ]);
+    expect(mergeSavedLine([LINE], krakenLine)).toEqual([LINE, krakenLine]);
+    expect(
+      mergeSavedLine([krakenLine, LINE], {
+        ...LINE,
+        points: [
+          [12, 12],
+          [52, 12],
+          [52, 32],
+          [12, 32],
+        ],
+      }),
+    ).toEqual([
+      krakenLine,
+      {
+        ...LINE,
+        points: [
+          [12, 12],
+          [52, 12],
+          [52, 32],
+          [12, 32],
+        ],
+      },
+    ]);
+  });
+
+  it('builds replace payloads that preserve kraken metadata fields', () => {
+    const krakenLine = {
+      ...LINE,
+      block_id: 'block-1',
+      source: 'kraken',
+      source_metadata: { model: 'kraken:blla' },
+      kraken_ceiling: [[-1, 9], [11, 9], [11, 16], [-1, 16]],
+      line_transcriptions: [],
+    } as LineResponse;
+
+    expect(upsertLineRequest(krakenLine)).toEqual({
+      id: 'line-1',
+      order: 0,
+      kind: 'polygon',
+      points: krakenLine.points,
+      block_id: 'block-1',
+      source: 'kraken',
+      source_metadata: { model: 'kraken:blla' },
+      kraken_ceiling: [[-1, 9], [11, 9], [11, 16], [-1, 16]],
+      baseline: krakenLine.baseline,
+      mask: krakenLine.mask,
+    });
   });
 });

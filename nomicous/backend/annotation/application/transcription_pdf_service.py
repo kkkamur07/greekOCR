@@ -16,7 +16,7 @@ from backend.core.exceptions import NotFoundError
 from backend.core.fonts import resolve_unicode_font
 from backend.document.application.document_service import DocumentService
 from backend.document.infrastructure.document_repository import DocumentRepository
-from backend.document.infrastructure.media_store import MediaStore
+from backend.document.infrastructure.media_store import MediaStore, get_media_store
 from backend.document.infrastructure.orm_models import Line, TranscriptionKind
 from backend.users.infrastructure.orm_models import User
 
@@ -36,7 +36,7 @@ class TranscriptionPdfService:
     ) -> None:
         self._documents = documents or DocumentRepository()
         self._document_service = document_service or DocumentService()
-        self._media = media or MediaStore()
+        self._media = media or get_media_store()
 
     async def generate_part_pdf(
         self,
@@ -53,8 +53,7 @@ class TranscriptionPdfService:
         if part is None or part.document_id != document.id:
             raise NotFoundError("Part not found")
 
-        image_path = self._media.absolute_path(part.image_key)
-        with Image.open(image_path) as page_image:
+        with Image.open(io.BytesIO(self._media.read(part.image_key))) as page_image:
             width, height = page_image.size
 
         return self._render_pdf(
@@ -73,8 +72,7 @@ class TranscriptionPdfService:
         part = await self._document_service.get_published_part(
             session, project_id, document_id, part_id
         )
-        image_path = self._media.absolute_path(part.image_key)
-        with Image.open(image_path) as page_image:
+        with Image.open(io.BytesIO(self._media.read(part.image_key))) as page_image:
             width, height = page_image.size
 
         return self._render_pdf(

@@ -1,11 +1,22 @@
 import { useEffect, useState, type ChangeEvent, type Dispatch, type SetStateAction } from 'react';
 import {
   api,
+  fetchBinaryApi,
+  mediaUrl,
+  type InferenceModelResponse,
   type JobResponse,
   type LineResponse,
   type TranscribeJobResult,
   type TranscriptionLayerResponse,
 } from '../../../api/client';
+import {
+  blobToBase64,
+  registrySelectionFromArtifactRef,
+  runLocalInference,
+  type LocalInferenceCallbacks,
+  type TranscribeBatchRunOutput,
+  isAbortError,
+} from '../../../inference';
 import type { PageEditorJobKind } from '../jobProgress';
 import {
   lineTextForLayer,
@@ -32,10 +43,18 @@ type PairingStateInput = {
   >;
   setPairingError: Dispatch<SetStateAction<string | null>>;
   selectedTranscribeModelId: string | null;
+  transcribeModels: InferenceModelResponse[];
+  partImageUrl: string | null;
+  shouldUseLocalPath: (registryModelId: string) => boolean;
+  localInference: LocalInferenceCallbacks;
   trackJobAndWait: (
     jobId: string,
     meta: { label: string; kind: PageEditorJobKind },
   ) => Promise<JobResponse>;
+  trackLocalTask: <T>(
+    meta: { label: string; kind: PageEditorJobKind },
+    run: () => Promise<T>,
+  ) => Promise<T>;
 };
 
 export function usePairingState({
@@ -53,7 +72,12 @@ export function usePairingState({
   setPairingProgress,
   setPairingError,
   selectedTranscribeModelId,
+  transcribeModels,
+  partImageUrl,
+  shouldUseLocalPath,
+  localInference,
   trackJobAndWait,
+  trackLocalTask,
 }: PairingStateInput) {
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
   const [pageTranscriptionText, setPageTranscriptionText] = useState('');
@@ -233,6 +257,125 @@ export function usePairingState({
     return result;
   }
 
+  async function applyLocalTranscribeResult(transcriptionId: string, resultLines: TranscribeJobResult['lines']) {
+    setLines((current) =>
+      current.map((line) => {
+        const output = resultLines.find((entry) => entry.line_id === line.id);
+        if (!output) return line;
+        const withoutLayer = line.line_transcriptions.filter(
+          (transcription) => transcription.transcription_id !== transcriptionId,
+        );
+        return {
+          ...line,
+          line_transcriptions: [
+            ...withoutLayer,
+            {
+              id: `ocr-${line.id}-${transcriptionId}`,
+              transcription_id: transcriptionId,
+              transcription_kind: 'model' as const,
+              text: output.text,
+              confidence: output.confidence,
+              text_source: 'model' as const,
+              character_confidences: null,
+            },
+          ],
+        };
+      }),
+    );
+    await refreshAfterOcr(transcriptionId);
+    return { transcription_id: transcriptionId, lines: resultLines };
+  }
+
+  function selectedTranscribeModel(): InferenceModelResponse | null {
+    if (!selectedTranscribeModelId) return null;
+    return transcribeModels.find((model) => model.id === selectedTranscribeModelId) ?? null;
+  }
+
+  async function loadPartImageBase64(): Promise<string> {
+    if (!partImageUrl) {
+      throw new Error('Page image is not available for local inference.');
+    }
+    const blob = await fetchBinaryApi(partImageUrl);
+    return blobToBase64(blob);
+  }
+
+  async function runLocalTranscribe(lineIds: string[]) {
+    const model = selectedTranscribeModel();
+    if (!model) {
+      throw new Error('Select an HTR model before running OCR.');
+    }
+    const { registryModelId, registryTag } = registrySelectionFromArtifactRef(model.artifact_ref);
+    if (!shouldUseLocalPath(registryModelId)) {
+      throw new Error('Selected model is not eligible for local inference.');
+    }
+
+    const targetLines = lines
+      .filter((line) => lineIds.includes(line.id))
+      .sort((a, b) => a.order - b.order);
+    if (targetLines.length === 0) {
+      throw new Error('No matching segments to transcribe.');
+    }
+
+    const imageBytes = await loadPartImageBase64();
+    await localInference.onStart(registryModelId, registryTag);
+    try {
+      const response = await runLocalInference({
+        task: 'transcribe',
+        registry_model_id: registryModelId,
+        registry_tag: registryTag,
+        image_bytes: imageBytes,
+        signal: localInference.getSignal(),
+        params: {
+          lines: targetLines.map((line, index) => ({
+            line_id: line.id,
+            line_index: index,
+            points: line.points,
+          })),
+        },
+      });
+
+      if (response.task !== 'transcribe' || !('lines' in response.output)) {
+        throw new Error('Local transcribe returned an unexpected response.');
+      }
+      const batch = response.output as TranscribeBatchRunOutput;
+      const persisted = await api.persistLocalTranscribe(projectId!, documentId!, partId!, {
+        registry_model_id: registryModelId,
+        registry_tag: registryTag,
+        lines: batch.lines.map((entry) => ({
+          line_id: entry.line_id ?? targetLines[entry.line_index]?.id ?? '',
+          text: entry.output.text,
+          confidence: entry.output.confidence,
+          character_confidences: entry.output.character_confidences,
+        })),
+      });
+      return applyLocalTranscribeResult(persisted.transcription_id, persisted.lines);
+    } finally {
+      localInference.onEnd();
+    }
+  }
+
+  async function runLocalTranscribeWithFallback(
+    lineIds: string[],
+    jobMeta: { label: string; kind: PageEditorJobKind },
+  ) {
+    try {
+      return await trackLocalTask(jobMeta, () => runLocalTranscribe(lineIds));
+    } catch (err) {
+      if (isAbortError(err) && localInference.shouldFallbackToCloud()) {
+        localInference.clearFallbackToCloud();
+      } else {
+        throw err;
+      }
+    }
+
+    const enqueued = await api.enqueueTranscribePart(projectId!, documentId!, partId!, {
+      model_id: selectedTranscribeModelId!,
+      line_ids: lineIds.length === lines.length ? undefined : lineIds,
+    });
+    const job = await trackJobAndWait(enqueued.job_id, jobMeta);
+    return applyTranscribeResult(job);
+  }
+
   async function runSegmentOcr() {
     if (!projectId || !documentId || !partId) {
       setPairingError('Page context is missing. Reload and try again.');
@@ -251,6 +394,26 @@ export function usePairingState({
     setOcrMessage(null);
     setPairingError(null);
     try {
+      const model = selectedTranscribeModel();
+      const registryModelId = model
+        ? registrySelectionFromArtifactRef(model.artifact_ref).registryModelId
+        : null;
+      if (model && registryModelId && shouldUseLocalPath(registryModelId)) {
+        const result = await runLocalTranscribeWithFallback([selectedSegmentId], {
+          label: selectedSegmentNumber
+            ? `Segment ${selectedSegmentNumber}`
+            : 'Selected segment',
+          kind: 'transcription-segment',
+        });
+        const hasAnyText = result.lines.some((line) => line.text?.trim());
+        setOcrMessage(
+          hasAnyText
+            ? 'OCR prediction completed for selected Segment (local).'
+            : 'OCR finished with no text for this segment.',
+        );
+        return;
+      }
+
       const enqueued = await api.enqueueTranscribePart(projectId, documentId, partId, {
         model_id: selectedTranscribeModelId,
         line_ids: [selectedSegmentId],
@@ -290,6 +453,24 @@ export function usePairingState({
     setOcrMessage(null);
     setPairingError(null);
     try {
+      const model = selectedTranscribeModel();
+      const registryModelId = model
+        ? registrySelectionFromArtifactRef(model.artifact_ref).registryModelId
+        : null;
+      if (model && registryModelId && shouldUseLocalPath(registryModelId)) {
+        const result = await runLocalTranscribeWithFallback(lines.map((line) => line.id), {
+          label: 'Full page',
+          kind: 'transcription-page',
+        });
+        const withText = result.lines.filter((line) => line.text?.trim()).length;
+        setOcrMessage(
+          withText > 0
+            ? `OCR prediction completed for ${withText} Segment(s) (local).`
+            : 'OCR finished with no text for the selected segments.',
+        );
+        return;
+      }
+
       const enqueued = await api.enqueueTranscribePart(projectId, documentId, partId, {
         model_id: selectedTranscribeModelId,
       });

@@ -36,8 +36,16 @@ type BackgroundJobsContextValue = {
     meta: { label: string; kind: PageEditorJobKind },
     options?: { timeoutMs?: number },
   ) => Promise<JobResponse>;
+  trackLocalTask: <T>(
+    meta: { label: string; kind: PageEditorJobKind },
+    run: () => Promise<T>,
+  ) => Promise<T>;
   dismissCompleted: () => void;
 };
+
+function createLocalJobId(): string {
+  return `local-${crypto.randomUUID()}`;
+}
 
 const COMPLETED_TTL_MS = 10_000;
 
@@ -58,7 +66,7 @@ function patchTrackedJob(
 
 export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
   const [jobs, setJobs] = useState<TrackedBackgroundJob[]>([]);
-  const [panelExpanded, setPanelExpanded] = useState(true);
+  const [panelExpanded, setPanelExpanded] = useState(false);
   const timersRef = useRef<Map<string, number>>(new Map());
 
   const scheduleRemoval = useCallback((jobId: string) => {
@@ -134,7 +142,7 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
           },
         ];
       });
-      setPanelExpanded(true);
+      setPanelExpanded(false);
 
       try {
         const job = await waitForJob(jobId, {
@@ -165,6 +173,64 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
     [applyJobUpdate, scheduleRemoval],
   );
 
+  const trackLocalTask = useCallback(
+    async <T,>(
+      meta: { label: string; kind: PageEditorJobKind },
+      run: () => Promise<T>,
+    ): Promise<T> => {
+      const jobId = createLocalJobId();
+      setJobs((current) => [
+        ...current,
+        {
+          id: jobId,
+          label: meta.label,
+          kind: meta.kind,
+          status: 'running' as JobStatus,
+          error: null,
+          progressLabel: 'Running locally',
+          finishedAt: null,
+        },
+      ]);
+      setPanelExpanded(false);
+
+      try {
+        const result = await run();
+        setJobs((current) =>
+          current.map((job) =>
+            job.id === jobId
+              ? {
+                  ...job,
+                  status: 'done',
+                  progressLabel: 'Complete',
+                  finishedAt: Date.now(),
+                }
+              : job,
+          ),
+        );
+        scheduleRemoval(jobId);
+        return result;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Task failed';
+        setJobs((current) =>
+          current.map((job) =>
+            job.id === jobId
+              ? {
+                  ...job,
+                  status: 'failed',
+                  error: message,
+                  progressLabel: 'Failed',
+                  finishedAt: Date.now(),
+                }
+              : job,
+          ),
+        );
+        scheduleRemoval(jobId);
+        throw err;
+      }
+    },
+    [scheduleRemoval],
+  );
+
   const dismissCompleted = useCallback(() => {
     setJobs((current) => current.filter((job) => !isTerminalJobStatus(job.status)));
   }, []);
@@ -178,9 +244,10 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
       panelExpanded,
       setPanelExpanded,
       trackAndWait,
+      trackLocalTask,
       dismissCompleted,
     }),
-    [jobs, activeCount, panelExpanded, trackAndWait, dismissCompleted],
+    [jobs, activeCount, panelExpanded, trackAndWait, trackLocalTask, dismissCompleted],
   );
 
   return (

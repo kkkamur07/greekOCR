@@ -3,14 +3,21 @@
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import create_engine, pool
 
 from backend.core.settings import get_infrastructure_settings
 from infrastructure.db import Base
 from infrastructure import models  # noqa: F401 — register all ORM tables
 
 config = context.config
-config.set_main_option("sqlalchemy.url", get_infrastructure_settings().sync_database_url)
+
+
+def _migrator_database_url() -> str:
+    return get_infrastructure_settings().migrator_database_url
+
+
+# ConfigParser treats % as interpolation; escape when storing in alembic.ini section.
+config.set_main_option("sqlalchemy.url", _migrator_database_url().replace("%", "%%"))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
@@ -19,7 +26,7 @@ target_metadata = Base.metadata
 
 
 def run_migrations_offline() -> None:
-    url = config.get_main_option("sqlalchemy.url")
+    url = _migrator_database_url()
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -31,11 +38,7 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
+    connectable = create_engine(_migrator_database_url(), poolclass=pool.NullPool)
     with connectable.connect() as connection:
         context.configure(connection=connection, target_metadata=target_metadata)
         with context.begin_transaction():

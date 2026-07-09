@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.annotation.application.processing import apply_step
 from backend.document.application.document_service import DocumentService
 from backend.document.infrastructure.document_repository import DocumentRepository
-from backend.document.infrastructure.media_store import MediaStore
+from backend.document.infrastructure.media_store import MediaStore, get_media_store
 from backend.document.infrastructure.orm_models import (
     Line,
     PageTranscriptionLine,
@@ -58,7 +58,7 @@ class AnnotationExportService:
     ) -> None:
         self._documents = documents or DocumentRepository()
         self._document_service = document_service or DocumentService()
-        self._media = media or MediaStore()
+        self._media = media or get_media_store()
 
     async def export_part(
         self,
@@ -132,8 +132,8 @@ class AnnotationExportService:
             source_image.close()
 
     def _load_page_image(self, image_key: str) -> tuple[np.ndarray, Image.Image]:
-        path = self._media.absolute_path(image_key)
-        pil = Image.open(path)
+        raw = self._media.read(image_key)
+        pil = Image.open(BytesIO(raw))
         rgb = pil.convert("RGB")
         pil.close()
         return np.array(rgb), rgb

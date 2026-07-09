@@ -20,7 +20,7 @@ from backend.project.infrastructure.orm_models import Project  # noqa: E402
 from backend.users.infrastructure.orm_models import User  # noqa: E402
 
 from infrastructure import models as _orm_models  # noqa: E402, F401 — register all mappers
-from infrastructure.db import AsyncSessionLocal  # noqa: E402
+from infrastructure.db import system_session  # noqa: E402
 
 DEFAULT_SEGMENT_MODEL = os.environ.get("DEFAULT_SEGMENT_MODEL", "greek-kraken-segment-v1")
 DEFAULT_TRANSCRIBE_MODEL = os.environ.get("DEFAULT_TRANSCRIBE_MODEL", "syriac-calamari-v1")
@@ -37,7 +37,7 @@ async def _upsert_model(
     artifact_ref: str,
     default_params: dict,
 ) -> InferenceModel:
-    async with AsyncSessionLocal() as session:
+    async with system_session() as session:
         result = await session.execute(select(InferenceModel).where(InferenceModel.name == name))
         model = result.scalar_one_or_none()
         if model is None:
@@ -60,7 +60,7 @@ async def _upsert_model(
 
 
 async def _ensure_dev_project() -> Project:
-    async with AsyncSessionLocal() as session:
+    async with system_session() as session:
         result = await session.execute(select(Project).where(Project.slug == DEV_PROJECT_SLUG))
         project = result.scalar_one_or_none()
         if project is not None:
@@ -83,7 +83,7 @@ async def _ensure_dev_project() -> Project:
 async def _upsert_project_binding(
     *, project: Project, task: InferenceTask, model: InferenceModel
 ) -> ModelBinding:
-    async with AsyncSessionLocal() as session:
+    async with system_session() as session:
         result = await session.execute(
             select(ModelBinding).where(
                 ModelBinding.project_id == project.id,

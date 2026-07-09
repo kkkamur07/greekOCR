@@ -47,17 +47,23 @@ class TranscribeMergeService:
         *,
         document_id: UUID,
         part_id: UUID,
-        job_id: UUID,
+        job_id: UUID | None,
         lines_with_output: list[tuple[Line, TranscribeRunResponse]],
         commit: bool = True,
+        layer_name: str | None = None,
     ) -> dict:
         part = session.get(DocumentPart, part_id)
         if part is None or part.document_id != document_id:
             raise TranscribeJobHandlerError("Document part not found")
 
+        resolved_name = layer_name or (
+            f"Model transcription {job_id.hex[:8]}"
+            if job_id is not None
+            else "Local model transcription"
+        )
         layer = Transcription(
             document_id=document_id,
-            name=f"Model transcription {job_id.hex[:8]}",
+            name=resolved_name,
             kind=TranscriptionKind.model,
             created_by_job_id=job_id,
         )

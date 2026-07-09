@@ -5,7 +5,7 @@ import uuid
 import pytest
 
 from tests.fixtures.paths import MINIMAL_PNG
-from tests.nomicous.integration.helpers import documents_url
+from tests.nomicous.integration.helpers import documents_url, stored_minimal_page_bytes
 
 
 def _create_document_with_part(client, owner_headers, owner_project) -> tuple[str, str, str]:
@@ -42,7 +42,7 @@ def test_member_create_list_read_update_delete_document(client, owner_headers, o
 
     listed = client.get(base, headers=owner_headers)
     assert listed.status_code == 200
-    listed_doc = next(d for d in listed.json() if d["id"] == document_id)
+    listed_doc = next(d for d in listed.json()["items"] if d["id"] == document_id)
     assert listed_doc["part_count"] == 0
 
     read = client.get(f"{base}/{document_id}", headers=owner_headers)
@@ -87,11 +87,11 @@ def test_archived_document_hidden_from_default_list(client, owner_headers, owner
 
     default_list = client.get(base, headers=owner_headers)
     assert default_list.status_code == 200
-    assert not any(d["id"] == document_id for d in default_list.json())
+    assert not any(d["id"] == document_id for d in default_list.json()["items"])
 
     with_archived = client.get(f"{base}?include_archived=true", headers=owner_headers)
     assert with_archived.status_code == 200
-    assert any(d["id"] == document_id for d in with_archived.json())
+    assert any(d["id"] == document_id for d in with_archived.json()["items"])
 
 
 # --- Document access control ---
@@ -151,7 +151,7 @@ def test_upload_reorder_delete_part_and_serve_media(client, owner_headers, owner
     assert part_b["order"] == 1
 
     listed = client.get(base, headers=owner_headers)
-    listed_doc = next(d for d in listed.json() if d["id"] == document_id)
+    listed_doc = next(d for d in listed.json()["items"] if d["id"] == document_id)
     assert listed_doc["part_count"] == 2
 
     project = client.get(f"/projects/{project_id}", headers=owner_headers)
@@ -170,7 +170,7 @@ def test_upload_reorder_delete_part_and_serve_media(client, owner_headers, owner
 
     media = client.get(part_a["image_url"], headers=owner_headers)
     assert media.status_code == 200
-    assert media.content == MINIMAL_PNG
+    assert media.content == stored_minimal_page_bytes()
 
     dashboard = client.get(f"{base}/{document_id}", headers=owner_headers)
     assert dashboard.status_code == 200
@@ -413,6 +413,70 @@ def test_replace_part_lines_preserves_existing_kraken_baseline(
     )
     assert updated.status_code == 200
     assert updated.json()[0]["baseline"] == kraken_baseline
+
+
+@pytest.mark.integration
+def test_replace_part_lines_preserves_kraken_metadata_when_omitted(
+    client, owner_headers, owner_project
+):
+    project_id, document_id, part_id = _create_document_with_part(
+        client, owner_headers, owner_project
+    )
+    base = documents_url(project_id)
+    kraken_ceiling = [[-1, 9], [11, 9], [11, 16], [-1, 16]]
+    source_metadata = {"model": "kraken:blla", "version": "1.0"}
+    seed = client.put(
+        f"{base}/{document_id}/parts/{part_id}/lines",
+        headers=owner_headers,
+        json={
+            "lines": [
+                {
+                    "order": 0,
+                    "kind": "polygon",
+                    "points": [[0, 0], [10, 0], [10, 8], [0, 8]],
+                    "source": "kraken",
+                    "source_metadata": source_metadata,
+                    "kraken_ceiling": kraken_ceiling,
+                },
+                {
+                    "order": 1,
+                    "kind": "polygon",
+                    "points": [[0, 10], [10, 10], [10, 18], [0, 18]],
+                    "source": "manual",
+                },
+            ]
+        },
+    )
+    assert seed.status_code == 200
+    kraken_line_id = seed.json()[0]["id"]
+    manual_line_id = seed.json()[1]["id"]
+
+    updated = client.put(
+        f"{base}/{document_id}/parts/{part_id}/lines",
+        headers=owner_headers,
+        json={
+            "lines": [
+                {
+                    "id": kraken_line_id,
+                    "order": 0,
+                    "kind": "polygon",
+                    "points": [[1, 1], [11, 1], [11, 9], [1, 9]],
+                    "source": "kraken",
+                },
+                {
+                    "id": manual_line_id,
+                    "order": 1,
+                    "kind": "polygon",
+                    "points": [[0, 11], [10, 11], [10, 19], [0, 19]],
+                    "source": "manual",
+                },
+            ]
+        },
+    )
+    assert updated.status_code == 200
+    lines_by_id = {line["id"]: line for line in updated.json()}
+    assert lines_by_id[kraken_line_id]["source_metadata"] == source_metadata
+    assert lines_by_id[kraken_line_id]["kraken_ceiling"] == kraken_ceiling
 
 
 # --- Line ID validation ---

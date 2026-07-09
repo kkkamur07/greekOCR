@@ -4,6 +4,7 @@ from collections.abc import Callable
 from uuid import UUID, uuid4
 
 import pytest
+from fastapi.testclient import TestClient
 from httpx import Response
 from inference.contracts.common import InferenceJobStatus, InferenceTask
 from inference.infrastructure.job_repository import get_job_by_id
@@ -67,3 +68,21 @@ def test_submit_job_rejects_task_mismatch(
 
     assert response.status_code == 400
     assert "does not match registry model task" in response.json()["detail"]
+
+
+def test_submit_job_requires_service_secret():
+    from inference.api.app import create_app
+
+    client = TestClient(create_app())
+    response = client.post(
+        "/inference/v1/jobs",
+        json={
+            "task": "segment",
+            "registry_model_id": "greek-kraken-segment-v1",
+            "registry_tag": "stable",
+            "product_job_id": str(uuid4()),
+            "image_bytes": "YQ==",
+            "params": {},
+        },
+    )
+    assert response.status_code == 401

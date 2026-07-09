@@ -8,6 +8,8 @@ import httpx
 from inference.contracts.jobs import JobSubmitRequest, JobSubmitResponse
 from inference.contracts.segment import SegmentRunResponse
 
+from inference.contracts.webhooks import INFERENCE_SERVICE_SECRET_HEADER
+
 from backend.core.settings.ml import get_inference_settings
 from backend.document.infrastructure.orm_models import LineGeometryKind
 from backend.ml.domain.segment import CanonicalBlock, CanonicalLine, CanonicalSegmentResult
@@ -27,10 +29,15 @@ class InferenceClient:
         self._timeout = timeout
 
     def _post_json(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
+        settings = get_inference_settings()
+        headers: dict[str, str] = {}
+        if settings.inference_service_secret:
+            headers[INFERENCE_SERVICE_SECRET_HEADER] = settings.inference_service_secret
         with httpx.Client(
             base_url=self._base_url,
             transport=self._transport,
             timeout=self._timeout,
+            headers=headers,
         ) as client:
             response = client.post(path, json=body)
             response.raise_for_status()

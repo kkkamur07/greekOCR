@@ -27,11 +27,15 @@ export function PageEditorJobProgressPanel({
   const completedCount = jobs.filter((job) => isTerminalJobStatus(job.status)).length;
 
   if (!expanded) {
+    const statusLabel =
+      activeCount > 0
+        ? `${activeCount} background job${activeCount === 1 ? '' : 's'} running`
+        : `${completedCount} background job${completedCount === 1 ? '' : 's'} finished`;
     return (
       <button
         type="button"
         className="pe-job-panel pe-job-panel--collapsed"
-        aria-label={`${activeCount} background job${activeCount === 1 ? '' : 's'} running`}
+        aria-label={statusLabel}
         onClick={() => onExpandedChange(true)}
       >
         <span className="pe-job-panel__pulse" aria-hidden="true" />

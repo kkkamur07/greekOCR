@@ -835,6 +835,18 @@
             ],
             "title": "Error"
           },
+          "execution": {
+            "anyOf": [
+              {
+                "enum": ["local", "cloud"],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",

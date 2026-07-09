@@ -59,7 +59,7 @@ class DocumentJobEnqueueMixin(DocumentServiceSharedMixin):
                 selected_model_id = resolved.model.id
                 binding_id = resolved.binding.id
                 ml_params = dict(resolved.effective_params)
-        payload: dict = {"ml_params": ml_params}
+        payload: dict = {"ml_params": ml_params, "execution": "cloud"}
         if line_ids is not None:
             payload["line_ids"] = [str(line_id) for line_id in line_ids]
         job = Job(
@@ -126,7 +126,7 @@ class DocumentJobEnqueueMixin(DocumentServiceSharedMixin):
             document_part_id=part.id,
             model_id=selected_model_id,
             binding_id=binding_id,
-            payload={"ml_params": effective_params},
+            payload={"ml_params": effective_params, "execution": "cloud"},
         )
         session.add(job)
         await session.commit()
