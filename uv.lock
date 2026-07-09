@@ -632,7 +632,6 @@ platform = [
     { name = "uvicorn", extra = ["standard"] },
 ]
 platform-prod = [
-    { name = "alembic" },
     { name = "asyncpg" },
     { name = "bcrypt" },
     { name = "email-validator" },
@@ -710,7 +709,6 @@ platform = [
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32.0" },
 ]
 platform-prod = [
-    { name = "alembic", specifier = ">=1.14.0" },
     { name = "asyncpg", specifier = ">=0.30.0" },
     { name = "bcrypt", specifier = ">=4.2.0" },
     { name = "email-validator", specifier = ">=2.2.0" },

@@ -67,7 +67,6 @@ platform = [
 ]
 # Production platform image (no test runner deps)
 platform-prod = [
-    "alembic>=1.14.0",
     "asyncpg>=0.30.0",
     "fastapi>=0.115.0",
     "httpx>=0.28.0",
