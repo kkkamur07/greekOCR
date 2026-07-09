@@ -29,6 +29,7 @@ PYTHONPATH=".:nomicous" python -c "from api.index import app; print(app.title)"
 | Framework | Other |
 | Install Command | *(empty / default)* |
 | Build Command | `bash build.sh` |
+| Output Directory | `.` |
 | Domain | `api.nomicous.com` |
 
 Copy environment variables from [`nomicous/backend/core/.env.production.example`](../../nomicous/backend/core/.env.production.example) into the Vercel project (Production).
