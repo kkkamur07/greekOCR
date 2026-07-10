@@ -10,14 +10,18 @@ permissions:
 jobs:
   platform-and-docker:
     name: Platform bundle, image, and supply-chain checks
-    # Temporarily disabled until deployment/image configuration is finalized.
-    if: ${{ false }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: bash deploy/platform/build.sh
       - run: test -f deploy/platform/nomicous/backend/core/app.py
       - run: test -f deploy/platform/inference/contracts/__init__.py
+      - run: test -f deploy/platform/inference/admission.py
+      - run: test -f deploy/platform/inference/infrastructure/settings.py
+      - name: Verify platform contract import surface
+        run: |
+          PYTHONPATH=deploy/platform python -c \
+            "from inference.contracts.jobs import JobCallbackRequest; assert JobCallbackRequest"
       - run: docker build --target runtime --tag nomicous-api:ci -f nomicous/Dockerfile .
       - run: docker build --target builder -f nomicous/frontend/Dockerfile nomicous
       - run: docker build --target runtime --tag nomicous-inference:ci -f inference/Dockerfile .

@@ -1,7 +1,7 @@
-import type { ReactNode } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useAuthSession } from '../../auth/AuthProvider';
+import type { ReactNode } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useAuthSession } from "../../auth/AuthProvider";
 
 export type BreadcrumbItem = {
   label: string;
@@ -32,7 +32,7 @@ export function TopNav({
       return;
     }
     void logout().finally(() => {
-      router.push('/login');
+      router.push("/login");
     });
   };
 
@@ -46,7 +46,10 @@ export function TopNav({
       {breadcrumb && breadcrumb.length > 0 ? (
         <nav className="topnav-breadcrumb" aria-label="Breadcrumb">
           {breadcrumb.map((item, index) => (
-            <span key={`${item.label}-${index}`} style={{ display: 'contents' }}>
+            <span
+              key={`${item.label}-${index}`}
+              style={{ display: "contents" }}
+            >
               {index > 0 && (
                 <span className="sep" aria-hidden="true">
                   /
@@ -73,7 +76,11 @@ export function TopNav({
       <div className="topnav-actions">
         {actions}
         {username && <span className="topnav-user">{username}</span>}
-        <button type="button" className="btn btn-ghost btn-sm" onClick={handleLogout}>
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          onClick={handleLogout}
+        >
           Log out
         </button>
       </div>

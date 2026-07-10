@@ -1,6 +1,6 @@
-import type { ReactNode } from 'react';
-import { Spin, Typography } from 'antd';
-import { PageEditorNavHeader } from './PageEditorNavHeader';
+import type { ReactNode } from "react";
+import { Spin, Typography } from "antd";
+import { PageEditorNavHeader } from "./PageEditorNavHeader";
 
 type PageEditorShellProps = {
   loading: boolean;
@@ -43,7 +43,9 @@ export function PageEditorShell({
         <PageEditorNavHeader backHref={backHref} />
         <div className="pe-shell__message">
           <Typography.Title level={4}>Page unavailable</Typography.Title>
-          <Typography.Text type="secondary">{unavailableDescription}</Typography.Text>
+          <Typography.Text type="secondary">
+            {unavailableDescription}
+          </Typography.Text>
         </div>
       </div>
     );

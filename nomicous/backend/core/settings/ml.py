@@ -25,8 +25,10 @@ def _default_inference_registry_path() -> Path:
 
 def _is_placeholder_secret(value: str | None) -> bool:
     normalized = (value or "").strip().casefold()
-    return not normalized or normalized in _PLACEHOLDER_SECRET_VALUES or normalized.startswith(
-        "replace-with-"
+    return (
+        not normalized
+        or normalized in _PLACEHOLDER_SECRET_VALUES
+        or normalized.startswith("replace-with-")
     )
 
 
@@ -41,7 +43,9 @@ def _validate_service_url(*, value: str, name: str, environment: str) -> None:
         or parsed.query
         or parsed.fragment
     ):
-        raise ValueError(f"{name} must be an absolute http(s) URL without credentials, query, or fragment")
+        raise ValueError(
+            f"{name} must be an absolute http(s) URL without credentials, query, or fragment"
+        )
     if environment.casefold() == "production" and parsed.scheme != "https":
         raise ValueError(f"{name} must use HTTPS in production")
 
@@ -50,6 +54,7 @@ class MLSettings(BaseSettings):
     model_config = env_settings_config()
 
     environment: str = Field(default="development", alias="ENVIRONMENT")
+    cloud_inference_enabled: bool = Field(default=False, alias="CLOUD_INFERENCE_ENABLED")
     inference_url: str = Field(default="http://localhost:8001", alias="INFERENCE_URL")
     inference_webhook_secret: str | None = Field(default=None, alias="INFERENCE_WEBHOOK_SECRET")
     inference_service_secret: str | None = Field(default=None, alias="INFERENCE_SERVICE_SECRET")
@@ -60,11 +65,16 @@ class MLSettings(BaseSettings):
 
     @model_validator(mode="after")
     def _validate_production_runtime(self) -> "MLSettings":
-        _validate_service_url(
-            value=self.inference_url,
-            name="INFERENCE_URL",
-            environment=self.environment,
-        )
+        if (
+            self.environment.casefold() != "production"
+            or self.cloud_inference_enabled
+            or self.inference_service_secret is not None
+        ):
+            _validate_service_url(
+                value=self.inference_url,
+                name="INFERENCE_URL",
+                environment=self.environment,
+            )
         if self.environment.casefold() != "production":
             return self
 
@@ -74,11 +84,31 @@ class MLSettings(BaseSettings):
                 ("INFERENCE_WEBHOOK_SECRET", self.inference_webhook_secret),
                 ("INFERENCE_SERVICE_SECRET", self.inference_service_secret),
             )
-            if _is_placeholder_secret(value)
+            if value is not None and _is_placeholder_secret(value)
         ]
         if invalid:
-            raise ValueError(f"{', '.join(invalid)} must be set to non-placeholder secrets in production")
+            raise ValueError(
+                f"{', '.join(invalid)} must be set to non-placeholder secrets in production"
+            )
         return self
+
+    def require_callback_receiver_configuration(self) -> None:
+        """Fail closed when an API process accepts inference completion callbacks."""
+        if self.environment.casefold() != "production":
+            return
+        if _is_placeholder_secret(self.inference_webhook_secret):
+            raise ValueError(
+                "INFERENCE_WEBHOOK_SECRET must be set to a non-placeholder secret in production"
+            )
+
+    def require_job_dispatcher_configuration(self) -> None:
+        """Fail closed when a worker process submits jobs to inference."""
+        if self.environment.casefold() != "production":
+            return
+        if _is_placeholder_secret(self.inference_service_secret):
+            raise ValueError(
+                "INFERENCE_SERVICE_SECRET must be set to a non-placeholder secret in production"
+            )
 
 
 @lru_cache

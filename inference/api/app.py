@@ -24,6 +24,7 @@ def root() -> RootResponse:
 
 def create_app() -> FastAPI:
     settings = get_inference_settings()
+    settings.require_service_endpoint_configuration()
     app = FastAPI(title="nomicous ML inference service", version="0.1.0")
     app.add_middleware(
         RequestBodyLimitMiddleware,
@@ -32,6 +33,8 @@ def create_app() -> FastAPI:
     app.add_middleware(
         ServiceRateLimitMiddleware,
         requests_per_minute=settings.inference_rate_limit_per_minute,
+        service_secret=settings.inference_service_secret,
+        limit_only_authenticated_service_requests=True,
     )
 
     @app.exception_handler(RequestValidationError)

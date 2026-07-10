@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from "react";
 import {
   api,
   type DocumentPartResponse,
@@ -7,22 +7,28 @@ import {
   type LineResponse,
   type PartLayoutResponse,
   type TranscriptionLayerResponse,
-} from '../../../api/client';
-import { ApiError } from '../../../api/errors';
-import { hasAccessToken, isUnauthorized, redirectToLogin } from '../../../auth/session';
+} from "../../../api/client";
+import { ApiError } from "../../../api/errors";
+import {
+  hasAccessToken,
+  isUnauthorized,
+  redirectToLogin,
+} from "../../../auth/session";
 
 function accessMessage(error: ApiError): string {
   if (error.status === 401) {
     redirectToLogin();
-    return '';
+    return "";
   }
   if (error.status === 403 || error.status === 404) {
-    return 'This page is not available to your account.';
+    return "This page is not available to your account.";
   }
   return error.message;
 }
 
-function sortedParts(document: DocumentWithPartsResponse): DocumentPartResponse[] {
+function sortedParts(
+  document: DocumentWithPartsResponse,
+): DocumentPartResponse[] {
   return [...document.parts].sort((a, b) => a.order - b.order);
 }
 
@@ -45,11 +51,14 @@ async function loadTranscribeModels(
   projectId: string,
   documentId: string,
   partId: string,
-): Promise<{ models: InferenceModelResponse[]; selectedModelId: string | null }> {
+): Promise<{
+  models: InferenceModelResponse[];
+  selectedModelId: string | null;
+}> {
   let models: InferenceModelResponse[] = [];
   try {
     const catalog = await api.listInferenceModels();
-    models = catalog.filter((model) => model.task === 'transcribe');
+    models = catalog.filter((model) => model.task === "transcribe");
   } catch {
     models = [];
   }
@@ -59,7 +68,7 @@ async function loadTranscribeModels(
       projectId,
       documentId,
       partId,
-      'transcribe',
+      "transcribe",
     );
     if (!models.some((model) => model.id === resolved.model.id)) {
       models = [resolved.model, ...models];
@@ -77,21 +86,27 @@ export function usePageEditorData(
   onRouteChange?: () => void,
   initialDocument?: DocumentWithPartsResponse | null,
 ) {
-  const [document, setDocument] = useState<DocumentWithPartsResponse | null>(null);
+  const [document, setDocument] = useState<DocumentWithPartsResponse | null>(
+    null,
+  );
   const [part, setPart] = useState<DocumentPartResponse | null>(null);
-  const [layout, setLayout] = useState<PartLayoutResponse>({ blocks: [], lines: [] });
+  const [layout, setLayout] = useState<PartLayoutResponse>({
+    blocks: [],
+    lines: [],
+  });
   const [lines, setLines] = useState<LineResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [layoutError, setLayoutError] = useState<string | null>(null);
   const [lineError, setLineError] = useState<string | null>(null);
-  const [transcriptionLayers, setTranscriptionLayers] = useState<TranscriptionLayerResponse[]>([]);
-  const [selectedTranscriptionLayerId, setSelectedTranscriptionLayerId] = useState<string | null>(
-    null,
-  );
-  const [groundTruthTranscriptionId, setGroundTruthTranscriptionId] = useState<string | null>(
-    null,
-  );
+  const [transcriptionLayers, setTranscriptionLayers] = useState<
+    TranscriptionLayerResponse[]
+  >([]);
+  const [selectedTranscriptionLayerId, setSelectedTranscriptionLayerId] =
+    useState<string | null>(null);
+  const [groundTruthTranscriptionId, setGroundTruthTranscriptionId] = useState<
+    string | null
+  >(null);
   const [textLines, setTextLines] = useState<
     { order: number; text: string; paired_line_id: string | null }[]
   >([]);
@@ -101,13 +116,17 @@ export function usePageEditorData(
     percent: 0,
   });
   const [pairingError, setPairingError] = useState<string | null>(null);
-  const [transcribeModels, setTranscribeModels] = useState<InferenceModelResponse[]>([]);
-  const [selectedTranscribeModelId, setSelectedTranscribeModelId] = useState<string | null>(null);
+  const [transcribeModels, setTranscribeModels] = useState<
+    InferenceModelResponse[]
+  >([]);
+  const [selectedTranscribeModelId, setSelectedTranscribeModelId] = useState<
+    string | null
+  >(null);
 
   useEffect(() => {
     if (!projectId || !documentId || !partId) {
       setLoading(false);
-      setError('Page route is incomplete.');
+      setError("Page route is incomplete.");
       return;
     }
     if (!hasAccessToken()) {
@@ -116,7 +135,7 @@ export function usePageEditorData(
     }
 
     let cancelled = false;
-    const apply = <T,>(setter: (value: T) => void, value: T) => {
+    const apply = <T>(setter: (value: T) => void, value: T) => {
       if (!cancelled) {
         setter(value);
       }
@@ -147,7 +166,7 @@ export function usePageEditorData(
 
         const selectedPart = resolvePart(doc, partId);
         if (!selectedPart) {
-          apply(setError, 'This document part was not found.');
+          apply(setError, "This document part was not found.");
           return;
         }
 
@@ -169,7 +188,7 @@ export function usePageEditorData(
         ]);
         if (cancelled) return;
 
-        if (layoutResult.status === 'fulfilled') {
+        if (layoutResult.status === "fulfilled") {
           apply(setLayout, layoutResult.value ?? { blocks: [], lines: [] });
         } else {
           const err = layoutResult.reason;
@@ -179,15 +198,16 @@ export function usePageEditorData(
           }
           apply(
             setLayoutError,
-            err instanceof ApiError && (err.status === 403 || err.status === 404)
-              ? 'Layout editing is not available for this page.'
+            err instanceof ApiError &&
+              (err.status === 403 || err.status === 404)
+              ? "Layout editing is not available for this page."
               : err instanceof Error
                 ? err.message
-                : 'Failed to load layout.',
+                : "Failed to load layout.",
           );
         }
 
-        if (linesResult.status === 'fulfilled') {
+        if (linesResult.status === "fulfilled") {
           apply(setLines, linesResult.value);
         } else {
           const err = linesResult.reason;
@@ -197,20 +217,26 @@ export function usePageEditorData(
           }
           apply(
             setLineError,
-            err instanceof ApiError && (err.status === 403 || err.status === 404)
-              ? 'Segment geometry is not available for this page.'
+            err instanceof ApiError &&
+              (err.status === 403 || err.status === 404)
+              ? "Segment geometry is not available for this page."
               : err instanceof Error
                 ? err.message
-                : 'Failed to load Segment geometry.',
+                : "Failed to load Segment geometry.",
           );
         }
 
-        if (transcriptionsResult.status === 'fulfilled') {
+        if (transcriptionsResult.status === "fulfilled") {
           const layers = transcriptionsResult.value;
-          const groundTruth = layers.find((layer) => layer.kind === 'ground_truth');
+          const groundTruth = layers.find(
+            (layer) => layer.kind === "ground_truth",
+          );
           apply(setTranscriptionLayers, layers);
           apply(setGroundTruthTranscriptionId, groundTruth?.id ?? null);
-          apply(setSelectedTranscriptionLayerId, groundTruth?.id ?? layers[0]?.id ?? null);
+          apply(
+            setSelectedTranscriptionLayerId,
+            groundTruth?.id ?? layers[0]?.id ?? null,
+          );
         } else {
           const err = transcriptionsResult.reason;
           if (isUnauthorized(err)) {
@@ -219,15 +245,16 @@ export function usePageEditorData(
           }
           apply(
             setPairingError,
-            err instanceof ApiError && (err.status === 403 || err.status === 404)
-              ? 'Pairing is not available for this page.'
+            err instanceof ApiError &&
+              (err.status === 403 || err.status === 404)
+              ? "Pairing is not available for this page."
               : err instanceof Error
                 ? err.message
-                : 'Failed to load Pairing progress.',
+                : "Failed to load Pairing progress.",
           );
         }
 
-        if (pairingResult.status === 'fulfilled') {
+        if (pairingResult.status === "fulfilled") {
           apply(setTextLines, pairingResult.value.text_lines);
           apply(setPairingProgress, pairingResult.value.pairing_progress);
         } else {
@@ -238,17 +265,21 @@ export function usePageEditorData(
           }
           apply(
             setPairingError,
-            err instanceof ApiError && (err.status === 403 || err.status === 404)
-              ? 'Pairing is not available for this page.'
+            err instanceof ApiError &&
+              (err.status === 403 || err.status === 404)
+              ? "Pairing is not available for this page."
               : err instanceof Error
                 ? err.message
-                : 'Failed to load Pairing progress.',
+                : "Failed to load Pairing progress.",
           );
         }
 
-        if (modelsResult.status === 'fulfilled') {
+        if (modelsResult.status === "fulfilled") {
           apply(setTranscribeModels, modelsResult.value.models);
-          apply(setSelectedTranscribeModelId, modelsResult.value.selectedModelId);
+          apply(
+            setSelectedTranscribeModelId,
+            modelsResult.value.selectedModelId,
+          );
         } else {
           apply(setTranscribeModels, []);
           apply(setSelectedTranscribeModelId, null);
@@ -260,7 +291,7 @@ export function usePageEditorData(
         }
         apply(
           setError,
-          err instanceof ApiError ? accessMessage(err) : 'Failed to load page.',
+          err instanceof ApiError ? accessMessage(err) : "Failed to load page.",
         );
       } finally {
         if (!cancelled) {

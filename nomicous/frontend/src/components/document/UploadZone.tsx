@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef } from "react";
 
 type UploadZoneProps = {
   onUpload: (file: File) => void | Promise<void>;
@@ -6,13 +6,17 @@ type UploadZoneProps = {
   loading?: boolean;
 };
 
-export function UploadZone({ onUpload, disabled = false, loading = false }: UploadZoneProps) {
+export function UploadZone({
+  onUpload,
+  disabled = false,
+  loading = false,
+}: UploadZoneProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = async (file: File | undefined) => {
     if (!file) return;
     await onUpload(file);
-    if (inputRef.current) inputRef.current.value = '';
+    if (inputRef.current) inputRef.current.value = "";
   };
 
   return (
@@ -48,7 +52,7 @@ export function UploadZone({ onUpload, disabled = false, loading = false }: Uplo
             d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"
           />
         </svg>
-        <p>{loading ? 'Uploading…' : 'Upload page images'}</p>
+        <p>{loading ? "Uploading…" : "Upload page images"}</p>
         <p className="hint">JPEG, PNG, TIFF, max 50 MB</p>
       </button>
     </>

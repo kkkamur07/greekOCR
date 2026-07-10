@@ -1,14 +1,14 @@
-import { useCallback, useRef, useState } from 'react';
-import { toast } from '../ui/toast';
-import { api, type JobResponse } from '../../api/client';
-import { ApiError } from '../../api/errors';
-import { useJobPolling } from '../../hooks/useJobPolling';
-import { isTerminalJobStatus } from '../page-editor/jobProgress';
+import { useCallback, useRef, useState } from "react";
+import { toast } from "../ui/toast";
+import { api, type JobResponse } from "../../api/client";
+import { ApiError } from "../../api/errors";
+import { useJobPolling } from "../../hooks/useJobPolling";
+import { isTerminalJobStatus } from "../page-editor/jobProgress";
 
 type TrackedJob = {
   jobId: string;
-  status: JobResponse['status'];
-  type?: JobResponse['type'];
+  status: JobResponse["status"];
+  type?: JobResponse["type"];
   error?: string | null;
 };
 
@@ -29,7 +29,7 @@ export function JobsNotice({ enableTestJobs = false }: JobsNoticeProps) {
   const trackJob = useCallback((jobId: string) => {
     setTrackedJobs((prev) => {
       if (prev.some((j) => j.jobId === jobId)) return prev;
-      return [...prev, { jobId, status: 'pending' }];
+      return [...prev, { jobId, status: "pending" }];
     });
     setExpanded(true);
   }, []);
@@ -51,7 +51,7 @@ export function JobsNotice({ enableTestJobs = false }: JobsNoticeProps) {
           error: job.error,
         };
         if (
-          job.status === 'failed' &&
+          job.status === "failed" &&
           job.error &&
           !failedNotifiedRef.current.has(job.id)
         ) {
@@ -70,20 +70,23 @@ export function JobsNotice({ enableTestJobs = false }: JobsNoticeProps) {
       trackJob(job_id);
       toast.success(`Test job enqueued (${shortId(job_id)})`);
     } catch (err) {
-      const msg = err instanceof ApiError ? err.message : 'Failed to enqueue test job';
+      const msg =
+        err instanceof ApiError ? err.message : "Failed to enqueue test job";
       toast.error(msg);
     } finally {
       setEnqueueing(false);
     }
   };
 
-  const activeCount = trackedJobs.filter((j) => !isTerminalJobStatus(j.status)).length;
+  const activeCount = trackedJobs.filter(
+    (j) => !isTerminalJobStatus(j.status),
+  ).length;
   const statusHint =
     activeCount > 0
       ? `${activeCount} running`
       : trackedJobs.length > 0
-        ? 'All jobs complete'
-        : 'Segment, transcribe, or refine layout';
+        ? "All jobs complete"
+        : "Segment, transcribe, or refine layout";
 
   return (
     <div>
@@ -98,7 +101,7 @@ export function JobsNotice({ enableTestJobs = false }: JobsNoticeProps) {
             onClick={() => void handleRunTestJob()}
             disabled={enqueueing}
           >
-            {enqueueing ? 'Running…' : 'Run job'}
+            {enqueueing ? "Running…" : "Run job"}
           </button>
         )}
         {trackedJobs.length > 0 && (
@@ -108,19 +111,27 @@ export function JobsNotice({ enableTestJobs = false }: JobsNoticeProps) {
             onClick={() => setExpanded((v) => !v)}
             aria-expanded={expanded}
           >
-            {expanded ? 'Hide' : 'Details'}
+            {expanded ? "Hide" : "Details"}
           </button>
         )}
       </div>
       {expanded && trackedJobs.length > 0 && (
-        <ul className="part-list" style={{ marginBottom: 20 }} aria-label="Job status">
+        <ul
+          className="part-list"
+          style={{ marginBottom: 20 }}
+          aria-label="Job status"
+        >
           {trackedJobs.map((job) => (
-            <li key={job.jobId} className="part-row" style={{ listStyle: 'none' }}>
+            <li
+              key={job.jobId}
+              className="part-row"
+              style={{ listStyle: "none" }}
+            >
               <div className="part-info">
                 <div className="part-num">{shortId(job.jobId)}</div>
                 <div className="part-desc">
-                  {job.type ?? 'job'} · {job.status}
-                  {job.error ? `: ${job.error}` : ''}
+                  {job.type ?? "job"} · {job.status}
+                  {job.error ? `: ${job.error}` : ""}
                 </div>
               </div>
             </li>

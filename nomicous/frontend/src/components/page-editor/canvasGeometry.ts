@@ -1,4 +1,4 @@
-import type { LayoutPoint, LinePoint } from '../../api/client';
+import type { LayoutPoint, LinePoint } from "../../api/client";
 
 export type GeometryInput =
   | LinePoint[]
@@ -21,16 +21,18 @@ type GeometryObject = {
 function asPointPair(value: LinePoint | number[]): LinePoint | null {
   if (!Array.isArray(value) || value.length < 2) return null;
   const [x, y] = value;
-  if (typeof x !== 'number' || typeof y !== 'number') return null;
+  if (typeof x !== "number" || typeof y !== "number") return null;
   return [x, y];
 }
 
 export function normalizeGeometryPoints(input: GeometryInput): LinePoint[] {
   if (!input) return [];
   if (Array.isArray(input)) {
-    return input.map(asPointPair).filter((point): point is LinePoint => point !== null);
+    return input
+      .map(asPointPair)
+      .filter((point): point is LinePoint => point !== null);
   }
-  if (typeof input === 'object') {
+  if (typeof input === "object") {
     if (Array.isArray(input.points)) {
       return normalizeGeometryPoints(input.points);
     }
@@ -44,16 +46,16 @@ export function normalizeGeometryPoints(input: GeometryInput): LinePoint[] {
 export function points(input: GeometryInput): string {
   return normalizeGeometryPoints(input)
     .map(([x, y]) => `${x},${y}`)
-    .join(' ');
+    .join(" ");
 }
 
 export function withGeometryPoints(
   geometry: GeometryInput,
   nextPoints: LinePoint[],
 ): GeometryObject {
-  if (geometry && typeof geometry === 'object' && !Array.isArray(geometry)) {
+  if (geometry && typeof geometry === "object" && !Array.isArray(geometry)) {
     const type = geometry.type;
-    if ('coordinates' in geometry) {
+    if ("coordinates" in geometry) {
       return { ...(type ? { type } : {}), coordinates: nextPoints };
     }
     return { ...(type ? { type } : {}), points: nextPoints };
@@ -61,7 +63,10 @@ export function withGeometryPoints(
   return { points: nextPoints };
 }
 
-export function offsetGeometry(geometry: GeometryInput, deltaY: number): GeometryObject {
+export function offsetGeometry(
+  geometry: GeometryInput,
+  deltaY: number,
+): GeometryObject {
   const shifted = normalizeGeometryPoints(geometry).map(
     ([x, y]) => [x, y + deltaY] as LinePoint,
   );
@@ -99,7 +104,12 @@ export function canvasHandleRadius(
   overlayStrokeWidth: number,
   canvasMaxDimension: number,
 ): number {
-  return canvasStrokeWidth(base * handleSize, zoomLevel, overlayStrokeWidth, canvasMaxDimension);
+  return canvasStrokeWidth(
+    base * handleSize,
+    zoomLevel,
+    overlayStrokeWidth,
+    canvasMaxDimension,
+  );
 }
 
 /** Minimum spacing between consecutive polygon vertices (image px). */
@@ -117,30 +127,45 @@ export function cleanPolygonPoints(
   if (points.length < 2) return points;
 
   const working = points.map(([x, y]) => [x, y] as LinePoint);
-  if (working.length >= 2 && pointDistance(working[0], working[working.length - 1]) <= minDistance) {
+  if (
+    working.length >= 2 &&
+    pointDistance(working[0], working[working.length - 1]) <= minDistance
+  ) {
     working.pop();
   }
   if (working.length < 2) return points;
 
   const cleaned: LinePoint[] = [working[0]];
   for (let index = 1; index < working.length; index += 1) {
-    if (pointDistance(working[index], cleaned[cleaned.length - 1]) > minDistance) {
+    if (
+      pointDistance(working[index], cleaned[cleaned.length - 1]) > minDistance
+    ) {
       cleaned.push(working[index]);
     }
   }
-  if (cleaned.length >= 2 && pointDistance(cleaned[0], cleaned[cleaned.length - 1]) <= minDistance) {
+  if (
+    cleaned.length >= 2 &&
+    pointDistance(cleaned[0], cleaned[cleaned.length - 1]) <= minDistance
+  ) {
     cleaned.pop();
   }
 
   return cleaned.length >= minVertices ? cleaned : points;
 }
 
-export function removePolygonVertex(polygon: LinePoint[], index: number): LinePoint[] | null {
+export function removePolygonVertex(
+  polygon: LinePoint[],
+  index: number,
+): LinePoint[] | null {
   if (index < 0 || index >= polygon.length || polygon.length <= 3) return null;
   return polygon.filter((_, vertexIndex) => vertexIndex !== index);
 }
 
-function distanceSquaredPointToSegment(point: LinePoint, start: LinePoint, end: LinePoint): number {
+function distanceSquaredPointToSegment(
+  point: LinePoint,
+  start: LinePoint,
+  end: LinePoint,
+): number {
   const [px, py] = point;
   const [ax, ay] = start;
   const [bx, by] = end;
@@ -161,7 +186,11 @@ function distanceSquaredPointToSegment(point: LinePoint, start: LinePoint, end: 
   return deltaX * deltaX + deltaY * deltaY;
 }
 
-function closestPointOnSegment(point: LinePoint, start: LinePoint, end: LinePoint): LinePoint {
+function closestPointOnSegment(
+  point: LinePoint,
+  start: LinePoint,
+  end: LinePoint,
+): LinePoint {
   const [px, py] = point;
   const [ax, ay] = start;
   const [bx, by] = end;
@@ -198,7 +227,11 @@ export function findPolygonEdgeInsert(
   if (isNearExistingVertex(polygon, click, maxDistance * 0.9)) return null;
 
   const maxDistanceSquared = maxDistance * maxDistance;
-  let best: { insertIndex: number; point: LinePoint; distanceSquared: number } | null = null;
+  let best: {
+    insertIndex: number;
+    point: LinePoint;
+    distanceSquared: number;
+  } | null = null;
 
   for (let index = 0; index < polygon.length; index += 1) {
     const start = polygon[index];
@@ -230,4 +263,3 @@ export function insertPolygonVertexAtClick(
   next.splice(hit.insertIndex, 0, hit.point);
   return next;
 }
-

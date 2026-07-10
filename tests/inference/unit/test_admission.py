@@ -47,6 +47,43 @@ def admission_client(monkeypatch: pytest.MonkeyPatch):
     return create_client
 
 
+def test_inference_service_routes_reject_missing_and_invalid_secrets(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("INFERENCE_SERVICE_SECRET", "admission-test-secret")
+    get_inference_settings.cache_clear()
+    client = TestClient(create_app())
+
+    assert client.post("/inference/v1/jobs", json={}).status_code == 401
+    assert (
+        client.post(
+            "/inference/v1/jobs",
+            json={},
+            headers={"X-Inference-Service-Secret": "wrong-secret"},
+        ).status_code
+        == 403
+    )
+
+
+def test_unauthenticated_requests_do_not_exhaust_service_rate_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("INFERENCE_SERVICE_SECRET", "admission-test-secret")
+    monkeypatch.setenv("INFERENCE_RATE_LIMIT_PER_MINUTE", "1")
+    get_inference_settings.cache_clear()
+    client = TestClient(create_app())
+
+    assert (
+        client.post(
+            "/inference/v1/jobs",
+            json={},
+            headers={"X-Inference-Service-Secret": "admission-test-secret"},
+        ).status_code
+        == 422
+    )
+    assert client.post("/inference/v1/jobs", json={}).status_code == 401
+
+
 def test_rejects_oversized_encoded_image_before_base64_decode(
     admission_client, monkeypatch: pytest.MonkeyPatch
 ) -> None:

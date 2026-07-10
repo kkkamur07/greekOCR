@@ -1,13 +1,21 @@
-import { useCallback, useEffect, useState } from 'react';
-import { fetchHelperCatalog, isModelLocalEligible, type HelperCatalogModel } from './catalog';
-import { preferCloudInference, saveInferencePreference, type InferencePreference } from './preference';
-import { probeHelperHealth } from './probe';
+import { useCallback, useEffect, useState } from "react";
+import {
+  fetchHelperCatalog,
+  isModelLocalEligible,
+  type HelperCatalogModel,
+} from "./catalog";
+import {
+  preferCloudInference,
+  saveInferencePreference,
+  type InferencePreference,
+} from "./preference";
+import { probeHelperHealth } from "./probe";
 
 export function useInferenceHost() {
   const [helperAvailable, setHelperAvailable] = useState(false);
   const [catalog, setCatalog] = useState<HelperCatalogModel[]>([]);
   const [preference, setPreference] = useState<InferencePreference>(() =>
-    preferCloudInference() ? 'cloud' : 'local',
+    preferCloudInference() ? "cloud" : "local",
   );
   const [probing, setProbing] = useState(true);
 
@@ -39,7 +47,7 @@ export function useInferenceHost() {
   }
 
   function shouldUseLocalPath(registryModelId: string): boolean {
-    if (preference === 'cloud' || !helperAvailable) return false;
+    if (preference === "cloud" || !helperAvailable) return false;
     return isModelLocalEligible(catalog, registryModelId);
   }
 
@@ -47,7 +55,7 @@ export function useInferenceHost() {
     helperAvailable,
     catalog,
     preference,
-    preferCloud: preference === 'cloud',
+    preferCloud: preference === "cloud",
     probing,
     refresh,
     setInferencePreference,

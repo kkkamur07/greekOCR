@@ -13,6 +13,7 @@ Related:
 
 | Doc | Topic |
 |-----|--------|
+| [repository-cleanup-plan.md](repository-cleanup-plan.md) | Dead code audit — files, CSS, deps, suggested PR series |
 | [codebase-audit.md](codebase-audit.md) | Full-stack audit — security, performance, launch readiness |
 | [frontend/nextjs-migration.md](frontend/nextjs-migration.md) | Completed Next.js migration record |
 | [guides/testing.md](guides/testing.md) | Test lanes and CI commands |
@@ -80,9 +81,9 @@ The working tree may contain a **large docs migration** not yet on `main`:
 | `docs/architecture/` | ADRs + service READMEs |
 | `docs/todo.md` | `issues/` backlog |
 
-**Risk:** `docs/README.md` links to files that do not exist yet (e.g.
-`repository-cleanup-plan.md`, `codebase-audit.md`) — a broken index is worse
-than no index.
+**Risk:** `docs/README.md` may still link to files not on every branch (e.g.
+`codebase-audit.md`) — a broken index is worse than no index. The cleanup
+audit lives in [repository-cleanup-plan.md](repository-cleanup-plan.md).
 
 **Fix:** Land the full reorg in **one atomic commit**: delete old paths, add new
 ones, verify every `*.md` link resolves. Treat “docs index has zero broken
@@ -202,11 +203,11 @@ root.
 
 ### H9 — Dead-code audit trail
 
-A dead-code pass removed modules (`ImageCanvas/`, pairing strip, etc.) but
-without a committed `repository-cleanup-plan.md` the audit trail is easy to lose.
-The next agent may re-audit the same code or delete something still needed.
+A dead-code pass removed modules (`ImageCanvas/`, pairing strip, etc.). Ongoing
+candidates are recorded in [repository-cleanup-plan.md](repository-cleanup-plan.md).
 
-**Fix:** Follow the [Dead-code ritual](#dead-code-ritual) below.
+**Fix:** Follow the [Dead-code ritual](#dead-code-ritual) below; update the plan
+before each cleanup PR.
 
 ---
 
@@ -257,7 +258,7 @@ git worktree remove ../nextjs-opt   # when done
 Single PR, e.g. `docs: land ADR reorg and repo hygiene fixes`:
 
 1. Commit full `docs/` reorg (adr, frontend, deployment hardening docs).
-2. Recreate `repository-cleanup-plan.md` or remove its index link.
+2. Keep [repository-cleanup-plan.md](repository-cleanup-plan.md) in sync after each cleanup PR.
 3. `.gitignore` + delete root `package-lock.json`.
 4. Update Vite → Next.js in READMEs.
 5. Fix `issues/README.md` backlog entry.

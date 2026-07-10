@@ -1,9 +1,14 @@
-import { PageEditorJobProgressPanel } from './page-editor/PageEditorJobProgressPanel';
-import { useBackgroundJobs } from '../context/BackgroundJobsContext';
+import { PageEditorJobProgressPanel } from "./page-editor/PageEditorJobProgressPanel";
+import { useBackgroundJobs } from "../context/BackgroundJobsContext";
 
 export function BackgroundJobsPanel() {
-  const { jobs, activeCount, panelExpanded, setPanelExpanded, dismissCompleted } =
-    useBackgroundJobs();
+  const {
+    jobs,
+    activeCount,
+    panelExpanded,
+    setPanelExpanded,
+    dismissCompleted,
+  } = useBackgroundJobs();
 
   return (
     <PageEditorJobProgressPanel

@@ -1,7 +1,8 @@
 #Requires -Version 5.1
 # Install Nomicous Inference Helper from the extracted Windows zip.
 param(
-  [string]$RegistryUrl = "https://api.nomicous.com/inference/v1/registry"
+  [string]$RegistryUrl = "https://api.nomicous.com/inference/v1/registry",
+  [string]$CorsOrigins = "https://app.nomicous.com"
 )
 
 $ErrorActionPreference = "Stop"
@@ -15,6 +16,8 @@ New-Item -ItemType Directory -Force -Path $InstallRoot, $LogDir, $CacheDir | Out
 Copy-Item -Recurse -Force (Join-Path $SourceDir "*") $InstallRoot
 [Environment]::SetEnvironmentVariable("HELPER_REGISTRY_URL", $RegistryUrl, "User")
 $env:HELPER_REGISTRY_URL = $RegistryUrl
+[Environment]::SetEnvironmentVariable("HELPER_CORS_ORIGINS", $CorsOrigins, "User")
+$env:HELPER_CORS_ORIGINS = $CorsOrigins
 
 $Exe = Join-Path $InstallRoot "nomicous-inference-helper.exe"
 $Action = New-ScheduledTaskAction -Execute $Exe -WorkingDirectory $InstallRoot

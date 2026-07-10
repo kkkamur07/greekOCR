@@ -1,10 +1,17 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 
-import { api, refreshAccessToken } from '../api/client';
-import { clearLoginRedirectGuard } from './session';
-import { clearAccessToken, getAccessToken, setAccessToken } from './storage';
+import { api, refreshAccessToken } from "../api/client";
+import { clearLoginRedirectGuard } from "./session";
+import { clearAccessToken, getAccessToken, setAccessToken } from "./storage";
 
-type AuthStatus = 'restoring' | 'authenticated' | 'anonymous';
+type AuthStatus = "restoring" | "authenticated" | "anonymous";
 
 type AuthContextValue = {
   status: AuthStatus;
@@ -13,7 +20,7 @@ type AuthContextValue = {
 };
 
 const fallbackContext: AuthContextValue = {
-  status: getAccessToken() ? 'authenticated' : 'anonymous',
+  status: getAccessToken() ? "authenticated" : "anonymous",
   establish: (accessToken) => {
     setAccessToken(accessToken);
     clearLoginRedirectGuard();
@@ -27,7 +34,7 @@ const AuthContext = createContext<AuthContextValue>(fallbackContext);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>(
-    getAccessToken() ? 'authenticated' : 'restoring',
+    getAccessToken() ? "authenticated" : "restoring",
   );
 
   useEffect(() => {
@@ -37,12 +44,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then(() => {
         if (!active) return;
         clearLoginRedirectGuard();
-        setStatus('authenticated');
+        setStatus("authenticated");
       })
       .catch(() => {
         if (!active) return;
         clearAccessToken();
-        setStatus('anonymous');
+        setStatus("anonymous");
       });
     return () => {
       active = false;
@@ -55,14 +62,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       establish: (accessToken) => {
         setAccessToken(accessToken);
         clearLoginRedirectGuard();
-        setStatus('authenticated');
+        setStatus("authenticated");
       },
       logout: async () => {
         try {
           await api.logout();
         } finally {
           clearAccessToken();
-          setStatus('anonymous');
+          setStatus("anonymous");
         }
       },
     }),

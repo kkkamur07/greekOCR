@@ -1,20 +1,26 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { PublicPageCanvas } from './PublicPageCanvas';
+import { PublicPageCanvas } from "./PublicPageCanvas";
 
-vi.mock('./PublicZoomSurface', () => ({
-  PublicZoomSurface: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+vi.mock("./PublicZoomSurface", () => ({
+  PublicZoomSurface: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
 }));
 
-describe('PublicPageCanvas', () => {
+describe("PublicPageCanvas", () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it('selects and clears a line geometry with the keyboard', () => {
-    vi.spyOn(HTMLImageElement.prototype, 'clientWidth', 'get').mockReturnValue(640);
-    vi.spyOn(HTMLImageElement.prototype, 'clientHeight', 'get').mockReturnValue(900);
+  it("selects and clears a line geometry with the keyboard", () => {
+    vi.spyOn(HTMLImageElement.prototype, "clientWidth", "get").mockReturnValue(
+      640,
+    );
+    vi.spyOn(HTMLImageElement.prototype, "clientHeight", "get").mockReturnValue(
+      900,
+    );
     const onSelectRegion = vi.fn();
     render(
       <PublicPageCanvas
@@ -38,12 +44,12 @@ describe('PublicPageCanvas', () => {
       />,
     );
 
-    const image = screen.getByAltText('Manuscript page');
+    const image = screen.getByAltText("Manuscript page");
     fireEvent.load(image);
-    const line = screen.getByRole('button', { name: 'Line 1' });
+    const line = screen.getByRole("button", { name: "Line 1" });
 
-    fireEvent.keyDown(line, { key: 'Enter' });
-    fireEvent.keyDown(line, { key: ' ' });
+    fireEvent.keyDown(line, { key: "Enter" });
+    fireEvent.keyDown(line, { key: " " });
 
     expect(onSelectRegion).toHaveBeenNthCalledWith(1, 1);
     expect(onSelectRegion).toHaveBeenNthCalledWith(2, 1);

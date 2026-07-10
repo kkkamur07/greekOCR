@@ -2,28 +2,17 @@ name: Release Inference Helper
 
 # Builds the native Inference Helper installers on each OS's own runner
 # (PyInstaller cannot cross-compile) and uploads the artifacts to the
-# matching GitHub Release. Trigger by pushing a tag `inference-helper-v*`
-# or manually via "Run workflow" against an existing tag.
+# matching, already-published GitHub Release. Trigger by publishing a release
+# for an `inference-helper-v*` tag or manually against an existing release tag.
 
 on:
-  push:
-    tags:
-      - "inference-helper-v*"
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing release tag to attach artifacts to (e.g. inference-helper-v0.1.0)"
+        description: "Existing release tag to attach artifacts to (e.g. inference-helper-v0.1.1)"
         required: true
-        type: string
-      cors_origin:
-        description: "HELPER_CORS_ORIGINS baked into the build (production SPA origin)"
-        required: false
-        default: "https://app.nomicous.com"
-        type: string
-      registry_url:
-        description: "HELPER_REGISTRY_URL baked into the build"
-        required: false
-        default: "https://api.nomicous.com/inference/v1/registry"
         type: string
 
 permissions:
@@ -35,6 +24,7 @@ concurrency:
 
 jobs:
   build:
+    if: startsWith(github.event.inputs.tag || github.event.release.tag_name, 'inference-helper-v')
     strategy:
       fail-fast: false
       matrix:
@@ -47,15 +37,12 @@ jobs:
             build: bash packaging/helper/linux/build-tarball.sh
           - os: windows-latest
             artifact: nomicous-inference-helper-windows.zip
-            build: powershell -ExecutionPolicy Bypass -File packaging/helper/windows/build-installer.ps1 -CorsOrigin "$HELPER_CORS_ORIGINS" -RegistryUrl "$HELPER_REGISTRY_URL"
+            build: powershell -ExecutionPolicy Bypass -File packaging/helper/windows/build-installer.ps1
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
       attestations: write
       id-token: write
-    env:
-      HELPER_CORS_ORIGINS: ${{ inputs.cors_origin || 'https://app.nomicous.com' }}
-      HELPER_REGISTRY_URL: ${{ inputs.registry_url || 'https://api.nomicous.com/inference/v1/registry' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -165,7 +152,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          RELEASE_TAG: ${{ github.event.inputs.tag || github.event.release.tag_name }}
         run: |
           gh release view "$RELEASE_TAG" >/dev/null
           gh release upload "$RELEASE_TAG" release-assets/*

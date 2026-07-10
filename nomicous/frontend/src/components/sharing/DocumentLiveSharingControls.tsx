@@ -1,10 +1,13 @@
-import { useState } from 'react';
-import Link from 'next/link';
-import { api, type DocumentWorkflow } from '../../api/client';
-import { ApiError } from '../../api/errors';
-import { toast } from '../ui/toast';
-import { WorkflowBadge } from '../WorkflowBadge';
-import { publicDocumentPath, publicDocumentUrl } from '../../utils/publicDocumentUrl';
+import { useState } from "react";
+import Link from "next/link";
+import { api, type DocumentWorkflow } from "../../api/client";
+import { ApiError } from "../../api/errors";
+import { toast } from "../ui/toast";
+import { WorkflowBadge } from "../WorkflowBadge";
+import {
+  publicDocumentPath,
+  publicDocumentUrl,
+} from "../../utils/publicDocumentUrl";
 
 type DocumentLiveSharingControlsProps = {
   projectId: string;
@@ -24,8 +27,8 @@ export function DocumentLiveSharingControls({
   compact = false,
 }: DocumentLiveSharingControlsProps) {
   const [publishing, setPublishing] = useState(false);
-  const isPublished = workflow === 'published';
-  const isArchived = workflow === 'archived';
+  const isPublished = workflow === "published";
+  const isArchived = workflow === "archived";
   const publicPath = publicDocumentPath(projectId, documentId);
   const publicUrl = publicDocumentUrl(projectId, documentId);
   const busy = disabled || publishing;
@@ -34,17 +37,23 @@ export function DocumentLiveSharingControls({
     if (isArchived) return;
     setPublishing(true);
     try {
-      const nextWorkflow: DocumentWorkflow = isPublished ? 'draft' : 'published';
-      const updated = await api.updateDocument(projectId, documentId, { workflow: nextWorkflow });
+      const nextWorkflow: DocumentWorkflow = isPublished
+        ? "draft"
+        : "published";
+      const updated = await api.updateDocument(projectId, documentId, {
+        workflow: nextWorkflow,
+      });
       onWorkflowChange(updated.workflow);
       toast.success(
-        nextWorkflow === 'published'
-          ? 'Document published. Public link is live'
-          : 'Document returned to draft',
+        nextWorkflow === "published"
+          ? "Document published. Public link is live"
+          : "Document returned to draft",
       );
     } catch (err) {
       const message =
-        err instanceof ApiError ? err.message : 'Failed to update document status';
+        err instanceof ApiError
+          ? err.message
+          : "Failed to update document status";
       toast.error(message);
     } finally {
       setPublishing(false);
@@ -54,15 +63,19 @@ export function DocumentLiveSharingControls({
   async function handleCopyPublicLink() {
     try {
       await navigator.clipboard.writeText(publicUrl);
-      toast.success('Public link copied');
+      toast.success("Public link copied");
     } catch {
-      toast.error('Could not copy link');
+      toast.error("Could not copy link");
     }
   }
 
-  const statusClass = compact ? 'entity-panel__meta' : 'entity-panel__status-row';
-  const urlClass = compact ? 'pe-dd-share__url' : 'entity-panel__url';
-  const actionsClass = compact ? 'pe-dd-share__actions' : 'entity-panel__actions';
+  const statusClass = compact
+    ? "entity-panel__meta"
+    : "entity-panel__status-row";
+  const urlClass = compact ? "pe-dd-share__url" : "entity-panel__url";
+  const actionsClass = compact
+    ? "pe-dd-share__actions"
+    : "entity-panel__actions";
 
   return (
     <>
@@ -71,8 +84,11 @@ export function DocumentLiveSharingControls({
         <WorkflowBadge workflow={workflow} />
       </div>
       {isPublished && (
-        <div className={compact ? 'pe-dd-share' : 'entity-panel__share-block'}>
-          <label className="entity-panel__label" htmlFor={`public-url-${documentId}`}>
+        <div className={compact ? "pe-dd-share" : "entity-panel__share-block"}>
+          <label
+            className="entity-panel__label"
+            htmlFor={`public-url-${documentId}`}
+          >
             Public page
           </label>
           <input
@@ -113,10 +129,10 @@ export function DocumentLiveSharingControls({
             onClick={() => void handlePublishToggle()}
           >
             {publishing
-              ? 'Updating…'
+              ? "Updating…"
               : isPublished
-                ? 'Unpublish document'
-                : 'Publish live page'}
+                ? "Unpublish document"
+                : "Publish live page"}
           </button>
         ) : (
           <button
@@ -126,10 +142,10 @@ export function DocumentLiveSharingControls({
             onClick={() => void handlePublishToggle()}
           >
             {publishing
-              ? 'Updating…'
+              ? "Updating…"
               : isPublished
-                ? 'Unpublish document'
-                : 'Publish live page'}
+                ? "Unpublish document"
+                : "Publish live page"}
           </button>
         ))}
     </>

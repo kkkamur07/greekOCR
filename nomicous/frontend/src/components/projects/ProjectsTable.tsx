@@ -1,5 +1,5 @@
-import { useRouter } from 'next/navigation';
-import type { ProjectResponse } from '../../api/client';
+import { useRouter } from "next/navigation";
+import type { ProjectResponse } from "../../api/client";
 
 type ProjectsTableProps = {
   id: string;
@@ -14,11 +14,14 @@ type ProjectsTableProps = {
 };
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+  return new Date(iso).toLocaleDateString(undefined, {
+    month: "short",
+    year: "numeric",
+  });
 }
 
 function formatDocumentCount(count: number): string {
-  return count === 1 ? '1 document' : `${count} documents`;
+  return count === 1 ? "1 document" : `${count} documents`;
 }
 
 export function ProjectsTable({
@@ -39,7 +42,7 @@ export function ProjectsTable({
   };
 
   const onRowKeyDown = (event: React.KeyboardEvent, projectId: string) => {
-    if (event.key === 'Enter' || event.key === ' ') {
+    if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       openProject(projectId);
     }
@@ -98,9 +101,14 @@ export function ProjectsTable({
                     </span>
                   </td>
                   <td className="col-muted">
-                    {showOwner ? project.owner_id?.slice(0, 8) ?? '-' : project.document_count}
+                    {showOwner
+                      ? (project.owner_id?.slice(0, 8) ?? "-")
+                      : project.document_count}
                   </td>
-                  <td className="col-action" onClick={(e) => e.stopPropagation()}>
+                  <td
+                    className="col-action"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <div className="data-list-actions">
                       <button
                         type="button"

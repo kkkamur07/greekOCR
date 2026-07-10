@@ -59,10 +59,15 @@ shutil.copytree(
     dest / "inference" / "contracts",
     ignore=ignore_deploy_artifacts,
 )
-shutil.copytree(
-    root / "inference" / "infrastructure",
-    dest / "inference" / "infrastructure",
-    ignore=ignore_deploy_artifacts,
+infrastructure_dest = dest / "inference" / "infrastructure"
+infrastructure_dest.mkdir()
+shutil.copy2(
+    root / "inference" / "infrastructure" / "__init__.py",
+    infrastructure_dest / "__init__.py",
+)
+shutil.copy2(
+    root / "inference" / "infrastructure" / "settings.py",
+    infrastructure_dest / "settings.py",
 )
 shutil.copytree(
     root / "inference" / "registry",

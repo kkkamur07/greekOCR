@@ -1,7 +1,11 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
 import { afterEach, vi } from "vitest";
-import { createElement, type AnchorHTMLAttributes, type ReactNode } from "react";
+import {
+  createElement,
+  type AnchorHTMLAttributes,
+  type ReactNode,
+} from "react";
 
 const storage = new Map<string, string>();
 
@@ -59,9 +63,15 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("next/link", () => ({
-  default: ({ href, children, ...props }: { href: string; children: ReactNode } & AnchorHTMLAttributes<HTMLAnchorElement>) => (
-    createElement("a", { href, ...props }, children)
-  ),
+  default: ({
+    href,
+    children,
+    ...props
+  }: {
+    href: string;
+    children: ReactNode;
+  } & AnchorHTMLAttributes<HTMLAnchorElement>) =>
+    createElement("a", { href, ...props }, children),
 }));
 
 export function testRouter(): TestRouter {

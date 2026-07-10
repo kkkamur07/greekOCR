@@ -9,6 +9,7 @@ WorkingDirectory=__INSTALL_DIR__
 Restart=on-failure
 Environment=HF_CACHE_ROOT=__HOME__/.nomicous/hf/cache
 Environment=HELPER_REGISTRY_URL=__REGISTRY_URL__
+Environment=HELPER_CORS_ORIGINS=__CORS_ORIGINS__
 
 [Install]
 WantedBy=default.target

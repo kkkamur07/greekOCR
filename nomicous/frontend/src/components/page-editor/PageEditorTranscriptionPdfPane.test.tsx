@@ -1,12 +1,12 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { api } from '../../api/client';
-import { ApiError } from '../../api/errors';
-import { PageEditorTranscriptionPdfPane } from './PageEditorTranscriptionPdfPane';
+import { api } from "../../api/client";
+import { ApiError } from "../../api/errors";
+import { PageEditorTranscriptionPdfPane } from "./PageEditorTranscriptionPdfPane";
 
-vi.mock('../../api/client', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../api/client')>();
+vi.mock("../../api/client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../api/client")>();
   return {
     ...actual,
     api: {
@@ -16,20 +16,21 @@ vi.mock('../../api/client', async (importOriginal) => {
   };
 });
 
-const mockedGenerateTranscriptionPdf = api.generateTranscriptionPdf as ReturnType<typeof vi.fn>;
+const mockedGenerateTranscriptionPdf =
+  api.generateTranscriptionPdf as ReturnType<typeof vi.fn>;
 
-describe('PageEditorTranscriptionPdfPane', () => {
+describe("PageEditorTranscriptionPdfPane", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockedGenerateTranscriptionPdf.mockResolvedValue(
-      new Blob(['%PDF'], { type: 'application/pdf' }),
+      new Blob(["%PDF"], { type: "application/pdf" }),
     );
   });
 
-  it('loads the transcription PDF into an embedded preview', async () => {
-    const createObjectURL = vi.fn(() => 'blob:preview');
+  it("loads the transcription PDF into an embedded preview", async () => {
+    const createObjectURL = vi.fn(() => "blob:preview");
     const revokeObjectURL = vi.fn();
-    vi.stubGlobal('URL', { createObjectURL, revokeObjectURL });
+    vi.stubGlobal("URL", { createObjectURL, revokeObjectURL });
 
     render(
       <PageEditorTranscriptionPdfPane
@@ -44,16 +45,23 @@ describe('PageEditorTranscriptionPdfPane', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTitle('Transcription PDF preview')).toHaveAttribute('data', 'blob:preview');
+      expect(screen.getByTitle("Transcription PDF preview")).toHaveAttribute(
+        "data",
+        "blob:preview",
+      );
     });
-    expect(mockedGenerateTranscriptionPdf).toHaveBeenCalledWith('project-1', 'doc-1', 'part-1');
+    expect(mockedGenerateTranscriptionPdf).toHaveBeenCalledWith(
+      "project-1",
+      "doc-1",
+      "part-1",
+    );
 
     vi.unstubAllGlobals();
   });
 
-  it('refetches when refreshKey changes', async () => {
-    vi.stubGlobal('URL', {
-      createObjectURL: vi.fn(() => 'blob:preview'),
+  it("refetches when refreshKey changes", async () => {
+    vi.stubGlobal("URL", {
+      createObjectURL: vi.fn(() => "blob:preview"),
       revokeObjectURL: vi.fn(),
     });
 
@@ -92,20 +100,26 @@ describe('PageEditorTranscriptionPdfPane', () => {
     vi.unstubAllGlobals();
   });
 
-  it('downloads the PDF when the user clicks Download', async () => {
-    const blob = new Blob(['%PDF'], { type: 'application/pdf' });
+  it("downloads the PDF when the user clicks Download", async () => {
+    const blob = new Blob(["%PDF"], { type: "application/pdf" });
     mockedGenerateTranscriptionPdf.mockResolvedValue(blob);
-    vi.stubGlobal('URL', {
-      createObjectURL: vi.fn(() => 'blob:download'),
+    vi.stubGlobal("URL", {
+      createObjectURL: vi.fn(() => "blob:download"),
       revokeObjectURL: vi.fn(),
     });
 
-    const anchor = { click: vi.fn(), href: '', download: '' } as unknown as HTMLAnchorElement;
+    const anchor = {
+      click: vi.fn(),
+      href: "",
+      download: "",
+    } as unknown as HTMLAnchorElement;
     const originalCreateElement = document.createElement.bind(document);
-    const createElement = vi.spyOn(document, 'createElement').mockImplementation((tagName, options) => {
-      if (tagName === 'a') return anchor;
-      return originalCreateElement(tagName, options);
-    });
+    const createElement = vi
+      .spyOn(document, "createElement")
+      .mockImplementation((tagName, options) => {
+        if (tagName === "a") return anchor;
+        return originalCreateElement(tagName, options);
+      });
 
     render(
       <PageEditorTranscriptionPdfPane
@@ -119,11 +133,13 @@ describe('PageEditorTranscriptionPdfPane', () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole('button', { name: /download pdf/i }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: /download pdf/i }),
+    );
 
     await waitFor(() => {
       expect(mockedGenerateTranscriptionPdf).toHaveBeenCalledTimes(2);
-      expect(anchor.download).toBe('page-1_transcription.pdf');
+      expect(anchor.download).toBe("page-1_transcription.pdf");
       expect(anchor.click).toHaveBeenCalled();
     });
 
@@ -131,9 +147,11 @@ describe('PageEditorTranscriptionPdfPane', () => {
     vi.unstubAllGlobals();
   });
 
-  it('shows API errors from transcription PDF generation', async () => {
-    mockedGenerateTranscriptionPdf.mockRejectedValue(new ApiError('Forbidden', 403));
-    vi.stubGlobal('URL', {
+  it("shows API errors from transcription PDF generation", async () => {
+    mockedGenerateTranscriptionPdf.mockRejectedValue(
+      new ApiError("Forbidden", 403),
+    );
+    vi.stubGlobal("URL", {
       createObjectURL: vi.fn(),
       revokeObjectURL: vi.fn(),
     });
@@ -150,7 +168,7 @@ describe('PageEditorTranscriptionPdfPane', () => {
       />,
     );
 
-    expect(await screen.findByText('Forbidden')).toBeTruthy();
+    expect(await screen.findByText("Forbidden")).toBeTruthy();
 
     vi.unstubAllGlobals();
   });

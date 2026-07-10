@@ -1,7 +1,7 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { ApiError } from '../../api/errors';
+import { ApiError } from "../../api/errors";
 import {
   DOCUMENT,
   enableBaselinesOnCanvas,
@@ -9,9 +9,9 @@ import {
   mockedApi,
   renderPageEditor,
   resetPageEditorApiMocks,
-} from './testSupport';
+} from "./testSupport";
 
-describe('PageEditorPlaceholderPage layout', () => {
+describe("PageEditorPlaceholderPage layout", () => {
   beforeEach(() => {
     resetPageEditorApiMocks();
   });
@@ -20,15 +20,15 @@ describe('PageEditorPlaceholderPage layout', () => {
     await flushPageEditorEffects();
   });
 
-  it('renders part layout blocks and line baselines in layout edit mode', async () => {
+  it("renders part layout blocks and line baselines in layout edit mode", async () => {
     mockedApi.getDocument.mockResolvedValue(DOCUMENT);
     mockedApi.listPartLines.mockResolvedValue([
       {
-        id: 'line-1',
-        part_id: 'part-1',
-        block_id: 'block-1',
+        id: "line-1",
+        part_id: "part-1",
+        block_id: "block-1",
         order: 0,
-        kind: 'polygon',
+        kind: "polygon",
         points: [
           [55, 110],
           [305, 118],
@@ -45,18 +45,18 @@ describe('PageEditorPlaceholderPage layout', () => {
           [300, 178],
           [50, 168],
         ],
-        source: 'kraken',
+        source: "kraken",
         source_metadata: null,
         kraken_ceiling: null,
         manual_geometry: false,
         line_transcriptions: [],
-        created_at: '2026-06-16T10:00:00Z',
+        created_at: "2026-06-16T10:00:00Z",
       },
     ]);
     mockedApi.getPartLayout.mockResolvedValue({
       blocks: [
         {
-          id: 'block-1',
+          id: "block-1",
           box: [
             [40, 60],
             [320, 60],
@@ -68,8 +68,8 @@ describe('PageEditorPlaceholderPage layout', () => {
       ],
       lines: [
         {
-          id: 'line-1',
-          block_id: 'block-1',
+          id: "line-1",
+          block_id: "block-1",
           baseline: [
             [60, 140],
             [300, 150],
@@ -89,20 +89,22 @@ describe('PageEditorPlaceholderPage layout', () => {
 
     await enableBaselinesOnCanvas();
 
-    expect(await screen.findByRole('heading', { name: /layout edit/i })).toBeTruthy();
-    expect(screen.getByLabelText('Block block-1')).toBeTruthy();
-    expect(screen.getByLabelText('Line line-1 baseline')).toBeTruthy();
+    expect(
+      await screen.findByRole("heading", { name: /layout edit/i }),
+    ).toBeTruthy();
+    expect(screen.getByLabelText("Block block-1")).toBeTruthy();
+    expect(screen.getByLabelText("Line line-1 baseline")).toBeTruthy();
   });
 
-  it('renders layout geometry when API returns box and baseline objects', async () => {
+  it("renders layout geometry when API returns box and baseline objects", async () => {
     mockedApi.getDocument.mockResolvedValue(DOCUMENT);
     mockedApi.listPartLines.mockResolvedValue([
       {
-        id: 'line-1',
-        part_id: 'part-1',
-        block_id: 'block-1',
+        id: "line-1",
+        part_id: "part-1",
+        block_id: "block-1",
         order: 0,
-        kind: 'polygon',
+        kind: "polygon",
         points: [
           [40, 60],
           [320, 60],
@@ -116,18 +118,18 @@ describe('PageEditorPlaceholderPage layout', () => {
           ],
         },
         mask: null,
-        source: 'kraken',
+        source: "kraken",
         source_metadata: null,
         kraken_ceiling: null,
         manual_geometry: false,
         line_transcriptions: [],
-        created_at: '2026-06-16T10:00:00Z',
+        created_at: "2026-06-16T10:00:00Z",
       },
     ]);
     mockedApi.getPartLayout.mockResolvedValue({
       blocks: [
         {
-          id: 'block-1',
+          id: "block-1",
           box: {
             points: [
               [40, 60],
@@ -141,8 +143,8 @@ describe('PageEditorPlaceholderPage layout', () => {
       ],
       lines: [
         {
-          id: 'line-1',
-          block_id: 'block-1',
+          id: "line-1",
+          block_id: "block-1",
           baseline: {
             points: [
               [60, 140],
@@ -158,18 +160,18 @@ describe('PageEditorPlaceholderPage layout', () => {
 
     await enableBaselinesOnCanvas();
 
-    const baseline = await screen.findByLabelText('Line line-1 baseline');
-    expect(baseline.getAttribute('points')).toBe('60,140 300,150');
+    const baseline = await screen.findByLabelText("Line line-1 baseline");
+    expect(baseline.getAttribute("points")).toBe("60,140 300,150");
   });
-  it('edits a Line baseline and saves it as manual geometry', async () => {
+  it("edits a Line baseline and saves it as manual geometry", async () => {
     mockedApi.getDocument.mockResolvedValue(DOCUMENT);
     mockedApi.listPartLines.mockResolvedValue([
       {
-        id: 'line-1',
-        part_id: 'part-1',
+        id: "line-1",
+        part_id: "part-1",
         block_id: null,
         order: 0,
-        kind: 'polygon',
+        kind: "polygon",
         points: [
           [55, 110],
           [305, 118],
@@ -190,19 +192,19 @@ describe('PageEditorPlaceholderPage layout', () => {
             [50, 168],
           ],
         },
-        source: 'kraken',
+        source: "kraken",
         source_metadata: null,
         kraken_ceiling: null,
         manual_geometry: false,
         line_transcriptions: [],
-        created_at: '2026-06-16T10:00:00Z',
+        created_at: "2026-06-16T10:00:00Z",
       },
     ]);
     mockedApi.getPartLayout.mockResolvedValue({
       blocks: [],
       lines: [
         {
-          id: 'line-1',
+          id: "line-1",
           baseline: {
             points: [
               [60, 140],
@@ -222,7 +224,7 @@ describe('PageEditorPlaceholderPage layout', () => {
       ],
     });
     mockedApi.updateLineGeometry.mockResolvedValue({
-      id: 'line-1',
+      id: "line-1",
       baseline: [
         [60, 145],
         [300, 155],
@@ -234,16 +236,18 @@ describe('PageEditorPlaceholderPage layout', () => {
 
     await enableBaselinesOnCanvas();
 
-    fireEvent.click(await screen.findByLabelText('Line line-1 baseline'));
-    fireEvent.click(screen.getByRole('button', { name: /move baseline down/i }));
-    fireEvent.click(screen.getByRole('button', { name: /save layout/i }));
+    fireEvent.click(await screen.findByLabelText("Line line-1 baseline"));
+    fireEvent.click(
+      screen.getByRole("button", { name: /move baseline down/i }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /save layout/i }));
 
     await waitFor(() => {
       expect(mockedApi.updateLineGeometry).toHaveBeenLastCalledWith(
-        'project-1',
-        'doc-1',
-        'part-1',
-        'line-1',
+        "project-1",
+        "doc-1",
+        "part-1",
+        "line-1",
         {
           baseline: {
             points: [
@@ -262,18 +266,18 @@ describe('PageEditorPlaceholderPage layout', () => {
         },
       );
     });
-    expect(await screen.findByText('Manual geometry saved')).toBeTruthy();
+    expect(await screen.findByText("Manual geometry saved")).toBeTruthy();
   });
 
-  it('resets selected Line layout through the API and refreshes the canvas state', async () => {
+  it("resets selected Line layout through the API and refreshes the canvas state", async () => {
     mockedApi.getDocument.mockResolvedValue(DOCUMENT);
     mockedApi.listPartLines.mockResolvedValue([
       {
-        id: 'line-1',
-        part_id: 'part-1',
+        id: "line-1",
+        part_id: "part-1",
         block_id: null,
         order: 0,
-        kind: 'polygon',
+        kind: "polygon",
         points: [
           [55, 110],
           [305, 118],
@@ -290,19 +294,19 @@ describe('PageEditorPlaceholderPage layout', () => {
           [300, 178],
           [50, 168],
         ],
-        source: 'kraken',
+        source: "kraken",
         source_metadata: null,
         kraken_ceiling: null,
         manual_geometry: true,
         line_transcriptions: [],
-        created_at: '2026-06-16T10:00:00Z',
+        created_at: "2026-06-16T10:00:00Z",
       },
     ]);
     mockedApi.getPartLayout.mockResolvedValue({
       blocks: [],
       lines: [
         {
-          id: 'line-1',
+          id: "line-1",
           baseline: [
             [60, 140],
             [300, 150],
@@ -321,7 +325,7 @@ describe('PageEditorPlaceholderPage layout', () => {
       blocks: [],
       lines: [
         {
-          id: 'line-1',
+          id: "line-1",
           baseline: [
             [60, 140],
             [300, 150],
@@ -341,29 +345,29 @@ describe('PageEditorPlaceholderPage layout', () => {
 
     await enableBaselinesOnCanvas();
 
-    fireEvent.click(await screen.findByLabelText('Line line-1 baseline'));
-    fireEvent.click(screen.getByRole('button', { name: /reset layout/i }));
+    fireEvent.click(await screen.findByLabelText("Line line-1 baseline"));
+    fireEvent.click(screen.getByRole("button", { name: /reset layout/i }));
 
     await waitFor(() => {
       expect(mockedApi.resetPartLayout).toHaveBeenLastCalledWith(
-        'project-1',
-        'doc-1',
-        'part-1',
-        { line_ids: ['line-1'] },
+        "project-1",
+        "doc-1",
+        "part-1",
+        { line_ids: ["line-1"] },
       );
     });
-    expect(await screen.findByText('Layout reset')).toBeTruthy();
+    expect(await screen.findByText("Layout reset")).toBeTruthy();
   });
 
-  it('shows a member-only error when the layout save API rejects access', async () => {
+  it("shows a member-only error when the layout save API rejects access", async () => {
     mockedApi.getDocument.mockResolvedValue(DOCUMENT);
     mockedApi.listPartLines.mockResolvedValue([
       {
-        id: 'line-1',
-        part_id: 'part-1',
+        id: "line-1",
+        part_id: "part-1",
         block_id: null,
         order: 0,
-        kind: 'polygon',
+        kind: "polygon",
         points: [
           [55, 110],
           [305, 118],
@@ -380,19 +384,19 @@ describe('PageEditorPlaceholderPage layout', () => {
           [300, 178],
           [50, 168],
         ],
-        source: 'kraken',
+        source: "kraken",
         source_metadata: null,
         kraken_ceiling: null,
         manual_geometry: false,
         line_transcriptions: [],
-        created_at: '2026-06-16T10:00:00Z',
+        created_at: "2026-06-16T10:00:00Z",
       },
     ]);
     mockedApi.getPartLayout.mockResolvedValue({
       blocks: [],
       lines: [
         {
-          id: 'line-1',
+          id: "line-1",
           baseline: [
             [60, 140],
             [300, 150],
@@ -407,21 +411,25 @@ describe('PageEditorPlaceholderPage layout', () => {
         },
       ],
     });
-    mockedApi.updateLineGeometry.mockRejectedValue(new ApiError('Forbidden', 403));
+    mockedApi.updateLineGeometry.mockRejectedValue(
+      new ApiError("Forbidden", 403),
+    );
 
     renderPageEditor();
 
     await enableBaselinesOnCanvas();
 
-    fireEvent.click(await screen.findByLabelText('Line line-1 baseline'));
-    fireEvent.click(screen.getByRole('button', { name: /move baseline down/i }));
-    fireEvent.click(screen.getByRole('button', { name: /save layout/i }));
+    fireEvent.click(await screen.findByLabelText("Line line-1 baseline"));
+    fireEvent.click(
+      screen.getByRole("button", { name: /move baseline down/i }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /save layout/i }));
 
     expect(
-      await screen.findByText('Only project members can edit layout.'),
+      await screen.findByText("Only project members can edit layout."),
     ).toBeTruthy();
-    expect(screen.getByLabelText('Line line-1 baseline').getAttribute('points')).toBe(
-      '60,140 300,150',
-    );
+    expect(
+      screen.getByLabelText("Line line-1 baseline").getAttribute("points"),
+    ).toBe("60,140 300,150");
   });
 });

@@ -1,7 +1,5 @@
 #Requires -Version 5.1
 param(
-  [string]$CorsOrigin = "https://app.nomicous.com",
-  [string]$RegistryUrl = "https://api.nomicous.com/inference/v1/registry",
   # Authenticode signing (all optional - omit for an unsigned build).
   [string]$SigningThumbprint = $env:WINDOWS_SIGNING_THUMBPRINT,   # cert in the local store
   [string]$SigningCertPath = $env:WINDOWS_SIGNING_CERT,           # or path to a .pfx
@@ -49,8 +47,6 @@ function Invoke-AuthenticodeSign([string[]]$Paths) {
 
 Push-Location $HelperDir
 try {
-  $env:HELPER_CORS_ORIGINS = $CorsOrigin
-
   & bash $BuildScript
 
   $InstallDir = Join-Path $DistDir "windows-installer"

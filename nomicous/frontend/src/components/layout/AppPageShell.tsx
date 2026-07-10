@@ -1,6 +1,6 @@
-import type { ReactNode } from 'react';
-import { PageHeader } from './PageHeader';
-import { TopNav, type BreadcrumbItem } from './TopNav';
+import type { ReactNode } from "react";
+import { PageHeader } from "./PageHeader";
+import { TopNav, type BreadcrumbItem } from "./TopNav";
 
 type AppPageShellProps = {
   breadcrumb?: BreadcrumbItem[];

@@ -52,7 +52,9 @@ def test_private_part_media_preserves_full_bytes_and_authorizes_before_cache(
 
 
 @pytest.mark.integration
-def test_part_thumbnail_is_bounded_lossy_webp_without_upscaling(client, owner_headers, owner_project):
+def test_part_thumbnail_is_bounded_lossy_webp_without_upscaling(
+    client, owner_headers, owner_project
+):
     _, part_id = _create_part(client, owner_headers, owner_project, _png_bytes((400, 100)))
     url = f"/media/parts/{part_id}"
 

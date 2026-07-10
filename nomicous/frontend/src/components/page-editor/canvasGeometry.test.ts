@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from "vitest";
 
 import {
   canvasStrokeWidth,
@@ -10,14 +10,19 @@ import {
   points,
   removePolygonVertex,
   withGeometryPoints,
-} from './canvasGeometry';
+} from "./canvasGeometry";
 
-describe('canvasGeometry', () => {
-  it('formats plain point arrays for SVG', () => {
-    expect(points([[1, 2], [3, 4]])).toBe('1,2 3,4');
+describe("canvasGeometry", () => {
+  it("formats plain point arrays for SVG", () => {
+    expect(
+      points([
+        [1, 2],
+        [3, 4],
+      ]),
+    ).toBe("1,2 3,4");
   });
 
-  it('normalizes backend box and baseline objects with points', () => {
+  it("normalizes backend box and baseline objects with points", () => {
     expect(
       points({
         points: [
@@ -26,7 +31,7 @@ describe('canvasGeometry', () => {
           [10, 10],
         ],
       }),
-    ).toBe('0,0 10,0 10,10');
+    ).toBe("0,0 10,0 10,10");
 
     expect(
       normalizeGeometryPoints({
@@ -41,20 +46,30 @@ describe('canvasGeometry', () => {
     ]);
   });
 
-  it('normalizes GeoJSON line coordinates', () => {
+  it("normalizes GeoJSON line coordinates", () => {
     expect(
       points({
-        type: 'LineString',
+        type: "LineString",
         coordinates: [
           [1, 1],
           [2, 1],
         ],
       }),
-    ).toBe('1,1 2,1');
+    ).toBe("1,1 2,1");
   });
 
-  it('offsets geometry while preserving object shape', () => {
-    expect(offsetGeometry({ points: [[2, 2], [22, 2]] }, 5)).toEqual({
+  it("offsets geometry while preserving object shape", () => {
+    expect(
+      offsetGeometry(
+        {
+          points: [
+            [2, 2],
+            [22, 2],
+          ],
+        },
+        5,
+      ),
+    ).toEqual({
       points: [
         [2, 7],
         [22, 7],
@@ -62,11 +77,14 @@ describe('canvasGeometry', () => {
     });
   });
 
-  it('writes updated points back into geometry objects', () => {
+  it("writes updated points back into geometry objects", () => {
     expect(
-      withGeometryPoints({ type: 'LineString', coordinates: [[1, 1]] }, [[1, 6], [2, 6]]),
+      withGeometryPoints({ type: "LineString", coordinates: [[1, 1]] }, [
+        [1, 6],
+        [2, 6],
+      ]),
     ).toEqual({
-      type: 'LineString',
+      type: "LineString",
       coordinates: [
         [1, 6],
         [2, 6],
@@ -74,14 +92,16 @@ describe('canvasGeometry', () => {
     });
   });
 
-  it('scales stroke width inversely with zoom for screen consistency', () => {
+  it("scales stroke width inversely with zoom for screen consistency", () => {
     const zoomedOut = canvasStrokeWidth(2, 0.5, 1.5, 2000);
     const zoomedIn = canvasStrokeWidth(2, 2, 1.5, 2000);
     expect(zoomedIn).toBeLessThan(zoomedOut);
-    expect(canvasStrokeWidth(2, 1, 2, 2000)).toBeGreaterThan(canvasStrokeWidth(2, 1, 1, 2000));
+    expect(canvasStrokeWidth(2, 1, 2, 2000)).toBeGreaterThan(
+      canvasStrokeWidth(2, 1, 1, 2000),
+    );
   });
 
-  it('finds the nearest polygon edge for vertex insertion', () => {
+  it("finds the nearest polygon edge for vertex insertion", () => {
     const square: [number, number][] = [
       [0, 0],
       [100, 0],
@@ -96,7 +116,7 @@ describe('canvasGeometry', () => {
     expect(findPolygonEdgeInsert(square, [0, 0], 12)).toBeNull();
   });
 
-  it('inserts a vertex on the clicked edge', () => {
+  it("inserts a vertex on the clicked edge", () => {
     const triangle: [number, number][] = [
       [0, 0],
       [100, 0],
@@ -110,7 +130,7 @@ describe('canvasGeometry', () => {
     ]);
   });
 
-  it('removes consecutive vertices closer than the minimum spacing', () => {
+  it("removes consecutive vertices closer than the minimum spacing", () => {
     expect(
       cleanPolygonPoints([
         [0, 0],
@@ -129,7 +149,7 @@ describe('canvasGeometry', () => {
     ]);
   });
 
-  it('removes a polygon vertex while keeping at least three points', () => {
+  it("removes a polygon vertex while keeping at least three points", () => {
     const square: [number, number][] = [
       [0, 0],
       [100, 0],

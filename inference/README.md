@@ -31,7 +31,7 @@ Keeping them separate lets the API and workers scale, restart, and fail independ
 
 ```bash
 docker compose up --build
-curl -s http://localhost:8001/health
+curl -s http://127.0.0.1:8010/health
 ```
 
 ## Weights layout
@@ -118,7 +118,10 @@ curl -s http://127.0.0.1:8001/inference/v1/catalog
 
 On startup the helper fetches `registry.yaml` from the hosted platform (`GET /inference/v1/registry`, public, ETag-aware) into `~/.nomicous/registry.yaml`. The bundled copy in the installer is only a fallback when offline. Model **weights** still download on first `/run` via existing `hf://` resolution.
 
-The browser probes `localhost:8001`, calls `/inference/v1/run`, and persists results through the hosted platform API. Set `HELPER_CORS_ORIGINS` to your SPA origin(s).
+The browser probes `127.0.0.1:8001`, calls `/inference/v1/run`, and persists results through
+the hosted platform API. The production Vercel CSP permits that exact loopback URL. Set an
+explicit `HELPER_CORS_ORIGINS` runtime value only when the hosted SPA origin differs from
+`https://app.nomicous.com`; do not use `*` or ship a helper secret in frontend code.
 
 Packaging for `.dmg` / `.msi` / Linux installers: [`packaging/helper/README.md`](../packaging/helper/README.md) — PyInstaller spec excludes training stacks, platform API, and unused torch backends so installers ship only Calamari + Kraken runtime.
 

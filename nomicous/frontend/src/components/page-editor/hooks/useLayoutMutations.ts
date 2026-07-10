@@ -1,4 +1,4 @@
-import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
+import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import {
   api,
   type JobResponse,
@@ -6,25 +6,29 @@ import {
   type LinePoint,
   type LineResponse,
   type PartLayoutResponse,
-} from '../../../api/client';
-import { fetchPartImage } from '../../../api/imageCache';
-import { ApiError } from '../../../api/errors';
+} from "../../../api/client";
+import { fetchPartImage } from "../../../api/imageCache";
+import { ApiError } from "../../../api/errors";
 import {
   blobToBase64,
   DEFAULT_SEGMENT_REGISTRY_MODEL_ID,
   runLocalInference,
   type LocalInferenceCallbacks,
   isAbortError,
-} from '../../../inference';
-import { cleanPolygonPoints, offsetGeometry } from '../canvasGeometry';
-import { SEGMENT_JOB_TIMEOUT_MS, type PageEditorJobKind } from '../jobProgress';
-import { applyLayoutLineGeometryToSegments, mergeSavedLine, syncLayoutLinesFromSegments } from './utils';
+} from "../../../inference";
+import { cleanPolygonPoints, offsetGeometry } from "../canvasGeometry";
+import { SEGMENT_JOB_TIMEOUT_MS, type PageEditorJobKind } from "../jobProgress";
+import {
+  applyLayoutLineGeometryToSegments,
+  mergeSavedLine,
+  syncLayoutLinesFromSegments,
+} from "./utils";
 
 function layoutMutationMessage(error: unknown): string {
   if (error instanceof ApiError && error.status === 403) {
-    return 'Only project members can edit layout.';
+    return "Only project members can edit layout.";
   }
-  return error instanceof Error ? error.message : 'Layout update failed.';
+  return error instanceof Error ? error.message : "Layout update failed.";
 }
 
 type LayoutMutationsInput = {
@@ -37,10 +41,16 @@ type LayoutMutationsInput = {
   setLines: Dispatch<SetStateAction<LineResponse[]>>;
   setLineError: Dispatch<SetStateAction<string | null>>;
   setTextLines: Dispatch<
-    SetStateAction<{ order: number; text: string; paired_line_id: string | null }[]>
+    SetStateAction<
+      { order: number; text: string; paired_line_id: string | null }[]
+    >
   >;
   setPairingProgress: Dispatch<
-    SetStateAction<{ paired_lines: number; total_lines: number; percent: number }>
+    SetStateAction<{
+      paired_lines: number;
+      total_lines: number;
+      percent: number;
+    }>
   >;
   setPairingError: Dispatch<SetStateAction<string | null>>;
   selectedSegmentId: string | null;
@@ -87,8 +97,8 @@ export function useLayoutMutations({
 }: LayoutMutationsInput) {
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
   const [selectedLineSnapshot, setSelectedLineSnapshot] = useState<{
-    baseline?: LayoutLineResponse['baseline'];
-    mask?: LayoutLineResponse['mask'];
+    baseline?: LayoutLineResponse["baseline"];
+    mask?: LayoutLineResponse["mask"];
   } | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
@@ -120,25 +130,37 @@ export function useLayoutMutations({
             }
           : line,
       );
-      setLines((segments) => applyLayoutLineGeometryToSegments(segments, nextLayoutLines));
+      setLines((segments) =>
+        applyLayoutLineGeometryToSegments(segments, nextLayoutLines),
+      );
       return { ...current, lines: nextLayoutLines };
     });
   }
 
   async function saveSelectedLine() {
     if (!projectId || !documentId || !partId || !selectedLineId) return;
-    const selectedLine = layout.lines.find((line) => line.id === selectedLineId);
+    const selectedLine = layout.lines.find(
+      (line) => line.id === selectedLineId,
+    );
     if (!selectedLine) return;
 
     try {
-      await api.updateLineGeometry(projectId, documentId, partId, selectedLineId, {
-        baseline: selectedLine.baseline,
-        mask: selectedLine.mask,
-      });
+      await api.updateLineGeometry(
+        projectId,
+        documentId,
+        partId,
+        selectedLineId,
+        {
+          baseline: selectedLine.baseline,
+          mask: selectedLine.mask,
+        },
+      );
       setLayout((current) => ({
         ...current,
         lines: current.lines.map((line) =>
-          line.id === selectedLineId ? { ...line, manual_geometry: true } : line,
+          line.id === selectedLineId
+            ? { ...line, manual_geometry: true }
+            : line,
         ),
       }));
       setLines((current) =>
@@ -154,7 +176,7 @@ export function useLayoutMutations({
         ),
       );
       setMutationError(null);
-      setSaveMessage('Manual geometry saved');
+      setSaveMessage("Manual geometry saved");
       setSelectedLineSnapshot({
         baseline: selectedLine.baseline,
         mask: selectedLine.mask,
@@ -190,17 +212,27 @@ export function useLayoutMutations({
 
   async function resetSelectedLine() {
     if (!projectId || !documentId || !partId || !selectedLineId) return;
-    const resetLayout = await api.resetPartLayout(projectId, documentId, partId, {
-      line_ids: [selectedLineId],
-    });
+    const resetLayout = await api.resetPartLayout(
+      projectId,
+      documentId,
+      partId,
+      {
+        line_ids: [selectedLineId],
+      },
+    );
     const nextLayout = resetLayout ?? { blocks: [], lines: [] };
     setLayout(nextLayout);
-    setLines((current) => applyLayoutLineGeometryToSegments(current, nextLayout.lines));
+    setLines((current) =>
+      applyLayoutLineGeometryToSegments(current, nextLayout.lines),
+    );
     setSelectedLineSnapshot(null);
-    setSaveMessage('Layout reset');
+    setSaveMessage("Layout reset");
   }
 
-  async function replaceWithManualLine(kind: 'rectangle' | 'polygon', points: LinePoint[]) {
+  async function replaceWithManualLine(
+    kind: "rectangle" | "polygon",
+    points: LinePoint[],
+  ) {
     if (!projectId || !documentId || !partId) return;
     try {
       const saved = await api.createPartLine(projectId, documentId, partId, {
@@ -214,7 +246,9 @@ export function useLayoutMutations({
       setLineError(null);
       onDrawComplete();
     } catch (err) {
-      setLineError(err instanceof Error ? err.message : 'Failed to save Segment geometry.');
+      setLineError(
+        err instanceof Error ? err.message : "Failed to save Segment geometry.",
+      );
     }
   }
 
@@ -222,26 +256,38 @@ export function useLayoutMutations({
     if (!projectId || !documentId || !partId) return;
     const cleanedPoints = cleanPolygonPoints(points);
     if (cleanedPoints.length < 3) {
-      setLineError('A segment needs at least 3 points.');
+      setLineError("A segment needs at least 3 points.");
       return;
     }
     const previousLines = lines;
     const optimisticLines = lines.map((line) =>
-      line.id === segmentId ? { ...line, points: cleanedPoints, source: 'manual' as const } : line,
+      line.id === segmentId
+        ? { ...line, points: cleanedPoints, source: "manual" as const }
+        : line,
     );
     setLines(optimisticLines);
-    setLayout((current) => syncLayoutLinesFromSegments(current, optimisticLines));
+    setLayout((current) =>
+      syncLayoutLinesFromSegments(current, optimisticLines),
+    );
     try {
-      const saved = await api.patchPartLine(projectId, documentId, partId, segmentId, {
-        points: cleanedPoints,
-      });
+      const saved = await api.patchPartLine(
+        projectId,
+        documentId,
+        partId,
+        segmentId,
+        {
+          points: cleanedPoints,
+        },
+      );
       const nextLines = mergeSavedLine(optimisticLines, saved);
       setLines(nextLines);
       setLayout((current) => syncLayoutLinesFromSegments(current, nextLines));
       setLineError(null);
     } catch (err) {
       setLines(previousLines);
-      setLayout((current) => syncLayoutLinesFromSegments(current, previousLines));
+      setLayout((current) =>
+        syncLayoutLinesFromSegments(current, previousLines),
+      );
       setLineError(layoutMutationMessage(err));
     }
   }
@@ -250,10 +296,18 @@ export function useLayoutMutations({
     if (!projectId || !documentId || !partId || !selectedSegmentId) return;
     const selectedLine = lines.find((line) => line.id === selectedSegmentId);
     if (!selectedLine) return;
-    const nextPoints = selectedLine.points.map(([x, y]) => [x + 5, y] as LinePoint);
-    const saved = await api.patchPartLine(projectId, documentId, partId, selectedSegmentId, {
-      points: nextPoints,
-    });
+    const nextPoints = selectedLine.points.map(
+      ([x, y]) => [x + 5, y] as LinePoint,
+    );
+    const saved = await api.patchPartLine(
+      projectId,
+      documentId,
+      partId,
+      selectedSegmentId,
+      {
+        points: nextPoints,
+      },
+    );
     const nextLines = mergeSavedLine(lines, saved);
     setLines(nextLines);
     setLayout((current) => syncLayoutLinesFromSegments(current, nextLines));
@@ -289,7 +343,7 @@ export function useLayoutMutations({
     if (
       lines.length > 0 &&
       !window.confirm(
-        'Run Kraken line segmentation? Existing machine Segments on this Page will be replaced.',
+        "Run Kraken line segmentation? Existing machine Segments on this Page will be replaced.",
       )
     ) {
       return;
@@ -298,23 +352,28 @@ export function useLayoutMutations({
     setSegmentMessage(null);
     setPairingError(null);
     try {
-      const resolvedSegmentModelId = segmentRegistryModelId ?? DEFAULT_SEGMENT_REGISTRY_MODEL_ID;
+      const resolvedSegmentModelId =
+        segmentRegistryModelId ?? DEFAULT_SEGMENT_REGISTRY_MODEL_ID;
       if (shouldUseLocalPath(resolvedSegmentModelId)) {
         try {
           await trackLocalTask(
             {
-              label: 'Kraken line segmentation',
-              kind: 'segmentation',
+              label: "Kraken line segmentation",
+              kind: "segmentation",
             },
             async () => {
               if (!partImageUrl) {
-                throw new Error('Page image is not available for local segmentation.');
+                throw new Error(
+                  "Page image is not available for local segmentation.",
+                );
               }
               await localInference.onStart(resolvedSegmentModelId);
               try {
-                const imageBytes = await blobToBase64(await fetchPartImage(partImageUrl));
+                const imageBytes = await blobToBase64(
+                  await fetchPartImage(partImageUrl),
+                );
                 const response = await runLocalInference({
-                  task: 'segment',
+                  task: "segment",
                   registry_model_id: resolvedSegmentModelId,
                   image_bytes: imageBytes,
                   signal: localInference.getSignal(),
@@ -323,8 +382,10 @@ export function useLayoutMutations({
                     otsu_sphere_radius: otsuSphereRadius,
                   },
                 });
-                if (response.task !== 'segment') {
-                  throw new Error('Local segment returned an unexpected response.');
+                if (response.task !== "segment") {
+                  throw new Error(
+                    "Local segment returned an unexpected response.",
+                  );
                 }
                 await api.persistLocalSegment(projectId, documentId, partId, {
                   registry_model_id: resolvedSegmentModelId,
@@ -345,7 +406,7 @@ export function useLayoutMutations({
           setSelectedLineId(null);
           setSelectedSegmentId(null);
           setSelectedLineSnapshot(null);
-          setApprovedTextDraft('');
+          setApprovedTextDraft("");
           setTextLines(pairing.text_lines);
           setPairingProgress(pairing.pairing_progress);
           setSegmentMessage(
@@ -369,8 +430,8 @@ export function useLayoutMutations({
       await trackJobAndWait(
         enqueued.job_id,
         {
-          label: 'Kraken line segmentation',
-          kind: 'segmentation',
+          label: "Kraken line segmentation",
+          kind: "segmentation",
         },
         { timeoutMs: SEGMENT_JOB_TIMEOUT_MS },
       );
@@ -384,7 +445,7 @@ export function useLayoutMutations({
       setSelectedLineId(null);
       setSelectedSegmentId(null);
       setSelectedLineSnapshot(null);
-      setApprovedTextDraft('');
+      setApprovedTextDraft("");
       setTextLines(pairing.text_lines);
       setPairingProgress(pairing.pairing_progress);
       setSegmentMessage(
@@ -393,7 +454,9 @@ export function useLayoutMutations({
           : `Kraken segmentation completed using raw Kraken boundaries (${reloadedLines.length} Segment(s)).`,
       );
     } catch (err) {
-      setPairingError(err instanceof Error ? err.message : 'Auto segment failed.');
+      setPairingError(
+        err instanceof Error ? err.message : "Auto segment failed.",
+      );
     } finally {
       setSegmenting(false);
     }

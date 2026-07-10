@@ -1,4 +1,4 @@
-import { modelDisplayName } from '../../inference/modelDisplayName';
+import { modelDisplayName } from "../../inference/modelDisplayName";
 
 type PageEditorLocalInferenceBannerProps = {
   registryModelId: string | null;
@@ -14,11 +14,20 @@ export function PageEditorLocalInferenceBanner({
   }
 
   return (
-    <div className="pe-inference-banner pe-inference-banner--active" role="status" aria-live="polite">
+    <div
+      className="pe-inference-banner pe-inference-banner--active"
+      role="status"
+      aria-live="polite"
+    >
       <span>
-        Downloading the <strong>{modelDisplayName(registryModelId)}</strong> on this machine…
+        Downloading the <strong>{modelDisplayName(registryModelId)}</strong> on
+        this machine…
       </span>
-      <button type="button" className="pe-inference-banner__action" onClick={onUseCloudInstead}>
+      <button
+        type="button"
+        className="pe-inference-banner__action"
+        onClick={onUseCloudInstead}
+      >
         Use cloud instead
       </button>
     </div>

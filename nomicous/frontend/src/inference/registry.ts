@@ -3,14 +3,15 @@ export function blobToBase64(blob: Blob): Promise<string> {
     const reader = new FileReader();
     reader.onload = () => {
       const result = reader.result;
-      if (typeof result !== 'string') {
-        reject(new Error('Failed to read image bytes.'));
+      if (typeof result !== "string") {
+        reject(new Error("Failed to read image bytes."));
         return;
       }
-      const commaIndex = result.indexOf(',');
+      const commaIndex = result.indexOf(",");
       resolve(commaIndex >= 0 ? result.slice(commaIndex + 1) : result);
     };
-    reader.onerror = () => reject(reader.error ?? new Error('Failed to read image bytes.'));
+    reader.onerror = () =>
+      reject(reader.error ?? new Error("Failed to read image bytes."));
     reader.readAsDataURL(blob);
   });
 }
@@ -24,9 +25,9 @@ export function registrySelectionFromArtifactRef(artifactRef: string): {
     throw new Error(`Unsupported artifact_ref: ${artifactRef}`);
   }
   const registryModelId = decodeURIComponent(match[1]);
-  const params = new URLSearchParams(match[2] ?? '');
+  const params = new URLSearchParams(match[2] ?? "");
   return {
     registryModelId,
-    registryTag: params.get('tag') || 'stable',
+    registryTag: params.get("tag") || "stable",
   };
 }

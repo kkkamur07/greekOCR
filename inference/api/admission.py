@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import secrets
 import time
 from collections import deque
 from collections.abc import Awaitable, Callable
 
 from inference.admission import REQUEST_LIMIT_ERROR
+from inference.contracts.webhooks import INFERENCE_SERVICE_SECRET_HEADER
 
 ASGIApp = Callable[
     [dict, Callable[[], Awaitable[dict]], Callable[[dict], Awaitable[None]]],
@@ -86,9 +88,18 @@ class RequestBodyLimitMiddleware:
 class ServiceRateLimitMiddleware:
     """Simple per-process sliding-window limiter for expensive inference routes."""
 
-    def __init__(self, app: ASGIApp, *, requests_per_minute: int) -> None:
+    def __init__(
+        self,
+        app: ASGIApp,
+        *,
+        requests_per_minute: int,
+        service_secret: str | None = None,
+        limit_only_authenticated_service_requests: bool = False,
+    ) -> None:
         self.app = app
         self.requests_per_minute = requests_per_minute
+        self.service_secret = service_secret
+        self.limit_only_authenticated_service_requests = limit_only_authenticated_service_requests
         self._requests: deque[float] = deque()
         self._lock = asyncio.Lock()
 
@@ -101,6 +112,21 @@ class ServiceRateLimitMiddleware:
         if scope["type"] != "http" or scope["method"] != "POST":
             await self.app(scope, receive, send)
             return
+
+        if self.limit_only_authenticated_service_requests:
+            supplied = dict(scope.get("headers", [])).get(
+                INFERENCE_SERVICE_SECRET_HEADER.encode().lower()
+            )
+            if (
+                self.service_secret is None
+                or supplied is None
+                or not secrets.compare_digest(
+                    supplied.decode("latin-1"),
+                    self.service_secret,
+                )
+            ):
+                await self.app(scope, receive, send)
+                return
 
         now = time.monotonic()
         async with self._lock:

@@ -64,6 +64,15 @@ The spec entry point is `packaging/helper/tray_launcher.py` (server + tray). Use
 
 Review `dist/nomicous-inference-helper/` before signing — if unexpected large directories appear (e.g. `torch/test`), add them to `excludes.txt`. Do **not** exclude `scipy`, `torchvision`, `sklearn`, `skimage`, or `shapely`: Kraken segment requires them at runtime (importing `kraken.blla` pulls in `scipy`), and excluding them breaks the segment model. Do **not** exclude `httpx` either: `huggingface_hub` uses it as its HTTP backend, so excluding it breaks `hf://` weight downloads (Calamari transcribe).
 
+The current release bundles are large because they carry the complete CPU
+runtime: approximately 311.6 MiB for macOS, 301.8 MiB for Windows, and
+432.2 MiB for Linux in the `inference-helper-v0.1.1` release. These figures are
+compressed download sizes and can change with each build. Since the published
+model repositories are public, a future size-reduction pass could replace
+`huggingface_hub` and its HTTP stack with a minimal `wget`-based downloader.
+That should only happen after preserving pinned revisions, artifact hashes,
+multi-file snapshots, and the existing cache layout.
+
 ## Per-OS installers
 
 | OS | Command | Auto-start |
@@ -80,7 +89,12 @@ Outputs land in `packaging/helper/dist/`:
 
 Each installer runs `install-helper` which copies the PyInstaller bundle, creates `~/.nomicous/hf/cache/`, and registers auto-start.
 
-Set `HELPER_CORS_ORIGINS` when building if the hosted SPA origin differs from production.
+The helper is loopback-only and intentionally has no browser-shipped secret. Its installer
+sets `HELPER_CORS_ORIGINS=https://app.nomicous.com` at runtime. For a different hosted SPA
+origin, set an explicit origin while installing (for example,
+`HELPER_CORS_ORIGINS=https://app.example.com bash install-helper.sh` on macOS/Linux, or
+`.\install-helper.ps1 -CorsOrigins https://app.example.com` on Windows), then restart the
+helper. Wildcard origins are rejected.
 
 ## Code signing
 
@@ -130,6 +144,8 @@ No OS-level signing gate. Distribute the tarball over HTTPS; optionally publish 
 - Cache: `HF_CACHE_ROOT=~/.nomicous/hf/cache/`
 - Registry sync: `HELPER_REGISTRY_URL=https://api…/inference/v1/registry` → `~/.nomicous/registry.yaml` (bundled `registry.yaml` is offline fallback)
 - No auth on `/run` (v1)
+- Browser access: the hosted app calls `http://127.0.0.1:8001` directly; do not enable
+  `HELPER_SECURE_MODE` for this browser flow because its secret must not be embedded in frontend code.
 
 ## Smoke test after install
 

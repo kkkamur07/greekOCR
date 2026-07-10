@@ -145,7 +145,7 @@ def run_worker(*, max_jobs: int | None = None, ready_event: Event | None = None)
 def main() -> None:
     # Validate production callback credentials before waiting for database schema
     # creation, so supervisors receive an immediate configuration error.
-    get_inference_settings()
+    get_inference_settings().require_callback_configuration()
     try:
         run_worker()
     except Exception:

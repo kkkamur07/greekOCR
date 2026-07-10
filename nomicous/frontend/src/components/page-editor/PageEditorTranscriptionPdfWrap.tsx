@@ -1,5 +1,5 @@
-import { PageEditorTranscriptionPdfPane } from './PageEditorTranscriptionPdfPane';
-import { usePdfPaneResize } from './hooks/usePdfPaneResize';
+import { PageEditorTranscriptionPdfPane } from "./PageEditorTranscriptionPdfPane";
+import { usePdfPaneResize } from "./hooks/usePdfPaneResize";
 
 type PageEditorTranscriptionPdfWrapProps = {
   projectId: string;
@@ -20,8 +20,14 @@ export function PageEditorTranscriptionPdfWrap({
   onClose,
   onRefresh,
 }: PageEditorTranscriptionPdfWrapProps) {
-  const { wrapRef, width, onPointerDown, onPointerMove, onPointerUp, onPointerCancel } =
-    usePdfPaneResize();
+  const {
+    wrapRef,
+    width,
+    onPointerDown,
+    onPointerMove,
+    onPointerUp,
+    onPointerCancel,
+  } = usePdfPaneResize();
 
   return (
     <div className="pe-pdf-wrap" ref={wrapRef} style={{ width }}>

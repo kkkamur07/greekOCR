@@ -1,32 +1,37 @@
-import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useParams } from "next/navigation";
 import {
   api,
   publicPartMediaUrl,
   type DocumentWithPartsResponse,
   type PublicLayoutResponse,
-} from '../api/client';
-import { ApiError } from '../api/errors';
-import { getAccessToken } from '../auth/storage';
-import { PublicCanvasPdfView } from '../components/public/PublicCanvasPdfView';
-import { PublicDocumentExports } from '../components/public/PublicDocumentExports';
-import { PublicPageCanvas } from '../components/public/PublicPageCanvas';
-import { PublicPartTabs } from '../components/public/PublicPartTabs';
-import { PublicTranscriptPanel } from '../components/public/PublicTranscriptPanel';
-import { WorkflowBadge } from '../components/WorkflowBadge';
-import { linesForPart, publicLinesToRegions } from '../utils/publicLayout';
+} from "../api/client";
+import { ApiError } from "../api/errors";
+import { getAccessToken } from "../auth/storage";
+import { PublicCanvasPdfView } from "../components/public/PublicCanvasPdfView";
+import { PublicDocumentExports } from "../components/public/PublicDocumentExports";
+import { PublicPageCanvas } from "../components/public/PublicPageCanvas";
+import { PublicPartTabs } from "../components/public/PublicPartTabs";
+import { PublicTranscriptPanel } from "../components/public/PublicTranscriptPanel";
+import { WorkflowBadge } from "../components/WorkflowBadge";
+import { linesForPart, publicLinesToRegions } from "../utils/publicLayout";
 
 export function PublicDocumentPage() {
-  const { projectId, documentId } = useParams<{ projectId: string; documentId: string }>() ?? {};
-  const [document, setDocument] = useState<DocumentWithPartsResponse | null>(null);
+  const { projectId, documentId } =
+    useParams<{ projectId: string; documentId: string }>() ?? {};
+  const [document, setDocument] = useState<DocumentWithPartsResponse | null>(
+    null,
+  );
   const [layout, setLayout] = useState<PublicLayoutResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [activePartId, setActivePartId] = useState<string | null>(null);
-  const [selectedLineIndex, setSelectedLineIndex] = useState<number | null>(null);
-  const [canvasView, setCanvasView] = useState<'image' | 'pdf'>('image');
+  const [selectedLineIndex, setSelectedLineIndex] = useState<number | null>(
+    null,
+  );
+  const [canvasView, setCanvasView] = useState<"image" | "pdf">("image");
 
   const isLoggedIn = !!getAccessToken();
 
@@ -54,7 +59,9 @@ export function PublicDocumentPage() {
           setNotFound(true);
           return;
         }
-        setErrorMessage(err instanceof ApiError ? err.message : 'Failed to load document');
+        setErrorMessage(
+          err instanceof ApiError ? err.message : "Failed to load document",
+        );
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -70,8 +77,11 @@ export function PublicDocumentPage() {
     [document],
   );
 
-  const activePart = parts.find((part) => part.id === activePartId) ?? parts[0] ?? null;
-  const activePartIndex = activePart ? parts.findIndex((part) => part.id === activePart.id) + 1 : 1;
+  const activePart =
+    parts.find((part) => part.id === activePartId) ?? parts[0] ?? null;
+  const activePartIndex = activePart
+    ? parts.findIndex((part) => part.id === activePart.id) + 1
+    : 1;
 
   const partTabs = parts.map((part, index) => ({
     id: part.id,
@@ -86,7 +96,9 @@ export function PublicDocumentPage() {
   const regions = useMemo(() => publicLinesToRegions(partLines), [partLines]);
 
   const selectedRegionId =
-    selectedLineIndex !== null && selectedLineIndex >= 0 ? selectedLineIndex + 1 : null;
+    selectedLineIndex !== null && selectedLineIndex >= 0
+      ? selectedLineIndex + 1
+      : null;
 
   const imageUrl = activePart ? publicPartMediaUrl(activePart.id) : null;
   const imageDimensions = {
@@ -96,7 +108,7 @@ export function PublicDocumentPage() {
 
   useEffect(() => {
     setSelectedLineIndex(null);
-    setCanvasView('image');
+    setCanvasView("image");
   }, [activePartId]);
 
   if (notFound) {
@@ -159,11 +171,11 @@ export function PublicDocumentPage() {
       <header className="pub-header pub-header--compact">
         <div className="pub-header__main">
           <div className="pub-header__title-row">
-            <h1>{document?.name ?? 'Document'}</h1>
+            <h1>{document?.name ?? "Document"}</h1>
             {document && <WorkflowBadge workflow={document.workflow} />}
           </div>
           <p className="pub-header__meta">
-            {parts.length} page{parts.length === 1 ? '' : 's'}
+            {parts.length} page{parts.length === 1 ? "" : "s"}
           </p>
         </div>
       </header>
@@ -182,18 +194,18 @@ export function PublicDocumentPage() {
               <button
                 type="button"
                 role="tab"
-                className={`pub-segment__btn${canvasView === 'image' ? ' pub-segment__btn--active' : ''}`}
-                aria-selected={canvasView === 'image'}
-                onClick={() => setCanvasView('image')}
+                className={`pub-segment__btn${canvasView === "image" ? " pub-segment__btn--active" : ""}`}
+                aria-selected={canvasView === "image"}
+                onClick={() => setCanvasView("image")}
               >
                 Image
               </button>
               <button
                 type="button"
                 role="tab"
-                className={`pub-segment__btn${canvasView === 'pdf' ? ' pub-segment__btn--active' : ''}`}
-                aria-selected={canvasView === 'pdf'}
-                onClick={() => setCanvasView('pdf')}
+                className={`pub-segment__btn${canvasView === "pdf" ? " pub-segment__btn--active" : ""}`}
+                aria-selected={canvasView === "pdf"}
+                onClick={() => setCanvasView("pdf")}
               >
                 PDF
               </button>
@@ -215,10 +227,12 @@ export function PublicDocumentPage() {
             className="pub-canvas"
             role="img"
             aria-label={
-              activePart ? `Manuscript page ${activePartIndex}` : 'Manuscript page'
+              activePart
+                ? `Manuscript page ${activePartIndex}`
+                : "Manuscript page"
             }
           >
-            {canvasView === 'pdf' && projectId && documentId && activePart ? (
+            {canvasView === "pdf" && projectId && documentId && activePart ? (
               <PublicCanvasPdfView
                 projectId={projectId}
                 documentId={documentId}
@@ -253,7 +267,9 @@ export function PublicDocumentPage() {
         </div>
 
         {!loading && parts.length === 0 && (
-          <p className="list-hint">This published document has no page images yet.</p>
+          <p className="list-hint">
+            This published document has no page images yet.
+          </p>
         )}
       </main>
     </div>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const MIN_HEIGHT = 128;
 const DEFAULT_HEIGHT = 220;
@@ -16,32 +16,43 @@ export function useStripResize(initialHeight = DEFAULT_HEIGHT) {
       startYRef.current = event.clientY;
       startHeightRef.current = height;
       event.currentTarget.setPointerCapture(event.pointerId);
-      event.currentTarget.classList.add('is-dragging');
+      event.currentTarget.classList.add("is-dragging");
     },
     [height],
   );
 
-  const onPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    if (!draggingRef.current) return;
-    const delta = startYRef.current - event.clientY;
-    const maxHeight = window.innerHeight * MAX_VH;
-    setHeight(Math.min(maxHeight, Math.max(MIN_HEIGHT, startHeightRef.current + delta)));
-  }, []);
+  const onPointerMove = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (!draggingRef.current) return;
+      const delta = startYRef.current - event.clientY;
+      const maxHeight = window.innerHeight * MAX_VH;
+      setHeight(
+        Math.min(
+          maxHeight,
+          Math.max(MIN_HEIGHT, startHeightRef.current + delta),
+        ),
+      );
+    },
+    [],
+  );
 
-  const onPointerUp = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    if (!draggingRef.current) return;
-    draggingRef.current = false;
-    event.currentTarget.releasePointerCapture(event.pointerId);
-    event.currentTarget.classList.remove('is-dragging');
-  }, []);
+  const onPointerUp = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (!draggingRef.current) return;
+      draggingRef.current = false;
+      event.currentTarget.releasePointerCapture(event.pointerId);
+      event.currentTarget.classList.remove("is-dragging");
+    },
+    [],
+  );
 
   useEffect(() => {
     const onResize = () => {
       const maxHeight = window.innerHeight * MAX_VH;
       setHeight((h) => Math.min(h, maxHeight));
     };
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
   }, []);
 
   return { height, setHeight, onPointerDown, onPointerMove, onPointerUp };

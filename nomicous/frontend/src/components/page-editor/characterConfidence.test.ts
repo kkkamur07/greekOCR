@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from "vitest";
 
 import {
   characterConfidencesForTranscription,
@@ -7,50 +7,50 @@ import {
   formatConfidencePercent,
   hasDistinctCharacterConfidences,
   type LineTranscriptionWithCharacterConfidence,
-} from './characterConfidence';
+} from "./characterConfidence";
 
 const BASE_TRANSCRIPTION: LineTranscriptionWithCharacterConfidence = {
-  id: 'tx-1',
-  transcription_id: 'model-1',
-  transcription_kind: 'model',
-  text: 'abc',
+  id: "tx-1",
+  transcription_id: "model-1",
+  transcription_kind: "model",
+  text: "abc",
   confidence: 0.82,
 };
 
-describe('characterConfidence', () => {
-  it('maps confidence values to highlight and label colors', () => {
-    expect(confidenceHighlightColor(0.95)).toBe('#059669');
-    expect(confidenceHighlightColor(0.8)).toBe('#d97706');
-    expect(confidenceHighlightColor(0.6)).toBe('#d97706');
-    expect(confidenceHighlightColor(0.2)).toBe('#dc2626');
-    expect(confidenceLabelColor(0.95)).toBe('#059669');
-    expect(formatConfidencePercent(0.825)).toBe('82.5%');
+describe("characterConfidence", () => {
+  it("maps confidence values to highlight and label colors", () => {
+    expect(confidenceHighlightColor(0.95)).toBe("#059669");
+    expect(confidenceHighlightColor(0.8)).toBe("#d97706");
+    expect(confidenceHighlightColor(0.6)).toBe("#d97706");
+    expect(confidenceHighlightColor(0.2)).toBe("#dc2626");
+    expect(confidenceLabelColor(0.95)).toBe("#059669");
+    expect(formatConfidencePercent(0.825)).toBe("82.5%");
   });
 
-  it('uses explicit per-character confidences when aligned with text', () => {
+  it("uses explicit per-character confidences when aligned with text", () => {
     const transcription: LineTranscriptionWithCharacterConfidence = {
       ...BASE_TRANSCRIPTION,
       character_confidences: [
-        { char: 'a', confidence: 0.99 },
-        { char: 'b', confidence: 0.55 },
-        { char: 'c', confidence: 0.71 },
+        { char: "a", confidence: 0.99 },
+        { char: "b", confidence: 0.55 },
+        { char: "c", confidence: 0.71 },
       ],
     };
 
     expect(hasDistinctCharacterConfidences(transcription)).toBe(true);
     expect(characterConfidencesForTranscription(transcription)).toEqual([
-      { char: 'a', confidence: 0.99 },
-      { char: 'b', confidence: 0.55 },
-      { char: 'c', confidence: 0.71 },
+      { char: "a", confidence: 0.99 },
+      { char: "b", confidence: 0.55 },
+      { char: "c", confidence: 0.71 },
     ]);
   });
 
-  it('falls back to line confidence for each character when per-char scores are missing', () => {
+  it("falls back to line confidence for each character when per-char scores are missing", () => {
     expect(hasDistinctCharacterConfidences(BASE_TRANSCRIPTION)).toBe(false);
     expect(characterConfidencesForTranscription(BASE_TRANSCRIPTION)).toEqual([
-      { char: 'a', confidence: 0.82 },
-      { char: 'b', confidence: 0.82 },
-      { char: 'c', confidence: 0.82 },
+      { char: "a", confidence: 0.82 },
+      { char: "b", confidence: 0.82 },
+      { char: "c", confidence: 0.82 },
     ]);
   });
 });

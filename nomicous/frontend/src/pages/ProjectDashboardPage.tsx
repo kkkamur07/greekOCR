@@ -1,14 +1,22 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { toast } from '../components/ui/toast';
-import { api, type DocumentResponse, type ProjectResponse } from '../api/client';
-import { ApiError } from '../api/errors';
-import { hasAccessToken, isUnauthorized, navigateToLogin } from '../auth/session';
-import { AppPageShell } from '../components/layout/AppPageShell';
-import { DocumentsTable } from '../components/projects/DocumentsTable';
-import { ProjectJobsPanel } from '../components/projects/ProjectJobsPanel';
-import { ProjectSettingsPanel } from '../components/sharing/ProjectSettingsPanel';
-import { FormModal } from '../components/ui/FormModal';
+import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { toast } from "../components/ui/toast";
+import {
+  api,
+  type DocumentResponse,
+  type ProjectResponse,
+} from "../api/client";
+import { ApiError } from "../api/errors";
+import {
+  hasAccessToken,
+  isUnauthorized,
+  navigateToLogin,
+} from "../auth/session";
+import { AppPageShell } from "../components/layout/AppPageShell";
+import { DocumentsTable } from "../components/projects/DocumentsTable";
+import { ProjectJobsPanel } from "../components/projects/ProjectJobsPanel";
+import { ProjectSettingsPanel } from "../components/sharing/ProjectSettingsPanel";
+import { FormModal } from "../components/ui/FormModal";
 
 export function ProjectDashboardPage() {
   const router = useRouter();
@@ -23,9 +31,11 @@ export function ProjectDashboardPage() {
   const [titlePanelOpen, setTitlePanelOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [deletingProject, setDeletingProject] = useState(false);
-  const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
+  const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
-  const [newDocName, setNewDocName] = useState('');
+  const [newDocName, setNewDocName] = useState("");
 
   const load = useCallback(async () => {
     if (!projectId) return;
@@ -50,12 +60,13 @@ export function ProjectDashboardPage() {
         navigateToLogin(router);
         return;
       }
-      const msg = err instanceof ApiError ? err.message : 'Failed to load project';
+      const msg =
+        err instanceof ApiError ? err.message : "Failed to load project";
       setProject(null);
       setDocuments([]);
       setError(
         err instanceof ApiError && (err.status === 403 || err.status === 404)
-          ? 'This project is not available to your account.'
+          ? "This project is not available to your account."
           : msg,
       );
       toast.error(msg);
@@ -75,13 +86,16 @@ export function ProjectDashboardPage() {
     if (!projectId || !newDocName.trim()) return;
     setCreating(true);
     try {
-      const doc = await api.createDocument(projectId, { name: newDocName.trim() });
-      toast.success('Document created');
+      const doc = await api.createDocument(projectId, {
+        name: newDocName.trim(),
+      });
+      toast.success("Document created");
       setCreateModalOpen(false);
-      setNewDocName('');
+      setNewDocName("");
       router.push(`/projects/${projectId}/documents/${doc.id}`);
     } catch (err) {
-      const msg = err instanceof ApiError ? err.message : 'Failed to create document';
+      const msg =
+        err instanceof ApiError ? err.message : "Failed to create document";
       toast.error(msg);
     } finally {
       setCreating(false);
@@ -98,10 +112,11 @@ export function ProjectDashboardPage() {
     setDeletingProject(true);
     try {
       await api.deleteProject(projectId);
-      toast.success('Project deleted');
-      router.push('/projects');
+      toast.success("Project deleted");
+      router.push("/projects");
     } catch (err) {
-      const msg = err instanceof ApiError ? err.message : 'Failed to delete project';
+      const msg =
+        err instanceof ApiError ? err.message : "Failed to delete project";
       toast.error(msg);
     } finally {
       setDeletingProject(false);
@@ -120,10 +135,11 @@ export function ProjectDashboardPage() {
     setDeletingDocumentId(documentId);
     try {
       await api.deleteDocument(projectId, documentId);
-      toast.success('Document deleted');
+      toast.success("Document deleted");
       await load();
     } catch (err) {
-      const msg = err instanceof ApiError ? err.message : 'Failed to delete document';
+      const msg =
+        err instanceof ApiError ? err.message : "Failed to delete document";
       toast.error(msg);
     } finally {
       setDeletingDocumentId(null);
@@ -131,16 +147,16 @@ export function ProjectDashboardPage() {
   };
 
   const docCountLabel =
-    documents.length === 1 ? '1 document' : `${documents.length} documents`;
+    documents.length === 1 ? "1 document" : `${documents.length} documents`;
 
   return (
     <AppPageShell
       breadcrumb={[
-        { label: 'Projects', href: '/projects' },
-        { label: project?.name ?? 'Project' },
+        { label: "Projects", href: "/projects" },
+        { label: project?.name ?? "Project" },
       ]}
       username={username}
-      title={project?.name ?? 'Project'}
+      title={project?.name ?? "Project"}
       subtitle={project ? docCountLabel : undefined}
       titleEditable={Boolean(isOwner && project && projectId)}
       titlePanelOpen={titlePanelOpen}

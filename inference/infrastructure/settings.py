@@ -18,12 +18,15 @@ _PLACEHOLDER_SECRET_VALUES = {
     "replace-me",
     "replace-with-a-secret",
 }
+DEFAULT_INFERENCE_DATABASE_URL = "postgresql://postgres@localhost:5433/kalamos"
 
 
 def _is_placeholder_secret(value: str | None) -> bool:
     normalized = (value or "").strip().casefold()
-    return not normalized or normalized in _PLACEHOLDER_SECRET_VALUES or normalized.startswith(
-        "replace-with-"
+    return (
+        not normalized
+        or normalized in _PLACEHOLDER_SECRET_VALUES
+        or normalized.startswith("replace-with-")
     )
 
 
@@ -38,7 +41,9 @@ def _validate_service_url(*, value: str, name: str, environment: str) -> None:
         or parsed.query
         or parsed.fragment
     ):
-        raise ValueError(f"{name} must be an absolute http(s) URL without credentials, query, or fragment")
+        raise ValueError(
+            f"{name} must be an absolute http(s) URL without credentials, query, or fragment"
+        )
     if environment.casefold() == "production" and parsed.scheme != "https":
         raise ValueError(f"{name} must use HTTPS in production")
 
@@ -48,7 +53,7 @@ class InferenceSettings(AdmissionSettings):
 
     environment: str = Field(default="development", alias="ENVIRONMENT")
     inference_database_url: str = Field(
-        default="postgresql://postgres@localhost:5433/kalamos",
+        default=DEFAULT_INFERENCE_DATABASE_URL,
         alias="INFERENCE_DATABASE_URL",
     )
     inference_callback_url: str | None = Field(default=None, alias="INFERENCE_CALLBACK_URL")
@@ -88,15 +93,46 @@ class InferenceSettings(AdmissionSettings):
         invalid = [
             name
             for name, value in (
-                ("INFERENCE_CALLBACK_URL", self.inference_callback_url),
                 ("INFERENCE_WEBHOOK_SECRET", self.inference_webhook_secret),
                 ("INFERENCE_SERVICE_SECRET", self.inference_service_secret),
+            )
+            if value is not None and _is_placeholder_secret(value)
+        ]
+        if invalid:
+            raise ValueError(
+                f"{', '.join(invalid)} must be set to non-placeholder values in production"
+            )
+        return self
+
+    def require_service_endpoint_configuration(self) -> None:
+        """Fail closed when the HTTP inference API cannot authenticate callers."""
+        if self.environment.casefold() != "production":
+            return
+        if _is_placeholder_secret(self.inference_service_secret):
+            raise ValueError(
+                "INFERENCE_SERVICE_SECRET must be set to a non-placeholder value in production"
+            )
+        if self.inference_database_url == DEFAULT_INFERENCE_DATABASE_URL:
+            raise ValueError("INFERENCE_DATABASE_URL must be set in production")
+
+    def require_callback_configuration(self) -> None:
+        """Fail closed when the worker cannot safely notify the platform API."""
+        if self.environment.casefold() != "production":
+            return
+        invalid = [
+            name
+            for name, value in (
+                ("INFERENCE_CALLBACK_URL", self.inference_callback_url),
+                ("INFERENCE_WEBHOOK_SECRET", self.inference_webhook_secret),
             )
             if _is_placeholder_secret(value)
         ]
         if invalid:
-            raise ValueError(f"{', '.join(invalid)} must be set to non-placeholder values in production")
-        return self
+            raise ValueError(
+                f"{', '.join(invalid)} must be set to non-placeholder values in production"
+            )
+        if self.inference_database_url == DEFAULT_INFERENCE_DATABASE_URL:
+            raise ValueError("INFERENCE_DATABASE_URL must be set in production")
 
 
 @lru_cache

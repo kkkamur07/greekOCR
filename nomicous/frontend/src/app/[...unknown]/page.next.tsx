@@ -1,13 +1,13 @@
-'use client';
+"use client";
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 export default function UnknownRoutePage() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace('/');
+    router.replace("/");
   }, [router]);
 
   return null;

@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import { Suspense } from 'react';
-import { LoginPage } from '../../pages/LoginPage';
+import { Suspense } from "react";
+import { LoginPage } from "../../pages/LoginPage";
 
 export default function LoginRoute() {
   return (

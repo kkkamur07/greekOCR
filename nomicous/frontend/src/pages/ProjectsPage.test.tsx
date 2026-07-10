@@ -1,13 +1,13 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { api } from '../api/client';
-import { ApiError } from '../api/errors';
-import * as session from '../auth/session';
-import { ProjectsPage } from './ProjectsPage';
+import { api } from "../api/client";
+import { ApiError } from "../api/errors";
+import * as session from "../auth/session";
+import { ProjectsPage } from "./ProjectsPage";
 
-vi.mock('../api/client', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../api/client')>();
+vi.mock("../api/client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../api/client")>();
   return {
     ...actual,
     api: {
@@ -20,58 +20,60 @@ vi.mock('../api/client', async (importOriginal) => {
   };
 });
 
-describe('ProjectsPage', () => {
+describe("ProjectsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.spyOn(session, 'hasAccessToken').mockReturnValue(true);
-    vi.spyOn(session, 'navigateToLogin').mockImplementation(() => {});
+    vi.spyOn(session, "hasAccessToken").mockReturnValue(true);
+    vi.spyOn(session, "navigateToLogin").mockImplementation(() => {});
     vi.mocked(api.me).mockResolvedValue({
-      id: 'user-1',
-      email: 'dev@example.com',
-      username: 'dev',
-      created_at: '2026-01-01T00:00:00Z',
+      id: "user-1",
+      email: "dev@example.com",
+      username: "dev",
+      created_at: "2026-01-01T00:00:00Z",
     });
     vi.mocked(api.listProjects).mockResolvedValue([
       {
-        id: 'project-1',
-        name: 'Syriac Pentateuch',
-        slug: 'syriac-pentateuch',
+        id: "project-1",
+        name: "Syriac Pentateuch",
+        slug: "syriac-pentateuch",
         guidelines: null,
-        owner_id: 'user-1',
+        owner_id: "user-1",
         document_count: 2,
-        created_at: '2026-01-01T00:00:00Z',
-        updated_at: '2026-01-01T00:00:00Z',
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
       },
     ]);
   });
 
-  it('lets the owner delete an owned project from the table', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+  it("lets the owner delete an owned project from the table", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
     vi.mocked(api.deleteProject).mockResolvedValue(undefined);
 
     render(<ProjectsPage />);
 
-    await screen.findByRole('heading', { name: 'Projects' });
-    fireEvent.click(screen.getByRole('button', { name: /delete project syriac pentateuch/i }));
+    await screen.findByRole("heading", { name: "Projects" });
+    fireEvent.click(
+      screen.getByRole("button", { name: /delete project syriac pentateuch/i }),
+    );
 
     await waitFor(() => {
-      expect(api.deleteProject).toHaveBeenCalledWith('project-1');
+      expect(api.deleteProject).toHaveBeenCalledWith("project-1");
     });
   });
 
-  it('redirects to login when the session is unauthorized', async () => {
-    vi.mocked(api.me).mockRejectedValue(new ApiError('Unauthorized', 401));
+  it("redirects to login when the session is unauthorized", async () => {
+    vi.mocked(api.me).mockRejectedValue(new ApiError("Unauthorized", 401));
 
     render(<ProjectsPage />);
 
     await waitFor(() => {
       expect(session.navigateToLogin).toHaveBeenCalled();
     });
-    expect(screen.queryByText('Projects unavailable')).toBeNull();
+    expect(screen.queryByText("Projects unavailable")).toBeNull();
   });
 
-  it('redirects to login when no access token is present', async () => {
-    vi.spyOn(session, 'hasAccessToken').mockReturnValue(false);
+  it("redirects to login when no access token is present", async () => {
+    vi.spyOn(session, "hasAccessToken").mockReturnValue(false);
 
     render(<ProjectsPage />);
 

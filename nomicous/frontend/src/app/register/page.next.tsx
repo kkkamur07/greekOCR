@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import { Suspense } from 'react';
-import { RegisterPage } from '../../pages/RegisterPage';
+import { Suspense } from "react";
+import { RegisterPage } from "../../pages/RegisterPage";
 
 export default function RegisterRoute() {
   return (

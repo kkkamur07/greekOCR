@@ -14,6 +14,7 @@ sed \
   -e "s|__INSTALL_DIR__|$INSTALL_ROOT|g" \
   -e "s|__HOME__|$HOME|g" \
   -e "s|__REGISTRY_URL__|${HELPER_REGISTRY_URL:-https://api.nomicous.com/inference/v1/registry}|g" \
+  -e "s|__CORS_ORIGINS__|${HELPER_CORS_ORIGINS:-https://app.nomicous.com}|g" \
   "$SCRIPT_DIR/nomicous-inference-helper.service" > "$UNIT_DST"
 
 systemctl --user daemon-reload

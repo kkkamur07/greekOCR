@@ -1,6 +1,6 @@
 # nomicous
 
-AI-assisted transcription platform for manuscript pages. `nomicous/` is the production app root: the Postgres-backed backend, Vite frontend, and migration infrastructure live here, while the repository-level `model/` workspace remains outside nomicous.
+AI-assisted transcription platform for manuscript pages. `nomicous/` is the production app root: the Postgres-backed backend, Next.js frontend, and migration infrastructure live here, while the repository-level `model/` workspace remains outside nomicous.
 
 See `CONTEXT.md` for domain glossary, [`docs/README.md`](../docs/README.md) for guides and deployment, and [`issues/README.md`](../issues/README.md) for backlog and archived work.
 
@@ -35,7 +35,7 @@ cp backend/core/.env.example backend/core/.env
 
 ```bash
 cd nomicous/frontend
-cp .env.local.example .env.local   # VITE_API_BASE_URL defaults to http://localhost:8000
+cp .env.local.example .env.local   # NEXT_PUBLIC_API_BASE_URL defaults to http://localhost:8000
 npm install
 ```
 
@@ -84,9 +84,9 @@ Compose also starts **`inference-api`** and **`inference-worker`** from the repo
 
 Useful after `-d`: `docker compose ps`, `docker compose logs -f`, `docker compose down`.
 
-- `VITE_API_BASE_URL` (build/runtime env) — URL the browser uses (`http://localhost:8000`)
+- `NEXT_PUBLIC_API_BASE_URL` (build/runtime env) — URL the browser uses (`http://localhost:8000`)
 
-Rebuild the frontend image if you change `VITE_API_BASE_URL`.
+Rebuild the frontend image if you change `NEXT_PUBLIC_API_BASE_URL`.
 
 ### Bumping the Docker version
 
@@ -114,7 +114,7 @@ docker images 'nomicous-*'
 
 **Important:** set `NOMICOUS_VERSION` in a shell profile or root `.env` next to
 `docker-compose.yml` so the image tag always matches `VERSION`. The current
-Compose fallback is `0.3.3`; do not rely on it for a release unless it has been
+Compose fallback is `0.3.2`; do not rely on it for a release unless it has been
 updated to match `VERSION`.
 
 ## Environment variables
@@ -126,7 +126,7 @@ updated to match `VERSION`.
 | `JWT_SECRET` | `backend/core/.env` | development secret | Auth token signing key |
 | `CORS_ORIGINS` | `backend/core/.env` | `http://localhost:3000,http://localhost:5173` | Allowed browser origins |
 | `MEDIA_ROOT` | `backend/core/.env` | `nomicous/backend/media` | Uploaded document part media |
-| `VITE_API_BASE_URL` | `frontend/.env.local` | `http://localhost:8000` | Frontend → API URL |
+| `NEXT_PUBLIC_API_BASE_URL` | `frontend/.env.local` | `http://localhost:8000` | Frontend → API URL |
 
 ## Inference Catalog
 

@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
-import Link from 'next/link';
+import type { ReactNode } from "react";
+import Link from "next/link";
 
 type AuthLayoutProps = {
   headline: string;
@@ -31,7 +31,11 @@ export function AuthLayout({ headline, tagline, children }: AuthLayoutProps) {
 export function AuthFormWrap({ children }: { children: ReactNode }) {
   return (
     <div className="auth-form-wrap">
-      <Link href="/" className="mobile-logo auth-brand-logo" aria-label="nomicous home">
+      <Link
+        href="/"
+        className="mobile-logo auth-brand-logo"
+        aria-label="nomicous home"
+      >
         <img src="/nomos.svg" alt="" />
         <span>nomicous</span>
       </Link>

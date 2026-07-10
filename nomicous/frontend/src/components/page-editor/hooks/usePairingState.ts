@@ -1,4 +1,10 @@
-import { useEffect, useState, type ChangeEvent, type Dispatch, type SetStateAction } from 'react';
+import {
+  useEffect,
+  useState,
+  type ChangeEvent,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import {
   api,
   type InferenceModelResponse,
@@ -6,8 +12,8 @@ import {
   type LineResponse,
   type TranscribeJobResult,
   type TranscriptionLayerResponse,
-} from '../../../api/client';
-import { fetchPartImage } from '../../../api/imageCache';
+} from "../../../api/client";
+import { fetchPartImage } from "../../../api/imageCache";
 import {
   blobToBase64,
   registrySelectionFromArtifactRef,
@@ -15,13 +21,13 @@ import {
   type LocalInferenceCallbacks,
   type TranscribeBatchRunOutput,
   isAbortError,
-} from '../../../inference';
-import type { PageEditorJobKind } from '../jobProgress';
+} from "../../../inference";
+import type { PageEditorJobKind } from "../jobProgress";
 import {
   lineTextForLayer,
   modelLayerIdForPromotion,
   withLocalGroundTruth,
-} from './utils';
+} from "./utils";
 
 type PairingStateInput = {
   projectId: string | undefined;
@@ -30,15 +36,23 @@ type PairingStateInput = {
   lines: LineResponse[];
   setLines: Dispatch<SetStateAction<LineResponse[]>>;
   transcriptionLayers: TranscriptionLayerResponse[];
-  setTranscriptionLayers: Dispatch<SetStateAction<TranscriptionLayerResponse[]>>;
+  setTranscriptionLayers: Dispatch<
+    SetStateAction<TranscriptionLayerResponse[]>
+  >;
   selectedTranscriptionLayerId: string | null;
   setSelectedTranscriptionLayerId: Dispatch<SetStateAction<string | null>>;
   groundTruthTranscriptionId: string | null;
   setTextLines: Dispatch<
-    SetStateAction<{ order: number; text: string; paired_line_id: string | null }[]>
+    SetStateAction<
+      { order: number; text: string; paired_line_id: string | null }[]
+    >
   >;
   setPairingProgress: Dispatch<
-    SetStateAction<{ paired_lines: number; total_lines: number; percent: number }>
+    SetStateAction<{
+      paired_lines: number;
+      total_lines: number;
+      percent: number;
+    }>
   >;
   setPairingError: Dispatch<SetStateAction<string | null>>;
   selectedTranscribeModelId: string | null;
@@ -78,16 +92,20 @@ export function usePairingState({
   trackJobAndWait,
   trackLocalTask,
 }: PairingStateInput) {
-  const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
-  const [approvedTextDraft, setApprovedTextDraft] = useState('');
-  const [transcriptionSaveMessage, setTranscriptionSaveMessage] = useState<string | null>(null);
+  const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(
+    null,
+  );
+  const [approvedTextDraft, setApprovedTextDraft] = useState("");
+  const [transcriptionSaveMessage, setTranscriptionSaveMessage] = useState<
+    string | null
+  >(null);
   const [ocrRunning, setOcrRunning] = useState(false);
-  const [ocrScope, setOcrScope] = useState<'segment' | 'page' | null>(null);
+  const [ocrScope, setOcrScope] = useState<"segment" | "page" | null>(null);
   const [ocrMessage, setOcrMessage] = useState<string | null>(null);
 
   useEffect(() => {
     setSelectedSegmentId(null);
-    setApprovedTextDraft('');
+    setApprovedTextDraft("");
     setTranscriptionSaveMessage(null);
     setOcrMessage(null);
   }, [projectId, documentId, partId]);
@@ -100,15 +118,21 @@ export function usePairingState({
           .findIndex((line) => line.id === selectedSegmentId);
 
   const selectedSegmentNumber =
-    selectedSegmentIndex === null || selectedSegmentIndex < 0 ? null : selectedSegmentIndex + 1;
+    selectedSegmentIndex === null || selectedSegmentIndex < 0
+      ? null
+      : selectedSegmentIndex + 1;
 
   const selectedTranscriptionLayer =
     selectedTranscriptionLayerId === null
       ? null
-      : (transcriptionLayers.find((layer) => layer.id === selectedTranscriptionLayerId) ?? null);
+      : (transcriptionLayers.find(
+          (layer) => layer.id === selectedTranscriptionLayerId,
+        ) ?? null);
 
   const selectedSegment =
-    selectedSegmentId === null ? null : (lines.find((line) => line.id === selectedSegmentId) ?? null);
+    selectedSegmentId === null
+      ? null
+      : (lines.find((line) => line.id === selectedSegmentId) ?? null);
 
   async function pairTextLine(order: number) {
     if (!projectId || !documentId || !partId || !selectedSegmentId) return;
@@ -117,23 +141,34 @@ export function usePairingState({
         line_id: selectedSegmentId,
         text_line_order: order,
       });
-      const candidate = pairing.text_lines.find((textLine) => textLine.order === order);
+      const candidate = pairing.text_lines.find(
+        (textLine) => textLine.order === order,
+      );
       if (candidate) {
-        setLines(withLocalGroundTruth(lines, groundTruthTranscriptionId, selectedSegmentId, candidate.text));
+        setLines(
+          withLocalGroundTruth(
+            lines,
+            groundTruthTranscriptionId,
+            selectedSegmentId,
+            candidate.text,
+          ),
+        );
         setApprovedTextDraft(candidate.text);
       }
       setTextLines(pairing.text_lines);
       setPairingProgress(pairing.pairing_progress);
       setPairingError(null);
     } catch (err) {
-      setPairingError(err instanceof Error ? err.message : 'Failed to pair Text line.');
+      setPairingError(
+        err instanceof Error ? err.message : "Failed to pair Text line.",
+      );
     }
   }
 
   async function saveApprovedText() {
     if (!projectId || !documentId || !partId || !selectedSegmentId) return;
     if (!groundTruthTranscriptionId) {
-      setPairingError('Ground truth transcription layer is not available.');
+      setPairingError("Ground truth transcription layer is not available.");
       return;
     }
     try {
@@ -144,13 +179,22 @@ export function usePairingState({
         selectedSegmentId,
         { text: approvedTextDraft },
       );
-      setLines(withLocalGroundTruth(lines, groundTruthTranscriptionId, selectedSegmentId, updated.text));
+      setLines(
+        withLocalGroundTruth(
+          lines,
+          groundTruthTranscriptionId,
+          selectedSegmentId,
+          updated.text,
+        ),
+      );
       const pairing = await api.getPagePairing(projectId, documentId, partId);
       setTextLines(pairing.text_lines);
       setPairingProgress(pairing.pairing_progress);
       setPairingError(null);
     } catch (err) {
-      setPairingError(err instanceof Error ? err.message : 'Failed to save approved text.');
+      setPairingError(
+        err instanceof Error ? err.message : "Failed to save approved text.",
+      );
     }
   }
 
@@ -166,8 +210,11 @@ export function usePairingState({
 
   async function saveGroundTruthText() {
     if (!projectId || !documentId || !partId || !selectedSegmentId) return;
-    if (!groundTruthTranscriptionId || selectedTranscriptionLayer?.kind !== 'ground_truth') {
-      setPairingError('Only Ground truth can be edited.');
+    if (
+      !groundTruthTranscriptionId ||
+      selectedTranscriptionLayer?.kind !== "ground_truth"
+    ) {
+      setPairingError("Only Ground truth can be edited.");
       return;
     }
     try {
@@ -178,15 +225,26 @@ export function usePairingState({
         selectedSegmentId,
         { text: approvedTextDraft },
       );
-      setLines(withLocalGroundTruth(lines, groundTruthTranscriptionId, selectedSegmentId, updated.text));
+      setLines(
+        withLocalGroundTruth(
+          lines,
+          groundTruthTranscriptionId,
+          selectedSegmentId,
+          updated.text,
+        ),
+      );
       const pairing = await api.getPagePairing(projectId, documentId, partId);
       setTextLines(pairing.text_lines);
       setPairingProgress(pairing.pairing_progress);
       setPairingError(null);
-      setTranscriptionSaveMessage('Ground truth text saved');
+      setTranscriptionSaveMessage("Ground truth text saved");
     } catch (err) {
       setTranscriptionSaveMessage(null);
-      setPairingError(err instanceof Error ? err.message : 'Failed to save Ground truth text.');
+      setPairingError(
+        err instanceof Error
+          ? err.message
+          : "Failed to save Ground truth text.",
+      );
     }
   }
 
@@ -200,7 +258,9 @@ export function usePairingState({
     setTranscriptionLayers(layers);
     setSelectedTranscriptionLayerId(modelLayerId);
     if (selectedSegmentId) {
-      const segment = reloadedLines.find((line) => line.id === selectedSegmentId);
+      const segment = reloadedLines.find(
+        (line) => line.id === selectedSegmentId,
+      );
       if (segment) {
         setApprovedTextDraft(lineTextForLayer(segment, modelLayerId));
       }
@@ -210,14 +270,15 @@ export function usePairingState({
   async function applyTranscribeResult(job: JobResponse) {
     const result = job.result as TranscribeJobResult | null;
     if (!result?.transcription_id) {
-      throw new Error('Transcribe job returned no result.');
+      throw new Error("Transcribe job returned no result.");
     }
     setLines((current) =>
       current.map((line) => {
         const output = result.lines.find((entry) => entry.line_id === line.id);
         if (!output) return line;
         const withoutLayer = line.line_transcriptions.filter(
-          (transcription) => transcription.transcription_id !== result.transcription_id,
+          (transcription) =>
+            transcription.transcription_id !== result.transcription_id,
         );
         return {
           ...line,
@@ -226,7 +287,7 @@ export function usePairingState({
             {
               id: `ocr-${line.id}-${result.transcription_id}`,
               transcription_id: result.transcription_id,
-              transcription_kind: 'model' as const,
+              transcription_kind: "model" as const,
               text: output.text,
               confidence: output.confidence,
             },
@@ -238,7 +299,10 @@ export function usePairingState({
     return result;
   }
 
-  async function applyLocalTranscribeResult(transcriptionId: string, resultLines: TranscribeJobResult['lines']) {
+  async function applyLocalTranscribeResult(
+    transcriptionId: string,
+    resultLines: TranscribeJobResult["lines"],
+  ) {
     setLines((current) =>
       current.map((line) => {
         const output = resultLines.find((entry) => entry.line_id === line.id);
@@ -253,7 +317,7 @@ export function usePairingState({
             {
               id: `ocr-${line.id}-${transcriptionId}`,
               transcription_id: transcriptionId,
-              transcription_kind: 'model' as const,
+              transcription_kind: "model" as const,
               text: output.text,
               confidence: output.confidence,
             },
@@ -267,12 +331,16 @@ export function usePairingState({
 
   function selectedTranscribeModel(): InferenceModelResponse | null {
     if (!selectedTranscribeModelId) return null;
-    return transcribeModels.find((model) => model.id === selectedTranscribeModelId) ?? null;
+    return (
+      transcribeModels.find(
+        (model) => model.id === selectedTranscribeModelId,
+      ) ?? null
+    );
   }
 
   async function loadPartImageBase64(): Promise<string> {
     if (!partImageUrl) {
-      throw new Error('Page image is not available for local inference.');
+      throw new Error("Page image is not available for local inference.");
     }
     const blob = await fetchPartImage(partImageUrl);
     return blobToBase64(blob);
@@ -281,25 +349,27 @@ export function usePairingState({
   async function runLocalTranscribe(lineIds: string[]) {
     const model = selectedTranscribeModel();
     if (!model) {
-      throw new Error('Select an HTR model before running OCR.');
+      throw new Error("Select an HTR model before running OCR.");
     }
-    const { registryModelId, registryTag } = registrySelectionFromArtifactRef(model.artifact_ref);
+    const { registryModelId, registryTag } = registrySelectionFromArtifactRef(
+      model.artifact_ref,
+    );
     if (!shouldUseLocalPath(registryModelId)) {
-      throw new Error('Selected model is not eligible for local inference.');
+      throw new Error("Selected model is not eligible for local inference.");
     }
 
     const targetLines = lines
       .filter((line) => lineIds.includes(line.id))
       .sort((a, b) => a.order - b.order);
     if (targetLines.length === 0) {
-      throw new Error('No matching segments to transcribe.');
+      throw new Error("No matching segments to transcribe.");
     }
 
     const imageBytes = await loadPartImageBase64();
     await localInference.onStart(registryModelId, registryTag);
     try {
       const response = await runLocalInference({
-        task: 'transcribe',
+        task: "transcribe",
         registry_model_id: registryModelId,
         registry_tag: registryTag,
         image_bytes: imageBytes,
@@ -313,21 +383,29 @@ export function usePairingState({
         },
       });
 
-      if (response.task !== 'transcribe' || !('lines' in response.output)) {
-        throw new Error('Local transcribe returned an unexpected response.');
+      if (response.task !== "transcribe" || !("lines" in response.output)) {
+        throw new Error("Local transcribe returned an unexpected response.");
       }
       const batch = response.output as TranscribeBatchRunOutput;
-      const persisted = await api.persistLocalTranscribe(projectId!, documentId!, partId!, {
-        registry_model_id: registryModelId,
-        registry_tag: registryTag,
-        lines: batch.lines.map((entry) => ({
-          line_id: entry.line_id ?? targetLines[entry.line_index]?.id ?? '',
-          text: entry.output.text,
-          confidence: entry.output.confidence,
-          character_confidences: entry.output.character_confidences,
-        })),
-      });
-      return applyLocalTranscribeResult(persisted.transcription_id, persisted.lines);
+      const persisted = await api.persistLocalTranscribe(
+        projectId!,
+        documentId!,
+        partId!,
+        {
+          registry_model_id: registryModelId,
+          registry_tag: registryTag,
+          lines: batch.lines.map((entry) => ({
+            line_id: entry.line_id ?? targetLines[entry.line_index]?.id ?? "",
+            text: entry.output.text,
+            confidence: entry.output.confidence,
+            character_confidences: entry.output.character_confidences,
+          })),
+        },
+      );
+      return applyLocalTranscribeResult(
+        persisted.transcription_id,
+        persisted.lines,
+      );
     } finally {
       localInference.onEnd();
     }
@@ -347,29 +425,34 @@ export function usePairingState({
       }
     }
 
-    const enqueued = await api.enqueueTranscribePart(projectId!, documentId!, partId!, {
-      model_id: selectedTranscribeModelId!,
-      line_ids: lineIds.length === lines.length ? undefined : lineIds,
-    });
+    const enqueued = await api.enqueueTranscribePart(
+      projectId!,
+      documentId!,
+      partId!,
+      {
+        model_id: selectedTranscribeModelId!,
+        line_ids: lineIds.length === lines.length ? undefined : lineIds,
+      },
+    );
     const job = await trackJobAndWait(enqueued.job_id, jobMeta);
     return applyTranscribeResult(job);
   }
 
   async function runSegmentOcr() {
     if (!projectId || !documentId || !partId) {
-      setPairingError('Page context is missing. Reload and try again.');
+      setPairingError("Page context is missing. Reload and try again.");
       return;
     }
     if (!selectedSegmentId) {
-      setPairingError('Select a segment on the canvas first.');
+      setPairingError("Select a segment on the canvas first.");
       return;
     }
     if (!selectedTranscribeModelId) {
-      setPairingError('Select an HTR model before running OCR.');
+      setPairingError("Select an HTR model before running OCR.");
       return;
     }
     setOcrRunning(true);
-    setOcrScope('segment');
+    setOcrScope("segment");
     setOcrMessage(null);
     setPairingError(null);
     try {
@@ -378,40 +461,50 @@ export function usePairingState({
         ? registrySelectionFromArtifactRef(model.artifact_ref).registryModelId
         : null;
       if (model && registryModelId && shouldUseLocalPath(registryModelId)) {
-        const result = await runLocalTranscribeWithFallback([selectedSegmentId], {
-          label: selectedSegmentNumber
-            ? `Segment ${selectedSegmentNumber}`
-            : 'Selected segment',
-          kind: 'transcription-segment',
-        });
+        const result = await runLocalTranscribeWithFallback(
+          [selectedSegmentId],
+          {
+            label: selectedSegmentNumber
+              ? `Segment ${selectedSegmentNumber}`
+              : "Selected segment",
+            kind: "transcription-segment",
+          },
+        );
         const hasAnyText = result.lines.some((line) => line.text?.trim());
         setOcrMessage(
           hasAnyText
-            ? 'OCR prediction completed for selected Segment (local).'
-            : 'OCR finished with no text for this segment.',
+            ? "OCR prediction completed for selected Segment (local)."
+            : "OCR finished with no text for this segment.",
         );
         return;
       }
 
-      const enqueued = await api.enqueueTranscribePart(projectId, documentId, partId, {
-        model_id: selectedTranscribeModelId,
-        line_ids: [selectedSegmentId],
-      });
+      const enqueued = await api.enqueueTranscribePart(
+        projectId,
+        documentId,
+        partId,
+        {
+          model_id: selectedTranscribeModelId,
+          line_ids: [selectedSegmentId],
+        },
+      );
       const job = await trackJobAndWait(enqueued.job_id, {
         label: selectedSegmentNumber
           ? `Segment ${selectedSegmentNumber}`
-          : 'Selected segment',
-        kind: 'transcription-segment',
+          : "Selected segment",
+        kind: "transcription-segment",
       });
       const result = await applyTranscribeResult(job);
       const hasAnyText = result.lines.some((line) => line.text?.trim());
       setOcrMessage(
         hasAnyText
-          ? 'OCR prediction completed for selected Segment.'
-          : 'OCR finished with no text for this segment.',
+          ? "OCR prediction completed for selected Segment."
+          : "OCR finished with no text for this segment.",
       );
     } catch (err) {
-      setPairingError(err instanceof Error ? err.message : 'Segment OCR failed.');
+      setPairingError(
+        err instanceof Error ? err.message : "Segment OCR failed.",
+      );
     } finally {
       setOcrRunning(false);
       setOcrScope(null);
@@ -420,15 +513,15 @@ export function usePairingState({
 
   async function runPageOcr() {
     if (!projectId || !documentId || !partId) {
-      setPairingError('Page context is missing. Reload and try again.');
+      setPairingError("Page context is missing. Reload and try again.");
       return;
     }
     if (!selectedTranscribeModelId) {
-      setPairingError('Select an HTR model before running OCR.');
+      setPairingError("Select an HTR model before running OCR.");
       return;
     }
     setOcrRunning(true);
-    setOcrScope('page');
+    setOcrScope("page");
     setOcrMessage(null);
     setPairingError(null);
     try {
@@ -437,35 +530,45 @@ export function usePairingState({
         ? registrySelectionFromArtifactRef(model.artifact_ref).registryModelId
         : null;
       if (model && registryModelId && shouldUseLocalPath(registryModelId)) {
-        const result = await runLocalTranscribeWithFallback(lines.map((line) => line.id), {
-          label: 'Full page',
-          kind: 'transcription-page',
-        });
-        const withText = result.lines.filter((line) => line.text?.trim()).length;
+        const result = await runLocalTranscribeWithFallback(
+          lines.map((line) => line.id),
+          {
+            label: "Full page",
+            kind: "transcription-page",
+          },
+        );
+        const withText = result.lines.filter((line) =>
+          line.text?.trim(),
+        ).length;
         setOcrMessage(
           withText > 0
             ? `OCR prediction completed for ${withText} Segment(s) (local).`
-            : 'OCR finished with no text for the selected segments.',
+            : "OCR finished with no text for the selected segments.",
         );
         return;
       }
 
-      const enqueued = await api.enqueueTranscribePart(projectId, documentId, partId, {
-        model_id: selectedTranscribeModelId,
-      });
+      const enqueued = await api.enqueueTranscribePart(
+        projectId,
+        documentId,
+        partId,
+        {
+          model_id: selectedTranscribeModelId,
+        },
+      );
       const job = await trackJobAndWait(enqueued.job_id, {
-        label: 'Full page',
-        kind: 'transcription-page',
+        label: "Full page",
+        kind: "transcription-page",
       });
       const result = await applyTranscribeResult(job);
       const withText = result.lines.filter((line) => line.text?.trim()).length;
       setOcrMessage(
         withText > 0
           ? `OCR prediction completed for ${withText} Segment(s).`
-          : 'OCR finished with no text for the selected segments.',
+          : "OCR finished with no text for the selected segments.",
       );
     } catch (err) {
-      setPairingError(err instanceof Error ? err.message : 'Page OCR failed.');
+      setPairingError(err instanceof Error ? err.message : "Page OCR failed.");
     } finally {
       setOcrRunning(false);
       setOcrScope(null);
@@ -473,10 +576,22 @@ export function usePairingState({
   }
 
   async function promoteSelectedSegmentToGroundTruth() {
-    if (!projectId || !documentId || !partId || !selectedSegmentId || !selectedSegment) return;
-    const modelLayerId = modelLayerIdForPromotion(selectedSegment, selectedTranscriptionLayer);
+    if (
+      !projectId ||
+      !documentId ||
+      !partId ||
+      !selectedSegmentId ||
+      !selectedSegment
+    )
+      return;
+    const modelLayerId = modelLayerIdForPromotion(
+      selectedSegment,
+      selectedTranscriptionLayer,
+    );
     if (!modelLayerId) {
-      setPairingError('Model transcription is not available to save as Ground truth.');
+      setPairingError(
+        "Model transcription is not available to save as Ground truth.",
+      );
       return;
     }
     try {
@@ -493,15 +608,21 @@ export function usePairingState({
       setPairingError(null);
       if (groundTruthTranscriptionId) {
         setSelectedTranscriptionLayerId(groundTruthTranscriptionId);
-        const refreshedSegment = reloadedLines.find((line) => line.id === selectedSegmentId);
+        const refreshedSegment = reloadedLines.find(
+          (line) => line.id === selectedSegmentId,
+        );
         if (refreshedSegment) {
-          setApprovedTextDraft(lineTextForLayer(refreshedSegment, groundTruthTranscriptionId));
+          setApprovedTextDraft(
+            lineTextForLayer(refreshedSegment, groundTruthTranscriptionId),
+          );
         }
       }
-      setTranscriptionSaveMessage('Saved to Ground truth');
+      setTranscriptionSaveMessage("Saved to Ground truth");
     } catch (err) {
       setTranscriptionSaveMessage(null);
-      setPairingError(err instanceof Error ? err.message : 'Failed to save to Ground truth.');
+      setPairingError(
+        err instanceof Error ? err.message : "Failed to save to Ground truth.",
+      );
     }
   }
 
@@ -510,7 +631,7 @@ export function usePairingState({
     setSelectedSegmentId(lineId);
     setTranscriptionSaveMessage(null);
     setApprovedTextDraft(
-      selected ? lineTextForLayer(selected, selectedTranscriptionLayerId) : '',
+      selected ? lineTextForLayer(selected, selectedTranscriptionLayerId) : "",
     );
   }
 
@@ -526,7 +647,10 @@ export function usePairingState({
     if (currentIndex < 0) {
       nextIndex = direction === 1 ? 0 : sorted.length - 1;
     } else {
-      nextIndex = Math.min(Math.max(currentIndex + direction, 0), sorted.length - 1);
+      nextIndex = Math.min(
+        Math.max(currentIndex + direction, 0),
+        sorted.length - 1,
+      );
     }
 
     if (nextIndex !== currentIndex) {

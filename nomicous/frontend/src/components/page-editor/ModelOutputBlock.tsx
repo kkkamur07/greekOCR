@@ -1,13 +1,13 @@
-import { CharacterConfidenceText } from './CharacterConfidenceText';
+import { CharacterConfidenceText } from "./CharacterConfidenceText";
 import {
   characterConfidencesForTranscription,
   type LineTranscriptionWithCharacterConfidence,
-} from './characterConfidence';
+} from "./characterConfidence";
 
 type ModelOutputBlockProps = {
   transcription: LineTranscriptionWithCharacterConfidence | null;
   segmentNumber: number | null;
-  layout?: 'stack' | 'inline';
+  layout?: "stack" | "inline";
   onCopy?: () => void;
   onRerunOcr?: () => void;
   ocrRunning?: boolean;
@@ -18,7 +18,7 @@ type ModelOutputBlockProps = {
 export function ModelOutputBlock({
   transcription,
   segmentNumber,
-  layout = 'inline',
+  layout = "inline",
   onCopy,
   onRerunOcr,
   ocrRunning = false,
@@ -39,23 +39,23 @@ export function ModelOutputBlock({
   const hasText = Boolean(transcription?.text?.trim());
 
   const emptyMessage = !segmentNumber
-    ? 'Select a segment to view model output.'
+    ? "Select a segment to view model output."
     : hasTranscription && !hasText
-      ? 'OCR finished with no text for this segment.'
-      : 'No OCR yet. Run OCR on this segment.';
+      ? "OCR finished with no text for this segment."
+      : "No OCR yet. Run OCR on this segment.";
   const ocrButtonLabel = hasText
     ? ocrRunning
-      ? 'Running…'
-      : 'Re-run OCR'
+      ? "Running…"
+      : "Re-run OCR"
     : ocrRunning
-      ? 'Running…'
-      : 'Run OCR';
+      ? "Running…"
+      : "Run OCR";
 
   const ariaLabel = segmentNumber
     ? `OCR model output for segment ${segmentNumber}`
-    : 'OCR model output';
+    : "OCR model output";
 
-  if (layout === 'inline') {
+  if (layout === "inline") {
     return (
       <div className="pe-model-inline">
         <span className="pe-model-inline__label" id="model-output-label">
@@ -68,14 +68,21 @@ export function ModelOutputBlock({
           aria-describedby="confidence-legend"
         >
           {hasText ? (
-            <CharacterConfidenceText characterConfidences={characterConfidences} ariaLabel={ariaLabel} />
+            <CharacterConfidenceText
+              characterConfidences={characterConfidences}
+              ariaLabel={ariaLabel}
+            />
           ) : (
             <span className="pe-model-inline__empty">{emptyMessage}</span>
           )}
         </div>
         <div className="pe-model-inline__actions">
           {hasText && (
-            <button type="button" className="btn btn-ghost btn-xs" onClick={() => void handleCopy()}>
+            <button
+              type="button"
+              className="btn btn-ghost btn-xs"
+              onClick={() => void handleCopy()}
+            >
               Copy
             </button>
           )}
@@ -102,7 +109,11 @@ export function ModelOutputBlock({
           Model output
         </span>
         {hasText && (
-          <button type="button" className="btn btn-ghost btn-xs" onClick={() => void handleCopy()}>
+          <button
+            type="button"
+            className="btn btn-ghost btn-xs"
+            onClick={() => void handleCopy()}
+          >
             Copy
           </button>
         )}
@@ -114,7 +125,10 @@ export function ModelOutputBlock({
         aria-describedby="confidence-legend"
       >
         {hasText ? (
-          <CharacterConfidenceText characterConfidences={characterConfidences} ariaLabel={ariaLabel} />
+          <CharacterConfidenceText
+            characterConfidences={characterConfidences}
+            ariaLabel={ariaLabel}
+          />
         ) : (
           <span className="text-muted text-sm">{emptyMessage}</span>
         )}

@@ -1,6 +1,11 @@
-import { useEffect, useState, type CSSProperties, type SyntheticEvent } from 'react';
-import { API_BASE_URL } from '../api/client';
-import { acquirePartImage, normalizePartImagePath } from '../api/imageCache';
+import {
+  useEffect,
+  useState,
+  type CSSProperties,
+  type SyntheticEvent,
+} from "react";
+import { API_BASE_URL } from "../api/client";
+import { acquirePartImage, normalizePartImagePath } from "../api/imageCache";
 
 export function resolveProtectedMediaUrl(src: string): string | null {
   const path = normalizePartImagePath(src);
@@ -61,7 +66,7 @@ export function AuthenticatedImage({
   if (loading) {
     return (
       <span
-        className={`auth-image auth-image--loading${className ? ` ${className}` : ''}`}
+        className={`auth-image auth-image--loading${className ? ` ${className}` : ""}`}
         style={style}
         aria-busy="true"
         aria-label={`Loading ${alt}`}
@@ -72,7 +77,7 @@ export function AuthenticatedImage({
   if (failed || !blobUrl) {
     return (
       <span
-        className={`auth-image auth-image--failed${className ? ` ${className}` : ''}`}
+        className={`auth-image auth-image--failed${className ? ` ${className}` : ""}`}
         style={style}
         aria-label={`${alt} unavailable`}
         title="Image could not be loaded"

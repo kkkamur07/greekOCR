@@ -1,5 +1,5 @@
-import type { TrackedBackgroundJob } from '../../context/BackgroundJobsContext';
-import { isTerminalJobStatus, pageEditorJobKindLabel } from './jobProgress';
+import type { TrackedBackgroundJob } from "../../context/BackgroundJobsContext";
+import { isTerminalJobStatus, pageEditorJobKindLabel } from "./jobProgress";
 
 type PageEditorJobProgressPanelProps = {
   jobs: TrackedBackgroundJob[];
@@ -9,10 +9,10 @@ type PageEditorJobProgressPanelProps = {
   onDismissCompleted: () => void;
 };
 
-function statusClass(status: TrackedBackgroundJob['status']): string {
-  if (status === 'done') return 'pe-job-item--done';
-  if (status === 'failed') return 'pe-job-item--failed';
-  return 'pe-job-item--active';
+function statusClass(status: TrackedBackgroundJob["status"]): string {
+  if (status === "done") return "pe-job-item--done";
+  if (status === "failed") return "pe-job-item--failed";
+  return "pe-job-item--active";
 }
 
 export function PageEditorJobProgressPanel({
@@ -24,13 +24,15 @@ export function PageEditorJobProgressPanel({
 }: PageEditorJobProgressPanelProps) {
   if (jobs.length === 0) return null;
 
-  const completedCount = jobs.filter((job) => isTerminalJobStatus(job.status)).length;
+  const completedCount = jobs.filter((job) =>
+    isTerminalJobStatus(job.status),
+  ).length;
 
   if (!expanded) {
     const statusLabel =
       activeCount > 0
-        ? `${activeCount} background job${activeCount === 1 ? '' : 's'} running`
-        : `${completedCount} background job${completedCount === 1 ? '' : 's'} finished`;
+        ? `${activeCount} background job${activeCount === 1 ? "" : "s"} running`
+        : `${completedCount} background job${completedCount === 1 ? "" : "s"} finished`;
     return (
       <button
         type="button"
@@ -40,8 +42,8 @@ export function PageEditorJobProgressPanel({
       >
         <span className="pe-job-panel__pulse" aria-hidden="true" />
         {activeCount > 0
-          ? `${activeCount} job${activeCount === 1 ? '' : 's'} running`
-          : `${completedCount} job${completedCount === 1 ? '' : 's'} finished`}
+          ? `${activeCount} job${activeCount === 1 ? "" : "s"} running`
+          : `${completedCount} job${completedCount === 1 ? "" : "s"} finished`}
       </button>
     );
   }
@@ -59,12 +61,16 @@ export function PageEditorJobProgressPanel({
           <p className="pe-job-panel__subtitle">
             {activeCount > 0
               ? `${activeCount} in progress. You can keep editing other segments.`
-              : 'Recent jobs'}
+              : "Recent jobs"}
           </p>
         </div>
         <div className="pe-job-panel__head-actions">
           {completedCount > 0 && activeCount === 0 && (
-            <button type="button" className="btn btn-ghost btn-xs" onClick={onDismissCompleted}>
+            <button
+              type="button"
+              className="btn btn-ghost btn-xs"
+              onClick={onDismissCompleted}
+            >
               Clear
             </button>
           )}
@@ -87,7 +93,9 @@ export function PageEditorJobProgressPanel({
             )}
             <div className="pe-job-item__body">
               <div className="pe-job-item__row">
-                <span className="pe-job-item__kind">{pageEditorJobKindLabel(job.kind)}</span>
+                <span className="pe-job-item__kind">
+                  {pageEditorJobKindLabel(job.kind)}
+                </span>
                 <span className="pe-job-item__status">{job.progressLabel}</span>
               </div>
               <strong className="pe-job-item__label">{job.label}</strong>

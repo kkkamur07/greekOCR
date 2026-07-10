@@ -34,3 +34,7 @@ inference.api.jobs
 inference.api.dependencies
 inference.api.main
 src.hf.publish
+# Kraken BLLA imports this training-only package but does not use it for
+# inference. `inference.architectures.kraken_runtime` supplies its placeholder.
+kraken.lib.dataset
+pyarrow

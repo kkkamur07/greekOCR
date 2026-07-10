@@ -1,6 +1,12 @@
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import type { Region } from '../../types';
-import { PublicZoomSurface } from './PublicZoomSurface';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
+import type { Region } from "../../types";
+import { PublicZoomSurface } from "./PublicZoomSurface";
 
 type PublicPageCanvasProps = {
   imageUrl: string;
@@ -40,7 +46,7 @@ export function PublicPageCanvas({
 
   useEffect(() => {
     const image = imageRef.current;
-    if (!image || typeof ResizeObserver === 'undefined') return;
+    if (!image || typeof ResizeObserver === "undefined") return;
 
     const observer = new ResizeObserver(() => {
       syncDisplaySize();
@@ -65,7 +71,7 @@ export function PublicPageCanvas({
     regionId: number,
     selected: boolean,
   ) => {
-    if (event.key !== 'Enter' && event.key !== ' ') return;
+    if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
     onSelectRegion(selected ? null : regionId);
   };
@@ -96,7 +102,9 @@ export function PublicPageCanvas({
           >
             {regions.map((region) => {
               const isSelected = region.id === selectedRegionId;
-              const points = region.boundary.map(([x, y]) => `${x},${y}`).join(' ');
+              const points = region.boundary
+                .map(([x, y]) => `${x},${y}`)
+                .join(" ");
               return (
                 <polygon
                   key={region.id}
@@ -105,12 +113,18 @@ export function PublicPageCanvas({
                   points={points}
                   aria-label={`Line ${region.id}`}
                   aria-pressed={isSelected}
-                  fill={isSelected ? 'rgba(13, 31, 60, 0.18)' : 'rgba(82, 196, 26, 0.15)'}
-                  stroke={isSelected ? 'var(--navy, #0d1f3c)' : '#52c41a'}
+                  fill={
+                    isSelected
+                      ? "rgba(13, 31, 60, 0.18)"
+                      : "rgba(82, 196, 26, 0.15)"
+                  }
+                  stroke={isSelected ? "var(--navy, #0d1f3c)" : "#52c41a"}
                   strokeWidth={isSelected ? 2.5 : 2}
-                  style={{ pointerEvents: 'all', cursor: 'pointer' }}
+                  style={{ pointerEvents: "all", cursor: "pointer" }}
                   onClick={() => onSelectRegion(isSelected ? null : region.id)}
-                  onKeyDown={(event) => selectWithKeyboard(event, region.id, isSelected)}
+                  onKeyDown={(event) =>
+                    selectWithKeyboard(event, region.id, isSelected)
+                  }
                 />
               );
             })}

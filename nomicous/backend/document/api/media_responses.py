@@ -1,4 +1,5 @@
 """Shared OpenAPI + response helpers for part image routes."""
+
 from hashlib import sha256
 
 from fastapi.responses import Response

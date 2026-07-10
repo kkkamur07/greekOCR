@@ -41,6 +41,7 @@ Cross-cutting reviews, hygiene, and hardening.
 | Doc | Topic |
 |-----|--------|
 | [repository-hygiene.md](repository-hygiene.md) | Repo hygiene — docs drift, gitignore, rituals, improvement roadmap |
+| [repository-cleanup-plan.md](repository-cleanup-plan.md) | Dead code and cleanup audit — confidence levels, PR series |
 | [codebase-audit.md](codebase-audit.md) | Full-stack audit — critical issues, phased fix order (when present) |
 
 ---

@@ -1,16 +1,20 @@
-import type { ChangeEventHandler } from 'react';
-import type { InferenceModelResponse, LineResponse, TranscriptionLayerResponse } from '../../api/client';
-import { ModelOutputBlock } from './ModelOutputBlock';
-import { PageEditorModelSelect } from './PageEditorModelSelect';
-import { PageEditorSegmentNav } from './PageEditorSegmentNav';
-import { useStripResize } from './hooks/useStripResize';
+import type { ChangeEventHandler } from "react";
+import type {
+  InferenceModelResponse,
+  LineResponse,
+  TranscriptionLayerResponse,
+} from "../../api/client";
+import { ModelOutputBlock } from "./ModelOutputBlock";
+import { PageEditorModelSelect } from "./PageEditorModelSelect";
+import { PageEditorSegmentNav } from "./PageEditorSegmentNav";
+import { useStripResize } from "./hooks/useStripResize";
 import {
   lineTranscriptionForLayer,
   modelTranscriptionForLine,
   showsModelSourceReview,
   transcriptionForOcrReview,
-} from './hooks/utils';
-import { groundTruthLayer } from '../../utils/transcriptionLayerLabel';
+} from "./hooks/utils";
+import { groundTruthLayer } from "../../utils/transcriptionLayerLabel";
 
 type PageEditorTranscriptionStripProps = {
   visible: boolean;
@@ -34,7 +38,7 @@ type PageEditorTranscriptionStripProps = {
   selectedTranscribeModelId: string | null;
   onSelectedTranscribeModelIdChange: (modelId: string | null) => void;
   ocrRunning: boolean;
-  ocrScope?: 'segment' | 'page' | null;
+  ocrScope?: "segment" | "page" | null;
   backgroundJobsActive?: boolean;
 };
 
@@ -61,23 +65,31 @@ export function PageEditorTranscriptionStrip({
   ocrScope = null,
   backgroundJobsActive = false,
 }: PageEditorTranscriptionStripProps) {
-  const { height, onPointerDown, onPointerMove, onPointerUp } = useStripResize(240);
+  const { height, onPointerDown, onPointerMove, onPointerUp } =
+    useStripResize(240);
 
-  const activeGroundTruthLayer = groundTruthLayer(transcriptionLayers) ?? selectedTranscriptionLayer;
+  const activeGroundTruthLayer =
+    groundTruthLayer(transcriptionLayers) ?? selectedTranscriptionLayer;
   const groundTruthTranscription =
-    selectedSegment && activeGroundTruthLayer?.kind === 'ground_truth'
+    selectedSegment && activeGroundTruthLayer?.kind === "ground_truth"
       ? lineTranscriptionForLayer(selectedSegment, activeGroundTruthLayer.id)
       : null;
   const modelName =
-    transcribeModels.find((m) => m.id === selectedTranscribeModelId)?.name ?? 'HTR model';
-  const segmentOcrRunning = ocrRunning && ocrScope === 'segment' && !backgroundJobsActive;
-  const rerunDisabled = !selectedSegmentId || !selectedTranscribeModelId || ocrRunning;
+    transcribeModels.find((m) => m.id === selectedTranscribeModelId)?.name ??
+    "HTR model";
+  const segmentOcrRunning =
+    ocrRunning && ocrScope === "segment" && !backgroundJobsActive;
+  const rerunDisabled =
+    !selectedSegmentId || !selectedTranscribeModelId || ocrRunning;
   const showGroundTruthEditor =
-    Boolean(groundTruthTranscription) && !showsModelSourceReview(groundTruthTranscription);
+    Boolean(groundTruthTranscription) &&
+    !showsModelSourceReview(groundTruthTranscription);
   const modelOutputTranscription = selectedSegment
     ? modelTranscriptionForLine(
         selectedSegment,
-        selectedTranscriptionLayer?.kind === 'model' ? selectedTranscriptionLayer.id : null,
+        selectedTranscriptionLayer?.kind === "model"
+          ? selectedTranscriptionLayer.id
+          : null,
       )
     : null;
   const ocrReviewTranscription =
@@ -85,10 +97,11 @@ export function PageEditorTranscriptionStrip({
       ? transcriptionForOcrReview(selectedSegment, selectedTranscriptionLayer)
       : null;
   const showOcrReview = Boolean(ocrReviewTranscription);
-  const showApprovedEditor = Boolean(selectedSegmentNumber) && !showGroundTruthEditor && !showOcrReview;
+  const showApprovedEditor =
+    Boolean(selectedSegmentNumber) && !showGroundTruthEditor && !showOcrReview;
   const canPromoteModelOutput = Boolean(
     modelOutputTranscription?.text &&
-      (selectedTranscriptionLayer?.kind === 'model' || showOcrReview),
+    (selectedTranscriptionLayer?.kind === "model" || showOcrReview),
   );
 
   const onAccept = showGroundTruthEditor
@@ -100,10 +113,10 @@ export function PageEditorTranscriptionStrip({
         : undefined;
 
   const acceptLabel = showGroundTruthEditor
-    ? 'Save ground truth'
+    ? "Save ground truth"
     : canPromoteModelOutput
-      ? 'Accept'
-      : 'Save';
+      ? "Accept"
+      : "Save";
 
   if (!visible) {
     return null;
@@ -128,10 +141,12 @@ export function PageEditorTranscriptionStrip({
       <header className="pe-strip__bar">
         <h2 className="pe-strip__heading" id="strip-heading">
           <span className="pe-strip__badge" aria-hidden="true">
-            {selectedSegmentNumber ?? '-'}
+            {selectedSegmentNumber ?? "-"}
           </span>
           <span id="strip-heading-text" aria-live="polite">
-            {selectedSegmentNumber ? `Segment ${selectedSegmentNumber}` : 'Transcription'}
+            {selectedSegmentNumber
+              ? `Segment ${selectedSegmentNumber}`
+              : "Transcription"}
           </span>
         </h2>
         <PageEditorSegmentNav
@@ -169,9 +184,9 @@ export function PageEditorTranscriptionStrip({
           ocrDisabled={rerunDisabled}
           ocrDisabledReason={
             !selectedTranscribeModelId
-              ? 'Select an HTR model above'
+              ? "Select an HTR model above"
               : !selectedSegmentId
-                ? 'Select a segment first'
+                ? "Select a segment first"
                 : undefined
           }
         />
@@ -187,10 +202,10 @@ export function PageEditorTranscriptionStrip({
             id="strip-edit"
             aria-label={
               showGroundTruthEditor
-                ? 'Ground truth text for selected Segment'
+                ? "Ground truth text for selected Segment"
                 : showApprovedEditor
-                  ? 'Approved text for selected Segment'
-                  : 'Edit transcription'
+                  ? "Approved text for selected Segment"
+                  : "Edit transcription"
             }
             spellCheck={false}
             placeholder="Accept model output or edit…"
@@ -201,7 +216,11 @@ export function PageEditorTranscriptionStrip({
         </div>
 
         <footer className="pe-strip__footer">
-          <div className="pe-strip__legend" id="confidence-legend" aria-label="Confidence thresholds">
+          <div
+            className="pe-strip__legend"
+            id="confidence-legend"
+            aria-label="Confidence thresholds"
+          >
             <span>
               <i className="dot dot--high" aria-hidden="true" /> high &gt;90%
             </span>
@@ -220,28 +239,35 @@ export function PageEditorTranscriptionStrip({
               aria-label={
                 selectedSegmentNumber
                   ? `Re-run OCR on segment ${selectedSegmentNumber}`
-                  : 'Re-run OCR on selected segment'
+                  : "Re-run OCR on selected segment"
               }
               title={
                 selectedTranscribeModelId
                   ? `Run ${modelName} on this segment`
-                  : 'Select an OCR model first'
+                  : "Select an OCR model first"
               }
               onClick={() => void onRunSegmentOcr()}
             >
-              {segmentOcrRunning ? 'Running OCR…' : modelOutputTranscription?.text ? 'Re-run OCR on segment' : 'Run OCR on segment'}
+              {segmentOcrRunning
+                ? "Running OCR…"
+                : modelOutputTranscription?.text
+                  ? "Re-run OCR on segment"
+                  : "Run OCR on segment"}
             </button>
-            {onAccept && (showGroundTruthEditor || canPromoteModelOutput || showApprovedEditor) && (
-              <button
-                type="button"
-                className="btn btn-accent btn-xs"
-                disabled={!selectedSegmentNumber}
-                aria-label={acceptLabel}
-                onClick={() => void onAccept()}
-              >
-                {acceptLabel}
-              </button>
-            )}
+            {onAccept &&
+              (showGroundTruthEditor ||
+                canPromoteModelOutput ||
+                showApprovedEditor) && (
+                <button
+                  type="button"
+                  className="btn btn-accent btn-xs"
+                  disabled={!selectedSegmentNumber}
+                  aria-label={acceptLabel}
+                  onClick={() => void onAccept()}
+                >
+                  {acceptLabel}
+                </button>
+              )}
           </div>
         </footer>
       </div>

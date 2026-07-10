@@ -1,5 +1,5 @@
-import type { PublicLayoutResponse } from '../../api/client';
-import { lineTextForLayer, linesForPart } from '../../utils/publicLayout';
+import type { PublicLayoutResponse } from "../../api/client";
+import { lineTextForLayer, linesForPart } from "../../utils/publicLayout";
 
 type PublicTranscriptPanelProps = {
   partId: string;
@@ -25,7 +25,9 @@ export function PublicTranscriptPanel({
     selectedLineIndex !== null && selectedLineIndex >= 0
       ? (partLines[selectedLineIndex] ?? null)
       : null;
-  const selectedText = selectedLine ? lineTextForLayer(selectedLine, null) : null;
+  const selectedText = selectedLine
+    ? lineTextForLayer(selectedLine, null)
+    : null;
 
   return (
     <aside className="pub-transcript" aria-labelledby="transcript-heading">
@@ -34,23 +36,29 @@ export function PublicTranscriptPanel({
           Transcription
         </h2>
         <span className="pub-transcript__count">
-          {partLines.length} line{partLines.length === 1 ? '' : 's'}
+          {partLines.length} line{partLines.length === 1 ? "" : "s"}
         </span>
       </header>
 
       {selectedLine && (
         <div className="pub-transcript__focus" aria-live="polite">
-          <span className="pub-transcript__focus-label">Line {selectedLine.order + 1}</span>
+          <span className="pub-transcript__focus-label">
+            Line {selectedLine.order + 1}
+          </span>
           <p className="pub-transcript__focus-text">
             {selectedText ?? (
-              <span className="text-block__empty">No transcription for this line</span>
+              <span className="text-block__empty">
+                No transcription for this line
+              </span>
             )}
           </p>
         </div>
       )}
 
       {partLines.length === 0 ? (
-        <p className="pub-transcript__empty">No line geometry on this page yet.</p>
+        <p className="pub-transcript__empty">
+          No line geometry on this page yet.
+        </p>
       ) : (
         <ol className="pub-line-index" aria-label="Page transcription lines">
           {partLines.map((line, index) => {
@@ -60,13 +68,13 @@ export function PublicTranscriptPanel({
               <li key={line.id}>
                 <button
                   type="button"
-                  className={`pub-line-index__item${selected ? ' pub-line-index__item--selected' : ''}`}
+                  className={`pub-line-index__item${selected ? " pub-line-index__item--selected" : ""}`}
                   aria-pressed={selected}
                   onClick={() => onSelectLine(selected ? null : index)}
                 >
                   <span className="pub-line-index__num">{line.order + 1}</span>
                   <span className="pub-line-index__text">
-                    {text ? previewText(text) : '-'}
+                    {text ? previewText(text) : "-"}
                   </span>
                 </button>
               </li>

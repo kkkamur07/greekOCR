@@ -40,9 +40,7 @@ class AdmissionSettings(BaseSettings):
         ge=1024,
         alias="INFERENCE_MAX_PARAMS_BYTES",
     )
-    inference_max_params_depth: int = Field(
-        default=8, ge=1, alias="INFERENCE_MAX_PARAMS_DEPTH"
-    )
+    inference_max_params_depth: int = Field(default=8, ge=1, alias="INFERENCE_MAX_PARAMS_DEPTH")
     inference_max_params_items: int = Field(
         # 10,000 lines with 256 two-coordinate points require roughly 7.7M
         # visited values once their nested lists are counted.
@@ -63,9 +61,7 @@ class AdmissionSettings(BaseSettings):
         ge=1024,
         alias="INFERENCE_MAX_JOB_PAYLOAD_BYTES",
     )
-    inference_max_pending_jobs: int = Field(
-        default=100, ge=1, alias="INFERENCE_MAX_PENDING_JOBS"
-    )
+    inference_max_pending_jobs: int = Field(default=100, ge=1, alias="INFERENCE_MAX_PENDING_JOBS")
     inference_worker_concurrency: int = Field(
         default=1, ge=1, le=4, alias="INFERENCE_WORKER_CONCURRENCY"
     )

@@ -34,9 +34,9 @@ def create_helper_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.helper_cors_origins,
-        allow_credentials=True,
+        allow_credentials=False,
         allow_methods=["GET", "POST", "OPTIONS"],
-        allow_headers=["*"],
+        allow_headers=["Content-Type", HELPER_AUTH_SECRET_HEADER],
     )
 
     @app.middleware("http")
