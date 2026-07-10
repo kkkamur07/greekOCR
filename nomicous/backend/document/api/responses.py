@@ -1,6 +1,10 @@
 """Shared response builders for document API routers."""
 
-from backend.document.api.schemas import DocumentPartResponse, DocumentResponse, DocumentWithPartsResponse
+from backend.document.api.schemas import (
+    DocumentPartResponse,
+    DocumentResponse,
+    DocumentWithPartsResponse,
+)
 from backend.document.infrastructure.orm_models import Document, DocumentPart
 
 

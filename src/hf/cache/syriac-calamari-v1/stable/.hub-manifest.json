@@ -1,6 +1,6 @@
 {
-  "artifact_hash": "68a53c01c87c91d71c074dae302672082a5fe96435c5c52d19743314623aec38",
-  "repo_id": "kkkamur07/syriac-htr-calamari",
-  "revision": "stable",
-  "revision_sha": "e01349626f934ee9526d486a42b5c4173b8d7a26"
+  "artifact_path": "best.pt",
+  "artifact_sha256": "ea711b918010aa31bd4a8a5de99c7953207421a7c7d4a39163166db380013053",
+  "hub_revision": "e01349626f934ee9526d486a42b5c4173b8d7a26",
+  "repo_id": "kkkamur07/syriac-htr-calamari"
 }

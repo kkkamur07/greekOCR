@@ -45,12 +45,16 @@ A Hugging Face collection grouping **Hub model repos** and **Hub dataset repos**
 _Avoid_: monorepo, model bundle
 
 **Hub revision**:
-The git tag (or commit) on a **Hub model repo** that a **registry tag** resolves to — e.g. registry tag `stable` → Hub revision `stable`.
-_Avoid_: version (too generic), release branch
+The immutable 40-character git commit on a **Hub model repo** selected by a **registry tag**. The tag remains a human-facing selector in the **weights source**, while the registry records its resolved commit separately.
+_Avoid_: mutable tag as a runtime revision, version (too generic), release branch
 
 **Hub artifact**:
 The checkpoint files published inside a **Hub model repo** at one **Hub revision** — Calamari inference uses converted PyTorch `.pt` checkpoints; Kraken may use `.mlmodel` or `.safetensors`.
 _Avoid_: weights (too generic), model file
+
+**Artifact SHA-256**:
+The required 64-character SHA-256 digest for the architecture-native **Hub artifact**. The inference service verifies it after download, before Hub-cache reuse, and before passing the artifact to an architecture loader.
+_Avoid_: directory hash alone, unverified download
 
 **Local bundled weights**:
 Checkpoint files under `src/hf/local/` used for offline dev and Docker without Hub access. Referenced by `file://` **weights source** URIs relative to `src/hf/`.
@@ -61,11 +65,11 @@ Publish-ready **Hub artifact**s under `src/hf/staging/` (models and datasets) be
 _Avoid_: hf repo (ambiguous with Hub remote repo)
 
 **Hub cache**:
-Downloaded **Hub artifact**s at runtime under `src/hf/cache/<registry_model_id>/<registry_tag>/`. Reused only when required files exist and a manifest hash matches the Hub revision.
+Downloaded **Hub artifact**s at runtime under `src/hf/cache/<registry_model_id>/<registry_tag>/`. Reused only when required files exist and a manifest matches the immutable **Hub revision** and **artifact SHA-256**.
 _Avoid_: runtime weight cache, inference/weights/cache
 
 **Hub cache manifest**:
-A hash record (e.g. `.hub-manifest.json`) stored alongside cached **Hub artifact**s. **Hub integration** compares it to the remote revision before skipping download.
+An integrity record (e.g. `.hub-manifest.json`) stored alongside cached **Hub artifact**s. It records the Hub repo, immutable **Hub revision**, artifact path, and **artifact SHA-256**; all must match before cache reuse.
 _Avoid_: revision file alone (insufficient when artifact bytes change)
 
 **Hub integration**:
@@ -103,7 +107,7 @@ _Avoid_: org (when meaning the namespace generically)
 - All three live under `src/hf/` alongside **Hub integration** code
 - **Hub cache** reuse requires matching **Hub cache manifest** hash, not just present files
 - **Hub integration** lazy-fetches at inference; `scripts/hf/fetch_model.py` for explicit prefetch
-- One **registry tag** resolves to one **Hub revision** on that repo
+- One **registry tag** records one immutable **Hub revision** on that repo
 - Training output is copied into **Hub staging tree** when ready to publish
 - One **Hub dataset repo** may train many **registry model ids** over time
 - A **Hub collection** (`nomos`) links to many **Hub model repos** and **Hub dataset repos**; defined in `src/hf/publish/collection.yaml`

@@ -10,7 +10,7 @@ Pytest layout and commands for the platform, inference service, and Hugging Face
 |------|----------|
 | Unit (`not integration and not ml`) | Python deps only |
 | Integration | Postgres on `localhost:5433` (or env URLs from `.env`) |
-| ML | Postgres + inference weights under `inference/weights/` |
+| ML | Postgres; Hub weights prefetch or network on first ML test |
 
 **Tip:** Stop the Docker API and inference-worker before integration tests if they contend for DB advisory locks:
 
@@ -53,7 +53,19 @@ uv run --group platform --group inference pytest tests/inference -q
 Frontend:
 
 ```bash
-cd nomicous/frontend && npm test
+cd nomicous/frontend
+npm run typecheck
+npm run lint
+npm test
+npm run build
+npm run check:api
+```
+
+Python correctness checks and the configured pre-commit hook:
+
+```bash
+uv run --locked --group dev ruff check nomicous/backend inference scripts/platform tests/nomicous tests/inference tests/hf
+uv run --locked --group dev pre-commit run --all-files
 ```
 
 ---
@@ -83,4 +95,4 @@ For Supabase-backed local testing, see [deployment/supabase.md](../deployment/su
 |---------|-----|
 | Tests hang on DB lock | Stop `api` / `inference-worker` containers; terminate stale Postgres sessions |
 | `DuplicatePreparedStatementError` with Supabase pooler | Handled in `nomicous/infrastructure/db.py` (`statement_cache_size=0`) |
-| ML tests skip or fail | Ensure weights exist and `inference/weights/` is populated per [`inference/README.md`](../../inference/README.md) |
+| ML tests skip or fail | Prefetch the default transcribe model: `PYTHONPATH=. python scripts/hf/fetch_model.py syriac-calamari-v1 --registry-tag stable` (see [`inference/README.md`](../../inference/README.md)) |

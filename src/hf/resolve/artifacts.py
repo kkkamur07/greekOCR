@@ -2,7 +2,25 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
+
+
+def sha256_file(path: Path) -> str:
+  digest = hashlib.sha256()
+  with path.open("rb") as file:
+    for chunk in iter(lambda: file.read(1024 * 1024), b""):
+      digest.update(chunk)
+  return digest.hexdigest()
+
+
+def verify_artifact_sha256(path: Path, expected_sha256: str) -> None:
+  actual_sha256 = sha256_file(path)
+  if actual_sha256 != expected_sha256:
+    raise ValueError(
+      f"artifact SHA-256 mismatch for {path}: "
+      f"expected {expected_sha256}, got {actual_sha256}"
+    )
 
 
 def find_hub_artifact(cache_dir: Path, *, architecture: str | None) -> Path:

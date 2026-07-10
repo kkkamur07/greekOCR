@@ -127,9 +127,7 @@ async def platform_job_notification_loop(
             asyncio.create_task(publish_notification(raw_payload))
 
         try:
-            connection = await asyncpg.connect(
-                get_infrastructure_settings().sync_database_url
-            )
+            connection = await asyncpg.connect(get_infrastructure_settings().sync_database_url)
             await connection.add_listener(channel, handle_notification)
             logger.info("Listening for platform job notifications on %s", channel)
             await stop_event.wait()

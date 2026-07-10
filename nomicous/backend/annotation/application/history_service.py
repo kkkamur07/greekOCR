@@ -80,7 +80,9 @@ class AnnotationHistoryService:
                 )
             )
             .where(AnnotationHistorySnapshot.part_id == part_id)
-            .order_by(AnnotationHistorySnapshot.created_at.desc(), AnnotationHistorySnapshot.id.desc())
+            .order_by(
+                AnnotationHistorySnapshot.created_at.desc(), AnnotationHistorySnapshot.id.desc()
+            )
         )
         return list(result.scalars().all())
 
@@ -144,7 +146,9 @@ class AnnotationHistoryService:
         result = await session.execute(
             select(AnnotationHistorySnapshot.id)
             .where(AnnotationHistorySnapshot.part_id == part_id)
-            .order_by(AnnotationHistorySnapshot.created_at.desc(), AnnotationHistorySnapshot.id.desc())
+            .order_by(
+                AnnotationHistorySnapshot.created_at.desc(), AnnotationHistorySnapshot.id.desc()
+            )
             .offset(HISTORY_RETENTION_LIMIT)
         )
         snapshot_ids = list(result.scalars().all())

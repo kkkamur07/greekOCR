@@ -1,0 +1,30 @@
+default_stages: [pre-commit]
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: Ruff correctness checks
+        entry: uv run --locked --group dev ruff check nomicous/backend inference scripts/platform tests/nomicous tests/inference tests/hf
+        language: system
+        types_or: [python, pyi]
+        pass_filenames: false
+
+      - id: ruff-format
+        name: Ruff formatting
+        entry: uv run --locked --group dev ruff format
+        language: system
+        types_or: [python, pyi]
+        files: ^(nomicous/backend|inference|scripts/platform|tests/nomicous|tests/inference|tests/hf)/
+
+      - id: frontend-eslint
+        name: Frontend ESLint checks
+        entry: npm --prefix nomicous/frontend run lint
+        language: system
+        files: ^nomicous/frontend/.*\.(?:[cm]?[jt]sx?)$
+        pass_filenames: false
+
+      - id: frontend-prettier
+        name: Frontend Prettier formatting
+        entry: npm --prefix nomicous/frontend exec -- prettier --write
+        language: system
+        files: ^nomicous/frontend/.*\.(?:[cm]?[jt]sx?|json|css|html|md|ya?ml)$

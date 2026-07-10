@@ -1,10 +1,10 @@
 import { useEffect, useState, type CSSProperties, type SyntheticEvent } from 'react';
 import { API_BASE_URL } from '../api/client';
-import { getAccessToken } from '../auth/storage';
+import { acquirePartImage, normalizePartImagePath } from '../api/imageCache';
 
-function resolveMediaUrl(src: string): string {
-  if (src.startsWith('http')) return src;
-  return `${API_BASE_URL}${src}`;
+export function resolveProtectedMediaUrl(src: string): string | null {
+  const path = normalizePartImagePath(src);
+  return path ? new URL(path, `${API_BASE_URL}/`).toString() : null;
 }
 
 export function AuthenticatedImage({
@@ -30,29 +30,21 @@ export function AuthenticatedImage({
 
   useEffect(() => {
     let cancelled = false;
-    let objectUrl: string | null = null;
+    let release: (() => void) | null = null;
 
     setLoading(true);
     setFailed(false);
     setBlobUrl(null);
 
-    const fullUrl = resolveMediaUrl(src);
-    const token = getAccessToken();
-
     void (async () => {
       try {
-        const res = await fetch(fullUrl, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-        if (cancelled) return;
-        if (!res.ok) {
-          setFailed(true);
+        const image = await acquirePartImage(src);
+        release = image.release;
+        if (cancelled) {
+          image.release();
           return;
         }
-        const blob = await res.blob();
-        if (cancelled) return;
-        objectUrl = URL.createObjectURL(blob);
-        setBlobUrl(objectUrl);
+        setBlobUrl(image.objectUrl);
       } catch {
         if (!cancelled) setFailed(true);
       } finally {
@@ -62,9 +54,7 @@ export function AuthenticatedImage({
 
     return () => {
       cancelled = true;
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl);
-      }
+      release?.();
     };
   }, [src]);
 

@@ -88,33 +88,26 @@ SUPABASE_SERVICE_ROLE_KEY=<secret key from dashboard>
 
 ## Database connection strings
 
-Supabase gives connection URIs in **Project Settings → Database**. You often start with **one** URI; the app needs up to **three** (same password, different hosts/modes).
+Supabase provides connection URIs in **Project Settings → Database**. Use
+separate provider-managed service principals where the plan supports them; see
+[database-roles.md](database-roles.md). Their credentials stay in provider
+secrets, never in an example file or command history.
 
 | Variable | Connection | Port | Driver | Purpose |
 |----------|------------|------|--------|---------|
-| `MIGRATOR_DATABASE_URL` | **Direct** `db.<ref>.supabase.co` | 5432 | `postgresql://` (psycopg2) | Alembic migrations only |
-| `DATABASE_URL` | **Transaction pooler** `…pooler…` | 6543 | `postgresql+asyncpg://` | Async app runtime |
-| `SYNC_DATABASE_URL` | **Transaction pooler** (or direct) | 6543 / 5432 | `postgresql://` | Sync listener, scripts |
+| `MIGRATOR_DATABASE_URL` | **Direct** `db.<ref>.supabase.co` | 5432 | `postgresql://` (psycopg2) | Alembic operator/migrator only |
+| `DATABASE_URL` | **Transaction pooler** `…pooler…` | 6543 | `postgresql+asyncpg://` | `nomicous_api` or platform-worker runtime |
+| `SYNC_DATABASE_URL` | **Transaction pooler** (or direct) | 6543 / 5432 | `postgresql://` | Matching runtime principal for sync listener/scripts |
 
 Database name is **`postgres`** (Supabase default) — not `kalamos`.
 
-### One URL → three env vars
+### Assign service URLs
 
-If Supabase gives:
-
-```text
-postgresql://postgres.<ref>:PASSWORD@db.<ref>.supabase.co:5432/postgres
-```
-
-Set:
-
-```bash
-MIGRATOR_DATABASE_URL=postgresql://postgres.<ref>:PASSWORD@db.<ref>.supabase.co:5432/postgres?sslmode=require
-SYNC_DATABASE_URL=postgresql://postgres.<ref>:PASSWORD@aws-0-<region>.pooler.supabase.com:6543/postgres?sslmode=require
-DATABASE_URL=postgresql+asyncpg://postgres.<ref>:PASSWORD@aws-0-<region>.pooler.supabase.com:6543/postgres?sslmode=require
-```
-
-Only `DATABASE_URL` adds `+asyncpg`. Add `?sslmode=require` if missing.
+Copy the direct migrator URI only into the migration runner's secret store.
+Copy an API principal's pooler URI into `DATABASE_URL` and
+`SYNC_DATABASE_URL`; only `DATABASE_URL` adds `+asyncpg`. Copy the inference
+principal's pooler URI into `INFERENCE_DATABASE_URL` on the inference API and
+worker. Add `?sslmode=require` to libpq URLs when the provider URI omits it.
 
 ### Direct vs transaction pooler
 
@@ -152,6 +145,8 @@ Alembic also needs `%` doubled (`%%`) when passed through ConfigParser — handl
 | `nomicous/backend/core/.env` | Default local dev (Docker Postgres) |
 | `nomicous/backend/core/.env.supabase` | Supabase profile (gitignored) |
 | `nomicous/backend/core/.env.supabase.example` | Template (committed) |
+| `nomicous/backend/core/.env.inference` | Cloud inference containers only (gitignored) |
+| `nomicous/backend/core/.env.inference.example` | Least-privilege inference template (committed) |
 
 Settings load **`.env` first**; if missing, fall back to **`.env.supabase`** (`backend/core/settings/_env.py`).
 
@@ -279,13 +274,20 @@ Cloud path:  Browser → API creates job → INFERENCE_URL service → webhook c
 
 ```bash
 cp nomicous/backend/core/.env.supabase.example nomicous/backend/core/.env.supabase
+cp nomicous/backend/core/.env.inference.example nomicous/backend/core/.env.inference
 ```
 
-Fill in: three DB URLs, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `JWT_SECRET`, `STORAGE_BACKEND=supabase`.
+Fill `.env.supabase` from the provider secret store with the API and migrator
+DB URLs, `SUPABASE_URL`,
+`SUPABASE_SERVICE_ROLE_KEY`, `JWT_SECRET`, and `STORAGE_BACKEND=supabase`.
+Fill `.env.inference` with only the inference-role pooler URL and the two shared
+inference secrets. The Docker inference API and worker deliberately do not
+receive the app JWT, storage service-role key, or migration URL.
 
 ### 3. Migrate
 
 ```bash
+# One-time per database: follow docs/deployment/database-roles.md first.
 ./scripts/platform/migrate_supabase.sh
 ```
 
@@ -306,7 +308,8 @@ PYTHONPATH=. uvicorn backend.core.main:app --reload --port 8000
 
 ### 5b. Run full stack with Docker (recommended)
 
-From the **repository root**, with `.env.supabase` configured:
+From the **repository root**, with `.env.supabase` and `.env.inference`
+configured:
 
 ```bash
 # First time (or after code changes)
@@ -325,8 +328,9 @@ docker compose -f docker-compose.yml -f docker-compose.supabase.yml up -d --buil
 | http://localhost:8000 | Platform API |
 | http://localhost:8010 | Inference API (cloud jobs) — host port; container listens on 8001 |
 
-This profile **does not start local Postgres** (`db` is disabled). API startup still runs
-`alembic upgrade head` + seed (idempotent).
+This profile **does not start local Postgres** (`db` is disabled). Apply
+Alembic from the operator/migrator host first; the Compose API only runs the
+idempotent development seed.
 
 ```bash
 # Stop
@@ -364,9 +368,9 @@ Dev login after seed: `dev@example.com` / `dev-pass-123`
 
 | Variable | Required (Supabase) | Purpose |
 |----------|---------------------|---------|
-| `MIGRATOR_DATABASE_URL` | Yes | Alembic — direct Postgres |
-| `DATABASE_URL` | Yes | Async SQLAlchemy (`+asyncpg`) |
-| `SYNC_DATABASE_URL` | Yes | Sync Postgres / listener |
+| `MIGRATOR_DATABASE_URL` | Yes | Alembic operator/migrator — direct Postgres |
+| `DATABASE_URL` | Yes | Async SQLAlchemy (`+asyncpg`) API/worker principal |
+| `SYNC_DATABASE_URL` | Yes | Matching API/worker principal sync connection |
 | `STORAGE_BACKEND` | Yes | `supabase` |
 | `SUPABASE_URL` | Yes | Project API URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | Storage (secret key) |
@@ -409,7 +413,7 @@ Dev login after seed: `dev@example.com` / `dev-pass-123`
 
 ## Related docs
 
-- [ADR 003: Supabase as hosted Postgres + Storage](../decisions/003-supabase-hosted-postgres-and-storage.md)
-- [Local inference helper (ADR 002)](../decisions/002-local-inference-helper.md)
+- [Supabase learnings (pitfalls + connection URLs)](../guides/learnings.md#supabase-hosted-postgres--storage)
+- [Local inference helper](../../README.md#local-inference-helper)
 - [Local development guide](../guides/local-development.md)
 - [Infrastructure README](../../nomicous/infrastructure/README.md)

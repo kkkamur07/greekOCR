@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { toast } from '../components/ui/toast';
 import { api, type DocumentResponse, type ProjectResponse } from '../api/client';
 import { ApiError } from '../api/errors';
@@ -11,9 +11,8 @@ import { ProjectSettingsPanel } from '../components/sharing/ProjectSettingsPanel
 import { FormModal } from '../components/ui/FormModal';
 
 export function ProjectDashboardPage() {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { projectId } = useParams<{ projectId: string }>();
+  const router = useRouter();
+  const { projectId } = useParams<{ projectId: string }>() ?? {};
   const [project, setProject] = useState<ProjectResponse | null>(null);
   const [documents, setDocuments] = useState<DocumentResponse[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
@@ -31,7 +30,7 @@ export function ProjectDashboardPage() {
   const load = useCallback(async () => {
     if (!projectId) return;
     if (!hasAccessToken()) {
-      navigateToLogin(navigate, location);
+      navigateToLogin(router);
       return;
     }
     setLoading(true);
@@ -48,7 +47,7 @@ export function ProjectDashboardPage() {
       setDocuments(docs);
     } catch (err) {
       if (isUnauthorized(err)) {
-        navigateToLogin(navigate, location);
+        navigateToLogin(router);
         return;
       }
       const msg = err instanceof ApiError ? err.message : 'Failed to load project';
@@ -63,7 +62,7 @@ export function ProjectDashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [projectId, includeArchived, location, navigate]);
+  }, [projectId, includeArchived, router]);
 
   useEffect(() => {
     void load();
@@ -80,7 +79,7 @@ export function ProjectDashboardPage() {
       toast.success('Document created');
       setCreateModalOpen(false);
       setNewDocName('');
-      navigate(`/projects/${projectId}/documents/${doc.id}`);
+      router.push(`/projects/${projectId}/documents/${doc.id}`);
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : 'Failed to create document';
       toast.error(msg);
@@ -100,7 +99,7 @@ export function ProjectDashboardPage() {
     try {
       await api.deleteProject(projectId);
       toast.success('Project deleted');
-      navigate('/projects');
+      router.push('/projects');
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : 'Failed to delete project';
       toast.error(msg);

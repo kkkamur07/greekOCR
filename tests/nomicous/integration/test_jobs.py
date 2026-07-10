@@ -127,7 +127,9 @@ def test_job_events_requires_auth(client: TestClient, registered_user: dict[str,
 # Tests enqueue, poll, and status fields for noop handler. Does not test real ML jobs.
 
 
-def test_enqueue_test_job_returns_job_id_immediately(client: TestClient, registered_user: dict[str, str]):
+def test_enqueue_test_job_returns_job_id_immediately(
+    client: TestClient, registered_user: dict[str, str]
+):
     auth_headers = {"Authorization": f"Bearer {registered_user['access_token']}"}
     response = client.post("/jobs/test", headers=auth_headers)
 
@@ -185,7 +187,11 @@ def test_get_job_denies_access_to_other_users_job(client: TestClient):
     def _register(suffix: str) -> str:
         r = client.post(
             "/auth/register",
-            json={"email": f"{suffix}@test.kalamos", "username": suffix, "password": "test-pass-123"},
+            json={
+                "email": f"{suffix}@test.kalamos",
+                "username": suffix,
+                "password": "test-pass-123",
+            },
         )
         return r.json()["access_token"]
 
@@ -199,7 +205,9 @@ def test_get_job_denies_access_to_other_users_job(client: TestClient):
     assert response.status_code == 403
 
 
-def test_get_job_denies_access_to_ownerless_job(client: TestClient, registered_user: dict[str, str]):
+def test_get_job_denies_access_to_ownerless_job(
+    client: TestClient, registered_user: dict[str, str]
+):
     job_id = uuid.uuid4()
     with sync_system_session() as session:
         session.add(
@@ -230,11 +238,13 @@ def test_failed_handler_stores_error_message(client: TestClient, registered_user
     job_id = response.json()["job_id"]
 
     body = poll_job(client, job_id, expect_status="failed", headers=auth_headers)
-    assert body["error"] == "intentional test failure"
+    assert body["error"] == "Test job failed"
     assert body["completed_at"] is not None
 
 
-def test_worker_processes_pending_job_via_lifespan(client: TestClient, registered_user: dict[str, str]):
+def test_worker_processes_pending_job_via_lifespan(
+    client: TestClient, registered_user: dict[str, str]
+):
     """Background loop started in app lifespan completes a noop job without manual claim."""
     auth_headers = {"Authorization": f"Bearer {registered_user['access_token']}"}
     response = client.post("/jobs/test", headers=auth_headers)
@@ -284,9 +294,7 @@ def test_transcribe_job_submits_one_batched_inference_job(
     assert len(stub_client.requests) == 1
     request = stub_client.requests[0]
     assert request.task.value == "transcribe"
-    assert [line["line_id"] for line in request.params["lines"]] == [
-        line["id"] for line in lines
-    ]
+    assert [line["line_id"] for line in request.params["lines"]] == [line["id"] for line in lines]
     assert [line["line_index"] for line in request.params["lines"]] == [0, 1]
 
 

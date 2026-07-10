@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import uuid
+from datetime import UTC, datetime
 
 from backend.core.settings import get_inference_settings
-from backend.document.infrastructure.orm_models import Document, DocumentPart, Line, LineGeometryKind
+from backend.document.infrastructure.orm_models import (
+    Document,
+    DocumentPart,
+    Line,
+    LineGeometryKind,
+)
 from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
 from backend.project.infrastructure.orm_models import Project
 from fastapi.testclient import TestClient
@@ -105,7 +112,9 @@ def _seed_waiting_job(
             project_id = uuid.uuid4()
             document_id = uuid.uuid4()
             part_id = uuid.uuid4()
-            session.add(Project(id=project_id, name="Callback test", slug=f"callback-{uuid.uuid4().hex}"))
+            session.add(
+                Project(id=project_id, name="Callback test", slug=f"callback-{uuid.uuid4().hex}")
+            )
             session.flush()
             session.add(
                 Document(
@@ -150,7 +159,9 @@ def _seed_transcribe_waiting_job(
     part_id = uuid.uuid4()
     line_id = uuid.uuid4()
     with sync_system_session() as session:
-        session.add(Project(id=project_id, name="Callback test", slug=f"callback-{uuid.uuid4().hex}"))
+        session.add(
+            Project(id=project_id, name="Callback test", slug=f"callback-{uuid.uuid4().hex}")
+        )
         session.flush()
         session.add(
             Document(
@@ -209,7 +220,9 @@ def test_callback_missing_secret_returns_401(client: TestClient):
     product_job_id, inference_job_id = _seed_waiting_job()
     response = client.post(
         CALLBACK_URL,
-        json=_segment_done_payload(product_job_id=product_job_id, inference_job_id=inference_job_id),
+        json=_segment_done_payload(
+            product_job_id=product_job_id, inference_job_id=inference_job_id
+        ),
     )
     assert response.status_code == 401
 
@@ -219,7 +232,9 @@ def test_callback_wrong_secret_returns_403(client: TestClient):
     response = client.post(
         CALLBACK_URL,
         headers={INFERENCE_WEBHOOK_SECRET_HEADER: "wrong-secret"},
-        json=_segment_done_payload(product_job_id=product_job_id, inference_job_id=inference_job_id),
+        json=_segment_done_payload(
+            product_job_id=product_job_id, inference_job_id=inference_job_id
+        ),
     )
     assert response.status_code == 403
 
@@ -232,7 +247,9 @@ def test_callback_unconfigured_secret_returns_503(client: TestClient, monkeypatc
     response = client.post(
         CALLBACK_URL,
         headers=WEBHOOK_HEADERS,
-        json=_segment_done_payload(product_job_id=product_job_id, inference_job_id=inference_job_id),
+        json=_segment_done_payload(
+            product_job_id=product_job_id, inference_job_id=inference_job_id
+        ),
     )
 
     assert response.status_code == 503
@@ -248,7 +265,9 @@ def test_callback_success_marks_job_done(client: TestClient):
     response = client.post(
         CALLBACK_URL,
         headers=WEBHOOK_HEADERS,
-        json=_segment_done_payload(product_job_id=product_job_id, inference_job_id=inference_job_id),
+        json=_segment_done_payload(
+            product_job_id=product_job_id, inference_job_id=inference_job_id
+        ),
     )
     assert response.status_code == 204
 
@@ -303,7 +322,7 @@ def test_callback_failure_marks_job_failed(client: TestClient):
 
     job = _get_job(product_job_id)
     assert job.status == JobStatus.failed
-    assert job.error == "weights not found in cache"
+    assert job.error == "Inference job failed"
     assert job.completed_at is not None
 
 
@@ -313,7 +332,9 @@ def test_callback_failure_marks_job_failed(client: TestClient):
 
 def test_callback_on_terminal_job_is_idempotent(client: TestClient):
     product_job_id, inference_job_id = _seed_waiting_job()
-    payload = _segment_done_payload(product_job_id=product_job_id, inference_job_id=inference_job_id)
+    payload = _segment_done_payload(
+        product_job_id=product_job_id, inference_job_id=inference_job_id
+    )
 
     first = client.post(CALLBACK_URL, headers=WEBHOOK_HEADERS, json=payload)
     assert first.status_code == 204
@@ -329,12 +350,33 @@ def test_callback_on_terminal_job_is_idempotent(client: TestClient):
     assert after_second.error == after_first.error
 
 
+def test_parallel_callback_replays_merge_once(client: TestClient):
+    product_job_id, inference_job_id = _seed_waiting_job()
+    payload = _segment_done_payload(
+        product_job_id=product_job_id, inference_job_id=inference_job_id
+    )
+
+    def deliver() -> int:
+        return client.post(CALLBACK_URL, headers=WEBHOOK_HEADERS, json=payload).status_code
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        statuses = list(executor.map(lambda _unused: deliver(), range(2)))
+
+    assert statuses == [204, 204]
+    job = _get_job(product_job_id)
+    assert job.status == JobStatus.done
+    assert job.result is not None
+    assert job.result["lines_count"] == 1
+
+
 def test_callback_task_mismatch_returns_409(client: TestClient):
     product_job_id, inference_job_id = _seed_waiting_job(job_type=JobType.transcribe)
     response = client.post(
         CALLBACK_URL,
         headers=WEBHOOK_HEADERS,
-        json=_segment_done_payload(product_job_id=product_job_id, inference_job_id=inference_job_id),
+        json=_segment_done_payload(
+            product_job_id=product_job_id, inference_job_id=inference_job_id
+        ),
     )
     assert response.status_code == 409
 
@@ -355,12 +397,76 @@ def test_callback_ml_job_mismatch_returns_409(client: TestClient):
     assert response.status_code == 409
 
 
+def test_callback_rejects_unbound_inference_job(client: TestClient):
+    product_job_id, inference_job_id = _seed_waiting_job()
+    with sync_system_session() as session:
+        job = session.get(Job, product_job_id)
+        assert job is not None
+        job.inference_job_id = None
+        session.commit()
+
+    response = client.post(
+        CALLBACK_URL,
+        headers=WEBHOOK_HEADERS,
+        json=_segment_done_payload(
+            product_job_id=product_job_id, inference_job_id=inference_job_id
+        ),
+    )
+
+    assert response.status_code == 409
+    assert _get_job(product_job_id).status == JobStatus.waiting
+
+
+def test_callback_requires_waiting_job_state(client: TestClient):
+    product_job_id, inference_job_id = _seed_waiting_job()
+    with sync_system_session() as session:
+        job = session.get(Job, product_job_id)
+        assert job is not None
+        job.status = JobStatus.running
+        session.commit()
+
+    response = client.post(
+        CALLBACK_URL,
+        headers=WEBHOOK_HEADERS,
+        json=_segment_done_payload(
+            product_job_id=product_job_id, inference_job_id=inference_job_id
+        ),
+    )
+
+    assert response.status_code == 409
+    assert _get_job(product_job_id).status == JobStatus.running
+
+
+def test_callback_claimed_replay_is_not_merged_twice(client: TestClient):
+    product_job_id, inference_job_id = _seed_waiting_job()
+    with sync_system_session() as session:
+        job = session.get(Job, product_job_id)
+        assert job is not None
+        job.callback_claimed_at = datetime.now(UTC)
+        session.commit()
+
+    response = client.post(
+        CALLBACK_URL,
+        headers=WEBHOOK_HEADERS,
+        json=_segment_done_payload(
+            product_job_id=product_job_id, inference_job_id=inference_job_id
+        ),
+    )
+
+    assert response.status_code == 204
+    job = _get_job(product_job_id)
+    assert job.status == JobStatus.waiting
+    assert job.result is None
+
+
 def test_callback_unknown_job_returns_404(client: TestClient):
     product_job_id = uuid.uuid4()
     inference_job_id = uuid.uuid4()
     response = client.post(
         CALLBACK_URL,
         headers=WEBHOOK_HEADERS,
-        json=_segment_done_payload(product_job_id=product_job_id, inference_job_id=inference_job_id),
+        json=_segment_done_payload(
+            product_job_id=product_job_id, inference_job_id=inference_job_id
+        ),
     )
     assert response.status_code == 404

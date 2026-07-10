@@ -1,18 +1,14 @@
-export function authRedirectTarget(state: unknown): string {
-  if (
-    typeof state !== 'object' ||
-    state === null ||
-    !('from' in state) ||
-    typeof state.from !== 'object' ||
-    state.from === null ||
-    !('pathname' in state.from) ||
-    typeof state.from.pathname !== 'string'
-  ) {
+export function authRedirectTarget(callbackUrl: string | null | undefined): string {
+  if (!callbackUrl || !callbackUrl.startsWith('/') || callbackUrl.startsWith('//')) {
     return '/projects';
   }
 
-  const search =
-    'search' in state.from && typeof state.from.search === 'string' ? state.from.search : '';
-  const hash = 'hash' in state.from && typeof state.from.hash === 'string' ? state.from.hash : '';
-  return `${state.from.pathname}${search}${hash}`;
+  try {
+    const url = new URL(callbackUrl, 'http://nomicous.internal');
+    return url.origin === 'http://nomicous.internal'
+      ? `${url.pathname}${url.search}${url.hash}`
+      : '/projects';
+  } catch {
+    return '/projects';
+  }
 }

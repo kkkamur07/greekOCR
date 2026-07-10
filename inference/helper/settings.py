@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import os
 from functools import lru_cache
+from ipaddress import ip_address
 from pathlib import Path
 
-from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, field_validator, model_validator
+from pydantic_settings import SettingsConfigDict
+
+from inference.admission import AdmissionSettings
 
 INFERENCE_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_HF_CACHE_ROOT = Path.home() / ".nomicous" / "hf" / "cache"
@@ -17,11 +20,32 @@ DEFAULT_CACHED_REGISTRY_PATH = DEFAULT_NOMICOUS_HOME / "registry.yaml"
 DEFAULT_CACHED_REGISTRY_ETAG_PATH = DEFAULT_NOMICOUS_HOME / "registry.etag"
 
 
-class HelperSettings(BaseSettings):
+def _is_loopback_host(host: str) -> bool:
+    normalized = host.strip().strip("[]").lower()
+    if normalized == "localhost":
+        return True
+    try:
+        return ip_address(normalized).is_loopback
+    except ValueError:
+        return False
+
+
+def _is_non_placeholder_secret(secret: str | None) -> bool:
+    if secret is None or len(secret.strip()) < 32:
+        return False
+    normalized = secret.strip().lower()
+    return not any(
+        marker in normalized for marker in ("change", "example", "placeholder", "replace")
+    )
+
+
+class HelperSettings(AdmissionSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     helper_host: str = Field(default="127.0.0.1", alias="HELPER_HOST")
     helper_port: int = Field(default=8001, alias="HELPER_PORT")
+    helper_secure_mode: bool = Field(default=False, alias="HELPER_SECURE_MODE")
+    helper_auth_secret: str | None = Field(default=None, alias="HELPER_AUTH_SECRET")
     bundled_registry_path: Path = Field(
         default=DEFAULT_BUNDLED_REGISTRY_PATH,
         alias="HELPER_BUNDLED_REGISTRY_PATH",
@@ -59,6 +83,19 @@ class HelperSettings(BaseSettings):
         if isinstance(value, list):
             return value
         return []
+
+    @model_validator(mode="after")
+    def validate_exposure(self) -> HelperSettings:
+        secret_is_safe = _is_non_placeholder_secret(self.helper_auth_secret)
+        if self.helper_secure_mode and not secret_is_safe:
+            raise ValueError("HELPER_SECURE_MODE requires a non-placeholder HELPER_AUTH_SECRET")
+        if not _is_loopback_host(self.helper_host) and not (
+            self.helper_secure_mode and secret_is_safe
+        ):
+            raise ValueError(
+                "HELPER_HOST must be loopback unless secure mode has a non-placeholder auth secret"
+            )
+        return self
 
 
 @lru_cache

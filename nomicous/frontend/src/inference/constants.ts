@@ -1,5 +1,5 @@
 export const HELPER_BASE_URL =
-  (import.meta.env.VITE_INFERENCE_HELPER_URL as string | undefined)?.replace(/\/$/, '') ||
+  process.env.NEXT_PUBLIC_INFERENCE_HELPER_URL?.replace(/\/$/, '') ||
   'http://127.0.0.1:8001';
 
 export const HELPER_PROBE_TIMEOUT_MS = 2_000;

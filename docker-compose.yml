@@ -1,14 +1,24 @@
 name: nomicous
 
+x-api-build: &api-build
+  context: .
+  dockerfile: nomicous/Dockerfile
+  args:
+    APP_VERSION: ${NOMICOUS_VERSION:-0.3.3}
+
+x-inference-build: &inference-build
+  context: .
+  dockerfile: inference/Dockerfile
+
 services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: dev
-      POSTGRES_DB: kalamos
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?copy .env.compose.example to .env and set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-kalamos}
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -18,25 +28,25 @@ services:
       retries: 5
 
   api:
-    build:
-      context: .
-      dockerfile: nomicous/Dockerfile
-      args:
-        APP_VERSION: ${NOMICOUS_VERSION:-0.3.3}
+    image: nomicous-api:latest
+    build: *api-build
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       ENVIRONMENT: development
-      DATABASE_URL: postgresql+asyncpg://postgres:dev@db:5432/kalamos
-      SYNC_DATABASE_URL: postgresql://postgres:dev@db:5432/kalamos
-      MIGRATOR_DATABASE_URL: postgresql://postgres:dev@db:5432/kalamos
-      JWT_SECRET: dev-secret-change-in-production
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?copy .env.compose.example to .env and set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-kalamos}
+      SYNC_DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?copy .env.compose.example to .env and set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-kalamos}
+      MIGRATOR_DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?copy .env.compose.example to .env and set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-kalamos}
+      JWT_SECRET: ${JWT_SECRET:?copy .env.compose.example to .env and set JWT_SECRET}
       CORS_ORIGINS: http://localhost:3000,http://localhost:5173
       MEDIA_ROOT: /app/backend/media
       NOMICOUS_APP_ROOT: /app
       INFERENCE_URL: http://inference-api:8001
-      INFERENCE_WEBHOOK_SECRET: dev-inference-webhook-secret
-      INFERENCE_SERVICE_SECRET: dev-inference-webhook-secret
+      INFERENCE_WEBHOOK_SECRET: ${INFERENCE_WEBHOOK_SECRET:?copy .env.compose.example to .env and set INFERENCE_WEBHOOK_SECRET}
+      INFERENCE_SERVICE_SECRET: ${INFERENCE_SERVICE_SECRET:?copy .env.compose.example to .env and set INFERENCE_SERVICE_SECRET}
+      # API hosts remain request/response only; Compose runs platform-worker separately.
+      JOB_WORKER_ENABLED: "false"
+      JOB_SSE_NOTIFICATIONS_ENABLED: "false"
       ANNOTATED_DATA_ROOT: /data/annotated/data
     volumes:
       - ./nomicous/backend/media:/app/backend/media
@@ -69,28 +79,47 @@ services:
     # recreate the DB volume while the API keeps running, hit /health or restart api —
     # development health checks recreate the dev login user when it is missing.
 
+  platform-worker:
+    image: nomicous-api:latest
+    build: *api-build
+    environment:
+      ENVIRONMENT: development
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?copy .env.compose.example to .env and set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-kalamos}
+      SYNC_DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?copy .env.compose.example to .env and set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-kalamos}
+      INFERENCE_URL: http://inference-api:8001
+      INFERENCE_WEBHOOK_SECRET: ${INFERENCE_WEBHOOK_SECRET:?copy .env.compose.example to .env and set INFERENCE_WEBHOOK_SECRET}
+      INFERENCE_SERVICE_SECRET: ${INFERENCE_SERVICE_SECRET:?copy .env.compose.example to .env and set INFERENCE_SERVICE_SECRET}
+      JOB_WORKER_ENABLED: "true"
+      JOB_SSE_NOTIFICATIONS_ENABLED: "false"
+    volumes:
+      - ./nomicous/backend:/app/backend
+      - ./inference:/app/inference
+    depends_on:
+      db:
+        condition: service_healthy
+      inference-api:
+        condition: service_healthy
+    command: python -m backend.jobs.worker_main
+
   inference-api:
     image: nomicous-inference:latest
-    build:
-      context: .
-      dockerfile: inference/Dockerfile
+    build: *inference-build
     # Host port 8001 is reserved for the local Inference helper (the browser probes
     # http://127.0.0.1:8001 directly — see docs/deployment/supabase.md). Publish the cloud
     # inference API on 8010 so it never shadows a locally installed helper. The
     # container still listens on 8001, so INFERENCE_URL (docker network) is unchanged.
     ports:
-      - "8010:8001"
+      - "127.0.0.1:8010:8001"
     environment:
-      DATABASE_URL: postgresql://postgres:dev@db:5432/kalamos
-      INFERENCE_DATABASE_URL: postgresql://postgres:dev@db:5432/kalamos
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?copy .env.compose.example to .env and set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-kalamos}
+      INFERENCE_DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?copy .env.compose.example to .env and set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-kalamos}
       INFERENCE_CALLBACK_URL: http://api:8000/internal/inference/job-complete
       INFERENCE_REGISTRY_PATH: /app/inference/registry.yaml
-      INFERENCE_WEBHOOK_SECRET: dev-inference-webhook-secret
-      INFERENCE_SERVICE_SECRET: dev-inference-webhook-secret
-      INFERENCE_WEIGHTS_CACHE_DIR: /app/inference/weights/cache
+      INFERENCE_WEBHOOK_SECRET: ${INFERENCE_WEBHOOK_SECRET:?copy .env.compose.example to .env and set INFERENCE_WEBHOOK_SECRET}
+      INFERENCE_SERVICE_SECRET: ${INFERENCE_SERVICE_SECRET:?copy .env.compose.example to .env and set INFERENCE_SERVICE_SECRET}
+      HF_CACHE_ROOT: /app/src/hf/cache
       INFERENCE_CALAMARI_NUM_PROCESSES: "1"
     volumes:
-      - ./inference/weights:/app/inference/weights
       - ./src/hf:/app/src/hf
     depends_on:
       db:
@@ -114,17 +143,16 @@ services:
     healthcheck:
       disable: true
     environment:
-      DATABASE_URL: postgresql://postgres:dev@db:5432/kalamos
-      INFERENCE_DATABASE_URL: postgresql://postgres:dev@db:5432/kalamos
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?copy .env.compose.example to .env and set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-kalamos}
+      INFERENCE_DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?copy .env.compose.example to .env and set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-kalamos}
       INFERENCE_CALLBACK_URL: http://api:8000/internal/inference/job-complete
       INFERENCE_REGISTRY_PATH: /app/inference/registry.yaml
-      INFERENCE_WEBHOOK_SECRET: dev-inference-webhook-secret
-      INFERENCE_SERVICE_SECRET: dev-inference-webhook-secret
-      INFERENCE_WEIGHTS_CACHE_DIR: /app/inference/weights/cache
+      INFERENCE_WEBHOOK_SECRET: ${INFERENCE_WEBHOOK_SECRET:?copy .env.compose.example to .env and set INFERENCE_WEBHOOK_SECRET}
+      INFERENCE_SERVICE_SECRET: ${INFERENCE_SERVICE_SECRET:?copy .env.compose.example to .env and set INFERENCE_SERVICE_SECRET}
+      HF_CACHE_ROOT: /app/src/hf/cache
       INFERENCE_CALAMARI_NUM_PROCESSES: "1"
       INFERENCE_WORKER_RUNNING_JOB_TIMEOUT_SECONDS: "1800"
     volumes:
-      - ./inference/weights:/app/inference/weights
       - ./src/hf:/app/src/hf
     depends_on:
       db:
@@ -134,19 +162,19 @@ services:
     command: python -m inference.jobs.worker
 
   frontend:
+    image: nomicous-frontend:latest
     build:
       context: ./nomicous
       dockerfile: frontend/Dockerfile
       target: dev
       args:
         APP_VERSION: ${NOMICOUS_VERSION:-0.3.3}
-        VITE_API_BASE_URL: http://localhost:8000
+        NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
     ports:
-      - "5173:5173"
+      - "127.0.0.1:5173:5173"
     environment:
-      VITE_API_BASE_URL: http://localhost:8000
-      VITE_DEV_PROXY_TARGET: http://api:8000
-    command: sh -c "rm -rf node_modules/.vite && npm run dev -- --host 0.0.0.0 --force"
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+    command: npm run dev -- --hostname 0.0.0.0
     volumes:
       - ./nomicous/frontend:/app
       - frontend_node_modules:/app/node_modules

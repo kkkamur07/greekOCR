@@ -3,13 +3,20 @@ import type { LayoutPoint, LinePoint } from '../../api/client';
 export type GeometryInput =
   | LinePoint[]
   | LayoutPoint[]
+  | number[][]
   | {
-      points?: Array<LinePoint | number[]>;
+      points?: number[][];
       type?: string;
-      coordinates?: Array<LinePoint | number[]>;
+      coordinates?: number[][];
     }
   | null
   | undefined;
+
+type GeometryObject = {
+  points?: LinePoint[];
+  type?: string;
+  coordinates?: LinePoint[];
+};
 
 function asPointPair(value: LinePoint | number[]): LinePoint | null {
   if (!Array.isArray(value) || value.length < 2) return null;
@@ -43,17 +50,18 @@ export function points(input: GeometryInput): string {
 export function withGeometryPoints(
   geometry: GeometryInput,
   nextPoints: LinePoint[],
-): { points: LinePoint[] } & Record<string, unknown> {
+): GeometryObject {
   if (geometry && typeof geometry === 'object' && !Array.isArray(geometry)) {
+    const type = geometry.type;
     if ('coordinates' in geometry) {
-      return { ...geometry, coordinates: nextPoints };
+      return { ...(type ? { type } : {}), coordinates: nextPoints };
     }
-    return { ...geometry, points: nextPoints };
+    return { ...(type ? { type } : {}), points: nextPoints };
   }
   return { points: nextPoints };
 }
 
-export function offsetGeometry(geometry: GeometryInput, deltaY: number): { points: LinePoint[] } {
+export function offsetGeometry(geometry: GeometryInput, deltaY: number): GeometryObject {
   const shifted = normalizeGeometryPoints(geometry).map(
     ([x, y]) => [x, y + deltaY] as LinePoint,
   );

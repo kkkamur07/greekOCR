@@ -1,14 +1,14 @@
-import { useNavigate } from 'react-router-dom';
-import type { DocumentPartResponse, DocumentWithPartsResponse } from '../../api/client';
+import { useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import type { DocumentPartResponse } from '../../api/client';
+import { prefetchPartImage } from '../../api/imageCache';
 import { ReviewBadge } from '../WorkflowBadge';
 import { AuthenticatedImage } from '../AuthenticatedImage';
-import type { PageEditorLocationState } from '../../pages/pageEditorNavigation';
 
 type PartListProps = {
   parts: DocumentPartResponse[];
   projectId: string;
   documentId: string;
-  document?: DocumentWithPartsResponse | null;
   loading?: boolean;
   onMoveUp?: (index: number) => void;
   onMoveDown?: (index: number) => void;
@@ -22,7 +22,6 @@ export function PartList({
   parts,
   projectId,
   documentId,
-  document = null,
   loading = false,
   onMoveUp,
   onMoveDown,
@@ -45,7 +44,6 @@ export function PartList({
           total={parts.length}
           projectId={projectId}
           documentId={documentId}
-          document={document}
           onMoveUp={onMoveUp ? () => onMoveUp(index) : undefined}
           onMoveDown={onMoveDown ? () => onMoveDown(index) : undefined}
           onDelete={onDelete ? () => onDelete(part.id) : undefined}
@@ -66,7 +64,6 @@ type PartRowProps = {
   total: number;
   projectId: string;
   documentId: string;
-  document?: DocumentWithPartsResponse | null;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
   onDelete?: () => void;
@@ -81,7 +78,6 @@ function PartRow({
   total,
   projectId,
   documentId,
-  document = null,
   onMoveUp,
   onMoveDown,
   onDelete,
@@ -89,14 +85,39 @@ function PartRow({
   reviewUpdating = false,
   reordering,
 }: PartRowProps) {
-  const navigate = useNavigate();
+  const router = useRouter();
+  const prefetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dim =
     part.width && part.height ? `${part.width} × ${part.height}` : 'Dimensions pending';
   const editorPath = `/projects/${projectId}/documents/${documentId}/parts/${part.id}`;
+  const thumbnailUrl = part.image_url
+    ? `${part.image_url}${part.image_url.includes('?') ? '&' : '?'}w=200`
+    : null;
+
+  const cancelPrefetch = () => {
+    if (prefetchTimer.current !== null) {
+      clearTimeout(prefetchTimer.current);
+      prefetchTimer.current = null;
+    }
+  };
+
+  const scheduleFullImagePrefetch = () => {
+    if (!part.image_url || prefetchTimer.current !== null) return;
+    prefetchTimer.current = setTimeout(() => {
+      prefetchTimer.current = null;
+      prefetchPartImage(part.image_url);
+    }, 100);
+  };
+
+  useEffect(
+    () => () => {
+      if (prefetchTimer.current !== null) clearTimeout(prefetchTimer.current);
+    },
+    [],
+  );
 
   const openEditor = () => {
-    const state: PageEditorLocationState | undefined = document ? { document } : undefined;
-    void navigate(editorPath, { state });
+    router.push(editorPath);
   };
 
   const onRowKeyDown = (event: React.KeyboardEvent) => {
@@ -114,12 +135,16 @@ function PartRow({
       aria-label={`Open part ${index + 1} in editor`}
       onClick={openEditor}
       onKeyDown={onRowKeyDown}
+      onMouseEnter={scheduleFullImagePrefetch}
+      onMouseLeave={cancelPrefetch}
+      onFocus={scheduleFullImagePrefetch}
+      onBlur={cancelPrefetch}
     >
       <div className="part-thumb" aria-hidden={!!part.image_url}>
-        {part.image_url ? (
+        {thumbnailUrl ? (
           <AuthenticatedImage
             compact
-            src={part.image_url}
+            src={thumbnailUrl}
             alt={`Part ${index + 1}`}
             style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
           />

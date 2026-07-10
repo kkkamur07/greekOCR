@@ -111,9 +111,7 @@ class DocumentCrudMixin(DocumentServiceSharedMixin):
         project = await self._require_member(session, project_id, user.id)
         document = await self._load_document_in_project(session, project, document_id)
         image_keys = [part.image_key for part in document.parts]
-        for image_key in image_keys:
-            self._media.delete(image_key)
-        await self._documents.delete(session, document)
+        await self._documents.delete_with_media_intents(session, document, image_keys)
 
     async def list_transcriptions(
         self,

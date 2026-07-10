@@ -15,7 +15,6 @@ const BASE_TRANSCRIPTION: LineTranscriptionWithCharacterConfidence = {
   transcription_kind: 'model',
   text: 'abc',
   confidence: 0.82,
-  text_source: 'model',
 };
 
 describe('characterConfidence', () => {

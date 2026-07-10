@@ -7,4 +7,3 @@ INFERENCE_ROOT = Path(__file__).resolve().parent
 __all__ = [
     "INFERENCE_ROOT",
 ]
-

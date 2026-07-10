@@ -19,6 +19,7 @@ from src.hf.publish.staging import (
   hub_repo_slug,
   model_staging_dir,
   validate_dataset_staging,
+  validate_dataset_slug,
   validate_model_staging,
 )
 from src.hf.publish.sync import CollectionSyncPlan, plan_collection_sync, sync_collection
@@ -48,5 +49,6 @@ __all__ = [
   "sync_collection",
   "upload_enabled",
   "validate_dataset_staging",
+  "validate_dataset_slug",
   "validate_model_staging",
 ]

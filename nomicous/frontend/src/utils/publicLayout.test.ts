@@ -1,12 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { PublicLineResponse } from '../api/client';
-import {
-  lineTextForLayer,
-  linesForPart,
-  publicLinesToRegions,
-  publicLinesToTranscriptions,
-} from './publicLayout';
+import { lineTextForLayer, linesForPart, publicLinesToRegions } from './publicLayout';
 
 const LINE: PublicLineResponse = {
   id: 'line-1',
@@ -42,14 +37,11 @@ describe('publicLayout', () => {
     expect(lines.map((line) => line.id)).toEqual(['line-1', 'line-3']);
   });
 
-  it('maps public lines to canvas regions and transcriptions', () => {
+  it('maps public lines to canvas regions', () => {
     const regions = publicLinesToRegions([LINE]);
     expect(regions).toHaveLength(1);
     expect(regions[0]?.id).toBe(1);
     expect(regions[0]?.bbox).toEqual([10, 10, 50, 30]);
-
-    const transcriptions = publicLinesToTranscriptions([LINE], 'ground-truth-1');
-    expect(transcriptions).toEqual([{ region_id: 1, text: 'alpha', confidence: 1 }]);
     expect(lineTextForLayer(LINE, 'ground-truth-1')).toBe('alpha');
   });
 });

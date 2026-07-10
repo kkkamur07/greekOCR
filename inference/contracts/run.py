@@ -6,9 +6,11 @@ from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
+from inference.admission import validate_request_params
 from inference.contracts.common import ImageBytes, InferenceTask
 from inference.contracts.segment import SegmentRunResponse
 from inference.contracts.transcribe import TranscribeBatchRunResponse, TranscribeRunResponse
+from inference.infrastructure.settings import get_inference_settings
 
 
 class InferenceRunRequest(BaseModel):
@@ -17,6 +19,11 @@ class InferenceRunRequest(BaseModel):
     registry_tag: str = Field(default="stable", min_length=1)
     image_bytes: ImageBytes
     params: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_admission_limits(self) -> InferenceRunRequest:
+        validate_request_params(self.params, get_inference_settings())
+        return self
 
 
 class InferenceRunResponse(BaseModel):

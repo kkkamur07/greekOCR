@@ -1,8 +1,10 @@
+# syntax=docker/dockerfile:1
+
 FROM node:20-alpine AS dev
 
 WORKDIR /app
 
-ENV VITE_API_BASE_URL=http://localhost:8000
+ENV NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 
 COPY frontend/package.json frontend/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm \
@@ -10,16 +12,16 @@ RUN --mount=type=cache,target=/root/.npm \
 
 EXPOSE 5173
 
-CMD ["sh", "-c", "rm -rf node_modules/.vite && npm run dev -- --host 0.0.0.0 --force"]
+CMD ["npm", "run", "dev", "--", "--hostname", "0.0.0.0"]
 
 
 FROM node:20-alpine AS builder
 
 # Keep default in sync with ../VERSION; docker compose passes APP_VERSION from NOMICOUS_VERSION.
 ARG APP_VERSION=0.3.2
-ARG VITE_API_BASE_URL=http://localhost:8000
-ENV VITE_APP_VERSION=$APP_VERSION
-ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+ARG NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+ENV NEXT_PUBLIC_APP_VERSION=$APP_VERSION
+ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
 
 WORKDIR /app
 
@@ -30,19 +32,31 @@ RUN --mount=type=cache,target=/root/.npm \
 
 COPY frontend/ .
 
-RUN npm run build
+RUN --mount=type=cache,target=/app/.next/cache \
+  npm run build
 
 
-FROM nginx:1.27-alpine AS runner
+FROM node:20-alpine AS runner
 
 # Keep default in sync with ../VERSION; docker compose passes APP_VERSION from NOMICOUS_VERSION.
 ARG APP_VERSION=0.3.2
 LABEL org.opencontainers.image.title="nomicous-frontend" \
       org.opencontainers.image.version="${APP_VERSION}"
 
-COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=builder /app/dist /usr/share/nginx/html
+WORKDIR /app
+ENV NODE_ENV=production \
+    PORT=5173 \
+    HOSTNAME=0.0.0.0
+
+RUN addgroup --system --gid 1001 nodejs \
+  && adduser --system --uid 1001 nextjs
+
+COPY --from=builder /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+USER nextjs
 
 EXPOSE 5173
 
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["node", "server.js"]

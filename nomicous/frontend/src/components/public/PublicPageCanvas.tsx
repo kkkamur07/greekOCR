@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import type { Region } from '../../types';
 import { PublicZoomSurface } from './PublicZoomSurface';
 
@@ -60,6 +60,15 @@ export function PublicPageCanvas({
     }
     syncDisplaySize();
   };
+  const selectWithKeyboard = (
+    event: KeyboardEvent<SVGPolygonElement>,
+    regionId: number,
+    selected: boolean,
+  ) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    onSelectRegion(selected ? null : regionId);
+  };
 
   return (
     <PublicZoomSurface ariaLabel="Manuscript page viewer">
@@ -82,6 +91,8 @@ export function PublicPageCanvas({
               height: displaySize.height,
             }}
             aria-hidden={regions.length === 0}
+            role="group"
+            aria-label="Selectable transcription lines"
           >
             {regions.map((region) => {
               const isSelected = region.id === selectedRegionId;
@@ -89,12 +100,17 @@ export function PublicPageCanvas({
               return (
                 <polygon
                   key={region.id}
+                  role="button"
+                  tabIndex={0}
                   points={points}
+                  aria-label={`Line ${region.id}`}
+                  aria-pressed={isSelected}
                   fill={isSelected ? 'rgba(13, 31, 60, 0.18)' : 'rgba(82, 196, 26, 0.15)'}
                   stroke={isSelected ? 'var(--navy, #0d1f3c)' : '#52c41a'}
                   strokeWidth={isSelected ? 2.5 : 2}
                   style={{ pointerEvents: 'all', cursor: 'pointer' }}
                   onClick={() => onSelectRegion(isSelected ? null : region.id)}
+                  onKeyDown={(event) => selectWithKeyboard(event, region.id, isSelected)}
                 />
               );
             })}

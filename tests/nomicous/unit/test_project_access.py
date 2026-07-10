@@ -10,7 +10,9 @@ from backend.users.infrastructure.orm_models import User
 def _project(*, owner_id: uuid.UUID | None, shared_ids: list[uuid.UUID] | None = None) -> Project:
     project = Project(name="Test", slug="test", owner_id=owner_id)
     if shared_ids:
-        project.shared_users = [User(id=sid, email=f"{sid}@t", username=f"u{sid}") for sid in shared_ids]
+        project.shared_users = [
+            User(id=sid, email=f"{sid}@t", username=f"u{sid}") for sid in shared_ids
+        ]
     return project
 
 

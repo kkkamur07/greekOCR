@@ -260,9 +260,7 @@ class InferenceModelService:
                 session, user, project_id, document_id, scope.document_part_id
             )
         elif scope.document_id is not None:
-            await self._require_document_in_project(
-                session, user, project_id, scope.document_id
-            )
+            await self._require_document_in_project(session, user, project_id, scope.document_id)
         else:
             await self._require_project_member(session, user, project_id)
 

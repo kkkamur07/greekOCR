@@ -1,7 +1,5 @@
 """Document access policy — members vs public published read."""
 
-from uuid import UUID
-
 from backend.core.exceptions import AccessDeniedError, NotFoundError
 from backend.document.infrastructure.orm_models import Document, DocumentWorkflow
 from backend.project.domain.access import is_member

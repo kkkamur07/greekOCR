@@ -35,7 +35,11 @@ PYTHONPATH=".:nomicous" python -c "from api.index import app; print(app.title)"
 
 Copy environment variables from [`nomicous/backend/core/.env.production.example`](../../nomicous/backend/core/.env.production.example) into the Vercel project (Production).
 
-**Do not** set `JOB_WORKER_ENABLED=true` on Vercel — run [`backend.jobs.worker_main`](../../nomicous/backend/jobs/worker_main.py) on a persistent host instead (see [`deploy/inference/README.md`](../inference/README.md)).
+Set `JOB_WORKER_ENABLED=false` and `JOB_SSE_NOTIFICATIONS_ENABLED=false` on the
+Vercel API. Run [`backend.jobs.worker_main`](../../nomicous/backend/jobs/worker_main.py)
+on a persistent host instead (see [`deploy/inference/README.md`](../inference/README.md)).
+`FORWARDED_ALLOW_IPS` must be an explicit proxy IP/CIDR allowlist; never use
+`*`, and leave `BEHIND_PROXY=false` when the provider has no stable source range.
 
 ## Health check
 

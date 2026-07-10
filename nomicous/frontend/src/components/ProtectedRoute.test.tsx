@@ -1,29 +1,23 @@
 import { render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ProtectedRoute } from './ProtectedRoute';
 
-const navigateMock = vi.fn();
-
-vi.mock('react-router-dom', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('react-router-dom')>();
+vi.mock('../auth/AuthProvider', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../auth/AuthProvider')>();
   return {
     ...actual,
-    useNavigate: () => navigateMock,
+    useAuthSession: vi.fn(),
   };
 });
 
 vi.mock('../auth/session', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../auth/session')>();
-  return {
-    ...actual,
-    hasAccessToken: vi.fn(),
-    navigateToLogin: vi.fn(),
-  };
+  return { ...actual, navigateToLogin: vi.fn() };
 });
 
-import { hasAccessToken, navigateToLogin } from '../auth/session';
+import { useAuthSession } from '../auth/AuthProvider';
+import { navigateToLogin } from '../auth/session';
 
 describe('ProtectedRoute', () => {
   beforeEach(() => {
@@ -31,22 +25,16 @@ describe('ProtectedRoute', () => {
   });
 
   it('redirects unauthenticated users to login', async () => {
-    vi.mocked(hasAccessToken).mockReturnValue(false);
+    vi.mocked(useAuthSession).mockReturnValue({
+      status: 'anonymous',
+      establish: vi.fn(),
+      logout: vi.fn(),
+    });
 
     render(
-      <MemoryRouter initialEntries={['/projects']}>
-        <Routes>
-          <Route
-            path="/projects"
-            element={
-              <ProtectedRoute>
-                <div>Projects content</div>
-              </ProtectedRoute>
-            }
-          />
-          <Route path="/login" element={<div>Login page</div>} />
-        </Routes>
-      </MemoryRouter>,
+      <ProtectedRoute>
+        <div>Projects content</div>
+      </ProtectedRoute>,
     );
 
     expect(screen.queryByText('Projects content')).toBeNull();
@@ -56,21 +44,16 @@ describe('ProtectedRoute', () => {
   });
 
   it('renders children for authenticated users', () => {
-    vi.mocked(hasAccessToken).mockReturnValue(true);
+    vi.mocked(useAuthSession).mockReturnValue({
+      status: 'authenticated',
+      establish: vi.fn(),
+      logout: vi.fn(),
+    });
 
     render(
-      <MemoryRouter initialEntries={['/projects']}>
-        <Routes>
-          <Route
-            path="/projects"
-            element={
-              <ProtectedRoute>
-                <div>Projects content</div>
-              </ProtectedRoute>
-            }
-          />
-        </Routes>
-      </MemoryRouter>,
+      <ProtectedRoute>
+        <div>Projects content</div>
+      </ProtectedRoute>,
     );
 
     expect(screen.getByText('Projects content')).toBeTruthy();

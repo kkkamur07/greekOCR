@@ -32,12 +32,20 @@ Stage labelled line crops under a searchable **Hub dataset slug** (`{script}-man
 
 ```
 src/hf/staging/datasets/greek-manuscript-lines/
-  metadata.json
+  images/
+    ms-001/line-0001.png
   labels.csv
-  images/...
 ```
 
-Datasets are published to separate **Hub dataset repos** — not mixed with model weights.
+`labels.csv` must be UTF-8 CSV with `image,transcription` columns. Each image
+path is relative to the dataset root, starts with `images/`, and pairs exactly
+one crop with a non-empty transcription; every crop needs one row. Keep
+model-specific resizing and normalization out of these source crops.
+
+Datasets are published to separate **Hub dataset repos** — not mixed with model
+weights or addressed through `hf://` weights sources. A dataset can train
+multiple future **registry model ids**; a **Hub model repo** supplies the
+inference weights for each registry id.
 
 ## Authentication
 
@@ -86,14 +94,20 @@ Default CI and local dry-runs do **not** call the Hub upload API unless `--uploa
 
    ```yaml
    weights_source: hf://nomicous/greek-htr-calamari@stable
+   hub_revision: <40-character-commit-created-by-the-upload>
+   artifact_sha256: <sha256-of-best.pt>
    ```
 
-   Then complete the platform catalog and deploy steps in [`docs/inference/adding-inference-models.md`](../docs/inference/adding-inference-models.md).
+   Resolve `stable` once after upload and copy its immutable commit plus the
+   Hub artifact SHA-256 into the Registry. Inference downloads by that commit
+   rather than the mutable tag, and rejects cache or artifact digest changes.
+   Then complete the platform catalog and deploy steps in
+   [`docs/inference/adding-inference-models.md`](../docs/inference/adding-inference-models.md).
 
 5. **Prefetch** to warm the **Hub cache**:
 
    ```bash
-   PYTHONPATH=. python scripts/hf/fetch_model.py greek-calamariv1 --registry-tag stable
+   PYTHONPATH=. python scripts/hf/fetch_model.py greek-calamari-v1 --registry-tag stable
    ```
 
 6. **Update the collection** — add the model slug to `src/hf/publish/collection.yaml` and run `sync_collection.py` after setting `hub_slug` (see below).
@@ -101,6 +115,15 @@ Default CI and local dry-runs do **not** call the Hub upload API unless `--uploa
 Override `--namespace` if the **Hub namespace** is not yet `nomicous`. Use `--registry-model-id` when the legacy id differs from the default `{script}-{architecture}{model_version}` derivation.
 
 ## Dataset publish
+
+1. Create a directory under `src/hf/staging/datasets/` using
+   `{script}-manuscript-lines` or `{script}-{corpus}-htr-lines`.
+2. Add the required `images/` and `labels.csv` pairing layout above.
+3. Run the command below without `--upload` to validate the staging layout and
+   print the generated dataset README. This is safe in CI and does not contact
+   the Hub.
+4. Set a write-capable `HF_TOKEN` and add `--upload` to create or update the
+   target **Hub dataset repo** at `<namespace>/<dataset-slug>`.
 
 ```bash
 PYTHONPATH=. python scripts/hf/publish_dataset.py greek-manuscript-lines --script greek

@@ -40,6 +40,4 @@ def poll_job(
         if body["status"] == expect_status:
             return body
         time.sleep(0.05)
-    raise AssertionError(
-        f"job {job_id} did not reach status {expect_status!r} in {timeout}s"
-    )
+    raise AssertionError(f"job {job_id} did not reach status {expect_status!r} in {timeout}s")

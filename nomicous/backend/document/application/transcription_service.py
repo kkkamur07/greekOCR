@@ -57,9 +57,7 @@ class TranscriptionServiceMixin(DocumentServiceSharedMixin):
                     LineTranscription.line_id.in_(copied_line_ids),
                 )
             )
-            existing_by_line = {
-                row.line_id: row for row in existing_result.scalars().all()
-            }
+            existing_by_line = {row.line_id: row for row in existing_result.scalars().all()}
 
         for source_row in source_rows:
             target = existing_by_line.get(source_row.line_id)

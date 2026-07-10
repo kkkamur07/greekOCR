@@ -3,19 +3,18 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import json
 from datetime import datetime
 from typing import Generic, TypeVar
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
+
+from backend.core.exceptions import ValidationError
 
 T = TypeVar("T")
-
-
-class PageParams(BaseModel):
-    limit: int = Field(default=50, ge=1, le=200)
-    cursor: str | None = None
+MAX_CURSOR_LENGTH = 1024
 
 
 class PageCursor(BaseModel):
@@ -37,15 +36,24 @@ def encode_cursor(created_at: datetime, row_id: UUID) -> str:
 
 
 def decode_cursor(cursor: str) -> PageCursor:
+    if not cursor or len(cursor) > MAX_CURSOR_LENGTH:
+        raise ValidationError("Invalid pagination cursor")
     try:
-        raw = base64.urlsafe_b64decode(cursor.encode("ascii"))
+        raw = base64.b64decode(cursor.encode("ascii"), altchars=b"-_", validate=True)
         payload = json.loads(raw.decode("utf-8"))
         return PageCursor(
             created_at=datetime.fromisoformat(payload["created_at"]),
             id=UUID(payload["id"]),
         )
-    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
-        raise ValueError("Invalid pagination cursor") from exc
+    except (
+        UnicodeEncodeError,
+        binascii.Error,
+        KeyError,
+        TypeError,
+        ValueError,
+        json.JSONDecodeError,
+    ) as exc:
+        raise ValidationError("Invalid pagination cursor") from exc
 
 
 def paginate_rows(

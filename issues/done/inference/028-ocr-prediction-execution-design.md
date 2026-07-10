@@ -15,7 +15,7 @@ parent_prd: "issues/done/prd-annote-merge.md"
 ## Resolution (accepted)
 
 - **Cloud path:** **Product job** per user OCR/segment action → **remote inference** → single callback → merge into Postgres (`nomicous/CONTEXT.md`).
-- **Local path:** **Inference helper** on researcher machine; browser probes `localhost:8001`, calls `/inference/v1/run`, persists via hosted API. See ADR [`docs/decisions/002-local-inference-helper.md`](../../../docs/decisions/002-local-inference-helper.md) and [`prd-local-inference-helper.md`](prd-local-inference-helper.md).
+- **Local path:** **Inference helper** on researcher machine; browser probes `localhost:8001`, calls `/inference/v1/run`, persists via hosted API. See [`README.md`](../../../README.md#local-inference-helper) and [`prd-local-inference-helper.md`](prd-local-inference-helper.md).
 - **Model layers:** **Model transcription** separate from **Ground truth**; accept/edit workflow unchanged.
 - **Progress UI:** Job banner / `trackJobAndWait` for cloud; local path shows download/run status in editor.
 - **Follow-up AFK issues:** 038 (local transcribe tracer), 039 (local segment tracer).

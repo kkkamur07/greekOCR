@@ -14,9 +14,14 @@ or runtime import fails.
 | Build Command | `bash build.sh` |
 | Output Directory | `.` |
 | Domain | `api.nomicous.com` |
+| Function region | `fra1` (Frankfurt, Europe) |
 
 Do not set a custom install command. Vercel's Python runtime installs from the
 checked-in `deploy/platform/requirements.txt`.
+
+The region applies to the platform API functions only. Static Vercel projects
+remain globally edge-served. Compare API p95 latency with the Supabase project
+region after deployment; change `regions` in `deploy/platform/vercel.json` if needed.
 
 `build.sh` only bundles source files into the Vercel project root. It must not
 install dependencies.
@@ -115,14 +120,20 @@ Set:
 ```bash
 JOB_WORKER_ENABLED=false
 JOB_SSE_NOTIFICATIONS_ENABLED=false
-BEHIND_PROXY=true
-FORWARDED_ALLOW_IPS=*
+# Set true only when this is a fixed, allowlisted proxy source range.
+BEHIND_PROXY=false
+# FORWARDED_ALLOW_IPS=203.0.113.0/24
 STORAGE_BACKEND=supabase
 ENABLE_TEST_JOB_ROUTES=false
 ```
 
 Run the platform worker and inference workers on a persistent host if cloud
 inference is enabled.
+
+Never use `FORWARDED_ALLOW_IPS=*`. The API accepts only explicit IP/CIDR
+allowlists and uses `X-Forwarded-For` for rate limiting only when the direct
+peer matches one. If Vercel cannot provide a stable proxy source range for this
+deployment, leave `BEHIND_PROXY=false`.
 
 ## Common failures
 
@@ -144,6 +155,11 @@ cd deploy/platform
 PYENV_VERSION=3.11.10 bash build.sh
 ```
 
+Inspect the generated bundle before deployment. It must contain the platform
+source and registry contracts only; it must not contain `.env` files, local
+media, model weights, training outputs, or private credentials. Treat a
+bundle inspection failure as a release blocker.
+
 From repo root, confirm the registry import still works:
 
 ```bash
@@ -160,3 +176,21 @@ After Vercel deploy:
 ```bash
 curl -s https://api.nomicous.com/health
 ```
+
+The first production smoke test must also cover authentication, a bounded
+upload, job creation, job polling, registry access, storage access, and a
+representative export. Confirm that expected client errors are sanitized and
+that Vercel logs do not contain passwords, bearer tokens, submitted payloads,
+filesystem paths, or infrastructure exceptions.
+
+Record p50, p95, and p99 API latency, error rate, request volume, and job
+completion health before the change and during the first hour after deployment.
+Use representative European clients and compare the result with the Supabase
+project region. Keep the prior deployment available while observing the
+change.
+
+Rollback when p95 latency is more than 50% above baseline, error rate exceeds
+2× baseline, a critical flow breaks, or any security or cross-user isolation
+issue appears. For a region-specific regression, remove `regions` from
+`deploy/platform/vercel.json`, redeploy the last known-good version, and repeat
+the health and smoke checks.

@@ -113,9 +113,7 @@ async def list_part_model_bindings(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> list[ModelBindingResponse]:
-    bindings = await _service.list_part_bindings(
-        db, current_user, project_id, document_id, part_id
-    )
+    bindings = await _service.list_part_bindings(db, current_user, project_id, document_id, part_id)
     return [ModelBindingResponse.model_validate(binding) for binding in bindings]
 
 

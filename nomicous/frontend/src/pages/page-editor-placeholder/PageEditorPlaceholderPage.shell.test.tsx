@@ -1,10 +1,9 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiError } from '../../api/errors';
 import {
   DOCUMENT,
-  enableBaselinesOnCanvas,
   flushPageEditorEffects,
   mockedApi,
   renderPageEditor,
@@ -61,7 +60,7 @@ describe('PageEditorPlaceholderPage shell', () => {
 
     expect(await screen.findByText('ANNOTE PAGE WORKSPACE')).toBeTruthy();
     expect(screen.getByRole('button', { name: /rectangle segment/i })).toBeTruthy();
-    expect(screen.getByRole('img', { name: /page geometry canvas/i })).toBeTruthy();
+    expect(screen.getByRole('group', { name: /page geometry canvas/i })).toBeTruthy();
 
     fireEvent.click(screen.getByLabelText(/^Segment 1/));
 

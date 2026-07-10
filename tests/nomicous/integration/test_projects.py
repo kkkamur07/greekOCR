@@ -17,6 +17,17 @@ def test_list_projects_empty_for_new_user(client, auth_headers):
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize("cursor", ["%%%", "x" * 2048])
+def test_malformed_project_cursor_is_bounded_and_sanitized(client, auth_headers, cursor):
+    response = client.get(f"/projects?cursor={cursor}", headers=auth_headers)
+
+    assert response.status_code == 422
+    assert response.json() == {"error": {"code": "VALIDATION_ERROR", "message": "Invalid request"}}
+    assert cursor not in response.text
+    assert response.headers["x-error-id"]
+
+
+@pytest.mark.integration
 def test_owner_create_read_update_delete(client, owner_headers):
     slug = f"proj-{uuid.uuid4().hex[:8]}"
     create = client.post(
@@ -84,7 +95,9 @@ def test_create_duplicate_slug_conflict(client, owner_headers):
 
 
 @pytest.mark.integration
-def test_share_and_collaborator_list_read(client, owner_headers, collaborator_headers, collaborator_user):
+def test_share_and_collaborator_list_read(
+    client, owner_headers, collaborator_headers, collaborator_user
+):
     slug = f"share-{uuid.uuid4().hex[:8]}"
     create = client.post(
         "/projects",
@@ -128,9 +141,7 @@ def test_share_and_collaborator_list_read(client, owner_headers, collaborator_he
 
 
 @pytest.mark.integration
-def test_non_member_cannot_read_or_mutate(
-    client, owner_headers, outsider_headers, outsider_user
-):
+def test_non_member_cannot_read_or_mutate(client, owner_headers, outsider_headers, outsider_user):
     slug = f"private-{uuid.uuid4().hex[:8]}"
     create = client.post(
         "/projects",

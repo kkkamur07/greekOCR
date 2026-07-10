@@ -20,7 +20,7 @@ os.environ.setdefault("INFERENCE_REGISTRY_PATH", "inference/registry.yaml")
 os.environ.setdefault("INFERENCE_WEBHOOK_SECRET", "test-inference-webhook-secret")
 os.environ.setdefault("INFERENCE_SERVICE_SECRET", "test-inference-webhook-secret")
 
-from inference.infrastructure.db import Base, engine
+from inference.infrastructure.db import engine
 from inference.infrastructure.settings import get_inference_settings
 
 
@@ -75,7 +75,7 @@ def submit_inference_job(
         registry_tag: str = "stable",
         params: dict[str, object] | None = None,
     ) -> tuple[Response, UUID]:
-    
+
         resolved_product_job_id = product_job_id or uuid4()
         settings = get_inference_settings()
         headers = {}

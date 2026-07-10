@@ -16,12 +16,8 @@ class StorageSettings(BaseSettings):
 
     storage_backend: StorageBackend = Field(default="local", alias="STORAGE_BACKEND")
     supabase_url: str | None = Field(default=None, alias="SUPABASE_URL")
-    supabase_service_role_key: str | None = Field(
-        default=None, alias="SUPABASE_SERVICE_ROLE_KEY"
-    )
-    supabase_storage_bucket: str = Field(
-        default="document-media", alias="SUPABASE_STORAGE_BUCKET"
-    )
+    supabase_service_role_key: str | None = Field(default=None, alias="SUPABASE_SERVICE_ROLE_KEY")
+    supabase_storage_bucket: str = Field(default="document-media", alias="SUPABASE_STORAGE_BUCKET")
     media_webp_lossless: bool = Field(default=True, alias="MEDIA_WEBP_LOSSLESS")
     media_webp_quality: int = Field(default=95, alias="MEDIA_WEBP_QUALITY")
 

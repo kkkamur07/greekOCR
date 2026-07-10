@@ -50,8 +50,7 @@ async def list_history_snapshots(
 ) -> list[AnnotationHistorySnapshotSummaryResponse]:
     snapshots = await _service.list_snapshots(db, current_user, project_id, document_id, part_id)
     return [
-        AnnotationHistorySnapshotSummaryResponse.model_validate(snapshot)
-        for snapshot in snapshots
+        AnnotationHistorySnapshotSummaryResponse.model_validate(snapshot) for snapshot in snapshots
     ]
 
 

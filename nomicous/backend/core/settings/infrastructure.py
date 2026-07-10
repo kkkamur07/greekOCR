@@ -13,15 +13,15 @@ class InfrastructureSettings(BaseSettings):
 
     environment: str = Field(default="development", alias="ENVIRONMENT")
     database_url: str = Field(
-        default="postgresql+asyncpg://postgres:dev@localhost:5433/kalamos",
+        default="postgresql+asyncpg://postgres@localhost:5433/kalamos",
         alias="DATABASE_URL",
     )
     sync_database_url: str = Field(
-        default="postgresql://postgres:dev@localhost:5433/kalamos",
+        default="postgresql://postgres@localhost:5433/kalamos",
         alias="SYNC_DATABASE_URL",
     )
     migrator_database_url: str = Field(
-        default="postgresql://postgres:dev@localhost:5433/kalamos",
+        default="postgresql://postgres@localhost:5433/kalamos",
         alias="MIGRATOR_DATABASE_URL",
     )
     db_pool_size: int = Field(default=5, alias="DB_POOL_SIZE")

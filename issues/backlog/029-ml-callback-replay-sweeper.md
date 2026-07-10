@@ -29,4 +29,4 @@ Add a durable callback recovery path before relying on ML callbacks in productio
 
 ## Blocked by
 
-None — OCR execution design resolved in issue 028 / ADR 002.
+None — OCR execution design resolved in issue 028 (see [README](../../README.md#local-inference-helper)).

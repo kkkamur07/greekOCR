@@ -12,6 +12,7 @@ from src.hf.publish.staging import (
   build_dataset_readme,
   dataset_staging_dir,
   validate_dataset_staging,
+  validate_dataset_slug,
 )
 
 
@@ -34,6 +35,7 @@ def plan_dataset_publish(
   dry_run: bool = True,
 ) -> DatasetPublishPlan:
   ref = DatasetStagingRef(dataset_slug=dataset_slug)
+  validate_dataset_slug(dataset_slug=dataset_slug, script=script)
   staging_dir = dataset_staging_dir(ref, staging_root=staging_root)
   validate_dataset_staging(staging_dir)
   repo_id = ref.repo_id(namespace=namespace)

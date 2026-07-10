@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import {
   api,
   publicPartMediaUrl,
@@ -17,7 +18,7 @@ import { WorkflowBadge } from '../components/WorkflowBadge';
 import { linesForPart, publicLinesToRegions } from '../utils/publicLayout';
 
 export function PublicDocumentPage() {
-  const { projectId, documentId } = useParams<{ projectId: string; documentId: string }>();
+  const { projectId, documentId } = useParams<{ projectId: string; documentId: string }>() ?? {};
   const [document, setDocument] = useState<DocumentWithPartsResponse | null>(null);
   const [layout, setLayout] = useState<PublicLayoutResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -127,7 +128,7 @@ export function PublicDocumentPage() {
   return (
     <div className="page page--public">
       <nav className="topnav" aria-label="Main navigation">
-        <Link to="/" className="topnav-logo" aria-label="nomicous home">
+        <Link href="/" className="topnav-logo" aria-label="nomicous home">
           <img src="/nomos.svg" alt="" />
           <span>nomicous</span>
         </Link>
@@ -141,14 +142,14 @@ export function PublicDocumentPage() {
         <div className="topnav-actions">
           {isLoggedIn && projectId && documentId && (
             <Link
-              to={`/projects/${projectId}/documents/${documentId}`}
+              href={`/projects/${projectId}/documents/${documentId}`}
               className="btn btn-outline btn-sm"
             >
               Editor
             </Link>
           )}
           {!isLoggedIn && (
-            <Link to="/login" className="btn btn-ghost btn-sm">
+            <Link href="/login" className="btn btn-ghost btn-sm">
               Sign in
             </Link>
           )}

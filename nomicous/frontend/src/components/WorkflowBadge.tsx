@@ -1,4 +1,4 @@
-import type { DocumentWorkflow } from '../../api/client';
+import type { DocumentWorkflow } from '../api/client';
 
 export const WORKFLOW_LABEL: Record<DocumentWorkflow, string> = {
   draft: 'Draft',

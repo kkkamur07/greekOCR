@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { JobResponse } from '../../../api/client';
+import type { JobResponse } from '../../api/client';
 import { jobStatusLabel } from './jobProgress';
 
 function job(partial: Partial<JobResponse>): JobResponse {
@@ -13,6 +13,7 @@ function job(partial: Partial<JobResponse>): JobResponse {
     error: null,
     document_id: null,
     document_part_id: null,
+    user_id: null,
     created_at: '2026-01-01T00:00:00Z',
     updated_at: '2026-01-01T00:00:00Z',
     started_at: null,

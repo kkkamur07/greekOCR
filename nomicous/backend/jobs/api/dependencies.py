@@ -13,7 +13,9 @@ __all__ = ["INFERENCE_WEBHOOK_SECRET_HEADER", "require_inference_webhook_secret"
 
 
 def require_inference_webhook_secret(
-    x_inference_webhook_secret: str | None = Header(default=None, alias=INFERENCE_WEBHOOK_SECRET_HEADER),
+    x_inference_webhook_secret: str | None = Header(
+        default=None, alias=INFERENCE_WEBHOOK_SECRET_HEADER
+    ),
 ) -> None:
     configured = get_inference_settings().inference_webhook_secret
     if not configured:

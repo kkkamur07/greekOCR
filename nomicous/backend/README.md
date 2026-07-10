@@ -37,7 +37,7 @@ backend/
   annotation/                     # history snapshots, export, PDF artifacts
   ml/                             # model catalog, bindings, ML adapters
   jobs/                           # enqueue, status, NOTIFY→SSE push, workers, job persistence
-  tests/platform/                 # Postgres-backed platform integration tests
+tests/nomicous/                   # Unit and Postgres-backed integration tests
 ```
 
 ## Architecture
@@ -76,9 +76,9 @@ Important rules:
 Platform jobs (segment, transcribe, test noop) push status updates to the browser
 with **Postgres `NOTIFY` for detection** and **Server-Sent Events (SSE) for
 delivery**. Polling (`GET /jobs/{id}`) remains as a fallback when SSE is
-unavailable.
+unavailable (e.g. Vercel with `JOB_SSE_NOTIFICATIONS_ENABLED=false`).
 
-Design background: [`docs/decisions/001-platform-job-status-push.md`](../../docs/decisions/001-platform-job-status-push.md).
+Overview in the [root README](../../README.md#job-status-sse-not-polling).
 
 ### End-to-end flow
 
@@ -103,7 +103,7 @@ flowchart TB
   end
 
   subgraph browser [Browser]
-    FE[watchJobViaSse / useJobPolling]
+    FE[subscribeToJob / useJobPolling]
     POLL[GET /jobs/id poll fallback]
   end
 
@@ -190,11 +190,11 @@ Test noop jobs follow the same path when the in-process worker handles them.
 
 ### Frontend consumption
 
-The React app opens `GET /jobs/{job_id}/events` via `watchJobViaSse` /
-`waitForJob` (`nomicous/frontend/src/utils/jobPolling.ts`). If SSE cannot be
-opened, it falls back to polling `GET /jobs/{id}` every 250 ms. Background job
-panels use `useJobPolling`, which prefers SSE and degrades to 1.5 s polling per
-job when needed.
+The React app opens `GET /jobs/{job_id}/events` through `subscribeToJob` /
+`waitForSubscribedJob` (`nomicous/frontend/src/utils/jobSubscription.ts`). If
+SSE cannot be opened, closes, or becomes idle, it falls back to polling
+`GET /jobs/{id}`. Waiting callers poll every 250 ms; background job panels use
+the `useJobPolling` hook and poll every 1.5 seconds when needed.
 
 ### Configuration
 
@@ -261,8 +261,8 @@ Settings are loaded by `backend/core/settings/` from environment variables and
 
 | Variable | Purpose | Local default |
 |----------|---------|---------------|
-| `DATABASE_URL` | Async SQLAlchemy app connection | `postgresql+asyncpg://postgres:dev@localhost:5433/kalamos` |
-| `SYNC_DATABASE_URL` | Alembic sync connection | `postgresql://postgres:dev@localhost:5433/kalamos` |
+| `DATABASE_URL` | Async SQLAlchemy app connection | Set in ignored `backend/core/.env` |
+| `SYNC_DATABASE_URL` | Alembic sync connection | Set in ignored `backend/core/.env` |
 | `JWT_SECRET` | JWT signing secret | required; use a unique value per environment |
 | `JWT_EXPIRE_MINUTES` | Access-token lifetime | `60` |
 | `AUTH_RATE_LIMIT_REQUESTS` | Login/register attempts per window per client | `60` |
@@ -273,13 +273,13 @@ Settings are loaded by `backend/core/settings/` from environment variables and
 | `PLATFORM_JOB_NOTIFY_CHANNEL` | Postgres channel for platform job status NOTIFY | `platform_jobs` |
 | `JOB_SSE_HEARTBEAT_SECONDS` | SSE idle heartbeat interval for `/jobs/{id}/events` | `30` |
 | `JOB_WORKER_ENABLED` | Start in-process platform job worker on API boot | `true` |
-| `TRANSCRIBE_ADAPTER` | Adapter marker used for transcribe jobs | `calamari` |
-| `SEGMENT_ADAPTER` | Adapter marker used for segment jobs | `kraken` |
-| `DEFAULT_SEGMENT_MODEL` | Dev segment model name | `kraken-segment-default` |
-| `DEFAULT_TRANSCRIBE_MODEL` | Dev transcribe model name | `kraken-transcribe-default` |
-| `KRAKEN_MODEL_PATH` | Path to model weights outside nomicous | `../model/kraken` |
+| `JOB_SSE_NOTIFICATIONS_ENABLED` | Start the in-process Postgres NOTIFY listener for SSE | `true` |
 
 Keep real secrets out of git. `backend/core/.env` is local-only.
+Production API hosts set both worker flags to `false`; run
+`backend.jobs.worker_main` as a separate persistent process. If
+`BEHIND_PROXY=true`, `FORWARDED_ALLOW_IPS` must contain explicit proxy IPs or
+CIDRs—never `*`.
 
 ## Persistence and Media
 
@@ -295,23 +295,21 @@ the production app.
 Focused platform test examples:
 
 ```bash
-cd nomicous
-PYTHONPATH=. pytest backend/tests/platform/test_auth.py -q
-PYTHONPATH=. pytest backend/tests/platform/test_documents.py -q
-PYTHONPATH=. pytest backend/tests/platform/test_pairing_progress.py -q
-PYTHONPATH=. pytest backend/tests/platform/test_annotation_history.py -q
-PYTHONPATH=. pytest backend/tests/platform/test_export_approved_line_artifacts.py -q
-PYTHONPATH=. pytest backend/tests/platform/test_transcription_pdf_artifact.py -q
+uv run --group platform --group inference pytest tests/nomicous/integration/test_auth.py -q
+uv run --group platform --group inference pytest tests/nomicous/integration/test_documents.py -q
+uv run --group platform --group inference pytest tests/nomicous/integration/test_pairing_progress.py -q
+uv run --group platform --group inference pytest tests/nomicous/integration/test_annotation_history.py -q
+uv run --group platform --group inference pytest tests/nomicous/integration/test_export_approved_line_artifacts.py -q
+uv run --group platform --group inference pytest tests/nomicous/integration/test_transcription_pdf_artifact.py -q
 ```
 
 Run the full platform suite:
 
 ```bash
-cd nomicous
-PYTHONPATH=. pytest backend/tests/platform
+uv run --group platform --group inference pytest tests/nomicous
 ```
 
-All backend API tests live under `backend/tests/platform/` and exercise the
+Platform tests live under `tests/nomicous/`; integration tests exercise the
 platform FastAPI app.
 
 ## ML inference service

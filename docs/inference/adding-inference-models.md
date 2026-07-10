@@ -48,7 +48,7 @@ Examples: `greek-calamari-v1`, `greek-kraken-segment-v1`.
 
 **Hub repo slug** (separate from registry model id): `{script}-htr-{architecture}` → `greek-htr-calamari`.
 
-**Platform `artifact_ref`** (Postgres): `registry://<registry_model_id>?tag=<registry_tag>`  
+**Platform `artifact_ref`** (Postgres): `registry://<registry_model_id>?tag=<registry_tag>`
 Example: `registry://greek-calamari-v1?tag=stable`.
 
 ---
@@ -94,6 +94,30 @@ Example: `registry://greek-calamari-v1?tag=stable`.
 
 Full publish runbook: [`scripts/hf/README.md`](../../scripts/hf/README.md).
 
+### Record immutable provenance for new Hub entries
+
+Before adding an `hf://` source to the Registry, resolve the public Hub tag to
+its 40-character commit and read the SHA-256 for the architecture-native Hub
+artifact. Record both values in the same Registry version entry. The runtime
+uses `hub_revision` when present and verifies `artifact_sha256` before loading
+or reusing cache contents.
+
+Existing `hf://` entries without both provenance fields are accepted for
+migration compatibility and resolve from their `weights_source` tag. Do not add
+new unpinned entries; update legacy entries with both fields when their
+published artifact provenance is available.
+
+For a public model repo, `huggingface_hub` can report both values without
+`HF_TOKEN`:
+
+```bash
+uv run --group inference python -c \
+  "from huggingface_hub import HfApi; print(HfApi().model_info('<namespace>/<repo>', revision='stable', files_metadata=True))"
+```
+
+`HF_TOKEN` is only required by the publish command, not by model download or
+metadata lookup for public repositories.
+
 ### Kraken segment (bundled)
 
 Kraken BLLA ships via `package://kraken/blla.mlmodel` inside the `kraken` Python package — no Hub upload for the default segment model. For a custom Kraken checkpoint, use `file://` (bundled under `src/hf/local/`) or `hf://` like Calamari.
@@ -124,7 +148,17 @@ models:
     versions:
       stable:
         weights_source: hf://<namespace>/greek-htr-calamari@stable
+        hub_revision: <40-character-resolved-Hub-commit>
+        artifact_sha256: <sha256-of-best.pt>
 ```
+
+When present, the two provenance fields must be supplied together for an
+`hf://` **weights source**. `weights_source` retains the **registry tag** for
+readability; a pinned `hub_revision` prevents a changed Hub tag from changing
+the bytes inference loads until a reviewed Registry update replaces the
+revision and digest. For packaged Kraken assets, record `artifact_sha256`
+without `hub_revision` so the packaged `.mlmodel` is also verified before
+Kraken loads it.
 
 **`host_eligibility`**
 
@@ -247,5 +281,5 @@ See [`packaging/helper/README.md`](../../packaging/helper/README.md).
 
 - [`inference/README.md`](../../inference/README.md) — inference service and helper
 - [`scripts/hf/README.md`](../../scripts/hf/README.md) — Hub publish and prefetch
-- [`docs/decisions/002-local-inference-helper.md`](../decisions/002-local-inference-helper.md) — local vs remote inference
-- [`docs/architecture/hf-registry-id-migration.md`](../architecture/hf-registry-id-migration.md) — registry id naming migration (historical)
+- [`README.md`](../../README.md#local-inference-helper) — local vs remote inference architecture
+- [`issues/done/huggingface/036-hf-registry-id-migration.md`](../../issues/done/huggingface/036-hf-registry-id-migration.md) — registry id naming migration (historical)

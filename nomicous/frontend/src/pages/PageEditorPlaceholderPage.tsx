@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation, useParams } from 'react-router-dom';
+import { useParams } from 'next/navigation';
 import { type LayoutPoint, type LinePoint, api } from '../api/client';
 import {
   DEFAULT_SEGMENT_REGISTRY_MODEL_ID,
@@ -39,19 +39,13 @@ import {
   segmentHasGroundTruth,
   segmentIdsWithGroundTruth,
 } from '../components/page-editor/hooks/utils';
-import { readPageEditorDocument } from './pageEditorNavigation';
 
 export function PageEditorPlaceholderPage() {
   const { projectId, documentId, partId } = useParams<{
     projectId: string;
     documentId: string;
     partId: string;
-  }>();
-  const location = useLocation();
-  const initialDocument =
-    projectId && documentId
-      ? readPageEditorDocument(location.state, projectId, documentId)
-      : null;
+  }>() ?? {};
 
   const [editorMode, setEditorMode] = useState<'layout' | 'transcription'>('layout');
   const [drawMode, setDrawMode] = useState<'none' | 'rectangle' | 'polygon'>('none');
@@ -69,7 +63,7 @@ export function PageEditorPlaceholderPage() {
     setDrawMode('none');
     setDraftPolygon([]);
     setDraftStart(null);
-  }, initialDocument);
+  });
   const {
     document,
     setDocument,
@@ -181,7 +175,7 @@ export function PageEditorPlaceholderPage() {
     } catch {
       return null;
     }
-  }, [inferenceHost.catalog, inferenceHost.shouldUseLocalPath, selectedTranscribeModelId, transcribeModels]);
+  }, [inferenceHost, selectedTranscribeModelId, transcribeModels]);
 
   const pairing = usePairingState({
     projectId,

@@ -15,17 +15,17 @@ from uuid import UUID, uuid4
 import pytest
 from inference.contracts import (
     CharacterConfidence,
+    InferenceJobStatus,
+    InferenceTask,
     JobCallbackRequest,
     JobSubmitRequest,
     JobSubmitResponse,
-    InferenceJobStatus,
-    InferenceTask,
     SegmentJobOutput,
     SegmentLine,
     SegmentRunResponse,
-    TranscribeJobOutput,
     TranscribeBatchLineResult,
     TranscribeBatchRunResponse,
+    TranscribeJobOutput,
     TranscribeRunResponse,
 )
 from inference.contracts.run import InferenceRunRequest
@@ -33,7 +33,7 @@ from inference.contracts.segment import SegmentGeometryKind
 from pydantic import ValidationError
 
 
-# Checks whether the payload survives the round trip. 
+# Checks whether the payload survives the round trip.
 def _round_trip(model: object) -> dict:
     cls = type(model)
     payload = json.loads(cls.model_validate(model).model_dump_json())
@@ -61,10 +61,7 @@ def _transcribe_response(text: str = "hi") -> TranscribeRunResponse:
     return TranscribeRunResponse(
         text=text,
         confidence=0.88,
-        character_confidences=[
-            CharacterConfidence(char=char, confidence=0.87)
-            for char in text
-        ],
+        character_confidences=[CharacterConfidence(char=char, confidence=0.87) for char in text],
     )
 
 
@@ -112,7 +109,7 @@ def test_image_bytes_accepts_whitespace_wrapped_base64():
 
 
 def test_image_bytes_rejects_invalid_base64():
-    with pytest.raises(ValidationError, match="valid base64"):
+    with pytest.raises(ValidationError, match="Invalid inference request"):
         InferenceRunRequest(
             task=InferenceTask.segment,
             registry_model_id="greek-kraken-segment-v1",

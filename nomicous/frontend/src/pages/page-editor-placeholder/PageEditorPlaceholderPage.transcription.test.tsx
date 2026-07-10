@@ -1,10 +1,9 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { ApiError } from '../../api/errors';
 import {
   DOCUMENT,
-  enableBaselinesOnCanvas,
   flushPageEditorEffects,
   mockedApi,
   renderPageEditor,
@@ -491,7 +490,7 @@ describe('PageEditorPlaceholderPage transcription', () => {
     });
   });
 
-  it('shows OCR review on Ground truth when text_source is model', async () => {
+  it('ignores stale text source metadata on ground truth', async () => {
     mockedApi.getDocument.mockResolvedValue(DOCUMENT);
     mockedApi.listPartLines.mockResolvedValue([
       {
@@ -512,7 +511,6 @@ describe('PageEditorPlaceholderPage transcription', () => {
             transcription_kind: 'ground_truth',
             text: 'model suggestion',
             confidence: null,
-            text_source: 'model',
           },
           {
             id: 'line-tx-model-1',
@@ -520,7 +518,6 @@ describe('PageEditorPlaceholderPage transcription', () => {
             transcription_kind: 'model',
             text: 'model suggestion',
             confidence: 0.91,
-            text_source: 'model',
             character_confidences: [
               { char: 'm', confidence: 0.95 },
               { char: 'o', confidence: 0.62 },
@@ -556,9 +553,7 @@ describe('PageEditorPlaceholderPage transcription', () => {
 
     expect(screen.getByText('Model output:')).toBeTruthy();
     expect(screen.getByLabelText('OCR model output for segment 1')).toBeTruthy();
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /accept/i })).toBeTruthy();
-    });
+    expect(screen.queryByRole('button', { name: /accept/i })).toBeNull();
   });
 
   it('surfaces Ground truth save API errors and keeps the typed text visible', async () => {

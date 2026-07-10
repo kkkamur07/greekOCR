@@ -62,7 +62,9 @@ class ProjectRepository:
         await session.refresh(project)
         return project
 
-    async def update(self, session: AsyncSession, project: Project, **fields: str | None) -> Project:
+    async def update(
+        self, session: AsyncSession, project: Project, **fields: str | None
+    ) -> Project:
         for key, value in fields.items():
             setattr(project, key, value)
         await session.commit()

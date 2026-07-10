@@ -5,7 +5,7 @@ from uuid import UUID
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core.exceptions import ConflictError, NotFoundError, ValidationError
+from backend.core.exceptions import ConflictError, ValidationError
 from backend.document.infrastructure.orm_models import PageTranscriptionLine
 from backend.document.application.document_service_shared import (
     MAX_PAGE_TRANSCRIPTION_LINES,
@@ -86,9 +86,7 @@ class PairingServiceMixin(DocumentServiceSharedMixin):
         document = await self.get_document(session, user, project_id, document_id)
         part = await self._document_part_or_404(session, document, part_id)
         line = await self._line_or_404(session, part.id, line_id)
-        text_line = await self._page_transcription_line_or_404(
-            session, part.id, text_line_order
-        )
+        text_line = await self._page_transcription_line_or_404(session, part.id, text_line_order)
         ground_truth = await self._ensure_ground_truth_transcription(session, document)
 
         previous_paired_line_id = text_line.paired_line_id

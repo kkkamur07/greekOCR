@@ -1,0 +1,38 @@
+name: Security
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scans:
+    name: Secret and dependency scans
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+          enable-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: nomicous/frontend/package-lock.json
+      - run: npm ci --prefix nomicous/frontend
+      - run: npm audit --prefix nomicous/frontend --omit=dev --audit-level=high
+      # Kraken/CoreML currently constrain protobuf and torch below audited fixes.
+      - run: >-
+          uv run --locked --group dev --group platform --group inference pip-audit
+          --ignore-vuln PYSEC-2026-1806
+          --ignore-vuln PYSEC-2026-1805
+          --ignore-vuln PYSEC-2026-139
+          --ignore-vuln CVE-2025-3000

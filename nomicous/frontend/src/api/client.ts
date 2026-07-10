@@ -1,12 +1,18 @@
 /**
- * Platform API client — JWT from localStorage, OpenAPI-aligned types.
+ * Platform API client — short-lived JWT in memory, OpenAPI-aligned types.
  * Regenerate types: `npm run codegen:api` (after `python scripts/platform/export_openapi.py`).
  */
 import { redirectToLogin } from '../auth/session';
-import { getAccessToken } from '../auth/storage';
-import { pollJobUntilTerminal, waitForJobViaSse } from '../utils/jobPolling';
+import { getAccessToken, setAccessToken } from '../auth/storage';
+import { JOB_WAIT_POLL_INTERVAL_MS } from '../utils/jobPolling';
+import { waitForSubscribedJob } from '../utils/jobSubscription';
+import {
+  collectCursorPages,
+  type CursorPage,
+  type CursorPageOptions,
+} from './cursorPagination';
 import { ApiError, parseApiError } from './errors';
-import { dedupedGet } from './getCache';
+import { dedupedGet, getAuthRequestVersion } from './getCache';
 import type { components } from './schema';
 
 export type TokenResponse = components['schemas']['TokenResponse'];
@@ -25,10 +31,14 @@ export type DocumentPartUpdateRequest = components['schemas']['DocumentPartUpdat
 export type DocumentWorkflow = components['schemas']['DocumentWorkflow'];
 export type ReorderPartsRequest = components['schemas']['ReorderPartsRequest'];
 export type PublicLayoutResponse = components['schemas']['PublicLayoutResponse'];
+export type PublicLineResponse = NonNullable<PublicLayoutResponse['lines']>[number];
 export type PublicTranscriptionLayerResponse =
   components['schemas']['PublicTranscriptionLayerResponse'];
 export type TranscriptionLayerResponse = components['schemas']['TranscriptionLayerResponse'];
-export type LineTranscriptionResponse = components['schemas']['LineTranscriptionResponse'];
+export type LineTranscriptionResponse = components['schemas']['LineTranscriptionResponse'] & {
+  text_source?: string | null;
+  character_confidences?: components['schemas']['CharacterConfidence'][] | null;
+};
 export type CharacterConfidence = components['schemas']['CharacterConfidence'];
 export type JobResponse = components['schemas']['JobResponse'];
 export type JobStatus = components['schemas']['JobStatus'];
@@ -155,33 +165,24 @@ export type LineTranscriptionPatchRequest = {
 export type CopyToGroundTruthRequest = components['schemas']['CopyToGroundTruthRequest'];
 export type CopyToGroundTruthResponse = components['schemas']['CopyToGroundTruthResponse'];
 
-export type PageResponse<T> = {
-  items: T[];
-  next_cursor: string | null;
-};
+export type PageResponse<T> = CursorPage<T>;
 
-async function fetchAllPages<T>(
-  buildPath: (params: URLSearchParams) => string,
-): Promise<T[]> {
-  const items: T[] = [];
-  let cursor: string | null = null;
-  for (;;) {
-    const params = new URLSearchParams();
-    if (cursor) {
-      params.set('cursor', cursor);
-    }
-    const page = await apiRequest<PageResponse<T>>(buildPath(params));
-    items.push(...page.items);
-    cursor = page.next_cursor;
-    if (!cursor) {
-      return items;
-    }
-  }
+export type ListPageOptions = CursorPageOptions;
+
+function cursorQuery(options: CursorPageOptions, extra?: (params: URLSearchParams) => void): string {
+  const params = new URLSearchParams();
+  if (options.cursor) params.set('cursor', options.cursor);
+  if (options.limit) params.set('limit', String(options.limit));
+  extra?.(params);
+  return params.toString();
 }
 
 export const API_BASE_URL =
-  (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') ||
+  process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, '') ||
   'http://localhost:8000';
+export const API_ORIGIN = new URL(API_BASE_URL).origin;
+const CSRF_COOKIE_NAME =
+  process.env.NEXT_PUBLIC_CSRF_COOKIE_NAME || 'greekocr-csrf';
 
 type RequestOptions = Omit<RequestInit, 'body'> & {
   body?: unknown;
@@ -190,33 +191,101 @@ type RequestOptions = Omit<RequestInit, 'body'> & {
   skipDedup?: boolean;
 };
 
-export async function apiRequest<T>(
-  path: string,
-  options: RequestOptions = {},
-): Promise<T> {
-  const method = (options.method ?? 'GET').toUpperCase();
-  if (method === 'GET' && !options.skipDedup) {
-    return dedupedGet(`GET ${path}`, () =>
-      apiRequest<T>(path, { ...options, skipDedup: true }),
-    );
+let refreshPromise: Promise<TokenResponse> | null = null;
+
+function csrfToken(): string | null {
+  if (typeof document === 'undefined') return null;
+  const encodedName = `${encodeURIComponent(CSRF_COOKIE_NAME)}=`;
+  const cookie = document.cookie.split('; ').find((item) => item.startsWith(encodedName));
+  if (!cookie) return null;
+  try {
+    return decodeURIComponent(cookie.slice(encodedName.length));
+  } catch {
+    return null;
+  }
+}
+
+function addCsrfHeader(headers: Headers, method: string): void {
+  if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) return;
+  const token = csrfToken();
+  if (token) headers.set('X-CSRF-Token', token);
+}
+
+/**
+ * Refresh the cookie-backed session once for all concurrent callers.
+ * The refresh route deliberately bypasses auth recovery to avoid recursion.
+ */
+export function refreshAccessToken(): Promise<TokenResponse> {
+  refreshPromise ??= apiRequest<TokenResponse>('/auth/refresh', {
+    method: 'POST',
+    skipAuth: true,
+  })
+    .then((token) => {
+      setAccessToken(token.access_token);
+      return token;
+    })
+    .finally(() => {
+      refreshPromise = null;
+    });
+  return refreshPromise;
+}
+
+/**
+ * Fetch a protected resource, refreshing the access token once after a 401.
+ * It is shared by API requests and the event-stream client so each path has
+ * the same recovery and sign-out behavior.
+ */
+export async function fetchWithAuthRecovery(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+): Promise<Response> {
+  return fetchWithAuthRecoveryAttempt(input, init, false);
+}
+
+async function fetchWithAuthRecoveryAttempt(
+  input: RequestInfo | URL,
+  init: RequestInit,
+  retried: boolean,
+): Promise<Response> {
+  const headers = new Headers(init.headers);
+  const token = getAccessToken();
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+
+  const response = await fetch(input, {
+    ...init,
+    credentials: init.credentials ?? 'include',
+    headers,
+  });
+  if (response.status !== 401) return response;
+
+  if (retried) {
+    redirectToLogin();
+    throw new ApiError('Unauthorized', 401);
   }
 
+  try {
+    await refreshAccessToken();
+  } catch {
+    redirectToLogin();
+    throw new ApiError('Unauthorized', 401);
+  }
+
+  return fetchWithAuthRecoveryAttempt(input, init, true);
+}
+
+async function requestApiResponse(path: string, options: RequestOptions): Promise<Response> {
   const { body, skipAuth, headers: initHeaders, ...rest } = options;
   const headers = new Headers(initHeaders);
+  const method = (options.method ?? 'GET').toUpperCase();
 
   if (body !== undefined && !(body instanceof FormData)) {
     headers.set('Content-Type', 'application/json');
   }
+  addCsrfHeader(headers, method);
 
-  if (!skipAuth) {
-    const token = getAccessToken();
-    if (token) {
-      headers.set('Authorization', `Bearer ${token}`);
-    }
-  }
-
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const init: RequestInit = {
     ...rest,
+    credentials: 'include',
     headers,
     body:
       body === undefined
@@ -224,12 +293,28 @@ export async function apiRequest<T>(
         : body instanceof FormData
           ? body
           : JSON.stringify(body),
-  });
+  };
 
-  if (response.status === 401 && !skipAuth) {
-    redirectToLogin();
-    throw new ApiError('Unauthorized', 401);
+  if (skipAuth) {
+    return fetch(`${API_BASE_URL}${path}`, init);
   }
+  return fetchWithAuthRecovery(`${API_BASE_URL}${path}`, init);
+}
+
+export async function apiRequest<T>(
+  path: string,
+  options: RequestOptions = {},
+): Promise<T> {
+  const method = (options.method ?? 'GET').toUpperCase();
+  // Abort signals belong to one component lifecycle. Sharing an abortable
+  // fetch lets one Strict Mode cleanup cancel a newer mount's request.
+  if (method === 'GET' && !options.skipDedup && !options.signal) {
+    return dedupedGet(`auth:${getAuthRequestVersion()} GET ${path}`, () =>
+      apiRequest<T>(path, { ...options, skipDedup: true }),
+    );
+  }
+
+  const response = await requestApiResponse(path, options);
 
   if (!response.ok) {
     throw await parseApiError(response);
@@ -246,48 +331,13 @@ export async function fetchBinaryApi(
   path: string,
   options: RequestOptions = {},
 ): Promise<Blob> {
-  const { body, skipAuth, headers: initHeaders, ...rest } = options;
-  const headers = new Headers(initHeaders);
-
-  if (body !== undefined && !(body instanceof FormData)) {
-    headers.set('Content-Type', 'application/json');
-  }
-
-  if (!skipAuth) {
-    const token = getAccessToken();
-    if (token) {
-      headers.set('Authorization', `Bearer ${token}`);
-    }
-  }
-
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...rest,
-    headers,
-    body:
-      body === undefined
-        ? undefined
-        : body instanceof FormData
-          ? body
-          : JSON.stringify(body),
-  });
-
-  if (response.status === 401 && !skipAuth) {
-    redirectToLogin();
-    throw new ApiError('Unauthorized', 401);
-  }
+  const response = await requestApiResponse(path, options);
 
   if (!response.ok) {
     throw await parseApiError(response);
   }
 
   return response.blob();
-}
-
-export function mediaUrl(path: string): string {
-  if (path.startsWith('http://') || path.startsWith('https://')) {
-    return path;
-  }
-  return `${API_BASE_URL}${path}`;
 }
 
 export function publicPartMediaUrl(partId: string): string {
@@ -306,13 +356,24 @@ export const api = {
   register: (body: RegisterRequest) =>
     apiRequest<TokenResponse>('/auth/register', { method: 'POST', body, skipAuth: true }),
 
+  refresh: refreshAccessToken,
+
+  logout: () => apiRequest<void>('/auth/logout', { method: 'POST', skipAuth: true }),
+
   me: () => apiRequest<UserResponse>('/me'),
 
-  listProjects: () =>
-    fetchAllPages<ProjectResponse>((params) => {
-      const query = params.toString();
-      return query ? `/projects?${query}` : '/projects';
-    }),
+  listProjectsPage: (options: ListPageOptions = {}) => {
+    const query = cursorQuery(options);
+    return apiRequest<PageResponse<ProjectResponse>>(query ? `/projects?${query}` : '/projects', {
+      signal: options.signal,
+    });
+  },
+
+  listProjects: (options?: { maxPages?: number; signal?: AbortSignal }) =>
+    collectCursorPages(
+      (pageOptions) => api.listProjectsPage(pageOptions),
+      options,
+    ),
 
 
   createProject: (body: ProjectCreateRequest) =>
@@ -327,11 +388,29 @@ export const api = {
   deleteProject: (projectId: string) =>
     apiRequest<void>(`/projects/${projectId}`, { method: 'DELETE' }),
 
-  listDocuments: (projectId: string, includeArchived = false) =>
-    fetchAllPages<DocumentResponse>((params) => {
-      params.set('include_archived', String(includeArchived));
-      return `/projects/${projectId}/documents?${params.toString()}`;
-    }),
+  listDocumentsPage: (
+    projectId: string,
+    includeArchived = false,
+    options: ListPageOptions = {},
+  ) => {
+    const query = cursorQuery(options, (params) =>
+      params.set('include_archived', String(includeArchived)),
+    );
+    return apiRequest<PageResponse<DocumentResponse>>(
+      `/projects/${projectId}/documents?${query}`,
+      { signal: options.signal },
+    );
+  },
+
+  listDocuments: (
+    projectId: string,
+    includeArchived = false,
+    options?: { maxPages?: number; signal?: AbortSignal },
+  ) =>
+    collectCursorPages(
+      (pageOptions) => api.listDocumentsPage(projectId, includeArchived, pageOptions),
+      options,
+    ),
 
   createDocument: (projectId: string, body: DocumentCreateRequest) =>
     apiRequest<DocumentResponse>(`/projects/${projectId}/documents`, {
@@ -636,28 +715,30 @@ export const api = {
 
   getJob: (jobId: string) => apiRequest<JobResponse>(`/jobs/${jobId}`),
 
-  listProjectJobs: (projectId: string) =>
-    fetchAllPages<JobResponse>((params) => {
-      const query = params.toString();
-      const suffix = query ? `?${query}` : '';
-      return `/projects/${projectId}/jobs${suffix}`;
-    }),
+  listProjectJobsPage: (projectId: string, options: ListPageOptions = {}) => {
+    const query = cursorQuery(options);
+    return apiRequest<PageResponse<JobResponse>>(
+      `/projects/${projectId}/jobs${query ? `?${query}` : ''}`,
+      { signal: options.signal },
+    );
+  },
+
+  listProjectJobs: (projectId: string, options?: { maxPages?: number; signal?: AbortSignal }) =>
+    collectCursorPages(
+      (pageOptions) => api.listProjectJobsPage(projectId, pageOptions),
+      options,
+    ),
 };
 
 export async function waitForJob(
   jobId: string,
   options?: { timeoutMs?: number; onUpdate?: (job: JobResponse) => void },
 ): Promise<JobResponse> {
-  try {
-    return await waitForJobViaSse(jobId, {
-      ...options,
-      eventsUrl: `${API_BASE_URL}/jobs/${jobId}/events`,
-      token: getAccessToken(),
-    });
-  } catch (err) {
-    if (err instanceof Error && err.message === 'Job timed out.') {
-      throw err;
-    }
-    return pollJobUntilTerminal(api.getJob, jobId, options);
-  }
+  return waitForSubscribedJob(jobId, {
+    ...options,
+    eventsUrl: `${API_BASE_URL}/jobs/${jobId}/events`,
+    token: getAccessToken(),
+    getJob: api.getJob,
+    intervalMs: JOB_WAIT_POLL_INTERVAL_MS,
+  });
 }

@@ -1,6 +1,6 @@
 # Local Inference via Inference Helper — Product Requirements Document
 
-> **Status: completed** (issues 038–041). ADR: [`docs/decisions/002-local-inference-helper.md`](../docs/decisions/002-local-inference-helper.md).
+> **Status: completed** (issues 038–041). Architecture: [`README.md`](../../README.md#local-inference-helper).
 
 ## Problem Statement
 
@@ -17,7 +17,7 @@ Researchers need models marked for local CPU in the **Registry** to run on their
 
 Ship an **Inference helper** — a small native background app (Windows, macOS, Linux) that runs a slim **Inference sidecar** on `127.0.0.1:8001`. The hosted browser probes `GET /health`, calls `POST /inference/v1/run` for segment and transcribe when **Inference preference** is local, then persists results through the hosted API into Postgres. **Remote inference** remains the existing **Product job** path and is used when the helper is absent, the user toggles **Use cloud inference**, or the selected model has `host_eligibility: remote`.
 
-This follows ADR [`docs/decisions/002-local-inference-helper.md`](../docs/decisions/002-local-inference-helper.md): browser-orchestrated localhost inference because the hosted API cannot reach a researcher's `localhost`.
+This follows the browser-orchestrated localhost inference design in [`README.md`](../../README.md#local-inference-helper): the hosted API cannot reach a researcher's `localhost`.
 
 ## User Stories
 
@@ -105,7 +105,7 @@ This follows ADR [`docs/decisions/002-local-inference-helper.md`](../docs/decisi
 
 ## Implementation Decisions
 
-- **Architecture**: Hosted SPA + hosted API + hosted Postgres; **Inference helper** on researcher machine. Browser orchestrates local `/inference/v1/run`; hosted job worker continues **remote inference** only. See ADR 002.
+- **Architecture**: Hosted SPA + hosted API + hosted Postgres; **Inference helper** on researcher machine. Browser orchestrates local `/inference/v1/run`; hosted job worker continues **remote inference** only. See [README](../../README.md#local-inference-helper).
 - **Rejected alternatives**: Full desktop app (Tauri/Electron), in-browser WASM/ONNX, cloud-default inference, outbound WebSocket agent (deferred), transcribe-only v1 (rejected — all `host_eligibility: local` models run locally).
 - **Helper app**: New `inference/helper/` slim FastAPI app — `health` + `/inference/v1/run` (+ catalog) only; no jobs router, no Postgres. Entrypoint `python -m inference.helper`; bind `127.0.0.1:8001`.
 - **Auth on helper v1**: No `inference_service_secret` on helper `/run` (differs from cloud inference API). CORS allows hosted origin. Token handshake deferred.
@@ -152,7 +152,7 @@ Tests assert **external behavior** at the highest existing seams; do not test Py
 ## Further Notes
 
 - Domain vocabulary: `nomicous/CONTEXT.md` (**Local inference**, **Remote inference**, **Inference sidecar**, **Inference helper**, **Inference preference**, **Host eligibility**) and `inference/CONTEXT.md` (**Inference host**, **Lite model tier**, **Server model tier**).
-- ADR: [`docs/decisions/002-local-inference-helper.md`](../docs/decisions/002-local-inference-helper.md) (Accepted 2026-07-09).
+- Architecture: [`README.md`](../../README.md#local-inference-helper) (shipped 2026-07-09).
 - Supersedes the open HITL question in issue 028 (sync vs job-backed OCR) for hosted deployment: local = browser `/run` + API persist; cloud = **Product jobs** + **remote inference**.
 - Grilling session decisions captured 2026-07-09: one install (not desktop app), health probe only, always-on helper, all `local` models (segment + transcribe), cloud fallback via toggle.
 - Prefer thin vertical slices: first tracer proves local transcribe pairing assist end-to-end; second adds local segment; third polishes preference/install UX; fourth ships installers.

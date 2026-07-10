@@ -1,4 +1,4 @@
-import { useState, type ChangeEventHandler } from 'react';
+import type { ChangeEventHandler } from 'react';
 import type { InferenceModelResponse, LineResponse, TranscriptionLayerResponse } from '../../api/client';
 import { ModelOutputBlock } from './ModelOutputBlock';
 import { PageEditorModelSelect } from './PageEditorModelSelect';
@@ -41,8 +41,6 @@ type PageEditorTranscriptionStripProps = {
 export function PageEditorTranscriptionStrip({
   visible,
   transcriptionLayers,
-  selectedTranscriptionLayerId: _selectedTranscriptionLayerId,
-  onSelectTranscriptionLayer: _onSelectTranscriptionLayer,
   selectedSegmentNumber,
   selectedSegment,
   selectedTranscriptionLayer,

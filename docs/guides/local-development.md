@@ -9,6 +9,7 @@ Run the full Nomicous stack on your machine. For production hosting, see [deploy
 From the repository root:
 
 ```bash
+cp .env.compose.example .env
 cp nomicous/backend/core/.env.example nomicous/backend/core/.env
 docker compose up --build
 ```
@@ -21,7 +22,7 @@ docker compose up --build
 | OpenAPI | http://localhost:8000/docs |
 | Inference API (cloud) | http://localhost:8010 |
 | Local Inference Helper | http://127.0.0.1:8001 (if installed) |
-| Postgres | `localhost:5433` — user `postgres`, password `dev`, database `kalamos` |
+| Postgres | `127.0.0.1:5433` — credentials from the ignored root `.env`, database `kalamos` |
 
 Migrations run automatically when the API container starts.
 
@@ -32,7 +33,7 @@ Migrations run automatically when the API container starts.
 Use a hosted Supabase project for shared testing:
 
 1. Copy `nomicous/backend/core/.env.supabase.example` → `.env.supabase` and fill credentials.
-2. Run `./scripts/platform/migrate_supabase.sh`.
+2. Follow the [database role runbook](../deployment/database-roles.md), then run `./scripts/platform/migrate_supabase.sh`.
 3. Start with the Compose override:
 
 ```bash
@@ -87,4 +88,5 @@ Probes `http://127.0.0.1:8001`. Packaging and DMG install: [`packaging/helper/RE
 | [`nomicous/README.md`](../../nomicous/README.md) | App operations, env vars, version bumps |
 | [`nomicous/infrastructure/README.md`](../../nomicous/infrastructure/README.md) | Alembic, database wiring |
 | [`inference/README.md`](../../inference/README.md) | Inference service, registry, Compose ports |
+| [learnings.md](learnings.md) | Supabase, serverless (Vercel), Calamari training, frequent errors |
 | [testing.md](testing.md) | Pytest commands |

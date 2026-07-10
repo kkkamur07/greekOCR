@@ -74,12 +74,17 @@ class Document(Base):
     transcriptions: Mapped[list[Transcription]] = relationship(
         "Transcription", back_populates="document", cascade="all, delete-orphan"
     )
-    model_bindings: Mapped[list[ModelBinding]] = relationship("ModelBinding", back_populates="document")
+    model_bindings: Mapped[list[ModelBinding]] = relationship(
+        "ModelBinding", back_populates="document"
+    )
 
 
 class DocumentPart(Base):
     __tablename__ = "document_parts"
-    __table_args__ = (Index("ix_document_parts_document_order", "document_id", "order"),)
+    __table_args__ = (
+        UniqueConstraint("document_id", "order", name="uq_document_parts_document_order"),
+        Index("ix_document_parts_document_order", "document_id", "order"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     document_id: Mapped[uuid.UUID] = mapped_column(
@@ -93,14 +98,38 @@ class DocumentPart(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     document: Mapped[Document] = relationship("Document", back_populates="parts")
-    blocks: Mapped[list[Block]] = relationship("Block", back_populates="part", cascade="all, delete-orphan")
-    lines: Mapped[list[Line]] = relationship("Line", back_populates="part", cascade="all, delete-orphan")
+    blocks: Mapped[list[Block]] = relationship(
+        "Block", back_populates="part", cascade="all, delete-orphan"
+    )
+    lines: Mapped[list[Line]] = relationship(
+        "Line", back_populates="part", cascade="all, delete-orphan"
+    )
     page_transcription_lines: Mapped[list[PageTranscriptionLine]] = relationship(
         "PageTranscriptionLine", back_populates="part", cascade="all, delete-orphan"
     )
     model_bindings: Mapped[list[ModelBinding]] = relationship(
         "ModelBinding", back_populates="document_part"
     )
+
+
+class MediaDeletionIntent(Base):
+    """Durable outbox record for eventually deleting an object-store key."""
+
+    __tablename__ = "media_deletion_intents"
+    __table_args__ = (
+        Index(
+            "ix_media_deletion_intents_pending",
+            "created_at",
+            postgresql_where="completed_at IS NULL",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    image_key: Mapped[str] = mapped_column(String(1024), unique=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class Block(Base):
@@ -172,7 +201,9 @@ class Transcription(Base):
         UUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE"), index=True
     )
     name: Mapped[str] = mapped_column(String(255))
-    kind: Mapped[TranscriptionKind] = mapped_column(Enum(TranscriptionKind, name="transcription_kind"))
+    kind: Mapped[TranscriptionKind] = mapped_column(
+        Enum(TranscriptionKind, name="transcription_kind")
+    )
     created_by_job_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("jobs.id", ondelete="SET NULL"), nullable=True
     )
@@ -224,5 +255,7 @@ class PageTranscriptionLine(Base):
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    part: Mapped[DocumentPart] = relationship("DocumentPart", back_populates="page_transcription_lines")
+    part: Mapped[DocumentPart] = relationship(
+        "DocumentPart", back_populates="page_transcription_lines"
+    )
     paired_line: Mapped[Line | None] = relationship("Line")

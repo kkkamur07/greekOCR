@@ -1,5 +1,5 @@
 import type { PublicLineResponse } from '../api/client';
-import type { Region, Transcription } from '../types';
+import type { Region } from '../types';
 
 export function linesForPart(
   lines: PublicLineResponse[] | undefined,
@@ -32,17 +32,4 @@ export function lineTextForLayer(
   const picked = match ?? transcriptions[0];
   const text = picked?.text?.trim();
   return text ? text : null;
-}
-
-export function publicLinesToTranscriptions(
-  lines: PublicLineResponse[],
-  layerId: string | null,
-): Transcription[] {
-  return lines.flatMap((line, index) => {
-    const text = lineTextForLayer(line, layerId);
-    if (!text) return [];
-    const confidence =
-      line.line_transcriptions?.find((item) => item.text === text)?.confidence ?? 1;
-    return [{ region_id: index + 1, text, confidence: confidence ?? 1 }];
-  });
 }

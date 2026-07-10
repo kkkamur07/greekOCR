@@ -1,5 +1,4 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -50,6 +49,7 @@ const DOCUMENT: DocumentWithPartsResponse = {
   workflow: 'published',
   created_at: '2026-06-16T10:00:00Z',
   updated_at: '2026-06-16T10:00:00Z',
+  part_count: 1,
   parts: [
     {
       id: 'part-1',
@@ -70,7 +70,7 @@ const LAYOUT: PublicLayoutResponse = {
       id: 'block-1',
       part_id: 'part-1',
       order: 0,
-      box: [0, 0, 640, 900],
+      box: { coordinates: [0, 0, 640, 900] },
     },
   ],
   lines: [
@@ -98,16 +98,8 @@ const LAYOUT: PublicLayoutResponse = {
 };
 
 function renderPublicPage() {
-  return render(
-    <MemoryRouter initialEntries={['/public/projects/project-1/documents/doc-1']}>
-      <Routes>
-        <Route
-          path="/public/projects/:projectId/documents/:documentId"
-          element={<PublicDocumentPage />}
-        />
-      </Routes>
-    </MemoryRouter>,
-  );
+  window.history.replaceState({}, '', '/public/projects/project-1/documents/doc-1');
+  return render(<PublicDocumentPage />);
 }
 
 describe('PublicDocumentPage', () => {

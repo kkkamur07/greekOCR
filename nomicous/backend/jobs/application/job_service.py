@@ -15,7 +15,9 @@ class JobService:
     def __init__(self, session: AsyncSession) -> None:
         self._repo = JobRepository(session)
 
-    async def enqueue_test_job(self, handler: str = "noop", *, user_id: uuid.UUID | None = None) -> Job:
+    async def enqueue_test_job(
+        self, handler: str = "noop", *, user_id: uuid.UUID | None = None
+    ) -> Job:
         return await self._repo.create_test_job(handler, user_id=user_id)
 
     async def get_job(self, job_id: uuid.UUID) -> Job:

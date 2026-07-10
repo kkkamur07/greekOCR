@@ -1,9 +1,15 @@
 """Document and part integration tests — real Postgres (kalamos)."""
 
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 import uuid
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
+from backend.document.infrastructure.orm_models import Document, DocumentPart
+from backend.project.infrastructure.orm_models import Project
+from infrastructure.db import sync_system_session
 from tests.fixtures.paths import MINIMAL_PNG
 from tests.nomicous.integration.helpers import documents_url, stored_minimal_page_bytes
 
@@ -209,7 +215,7 @@ def test_upload_part_rejects_non_image_bytes(client, owner_headers, owner_projec
     assert response.status_code == 422
     assert response.json()["error"] == {
         "code": "VALIDATION_ERROR",
-        "message": "Uploaded file is not a valid image",
+        "message": "Invalid request",
     }
 
 
@@ -235,6 +241,42 @@ def test_reorder_rejects_duplicate_part_ids(client, owner_headers, owner_project
         json={"part_ids": [part_id, part_id]},
     )
     assert reorder.status_code == 422
+
+
+@pytest.mark.integration
+def test_simultaneous_part_inserts_cannot_duplicate_document_order():
+    project_id = uuid.uuid4()
+    document_id = uuid.uuid4()
+    with sync_system_session() as session:
+        session.add(
+            Project(id=project_id, name="Concurrent", slug=f"concurrent-{uuid.uuid4().hex}")
+        )
+        session.add(Document(id=document_id, project_id=project_id, name="Concurrent pages"))
+        session.commit()
+
+    barrier = Barrier(2)
+
+    def insert_part() -> bool:
+        try:
+            with sync_system_session() as session:
+                session.add(
+                    DocumentPart(
+                        document_id=document_id,
+                        order=0,
+                        image_key=f"parts/{uuid.uuid4()}.webp",
+                    )
+                )
+                barrier.wait(timeout=5)
+                session.commit()
+            return True
+        except IntegrityError:
+            return False
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        outcomes = list(executor.map(lambda _unused: insert_part(), range(2)))
+
+    assert outcomes.count(True) == 1
+    assert outcomes.count(False) == 1
 
 
 @pytest.mark.integration

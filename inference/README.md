@@ -36,27 +36,23 @@ curl -s http://localhost:8001/health
 
 ## Weights layout
 
-### Local bundled weights (`src/hf/local/`)
+Registry models resolve weights at runtime from:
 
-Bundled checkpoints for offline dev and Docker live under `src/hf/local/{script}/{architecture}/{model_version}/{registry_tag}/`. Registry entries reference them with `file://` URIs relative to `src/hf/` (for example `file://local/syriac/calamari/v1/stable/best.pt`).
+| Source | Example | Cache / path |
+|--------|---------|----------------|
+| Hub | `hf://kkkamur07/greek-htr-calamari@stable` | `src/hf/cache/<registry_model_id>/<registry_tag>/` |
+| Local bundled (offline) | `file://local/syriac/calamari/v1/stable/best.pt` | `src/hf/local/...` |
+| Kraken package | `package://kraken/blla.mlmodel` | Inside `kraken` pip package |
 
-Docker Compose mounts `./src/hf` at `/app/src/hf` on `inference-api` and `inference-worker`. No Hub credentials are required for models that use local bundled weights.
-
-**Migrated:** `syriac-calamari-v1` (`stable`) — served from `src/hf/local/syriac/calamari/v1/stable/`.
-
-### Interim layout (`inference/weights/`)
-
-Legacy checkpoints still under `inference/weights/` use `file://` URIs relative to `inference/` (interim layout). Docker Compose continues to mount `inference/weights/` at `/app/inference/weights`. These paths will move to `src/hf/local/` as models are migrated.
-
-Runtime weight cache for resolved remote weights: `src/hf/cache/<registry_model_id>/<registry_tag>/` (Hub integration). Interim `inference/weights/cache/` remains the default for `INFERENCE_WEIGHTS_CACHE_DIR` until all models use Hub cache.
+Docker Compose mounts `./src/hf` at `/app/src/hf` on `inference-api` and `inference-worker` and sets `HF_CACHE_ROOT=/app/src/hf/cache`. No local weight checkout is required for the default Hub models; they download from their public repos on first use. The default Kraken segment model is packaged with the `kraken` dependency.
 
 ### Calamari (PyTorch runtime)
 
 Transcribe uses the local PyTorch Calamari implementation under `inference/architectures/calamari/`.
-Runtime artifacts are converted `.pt` checkpoints, so inference images do not install TensorFlow
+Runtime artifacts are converted `.pt` checkpoints (`calamari-pytorch-v1`), so inference images do not install TensorFlow
 or copy the vendored Calamari source tree.
 
-Historical migration notes: [`docs/architecture/calamari-vendored-architecture.md`](../docs/architecture/calamari-vendored-architecture.md).
+Training and vendored TensorFlow Calamari: [`docs/guides/learnings.md`](../docs/guides/learnings.md#calamari-training).
 
 **Hub integration:** `hf://` weight sources, Hub cache, and prefetch tooling live under `src/hf/` and `scripts/hf/`. See `inference/CONTEXT.md` for domain terminology and [`scripts/hf/README.md`](../scripts/hf/README.md) for the Hub publish runbook.
 
@@ -74,7 +70,7 @@ Environment:
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `INFERENCE_REGISTRY_PATH` | `inference/registry.yaml` | Model catalog file |
-| `INFERENCE_WEIGHTS_CACHE_DIR` | `inference/weights/cache` | Interim runtime cache directory (Hub cache uses `src/hf/cache/`) |
+| `HF_CACHE_ROOT` | `src/hf/cache` | Hub weight download cache |
 | `HF_TOKEN` | unset | Required only for **private** or gated Hub repos; all nomicous inference repos are public |
 
 Prefetch Hub weights without running inference:
@@ -99,10 +95,13 @@ Job callbacks use a tagged output union: `output.kind` is either `segment` or `t
 
 `inference/registry.yaml` lists available models and weight locations. Example entries:
 
-- `greek-calamari-v1` — transcribe, Calamari architecture
+- `syriac-calamari-v1` — transcribe, Calamari architecture, pinned Hub revision and digest
+- `greek-calamari-v1` — transcribe, Calamari architecture, legacy unpinned Hub entry
 - `greek-kraken-segment-v1` — segment, Kraken BLLA
 
-Weights are resolved at runtime from `src/hf/local/` (bundled), `src/hf/cache/` (Hub), `inference/weights/` (interim), or `package://` (Kraken).
+Weights are resolved at runtime from Hub cache (`src/hf/cache/`), local bundled paths (`src/hf/local/`), or `package://` (Kraken).
+New `hf://` entries should include both `hub_revision` and `artifact_sha256`; see
+the migration note in [`docs/inference/adding-inference-models.md`](../docs/inference/adding-inference-models.md).
 
 **Adding a model:** step-by-step checklist in [`docs/inference/adding-inference-models.md`](../docs/inference/adding-inference-models.md).
 
@@ -122,6 +121,31 @@ On startup the helper fetches `registry.yaml` from the hosted platform (`GET /in
 The browser probes `localhost:8001`, calls `/inference/v1/run`, and persists results through the hosted platform API. Set `HELPER_CORS_ORIGINS` to your SPA origin(s).
 
 Packaging for `.dmg` / `.msi` / Linux installers: [`packaging/helper/README.md`](../packaging/helper/README.md) — PyInstaller spec excludes training stacks, platform API, and unused torch backends so installers ship only Calamari + Kraken runtime.
+
+## Admission control and helper exposure
+
+Both the API and local helper enforce the same conservative `INFERENCE_*` limits before
+base64 decoding or model loading. Defaults are: 12 MiB request body, 10 MiB encoded image,
+7 MiB decoded image/job payload, 32 million pixels, 64 KiB parameters, depth 8, 1,000
+parameter items, 200 transcription lines, 256 geometry points per line, 100 queued/running
+jobs, one worker thread, and 60 POSTs per minute per process. Allowed image formats default
+to `JPEG,PNG,TIFF,WEBP`. Operators may lower or raise these with the corresponding
+`INFERENCE_MAX_*`, `INFERENCE_WORKER_CONCURRENCY`, and
+`INFERENCE_RATE_LIMIT_PER_MINUTE` environment variables; only trusted deployment
+configuration should do so.
+
+The API applies request-size and rate controls per process. Queue admission uses a PostgreSQL
+transaction advisory lock, so the configured queue cap holds across API replicas. Worker
+concurrency is bounded per worker process. It deliberately does **not** attempt to cancel
+timed-out Python model threads: ML libraries cannot be safely killed in-process. Run workers
+under a host/container supervisor with an execution deadline and restart policy; the existing
+running-job timeout is a stale-lease recovery mechanism, not execution cancellation.
+
+The helper defaults to `127.0.0.1` and is intentionally unauthenticated only in that loopback
+mode. Binding it to any non-loopback host requires both `HELPER_SECURE_MODE=true` and a
+non-placeholder `HELPER_AUTH_SECRET` of at least 32 characters. Secure mode protects all
+helper routes with the `X-Inference-Helper-Secret` header. Put the helper behind TLS and an
+authenticated reverse proxy when exposing it beyond the local machine.
 
 ## Tests
 

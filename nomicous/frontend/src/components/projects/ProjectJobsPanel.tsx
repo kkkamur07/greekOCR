@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { api, type DocumentResponse, type JobResponse } from '../../api/client';
 import { ApiError } from '../../api/errors';
 import { useJobPolling } from '../../hooks/useJobPolling';
@@ -56,31 +56,54 @@ function statusClass(status: JobResponse['status']): string {
 export function ProjectJobsPanel({ projectId, documents }: ProjectJobsPanelProps) {
   const [jobs, setJobs] = useState<JobResponse[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const loadMoreControllerRef = useRef<AbortController | null>(null);
 
   const documentNames = useMemo(
     () => new Map(documents.map((document) => [document.id, document.name])),
     [documents],
   );
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (cursor: string | null, signal: AbortSignal) => {
+    const isFirstPage = cursor === null;
+    if (isFirstPage) setLoading(true);
+    else setLoadingMore(true);
     setError(null);
     try {
-      const listed = await api.listProjectJobs(projectId);
-      setJobs(listed);
+      const page = await api.listProjectJobsPage(projectId, {
+        cursor,
+        limit: VISIBLE_JOB_LIMIT,
+        signal,
+      });
+      if (signal.aborted) return;
+      setJobs((current) => {
+        const next = isFirstPage ? page.items : [...current, ...page.items];
+        return Array.from(new Map(next.map((job) => [job.id, job])).values());
+      });
+      setNextCursor(page.next_cursor);
     } catch (err) {
+      if (signal.aborted) return;
       const message = err instanceof ApiError ? err.message : 'Failed to load jobs';
       setError(message);
-      setJobs([]);
+      if (isFirstPage) setJobs([]);
     } finally {
-      setLoading(false);
+      if (!signal.aborted) {
+        if (isFirstPage) setLoading(false);
+        else setLoadingMore(false);
+      }
     }
   }, [projectId]);
 
   useEffect(() => {
-    void load();
+    const controller = new AbortController();
+    void load(null, controller.signal);
+    return () => {
+      controller.abort();
+      loadMoreControllerRef.current?.abort();
+    };
   }, [load]);
 
   const activeJobIds = jobs
@@ -119,8 +142,17 @@ export function ProjectJobsPanel({ projectId, documents }: ProjectJobsPanelProps
           ? `${jobs.length} recent`
           : 'No jobs yet';
 
-  const visibleJobs = jobs.slice(0, VISIBLE_JOB_LIMIT);
-  const hiddenCount = Math.max(0, jobs.length - visibleJobs.length);
+  const loadMore = () => {
+    if (!nextCursor || loadingMore) return;
+    const controller = new AbortController();
+    loadMoreControllerRef.current?.abort();
+    loadMoreControllerRef.current = controller;
+    void load(nextCursor, controller.signal).finally(() => {
+      if (loadMoreControllerRef.current === controller) {
+        loadMoreControllerRef.current = null;
+      }
+    });
+  };
 
   if (!loading && !error && jobs.length === 0) {
     return (
@@ -178,7 +210,7 @@ export function ProjectJobsPanel({ projectId, documents }: ProjectJobsPanelProps
                 </tr>
               </thead>
               <tbody>
-                {visibleJobs.map((job) => {
+                {jobs.map((job) => {
                   const documentName = job.document_id
                     ? documentNames.get(job.document_id) ?? job.document_id.slice(0, 8)
                     : '-';
@@ -197,7 +229,7 @@ export function ProjectJobsPanel({ projectId, documents }: ProjectJobsPanelProps
                       </td>
                       <td className="col-muted">
                         {job.document_id ? (
-                          <Link to={`/projects/${projectId}/documents/${job.document_id}`}>
+                          <Link href={`/projects/${projectId}/documents/${job.document_id}`}>
                             {documentName}
                           </Link>
                         ) : (
@@ -221,10 +253,17 @@ export function ProjectJobsPanel({ projectId, documents }: ProjectJobsPanelProps
               </tbody>
             </table>
           </div>
-          {hiddenCount > 0 && (
-            <p className="project-jobs-panel__more">
-              Showing {visibleJobs.length} of {jobs.length} jobs.
-            </p>
+          {nextCursor && (
+            <div className="project-jobs-panel__more">
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                onClick={loadMore}
+                disabled={loadingMore}
+              >
+                {loadingMore ? 'Loading jobs…' : 'Load more jobs'}
+              </button>
+            </div>
           )}
         </div>
       )}

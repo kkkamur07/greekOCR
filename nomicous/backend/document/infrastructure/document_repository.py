@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from sqlalchemy import func, select, tuple_
+from sqlalchemy import func, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -14,6 +14,7 @@ from backend.document.infrastructure.orm_models import (
     DocumentWorkflow,
     Line,
     LineTranscription,
+    MediaDeletionIntent,
     PageTranscriptionLine,
     Transcription,
     TranscriptionKind,
@@ -111,6 +112,17 @@ class DocumentRepository:
         await session.delete(document)
         await session.commit()
 
+    async def delete_with_media_intents(
+        self,
+        session: AsyncSession,
+        document: Document,
+        image_keys: list[str],
+    ) -> None:
+        for image_key in image_keys:
+            session.add(MediaDeletionIntent(image_key=image_key))
+        await session.delete(document)
+        await session.commit()
+
     async def get_part(self, session: AsyncSession, part_id: UUID) -> DocumentPart | None:
         result = await session.execute(
             select(DocumentPart)
@@ -166,9 +178,7 @@ class DocumentRepository:
         )
         return list(result.scalars().all())
 
-    async def list_lines_for_document(
-        self, session: AsyncSession, document_id: UUID
-    ) -> list[Line]:
+    async def list_lines_for_document(self, session: AsyncSession, document_id: UUID) -> list[Line]:
         result = await session.execute(
             select(Line)
             .options(
@@ -191,6 +201,9 @@ class DocumentRepository:
         return list(result.scalars().all())
 
     async def next_part_order(self, session: AsyncSession, document_id: UUID) -> int:
+        await session.execute(
+            select(Document.id).where(Document.id == document_id).with_for_update()
+        )
         result = await session.execute(
             select(DocumentPart.order)
             .where(DocumentPart.document_id == document_id)
@@ -227,15 +240,29 @@ class DocumentRepository:
     async def reorder_parts(
         self, session: AsyncSession, document: Document, ordered_part_ids: list[UUID]
     ) -> list[DocumentPart]:
-        parts_by_id = {p.id: p for p in document.parts}
+        result = await session.execute(
+            select(DocumentPart).where(DocumentPart.document_id == document.id).with_for_update()
+        )
+        current_parts = list(result.scalars().all())
+        parts_by_id = {part.id: part for part in current_parts}
         if len(ordered_part_ids) != len(parts_by_id):
             return []
         if len(set(ordered_part_ids)) != len(ordered_part_ids):
             return []
         if set(ordered_part_ids) != set(parts_by_id):
             return []
+        minimum_order = min(part.order for part in current_parts)
+        maximum_order = max(part.order for part in current_parts)
+        temporary_offset = minimum_order - maximum_order - len(current_parts) - 1
+        await session.execute(
+            update(DocumentPart)
+            .where(DocumentPart.document_id == document.id)
+            .values(order=DocumentPart.order + temporary_offset)
+        )
         for index, part_id in enumerate(ordered_part_ids):
-            parts_by_id[part_id].order = index
+            await session.execute(
+                update(DocumentPart).where(DocumentPart.id == part_id).values(order=index)
+            )
         await session.commit()
         result = await session.execute(
             select(DocumentPart)
@@ -245,5 +272,10 @@ class DocumentRepository:
         return list(result.scalars().all())
 
     async def delete_part(self, session: AsyncSession, part: DocumentPart) -> None:
+        session.add(MediaDeletionIntent(image_key=part.image_key))
         await session.delete(part)
+        await session.commit()
+
+    async def enqueue_media_deletion_intent(self, session: AsyncSession, image_key: str) -> None:
+        session.add(MediaDeletionIntent(image_key=image_key))
         await session.commit()

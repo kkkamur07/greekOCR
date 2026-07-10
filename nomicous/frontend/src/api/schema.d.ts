@@ -38,6 +38,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Logout */
+        post: operations["logout_auth_logout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Refresh */
+        post: operations["refresh_auth_refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/register": {
         parameters: {
             query?: never;
@@ -89,6 +123,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/inference/v1/registry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Inference Registry
+         * @description Serve registry.yaml for installed helpers to sync at startup.
+         */
+        get: operations["get_inference_registry_inference_v1_registry_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/internal/inference/job-complete": {
         parameters: {
             query?: never;
@@ -132,6 +186,23 @@ export interface paths {
         };
         /** Get Job */
         get: operations["get_job_jobs__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/jobs/{job_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stream Job Events */
+        get: operations["stream_job_events_jobs__job_id__events_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -476,6 +547,40 @@ export interface paths {
         patch: operations["patch_part_line_projects__project_id__documents__document_id__parts__part_id__lines__line_id__patch"];
         trace?: never;
     };
+    "/projects/{project_id}/documents/{document_id}/parts/{part_id}/local-inference/segment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Persist Local Segment */
+        post: operations["persist_local_segment_projects__project_id__documents__document_id__parts__part_id__local_inference_segment_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/documents/{document_id}/parts/{part_id}/local-inference/transcribe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Persist Local Transcribe */
+        post: operations["persist_local_transcribe_projects__project_id__documents__document_id__parts__part_id__local_inference_transcribe_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{project_id}/documents/{document_id}/parts/{part_id}/model-bindings": {
         parameters: {
             query?: never;
@@ -620,7 +725,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Get Transcription Pdf */
+        get: operations["get_transcription_pdf_projects__project_id__documents__document_id__parts__part_id__transcription_pdf_get"];
         put?: never;
         /** Generate Transcription Pdf */
         post: operations["generate_transcription_pdf_projects__project_id__documents__document_id__parts__part_id__transcription_pdf_post"];
@@ -679,6 +785,23 @@ export interface paths {
         head?: never;
         /** Patch Ground Truth Line Text */
         patch: operations["patch_ground_truth_line_text_projects__project_id__documents__document_id__transcriptions__transcription_id__lines__line_id__patch"];
+        trace?: never;
+    };
+    "/projects/{project_id}/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Project Jobs */
+        get: operations["list_project_jobs_projects__project_id__jobs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/projects/{project_id}/model-bindings": {
@@ -802,6 +925,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/public/projects/{project_id}/documents/{document_id}/parts/{part_id}/page-xml": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Published Page Xml */
+        get: operations["get_published_page_xml_public_projects__project_id__documents__document_id__parts__part_id__page_xml_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/public/projects/{project_id}/documents/{document_id}/parts/{part_id}/transcription-pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Published Transcription Pdf */
+        get: operations["get_published_transcription_pdf_public_projects__project_id__documents__document_id__parts__part_id__transcription_pdf_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/public/projects/{project_id}/documents/{document_id}/transcriptions": {
         parameters: {
             query?: never;
@@ -879,13 +1036,8 @@ export interface components {
              */
             code: string;
             /**
-             * Details
-             * @description Optional structured error context
-             */
-            details?: unknown | null;
-            /**
              * Message
-             * @description Human-readable error message
+             * @description Allowlisted user-safe error message
              */
             message: string;
         };
@@ -963,6 +1115,13 @@ export interface components {
         DocumentCreateRequest: {
             /** Name */
             name: string;
+        };
+        /** DocumentPageResponse */
+        DocumentPageResponse: {
+            /** Items */
+            items: components["schemas"]["DocumentResponse"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
         };
         /** DocumentPartResponse */
         DocumentPartResponse: {
@@ -1142,6 +1301,11 @@ export interface components {
             /** Status */
             status: string;
         };
+        /**
+         * InferenceJobStatus
+         * @enum {string}
+         */
+        InferenceJobStatus: "pending" | "running" | "done" | "failed";
         /** InferenceModelResponse */
         InferenceModelResponse: {
             /** Artifact Ref */
@@ -1187,8 +1351,15 @@ export interface components {
              * Format: uuid
              */
             product_job_id: string;
-            status: components["schemas"]["MLJobStatus"];
-            task: components["schemas"]["MLTask"];
+            status: components["schemas"]["InferenceJobStatus"];
+            task: components["schemas"]["InferenceTask"];
+        };
+        /** JobPageResponse */
+        JobPageResponse: {
+            /** Items */
+            items: components["schemas"]["JobResponse"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
         };
         /** JobResponse */
         JobResponse: {
@@ -1206,7 +1377,7 @@ export interface components {
             /** Error */
             error: string | null;
             /** Execution */
-            execution?: "local" | "cloud" | null;
+            execution?: ("local" | "cloud") | null;
             /**
              * Id
              * Format: uuid
@@ -1371,6 +1542,10 @@ export interface components {
         LineUpsertRequest: {
             /** Approved Text */
             approved_text?: string | null;
+            /** Baseline */
+            baseline?: {
+                [key: string]: unknown;
+            } | null;
             /** Block Id */
             block_id?: string | null;
             /** Id */
@@ -1379,6 +1554,10 @@ export interface components {
             kind: components["schemas"]["LineGeometryKind"];
             /** Kraken Ceiling */
             kraken_ceiling?: number[][] | null;
+            /** Mask */
+            mask?: {
+                [key: string]: unknown;
+            } | null;
             /** Order */
             order: number;
             /** Points */
@@ -1395,6 +1574,83 @@ export interface components {
             /** Lines */
             lines?: components["schemas"]["LineUpsertRequest"][];
         };
+        /** LocalSegmentPersistRequest */
+        LocalSegmentPersistRequest: {
+            /** Output */
+            output: {
+                [key: string]: unknown;
+            };
+            /** Registry Model Id */
+            registry_model_id: string;
+            /**
+             * Registry Tag
+             * @default stable
+             */
+            registry_tag: string;
+        };
+        /** LocalSegmentPersistResponse */
+        LocalSegmentPersistResponse: {
+            /** Added Lines */
+            added_lines: number;
+            /** Blocks Count */
+            blocks_count: number;
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /** Lines Count */
+            lines_count: number;
+            /** Preserved Manual Lines */
+            preserved_manual_lines: number;
+            /** Pruned Lines */
+            pruned_lines: number;
+        };
+        /** LocalTranscribeLinePersistRequest */
+        LocalTranscribeLinePersistRequest: {
+            /** Character Confidences */
+            character_confidences?: {
+                [key: string]: unknown;
+            }[] | null;
+            /** Confidence */
+            confidence: number;
+            /**
+             * Line Id
+             * Format: uuid
+             */
+            line_id: string;
+            /** Text */
+            text: string;
+        };
+        /** LocalTranscribePersistRequest */
+        LocalTranscribePersistRequest: {
+            /** Lines */
+            lines: components["schemas"]["LocalTranscribeLinePersistRequest"][];
+            /** Registry Model Id */
+            registry_model_id: string;
+            /**
+             * Registry Tag
+             * @default stable
+             */
+            registry_tag: string;
+        };
+        /** LocalTranscribePersistResponse */
+        LocalTranscribePersistResponse: {
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /** Lines */
+            lines: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Transcription Id
+             * Format: uuid
+             */
+            transcription_id: string;
+        };
         /** LoginRequest */
         LoginRequest: {
             /**
@@ -1405,16 +1661,6 @@ export interface components {
             /** Password */
             password: string;
         };
-        /**
-         * MLJobStatus
-         * @enum {string}
-         */
-        MLJobStatus: "pending" | "running" | "done" | "failed";
-        /**
-         * MLTask
-         * @enum {string}
-         */
-        MLTask: "segment" | "transcribe" | "binarize";
         /** ModelBindingCreateRequest */
         ModelBindingCreateRequest: {
             /**
@@ -1513,6 +1759,13 @@ export interface components {
             name: string;
             /** Slug */
             slug: string;
+        };
+        /** ProjectPageResponse */
+        ProjectPageResponse: {
+            /** Items */
+            items: components["schemas"]["ProjectResponse"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
         };
         /** ProjectResponse */
         ProjectResponse: {
@@ -1688,6 +1941,46 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /** SegmentPartRequest */
+        SegmentPartRequest: {
+            /**
+             * Min Area Ratio
+             * @default 0.95
+             */
+            min_area_ratio: number;
+            /**
+             * Min Iou
+             * @default 0.97
+             */
+            min_iou: number;
+            /** Model Id */
+            model_id?: string | null;
+            /**
+             * Otsu Sphere Radius
+             * @default 4
+             */
+            otsu_sphere_radius: number;
+            /**
+             * Split Large Lines
+             * @default true
+             */
+            split_large_lines: boolean;
+            /**
+             * Split Vertical Gap Px
+             * @default 12
+             */
+            split_vertical_gap_px: number;
+            /**
+             * Target Max Points
+             * @default 80
+             */
+            target_max_points: number;
+            /**
+             * Use Otsu Refinement
+             * @default false
+             */
+            use_otsu_refinement: boolean;
+        };
         /** SegmentRunResponse */
         SegmentRunResponse: {
             /** Blocks */
@@ -1710,9 +2003,22 @@ export interface components {
              */
             token_type: string;
         };
+        /** TranscribeBatchLineResult */
+        TranscribeBatchLineResult: {
+            /** Line Id */
+            line_id?: string | null;
+            /** Line Index */
+            line_index: number;
+            output: components["schemas"]["TranscribeRunResponse"];
+        };
+        /** TranscribeBatchRunResponse */
+        TranscribeBatchRunResponse: {
+            /** Lines */
+            lines: components["schemas"]["TranscribeBatchLineResult"][];
+        };
         /** TranscribeJobOutput */
         TranscribeJobOutput: {
-            data: components["schemas"]["TranscribeRunResponse"];
+            data: components["schemas"]["TranscribeBatchRunResponse"];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -1721,6 +2027,8 @@ export interface components {
         };
         /** TranscribePartRequest */
         TranscribePartRequest: {
+            /** Line Ids */
+            line_ids?: string[] | null;
             /** Model Id */
             model_id?: string | null;
         };
@@ -1895,6 +2203,170 @@ export interface operations {
                 "application/json": components["schemas"]["LoginRequest"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenResponse"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Not authorized */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Conflict with current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    logout_auth_logout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Not authorized */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Conflict with current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    refresh_auth_refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -2232,6 +2704,89 @@ export interface operations {
             };
         };
     };
+    get_inference_registry_inference_v1_registry_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Not authorized */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Conflict with current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
     complete_inference_job_internal_inference_job_complete_post: {
         parameters: {
             query?: never;
@@ -2491,6 +3046,89 @@ export interface operations {
             };
         };
     };
+    stream_job_events_jobs__job_id__events_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Not authorized */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Conflict with current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
     me_me_get: {
         parameters: {
             query?: never;
@@ -2576,8 +3214,12 @@ export interface operations {
     };
     get_part_image_media_parts__part_id__get: {
         parameters: {
-            query?: never;
-            header?: never;
+            query?: {
+                w?: number | null;
+            };
+            header?: {
+                "if-none-match"?: string | null;
+            };
             path: {
                 part_id: string;
             };
@@ -2597,6 +3239,13 @@ export interface operations {
                     "image/png": string;
                     "image/webp": string;
                 };
+            };
+            /** @description Media has not changed */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Not authenticated */
             401: {
@@ -2665,7 +3314,10 @@ export interface operations {
     };
     list_projects_projects_get: {
         parameters: {
-            query?: never;
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -2678,7 +3330,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ProjectResponse"][];
+                    "application/json": components["schemas"]["ProjectPageResponse"];
                 };
             };
             /** @description Not authenticated */
@@ -3094,6 +3746,8 @@ export interface operations {
         parameters: {
             query?: {
                 include_archived?: boolean;
+                limit?: number;
+                cursor?: string | null;
             };
             header?: never;
             path: {
@@ -3109,7 +3763,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DocumentResponse"][];
+                    "application/json": components["schemas"]["DocumentPageResponse"];
                 };
             };
             /** @description Not authenticated */
@@ -5301,6 +5955,188 @@ export interface operations {
             };
         };
     };
+    persist_local_segment_projects__project_id__documents__document_id__parts__part_id__local_inference_segment_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                document_id: string;
+                part_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LocalSegmentPersistRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalSegmentPersistResponse"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Not authorized */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Conflict with current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    persist_local_transcribe_projects__project_id__documents__document_id__parts__part_id__local_inference_transcribe_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                document_id: string;
+                part_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LocalTranscribePersistRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalTranscribePersistResponse"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Not authorized */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Conflict with current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
     list_part_model_bindings_projects__project_id__documents__document_id__parts__part_id__model_bindings_get: {
         parameters: {
             query?: never;
@@ -5935,7 +6771,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SegmentPartRequest"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             202: {
@@ -6035,6 +6875,93 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EnqueueJobResponse"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Not authorized */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Conflict with current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    get_transcription_pdf_projects__project_id__documents__document_id__parts__part_id__transcription_pdf_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                document_id: string;
+                part_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Transcription PDF bytes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
                 };
             };
             /** @description Not authenticated */
@@ -6391,6 +7318,94 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LineTranscriptionResponse"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Not authorized */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Conflict with current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    list_project_jobs_projects__project_id__jobs_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobPageResponse"];
                 };
             };
             /** @description Not authenticated */
@@ -6979,8 +7994,12 @@ export interface operations {
     };
     get_public_part_image_public_media_parts__part_id__get: {
         parameters: {
-            query?: never;
-            header?: never;
+            query?: {
+                w?: number | null;
+            };
+            header?: {
+                "if-none-match"?: string | null;
+            };
             path: {
                 part_id: string;
             };
@@ -7000,6 +8019,13 @@ export interface operations {
                     "image/png": string;
                     "image/webp": string;
                 };
+            };
+            /** @description Media has not changed */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Not authenticated */
             401: {
@@ -7171,6 +8197,180 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PublicLayoutResponse"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Not authorized */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Conflict with current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    get_published_page_xml_public_projects__project_id__documents__document_id__parts__part_id__page_xml_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                document_id: string;
+                part_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description PAGE XML bytes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/xml": string;
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Not authorized */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Conflict with current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    get_published_transcription_pdf_public_projects__project_id__documents__document_id__parts__part_id__transcription_pdf_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                document_id: string;
+                part_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Transcription PDF bytes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
                 };
             };
             /** @description Not authenticated */

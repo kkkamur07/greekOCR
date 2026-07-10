@@ -13,7 +13,9 @@ def inference_settings(monkeypatch: pytest.MonkeyPatch):
 
     settings = InferenceSettings()
     get_inference_settings.cache_clear()
-    monkeypatch.setattr("inference.infrastructure.settings.get_inference_settings", lambda: settings)
+    monkeypatch.setattr(
+        "inference.infrastructure.settings.get_inference_settings", lambda: settings
+    )
     return settings
 
 

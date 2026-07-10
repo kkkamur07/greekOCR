@@ -6,7 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core.api.pagination import PageResponse, decode_cursor, paginate_rows
+from backend.core.api.pagination import MAX_CURSOR_LENGTH, decode_cursor, paginate_rows
 from backend.project.api.schemas import (
     ProjectCreateRequest,
     ProjectPageResponse,
@@ -17,7 +17,7 @@ from backend.project.api.schemas import (
 from backend.project.api.responses import project_response
 from backend.project.application.project_service import ProjectService
 from backend.document.infrastructure.document_repository import DocumentRepository
-from backend.jobs.api.schemas import JobPageResponse, JobResponse, job_response_from_orm
+from backend.jobs.api.schemas import JobPageResponse, job_response_from_orm
 from backend.jobs.application.job_service import JobService
 from backend.users.api.dependencies import get_current_user
 from backend.users.infrastructure.orm_models import User
@@ -32,9 +32,7 @@ def _job_service(db: AsyncSession = Depends(get_db)) -> JobService:
     return JobService(db)
 
 
-async def _projects_with_counts(
-    db: AsyncSession, projects: list
-) -> list[ProjectResponse]:
+async def _projects_with_counts(db: AsyncSession, projects: list) -> list[ProjectResponse]:
     document_counts = await _document_repo.count_documents_by_project_ids(
         db, [project.id for project in projects]
     )
@@ -49,7 +47,7 @@ async def list_projects(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
     limit: int = Query(default=50, ge=1, le=200),
-    cursor: str | None = Query(default=None),
+    cursor: str | None = Query(default=None, max_length=MAX_CURSOR_LENGTH),
 ) -> ProjectPageResponse:
     page_cursor = decode_cursor(cursor) if cursor else None
     projects = await _service.list_projects(
@@ -106,7 +104,7 @@ async def list_project_jobs(
     db: Annotated[AsyncSession, Depends(get_db)],
     job_service: JobService = Depends(_job_service),
     limit: int = Query(default=50, ge=1, le=200),
-    cursor: str | None = Query(default=None),
+    cursor: str | None = Query(default=None, max_length=MAX_CURSOR_LENGTH),
 ) -> JobPageResponse:
     await _service.get_project(db, current_user, project_id)
     page_cursor = decode_cursor(cursor) if cursor else None

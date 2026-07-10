@@ -3,7 +3,14 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
+
+from backend.users.application.password import password_bytes
+
+
+def _validate_bcrypt_password(value: str) -> str:
+    password_bytes(value)
+    return value
 
 
 class RegisterRequest(BaseModel):
@@ -11,11 +18,21 @@ class RegisterRequest(BaseModel):
     username: str = Field(min_length=1, max_length=150)
     password: str = Field(min_length=8, max_length=128)
 
+    @field_validator("password")
+    @classmethod
+    def validate_password_bytes(cls, value: str) -> str:
+        return _validate_bcrypt_password(value)
+
 
 class LoginRequest(BaseModel):
     email: EmailStr
     # Login accepts legacy short passwords; registration enforces the current minimum.
     password: str = Field(min_length=1, max_length=128)
+
+    @field_validator("password")
+    @classmethod
+    def validate_password_bytes(cls, value: str) -> str:
+        return _validate_bcrypt_password(value)
 
 
 class TokenResponse(BaseModel):

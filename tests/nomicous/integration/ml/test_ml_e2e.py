@@ -178,10 +178,7 @@ def test_segment_then_transcribe_chain(
     )
     assert lines.status_code == 200
     for line in lines.json():
-        assert any(
-            entry["transcription_kind"] == "model"
-            for entry in line["line_transcriptions"]
-        )
+        assert any(entry["transcription_kind"] == "model" for entry in line["line_transcriptions"])
 
 
 # --- Transcribe preconditions ---

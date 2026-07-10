@@ -1,15 +1,23 @@
 """Document part upload, ordering, review, and media access."""
 
+import asyncio
+import logging
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.exceptions import NotFoundError, ValidationError
 from backend.document.domain.access import require_can_read
-from backend.document.infrastructure.media_store import DEFAULT_PART_IMAGE_SUFFIX, encode_part_image
+from backend.document.infrastructure.media_store import (
+    DEFAULT_PART_IMAGE_SUFFIX,
+    encode_part_image,
+    encode_part_thumbnail,
+)
 from backend.document.infrastructure.orm_models import DocumentPart
 from backend.document.application.document_service_shared import DocumentServiceSharedMixin
 from backend.users.infrastructure.orm_models import User
+
+logger = logging.getLogger(__name__)
 
 
 class PartServiceMixin(DocumentServiceSharedMixin):
@@ -53,7 +61,14 @@ class PartServiceMixin(DocumentServiceSharedMixin):
             await session.commit()
         except Exception:
             await session.rollback()
-            self._media.delete(image_key)
+            try:
+                self._media.delete(image_key)
+            except Exception:
+                try:
+                    await self._documents.enqueue_media_deletion_intent(session, image_key)
+                except Exception:
+                    await session.rollback()
+                    logger.exception("Could not persist media compensation intent")
             raise
         await session.refresh(part)
         return part
@@ -101,8 +116,6 @@ class PartServiceMixin(DocumentServiceSharedMixin):
         part = await self._documents.get_part(session, part_id)
         if part is None or part.document_id != document.id:
             raise NotFoundError("Part not found")
-        image_key = part.image_key
-        self._media.delete(image_key)
         await self._documents.delete_part(session, part)
 
     async def get_part_for_media(
@@ -135,8 +148,15 @@ class PartServiceMixin(DocumentServiceSharedMixin):
         require_can_read(document, project, None)
         return part
 
-    def read_part_bytes(self, part: DocumentPart) -> bytes:
+    async def read_part_bytes(self, part: DocumentPart, *, width: int | None = None) -> bytes:
+        """Read and optionally transform media without blocking the event loop."""
+        return await asyncio.to_thread(self._read_part_bytes, part, width)
+
+    def _read_part_bytes(self, part: DocumentPart, width: int | None) -> bytes:
         try:
-            return self._media.read(part.image_key)
+            data = self._media.read(part.image_key)
         except (ValueError, FileNotFoundError):
             raise NotFoundError("Part image not found") from None
+        if width is None:
+            return data
+        return encode_part_thumbnail(data, width)

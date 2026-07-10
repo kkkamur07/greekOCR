@@ -1,14 +1,13 @@
 import { useEffect, useState, type ChangeEvent, type Dispatch, type SetStateAction } from 'react';
 import {
   api,
-  fetchBinaryApi,
-  mediaUrl,
   type InferenceModelResponse,
   type JobResponse,
   type LineResponse,
   type TranscribeJobResult,
   type TranscriptionLayerResponse,
 } from '../../../api/client';
+import { fetchPartImage } from '../../../api/imageCache';
 import {
   blobToBase64,
   registrySelectionFromArtifactRef,
@@ -80,7 +79,6 @@ export function usePairingState({
   trackLocalTask,
 }: PairingStateInput) {
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
-  const [pageTranscriptionText, setPageTranscriptionText] = useState('');
   const [approvedTextDraft, setApprovedTextDraft] = useState('');
   const [transcriptionSaveMessage, setTranscriptionSaveMessage] = useState<string | null>(null);
   const [ocrRunning, setOcrRunning] = useState(false);
@@ -89,7 +87,6 @@ export function usePairingState({
 
   useEffect(() => {
     setSelectedSegmentId(null);
-    setPageTranscriptionText('');
     setApprovedTextDraft('');
     setTranscriptionSaveMessage(null);
     setOcrMessage(null);
@@ -112,20 +109,6 @@ export function usePairingState({
 
   const selectedSegment =
     selectedSegmentId === null ? null : (lines.find((line) => line.id === selectedSegmentId) ?? null);
-
-  async function importPageTranscription() {
-    if (!projectId || !documentId || !partId) return;
-    try {
-      const pairing = await api.importPageTranscription(projectId, documentId, partId, {
-        text: pageTranscriptionText,
-      });
-      setTextLines(pairing.text_lines);
-      setPairingProgress(pairing.pairing_progress);
-      setPairingError(null);
-    } catch (err) {
-      setPairingError(err instanceof Error ? err.message : 'Failed to import Page transcription.');
-    }
-  }
 
   async function pairTextLine(order: number) {
     if (!projectId || !documentId || !partId || !selectedSegmentId) return;
@@ -246,8 +229,6 @@ export function usePairingState({
               transcription_kind: 'model' as const,
               text: output.text,
               confidence: output.confidence,
-              text_source: 'model' as const,
-              character_confidences: null,
             },
           ],
         };
@@ -275,8 +256,6 @@ export function usePairingState({
               transcription_kind: 'model' as const,
               text: output.text,
               confidence: output.confidence,
-              text_source: 'model' as const,
-              character_confidences: null,
             },
           ],
         };
@@ -295,7 +274,7 @@ export function usePairingState({
     if (!partImageUrl) {
       throw new Error('Page image is not available for local inference.');
     }
-    const blob = await fetchBinaryApi(partImageUrl);
+    const blob = await fetchPartImage(partImageUrl);
     return blobToBase64(blob);
   }
 
@@ -558,8 +537,6 @@ export function usePairingState({
   return {
     selectedSegmentId,
     setSelectedSegmentId,
-    pageTranscriptionText,
-    setPageTranscriptionText,
     approvedTextDraft,
     setApprovedTextDraft,
     transcriptionSaveMessage,
@@ -569,8 +546,6 @@ export function usePairingState({
     selectedSegment,
     selectedSegmentNumber,
     selectedTranscriptionLayer,
-    lineTextForLayer,
-    importPageTranscription,
     pairTextLine,
     saveApprovedText,
     selectTranscriptionLayer,

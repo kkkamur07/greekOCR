@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+from concurrent.futures import Future, ThreadPoolExecutor, wait
 from threading import Event
 
 from inference.contracts.common import InferenceJobStatus
@@ -91,13 +92,21 @@ def process_next_job() -> bool:
 
 
 def run_worker(*, max_jobs: int | None = None, ready_event: Event | None = None) -> None:
-    """Run forever, waking on PostgreSQL notifications or stale-job deadlines."""
+    """Run bounded concurrent jobs, waking on notifications or lease deadlines."""
     wait_for_worker_schema()
     settings = get_inference_settings()
-    logger.info("inference-worker listening on PostgreSQL channel %s", settings.worker_notify_channel)
+    logger.info(
+        "inference-worker listening on PostgreSQL channel %s with concurrency %s",
+        settings.worker_notify_channel,
+        settings.inference_worker_concurrency,
+    )
 
-    with JobNotificationListener(settings.worker_notify_channel) as listener:
+    with (
+        JobNotificationListener(settings.worker_notify_channel) as listener,
+        ThreadPoolExecutor(max_workers=settings.inference_worker_concurrency) as executor,
+    ):
         processed_jobs = 0
+        in_flight: set[Future[None]] = set()
         if ready_event is not None:
             ready_event.set()
 
@@ -108,19 +117,35 @@ def run_worker(*, max_jobs: int | None = None, ready_event: Event | None = None)
             if reclaimed:
                 logger.warning("reclaimed %s stale inference job(s)", reclaimed)
 
-            if process_next_job():
-                processed_jobs += 1
-                if max_jobs is not None and processed_jobs >= max_jobs:
-                    return
-                continue
+            while len(in_flight) < settings.inference_worker_concurrency and (
+                max_jobs is None or processed_jobs + len(in_flight) < max_jobs
+            ):
+                job = claim_next_pending_job()
+                if job is None:
+                    break
+                in_flight.add(executor.submit(execute_inference_job, job))
+
+            completed = {future for future in in_flight if future.done()}
+            for future in completed:
+                future.result()
+            in_flight -= completed
+            processed_jobs += len(completed)
+            if max_jobs is not None and processed_jobs >= max_jobs and not in_flight:
+                return
 
             wait_timeout = seconds_until_next_stale_running_job(
                 running_timeout_seconds=settings.worker_running_job_timeout_seconds
             )
-            listener.wait(timeout_seconds=wait_timeout)
+            if in_flight:
+                wait(in_flight, timeout=min(wait_timeout or 1.0, 1.0))
+            else:
+                listener.wait(timeout_seconds=wait_timeout)
 
 
 def main() -> None:
+    # Validate production callback credentials before waiting for database schema
+    # creation, so supervisors receive an immediate configuration error.
+    get_inference_settings()
     try:
         run_worker()
     except Exception:

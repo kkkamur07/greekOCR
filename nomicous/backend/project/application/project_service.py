@@ -29,9 +29,7 @@ class ProjectService:
         limit: int = 50,
         cursor=None,
     ) -> list[Project]:
-        return await self._projects.list_for_user(
-            session, user.id, limit=limit, cursor=cursor
-        )
+        return await self._projects.list_for_user(session, user.id, limit=limit, cursor=cursor)
 
     async def create_project(
         self,
@@ -116,8 +114,6 @@ class ProjectService:
 
     def _require_owner(self, project: Project, user_id: UUID) -> None:
         if not has_owner(project):
-            raise AccessDeniedError(
-                "This project has no owner; owner-only actions are unavailable"
-            )
+            raise AccessDeniedError("This project has no owner; owner-only actions are unavailable")
         if not is_owner(project, user_id):
             raise AccessDeniedError("Only the project owner can perform this action")

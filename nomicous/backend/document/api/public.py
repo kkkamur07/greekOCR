@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.annotation.application.page_xml_export_service import PageXmlExportService
 from backend.annotation.application.transcription_pdf_service import TranscriptionPdfService
-from backend.document.api.responses import document_with_parts_response, part_response
+from backend.document.api.responses import document_with_parts_response
 from backend.document.api.schemas import (
     DocumentWithPartsResponse,
     LineTranscriptionResponse,
@@ -27,17 +27,13 @@ _page_xml_export_service = PageXmlExportService()
 
 PDF_RESPONSE = {
     200: {
-        "content": {
-            "application/pdf": {"schema": {"type": "string", "format": "binary"}}
-        },
+        "content": {"application/pdf": {"schema": {"type": "string", "format": "binary"}}},
         "description": "Transcription PDF bytes",
     }
 }
 XML_RESPONSE = {
     200: {
-        "content": {
-            "application/xml": {"schema": {"type": "string", "format": "binary"}}
-        },
+        "content": {"application/xml": {"schema": {"type": "string", "format": "binary"}}},
         "description": "PAGE XML bytes",
     }
 }

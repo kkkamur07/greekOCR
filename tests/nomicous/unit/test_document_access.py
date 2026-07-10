@@ -51,7 +51,7 @@ def test_anonymous_can_read_published_only():
     project = _project(owner_id=uuid.uuid4())
     published = _document(DocumentWorkflow.published)
     draft = _document(DocumentWorkflow.draft)
-    
+
     assert can_read_document(published, project, None) is True
     assert can_read_document(draft, project, None) is False
 

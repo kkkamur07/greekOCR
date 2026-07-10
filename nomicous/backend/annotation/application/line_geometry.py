@@ -31,7 +31,9 @@ def _points_close(a: list[float], b: list[float], *, tolerance: float = 1e-6) ->
     return abs(a[0] - b[0]) <= tolerance and abs(a[1] - b[1]) <= tolerance
 
 
-def baseline_matches_polygon(baseline_points: list[list[float]], polygon_points: list[list[float]]) -> bool:
+def baseline_matches_polygon(
+    baseline_points: list[list[float]], polygon_points: list[list[float]]
+) -> bool:
     """True when baseline is just the segment polygon copied verbatim (not a text line)."""
     if len(baseline_points) != len(polygon_points):
         return False

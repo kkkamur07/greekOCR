@@ -1,0 +1,213 @@
+"""Shared admission limits and validation for untrusted inference requests."""
+
+from __future__ import annotations
+
+import json
+import math
+import warnings
+from collections.abc import Mapping
+from io import BytesIO
+from typing import Any
+
+from PIL import Image, UnidentifiedImageError
+from pydantic import Field
+from pydantic_settings import BaseSettings
+
+CLIENT_INPUT_ERROR = "Invalid inference request"
+REQUEST_LIMIT_ERROR = "Request exceeds configured limits"
+
+
+class AdmissionSettings(BaseSettings):
+    """Environment-configurable, process-local inference admission limits."""
+
+    inference_max_request_body_bytes: int = Field(
+        default=12 * 1024 * 1024, ge=1024, alias="INFERENCE_MAX_REQUEST_BODY_BYTES"
+    )
+    inference_max_encoded_image_bytes: int = Field(
+        default=10 * 1024 * 1024, ge=1024, alias="INFERENCE_MAX_ENCODED_IMAGE_BYTES"
+    )
+    inference_max_decoded_image_bytes: int = Field(
+        default=7 * 1024 * 1024, ge=1024, alias="INFERENCE_MAX_DECODED_IMAGE_BYTES"
+    )
+    inference_max_image_pixels: int = Field(
+        default=32_000_000, ge=1, alias="INFERENCE_MAX_IMAGE_PIXELS"
+    )
+    inference_allowed_image_formats: str = Field(
+        default="JPEG,PNG,TIFF,WEBP", alias="INFERENCE_ALLOWED_IMAGE_FORMATS"
+    )
+    inference_max_params_bytes: int = Field(
+        default=64 * 1024 * 1024,
+        ge=1024,
+        alias="INFERENCE_MAX_PARAMS_BYTES",
+    )
+    inference_max_params_depth: int = Field(
+        default=8, ge=1, alias="INFERENCE_MAX_PARAMS_DEPTH"
+    )
+    inference_max_params_items: int = Field(
+        # 10,000 lines with 256 two-coordinate points require roughly 7.7M
+        # visited values once their nested lists are counted.
+        default=8_000_000,
+        ge=1,
+        alias="INFERENCE_MAX_PARAMS_ITEMS",
+    )
+    inference_max_transcribe_lines: int = Field(
+        default=10_000,
+        ge=1,
+        alias="INFERENCE_MAX_TRANSCRIBE_LINES",
+    )
+    inference_max_geometry_points: int = Field(
+        default=256, ge=2, alias="INFERENCE_MAX_GEOMETRY_POINTS"
+    )
+    inference_max_job_payload_bytes: int = Field(
+        default=128 * 1024 * 1024,
+        ge=1024,
+        alias="INFERENCE_MAX_JOB_PAYLOAD_BYTES",
+    )
+    inference_max_pending_jobs: int = Field(
+        default=100, ge=1, alias="INFERENCE_MAX_PENDING_JOBS"
+    )
+    inference_worker_concurrency: int = Field(
+        default=1, ge=1, le=4, alias="INFERENCE_WORKER_CONCURRENCY"
+    )
+    inference_rate_limit_per_minute: int = Field(
+        default=60, ge=1, alias="INFERENCE_RATE_LIMIT_PER_MINUTE"
+    )
+
+
+def allowed_image_formats(settings: AdmissionSettings) -> frozenset[str]:
+    formats = frozenset(
+        value.strip().upper()
+        for value in settings.inference_allowed_image_formats.split(",")
+        if value.strip()
+    )
+    if not formats:
+        raise ValueError(CLIENT_INPUT_ERROR)
+    return formats
+
+
+def validate_encoded_image(value: Any, settings: AdmissionSettings) -> bytes:
+    """Reject oversized base64 before allocating decoded image bytes."""
+    if isinstance(value, bytes):
+        if len(value) > settings.inference_max_decoded_image_bytes:
+            raise ValueError(CLIENT_INPUT_ERROR)
+        return value
+
+    if not isinstance(value, str):
+        raise TypeError("image_bytes must be bytes or base64 string")
+
+    if len(value) > settings.inference_max_encoded_image_bytes:
+        raise ValueError(CLIENT_INPUT_ERROR)
+
+    encoded_length = sum(not character.isspace() for character in value)
+    if encoded_length > settings.inference_max_encoded_image_bytes:
+        raise ValueError(CLIENT_INPUT_ERROR)
+    # Base64 decoding cannot produce more than three bytes per four characters.
+    if (encoded_length // 4) * 3 > settings.inference_max_decoded_image_bytes:
+        raise ValueError(CLIENT_INPUT_ERROR)
+    return b""
+
+
+def validate_image_bytes(image_bytes: bytes, settings: AdmissionSettings) -> None:
+    """Validate image headers with Pillow before model loading or array conversion."""
+    if len(image_bytes) > settings.inference_max_decoded_image_bytes:
+        raise ValueError(CLIENT_INPUT_ERROR)
+
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(BytesIO(image_bytes)) as image:
+                image_format = (image.format or "").upper()
+                if image_format not in allowed_image_formats(settings):
+                    raise ValueError(CLIENT_INPUT_ERROR)
+                width, height = image.size
+                if (
+                    width <= 0
+                    or height <= 0
+                    or width * height > settings.inference_max_image_pixels
+                ):
+                    raise ValueError(CLIENT_INPUT_ERROR)
+                image.verify()
+    except (
+        Image.DecompressionBombError,
+        Image.DecompressionBombWarning,
+        UnidentifiedImageError,
+        OSError,
+        SyntaxError,
+    ):
+        raise ValueError(CLIENT_INPUT_ERROR) from None
+
+
+def _validate_param_structure(value: Any, settings: AdmissionSettings) -> int:
+    item_count = 0
+
+    def visit(current: Any, depth: int) -> None:
+        nonlocal item_count
+        if depth > settings.inference_max_params_depth:
+            raise ValueError(CLIENT_INPUT_ERROR)
+        item_count += 1
+        if item_count > settings.inference_max_params_items:
+            raise ValueError(CLIENT_INPUT_ERROR)
+        if isinstance(current, Mapping):
+            for key, nested in current.items():
+                if not isinstance(key, str):
+                    raise ValueError(CLIENT_INPUT_ERROR)
+                visit(nested, depth + 1)
+        elif isinstance(current, list):
+            for nested in current:
+                visit(nested, depth + 1)
+        elif isinstance(current, float) and not math.isfinite(current):
+            raise ValueError(CLIENT_INPUT_ERROR)
+        elif not isinstance(current, str | int | float | bool | type(None)):
+            raise ValueError(CLIENT_INPUT_ERROR)
+
+    visit(value, 0)
+    return item_count
+
+
+def serialized_params_size(params: dict[str, Any], settings: AdmissionSettings) -> int:
+    _validate_param_structure(params, settings)
+    try:
+        size = len(
+            json.dumps(
+                params,
+                ensure_ascii=False,
+                allow_nan=False,
+                separators=(",", ":"),
+            ).encode()
+        )
+    except (TypeError, ValueError):
+        raise ValueError(CLIENT_INPUT_ERROR) from None
+    if size > settings.inference_max_params_bytes:
+        raise ValueError(CLIENT_INPUT_ERROR)
+    return size
+
+
+def validate_transcribe_params(params: dict[str, Any], settings: AdmissionSettings) -> None:
+    """Bound line-region input before the runner crops and fans out work."""
+    lines = params.get("lines")
+    if lines is None:
+        return
+    if not isinstance(lines, list) or len(lines) > settings.inference_max_transcribe_lines:
+        raise ValueError(CLIENT_INPUT_ERROR)
+    for line in lines:
+        if not isinstance(line, dict):
+            raise ValueError(CLIENT_INPUT_ERROR)
+        points = line.get("points")
+        if points is not None and (
+            not isinstance(points, list) or len(points) > settings.inference_max_geometry_points
+        ):
+            raise ValueError(CLIENT_INPUT_ERROR)
+
+
+def validate_request_params(params: dict[str, Any], settings: AdmissionSettings) -> int:
+    size = serialized_params_size(params, settings)
+    validate_transcribe_params(params, settings)
+    return size
+
+
+def validate_job_payload(
+    image_bytes: bytes, params: dict[str, Any], settings: AdmissionSettings
+) -> None:
+    params_size = validate_request_params(params, settings)
+    if len(image_bytes) + params_size > settings.inference_max_job_payload_bytes:
+        raise ValueError(CLIENT_INPUT_ERROR)

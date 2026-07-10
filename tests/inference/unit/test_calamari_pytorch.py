@@ -23,7 +23,7 @@ def test_converted_checkpoint_carries_runtime_metadata() -> None:
     checkpoint = torch.load(
         REPO_ROOT / "src/hf/local/syriac/calamari/v1/stable/best.pt",
         map_location="cpu",
-        weights_only=False,
+        weights_only=True,
     )
 
     assert checkpoint["format"] == "calamari-pytorch-v1"
@@ -105,6 +105,7 @@ def _tiny_config() -> CalamariTorchConfig:
         ),
         classes=6,
     )
+
 
 def _transcribe_fixture_tensor() -> torch.Tensor:
     tensor = preprocess_line_image_to_calamari_tensor(TRANSCRIBE_LINE)
