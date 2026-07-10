@@ -8,6 +8,7 @@ export type CharacterConfidence = {
 /** Optional per-character scores until OpenAPI exposes them on LineTranscriptionResponse. */
 export type LineTranscriptionWithCharacterConfidence = LineTranscriptionResponse & {
   character_confidences?: CharacterConfidence[] | null;
+  text_source?: string | null;
 };
 
 export function confidenceTierClass(confidence: number): string {

@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.annotation.application.export_service import AnnotationExportService
 from backend.annotation.application.page_xml_export_service import PageXmlExportService
 from backend.annotation.application.transcription_pdf_service import TranscriptionPdfService
-from backend.core.api.pagination import decode_cursor, paginate_rows
+from backend.core.api.pagination import MAX_CURSOR_LENGTH, decode_cursor, paginate_rows
 from backend.core.exceptions import ValidationError
 from backend.document.api.line_responses import line_response
 from backend.document.api.responses import (
@@ -80,17 +80,13 @@ MAX_UPLOAD_BYTES = 100 * 1024 * 1024
 Image.MAX_IMAGE_PIXELS = 200_000_000
 PDF_RESPONSE = {
     200: {
-        "content": {
-            "application/pdf": {"schema": {"type": "string", "format": "binary"}}
-        },
+        "content": {"application/pdf": {"schema": {"type": "string", "format": "binary"}}},
         "description": "Transcription PDF bytes",
     }
 }
 XML_RESPONSE = {
     200: {
-        "content": {
-            "application/xml": {"schema": {"type": "string", "format": "binary"}}
-        },
+        "content": {"application/xml": {"schema": {"type": "string", "format": "binary"}}},
         "description": "PAGE XML bytes",
     }
 }
@@ -150,7 +146,7 @@ async def list_documents(
     db: Annotated[AsyncSession, Depends(get_db)],
     include_archived: bool = Query(default=False),
     limit: int = Query(default=50, ge=1, le=200),
-    cursor: str | None = Query(default=None),
+    cursor: str | None = Query(default=None, max_length=MAX_CURSOR_LENGTH),
 ) -> DocumentPageResponse:
     page_cursor = decode_cursor(cursor) if cursor else None
     documents = await _service.list_documents(
@@ -186,9 +182,7 @@ async def create_document(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> DocumentResponse:
-    document = await _service.create_document(
-        db, current_user, project_id, name=body.name
-    )
+    document = await _service.create_document(db, current_user, project_id, name=body.name)
     return document_response(document, part_count=0)
 
 
@@ -212,9 +206,7 @@ async def update_document(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> DocumentResponse:
     updates = body.model_dump(exclude_unset=True)
-    document = await _service.update_document(
-        db, current_user, project_id, document_id, **updates
-    )
+    document = await _service.update_document(db, current_user, project_id, document_id, **updates)
     part_counts = await _document_repo.count_parts_by_document_ids(db, [document.id])
     return document_response(document, part_count=part_counts.get(document.id, 0))
 
@@ -226,9 +218,7 @@ async def list_transcriptions(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> list[TranscriptionLayerResponse]:
-    transcriptions = await _service.list_transcriptions(
-        db, current_user, project_id, document_id
-    )
+    transcriptions = await _service.list_transcriptions(db, current_user, project_id, document_id)
     return [TranscriptionLayerResponse.model_validate(t) for t in transcriptions]
 
 
@@ -283,9 +273,7 @@ async def reorder_parts(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> list[DocumentPartResponse]:
-    parts = await _service.reorder_parts(
-        db, current_user, project_id, document_id, body.part_ids
-    )
+    parts = await _service.reorder_parts(db, current_user, project_id, document_id, body.part_ids)
     return [part_response(p) for p in parts]
 
 
@@ -693,7 +681,13 @@ async def transcribe_part(
 ) -> EnqueueJobResponse:
     body = body or TranscribePartRequest()
     job = await _service.enqueue_transcribe_part(
-        db, current_user, project_id, document_id, part_id, model_id=body.model_id, line_ids=body.line_ids
+        db,
+        current_user,
+        project_id,
+        document_id,
+        part_id,
+        model_id=body.model_id,
+        line_ids=body.line_ids,
     )
     return EnqueueJobResponse(job_id=job.id)
 

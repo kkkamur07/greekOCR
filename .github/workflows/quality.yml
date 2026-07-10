@@ -1,0 +1,92 @@
+name: Quality
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: Frontend quality
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nomicous/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: nomicous/frontend/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
+  python-lint-unit:
+    name: Python lint and unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+          enable-cache: true
+      - run: uv run --locked --group dev ruff check nomicous/backend inference scripts/platform tests/nomicous tests/inference tests/hf
+      - run: uv run --locked --group platform --group inference pytest tests/nomicous/unit tests/inference/unit tests/hf
+
+  postgres-integration:
+    name: Postgres integration tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: kalamos
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d kalamos"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql+asyncpg://postgres:${{ github.run_id }}-${{ github.run_attempt }}@localhost:5432/kalamos
+      SYNC_DATABASE_URL: postgresql://postgres:${{ github.run_id }}-${{ github.run_attempt }}@localhost:5432/kalamos
+      MIGRATOR_DATABASE_URL: postgresql://postgres:${{ github.run_id }}-${{ github.run_attempt }}@localhost:5432/kalamos
+      INFERENCE_DATABASE_URL: postgresql://postgres:${{ github.run_id }}-${{ github.run_attempt }}@localhost:5432/kalamos
+      JWT_SECRET: test-secret-not-for-production-at-least-32-bytes
+      INFERENCE_WEBHOOK_SECRET: test-inference-webhook-secret
+      INFERENCE_SERVICE_SECRET: test-inference-webhook-secret
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+          enable-cache: true
+      - run: PYTHONPATH=nomicous uv run --locked --group platform alembic -c nomicous/infrastructure/alembic.ini upgrade head
+      - run: uv run --locked --group platform --group inference pytest tests/nomicous/integration -m "not ml"
+
+  api-contracts:
+    name: API contract artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+          enable-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: nomicous/frontend/package-lock.json
+      - run: npm ci --prefix nomicous/frontend
+      - run: npm run check:api --prefix nomicous/frontend
+      - run: uv run --locked --group inference pytest tests/inference/unit/test_contracts_roundtrip.py

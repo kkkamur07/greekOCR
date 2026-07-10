@@ -132,16 +132,13 @@ def test_skip_locked_allows_parallel_claims():
     second = _submit_segment()
 
     session = SessionLocal()
-    locked = (
-        session.execute(
-            select(InferenceJob)
-            .where(InferenceJob.status == InferenceJobStatus.pending)
-            .order_by(InferenceJob.created_at, InferenceJob.id)
-            .with_for_update()
-            .limit(1)
-        )
-        .scalar_one_or_none()
-    )
+    locked = session.execute(
+        select(InferenceJob)
+        .where(InferenceJob.status == InferenceJobStatus.pending)
+        .order_by(InferenceJob.created_at, InferenceJob.id)
+        .with_for_update()
+        .limit(1)
+    ).scalar_one_or_none()
     assert locked is not None
 
     claimed = claim_next_pending_job()

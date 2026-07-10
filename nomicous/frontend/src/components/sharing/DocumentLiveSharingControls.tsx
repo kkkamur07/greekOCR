@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import Link from 'next/link';
 import { api, type DocumentWorkflow } from '../../api/client';
 import { ApiError } from '../../api/errors';
 import { toast } from '../ui/toast';
@@ -93,7 +93,7 @@ export function DocumentLiveSharingControls({
               Copy link
             </button>
             <Link
-              to={publicPath}
+              href={publicPath}
               className="btn btn-ghost btn-xs"
               target="_blank"
               rel="noopener noreferrer"

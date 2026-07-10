@@ -43,9 +43,7 @@ class SegmentLine(BaseModel):
 
     @field_validator("kraken_ceiling")
     @classmethod
-    def validate_kraken_ceiling(
-        cls, value: list[list[float]] | None
-    ) -> list[list[float]] | None:
+    def validate_kraken_ceiling(cls, value: list[list[float]] | None) -> list[list[float]] | None:
         if value is None:
             return value
         return _validate_point_pairs(value)
@@ -54,6 +52,7 @@ class SegmentLine(BaseModel):
 class SegmentRunResponse(BaseModel):
     blocks: list[SegmentBlock] = Field(default_factory=list)
     lines: list[SegmentLine] = Field(default_factory=list)
+
 
 __all__ = [
     "SegmentBlock",

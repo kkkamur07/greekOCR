@@ -1,20 +1,22 @@
 import { useState, type FormEvent } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from '../components/ui/toast';
 import { api, type LoginRequest } from '../api/client';
 import { ApiError } from '../api/errors';
 import { authRedirectTarget } from '../auth/redirect';
-import { setAccessToken } from '../auth/storage';
+import { useAuthSession } from '../auth/AuthProvider';
 import { AuthFormWrap, AuthLayout } from '../components/layout/AuthLayout';
 import { PasswordInput } from '../components/ui/PasswordInput';
 
 export function LoginPage() {
-  const navigate = useNavigate();
-  const location = useLocation();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const from = authRedirectTarget(location.state);
+  const from = authRedirectTarget(searchParams?.get('callbackUrl'));
+  const { establish } = useAuthSession();
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -22,9 +24,9 @@ export function LoginPage() {
     const values: LoginRequest = { email, password };
     try {
       const token = await api.login(values);
-      setAccessToken(token.access_token);
+      establish(token.access_token);
       toast.success('Signed in');
-      navigate(from, { replace: true });
+      router.replace(from);
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : 'Login failed';
       toast.error(msg);
@@ -68,7 +70,7 @@ export function LoginPage() {
           </button>
         </form>
         <p className="auth-footer-link">
-          No account? <Link to="/register" state={location.state}>Register</Link>
+          No account? <Link href={`/register?callbackUrl=${encodeURIComponent(from)}`}>Register</Link>
         </p>
       </AuthFormWrap>
     </AuthLayout>

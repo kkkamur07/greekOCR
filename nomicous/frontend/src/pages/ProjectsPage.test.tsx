@@ -1,22 +1,10 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '../api/client';
 import { ApiError } from '../api/errors';
 import * as session from '../auth/session';
 import { ProjectsPage } from './ProjectsPage';
-
-const navigateMock = vi.fn();
-
-vi.mock('react-router-dom', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('react-router-dom')>();
-  return {
-    ...actual,
-    useNavigate: () => navigateMock,
-    useLocation: () => ({ pathname: '/projects', search: '', hash: '' }),
-  };
-});
 
 vi.mock('../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/client')>();
@@ -61,11 +49,7 @@ describe('ProjectsPage', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     vi.mocked(api.deleteProject).mockResolvedValue(undefined);
 
-    render(
-      <MemoryRouter>
-        <ProjectsPage />
-      </MemoryRouter>,
-    );
+    render(<ProjectsPage />);
 
     await screen.findByRole('heading', { name: 'Projects' });
     fireEvent.click(screen.getByRole('button', { name: /delete project syriac pentateuch/i }));
@@ -78,11 +62,7 @@ describe('ProjectsPage', () => {
   it('redirects to login when the session is unauthorized', async () => {
     vi.mocked(api.me).mockRejectedValue(new ApiError('Unauthorized', 401));
 
-    render(
-      <MemoryRouter>
-        <ProjectsPage />
-      </MemoryRouter>,
-    );
+    render(<ProjectsPage />);
 
     await waitFor(() => {
       expect(session.navigateToLogin).toHaveBeenCalled();
@@ -93,11 +73,7 @@ describe('ProjectsPage', () => {
   it('redirects to login when no access token is present', async () => {
     vi.spyOn(session, 'hasAccessToken').mockReturnValue(false);
 
-    render(
-      <MemoryRouter>
-        <ProjectsPage />
-      </MemoryRouter>,
-    );
+    render(<ProjectsPage />);
 
     await waitFor(() => {
       expect(session.navigateToLogin).toHaveBeenCalled();

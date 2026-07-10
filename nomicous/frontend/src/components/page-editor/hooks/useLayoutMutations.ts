@@ -1,13 +1,13 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 import {
   api,
-  fetchBinaryApi,
   type JobResponse,
   type LayoutLineResponse,
   type LinePoint,
   type LineResponse,
   type PartLayoutResponse,
 } from '../../../api/client';
+import { fetchPartImage } from '../../../api/imageCache';
 import { ApiError } from '../../../api/errors';
 import {
   blobToBase64,
@@ -312,7 +312,7 @@ export function useLayoutMutations({
               }
               await localInference.onStart(resolvedSegmentModelId);
               try {
-                const imageBytes = await blobToBase64(await fetchBinaryApi(partImageUrl));
+                const imageBytes = await blobToBase64(await fetchPartImage(partImageUrl));
                 const response = await runLocalInference({
                   task: 'segment',
                   registry_model_id: resolvedSegmentModelId,

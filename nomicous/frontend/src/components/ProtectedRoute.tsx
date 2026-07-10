@@ -1,19 +1,20 @@
 import { useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
-import { hasAccessToken, navigateToLogin } from '../auth/session';
+import { useRouter } from 'next/navigation';
+import { useAuthSession } from '../auth/AuthProvider';
+import { navigateToLogin } from '../auth/session';
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const authed = hasAccessToken();
+  const router = useRouter();
+  const { status } = useAuthSession();
+  const authed = status === 'authenticated';
 
   useEffect(() => {
-    if (!authed) {
-      navigateToLogin(navigate, location);
+    if (status === 'anonymous') {
+      navigateToLogin(router);
     }
-  }, [authed, location, navigate]);
+  }, [router, status]);
 
-  if (!authed) {
+  if (status === 'restoring' || !authed) {
     return null;
   }
 

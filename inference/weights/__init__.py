@@ -6,8 +6,10 @@ import os
 from importlib import resources
 from pathlib import Path
 
-INFERENCE_ROOT = Path(__file__).resolve().parents[1]
 from src.hf.paths import HF_ROOT
+
+INFERENCE_ROOT = Path(__file__).resolve().parents[1]
+
 DEFAULT_WEIGHTS_ROOT = INFERENCE_ROOT / "weights"
 DEFAULT_CACHE_ROOT = Path(
     os.environ.get("INFERENCE_WEIGHTS_CACHE_DIR", DEFAULT_WEIGHTS_ROOT / "cache")
@@ -21,6 +23,8 @@ def resolve_weights_source(
     inference_root: Path = INFERENCE_ROOT,
     registry_model_id: str | None = None,
     registry_tag: str | None = None,
+    hub_revision: str | None = None,
+    artifact_sha256: str | None = None,
     architecture: str | None = None,
 ) -> Path:
     if uri.startswith("hf://"):
@@ -32,6 +36,8 @@ def resolve_weights_source(
             uri,
             registry_model_id=registry_model_id,
             registry_tag=registry_tag,
+            hub_revision=hub_revision,
+            artifact_sha256=artifact_sha256,
             architecture=architecture,
         )
 
@@ -43,7 +49,12 @@ def resolve_weights_source(
         resource = resources.files(package_name).joinpath(resource_name)
         if not resource.is_file():
             raise FileNotFoundError(f"package weights source not found: {uri}")
-        return Path(str(resource))
+        resolved_path = Path(str(resource))
+        if artifact_sha256:
+            from src.hf.resolve.artifacts import verify_artifact_sha256
+
+            verify_artifact_sha256(resolved_path, artifact_sha256)
+        return resolved_path
 
     if not uri.startswith("file://"):
         raise ValueError(f"unsupported weights source scheme: {uri}")
@@ -67,4 +78,8 @@ def resolve_weights_source(
     except ValueError as exc:
         raise ValueError(f"file weights source must stay within {root_label}") from exc
 
+    if artifact_sha256:
+        from src.hf.resolve.artifacts import verify_artifact_sha256
+
+        verify_artifact_sha256(resolved_path, artifact_sha256)
     return resolved_path

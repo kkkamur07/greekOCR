@@ -41,6 +41,7 @@ def polygon_area(points: list[list[float]]) -> float:
         area += x0 * y1 - x1 * y0
     return abs(area) / 2.0
 
+
 def clean_polygon(
     points: list[list[float]],
     *,
@@ -234,11 +235,7 @@ def simplify_kraken_boundary(
     simplified = clean_polygon(simplified, min_distance=spacing)
     if len(simplified) < 4:
         simplified = reference if len(reference) >= 4 else points
-    status = (
-        "kraken_boundary_simplified"
-        if simplified != points
-        else "kraken_boundary_unchanged"
-    )
+    status = "kraken_boundary_simplified" if simplified != points else "kraken_boundary_unchanged"
 
     return simplified, {
         "simplification_status": status,

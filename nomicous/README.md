@@ -63,8 +63,6 @@ Open [http://localhost:5173](http://localhost:5173).
 
 ## Docker (one command)
 
-See [`docs/deployment/docker-build-optimization.md`](../docs/deployment/docker-build-optimization.md) for image sizes, `.dockerignore` rationale, multi-stage layout, and production build commands.
-
 Ensure ports **5173**, **8000**, **8001**, and **5433** are free. Run Compose from the repository root:
 
 ```bash
@@ -92,7 +90,7 @@ Rebuild the frontend image if you change `VITE_API_BASE_URL`.
 
 ### Bumping the Docker version
 
-**Single source of truth:** [`VERSION`](VERSION) at the repo root of `nomicous/`.
+**Release source of truth:** [`VERSION`](VERSION) at the repo root of `nomicous/`.
 
 1. Edit `VERSION` (semver, one line — e.g. `0.2.1`).
 2. From the repository root, export it and rebuild so Compose tags images correctly:
@@ -114,41 +112,45 @@ docker images 'nomicous-*'
 
 **When to bump:** any release you want to distinguish in image tags or `/health` — not required for every code change during dev (rebuild with the same `NOMICOUS_VERSION` is fine).
 
-**Optional:** set `NOMICOUS_VERSION` in a shell profile or root `.env` next to `docker-compose.yml` so you do not export it every time. If `NOMICOUS_VERSION` is unset, Compose defaults to `0.3.3` — keep it in sync with `VERSION` when tagging releases.
+**Important:** set `NOMICOUS_VERSION` in a shell profile or root `.env` next to
+`docker-compose.yml` so the image tag always matches `VERSION`. The current
+Compose fallback is `0.3.3`; do not rely on it for a release unless it has been
+updated to match `VERSION`.
 
 ## Environment variables
 
 | Variable | File | Default | Purpose |
 |----------|------|---------|---------|
-| `DATABASE_URL` | `backend/core/.env` | `postgresql+asyncpg://postgres:dev@localhost:5433/kalamos` | Async platform database URL |
-| `SYNC_DATABASE_URL` | `backend/core/.env` | `postgresql://postgres:dev@localhost:5433/kalamos` | Alembic database URL |
+| `DATABASE_URL` | `backend/core/.env` | local Compose DB URL | Async platform database URL |
+| `SYNC_DATABASE_URL` | `backend/core/.env` | local Compose DB URL | Alembic database URL |
 | `JWT_SECRET` | `backend/core/.env` | development secret | Auth token signing key |
 | `CORS_ORIGINS` | `backend/core/.env` | `http://localhost:3000,http://localhost:5173` | Allowed browser origins |
 | `MEDIA_ROOT` | `backend/core/.env` | `nomicous/backend/media` | Uploaded document part media |
-| `DEFAULT_SEGMENT_MODEL` | `backend/core/.env` | `kraken-segment-default` | Dev catalog name/ID for default segmentation |
-| `DEFAULT_TRANSCRIBE_MODEL` | `backend/core/.env` | `kraken-transcribe-default` | Dev catalog name/ID for default transcription |
-| `KRAKEN_MODEL_PATH` | `backend/core/.env` | `../model/kraken` | Local directory containing Kraken weights |
 | `VITE_API_BASE_URL` | `frontend/.env.local` | `http://localhost:8000` | Frontend → API URL |
 
 ## Inference Catalog
 
-Keep Kraken weights in the repository-level `model/` workspace, not under
-`nomicous/`. The dev seed records `KRAKEN_MODEL_PATH/segment.mlmodel` and
-`KRAKEN_MODEL_PATH/transcribe.mlmodel` as artifact references and creates
-project-level defaults:
+`inference/registry.yaml` is the runtime model catalog. The development seed
+creates `InferenceModel` rows with `registry://<model-id>?tag=stable` artifact
+references and project-level bindings. Its defaults are
+`greek-kraken-segment-v1` for segmentation and `syriac-calamari-v1` for
+transcription; `greek-calamari-v1` is also seeded as an available transcription
+model.
 
 ```bash
-cd nomicous
-alembic -c infrastructure/alembic.ini upgrade head
-python ../scripts/platform/seed_dev_inference.py
+uv run --group platform python scripts/platform/seed_dev_inference.py
 ```
+
+Model bytes are resolved by the inference service from the registry's
+`package://`, `hf://`, or optional `file://` source. See
+[`docs/inference/adding-inference-models.md`](../docs/inference/adding-inference-models.md).
 
 ## Tests (TDD)
 
 ```bash
 # From repository root
-uv run --group platform pytest tests/nomicous/unit
-uv run --group platform pytest tests/nomicous/integration -m "not ml"
+uv run --group platform --group inference pytest tests/nomicous/unit
+uv run --group platform --group inference pytest tests/nomicous/integration -m "not ml"
 ```
 
 See [`docs/guides/testing.md`](../docs/guides/testing.md) for the ML lane and full-suite commands.
@@ -162,5 +164,6 @@ cd nomicous/frontend
 npm run codegen:api
 ```
 
-Generated schema types: `frontend/src/types/openapi.ts`. App-facing aliases: `frontend/src/types/api.ts`.
+Generated schema types: `frontend/src/api/schema.d.ts`. App-facing aliases live
+in `frontend/src/api/client.ts`.
 

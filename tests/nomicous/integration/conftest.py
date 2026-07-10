@@ -40,9 +40,7 @@ os.environ.setdefault(
 )
 os.environ.setdefault(
     "INFERENCE_REGISTRY_PATH",
-    os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "../../../inference/registry.yaml")
-    ),
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../inference/registry.yaml")),
 )
 
 import infrastructure.models  # noqa: F401 — register all mappers

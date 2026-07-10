@@ -1,4 +1,3 @@
-import type { LineTranscriptionResponse } from '../../api/client';
 import { CharacterConfidenceText } from './CharacterConfidenceText';
 import {
   characterConfidencesForTranscription,
@@ -6,7 +5,7 @@ import {
 } from './characterConfidence';
 
 type ModelOutputBlockProps = {
-  transcription: LineTranscriptionResponse | null;
+  transcription: LineTranscriptionWithCharacterConfidence | null;
   segmentNumber: number | null;
   layout?: 'stack' | 'inline';
   onCopy?: () => void;
@@ -26,9 +25,8 @@ export function ModelOutputBlock({
   ocrDisabled = false,
   ocrDisabledReason,
 }: ModelOutputBlockProps) {
-  const enriched = transcription as LineTranscriptionWithCharacterConfidence | null;
-  const characterConfidences = enriched
-    ? characterConfidencesForTranscription(enriched)
+  const characterConfidences = transcription
+    ? characterConfidencesForTranscription(transcription)
     : [];
 
   const handleCopy = async () => {

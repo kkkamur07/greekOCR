@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import Link from 'next/link';
 import type { DocumentWithPartsResponse, InferenceModelResponse, LineResponse } from '../../api/client';
 import { PageEditorBackLink } from './PageEditorNavHeader';
 import { editorButton } from './editorButton';
@@ -69,7 +69,6 @@ export function PageEditorToolbar({
   documentId,
   document,
   partIndex,
-  partId,
   editorMode,
   onEditorModeChange,
   drawMode,
@@ -176,7 +175,7 @@ export function PageEditorToolbar({
         {document.name} · Page {partIndex}
       </span>
 
-      <Link to="/projects" className="pe-toolbar__logo" aria-label="nomicous home">
+      <Link href="/projects" className="pe-toolbar__logo" aria-label="nomicous home">
         <img src="/nomos.svg" alt="" />
         <span>nomicous</span>
       </Link>

@@ -27,7 +27,9 @@ def mock_registry_transport(monkeypatch):
         real_client = httpx.Client
 
         def client_factory(*args, **kwargs):
-            return real_client(transport=httpx.MockTransport(handler), timeout=kwargs.get("timeout"))
+            return real_client(
+                transport=httpx.MockTransport(handler), timeout=kwargs.get("timeout")
+            )
 
         monkeypatch.setattr("inference.helper.registry_sync.httpx.Client", client_factory)
 

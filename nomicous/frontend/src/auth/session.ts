@@ -1,28 +1,43 @@
-import type { Location, NavigateFunction } from 'react-router-dom';
-
 import { ApiError } from '../api/errors';
 import { clearAccessToken, getAccessToken } from './storage';
+
+let loginRedirectInFlight = false;
 
 export function hasAccessToken(): boolean {
   const token = getAccessToken();
   return typeof token === 'string' && token.trim().length > 0;
 }
 
-/** Full-page redirect for API-layer auth failures outside React Router. */
-export function redirectToLogin(): void {
-  clearAccessToken();
-  const loginPath = '/login';
-  if (window.location.pathname !== loginPath && window.location.pathname !== '/register') {
-    window.location.assign(loginPath);
-  }
+export function clearLoginRedirectGuard(): void {
+  loginRedirectInFlight = false;
 }
 
-export function navigateToLogin(
-  navigate: NavigateFunction,
-  location: Pick<Location, 'pathname' | 'search' | 'hash'>,
-): void {
+function beginLoginRedirect(): boolean {
+  if (
+    loginRedirectInFlight ||
+    typeof window === 'undefined' ||
+    window.location.pathname === '/login' ||
+    window.location.pathname === '/register'
+  ) {
+    return false;
+  }
+  loginRedirectInFlight = true;
+  return true;
+}
+
+/** Full-page redirect for API-layer auth failures outside React. */
+export function redirectToLogin(): void {
   clearAccessToken();
-  navigate('/login', { replace: true, state: { from: location } });
+  if (!beginLoginRedirect()) return;
+  const callbackUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  window.location.assign(`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`);
+}
+
+export function navigateToLogin(router: Pick<{ replace: (href: string) => void }, 'replace'>): void {
+  clearAccessToken();
+  if (!beginLoginRedirect()) return;
+  const callbackUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  router.replace(`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`);
 }
 
 export function isUnauthorized(err: unknown): boolean {

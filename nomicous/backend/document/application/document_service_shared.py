@@ -105,9 +105,7 @@ class DocumentServiceSharedMixin:
             joined = ", ".join(sorted(unknown))
             raise ValidationError(f"Unsupported {operation} field(s): {joined}")
 
-    async def _block_or_404(
-        self, session: AsyncSession, part_id: UUID, block_id: UUID
-    ) -> Block:
+    async def _block_or_404(self, session: AsyncSession, part_id: UUID, block_id: UUID) -> Block:
         result = await session.execute(
             select(Block).where(Block.id == block_id, Block.part_id == part_id)
         )
@@ -120,7 +118,9 @@ class DocumentServiceSharedMixin:
         result = await session.execute(
             select(Line)
             .where(Line.id == line_id, Line.part_id == part_id)
-            .options(selectinload(Line.transcriptions).selectinload(LineTranscription.transcription))
+            .options(
+                selectinload(Line.transcriptions).selectinload(LineTranscription.transcription)
+            )
         )
         line = result.scalar_one_or_none()
         if line is not None:

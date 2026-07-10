@@ -49,9 +49,11 @@ def _submit_inference_job(request: JobSubmitRequest) -> JobSubmitResponse:
 
 
 def _public_job_error(exc: BaseException, *, fallback: str = "Job failed") -> str:
-    """User-safe message for Job.error; full detail goes to logs only."""
-    if isinstance(exc, (TestJobHandlerError, TranscribeJobHandlerError, ValueError)):
-        return str(exc)
+    """Return allowlisted job output; exception text stays server-side only."""
+    if isinstance(exc, TranscribeJobHandlerError):
+        return "Inference request could not be prepared"
+    if isinstance(exc, TestJobHandlerError):
+        return "Test job failed"
     return fallback
 
 
@@ -88,7 +90,7 @@ def execute_claimed_job(job: Job) -> None:
         return
 
     logger.error("No handler for job %s type=%s", job.id, job.type.value)
-    mark_job_failed(job.id, f"No handler for job type {job.type.value}")
+    mark_job_failed(job.id, "Job type is not supported")
 
 
 def process_one_job() -> bool:

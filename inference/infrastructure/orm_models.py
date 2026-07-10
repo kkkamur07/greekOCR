@@ -16,9 +16,7 @@ from inference.infrastructure.db import Base
 
 class InferenceJob(Base):
     __tablename__ = "inference_jobs"
-    __table_args__ = (
-        Index("ix_inference_jobs_claim_order", "status", "created_at", "id"),
-    )
+    __table_args__ = (Index("ix_inference_jobs_claim_order", "status", "created_at", "id"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     product_job_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)

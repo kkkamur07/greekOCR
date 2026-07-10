@@ -39,7 +39,7 @@ OCR execution design, API audit, local Inference Helper tracer bullets, install 
 
 Issues: [inference/](inference/) — `028`, `037`, `038`–`041`.
 
-ADR: [`docs/decisions/002-local-inference-helper.md`](../../docs/decisions/002-local-inference-helper.md)
+Architecture: [`README.md`](../../README.md#local-inference-helper)
 
 ---
 

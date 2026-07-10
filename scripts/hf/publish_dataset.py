@@ -34,7 +34,7 @@ def _parse_args() -> argparse.Namespace:
   parser.add_argument(
     "--upload",
     action="store_true",
-    help="Perform a live Hub upload (also set HF_PUBLISH=1)",
+    help="Perform a live Hub upload (or set HF_PUBLISH=1)",
   )
   return parser.parse_args()
 

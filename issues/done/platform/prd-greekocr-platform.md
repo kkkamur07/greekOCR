@@ -159,7 +159,7 @@ OpenAPI export drives frontend type codegen.
 - Jobs persisted in Postgres; handlers run in API process pool across Uvicorn workers.
 - Claim must be transactional so two workers do not run the same job.
 - HTTP handlers enqueue and return `job_id`; clients poll until `done` or `failed` (**current**).
-- **Target:** Postgres `NOTIFY` on `jobs` status changes + SSE to the browser — see [`docs/decisions/001-platform-job-status-push.md`](../docs/decisions/001-platform-job-status-push.md).
+- **Shipped:** Postgres `NOTIFY` on `jobs` status changes + SSE to the browser — see [root README](../../README.md#job-status-sse-not-polling).
 - v1 does not block HTTP until Kraken/TrOCR finishes for large batches.
 
 ### Frontend (structural, not pixel-perfect in v1)

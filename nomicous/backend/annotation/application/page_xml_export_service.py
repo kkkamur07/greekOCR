@@ -43,14 +43,14 @@ class PageXmlExportService:
         document_id: UUID,
         part_id: UUID,
     ) -> bytes:
-        document = await self._document_service.get_document(
-            session, user, project_id, document_id
-        )
+        document = await self._document_service.get_document(session, user, project_id, document_id)
         part = await self._documents.get_part(session, part_id)
         if part is None or part.document_id != document.id:
             raise NotFoundError("Part not found")
 
-        return self._export_part_lines(part, await self._documents.list_part_lines(session, part.id))
+        return self._export_part_lines(
+            part, await self._documents.list_part_lines(session, part.id)
+        )
 
     async def export_part_public(
         self,
@@ -62,7 +62,9 @@ class PageXmlExportService:
         part = await self._document_service.get_published_part(
             session, project_id, document_id, part_id
         )
-        return self._export_part_lines(part, await self._documents.list_part_lines(session, part.id))
+        return self._export_part_lines(
+            part, await self._documents.list_part_lines(session, part.id)
+        )
 
     def _export_part_lines(self, part, lines: list[Line]) -> bytes:
         root = Element(

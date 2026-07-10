@@ -1,8 +1,9 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { testRouter } from '../../vitest.setup';
 
 import { api } from '../api/client';
+import { clearAccessToken, getAccessToken } from '../auth/storage';
 import { RegisterPage } from './RegisterPage';
 
 vi.mock('../api/client', async (importOriginal) => {
@@ -16,14 +17,9 @@ vi.mock('../api/client', async (importOriginal) => {
   };
 });
 
-function RequestedPage() {
-  const location = useLocation();
-  return <div>Requested Page editor{location.search}</div>;
-}
-
 describe('RegisterPage', () => {
   beforeEach(() => {
-    localStorage.clear();
+    clearAccessToken();
     vi.clearAllMocks();
   });
 
@@ -33,29 +29,12 @@ describe('RegisterPage', () => {
       token_type: 'bearer',
     });
 
-    render(
-      <MemoryRouter
-        initialEntries={[
-          {
-            pathname: '/register',
-            state: {
-              from: {
-                pathname: '/projects/project-1/documents/doc-1/parts/part-1',
-                search: '?panel=history',
-              },
-            },
-          },
-        ]}
-      >
-        <Routes>
-          <Route path="/register" element={<RegisterPage />} />
-          <Route
-            path="/projects/:projectId/documents/:documentId/parts/:partId"
-            element={<RequestedPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
+    window.history.replaceState(
+      {},
+      '',
+      '/register?callbackUrl=%2Fprojects%2Fproject-1%2Fdocuments%2Fdoc-1%2Fparts%2Fpart-1%3Fpanel%3Dhistory',
     );
+    render(<RegisterPage />);
 
     fireEvent.change(screen.getByLabelText('Email'), {
       target: { value: 'new.researcher@example.com' },
@@ -68,9 +47,13 @@ describe('RegisterPage', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: /create account/i }));
 
-    expect(await screen.findByText('Requested Page editor?panel=history')).toBeTruthy();
     await waitFor(() => {
-      expect(localStorage.getItem('greekocr_access_token')).toBe('new-user-token');
+      expect(testRouter().replace).toHaveBeenCalledWith(
+        '/projects/project-1/documents/doc-1/parts/part-1?panel=history',
+      );
+    });
+    await waitFor(() => {
+      expect(getAccessToken()).toBe('new-user-token');
     });
   });
 });

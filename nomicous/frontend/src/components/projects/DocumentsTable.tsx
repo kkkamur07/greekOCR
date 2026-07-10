@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import type { DocumentResponse } from '../../api/client';
 import { WorkflowBadge } from '../WorkflowBadge';
 
@@ -23,10 +23,10 @@ export function DocumentsTable({
   onDelete,
   deletingDocumentId = null,
 }: DocumentsTableProps) {
-  const navigate = useNavigate();
+  const router = useRouter();
 
   const openDocument = (documentId: string) => {
-    void navigate(`/projects/${projectId}/documents/${documentId}`);
+    router.push(`/projects/${projectId}/documents/${documentId}`);
   };
 
   const onRowKeyDown = (event: React.KeyboardEvent, documentId: string) => {

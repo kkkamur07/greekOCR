@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useParams, useRouter } from 'next/navigation';
 import { toast } from '../components/ui/toast';
 import { api, type DocumentWithPartsResponse } from '../api/client';
 import { ApiError } from '../api/errors';
+import { invalidatePartImage } from '../api/imageCache';
 import { hasAccessToken, isUnauthorized, navigateToLogin } from '../auth/session';
 import { JobsNotice } from '../components/document/JobsNotice';
 import { PartList } from '../components/document/PartList';
@@ -12,7 +13,7 @@ import { DocumentLiveSharingPanel } from '../components/sharing/DocumentLiveShar
 import { WorkflowBadge } from '../components/WorkflowBadge';
 
 const ENABLE_TEST_JOBS =
-  (import.meta.env.VITE_ENABLE_TEST_JOBS as string | undefined) === 'true';
+  process.env.NEXT_PUBLIC_ENABLE_TEST_JOBS === 'true';
 
 function formatUpdated(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, {
@@ -23,9 +24,8 @@ function formatUpdated(iso: string): string {
 }
 
 export function DocumentDetailPage() {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { projectId, documentId } = useParams<{ projectId: string; documentId: string }>();
+  const router = useRouter();
+  const { projectId, documentId } = useParams<{ projectId: string; documentId: string }>() ?? {};
   const [document, setDocument] = useState<DocumentWithPartsResponse | null>(null);
   const [projectName, setProjectName] = useState<string | null>(null);
   const [username, setUsername] = useState<string | null>(null);
@@ -39,7 +39,7 @@ export function DocumentDetailPage() {
   const load = useCallback(async () => {
     if (!projectId || !documentId) return;
     if (!hasAccessToken()) {
-      navigateToLogin(navigate, location);
+      navigateToLogin(router);
       return;
     }
     setLoading(true);
@@ -55,7 +55,7 @@ export function DocumentDetailPage() {
       setDocument(doc);
     } catch (err) {
       if (isUnauthorized(err)) {
-        navigateToLogin(navigate, location);
+        navigateToLogin(router);
         return;
       }
       const msg = err instanceof ApiError ? err.message : 'Failed to load document';
@@ -69,7 +69,7 @@ export function DocumentDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [projectId, documentId, location, navigate]);
+  }, [projectId, documentId, router]);
 
   useEffect(() => {
     void load();
@@ -118,6 +118,7 @@ export function DocumentDetailPage() {
     if (!projectId || !documentId) return;
     try {
       await api.deletePart(projectId, documentId, partId);
+      invalidatePartImage(partId);
       toast.success('Part removed');
       await load();
     } catch (err) {
@@ -209,7 +210,6 @@ export function DocumentDetailPage() {
             parts={parts}
             projectId={projectId!}
             documentId={documentId!}
-            document={document}
             loading={loading}
             onMoveUp={(i) => movePart(i, -1)}
             onMoveDown={(i) => movePart(i, 1)}

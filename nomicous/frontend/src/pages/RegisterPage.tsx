@@ -1,21 +1,23 @@
 import { useState, type FormEvent } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from '../components/ui/toast';
 import { api, type RegisterRequest } from '../api/client';
 import { ApiError } from '../api/errors';
 import { authRedirectTarget } from '../auth/redirect';
-import { setAccessToken } from '../auth/storage';
+import { useAuthSession } from '../auth/AuthProvider';
 import { AuthFormWrap, AuthLayout } from '../components/layout/AuthLayout';
 import { PasswordInput } from '../components/ui/PasswordInput';
 
 export function RegisterPage() {
-  const navigate = useNavigate();
-  const location = useLocation();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const from = authRedirectTarget(location.state);
+  const from = authRedirectTarget(searchParams?.get('callbackUrl'));
+  const { establish } = useAuthSession();
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -23,9 +25,9 @@ export function RegisterPage() {
     const values: RegisterRequest = { email, username, password };
     try {
       const token = await api.register(values);
-      setAccessToken(token.access_token);
+      establish(token.access_token);
       toast.success('Account created');
-      navigate(from, { replace: true });
+      router.replace(from);
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : 'Registration failed';
       toast.error(msg);
@@ -85,7 +87,7 @@ export function RegisterPage() {
           </button>
         </form>
         <p className="auth-footer-link">
-          Have an account? <Link to="/login" state={location.state}>Sign in</Link>
+          Have an account? <Link href={`/login?callbackUrl=${encodeURIComponent(from)}`}>Sign in</Link>
         </p>
       </AuthFormWrap>
     </AuthLayout>

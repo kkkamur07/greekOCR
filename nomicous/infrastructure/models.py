@@ -7,6 +7,7 @@ from backend.document.infrastructure.orm_models import (  # noqa: F401
     DocumentPart,
     Line,
     LineTranscription,
+    MediaDeletionIntent,
     PageTranscriptionLine,
     Transcription,
 )
@@ -16,4 +17,4 @@ from backend.ml.infrastructure.orm_models import (  # noqa: F401
     ModelBinding,
 )
 from backend.project.infrastructure.orm_models import Project, project_shared_users  # noqa: F401
-from backend.users.infrastructure.orm_models import AuthRateLimitAttempt, User  # noqa: F401
+from backend.users.infrastructure.orm_models import AuthRateLimitAttempt, AuthSession, User  # noqa: F401

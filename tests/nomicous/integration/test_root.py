@@ -26,5 +26,7 @@ def test_security_headers_are_present(client):
     assert response.headers["Strict-Transport-Security"] == "max-age=31536000; includeSubDomains"
     assert response.headers["X-Content-Type-Options"] == "nosniff"
     assert response.headers["X-Frame-Options"] == "DENY"
-    assert response.headers["Content-Security-Policy"] == "default-src 'none'; frame-ancestors 'none'"
+    assert (
+        response.headers["Content-Security-Policy"] == "default-src 'none'; frame-ancestors 'none'"
+    )
     assert response.headers["Referrer-Policy"] == "strict-origin-when-cross-origin"

@@ -70,8 +70,7 @@ def maxpool_strides(config: CalamariTorchLayerConfig) -> tuple[int, int]:
     pool_size = require_tuple(config.pool_size, config.name, "pool_size")
     raw_strides = require_tuple(config.strides, config.name, "strides")
     return tuple(
-        pool if stride < 0 else stride
-        for stride, pool in zip(raw_strides, pool_size, strict=True)
+        pool if stride < 0 else stride for stride, pool in zip(raw_strides, pool_size, strict=True)
     )
 
 

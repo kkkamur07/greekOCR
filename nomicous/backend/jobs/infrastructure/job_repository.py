@@ -86,20 +86,14 @@ class JobRepository:
             .order_by(Job.created_at.desc(), Job.id.desc())
         )
         if cursor is not None:
-            query = query.where(
-                tuple_(Job.created_at, Job.id) < (cursor.created_at, cursor.id)
-            )
+            query = query.where(tuple_(Job.created_at, Job.id) < (cursor.created_at, cursor.id))
         query = query.limit(limit)
         result = await self._session.execute(query)
         return list(result.scalars().all())
 
 
 def _pending_job_query(*, test_only: bool | None = None):
-    query = (
-        select(Job)
-        .where(Job.status == JobStatus.pending)
-        .order_by(Job.created_at, Job.id)
-    )
+    query = select(Job).where(Job.status == JobStatus.pending).order_by(Job.created_at, Job.id)
     if test_only is True:
         query = query.where(Job.payload.contains({"test": True}))
     elif test_only is False:
@@ -128,10 +122,10 @@ def count_active_jobs(*, test_payload: bool | None = None) -> int:
     from sqlalchemy import func
 
     with sync_system_session() as session:
-        query = select(func.count()).select_from(Job).where(
-            Job.status.in_(
-                (JobStatus.pending, JobStatus.running, JobStatus.waiting)
-            )
+        query = (
+            select(func.count())
+            .select_from(Job)
+            .where(Job.status.in_((JobStatus.pending, JobStatus.running, JobStatus.waiting)))
         )
         if test_payload is True:
             query = query.where(Job.payload.contains({"test": True}))
@@ -210,6 +204,7 @@ def mark_job_waiting(
             payload.update(payload_patch)
         job.payload = payload
         job.status = JobStatus.waiting
+        job.callback_claimed_at = None
         if inference_job_id is not None:
             job.inference_job_id = inference_job_id
         job.updated_at = now
@@ -226,6 +221,7 @@ def mark_job_failed(job_id: uuid.UUID, error: str) -> None:
             .values(
                 status=JobStatus.failed,
                 error=error,
+                callback_claimed_at=None,
                 completed_at=now,
                 updated_at=now,
             )

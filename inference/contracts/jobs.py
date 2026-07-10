@@ -7,9 +7,11 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
+from inference.admission import validate_job_payload
 from inference.contracts.common import ImageBytes, InferenceJobStatus, InferenceTask
 from inference.contracts.segment import SegmentRunResponse
 from inference.contracts.transcribe import TranscribeBatchRunResponse
+from inference.infrastructure.settings import get_inference_settings
 
 SUPPORTED_JOB_TASKS = frozenset({InferenceTask.segment, InferenceTask.transcribe})
 
@@ -30,6 +32,7 @@ class JobSubmitRequest(BaseModel):
             lines = self.params.get("lines")
             if not isinstance(lines, list) or not lines:
                 raise ValueError("transcribe jobs require non-empty params.lines")
+        validate_job_payload(self.image_bytes, self.params, get_inference_settings())
         return self
 
 
@@ -84,6 +87,7 @@ class JobCallbackRequest(BaseModel):
                 raise ValueError("failed callbacks must not include output")
             return self
         raise ValueError("callback status must be done or failed")
+
 
 __all__ = [
     "JobCallbackRequest",

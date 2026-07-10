@@ -1,7 +1,6 @@
 import type {
   LineResponse,
   LineTranscriptionResponse,
-  LineUpsertRequest,
   PartLayoutResponse,
   TranscriptionLayerResponse,
 } from '../../../api/client';
@@ -12,7 +11,6 @@ export type LineTranscriptionTextSource = 'model' | 'human_edited';
 export type LineTranscriptionWithTextSource = LineTranscriptionResponse & {
   text_source?: LineTranscriptionTextSource | null;
 };
-
 
 export function approvedText(line: LineResponse): string | null {
   return (
@@ -106,26 +104,6 @@ export function mergeSavedLine(lines: LineResponse[], saved: LineResponse): Line
   return lines.map((line) => (line.id === saved.id ? saved : line));
 }
 
-export function upsertLineRequest(line: LineResponse, order?: number): LineUpsertRequest {
-  const text = approvedText(line);
-  const request: LineUpsertRequest = {
-    id: line.id,
-    order: order ?? line.order,
-    kind: line.kind,
-    points: line.points,
-    block_id: line.block_id,
-    source: line.source,
-    source_metadata: line.source_metadata,
-    kraken_ceiling: line.kraken_ceiling,
-    baseline: line.baseline,
-    mask: line.mask,
-  };
-  if (text !== null) {
-    request.approved_text = text;
-  }
-  return request;
-}
-
 export function withLocalGroundTruth(
   lines: LineResponse[],
   groundTruthTranscriptionId: string | null,
@@ -147,8 +125,6 @@ export function withLocalGroundTruth(
       transcription_kind: 'ground_truth',
       text,
       confidence: null,
-      text_source: 'human_edited',
-      character_confidences: null,
     };
     return { ...line, line_transcriptions: [...existing, nextTranscription] };
   });

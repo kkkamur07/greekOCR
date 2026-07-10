@@ -5,6 +5,7 @@ from __future__ import annotations
 from io import BytesIO
 from typing import TYPE_CHECKING, Any
 
+from inference.admission import validate_image_bytes, validate_request_params
 from inference.architectures.calamari import run_calamari_transcribe, run_calamari_transcribe_many
 from inference.architectures.kraken import run_kraken_segment
 from inference.contracts.common import InferenceTask, RegistryArchitecture
@@ -66,6 +67,8 @@ def run_model(
     params: dict[str, Any] | None = None,
 ) -> SegmentRunResponse | TranscribeRunResponse | TranscribeBatchRunResponse:
     settings = get_inference_settings()
+    validate_image_bytes(image_bytes, settings)
+    validate_request_params(params or {}, settings)
     entry = resolve_registry_entry(
         registry_model_id=registry_model_id,
         registry_tag=registry_tag,
@@ -78,6 +81,8 @@ def run_model(
         version.weights_source,
         registry_model_id=registry_model_id,
         registry_tag=registry_tag,
+        hub_revision=version.hub_revision,
+        artifact_sha256=version.artifact_sha256,
         architecture=entry.architecture.value,
     )
 
@@ -86,6 +91,7 @@ def run_model(
             return run_kraken_segment(
                 image_bytes,
                 model_path=weights_path,
+                artifact_sha256=version.artifact_sha256,
                 params=params,
             )
         raise ValueError(f"unsupported segment architecture: {entry.architecture.value}")
@@ -95,11 +101,9 @@ def run_model(
             line_regions = _line_regions_from_params(params)
             if line_regions:
                 outputs = run_calamari_transcribe_many(
-                    [
-                        _crop_line_image(image_bytes, region.points)
-                        for region in line_regions
-                    ],
+                    [_crop_line_image(image_bytes, region.points) for region in line_regions],
                     checkpoint_path=weights_path,
+                    artifact_sha256=version.artifact_sha256,
                 )
                 return TranscribeBatchRunResponse(
                     lines=[
@@ -114,6 +118,7 @@ def run_model(
             return run_calamari_transcribe(
                 image_bytes,
                 checkpoint_path=weights_path,
+                artifact_sha256=version.artifact_sha256,
             )
         raise ValueError(f"unsupported transcribe architecture: {entry.architecture.value}")
 

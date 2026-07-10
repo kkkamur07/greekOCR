@@ -23,7 +23,9 @@ def _free_port() -> int:
         return sock.getsockname()[1]
 
 
-def _wait_for_uvicorn(server: uvicorn.Server, thread: threading.Thread, *, timeout: float = 10.0) -> None:
+def _wait_for_uvicorn(
+    server: uvicorn.Server, thread: threading.Thread, *, timeout: float = 10.0
+) -> None:
     deadline = time.monotonic() + timeout
     while not server.started and thread.is_alive() and time.monotonic() < deadline:
         time.sleep(0.01)
@@ -74,9 +76,7 @@ def real_inference_url(real_platform_url: str) -> str:
     from inference.api.app import create_app as create_inference_app
     from inference.infrastructure.settings import get_inference_settings
 
-    os.environ["INFERENCE_CALLBACK_URL"] = (
-        f"{real_platform_url}/internal/inference/job-complete"
-    )
+    os.environ["INFERENCE_CALLBACK_URL"] = f"{real_platform_url}/internal/inference/job-complete"
     os.environ.setdefault(
         "INFERENCE_DATABASE_URL",
         "postgresql://postgres:dev@localhost:5433/kalamos",

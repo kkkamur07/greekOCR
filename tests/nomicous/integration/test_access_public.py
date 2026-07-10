@@ -1,7 +1,5 @@
 """Public access policy — anonymous read of published documents only."""
 
-import uuid
-
 import pytest
 
 from tests.fixtures.paths import MINIMAL_PNG
@@ -14,7 +12,7 @@ def published_document(client, owner_headers, owner_project):
     create = client.post(base, headers=owner_headers, json={"name": "Public codex"})
 
     assert create.status_code == 201
-    
+
     document_id = create.json()["id"]
     publish = client.patch(
         f"{base}/{document_id}",
@@ -100,9 +98,7 @@ def test_member_can_still_edit_published_document(client, owner_headers, publish
     document_id = published_document["document_id"]
     url = f"/projects/{project_id}/documents/{document_id}"
 
-    patch = client.patch(
-        url, headers=owner_headers, json={"name": "Published but editable"}
-    )
+    patch = client.patch(url, headers=owner_headers, json={"name": "Published but editable"})
     assert patch.status_code == 200
     assert patch.json()["name"] == "Published but editable"
     assert patch.json()["workflow"] == "published"
@@ -113,9 +109,7 @@ def test_member_can_still_edit_published_document(client, owner_headers, publish
 
 
 @pytest.mark.integration
-def test_outsider_can_read_published_via_public_route(
-    client, outsider_headers, published_document
-):
+def test_outsider_can_read_published_via_public_route(client, outsider_headers, published_document):
     project_id = published_document["project_id"]
     document_id = published_document["document_id"]
     member_url = f"/projects/{project_id}/documents/{document_id}"

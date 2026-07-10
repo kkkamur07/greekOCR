@@ -11,6 +11,7 @@ Day-to-day workflows.
 | Doc | Topic |
 |-----|--------|
 | [guides/local-development.md](guides/local-development.md) | Docker Compose, local API, frontend, Supabase profile |
+| [guides/learnings.md](guides/learnings.md) | Supabase, serverless (Vercel), Calamari training, frequent errors |
 | [guides/testing.md](guides/testing.md) | Pytest lanes (unit, integration, ML) and full-suite commands |
 
 ---
@@ -22,14 +23,47 @@ Hosted environments and infrastructure.
 | Doc | Topic |
 |-----|--------|
 | [deployment/supabase.md](deployment/supabase.md) | Supabase Postgres + Storage — env vars, migrations, Docker override |
+| [deployment/database-roles.md](deployment/database-roles.md) | Least-privilege API, worker, and migration database roles |
 | [deployment/production.md](deployment/production.md) | Production layout: Vercel (landing, app, API) + inference workers |
 | [deployment/vercel-platform-api.md](deployment/vercel-platform-api.md) | Vercel platform API settings, Python runtime, bundle trimming |
-| [deployment/docker-build-optimization.md](deployment/docker-build-optimization.md) | Image sizes, multi-stage builds, `.dockerignore` |
 
 Related deploy configs (not under `docs/`):
 
 - [`deploy/platform/`](../deploy/platform/) — Vercel platform API bundle
 - [`deploy/inference/`](../deploy/inference/) — Inference API + worker (Railway/Fly)
+
+---
+
+## Quality and audits
+
+Cross-cutting reviews, hygiene, and hardening.
+
+| Doc | Topic |
+|-----|--------|
+| [repository-hygiene.md](repository-hygiene.md) | Repo hygiene — docs drift, gitignore, rituals, improvement roadmap |
+| [codebase-audit.md](codebase-audit.md) | Full-stack audit — critical issues, phased fix order (when present) |
+
+---
+
+## Frontend
+
+Frontend performance guidance and the completed Next.js migration record.
+
+| Doc | Topic |
+|-----|--------|
+| [frontend/performance-optimization.md](frontend/performance-optimization.md) | Image cache, thumbnails, SWR, rendering — phased PR order |
+| [frontend/nextjs-migration.md](frontend/nextjs-migration.md) | Next.js App Router migration record and follow-up checklist |
+| [frontend/reliability-accessibility.md](frontend/reliability-accessibility.md) | Cursor pagination, background job SSE subscriptions |
+
+---
+
+## Architecture decisions
+
+| Doc | Topic |
+|-----|--------|
+| [adr/0001-browser-auth-memory-cookie-csrf.md](adr/0001-browser-auth-memory-cookie-csrf.md) | In-memory access tokens + HttpOnly cookie session + CSRF |
+| [adr/0002-job-status-sse-with-polling-fallback.md](adr/0002-job-status-sse-with-polling-fallback.md) | SSE job updates with serverless-safe polling fallback |
+| [adr/0003-image-canvas-archival-boundary.md](adr/0003-image-canvas-archival-boundary.md) | Separate archival decision for the legacy canvas family |
 
 ---
 
@@ -40,26 +74,19 @@ Models, registry, and the local Inference Helper.
 | Doc | Topic |
 |-----|--------|
 | [inference/adding-inference-models.md](inference/adding-inference-models.md) | Checklist: registry, Hub weights, platform catalog, helper sync |
-| [inference/local-inference-helper-launch-readiness.md](inference/local-inference-helper-launch-readiness.md) | Helper launch assessment, rollout, rollback |
 
 Service README: [`inference/README.md`](../inference/README.md)
+Helper packaging: [`packaging/helper/README.md`](../packaging/helper/README.md)
 
 ---
 
-## Architecture
+## App READMEs
 
-Deep dives and migration notes.
-
-| Doc | Topic |
+| Doc | Scope |
 |-----|--------|
-| [architecture/calamari-vendored-architecture.md](architecture/calamari-vendored-architecture.md) | Vendored Calamari HTR, Docker layout, troubleshooting |
-| [architecture/hf-registry-id-migration.md](architecture/hf-registry-id-migration.md) | Hugging Face registry ID migration |
-
----
-
-## Decisions (ADRs)
-
-Recorded architecture decisions: [decisions/README.md](decisions/README.md)
+| [`nomicous/frontend/README.md`](../nomicous/frontend/README.md) | Next.js App Router app setup and routes |
+| [`nomicous/README.md`](../nomicous/README.md) | Platform app root |
+| [`landing/README.md`](../landing/README.md) | Marketing site for nomicous.com |
 
 ---
 
@@ -74,10 +101,6 @@ Bounded-context glossaries (live next to the code they describe):
 
 ---
 
-## Other
+## Backlog
 
-| Doc | Topic |
-|-----|--------|
-| [todo.md](todo.md) | Scratch-pad backlog (not the issue tracker) |
-| [`issues/`](../issues/) | Backlog, kanban, and archived issues |
-| [`landing/README.md`](../landing/README.md) | Marketing site for nomicous.com |
+Tracked work lives in [`issues/`](../issues/) (kanban, backlog, archived issues).

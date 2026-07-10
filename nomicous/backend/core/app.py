@@ -1,8 +1,8 @@
 """FastAPI application factory — wires routers from core and bounded contexts."""
 
 import logging
+import uuid
 from contextlib import asynccontextmanager, suppress
-from http import HTTPStatus
 
 import infrastructure.models  # noqa: F401 — register all ORM mappers before first query
 
@@ -24,7 +24,13 @@ from backend.core.exceptions import (
     ValidationError,
 )
 from backend.core.schemas.errors import ApiErrorResponse
-from backend.core.settings import get_app_settings
+from backend.core.settings import (
+    get_app_settings,
+    get_auth_settings,
+    get_infrastructure_settings,
+    get_ml_settings,
+    get_storage_settings,
+)
 from backend.core.settings.job import get_job_settings
 from backend.core.version import get_version
 from backend.jobs.api.internal_inference import router as internal_inference_router
@@ -35,6 +41,7 @@ from backend.document.api.documents import router as documents_router
 from backend.document.api.media import router as media_router
 from backend.document.api.public import router as public_router
 from backend.document.api.public_media import router as public_media_router
+from backend.document.infrastructure.media_gc import media_gc_loop
 from backend.ml.api.models import router as ml_models_router
 from backend.ml.api.registry import router as ml_registry_router
 from backend.project.api.projects import router as projects_router
@@ -59,6 +66,17 @@ COMMON_ERROR_RESPONSES = {
     429: {"model": ApiErrorResponse, "description": "Rate limit exceeded"},
     500: {"model": ApiErrorResponse, "description": "Internal server error"},
 }
+_HTTP_PUBLIC_MESSAGES = {
+    400: "Bad request",
+    401: "Authentication required",
+    403: "Access denied",
+    404: "Resource not found",
+    409: "Request conflicts with current state",
+    413: "Request entity too large",
+    422: "Invalid request",
+    429: "Too many requests",
+    503: "Service unavailable",
+}
 
 
 def _error_response(
@@ -66,13 +84,18 @@ def _error_response(
     status_code: int,
     code: str,
     message: str,
-    details: object | None = None,
     headers: dict[str, str] | None = None,
+    correlation_id: str | None = None,
 ) -> JSONResponse:
     content: dict[str, object] = {"error": {"code": code, "message": message}}
-    if details is not None:
-        content["error"]["details"] = details
-    return JSONResponse(status_code=status_code, content=jsonable_encoder(content), headers=headers)
+    response_headers = dict(headers or {})
+    if correlation_id:
+        response_headers["X-Error-ID"] = correlation_id
+    return JSONResponse(
+        status_code=status_code,
+        content=jsonable_encoder(content),
+        headers=response_headers,
+    )
 
 
 def _http_error_code(status_code: int) -> str:
@@ -87,63 +110,130 @@ def _http_error_code(status_code: int) -> str:
     }.get(status_code, "HTTP_ERROR")
 
 
+def _correlated_error(
+    *,
+    request: Request,
+    status_code: int,
+    code: str,
+    message: str,
+    exc: BaseException,
+    headers: dict[str, str] | None = None,
+) -> JSONResponse:
+    correlation_id = uuid.uuid4().hex
+    logger.warning(
+        "api_error correlation_id=%s method=%s path=%s status=%s code=%s exception=%s",
+        correlation_id,
+        request.method,
+        request.url.path,
+        status_code,
+        code,
+        type(exc).__name__,
+    )
+    return _error_response(
+        status_code=status_code,
+        code=code,
+        message=message,
+        headers=headers,
+        correlation_id=correlation_id,
+    )
+
+
 def _register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(NotFoundError)
-    async def not_found_handler(_request: Request, exc: NotFoundError) -> JSONResponse:
-        return _error_response(status_code=404, code="NOT_FOUND", message=str(exc))
+    async def not_found_handler(request: Request, exc: NotFoundError) -> JSONResponse:
+        return _correlated_error(
+            request=request,
+            status_code=404,
+            code="NOT_FOUND",
+            message="Resource not found",
+            exc=exc,
+        )
 
     @app.exception_handler(InvalidCredentialsError)
     async def invalid_credentials_handler(
-        _request: Request, exc: InvalidCredentialsError
+        request: Request, exc: InvalidCredentialsError
     ) -> JSONResponse:
-        return _error_response(status_code=401, code="UNAUTHORIZED", message=str(exc))
+        return _correlated_error(
+            request=request,
+            status_code=401,
+            code="UNAUTHORIZED",
+            message="Authentication failed",
+            exc=exc,
+        )
 
     @app.exception_handler(AccessDeniedError)
-    async def access_denied_handler(_request: Request, exc: AccessDeniedError) -> JSONResponse:
-        return _error_response(status_code=403, code="FORBIDDEN", message=str(exc))
+    async def access_denied_handler(request: Request, exc: AccessDeniedError) -> JSONResponse:
+        return _correlated_error(
+            request=request, status_code=403, code="FORBIDDEN", message="Access denied", exc=exc
+        )
 
     @app.exception_handler(ValidationError)
-    async def validation_handler(_request: Request, exc: ValidationError) -> JSONResponse:
-        return _error_response(status_code=422, code="VALIDATION_ERROR", message=str(exc))
+    async def validation_handler(request: Request, exc: ValidationError) -> JSONResponse:
+        return _correlated_error(
+            request=request,
+            status_code=422,
+            code="VALIDATION_ERROR",
+            message="Invalid request",
+            exc=exc,
+        )
 
     @app.exception_handler(ConflictError)
-    async def conflict_handler(_request: Request, exc: ConflictError) -> JSONResponse:
-        return _error_response(status_code=409, code="CONFLICT", message=str(exc))
+    async def conflict_handler(request: Request, exc: ConflictError) -> JSONResponse:
+        return _correlated_error(
+            request=request,
+            status_code=409,
+            code="CONFLICT",
+            message="Request conflicts with current state",
+            exc=exc,
+        )
 
     @app.exception_handler(GreekOCRException)
-    async def greekocr_handler(_request: Request, exc: GreekOCRException) -> JSONResponse:
-        logger.exception("Unhandled platform error", exc_info=exc)
-        return _error_response(
+    async def greekocr_handler(request: Request, exc: GreekOCRException) -> JSONResponse:
+        return _correlated_error(
+            request=request,
             status_code=500,
             code="INTERNAL_SERVER_ERROR",
             message="Internal server error",
+            exc=exc,
         )
 
     @app.exception_handler(HTTPException)
-    async def http_exception_handler(_request: Request, exc: HTTPException) -> JSONResponse:
-        try:
-            default_message = HTTPStatus(exc.status_code).phrase
-        except ValueError:
-            default_message = "Request failed"
-        message = exc.detail if isinstance(exc.detail, str) else default_message
-        details = None if isinstance(exc.detail, str) else exc.detail
-        return _error_response(
+    async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+        return _correlated_error(
+            request=request,
             status_code=exc.status_code,
             code=_http_error_code(exc.status_code),
-            message=message,
-            details=details,
+            message=_HTTP_PUBLIC_MESSAGES.get(exc.status_code, "Request failed"),
+            exc=exc,
             headers=exc.headers,
         )
 
     @app.exception_handler(RequestValidationError)
     async def request_validation_handler(
-        _request: Request, exc: RequestValidationError
+        request: Request, exc: RequestValidationError
     ) -> JSONResponse:
-        return _error_response(
+        return _correlated_error(
+            request=request,
             status_code=422,
             code="VALIDATION_ERROR",
             message="Invalid request",
-            details=exc.errors(),
+            exc=exc,
+        )
+
+    @app.exception_handler(Exception)
+    async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        correlation_id = uuid.uuid4().hex
+        logger.exception(
+            "unhandled_api_error correlation_id=%s method=%s path=%s",
+            correlation_id,
+            request.method,
+            request.url.path,
+        )
+        return _error_response(
+            status_code=500,
+            code="INTERNAL_SERVER_ERROR",
+            message="Internal server error",
+            correlation_id=correlation_id,
         )
 
 
@@ -161,19 +251,21 @@ async def _lifespan(app: FastAPI):
         else None
     )
     worker_task = (
-        asyncio.create_task(worker_loop(stop_event))
-        if job_settings.job_worker_enabled
-        else None
+        asyncio.create_task(worker_loop(stop_event)) if job_settings.job_worker_enabled else None
     )
+    media_gc_task = asyncio.create_task(media_gc_loop(stop_event))
     yield
     stop_event.set()
     if worker_task is not None:
         worker_task.cancel()
     if notification_task is not None:
         notification_task.cancel()
+    media_gc_task.cancel()
     if notification_task is not None:
         with suppress(asyncio.CancelledError):
             await notification_task
+    with suppress(asyncio.CancelledError):
+        await media_gc_task
     if worker_task is not None:
         with suppress(asyncio.CancelledError):
             await worker_task
@@ -182,12 +274,14 @@ async def _lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    # Resolve every API runtime setting before registering routes so a production
+    # deployment cannot serve traffic with missing or placeholder credentials.
+    get_infrastructure_settings()
+    get_auth_settings()
     app_settings = get_app_settings()
-    if app_settings.behind_proxy and not app_settings.forwarded_allow_ips:
-        logger.warning(
-            "BEHIND_PROXY is enabled but FORWARDED_ALLOW_IPS is not set; "
-            "configure proxy header trust before production deployment."
-        )
+    get_job_settings()
+    get_ml_settings()
+    get_storage_settings()
     app = FastAPI(
         title="greekOCR Platform",
         version=get_version(),
@@ -207,7 +301,7 @@ def create_app() -> FastAPI:
         allow_origins=app_settings.cors_origin_list,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type"],
+        allow_headers=["Authorization", "Content-Type", "X-CSRF-Token"],
     )
     _register_exception_handlers(app)
     app.include_router(root_router)

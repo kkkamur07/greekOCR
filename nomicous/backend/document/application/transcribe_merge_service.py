@@ -28,9 +28,7 @@ class TranscribeMergeService:
     def load_lines(session: Session, part_id: UUID) -> list[Line]:
         lines = list(
             session.execute(
-                select(Line)
-                .where(Line.part_id == part_id)
-                .order_by(Line.order, Line.created_at)
+                select(Line).where(Line.part_id == part_id).order_by(Line.order, Line.created_at)
             )
             .scalars()
             .all()

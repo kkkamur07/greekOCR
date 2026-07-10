@@ -12,9 +12,7 @@ router = APIRouter(tags=["root"])
 async def welcome() -> WelcomeResponse:
     return WelcomeResponse(
         service="Kalamos API",
-        message=(
-            "Welcome to Kalamos API"
-        ),
+        message=("Welcome to Kalamos API"),
         version=get_version(),
         docs_url="/docs",
         health_url="/health",

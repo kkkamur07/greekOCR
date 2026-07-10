@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import shutil
 import sys
@@ -9,7 +10,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
-
 from inference.weights import resolve_weights_source
 from src.hf.resolve import resolve_hf_weights_source, set_default_hub_client
 from src.hf.resolve.manifest import load_manifest
@@ -17,20 +17,18 @@ from src.hf.resolve.uri import parse_hf_weights_uri
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MOCK_WEIGHTS = REPO_ROOT / "src/hf/local/syriac/calamari/v1/stable/best.pt"
+HUB_REVISION = "a" * 40
+ARTIFACT_SHA256 = hashlib.sha256(MOCK_WEIGHTS.read_bytes()).hexdigest()
 
 
 @dataclass
 class MockHubClient:
-    revision_sha: str = "abc123"
     downloads: list[tuple[str, str, Path]] = field(default_factory=list)
-    resolve_error: Exception | None = None
-
-    def resolve_revision_sha(self, repo_id: str, revision: str) -> str:
-        if self.resolve_error is not None:
-            raise self.resolve_error
-        return self.revision_sha
+    download_error: Exception | None = None
 
     def snapshot_download(self, repo_id: str, revision: str, local_dir: Path) -> None:
+        if self.download_error is not None:
+            raise self.download_error
         self.downloads.append((repo_id, revision, local_dir))
         local_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(MOCK_WEIGHTS, local_dir / "best.pt")
@@ -49,13 +47,15 @@ def test_parse_hf_weights_uri():
     assert parsed.registry_tag == "stable"
 
 
-def test_resolve_downloads_then_reuses_cache(tmp_path: Path):
-    client = MockHubClient(revision_sha="sha-v1")
+def test_resolve_uses_pinned_revision_not_moved_registry_tag(tmp_path: Path):
+    client = MockHubClient()
     uri = "hf://nomicous/greek-htr-calamari@stable"
     kwargs = dict(
         uri=uri,
         registry_model_id="greek-calamari-v1",
         registry_tag="stable",
+        hub_revision=HUB_REVISION,
+        artifact_sha256=ARTIFACT_SHA256,
         architecture="calamari",
         hub_client=client,
         cache_root=tmp_path,
@@ -66,7 +66,49 @@ def test_resolve_downloads_then_reuses_cache(tmp_path: Path):
 
     assert first == second
     assert len(client.downloads) == 1
-    assert load_manifest(tmp_path / "greek-calamari-v1" / "stable") is not None
+    assert client.downloads[0][1] == HUB_REVISION
+    manifest = load_manifest(tmp_path / "greek-calamari-v1" / "stable")
+    assert manifest is not None
+    assert manifest.hub_revision == HUB_REVISION
+    assert manifest.artifact_sha256 == ARTIFACT_SHA256
+
+
+def test_resolve_replaces_tampered_cache_before_reuse(tmp_path: Path):
+    client = MockHubClient()
+    kwargs = dict(
+        uri="hf://nomicous/greek-htr-calamari@stable",
+        registry_model_id="greek-calamari-v1",
+        registry_tag="stable",
+        hub_revision=HUB_REVISION,
+        artifact_sha256=ARTIFACT_SHA256,
+        architecture="calamari",
+        hub_client=client,
+        cache_root=tmp_path,
+    )
+
+    artifact = resolve_hf_weights_source(**kwargs)
+    artifact.write_bytes(b"tampered")
+    repaired = resolve_hf_weights_source(**kwargs)
+
+    assert repaired == artifact
+    assert repaired.read_bytes() == MOCK_WEIGHTS.read_bytes()
+    assert len(client.downloads) == 2
+
+
+def test_resolve_rejects_downloaded_digest_mismatch(tmp_path: Path):
+    with pytest.raises(ValueError, match="artifact SHA-256 mismatch"):
+        resolve_hf_weights_source(
+            "hf://nomicous/greek-htr-calamari@stable",
+            registry_model_id="greek-calamari-v1",
+            registry_tag="stable",
+            hub_revision=HUB_REVISION,
+            artifact_sha256="0" * 64,
+            architecture="calamari",
+            hub_client=MockHubClient(),
+            cache_root=tmp_path,
+        )
+
+    assert not (tmp_path / "greek-calamari-v1" / "stable").exists()
 
 
 def test_resolve_surfaces_missing_repo_error(tmp_path: Path):
@@ -78,8 +120,24 @@ def test_resolve_surfaces_missing_repo_error(tmp_path: Path):
             "hf://nomicous/missing-htr-calamari@stable",
             registry_model_id="greek-calamari-v1",
             registry_tag="stable",
+            hub_revision=HUB_REVISION,
+            artifact_sha256=ARTIFACT_SHA256,
             architecture="calamari",
-            hub_client=MockHubClient(resolve_error=RepositoryNotFoundError("missing")),
+            hub_client=MockHubClient(download_error=RepositoryNotFoundError("missing")),
+            cache_root=tmp_path,
+        )
+
+
+def test_resolve_rejects_mutable_only_hf_reference(tmp_path: Path):
+    with pytest.raises(ValueError, match="immutable.*hub_revision"):
+        resolve_hf_weights_source(
+            "hf://nomicous/greek-htr-calamari@stable",
+            registry_model_id="greek-calamari-v1",
+            registry_tag="stable",
+            hub_revision=None,
+            artifact_sha256=ARTIFACT_SHA256,
+            architecture="calamari",
+            hub_client=MockHubClient(),
             cache_root=tmp_path,
         )
 
@@ -91,7 +149,7 @@ def test_inference_delegate_requires_hf_context():
 
 def test_fetch_model_warms_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     cache_root = tmp_path / "cache"
-    client = MockHubClient(revision_sha="sha-fetch")
+    client = MockHubClient()
     set_default_hub_client(client)
     monkeypatch.setenv("HF_CACHE_ROOT", str(cache_root))
 
@@ -103,9 +161,9 @@ def test_fetch_model_warms_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(
         sys,
         "argv",
-        ["fetch_model.py", "greek-calamari-v1", "--registry-tag", "stable"],
+        ["fetch_model.py", "syriac-calamari-v1", "--registry-tag", "stable"],
     )
 
     assert module.main() == 0
     assert len(client.downloads) == 1
-    assert (cache_root / "greek-calamari-v1" / "stable" / "best.pt").is_file()
+    assert (cache_root / "syriac-calamari-v1" / "stable" / "best.pt").is_file()

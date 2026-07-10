@@ -14,7 +14,6 @@ describe('ModelOutputBlock', () => {
           transcription_kind: 'model',
           text: 'abc',
           confidence: 0.91,
-          text_source: 'model',
           character_confidences: [
             { char: 'a', confidence: 0.95 },
             { char: 'b', confidence: 0.62 },
@@ -49,7 +48,6 @@ describe('ModelOutputBlock', () => {
           transcription_kind: 'model',
           text: '',
           confidence: 0,
-          text_source: 'model',
           character_confidences: null,
         }}
       />,

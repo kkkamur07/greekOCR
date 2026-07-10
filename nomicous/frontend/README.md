@@ -1,6 +1,6 @@
 # Nomicous Frontend
 
-Vite + React client for the Nomicous production platform API. The app provides
+Next.js App Router client shell for the Nomicous production platform API. The app provides
 authentication, Project/Document navigation, public published-document views,
 and the Page editor used for layout, Pairing, Review status, Annotation
 history, Export, Transcription editing, jobs, and PDF artifacts.
@@ -17,7 +17,7 @@ npm run dev
 ```
 
 The dev app runs at `http://localhost:5173`. By default it talks to
-`http://localhost:8000`; override with `VITE_API_BASE_URL` in `.env.local`.
+`http://localhost:8000`; override with `NEXT_PUBLIC_API_BASE_URL` in `.env.local`.
 
 Start the backend separately:
 
@@ -34,13 +34,11 @@ PYTHONPATH=. uvicorn backend.core.app:create_app --factory --reload
 ```text
 frontend/
   package.json                 # scripts and dependencies
-  vite.config.ts               # Vite + React
+  next.config.ts               # Next media proxy configuration
   vitest.setup.ts              # test DOM setup and global mocks
   openapi/openapi.json         # exported FastAPI schema
   src/
-    main.tsx                   # React entrypoint
-    App.tsx                    # route tree and shell
-    LegacyDemoApp.tsx          # old OCR/editor demo route
+    app/                       # App Router routes and root provider shell
     api/
       client.ts                # typed fetch wrapper and API helpers
       schema.d.ts              # generated OpenAPI TypeScript types
@@ -48,8 +46,6 @@ frontend/
     auth/                      # token storage and redirect helpers
     components/                # shared UI and editor components
     pages/                     # route-level pages and tests
-    services/                  # legacy/demo service helpers
-    types/                     # legacy/demo types
 ```
 
 ## Main Libraries
@@ -57,9 +53,8 @@ frontend/
 | Library | Role |
 |---------|------|
 | React 19 | UI framework |
-| React Router 7 | Client routing |
+| Next.js App Router | Client routing, dev server, and production build |
 | Ant Design 6 | Forms, cards, buttons, alerts, notifications |
-| Vite 7 | Dev server and production build |
 | Vitest + Testing Library | Component and route behavior tests |
 | openapi-typescript | Generates `src/api/schema.d.ts` |
 | react-zoom-pan-pinch | Image canvas zoom/pan |
@@ -67,36 +62,26 @@ frontend/
 ## Scripts
 
 ```bash
-npm run dev             # Vite dev server on 5173
-npm run build           # typecheck:api + production bundle
-npm run preview         # serve built bundle
+npm run dev             # Next dev server on 5173
+npm run build           # typecheck:api + production build
+npm run start           # serve the built app on 5173
 npm run test            # Vitest run
 npm run typecheck       # full TypeScript project references
 npm run typecheck:api   # API-focused typecheck used by build
 npm run codegen:api     # regenerate schema.d.ts from openapi/openapi.json
+npm run generate:api    # export the backend schema and regenerate TypeScript
+npm run check:api       # regenerate artifacts and fail if they are stale
 npm run lint            # ESLint
 ```
-
-For workflow PRs, the current focused gate is usually:
-
-```bash
-npm run test -- PageEditorPlaceholderPage.test.tsx
-npm run build
-```
-
-`npm run typecheck`, `npm run lint`, and all-test runs may also surface legacy
-demo files; fix or scope those separately when touching that surface.
 
 ## API Contract Flow
 
 Backend routes are the source of truth. When FastAPI schemas or routes change:
 
 ```bash
-# from repository root
-python scripts/platform/export_openapi.py
 cd nomicous/frontend
-npm run codegen:api
-npm run typecheck:api
+npm run generate:api
+npm run check:api
 ```
 
 Committed API artifacts:
@@ -135,8 +120,8 @@ queries that describe user-visible behavior rather than component internals.
 - Marking the Page reviewed/unreviewed independently from Pairing progress.
 - Working with Transcription layers: Ground truth is editable; model layers are read-only and copyable into Ground truth.
 - Triggering Export/PDF artifact behavior when exposed by the active branch.
-- Tracking background jobs via SSE (`GET /jobs/{id}/events`) with poll fallback
-  (`jobPolling.ts`, `useJobPolling`, `BackgroundJobsProvider`). See backend
+- Tracking background jobs through the shared SSE subscription (`GET /jobs/{id}/events`)
+  with polling fallback (`jobSubscription.ts`, `useJobPolling`, `BackgroundJobsProvider`). See backend
   **Job status notifications** in [`backend/README.md`](../backend/README.md).
 
 Domain language follows `nomicous/CONTEXT.md`: Page, Document part, Segment, Text
@@ -149,12 +134,9 @@ Transcription PDF.
 |-----------|------|
 | `ProtectedRoute` | Redirects unauthenticated users |
 | `AuthenticatedImage` | Fetches protected media with JWT |
-| `RemoteImage` | Displays public unauthenticated media |
 | `WorkflowBadge` | Document workflow display |
 | `document/JobsNotice` | Document-level job status notices |
-| `ImageCanvas/` | Page image, overlays, drawing, zoom/pan |
-| `page-editor/` | Page editor strips, panes, hooks, and job queue |
-| `ControlBar/` | Legacy demo toolbar |
+| `page-editor/` | Page editor canvas, strips, panes, hooks, and job queue |
 
 The editor borrows ideas from eScriptorium's manuscript workflow, but it is not
 a line-for-line Vue port.
@@ -173,19 +155,41 @@ see editor navigation affordances on the public page.
 ## Jobs Notice Smoke Test
 
 1. Set `ENABLE_TEST_JOB_ROUTES=true` in `backend/core/.env`.
-2. Set `VITE_ENABLE_TEST_JOBS=true` in `frontend/.env.local`.
+2. Set `NEXT_PUBLIC_ENABLE_TEST_JOBS=true` in `frontend/.env.local`.
 3. Start the API from `nomicous/`.
-4. Start Vite from `nomicous/frontend/`.
+4. Start Next.js from `nomicous/frontend/`.
 5. Open a Document and click **Run test job**.
 
 The notice should move `pending` -> `running` -> `done`, or show the API error if
 the job fails.
 
+## Repository hygiene
+
+Docs drift, gitignore, dead-code rituals, and improvement roadmap:
+
+[`docs/repository-hygiene.md`](../../docs/repository-hygiene.md)
+
+## Code audit
+
+Full-stack findings, critical issues, and phased fix order (July 2026):
+
+[`docs/codebase-audit.md`](../../docs/codebase-audit.md)
+
+## Dead code
+
+Cleanup ritual and audit trail:
+
+[`docs/repository-hygiene.md#dead-code-ritual`](../../docs/repository-hygiene.md#dead-code-ritual)
+
+## Performance
+
+Latency and optimization plan:
+
+[`docs/frontend/performance-optimization.md`](../../docs/frontend/performance-optimization.md)
+
 ## Special Notes
 
-- `LegacyDemoApp.tsx`, `services/`, and some `types/` are retained for old OCR
-  demo behavior. Do not use them as patterns for production platform pages.
 - API-generated types may mark fields optional even when current backend
   responses always include them; UI code should be robust where feasible.
-- Production build warns about large chunks today; that is a bundle-splitting
-  follow-up, not a build failure.
+- Production build may warn about large chunks; see the performance doc for
+  bundle-splitting follow-ups.

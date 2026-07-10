@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import type { ProjectResponse } from '../../api/client';
 
 type ProjectsTableProps = {
@@ -32,10 +32,10 @@ export function ProjectsTable({
   onDelete,
   deletingProjectId = null,
 }: ProjectsTableProps) {
-  const navigate = useNavigate();
+  const router = useRouter();
 
   const openProject = (projectId: string) => {
-    void navigate(`/projects/${projectId}`);
+    router.push(`/projects/${projectId}`);
   };
 
   const onRowKeyDown = (event: React.KeyboardEvent, projectId: string) => {

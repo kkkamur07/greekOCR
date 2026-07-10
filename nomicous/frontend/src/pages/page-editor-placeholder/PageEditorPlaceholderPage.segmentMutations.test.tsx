@@ -1,10 +1,8 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { ApiError } from '../../api/errors';
 import {
   DOCUMENT,
-  enableBaselinesOnCanvas,
   flushPageEditorEffects,
   mockedApi,
   renderPageEditor,
@@ -28,10 +26,10 @@ describe('PageEditorPlaceholderPage segment mutations', () => {
     expect(await screen.findByText('ANNOTE PAGE WORKSPACE')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /rectangle segment/i }));
 
-    const canvas = screen.getByRole('img', { name: /page geometry canvas/i });
-    fireEvent.mouseDown(canvas, { clientX: 20, clientY: 30 });
-    fireEvent.mouseMove(canvas, { clientX: 120, clientY: 80 });
-    fireEvent.mouseUp(canvas, { clientX: 120, clientY: 80 });
+    const canvas = screen.getByRole('group', { name: /page geometry canvas/i });
+    fireEvent.pointerDown(canvas, { clientX: 20, clientY: 30 });
+    fireEvent.pointerMove(canvas, { clientX: 120, clientY: 80 });
+    fireEvent.pointerUp(canvas, { clientX: 120, clientY: 80 });
 
     await waitFor(() => {
       expect(mockedApi.createPartLine).toHaveBeenLastCalledWith(
@@ -61,7 +59,7 @@ describe('PageEditorPlaceholderPage segment mutations', () => {
     expect(await screen.findByText('ANNOTE PAGE WORKSPACE')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /polygon segment/i }));
 
-    const canvas = screen.getByRole('img', { name: /page geometry canvas/i });
+    const canvas = screen.getByRole('group', { name: /page geometry canvas/i });
     fireEvent.click(canvas, { clientX: 40, clientY: 40 });
     fireEvent.click(canvas, { clientX: 160, clientY: 45 });
     fireEvent.click(canvas, { clientX: 150, clientY: 90 });

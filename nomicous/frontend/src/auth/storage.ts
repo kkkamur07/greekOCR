@@ -1,13 +1,19 @@
-const TOKEN_KEY = 'greekocr_access_token';
+import { invalidateAuthGetCache } from '../api/getCache';
+import { clearImageCache } from '../api/imageCache';
+
+let accessToken: string | null = null;
 
 export function getAccessToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
+  return accessToken;
 }
 
 export function setAccessToken(token: string): void {
-  localStorage.setItem(TOKEN_KEY, token);
+  accessToken = token;
+  invalidateAuthGetCache();
 }
 
 export function clearAccessToken(): void {
-  localStorage.removeItem(TOKEN_KEY);
+  accessToken = null;
+  invalidateAuthGetCache();
+  clearImageCache();
 }

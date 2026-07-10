@@ -46,9 +46,7 @@ class TranscriptionPdfService:
         document_id: UUID,
         part_id: UUID,
     ) -> bytes:
-        document = await self._document_service.get_document(
-            session, user, project_id, document_id
-        )
+        document = await self._document_service.get_document(session, user, project_id, document_id)
         part = await self._documents.get_part(session, part_id)
         if part is None or part.document_id != document.id:
             raise NotFoundError("Part not found")

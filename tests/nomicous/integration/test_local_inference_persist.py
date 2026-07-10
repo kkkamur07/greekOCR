@@ -66,9 +66,7 @@ def test_persist_local_transcribe_writes_model_transcription(client, owner_heade
     assert listed.status_code == 200
     line = listed.json()[0]
     model_layers = [
-        layer
-        for layer in line["line_transcriptions"]
-        if layer["transcription_kind"] == "model"
+        layer for layer in line["line_transcriptions"] if layer["transcription_kind"] == "model"
     ]
     assert len(model_layers) == 1
     assert model_layers[0]["text"] == "Αβ"

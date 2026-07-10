@@ -38,9 +38,9 @@ Settings live in `backend/core/settings/` and are usually loaded from
 | Host port | `5433` |
 | Container port | `5432` |
 | User | `postgres` |
-| Password | `dev` |
-| Async URL | `postgresql+asyncpg://postgres:dev@localhost:5433/kalamos` |
-| Sync/Alembic URL | `postgresql://postgres:dev@localhost:5433/kalamos` |
+| Password | value in ignored root `.env` |
+| Async URL | configured in `backend/core/.env` |
+| Sync/Alembic URL | configured in `backend/core/.env` |
 
 Start only Postgres:
 
@@ -77,7 +77,7 @@ volume.
 ## Supabase test deploy
 
 For a shared Supabase Postgres + Storage profile (migrations still via Alembic),
-see [`docs/deployment/supabase.md`](../../docs/deployment/supabase.md) and [ADR 003](../../docs/decisions/003-supabase-hosted-postgres-and-storage.md).
+see [`docs/deployment/supabase.md`](../../docs/deployment/supabase.md) and [learnings — Supabase](../../docs/guides/learnings.md#supabase-hosted-postgres--storage).
 
 ## Migration Commands
 
@@ -316,16 +316,16 @@ Skip history snapshots (annotations only):
 python scripts/platform/seed_dev_annotated_data.py --skip-history
 ```
 
-Relevant env values:
+The seed defaults can be overridden with registry model ids:
 
 ```bash
-DEFAULT_SEGMENT_MODEL=kraken-segment-default
-DEFAULT_TRANSCRIBE_MODEL=kraken-transcribe-default
-KRAKEN_MODEL_PATH=../model/kraken
+DEFAULT_SEGMENT_MODEL=greek-kraken-segment-v1
+DEFAULT_TRANSCRIBE_MODEL=syriac-calamari-v1
 ```
 
-The seed records artifact references only; it does not download or modify model
-weights.
+The seed records `registry://` artifact references only; it does not download
+or modify model weights. The inference service resolves the corresponding
+`inference/registry.yaml` entry at run time.
 
 ## Troubleshooting
 

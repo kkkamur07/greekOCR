@@ -2,8 +2,14 @@
 # Bundle platform API sources into deploy/platform for Vercel.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-DEST="$(cd "$(dirname "$0")" && pwd)"
+ROOT="${PLATFORM_BUNDLE_SOURCE_ROOT:-$(cd "$(dirname "$0")/../.." && pwd)}"
+ROOT="$(cd "$ROOT" && pwd)"
+DEST="${PLATFORM_BUNDLE_DEST:-$(cd "$(dirname "$0")" && pwd)}"
+
+if [[ "$DEST" == "/" ]]; then
+    echo "Refusing to use the filesystem root as a platform bundle destination." >&2
+    exit 1
+fi
 
 rm -rf "$DEST/nomicous" "$DEST/inference"
 mkdir -p "$DEST/nomicous" "$DEST/inference"
@@ -18,12 +24,11 @@ root = Path(sys.argv[1])
 dest = Path(sys.argv[2])
 
 
-def ignore_backend(directory: str, names: list[str]) -> set[str]:
+def ignore_deploy_artifacts(directory: str, names: list[str]) -> set[str]:
     ignored: set[str] = set()
     for name in names:
         if (
-            name == "media"
-            or name == "__pycache__"
+            name == "__pycache__"
             or name == ".env"
             or name.endswith(".pyc")
             or fnmatch.fnmatch(name, ".env.*")
@@ -32,8 +37,8 @@ def ignore_backend(directory: str, names: list[str]) -> set[str]:
     return ignored
 
 
-def ignore_python_cache(directory: str, names: list[str]) -> set[str]:
-    return {name for name in names if name == "__pycache__" or name.endswith(".pyc")}
+def ignore_backend(directory: str, names: list[str]) -> set[str]:
+    return ignore_deploy_artifacts(directory, names) | {"media"}
 
 
 shutil.copytree(
@@ -44,11 +49,25 @@ shutil.copytree(
 shutil.copytree(
     root / "nomicous" / "infrastructure",
     dest / "nomicous" / "infrastructure",
-    ignore=ignore_python_cache,
+    ignore=ignore_deploy_artifacts,
 )
 shutil.copy2(root / "inference" / "__init__.py", dest / "inference" / "__init__.py")
+shutil.copy2(root / "inference" / "admission.py", dest / "inference" / "admission.py")
 shutil.copy2(root / "inference" / "registry.yaml", dest / "inference" / "registry.yaml")
-shutil.copytree(root / "inference" / "contracts", dest / "inference" / "contracts")
-shutil.copytree(root / "inference" / "registry", dest / "inference" / "registry")
+shutil.copytree(
+    root / "inference" / "contracts",
+    dest / "inference" / "contracts",
+    ignore=ignore_deploy_artifacts,
+)
+shutil.copytree(
+    root / "inference" / "infrastructure",
+    dest / "inference" / "infrastructure",
+    ignore=ignore_deploy_artifacts,
+)
+shutil.copytree(
+    root / "inference" / "registry",
+    dest / "inference" / "registry",
+    ignore=ignore_deploy_artifacts,
+)
 shutil.copy2(root / "nomicous" / "VERSION", dest / "nomicous" / "VERSION")
 PY

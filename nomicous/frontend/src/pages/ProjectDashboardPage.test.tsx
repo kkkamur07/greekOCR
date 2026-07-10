@@ -1,5 +1,4 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '../api/client';
@@ -26,13 +25,8 @@ vi.mock('../api/client', async (importOriginal) => {
 });
 
 function renderProjectDashboard() {
-  return render(
-    <MemoryRouter initialEntries={['/projects/project-1']}>
-      <Routes>
-        <Route path="/projects/:projectId" element={<ProjectDashboardPage />} />
-      </Routes>
-    </MemoryRouter>,
-  );
+  window.history.replaceState({}, '', '/projects/project-1');
+  return render(<ProjectDashboardPage />);
 }
 
 describe('ProjectDashboardPage', () => {

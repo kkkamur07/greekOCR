@@ -26,12 +26,24 @@ tests/
 docs/
 configs/
 
-# Model weights are mounted at runtime, not baked into images
+# Model weights are mounted at runtime, not baked into images. Keep the Python
+# package initializer so `from inference.weights import ...` works in the image.
 inference/weights
+!inference/
+!inference/weights/
+!inference/weights/__init__.py
 
-# HF helpers are only required by the inference image
+# Only the Hub resolver is needed by the inference image.  Docker ignore
+# negations must re-include both ancestor directories and concrete files.
+# Keep local caches, staging trees, publishing helpers, and bundled weights
+# outside the build context.
 src/**
+!src/
 !src/hf/
+!src/hf/__init__.py
+!src/hf/paths.py
+!src/hf/resolve/
+!src/hf/resolve/**
 
 # Frontend is built from nomicous/ context; exclude from repo-root API/inference builds
 nomicous/frontend/

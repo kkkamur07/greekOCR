@@ -38,7 +38,9 @@ def test_migration_013_handles_precreated_inference_jobs_table(monkeypatch):
     monkeypatch.setattr(migration, "inference_task", DummyEnum())
     monkeypatch.setattr(migration, "inference_job_status", DummyEnum())
     monkeypatch.setattr(migration, "_inference_jobs_table_exists", lambda _bind: True)
-    monkeypatch.setattr(migration, "_create_inference_jobs_table", lambda: calls.append(("table", None)))
+    monkeypatch.setattr(
+        migration, "_create_inference_jobs_table", lambda: calls.append(("table", None))
+    )
     monkeypatch.setattr(
         migration,
         "_create_missing_inference_jobs_indexes",
@@ -73,7 +75,8 @@ def test_migration_013_index_helper_creates_missing_indexes(monkeypatch):
         migration._create_missing_inference_jobs_indexes(connection)
 
         index_names = {
-            row[1] for row in connection.execute(migration.sa.text("PRAGMA index_list(inference_jobs)"))
+            row[1]
+            for row in connection.execute(migration.sa.text("PRAGMA index_list(inference_jobs)"))
         }
 
     assert {

@@ -11,9 +11,21 @@ import contextlib
 import logging
 import signal
 
+from backend.core.settings import (
+    get_infrastructure_settings,
+    get_job_settings,
+    get_ml_settings,
+)
 from backend.jobs.infrastructure.worker import worker_loop
 
 logger = logging.getLogger(__name__)
+
+
+def validate_worker_settings() -> None:
+    """Resolve worker dependencies before connecting to the database."""
+    get_infrastructure_settings()
+    get_job_settings()
+    get_ml_settings()
 
 
 async def _run() -> None:
@@ -33,6 +45,11 @@ async def _run() -> None:
     logger.info("platform job worker stopped")
 
 
+def main() -> None:
+    validate_worker_settings()
+    asyncio.run(_run())
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    asyncio.run(_run())
+    main()

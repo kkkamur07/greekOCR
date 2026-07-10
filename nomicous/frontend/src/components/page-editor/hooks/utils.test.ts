@@ -9,7 +9,6 @@ import {
   showsModelSourceReview,
   syncLayoutLinesFromSegments,
   transcriptionForOcrReview,
-  upsertLineRequest,
 } from './utils';
 
 const MODEL_LAYER: TranscriptionLayerResponse = {
@@ -50,7 +49,6 @@ const LINE = {
       transcription_kind: 'ground_truth',
       text: 'model suggestion',
       confidence: null,
-      text_source: 'model',
     },
     {
       id: 'line-tx-model-1',
@@ -58,21 +56,19 @@ const LINE = {
       transcription_kind: 'model',
       text: 'model suggestion',
       confidence: 0.91,
-      text_source: 'model',
     },
   ],
   created_at: '2026-06-16T10:00:00Z',
-} as LineResponse;
+} satisfies LineResponse;
 
 describe('page editor transcription utils', () => {
-  it('shows OCR review for model layers and ground truth with text_source model', () => {
+  it('shows OCR review for model transcriptions', () => {
     expect(showsModelSourceReview(LINE.line_transcriptions[1])).toBe(true);
-    expect(showsModelSourceReview(LINE.line_transcriptions[0])).toBe(true);
-    expect(showsModelSourceReview({ ...LINE.line_transcriptions[0], text_source: 'human_edited' })).toBe(false);
+    expect(showsModelSourceReview(LINE.line_transcriptions[0])).toBe(false);
   });
 
-  it('selects model transcription for OCR review on ground truth when text_source is model', () => {
-    expect(transcriptionForOcrReview(LINE, GROUND_TRUTH_LAYER)).toEqual(LINE.line_transcriptions[1]);
+  it('selects OCR review only for a model transcription layer', () => {
+    expect(transcriptionForOcrReview(LINE, GROUND_TRUTH_LAYER)).toBeNull();
     expect(transcriptionForOcrReview(LINE, MODEL_LAYER)).toEqual(LINE.line_transcriptions[1]);
   });
 
@@ -155,29 +151,5 @@ describe('page editor transcription utils', () => {
         ],
       },
     ]);
-  });
-
-  it('builds replace payloads that preserve kraken metadata fields', () => {
-    const krakenLine = {
-      ...LINE,
-      block_id: 'block-1',
-      source: 'kraken',
-      source_metadata: { model: 'kraken:blla' },
-      kraken_ceiling: [[-1, 9], [11, 9], [11, 16], [-1, 16]],
-      line_transcriptions: [],
-    } as LineResponse;
-
-    expect(upsertLineRequest(krakenLine)).toEqual({
-      id: 'line-1',
-      order: 0,
-      kind: 'polygon',
-      points: krakenLine.points,
-      block_id: 'block-1',
-      source: 'kraken',
-      source_metadata: { model: 'kraken:blla' },
-      kraken_ceiling: [[-1, 9], [11, 9], [11, 16], [-1, 16]],
-      baseline: krakenLine.baseline,
-      mask: krakenLine.mask,
-    });
   });
 });

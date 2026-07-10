@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, status
 
+from inference.admission import CLIENT_INPUT_ERROR, validate_image_bytes
 from inference.contracts.run import InferenceRunRequest, InferenceRunResponse
+from inference.helper.settings import get_helper_settings
 from inference.jobs.runner import run_model
 
 router = APIRouter(prefix="/inference/v1", tags=["ml"])
@@ -13,6 +15,7 @@ router = APIRouter(prefix="/inference/v1", tags=["ml"])
 @router.post("/run", response_model=InferenceRunResponse)
 def run_inference(body: InferenceRunRequest) -> InferenceRunResponse:
     try:
+        validate_image_bytes(body.image_bytes, get_helper_settings())
         output = run_model(
             task=body.task,
             registry_model_id=body.registry_model_id,
@@ -28,7 +31,7 @@ def run_inference(body: InferenceRunRequest) -> InferenceRunResponse:
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(exc),
+            detail=CLIENT_INPUT_ERROR,
         ) from exc
 
     return InferenceRunResponse(task=body.task, output=output)

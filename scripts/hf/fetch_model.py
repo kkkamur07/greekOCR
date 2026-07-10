@@ -56,6 +56,8 @@ def main() -> int:
             weights_source,
             registry_model_id=args.registry_model_id,
             registry_tag=args.registry_tag,
+            hub_revision=entry.versions[args.registry_tag].hub_revision,
+            artifact_sha256=entry.versions[args.registry_tag].artifact_sha256,
             architecture=entry.architecture.value,
         )
     except ValueError as exc:

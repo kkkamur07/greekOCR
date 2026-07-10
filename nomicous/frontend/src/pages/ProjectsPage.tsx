@@ -1,5 +1,5 @@
-import { useEffect, useState, type FormEvent } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useRouter } from 'next/navigation';
 import { toast } from '../components/ui/toast';
 import { api, type ProjectResponse } from '../api/client';
 import { ApiError } from '../api/errors';
@@ -10,8 +10,7 @@ import { FormModal } from '../components/ui/FormModal';
 import { slugify } from '../utils/slugify';
 
 export function ProjectsPage() {
-  const navigate = useNavigate();
-  const location = useLocation();
+  const router = useRouter();
   const [projects, setProjects] = useState<ProjectResponse[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [username, setUsername] = useState<string | null>(null);
@@ -22,9 +21,9 @@ export function ProjectsPage() {
   const [error, setError] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (!hasAccessToken()) {
-      navigateToLogin(navigate, location);
+      navigateToLogin(router);
       return;
     }
 
@@ -37,7 +36,7 @@ export function ProjectsPage() {
       setProjects(list);
     } catch (err) {
       if (isUnauthorized(err)) {
-        navigateToLogin(navigate, location);
+        navigateToLogin(router);
         return;
       }
       const msg = err instanceof ApiError ? err.message : 'Failed to load projects';
@@ -49,11 +48,11 @@ export function ProjectsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [router]);
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [load]);
 
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();

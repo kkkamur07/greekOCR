@@ -14,12 +14,24 @@ import bcrypt
 
 # bcrypt default work factor when using gensalt() without rounds=
 BCRYPT_ROUNDS = 12
+MAX_BCRYPT_PASSWORD_BYTES = 72
+
+
+def password_bytes(plain: str) -> bytes:
+    encoded = plain.encode("utf-8")
+    if len(encoded) > MAX_BCRYPT_PASSWORD_BYTES:
+        raise ValueError("Password exceeds the bcrypt UTF-8 byte limit")
+    return encoded
 
 
 def hash_password(plain: str) -> str:
     salt = bcrypt.gensalt(rounds=BCRYPT_ROUNDS)
-    return bcrypt.hashpw(plain.encode("utf-8"), salt).decode("utf-8")
+    return bcrypt.hashpw(password_bytes(plain), salt).decode("utf-8")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
+    try:
+        encoded = password_bytes(plain)
+    except ValueError:
+        return False
+    return bcrypt.checkpw(encoded, hashed.encode("utf-8"))

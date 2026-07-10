@@ -1,4 +1,12 @@
-import { useEffect, useRef, useState, type MouseEvent } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+  type PointerEvent,
+} from 'react';
 import {
   TransformComponent,
   TransformWrapper,
@@ -45,6 +53,7 @@ type CanvasSurfaceProps = {
   onVertexPointerDown: (vertexIndex: number) => void;
   onVertexPointerMove: (point: LinePoint) => void;
   onInsertVertexOnEdge: (nextPoints: LinePoint[]) => void;
+  onRemoveVertex: (vertexIndex: number) => void;
 };
 
 const VERTEX_DRAG_THRESHOLD = 3;
@@ -82,6 +91,7 @@ function CanvasSurface({
   onVertexPointerDown,
   onVertexPointerMove,
   onInsertVertexOnEdge,
+  onRemoveVertex,
 }: CanvasSurfaceProps) {
   const [naturalSize, setNaturalSize] = useState<{ width: number; height: number } | null>(null);
   const canvasWidth = naturalSize?.width ?? imageWidth;
@@ -108,7 +118,7 @@ function CanvasSurface({
   const segmentFill = (r: number, g: number, b: number) =>
     `rgba(${r}, ${g}, ${b}, ${settings.segmentFillOpacity})`;
 
-  const eventPoint = (event: MouseEvent<SVGElement>): LinePoint => {
+  const eventPoint = (event: MouseEvent<SVGElement> | PointerEvent<SVGElement>): LinePoint => {
     const svg = event.currentTarget.ownerSVGElement ?? event.currentTarget;
     const rect = svg.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) {
@@ -126,6 +136,19 @@ function CanvasSurface({
     drawingRectangle && draftStart && draftEnd ? rectanglePoints(draftStart, draftEnd) : null;
   const isDraggingVertex = draggedVertexIndex !== null;
   const isVertexInteracting = pendingVertexIndex !== null || isDraggingVertex;
+  const orderedLines = useMemo(
+    () => [...lines].sort((left, right) => left.order - right.order),
+    [lines],
+  );
+  const activateWithKeyboard = (
+    event: KeyboardEvent<SVGElement>,
+    activate: () => void,
+  ) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    event.stopPropagation();
+    activate();
+  };
 
   return (
     <div
@@ -156,15 +179,15 @@ function CanvasSurface({
         }}
       />
       <svg
-        role="img"
+        role="group"
         aria-label="Page geometry canvas"
         viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
-        onMouseDown={(event) => {
+        onPointerDown={(event) => {
           if (!drawingRectangle) return;
           event.stopPropagation();
           onDraftStart(eventPoint(event));
         }}
-        onMouseMove={(event) => {
+        onPointerMove={(event) => {
           if (drawingPolygon) {
             onDraftPolygonCursor(eventPoint(event));
           }
@@ -177,7 +200,7 @@ function CanvasSurface({
           event.stopPropagation();
           onDraftMove(eventPoint(event));
         }}
-        onMouseUp={(event) => {
+        onPointerUp={(event) => {
           if (!drawingRectangle || !draftStart) return;
           event.stopPropagation();
           onRectangleDrawn(eventPoint(event));
@@ -219,10 +242,7 @@ function CanvasSurface({
             strokeWidth={strokeWidth(1.2)}
           />
         ))}
-        {lines
-          .slice()
-          .sort((a, b) => a.order - b.order)
-          .map((line) => {
+        {orderedLines.map((line) => {
             const selected = line.id === selectedSegmentId;
             const paired = pairedSegmentIds.has(line.id);
             const fill = selected
@@ -242,6 +262,8 @@ function CanvasSurface({
             return (
               <polygon
                 key={line.id}
+                role="button"
+                tabIndex={0}
                 aria-label={`Segment ${line.order + 1}${paired ? ', paired' : ''}`}
                 aria-current={selected ? 'true' : undefined}
                 onClick={(event) => {
@@ -260,6 +282,9 @@ function CanvasSurface({
                   }
                   onSelectSegment(line.id);
                 }}
+                onKeyDown={(event) =>
+                  activateWithKeyboard(event, () => onSelectSegment(line.id))
+                }
                 points={points(segmentPoints)}
                 fill={fill}
                 stroke={strokeColor}
@@ -273,20 +298,22 @@ function CanvasSurface({
             );
           })}
         {settings.showBaselines &&
-          lines
-            .slice()
-            .sort((a, b) => a.order - b.order)
-            .map((line) => {
+          orderedLines.map((line) => {
               if (line.id === suppressBaselineSegmentId) return null;
               if (normalizeGeometryPoints(line.baseline).length < 2) return null;
               return (
                 <polyline
                   key={`baseline-${line.id}`}
+                role="button"
+                tabIndex={0}
                   aria-label={`Line ${line.id} baseline`}
                   onClick={(event) => {
                     event.stopPropagation();
                     onSelectLine(line.id);
                   }}
+                onKeyDown={(event) =>
+                  activateWithKeyboard(event, () => onSelectLine(line.id))
+                }
                   points={points(line.baseline)}
                   fill="none"
                   stroke={line.manual_geometry ? '#059669' : '#0d9488'}
@@ -386,11 +413,14 @@ function CanvasSurface({
                 cursor: isDraggingVertex ? 'grabbing' : 'pointer',
                 pointerEvents: 'all',
               }}
+              role="button"
+              tabIndex={0}
               aria-label={`Segment vertex ${index + 1} · click to remove · drag to move`}
-              onMouseDown={(event) => {
+              onPointerDown={(event) => {
                 event.stopPropagation();
                 onVertexPointerDown(index);
               }}
+              onKeyDown={(event) => activateWithKeyboard(event, () => onRemoveVertex(index))}
             />
           ))}
       </svg>
@@ -403,14 +433,17 @@ type PageEditorCanvasProps = Omit<
   | 'draftEnd'
   | 'onDraftMove'
   | 'zoomLevel'
+  | 'suppressBaselineSegmentId'
   | 'vertexEditPoints'
   | 'draggedVertexIndex'
   | 'pendingVertexIndex'
   | 'onVertexPointerDown'
   | 'onVertexPointerMove'
   | 'onInsertVertexOnEdge'
+  | 'onRemoveVertex'
   | 'draftPolygonCursor'
   | 'onDraftPolygonCursor'
+  | 'suppressBaselineSegmentId'
 > & {
   onSegmentPointsChange: (segmentId: string, points: LinePoint[]) => void | Promise<void>;
 };
@@ -601,7 +634,7 @@ export function PageEditorCanvas({
                 type="button"
                 className="pe-zoom__btn"
                 style={{ fontSize: '0.65rem' }}
-                onClick={() => resetTransform(undefined, ZOOM_ANIMATION_MS)}
+                onClick={() => resetTransform()}
                 aria-label="Reset zoom"
                 title="Reset zoom"
               >
@@ -686,6 +719,25 @@ export function PageEditorCanvas({
                 }}
                 onInsertVertexOnEdge={(nextPoints) => {
                   if (!selectedSegmentId) return;
+                  const pending = {
+                    segmentId: selectedSegmentId,
+                    points: nextPoints,
+                    draggedIndex: null as number | null,
+                    pendingVertexIndex: null as number | null,
+                  };
+                  setVertexEdit(pending);
+                  void Promise.resolve(
+                    onSegmentPointsChange(pending.segmentId, pending.points),
+                  ).finally(() => {
+                    setVertexEdit((latest) =>
+                      latest?.segmentId === pending.segmentId ? null : latest,
+                    );
+                  });
+                }}
+                onRemoveVertex={(vertexIndex) => {
+                  if (!selectedSegmentId || !vertexEditPoints) return;
+                  const nextPoints = removePolygonVertex(vertexEditPoints, vertexIndex);
+                  if (!nextPoints) return;
                   const pending = {
                     segmentId: selectedSegmentId,
                     points: nextPoints,

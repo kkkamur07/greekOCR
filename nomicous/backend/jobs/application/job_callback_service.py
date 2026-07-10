@@ -41,13 +41,6 @@ def _job_type_for_task(task: WireInferenceTask) -> JobType:
     return JobType(task.value)
 
 
-def _known_inference_job_ids(job: Job) -> set[uuid.UUID]:
-    ids: set[uuid.UUID] = set()
-    if job.inference_job_id is not None:
-        ids.add(job.inference_job_id)
-    return ids
-
-
 def _segment_output(callback: JobCallbackRequest) -> SegmentRunResponse:
     if callback.output is None or callback.output.kind != "segment":
         raise ValueError("Segment callback missing structured output")
@@ -145,8 +138,8 @@ def _run_merge(context: _MergeContext, callback: JobCallbackRequest) -> dict:
 def _mark_failed_from_callback_sync(job: Job, callback: JobCallbackRequest) -> None:
     now = datetime.now(UTC)
     job.status = JobStatus.failed
-    job.inference_job_id = callback.inference_job_id
-    job.error = callback.error or "Inference job failed"
+    job.error = "Inference job failed"
+    job.callback_claimed_at = None
     job.completed_at = now
     job.updated_at = now
 
@@ -155,15 +148,11 @@ def _assert_callback_matches_job(job: Job, callback: JobCallbackRequest) -> None
     expected_type = _job_type_for_task(callback.task)
     if job.type != expected_type:
         raise ConflictError(
-            f"job {job.id} type {job.type.value} "
-            f"does not match callback task {callback.task.value}"
+            f"job {job.id} type {job.type.value} does not match callback task {callback.task.value}"
         )
 
-    known_ids = _known_inference_job_ids(job)
-    if known_ids and callback.inference_job_id not in known_ids:
-        raise ConflictError(
-            f"job {job.id} does not recognize callback inference_job_id {callback.inference_job_id}"
-        )
+    if job.inference_job_id is None or callback.inference_job_id != job.inference_job_id:
+        raise ConflictError(f"job {job.id} does not recognize callback inference_job_id")
 
 
 def _mark_done_from_callback_sync(
@@ -173,9 +162,9 @@ def _mark_done_from_callback_sync(
 ) -> None:
     now = datetime.now(UTC)
     job.status = JobStatus.done
-    job.inference_job_id = callback.inference_job_id
     job.result = result
     job.error = None
+    job.callback_claimed_at = None
     job.completed_at = now
     job.updated_at = now
 
@@ -184,7 +173,7 @@ def _mark_failed_after_merge(job_id: uuid.UUID, error: str) -> None:
     now = datetime.now(UTC)
     with sync_system_session() as session:
         job = session.get(Job, job_id)
-        if job is None or job.status in _TERMINAL_STATUSES:
+        if job is None or job.status != JobStatus.waiting or job.callback_claimed_at is None:
             return
         job.status = JobStatus.failed
         job.error = error
@@ -195,18 +184,20 @@ def _mark_failed_after_merge(job_id: uuid.UUID, error: str) -> None:
 
 
 def _validate_callback(callback: JobCallbackRequest) -> tuple[bool, _MergeContext | None]:
-    """Short transaction: lock job, validate, or mark failed. Returns merge context when needed."""
+    """Atomically claim one waiting callback before its merge can begin."""
     with sync_system_session() as session:
         job = session.execute(
-            select(Job)
-            .where(Job.id == callback.product_job_id)
-            .with_for_update()
+            select(Job).where(Job.id == callback.product_job_id).with_for_update()
         ).scalar_one_or_none()
         if job is None:
             raise NotFoundError(f"job {callback.product_job_id} not found")
+        _assert_callback_matches_job(job, callback)
         if job.status in _TERMINAL_STATUSES:
             return False, None
-        _assert_callback_matches_job(job, callback)
+        if job.status != JobStatus.waiting:
+            raise ConflictError(f"job {job.id} is not waiting for an inference callback")
+        if job.callback_claimed_at is not None:
+            return False, None
 
         if callback.status == InferenceJobStatus.failed:
             _mark_failed_from_callback_sync(job, callback)
@@ -214,27 +205,27 @@ def _validate_callback(callback: JobCallbackRequest) -> tuple[bool, _MergeContex
             notify_platform_job_status_changed(job.id, job.status)
             return True, None
 
-        if job.status != JobStatus.waiting:
-            raise ConflictError(f"job {job.id} is not waiting for an inference callback")
-
         context = _merge_context(job, callback)
+        job.callback_claimed_at = datetime.now(UTC)
+        job.updated_at = job.callback_claimed_at
         session.commit()
         return True, context
 
 
-def _finalize_successful_callback(context: _MergeContext, callback: JobCallbackRequest, result: dict) -> bool:
+def _finalize_successful_callback(
+    context: _MergeContext, callback: JobCallbackRequest, result: dict
+) -> bool:
     with sync_system_session() as session:
         job = session.execute(
-            select(Job)
-            .where(Job.id == context.job_id)
-            .with_for_update()
+            select(Job).where(Job.id == context.job_id).with_for_update()
         ).scalar_one_or_none()
         if job is None:
             raise NotFoundError(f"job {context.job_id} not found")
+        _assert_callback_matches_job(job, callback)
         if job.status in _TERMINAL_STATUSES:
             return False
-        if job.status != JobStatus.waiting:
-            raise ConflictError(f"job {job.id} is no longer waiting for an inference callback")
+        if job.status != JobStatus.waiting or job.callback_claimed_at is None:
+            raise ConflictError(f"job {job.id} is not processing this inference callback")
         _mark_done_from_callback_sync(job, callback, result)
         session.commit()
         notify_platform_job_status_changed(job.id, job.status)
@@ -248,8 +239,8 @@ def _apply_callback_locked(callback: JobCallbackRequest) -> bool:
 
     try:
         result = _run_merge(context, callback)
-    except Exception as exc:
-        _mark_failed_after_merge(context.job_id, str(exc).strip() or "Callback merge failed")
+    except Exception:
+        _mark_failed_after_merge(context.job_id, "Callback processing failed")
         raise
 
     return _finalize_successful_callback(context, callback, result)

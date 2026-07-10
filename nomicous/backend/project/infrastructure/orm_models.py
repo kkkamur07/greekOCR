@@ -18,8 +18,15 @@ if TYPE_CHECKING:
 project_shared_users = Table(
     "project_shared_users",
     Base.metadata,
-    Column("project_id", UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True),
-    Column("user_id", UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
+    Column(
+        "project_id",
+        UUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "user_id", UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    ),
 )
 
 
@@ -47,4 +54,6 @@ class Project(Base):
     documents: Mapped[list[Document]] = relationship(
         "Document", back_populates="project", cascade="all, delete-orphan"
     )
-    model_bindings: Mapped[list[ModelBinding]] = relationship("ModelBinding", back_populates="project")
+    model_bindings: Mapped[list[ModelBinding]] = relationship(
+        "ModelBinding", back_populates="project"
+    )

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { clearAccessToken } from '../../auth/storage';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useAuthSession } from '../../auth/AuthProvider';
 
 export type BreadcrumbItem = {
   label: string;
@@ -22,20 +23,22 @@ export function TopNav({
   actions,
   onLogout,
 }: TopNavProps) {
-  const navigate = useNavigate();
+  const router = useRouter();
+  const { logout } = useAuthSession();
 
   const handleLogout = () => {
     if (onLogout) {
       onLogout();
       return;
     }
-    clearAccessToken();
-    navigate('/login');
+    void logout().finally(() => {
+      router.push('/login');
+    });
   };
 
   return (
     <nav className="topnav" aria-label="Main navigation">
-      <Link to="/projects" className="topnav-logo" aria-label="nomicous home">
+      <Link href="/projects" className="topnav-logo" aria-label="nomicous home">
         <img src="/nomos.svg" alt="" />
         <span>nomicous</span>
       </Link>
@@ -50,7 +53,7 @@ export function TopNav({
                 </span>
               )}
               {item.href ? (
-                <Link to={item.href}>{item.label}</Link>
+                <Link href={item.href}>{item.label}</Link>
               ) : (
                 <span className="current" aria-current="page">
                   {item.label}

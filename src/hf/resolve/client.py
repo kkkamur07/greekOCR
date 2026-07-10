@@ -7,8 +7,6 @@ from typing import Protocol
 
 
 class HubClient(Protocol):
-  def resolve_revision_sha(self, repo_id: str, revision: str) -> str: ...
-
   def snapshot_download(self, repo_id: str, revision: str, local_dir: Path) -> None: ...
 
 
@@ -46,30 +44,6 @@ def _hub_error_message(exc: Exception, *, repo_id: str, revision: str) -> str:
 
 
 class HuggingFaceHubClient:
-  def resolve_revision_sha(self, repo_id: str, revision: str) -> str:
-    from huggingface_hub import HfApi
-    from huggingface_hub.utils import HfHubHTTPError
-
-    try:
-      info = HfApi().repo_info(repo_id=repo_id, revision=revision, repo_type="model")
-    except Exception as exc:
-      if isinstance(exc, HfHubHTTPError) and exc.response is not None:
-        if exc.response.status_code in {401, 403}:
-          raise ValueError(_hub_error_message(exc, repo_id=repo_id, revision=revision)) from exc
-      if type(exc).__name__ in {
-        "RepositoryNotFoundError",
-        "RevisionNotFoundError",
-        "GatedRepoError",
-        "OfflineModeIsEnabled",
-      }:
-        raise ValueError(_hub_error_message(exc, repo_id=repo_id, revision=revision)) from exc
-      raise ValueError(_hub_error_message(exc, repo_id=repo_id, revision=revision)) from exc
-
-    sha = getattr(info, "sha", None)
-    if not sha:
-      raise ValueError(f"could not resolve Hub revision for {repo_id}@{revision}")
-    return str(sha)
-
   def snapshot_download(self, repo_id: str, revision: str, local_dir: Path) -> None:
     from huggingface_hub import snapshot_download
 

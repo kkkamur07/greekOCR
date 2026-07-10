@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from PIL import Image
+from src.hf.resolve.artifacts import verify_artifact_sha256
 
 from inference.contracts.segment import SegmentBlock, SegmentLine, SegmentRunResponse
 from inference.preprocessing.segment_geometry import simplify_kraken_boundary
@@ -141,10 +142,13 @@ def run_kraken_segment(
     image_bytes: bytes,
     *,
     model_path: Path,
+    artifact_sha256: str | None = None,
     params: dict[str, Any] | None = None,
 ) -> SegmentRunResponse:
     if not model_path.exists():
         raise FileNotFoundError(f"Kraken model not found: {model_path}")
+    if artifact_sha256:
+        verify_artifact_sha256(model_path, artifact_sha256)
 
     params = params or {}
     use_otsu_refinement = _bool_param(params, "use_otsu_refinement")

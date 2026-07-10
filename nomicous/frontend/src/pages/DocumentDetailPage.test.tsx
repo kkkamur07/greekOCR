@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { testRouter } from '../../vitest.setup';
 
 import { api, type DocumentWithPartsResponse } from '../api/client';
 import { ApiError } from '../api/errors';
@@ -40,6 +40,7 @@ const DOCUMENT: DocumentWithPartsResponse = {
   workflow: 'draft',
   created_at: '2026-06-16T10:00:00Z',
   updated_at: '2026-06-16T10:00:00Z',
+  part_count: 2,
   parts: [
     {
       id: 'part-2',
@@ -65,20 +66,8 @@ const DOCUMENT: DocumentWithPartsResponse = {
 };
 
 function renderDocumentPage(initialPath = '/projects/project-1/documents/doc-1') {
-  return render(
-    <MemoryRouter initialEntries={[initialPath]}>
-      <Routes>
-        <Route
-          path="/projects/:projectId/documents/:documentId"
-          element={<DocumentDetailPage />}
-        />
-        <Route
-          path="/projects/:projectId/documents/:documentId/parts/:partId"
-          element={<div>Page editor</div>}
-        />
-      </Routes>
-    </MemoryRouter>,
-  );
+  window.history.replaceState({}, '', initialPath);
+  return render(<DocumentDetailPage />);
 }
 
 describe('DocumentDetailPage', () => {
@@ -100,6 +89,7 @@ describe('DocumentDetailPage', () => {
       guidelines: null,
       created_at: '2026-01-01T00:00:00Z',
       updated_at: '2026-01-01T00:00:00Z',
+      document_count: 1,
     });
     vi.mocked(api.getDocument).mockResolvedValue(DOCUMENT);
   });
@@ -116,8 +106,9 @@ describe('DocumentDetailPage', () => {
     expect(rows).toHaveLength(2);
 
     fireEvent.click(rows[0]);
-
-    expect(await screen.findByText('Page editor')).toBeTruthy();
+    await waitFor(() => {
+      expect(testRouter().push).toHaveBeenCalledWith('/projects/project-1/documents/doc-1/parts/part-1');
+    });
   });
 
   it('shows review status on each part and lets a project member mark a part reviewed', async () => {

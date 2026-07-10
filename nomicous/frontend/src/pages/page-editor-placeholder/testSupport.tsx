@@ -1,8 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { vi } from 'vitest';
 
-import { api, type DocumentWithPartsResponse } from '../../api/client';
+import { api, type DocumentWithPartsResponse, type JobResponse } from '../../api/client';
 import { BackgroundJobsProvider } from '../../context/BackgroundJobsContext';
 import { BackgroundJobsPanel } from '../../components/BackgroundJobsPanel';
 import { PageEditorPlaceholderPage } from '../PageEditorPlaceholderPage';
@@ -50,11 +49,11 @@ vi.mock('../../api/client', async (importOriginal) => {
 
   async function waitForJob(
     jobId: string,
-    options?: { timeoutMs?: number; onUpdate?: (job: actual.JobResponse) => void },
-  ): Promise<actual.JobResponse> {
+    options?: { timeoutMs?: number; onUpdate?: (job: JobResponse) => void },
+  ): Promise<JobResponse> {
     const timeoutMs = options?.timeoutMs ?? 120_000;
     const deadline = Date.now() + timeoutMs;
-    let lastJob: actual.JobResponse | null = null;
+    let lastJob: JobResponse | null = null;
     while (Date.now() < deadline) {
       const job = await mockedApi.getJob(jobId);
       if (!lastJob || lastJob.status !== job.status || lastJob.updated_at !== job.updated_at) {
@@ -111,6 +110,7 @@ export const DOCUMENT: DocumentWithPartsResponse = {
   workflow: 'draft',
   created_at: '2026-06-16T10:00:00Z',
   updated_at: '2026-06-16T10:00:00Z',
+  part_count: 1,
   parts: [
     {
       id: 'part-1',
@@ -126,18 +126,12 @@ export const DOCUMENT: DocumentWithPartsResponse = {
 };
 
 export function renderPageEditor() {
+  window.history.replaceState({}, '', '/projects/project-1/documents/doc-1/parts/part-1');
   return render(
-    <MemoryRouter initialEntries={['/projects/project-1/documents/doc-1/parts/part-1']}>
-      <BackgroundJobsProvider>
-        <Routes>
-          <Route
-            path="/projects/:projectId/documents/:documentId/parts/:partId"
-            element={<PageEditorPlaceholderPage />}
-          />
-        </Routes>
-        <BackgroundJobsPanel />
-      </BackgroundJobsProvider>
-    </MemoryRouter>,
+    <BackgroundJobsProvider>
+      <PageEditorPlaceholderPage />
+      <BackgroundJobsPanel />
+    </BackgroundJobsProvider>,
   );
 }
 

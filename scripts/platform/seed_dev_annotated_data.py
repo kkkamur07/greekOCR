@@ -374,9 +374,7 @@ async def _pair_indexed_segments(
     if not indexed:
         return
 
-    lines = await document_service.list_part_lines(
-        session, user, project.id, document.id, part.id
-    )
+    lines = await document_service.list_part_lines(session, user, project.id, document.id, part.id)
     lines_by_order = {line.order: line for line in lines}
     for segment in indexed:
         order = int(segment.get("number", 1)) - 1
@@ -556,9 +554,7 @@ async def _import_document(
         await session.delete(existing)
         await session.commit()
 
-    document = await document_service.create_document(
-        session, user, project.id, name=doc_name
-    )
+    document = await document_service.create_document(session, user, project.id, name=doc_name)
     stats.documents_created = 1
 
     for page_stem in page_stems:

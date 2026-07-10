@@ -1,6 +1,8 @@
 # Issues
 
-Lightweight issue tracker for grab-bag work. For day-to-day docs see [`docs/README.md`](../docs/README.md).
+Lightweight issue tracker for grab-bag work. For day-to-day docs see
+[`docs/README.md`](../docs/README.md). For repo hygiene (kanban drift, doc
+links), see [`docs/repository-hygiene.md`](../docs/repository-hygiene.md).
 
 ---
 

@@ -14,6 +14,12 @@ from inference.infrastructure.db import SessionLocal
 from inference.infrastructure.orm_models import InferenceJob
 from inference.infrastructure.settings import get_inference_settings
 
+_QUEUE_ADMISSION_LOCK_KEY = 8_402_761
+
+
+class QueueSaturatedError(RuntimeError):
+    """Raised when the bounded inference queue cannot accept more work."""
+
 
 def create_job(request: JobSubmitRequest) -> InferenceJob:
     job = InferenceJob(
@@ -26,6 +32,20 @@ def create_job(request: JobSubmitRequest) -> InferenceJob:
         params=request.params,
     )
     with SessionLocal() as session:
+        # Serialize the count-and-insert admission decision across API processes.
+        session.execute(
+            text("SELECT pg_advisory_xact_lock(:lock_key)"),
+            {"lock_key": _QUEUE_ADMISSION_LOCK_KEY},
+        )
+        active_jobs = session.execute(
+            select(func.count())
+            .select_from(InferenceJob)
+            .where(
+                InferenceJob.status.in_([InferenceJobStatus.pending, InferenceJobStatus.running])
+            )
+        ).scalar_one()
+        if active_jobs >= get_inference_settings().inference_max_pending_jobs:
+            raise QueueSaturatedError("inference queue is saturated")
         session.add(job)
         session.flush()
         session.execute(
@@ -48,16 +68,13 @@ def get_job_by_id(job_id: uuid.UUID) -> InferenceJob | None:
 def claim_next_pending_job() -> InferenceJob | None:
     """Claim one pending inference job using FOR UPDATE SKIP LOCKED."""
     with SessionLocal() as session:
-        job = (
-            session.execute(
-                select(InferenceJob)
-                .where(InferenceJob.status == InferenceJobStatus.pending)
-                .order_by(InferenceJob.created_at, InferenceJob.id)
-                .with_for_update(skip_locked=True)
-                .limit(1)
-            )
-            .scalar_one_or_none()
-        )
+        job = session.execute(
+            select(InferenceJob)
+            .where(InferenceJob.status == InferenceJobStatus.pending)
+            .order_by(InferenceJob.created_at, InferenceJob.id)
+            .with_for_update(skip_locked=True)
+            .limit(1)
+        ).scalar_one_or_none()
         if job is None:
             return None
         now = datetime.now(UTC)

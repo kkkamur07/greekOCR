@@ -88,14 +88,3 @@ export const useKeyboardShortcuts = (handlers: ShortcutHandlers) => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handlers]);
 };
-
-export const KEYBOARD_SHORTCUTS = {
-  DRAW_BOX: 'B',
-  DRAW_POLYGON: 'P',
-  EDIT_VERTICES: 'V',
-  DELETE: 'Del/Backspace',
-  CANCEL: 'Esc',
-  UNDO: 'Ctrl+Z',
-  REDO: 'Ctrl+Shift+Z',
-  MOVE: 'Arrow Keys',
-};

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import Link from 'next/link';
 
 type AuthLayoutProps = {
   headline: string;
@@ -11,7 +11,7 @@ export function AuthLayout({ headline, tagline, children }: AuthLayoutProps) {
   return (
     <div className="auth-page">
       <aside className="auth-brand" aria-label="About nomicous">
-        <Link to="/" className="auth-brand-logo" aria-label="nomicous home">
+        <Link href="/" className="auth-brand-logo" aria-label="nomicous home">
           <img src="/nomos.svg" alt="" />
           <span>nomicous</span>
         </Link>
@@ -31,7 +31,7 @@ export function AuthLayout({ headline, tagline, children }: AuthLayoutProps) {
 export function AuthFormWrap({ children }: { children: ReactNode }) {
   return (
     <div className="auth-form-wrap">
-      <Link to="/" className="mobile-logo auth-brand-logo" aria-label="nomicous home">
+      <Link href="/" className="mobile-logo auth-brand-logo" aria-label="nomicous home">
         <img src="/nomos.svg" alt="" />
         <span>nomicous</span>
       </Link>

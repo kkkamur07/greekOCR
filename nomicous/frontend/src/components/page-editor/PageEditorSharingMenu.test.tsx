@@ -1,5 +1,4 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '../../api/client';
@@ -21,16 +20,14 @@ const mockedUpdateDocument = api.updateDocument as ReturnType<typeof vi.fn>;
 function renderMenu(workflow: 'draft' | 'published' | 'archived' = 'draft') {
   const onWorkflowChange = vi.fn();
   render(
-    <MemoryRouter>
-      <div role="menu">
-        <PageEditorSharingMenu
-          projectId="project-1"
-          documentId="doc-1"
-          workflow={workflow}
-          onWorkflowChange={onWorkflowChange}
-        />
-      </div>
-    </MemoryRouter>,
+    <div role="menu">
+      <PageEditorSharingMenu
+        projectId="project-1"
+        documentId="doc-1"
+        workflow={workflow}
+        onWorkflowChange={onWorkflowChange}
+      />
+    </div>,
   );
   return { onWorkflowChange };
 }

@@ -16,22 +16,3 @@ export function getPageEditorProcessingLabel(kind: PageEditorProcessingKind): st
       return null;
   }
 }
-
-type PageEditorProcessingBannerProps = {
-  kind: PageEditorProcessingKind;
-};
-
-export function PageEditorProcessingBanner({ kind }: PageEditorProcessingBannerProps) {
-  const label = getPageEditorProcessingLabel(kind);
-  if (!label) return null;
-
-  return (
-    <div className="pe-processing-banner" role="status" aria-live="polite">
-      <span className="pe-processing-banner__spinner" aria-hidden="true" />
-      <span className="pe-processing-banner__label">{label}</span>
-      <span className="pe-processing-banner__hint">
-        Track progress in the jobs panel (bottom-right).
-      </span>
-    </div>
-  );
-}
