@@ -56,7 +56,10 @@ The platform API needs only:
 - `nomicous/infrastructure/`
 - `nomicous/VERSION`
 - `inference/registry.yaml`
+- `inference/admission.py`
 - `inference/contracts/`
+- `inference/infrastructure/__init__.py`
+- `inference/infrastructure/settings.py`
 - `inference/registry/`
 
 It does not bundle model weights, training code, inference runtimes, notebooks,
@@ -120,6 +123,7 @@ Set:
 ```bash
 JOB_WORKER_ENABLED=false
 JOB_SSE_NOTIFICATIONS_ENABLED=false
+CLOUD_INFERENCE_ENABLED=false
 # Set true only when this is a fixed, allowlisted proxy source range.
 BEHIND_PROXY=false
 # FORWARDED_ALLOW_IPS=203.0.113.0/24
@@ -194,3 +198,41 @@ Rollback when p95 latency is more than 50% above baseline, error rate exceeds
 issue appears. For a region-specific regression, remove `regions` from
 `deploy/platform/vercel.json`, redeploy the last known-good version, and repeat
 the health and smoke checks.
+
+## July 2026 production incident and fixes
+
+The first production deployment built successfully but returned
+`FUNCTION_INVOCATION_FAILED` on every request. The failures were startup
+validation errors, not a Vercel build or Frankfurt connectivity problem. They
+were fixed in this order:
+
+1. `FORWARDED_ALLOW_IPS=*` was rejected by the hardened settings. The unsafe
+   value was removed.
+2. `BEHIND_PROXY=true` was enabled without an explicit trusted proxy CIDR. It
+   was changed to `false`; forwarded headers are not trusted until Vercel's
+   source range is explicitly allowlisted.
+3. Production required an HTTPS `INFERENCE_URL`. The optional cloud endpoint
+   was set to `https://inference.nomicous.com`.
+4. Production validation required non-placeholder
+   `INFERENCE_WEBHOOK_SECRET` and `INFERENCE_SERVICE_SECRET`. Both were added
+   to Vercel as encrypted Production variables from the local ignored secret
+   store. Their values are never committed or printed.
+5. The migrated Next.js app required `NEXT_PUBLIC_*` variables, while the
+   Vercel project still contained the old `VITE_*` names. The public API,
+   CSRF-cookie, test-job, and local-helper variables were corrected.
+
+The API function is pinned to Frankfurt with `"regions": ["fra1"]` in
+`deploy/platform/vercel.json`. The landing page and app remain globally served;
+only the API function is region-pinned.
+
+For the time being, local OCR uses the user's local helper:
+
+```text
+Browser on the user's machine → http://localhost:8001
+```
+
+This is configured as `NEXT_PUBLIC_INFERENCE_HELPER_URL` for the frontend and
+is allowed by the frontend Content Security Policy. It must not replace the
+API's production `INFERENCE_URL`: `localhost` inside a Vercel function refers
+to that ephemeral function container, not the researcher's computer. Cloud
+inference remains disabled until a persistent inference host is enabled.

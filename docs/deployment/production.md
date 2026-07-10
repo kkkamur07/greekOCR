@@ -9,7 +9,7 @@ Architecture overview: [root README](../../README.md#production-hosting). Server
 | [nomicous.com](https://nomicous.com) | `nomicous-landing` | `landing/` | Static marketing site |
 | [app.nomicous.com](https://app.nomicous.com) | `nomicous-app` | `nomicous/frontend/` | Next.js App Router client |
 | [api.nomicous.com](https://api.nomicous.com) | `nomicous-api` | `deploy/platform/` | FastAPI platform API |
-| [inference.nomicous.com](https://inference.nomicous.com) | **Not Vercel** — see below | Docker image | ML inference API + worker |
+| [inference.nomicous.com](https://inference.nomicous.com) | **Not Vercel** — optional | Docker image | Optional cloud ML inference API + worker |
 
 Supabase setup: [`supabase.md`](supabase.md).
 Local development: [`../guides/local-development.md`](../guides/local-development.md).
@@ -23,27 +23,28 @@ Browser
   ├─ nomicous.com          → Vercel (static landing)
   ├─ app.nomicous.com      → Vercel (Next.js App Router)
   │     ├─ REST + JWT      → api.nomicous.com (Vercel serverless FastAPI)
-  │     └─ optional        → localhost:8001 Inference Helper (user machine)
+  │     └─ local OCR       → 127.0.0.1:8001 Inference Helper (user machine)
   │
   ├─ api.nomicous.com      → Supabase Postgres + Storage
-  └─ inference.nomicous.com → Supabase Postgres (inference_jobs table)
+  └─ optional inference.nomicous.com → Supabase Postgres (inference_jobs table)
 
 Background (persistent compute, not serverless):
   platform-worker   → claims platform jobs, submits to inference API
   inference-worker  → runs OCR/segment models, callbacks to api
 ```
 
-### Why inference is not on Vercel
+### Why local inference is the default
 
-The inference service bundles the **PyTorch Calamari runtime** and **Kraken** and
+The local Inference Helper bundles the **PyTorch Calamari runtime** and **Kraken** and
 runs jobs for up to **30 minutes**. Hub weights are resolved lazily into the
 runtime cache; the default Kraken BLLA asset comes from the installed `kraken`
-package. Vercel serverless functions have strict size limits and short
-execution timeouts. Deploy inference with the existing
-[`inference/Dockerfile`](../inference/Dockerfile) on **Railway**, **Fly.io**, or
-similar.
+package. Vercel serverless functions have strict size limits and short execution
+timeouts, so researchers run inference on their own machines through the
+loopback-only helper; the hosted platform persists only the result.
 
-The **platform job worker** also needs a long-running process. Run it as a second service on the same host as inference (see [`deploy/inference/README.md`](../../deploy/inference/README.md)).
+Cloud inference remains optional. If it is enabled later, deploy the existing
+[`inference/Dockerfile`](../inference/Dockerfile) and the platform worker on a
+persistent host (see [`deploy/inference/README.md`](../../deploy/inference/README.md)).
 
 Local inference via the **Inference Helper** (DMG installer) remains the primary path for researchers who want on-device OCR; cloud inference is optional.
 
@@ -96,6 +97,9 @@ Environment variables (Production):
 
 ```bash
 NEXT_PUBLIC_API_BASE_URL=https://api.nomicous.com
+NEXT_PUBLIC_CSRF_COOKIE_NAME=greekocr-csrf
+NEXT_PUBLIC_INFERENCE_HELPER_URL=http://localhost:8001
+NEXT_PUBLIC_ENABLE_TEST_JOBS=false
 ```
 
 Template: [`nomicous/frontend/.env.production.example`](../nomicous/frontend/.env.production.example).
@@ -121,8 +125,8 @@ Environment variables: copy from [`nomicous/backend/core/.env.production.example
 |----------|------------------|-----|
 | `JOB_WORKER_ENABLED` | `false` | Worker runs on persistent host |
 | `JOB_SSE_NOTIFICATIONS_ENABLED` | `false` | NOTIFY listener needs long-lived process |
-| `BEHIND_PROXY` | `true` only behind an allowlisted proxy | Enables forwarded-header processing |
-| `FORWARDED_ALLOW_IPS` | Fixed proxy source IP/CIDR list | Required with `BEHIND_PROXY=true`; never `*` |
+| `BEHIND_PROXY` | `false` (current Vercel deployment) | Forwarded headers are not trusted without a fixed proxy allowlist |
+| `FORWARDED_ALLOW_IPS` | Unset (current Vercel deployment) | Set explicit IP/CIDRs before enabling `BEHIND_PROXY`; never `*` |
 | `CORS_ORIGINS` | `https://app.nomicous.com` | Browser origin |
 | `STORAGE_BACKEND` | `supabase` | No local filesystem on Vercel |
 
@@ -145,9 +149,10 @@ Vercel-specific Python runtime, bundle-size, and dependency notes:
 
 ---
 
-## 3. Inference + platform worker (persistent host)
+## 3. Optional cloud inference + platform worker (persistent host)
 
-See [`deploy/inference/README.md`](../../deploy/inference/README.md).
+Skip this section for the default local-helper deployment. If you later enable
+cloud jobs, see [`deploy/inference/README.md`](../../deploy/inference/README.md).
 
 Minimum services:
 
@@ -157,7 +162,11 @@ Minimum services:
 | `inference-worker` | `python -m inference.jobs.worker` | — |
 | `platform-worker` | `python -m backend.jobs.worker_main` | — |
 
-Point `INFERENCE_URL` on the platform API to `https://inference.nomicous.com`.
+Cloud inference is currently disabled. If it is enabled later, set
+`CLOUD_INFERENCE_ENABLED=true` and point `INFERENCE_URL` on the platform API to
+`https://inference.nomicous.com`. Do not set the platform API's production
+`INFERENCE_URL` to `localhost:8001`; that address belongs to the browser-side
+local helper and is configured with `NEXT_PUBLIC_INFERENCE_HELPER_URL`.
 Set `INFERENCE_CALLBACK_URL` on inference to `https://api.nomicous.com/internal/inference/job-complete`.
 Use the distinct API, platform-worker, and inference-worker database principals
 from [`database-roles.md`](database-roles.md); do not give these containers the
@@ -173,13 +182,17 @@ Supabase operator/migration URI.
 | `www` | CNAME | Vercel (redirect to apex) |
 | `app` | CNAME | Vercel app project |
 | `api` | CNAME | Vercel API project |
-| `inference` | CNAME | Railway / Fly inference host |
+| `inference` | CNAME | Railway / Fly inference host (optional cloud jobs) |
 
 ---
 
 ## 5. Inference Helper (local OCR)
 
-Ship the macOS DMG from GitHub Releases. Set `HELPER_CORS_ORIGINS=https://app.nomicous.com` when building production helper packages (see [`packaging/helper/README.md`](../packaging/helper/README.md)).
+Ship the macOS DMG from GitHub Releases. The installer configures the loopback-only
+helper for `https://app.nomicous.com` at runtime; it does not embed a browser secret.
+For another stable app origin, set `HELPER_CORS_ORIGINS` while installing as described
+in [`packaging/helper/README.md`](../packaging/helper/README.md). Do not use wildcard
+origins or preview domains.
 
 ---
 
