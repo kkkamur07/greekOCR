@@ -22,7 +22,7 @@ HELPER_AUTH_SECRET_HEADER = "X-Inference-Helper-Secret"
 
 def create_helper_app() -> FastAPI:
     settings = apply_helper_environment()
-    app = FastAPI(title="Nomicous Inference Helper", version="0.1.2")
+    app = FastAPI(title="Nomicous Inference Helper", version="0.1.3")
     app.add_middleware(
         RequestBodyLimitMiddleware,
         max_body_bytes=settings.inference_max_request_body_bytes,
