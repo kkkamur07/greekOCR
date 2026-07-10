@@ -171,25 +171,23 @@ Docs drift, gitignore, dead-code rituals, and improvement roadmap:
 
 ## Code audit
 
-Full-stack findings, critical issues, and phased fix order (July 2026):
+Launch readiness — scores, blockers, sprint order:
 
 [`docs/codebase-audit.md`](../../docs/codebase-audit.md)
 
 ## Dead code
 
-Cleanup audit (candidates, confidence levels, PR order):
+Cleanup candidates and PR order:
 
 [`docs/repository-cleanup-plan.md`](../../docs/repository-cleanup-plan.md)
 
-Ritual (grep → test → commit message):
-
-[`docs/repository-hygiene.md#dead-code-ritual`](../../docs/repository-hygiene.md#dead-code-ritual)
+Ritual: [`docs/repository-hygiene.md#dead-code-ritual`](../../docs/repository-hygiene.md#dead-code-ritual)
 
 ## Performance
 
-Latency and optimization plan:
-
 [`docs/frontend/performance-optimization.md`](../../docs/frontend/performance-optimization.md)
+
+Full frontend docs: [`docs/frontend/README.md`](../../docs/frontend/README.md)
 
 ## Special Notes
 

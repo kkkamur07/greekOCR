@@ -181,14 +181,14 @@ curl http://127.0.0.1:8001/inference/v1/catalog
 
 Download the native helper installers from the
 [latest GitHub release](https://github.com/kkkamur07/greekOCR/releases/latest).
-The current `inference-helper-v0.1.1` release is distributed as follows
+The current `inference-helper-v0.1.3` release is distributed as follows
 (compressed download sizes; future builds may vary slightly):
 
 | Platform | Release asset | Approx. size |
 |---|---|---:|
-| macOS | [`nomicous-inference-helper-macos.dmg`](https://github.com/kkkamur07/greekOCR/releases/download/inference-helper-v0.1.1/nomicous-inference-helper-macos.dmg) | 311.6 MiB |
-| Windows | [`nomicous-inference-helper-windows.zip`](https://github.com/kkkamur07/greekOCR/releases/download/inference-helper-v0.1.1/nomicous-inference-helper-windows.zip) | 301.8 MiB |
-| Linux | [`nomicous-inference-helper-linux.tar.gz`](https://github.com/kkkamur07/greekOCR/releases/download/inference-helper-v0.1.1/nomicous-inference-helper-linux.tar.gz) | 432.2 MiB |
+| macOS | [`nomicous-inference-helper-macos.dmg`](https://github.com/kkkamur07/greekOCR/releases/download/inference-helper-v0.1.3/nomicous-inference-helper-macos.dmg) | 311.6 MiB |
+| Windows | [`nomicous-inference-helper-windows.zip`](https://github.com/kkkamur07/greekOCR/releases/download/inference-helper-v0.1.3/nomicous-inference-helper-windows.zip) | 301.8 MiB |
+| Linux | [`nomicous-inference-helper-linux.tar.gz`](https://github.com/kkkamur07/greekOCR/releases/download/inference-helper-v0.1.3/nomicous-inference-helper-linux.tar.gz) | 432.2 MiB |
 
 These bundles are large because they include the CPU PyTorch, Kraken, and
 Calamari runtime so the helper works without a separate Python installation.
@@ -453,3 +453,6 @@ docs/                  Deployment, testing, architecture, and decisions
 - [Deployment guide](docs/deployment/production.md)
 - [Hugging Face publishing and model registry guide](scripts/hf/README.md)
 - [Project documentation index](docs/README.md)
+- [Launch readiness audit](docs/codebase-audit.md)
+- [Repository hygiene](docs/repository-hygiene.md)
+- [Cleanup plan](docs/repository-cleanup-plan.md)

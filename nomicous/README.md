@@ -2,7 +2,7 @@
 
 AI-assisted transcription platform for manuscript pages. `nomicous/` is the production app root: the Postgres-backed backend, Next.js frontend, and migration infrastructure live here, while the repository-level `model/` workspace remains outside nomicous.
 
-See `CONTEXT.md` for domain glossary, [`docs/README.md`](../docs/README.md) for guides and deployment, and [`issues/README.md`](../issues/README.md) for backlog and archived work.
+See `CONTEXT.md` for domain glossary and [`docs/README.md`](../docs/README.md) for guides, deployment, and audits.
 
 ## Data layout
 

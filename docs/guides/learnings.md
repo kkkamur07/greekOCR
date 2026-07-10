@@ -22,7 +22,7 @@ We use **Supabase** for **shared test/staging and production database hosting**,
 |------------------|---------|
 | Supabase Auth | Existing JWT + user tables |
 | PostgREST / Data API | Backend talks SQL directly via SQLAlchemy |
-| Row Level Security (RLS) | Authorization in FastAPI; migration `021` drops RLS roles |
+| Row Level Security (RLS) | Disabled; authorization remains in FastAPI |
 
 ### Connection URLs
 
@@ -40,7 +40,7 @@ Supabase exposes multiple Postgres endpoints. We use:
 |---------|-------|-----|
 | `prepared statement "..." already exists` with pooler | Transaction pooler + asyncpg statement cache | Set `statement_cache_size=0` on async engine (see `infrastructure/db.py`) |
 | Alembic fails on password with `%` or `@` | URL special characters | Percent-encode password in connection URL; Alembic `env.py` doubles `%` for ConfigParser |
-| Migration permission errors on new tables | Supabase default privileges / RLS | Run migrations with direct `MIGRATOR_DATABASE_URL`; see migration `021` |
+| Migration permission errors on new tables | Supabase default privileges | Run migrations with direct `MIGRATOR_DATABASE_URL`; verify `002_service_roles` grants |
 | Images 404 in Supabase profile | `STORAGE_BACKEND` still `local` or missing bucket key | Set `STORAGE_BACKEND=supabase`, `SUPABASE_SERVICE_ROLE_KEY`, bucket name in `.env.supabase` |
 | SSL required | Hosted Postgres | `sslmode=require` on remote URLs |
 | Schema drift between dev and staging | Migrations not run on Supabase | `./scripts/platform/migrate_supabase.sh` after pulling Alembic revisions |

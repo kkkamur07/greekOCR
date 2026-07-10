@@ -282,4 +282,4 @@ See [`packaging/helper/README.md`](../../packaging/helper/README.md).
 - [`inference/README.md`](../../inference/README.md) — inference service and helper
 - [`scripts/hf/README.md`](../../scripts/hf/README.md) — Hub publish and prefetch
 - [`README.md`](../../README.md#local-inference-helper) — local vs remote inference architecture
-- [`issues/done/huggingface/036-hf-registry-id-migration.md`](../../issues/done/huggingface/036-hf-registry-id-migration.md) — registry id naming migration (historical)
+- Issue **036** — registry id naming migration (historical; see git history on branches with `issues/done/`)

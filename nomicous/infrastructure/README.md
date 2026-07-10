@@ -20,7 +20,7 @@ infrastructure/
   models.py                      # imports all context ORM models for Alembic
   alembic.ini                    # Alembic config
   alembic/
-    env.py                       # reads SYNC_DATABASE_URL from backend settings
+    env.py                       # reads MIGRATOR_DATABASE_URL from backend settings
     script.py.mako               # migration template
     versions/                    # ordered database revisions
 ```
@@ -132,20 +132,12 @@ PYTHONPATH=. alembic -c infrastructure/alembic.ini downgrade -1
 
 | Revision | Domain | Main changes |
 |----------|--------|--------------|
-| `001_users` | users | `users` |
-| `002_project` | project | `projects`, `project_shared_users` |
-| `003_inference_models` | ML model catalog | `inference_models` and `inference_task` enum |
-| `004_document_layout` | document layout | `documents`, `document_parts`, `blocks`, `lines`, document workflow enum |
-| `005_inference_jobs` | ML bindings and jobs | `model_bindings`, `jobs`, job status/type enums |
-| `006_document_transcriptions` | document text | `transcriptions`, `line_transcriptions`, transcription kind enum |
-| `007_doc_line_tx` | document line model | reviewed parts, line geometry kind/source, points/source metadata/Kraken ceiling/manual flags |
-| `008_page_tx_lines` | Pairing helper | `page_transcription_lines` |
-| `009_annotation_history` | annotation history | `annotation_history_snapshots` |
-| `010_jobs_payload_gin` | jobs performance | GIN index for `jobs.payload` containment queries |
-| `011_auth_rate_limit` | Auth brute-force protection | Postgres-backed `auth_rate_limit_attempts` |
+| `001_initial_schema` | application schema | All final ORM tables, enums, constraints, indexes, and the ML-owned `inference_jobs` queue |
+| `002_service_roles` | service permissions | NOLOGIN service groups and default/table grants; provider-managed LOGIN membership remains external |
 
-`006` depends on jobs because `transcriptions.created_by_job_id` can reference
-`jobs`. `008` and `009` build on the merged Page/Line transcription model.
+The history was squashed before production. The baseline represents the final
+post-021 behavior: FastAPI owns authorization and PostgreSQL RLS is disabled.
+The baseline downgrade is intended for disposable databases only.
 
 ## Database Structure
 

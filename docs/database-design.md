@@ -743,10 +743,9 @@ group role. Credentials belong in the deployment secret store.
 
 ### 10.3 Row-level security
 
-The production security migration enables and forces RLS on application tables.
-The API sets transaction/session context such as the current application user
-when RLS-aware access is used. The policies use helper functions to evaluate
-project, document, and part access.
+PostgreSQL RLS is disabled for this application. Authorization is enforced by
+the FastAPI service before repository queries execute; the database service
+roles provide process-level least privilege, not user-level authorization.
 
 Do not assume that a database login role alone provides user-level
 authorization. The service role and application context are separate layers.
@@ -763,7 +762,7 @@ credentials.
 3. Update the relevant service/repository tests.
 4. Run the migration against a development database first.
 5. Run database security/advisor checks for production Supabase.
-6. Verify indexes, foreign-key behavior, RLS behavior, and service-role
+6. Verify indexes, foreign-key behavior, the no-RLS boundary, and service-role
    permissions.
 7. Update this document when a table, ownership boundary, state transition, or
    connection rule changes.

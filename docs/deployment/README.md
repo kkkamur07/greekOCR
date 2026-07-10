@@ -1,10 +1,22 @@
-# Deployment docs
+# Deployment documentation
+
+Hosted environments, database operations, and release evidence.
 
 | Doc | When to read |
 |-----|----------------|
-| [supabase.md](supabase.md) | Setting up hosted Postgres + Storage for test/staging |
-| [database-roles.md](database-roles.md) | Provisioning least-privilege database principals and grants |
-| [production.md](production.md) | Going live on nomicous.com (Vercel + workers) |
-| [vercel-platform-api.md](vercel-platform-api.md) | Vercel Python API build settings, bundle limits, dependency trimming |
+| [production.md](production.md) | **Primary runbook** — Vercel (landing, app, API), workers, rollback |
+| [supabase.md](supabase.md) | Hosted Postgres + Storage, env vars, migrations |
+| [database-roles.md](database-roles.md) | Least-privilege API, worker, and migrator roles |
+| [vercel-platform-api.md](vercel-platform-api.md) | Vercel Python runtime, bundle size, dependency trimming |
+| [nomicous-backend-hardening.md](nomicous-backend-hardening.md) | Backend security and boundary hardening |
+| [release-evidence.md](release-evidence.md) | Per-deploy checklist — baselines, smoke tests, sign-off |
+
+**Schema and jobs:** [database-design.md](../database-design.md)  
+**Launch audit:** [codebase-audit.md](../codebase-audit.md)
+
+Deploy configs outside `docs/`:
+
+- [`deploy/platform/`](../../deploy/platform/) — Vercel API bundle
+- [`deploy/inference/`](../../deploy/inference/) — Inference API + worker
 
 Back to [docs index](../README.md).

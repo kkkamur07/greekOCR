@@ -17,7 +17,7 @@ Related:
 | [codebase-audit.md](codebase-audit.md) | Full-stack audit — security, performance, launch readiness |
 | [frontend/nextjs-migration.md](frontend/nextjs-migration.md) | Completed Next.js migration record |
 | [guides/testing.md](guides/testing.md) | Test lanes and CI commands |
-| [issues/README.md](../issues/README.md) | File-based backlog and kanban |
+| [docs index](README.md) | Backlog — GitHub Issues (file-based `issues/` on some branches) |
 
 ---
 
@@ -71,23 +71,21 @@ Bounded contexts inside `nomicous/backend/` (`users`, `project`, `document`,
 
 ## Known hygiene debt
 
-### H1 — Doc reorg in flight / broken index links
+### H1 — Doc index integrity
 
-The working tree may contain a **large docs migration** not yet on `main`:
+The docs tree is indexed from [`docs/README.md`](README.md). Section indexes:
 
-| Removed (legacy) | Replaced by |
-|------------------|-------------|
-| `docs/decisions/` | `docs/adr/` |
-| `docs/architecture/` | ADRs + service READMEs |
-| `docs/todo.md` | `issues/` backlog |
+| Section | Index |
+|---------|--------|
+| Guides | [`guides/README.md`](guides/README.md) |
+| Frontend | [`frontend/README.md`](frontend/README.md) |
+| Deployment | [`deployment/README.md`](deployment/README.md) |
+| Inference | [`inference/README.md`](inference/README.md) |
+| ADRs | [`adr/README.md`](adr/README.md) |
+| Quality | `codebase-audit.md`, `repository-hygiene.md`, `repository-cleanup-plan.md` |
 
-**Risk:** `docs/README.md` may still link to files not on every branch (e.g.
-`codebase-audit.md`) — a broken index is worse than no index. The cleanup
-audit lives in [repository-cleanup-plan.md](repository-cleanup-plan.md).
-
-**Fix:** Land the full reorg in **one atomic commit**: delete old paths, add new
-ones, verify every `*.md` link resolves. Treat “docs index has zero broken
-links” as a merge gate.
+**Ritual:** Before merging doc changes, verify every `*.md` link in `docs/README.md`
+resolves. Legacy `docs/todo.md` and `docs/decisions/` are retired.
 
 ---
 
@@ -191,7 +189,7 @@ they need the **research** or **product** path.
 ```markdown
 ## I want to…
 
-- **Run the annotation app** → [nomicous/README.md](nomicous/README.md)
+- **Run the annotation app** → [nomicous/README.md](../nomicous/README.md)
 - **Train / evaluate OCR models** → [Training](#training-src-and-inference-inference) (below)
 - **Deploy to production** → [docs/deployment/production.md](deployment/production.md)
 ```
@@ -398,7 +396,7 @@ product/    ← nomicous/, inference/, landing/
 | Docker / deployment build | No | Disabled (`deployment.yml`) |
 
 Gap to close: re-enable deployment workflow or equivalent image-build gate —
-see [codebase-audit.md](codebase-audit.md) if present.
+see [codebase-audit.md](codebase-audit.md).
 
 ---
 
