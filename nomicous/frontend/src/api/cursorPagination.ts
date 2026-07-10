@@ -18,7 +18,7 @@ const DEFAULT_MAX_PAGES = 10;
 
 function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) {
-    throw new DOMException('The request was cancelled.', 'AbortError');
+    throw new DOMException("The request was cancelled.", "AbortError");
   }
 }
 
@@ -32,7 +32,7 @@ export async function collectCursorPages<T>(
 ): Promise<T[]> {
   const maxPages = options.maxPages ?? DEFAULT_MAX_PAGES;
   if (!Number.isInteger(maxPages) || maxPages < 1) {
-    throw new Error('maxPages must be a positive integer.');
+    throw new Error("maxPages must be a positive integer.");
   }
 
   const items: T[] = [];
@@ -48,7 +48,7 @@ export async function collectCursorPages<T>(
     const nextCursor = page.next_cursor;
     if (!nextCursor) return items;
     if (seenCursors.has(nextCursor)) {
-      throw new Error('Cursor pagination repeated a cursor.');
+      throw new Error("Cursor pagination repeated a cursor.");
     }
     seenCursors.add(nextCursor);
     cursor = nextCursor;

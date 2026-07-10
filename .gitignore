@@ -1,4 +1,6 @@
-# Python-generated files
+# Docker build cache (docker buildx bake)
+.docker-cache/
+
 __pycache__/
 *.py[oc]
 build/

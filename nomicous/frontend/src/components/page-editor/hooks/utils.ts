@@ -3,10 +3,10 @@ import type {
   LineTranscriptionResponse,
   PartLayoutResponse,
   TranscriptionLayerResponse,
-} from '../../../api/client';
+} from "../../../api/client";
 
 /** Optional until OpenAPI types include text_source on LineTranscriptionResponse. */
-export type LineTranscriptionTextSource = 'model' | 'human_edited';
+export type LineTranscriptionTextSource = "model" | "human_edited";
 
 export type LineTranscriptionWithTextSource = LineTranscriptionResponse & {
   text_source?: LineTranscriptionTextSource | null;
@@ -15,7 +15,7 @@ export type LineTranscriptionWithTextSource = LineTranscriptionResponse & {
 export function approvedText(line: LineResponse): string | null {
   return (
     line.line_transcriptions.find(
-      (transcription) => transcription.transcription_kind === 'ground_truth',
+      (transcription) => transcription.transcription_kind === "ground_truth",
     )?.text ?? null
   );
 }
@@ -29,9 +29,12 @@ export function segmentIdsWithGroundTruth(lines: LineResponse[]): Set<string> {
   return new Set(lines.filter(segmentHasGroundTruth).map((line) => line.id));
 }
 
-export function lineTextForLayer(line: LineResponse, transcriptionLayerId: string | null): string {
-  if (!transcriptionLayerId) return '';
-  return lineTranscriptionForLayer(line, transcriptionLayerId)?.text ?? '';
+export function lineTextForLayer(
+  line: LineResponse,
+  transcriptionLayerId: string | null,
+): string {
+  if (!transcriptionLayerId) return "";
+  return lineTranscriptionForLayer(line, transcriptionLayerId)?.text ?? "";
 }
 
 export function lineTranscriptionForLayer(
@@ -41,7 +44,8 @@ export function lineTranscriptionForLayer(
   if (!transcriptionLayerId) return null;
   return (
     line.line_transcriptions.find(
-      (transcription) => transcription.transcription_id === transcriptionLayerId,
+      (transcription) =>
+        transcription.transcription_id === transcriptionLayerId,
     ) ?? null
   );
 }
@@ -51,7 +55,7 @@ export function modelTranscriptionForLine(
   preferredLayerId?: string | null,
 ): LineTranscriptionResponse | null {
   const modelTranscriptions = line.line_transcriptions.filter(
-    (transcription) => transcription.transcription_kind === 'model',
+    (transcription) => transcription.transcription_kind === "model",
   );
   if (modelTranscriptions.length === 0) return null;
   if (preferredLayerId) {
@@ -67,8 +71,10 @@ export function showsModelSourceReview(
   transcription: LineTranscriptionResponse | null,
 ): boolean {
   if (!transcription) return false;
-  if (transcription.transcription_kind === 'model') return true;
-  return (transcription as LineTranscriptionWithTextSource).text_source === 'model';
+  if (transcription.transcription_kind === "model") return true;
+  return (
+    (transcription as LineTranscriptionWithTextSource).text_source === "model"
+  );
 }
 
 export function transcriptionForOcrReview(
@@ -77,7 +83,7 @@ export function transcriptionForOcrReview(
 ): LineTranscriptionResponse | null {
   if (!selectedLayer) return null;
   const layerTranscription = lineTranscriptionForLayer(line, selectedLayer.id);
-  if (selectedLayer.kind === 'model') {
+  if (selectedLayer.kind === "model") {
     return layerTranscription;
   }
   if (layerTranscription && showsModelSourceReview(layerTranscription)) {
@@ -90,13 +96,16 @@ export function modelLayerIdForPromotion(
   line: LineResponse,
   selectedLayer: TranscriptionLayerResponse | null,
 ): string | null {
-  if (selectedLayer?.kind === 'model') {
+  if (selectedLayer?.kind === "model") {
     return selectedLayer.id;
   }
   return modelTranscriptionForLine(line)?.transcription_id ?? null;
 }
 
-export function mergeSavedLine(lines: LineResponse[], saved: LineResponse): LineResponse[] {
+export function mergeSavedLine(
+  lines: LineResponse[],
+  saved: LineResponse,
+): LineResponse[] {
   const index = lines.findIndex((line) => line.id === saved.id);
   if (index === -1) {
     return [...lines, saved].sort((a, b) => a.order - b.order);
@@ -114,15 +123,16 @@ export function withLocalGroundTruth(
   return lines.map((line) => {
     if (line.id !== lineId) return line;
     const existing = line.line_transcriptions.filter(
-      (transcription) => transcription.transcription_kind !== 'ground_truth',
+      (transcription) => transcription.transcription_kind !== "ground_truth",
     );
     const nextTranscription: LineTranscriptionResponse = {
       id:
         line.line_transcriptions.find(
-          (transcription) => transcription.transcription_kind === 'ground_truth',
+          (transcription) =>
+            transcription.transcription_kind === "ground_truth",
         )?.id ?? `ground-truth-${lineId}`,
       transcription_id: groundTruthTranscriptionId,
-      transcription_kind: 'ground_truth',
+      transcription_kind: "ground_truth",
       text,
       confidence: null,
     };
@@ -163,7 +173,7 @@ export function syncLayoutLinesFromSegments(
 
 export function applyLayoutLineGeometryToSegments(
   segments: LineResponse[],
-  layoutLines: PartLayoutResponse['lines'],
+  layoutLines: PartLayoutResponse["lines"],
 ): LineResponse[] {
   const byId = new Map(layoutLines.map((line) => [line.id, line]));
   return segments.map((segment) => {

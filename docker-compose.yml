@@ -4,7 +4,7 @@ x-api-build: &api-build
   context: .
   dockerfile: nomicous/Dockerfile
   args:
-    APP_VERSION: ${NOMICOUS_VERSION:-0.3.3}
+    APP_VERSION: ${NOMICOUS_VERSION:-0.3.2}
 
 x-inference-build: &inference-build
   context: .
@@ -41,9 +41,9 @@ services:
       CORS_ORIGINS: http://localhost:3000,http://localhost:5173
       MEDIA_ROOT: /app/backend/media
       NOMICOUS_APP_ROOT: /app
+      CLOUD_INFERENCE_ENABLED: "true"
       INFERENCE_URL: http://inference-api:8001
       INFERENCE_WEBHOOK_SECRET: ${INFERENCE_WEBHOOK_SECRET:?copy .env.compose.example to .env and set INFERENCE_WEBHOOK_SECRET}
-      INFERENCE_SERVICE_SECRET: ${INFERENCE_SERVICE_SECRET:?copy .env.compose.example to .env and set INFERENCE_SERVICE_SECRET}
       # API hosts remain request/response only; Compose runs platform-worker separately.
       JOB_WORKER_ENABLED: "false"
       JOB_SSE_NOTIFICATIONS_ENABLED: "false"
@@ -87,7 +87,6 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?copy .env.compose.example to .env and set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-kalamos}
       SYNC_DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?copy .env.compose.example to .env and set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-kalamos}
       INFERENCE_URL: http://inference-api:8001
-      INFERENCE_WEBHOOK_SECRET: ${INFERENCE_WEBHOOK_SECRET:?copy .env.compose.example to .env and set INFERENCE_WEBHOOK_SECRET}
       INFERENCE_SERVICE_SECRET: ${INFERENCE_SERVICE_SECRET:?copy .env.compose.example to .env and set INFERENCE_SERVICE_SECRET}
       JOB_WORKER_ENABLED: "true"
       JOB_SSE_NOTIFICATIONS_ENABLED: "false"
@@ -115,7 +114,6 @@ services:
       INFERENCE_DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?copy .env.compose.example to .env and set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-kalamos}
       INFERENCE_CALLBACK_URL: http://api:8000/internal/inference/job-complete
       INFERENCE_REGISTRY_PATH: /app/inference/registry.yaml
-      INFERENCE_WEBHOOK_SECRET: ${INFERENCE_WEBHOOK_SECRET:?copy .env.compose.example to .env and set INFERENCE_WEBHOOK_SECRET}
       INFERENCE_SERVICE_SECRET: ${INFERENCE_SERVICE_SECRET:?copy .env.compose.example to .env and set INFERENCE_SERVICE_SECRET}
       HF_CACHE_ROOT: /app/src/hf/cache
       INFERENCE_CALAMARI_NUM_PROCESSES: "1"
@@ -148,7 +146,6 @@ services:
       INFERENCE_CALLBACK_URL: http://api:8000/internal/inference/job-complete
       INFERENCE_REGISTRY_PATH: /app/inference/registry.yaml
       INFERENCE_WEBHOOK_SECRET: ${INFERENCE_WEBHOOK_SECRET:?copy .env.compose.example to .env and set INFERENCE_WEBHOOK_SECRET}
-      INFERENCE_SERVICE_SECRET: ${INFERENCE_SERVICE_SECRET:?copy .env.compose.example to .env and set INFERENCE_SERVICE_SECRET}
       HF_CACHE_ROOT: /app/src/hf/cache
       INFERENCE_CALAMARI_NUM_PROCESSES: "1"
       INFERENCE_WORKER_RUNNING_JOB_TIMEOUT_SECONDS: "1800"
@@ -168,7 +165,7 @@ services:
       dockerfile: frontend/Dockerfile
       target: dev
       args:
-        APP_VERSION: ${NOMICOUS_VERSION:-0.3.3}
+        APP_VERSION: ${NOMICOUS_VERSION:-0.3.2}
         NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
     ports:
       - "127.0.0.1:5173:5173"

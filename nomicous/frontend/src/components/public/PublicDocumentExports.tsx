@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
-import { api } from '../../api/client';
-import { ApiError } from '../../api/errors';
-import { toast } from '../ui/toast';
+import { useEffect, useState } from "react";
+import { api } from "../../api/client";
+import { ApiError } from "../../api/errors";
+import { toast } from "../ui/toast";
 
 type PublicDocumentExportsProps = {
   projectId: string;
@@ -21,33 +21,38 @@ export function PublicDocumentExports({
   partIndex,
 }: PublicDocumentExportsProps) {
   const [open, setOpen] = useState(false);
-  const [downloading, setDownloading] = useState<'pdf' | 'xml' | null>(null);
+  const [downloading, setDownloading] = useState<"pdf" | "xml" | null>(null);
 
   useEffect(() => {
     if (!open) return;
     function handleClick(event: MouseEvent) {
       const target = event.target as HTMLElement | null;
-      if (!target?.closest('.pub-exports')) {
+      if (!target?.closest(".pub-exports")) {
         setOpen(false);
       }
     }
-    globalThis.document.addEventListener('click', handleClick);
-    return () => globalThis.document.removeEventListener('click', handleClick);
+    globalThis.document.addEventListener("click", handleClick);
+    return () => globalThis.document.removeEventListener("click", handleClick);
   }, [open]);
 
   async function handleDownloadPdf() {
-    setDownloading('pdf');
+    setDownloading("pdf");
     try {
-      const blob = await api.getPublicTranscriptionPdf(projectId, documentId, partId);
+      const blob = await api.getPublicTranscriptionPdf(
+        projectId,
+        documentId,
+        partId,
+      );
       const url = URL.createObjectURL(blob);
-      const anchor = globalThis.document.createElement('a');
+      const anchor = globalThis.document.createElement("a");
       anchor.href = url;
-      anchor.download = downloadFilename(partIndex, 'pdf');
+      anchor.download = downloadFilename(partIndex, "pdf");
       anchor.click();
       URL.revokeObjectURL(url);
       setOpen(false);
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : 'Failed to download PDF';
+      const message =
+        err instanceof ApiError ? err.message : "Failed to download PDF";
       toast.error(message);
     } finally {
       setDownloading(null);
@@ -55,18 +60,19 @@ export function PublicDocumentExports({
   }
 
   async function handleDownloadXml() {
-    setDownloading('xml');
+    setDownloading("xml");
     try {
       const blob = await api.getPublicPageXml(projectId, documentId, partId);
       const url = URL.createObjectURL(blob);
-      const anchor = globalThis.document.createElement('a');
+      const anchor = globalThis.document.createElement("a");
       anchor.href = url;
-      anchor.download = downloadFilename(partIndex, 'xml');
+      anchor.download = downloadFilename(partIndex, "xml");
       anchor.click();
       URL.revokeObjectURL(url);
       setOpen(false);
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : 'Failed to download PAGE XML';
+      const message =
+        err instanceof ApiError ? err.message : "Failed to download PAGE XML";
       toast.error(message);
     } finally {
       setDownloading(null);
@@ -88,7 +94,11 @@ export function PublicDocumentExports({
         Export
       </button>
       {open && (
-        <div className="pub-exports__menu" role="menu" aria-label="Export options">
+        <div
+          className="pub-exports__menu"
+          role="menu"
+          aria-label="Export options"
+        >
           <button
             type="button"
             role="menuitem"
@@ -96,7 +106,7 @@ export function PublicDocumentExports({
             disabled={downloading !== null}
             onClick={() => void handleDownloadPdf()}
           >
-            {downloading === 'pdf' ? 'Downloading PDF…' : 'Transcription PDF'}
+            {downloading === "pdf" ? "Downloading PDF…" : "Transcription PDF"}
           </button>
           <button
             type="button"
@@ -105,7 +115,7 @@ export function PublicDocumentExports({
             disabled={downloading !== null}
             onClick={() => void handleDownloadXml()}
           >
-            {downloading === 'xml' ? 'Downloading XML…' : 'PAGE XML'}
+            {downloading === "xml" ? "Downloading XML…" : "PAGE XML"}
           </button>
         </div>
       )}

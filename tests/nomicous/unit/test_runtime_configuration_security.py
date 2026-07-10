@@ -105,9 +105,7 @@ def test_rate_limit_ignores_malformed_forwarded_client(monkeypatch) -> None:
         ("http://inference.example.com", "must use HTTPS"),
     ],
 )
-def test_platform_production_inference_url_requires_https(
-    url: str, expected: str | None
-) -> None:
+def test_platform_production_inference_url_requires_https(url: str, expected: str | None) -> None:
     values = {
         "ENVIRONMENT": "production",
         "INFERENCE_URL": url,
@@ -121,16 +119,24 @@ def test_platform_production_inference_url_requires_https(
         assert MLSettings(_env_file=None, **values).inference_url == url
 
 
+def test_platform_local_inference_mode_needs_no_cloud_credentials() -> None:
+    settings = MLSettings(ENVIRONMENT="production", _env_file=None)
+
+    assert settings.cloud_inference_enabled is False
+
+
 @pytest.mark.parametrize("secret", [None, "", "replace-me", "replace-with-a-secret"])
-def test_platform_production_rejects_missing_or_placeholder_inference_secrets(secret: str | None) -> None:
-    with pytest.raises(ValidationError, match="INFERENCE_WEBHOOK_SECRET"):
+def test_platform_production_rejects_missing_or_placeholder_inference_secrets(
+    secret: str | None,
+) -> None:
+    with pytest.raises((ValidationError, ValueError), match="INFERENCE_WEBHOOK_SECRET"):
         MLSettings(
             ENVIRONMENT="production",
             INFERENCE_URL="https://inference.example.com",
             INFERENCE_WEBHOOK_SECRET=secret,
             INFERENCE_SERVICE_SECRET="service-secret",
             _env_file=None,
-        )
+        ).require_callback_receiver_configuration()
 
 
 @pytest.mark.parametrize("secret", ["replace-me", "replace-with-at-least-32-byte-secret"])
@@ -155,8 +161,8 @@ def test_platform_worker_validates_production_inference_configuration(monkeypatc
     monkeypatch.setenv("ENVIRONMENT", "production")
     monkeypatch.setenv("INFERENCE_URL", "https://inference.example.com")
     monkeypatch.delenv("INFERENCE_WEBHOOK_SECRET", raising=False)
-    monkeypatch.setenv("INFERENCE_SERVICE_SECRET", "service-secret")
+    monkeypatch.delenv("INFERENCE_SERVICE_SECRET", raising=False)
     _clear_platform_settings()
 
-    with pytest.raises(ValidationError, match="INFERENCE_WEBHOOK_SECRET"):
+    with pytest.raises(ValueError, match="INFERENCE_SERVICE_SECRET"):
         validate_worker_settings()

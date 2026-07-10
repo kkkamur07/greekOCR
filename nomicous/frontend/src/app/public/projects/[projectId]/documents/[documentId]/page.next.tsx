@@ -1,5 +1,5 @@
-'use client';
+"use client";
 
-import { PublicDocumentPage } from '../../../../../../pages/PublicDocumentPage';
+import { PublicDocumentPage } from "../../../../../../pages/PublicDocumentPage";
 
 export default PublicDocumentPage;

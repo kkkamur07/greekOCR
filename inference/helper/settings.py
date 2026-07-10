@@ -6,6 +6,7 @@ import os
 from functools import lru_cache
 from ipaddress import ip_address
 from pathlib import Path
+from urllib.parse import urlparse
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import SettingsConfigDict
@@ -83,6 +84,35 @@ class HelperSettings(AdmissionSettings):
         if isinstance(value, list):
             return value
         return []
+
+    @field_validator("helper_cors_origins")
+    @classmethod
+    def validate_cors_origins(cls, origins: list[str]) -> list[str]:
+        if not origins:
+            raise ValueError("HELPER_CORS_ORIGINS must contain at least one explicit origin")
+
+        normalized_origins: list[str] = []
+        for origin in origins:
+            if not isinstance(origin, str) or origin == "*":
+                raise ValueError("HELPER_CORS_ORIGINS must not contain wildcard origins")
+            parsed = urlparse(origin)
+            if (
+                parsed.scheme not in {"http", "https"}
+                or not parsed.netloc
+                or parsed.username
+                or parsed.password
+                or parsed.path not in {"", "/"}
+                or parsed.params
+                or parsed.query
+                or parsed.fragment
+            ):
+                raise ValueError(
+                    "HELPER_CORS_ORIGINS entries must be absolute http(s) origins without paths"
+                )
+            normalized = f"{parsed.scheme}://{parsed.netloc}"
+            if normalized not in normalized_origins:
+                normalized_origins.append(normalized)
+        return normalized_origins
 
     @model_validator(mode="after")
     def validate_exposure(self) -> HelperSettings:

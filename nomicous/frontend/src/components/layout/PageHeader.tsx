@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from "react";
 
 type PageHeaderProps = {
   title: string;
@@ -21,19 +21,22 @@ export function PageHeader({
   titlePanelOpen = false,
   onTitlePanelToggle,
   titlePanel,
-  titlePanelLabel = 'Edit details',
+  titlePanelLabel = "Edit details",
 }: PageHeaderProps) {
   const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!titlePanelOpen) return;
     function handleClick(event: MouseEvent) {
-      if (panelRef.current && !panelRef.current.contains(event.target as Node)) {
+      if (
+        panelRef.current &&
+        !panelRef.current.contains(event.target as Node)
+      ) {
         onTitlePanelToggle?.();
       }
     }
-    globalThis.document.addEventListener('click', handleClick);
-    return () => globalThis.document.removeEventListener('click', handleClick);
+    globalThis.document.addEventListener("click", handleClick);
+    return () => globalThis.document.removeEventListener("click", handleClick);
   }, [titlePanelOpen, onTitlePanelToggle]);
 
   return (
@@ -61,7 +64,11 @@ export function PageHeader({
         </div>
         {subtitle && <p className="subtitle">{subtitle}</p>}
         {titlePanelOpen && titlePanel && (
-          <div className="entity-panel" role="dialog" aria-label={titlePanelLabel}>
+          <div
+            className="entity-panel"
+            role="dialog"
+            aria-label={titlePanelLabel}
+          >
             {titlePanel}
           </div>
         )}

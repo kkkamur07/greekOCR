@@ -7,14 +7,14 @@ import {
   useRef,
   useState,
   type ReactNode,
-} from 'react';
-import { waitForJob, type JobResponse, type JobStatus } from '../api/client';
-import { useJobPolling } from '../hooks/useJobPolling';
+} from "react";
+import { waitForJob, type JobResponse, type JobStatus } from "../api/client";
+import { useJobPolling } from "../hooks/useJobPolling";
 import {
   isTerminalJobStatus,
   jobStatusLabel,
   type PageEditorJobKind,
-} from '../components/page-editor/jobProgress';
+} from "../components/page-editor/jobProgress";
 
 export type TrackedBackgroundJob = {
   id: string;
@@ -49,7 +49,9 @@ function createLocalJobId(): string {
 
 const COMPLETED_TTL_MS = 10_000;
 
-const BackgroundJobsContext = createContext<BackgroundJobsContextValue | null>(null);
+const BackgroundJobsContext = createContext<BackgroundJobsContextValue | null>(
+  null,
+);
 
 function patchTrackedJob(
   job: TrackedBackgroundJob,
@@ -92,7 +94,9 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
   const applyJobUpdate = useCallback(
     (jobId: string, latest: JobResponse) => {
       setJobs((current) =>
-        current.map((job) => (job.id === jobId ? patchTrackedJob(job, latest) : job)),
+        current.map((job) =>
+          job.id === jobId ? patchTrackedJob(job, latest) : job,
+        ),
       );
       if (isTerminalJobStatus(latest.status)) {
         scheduleRemoval(jobId);
@@ -102,7 +106,10 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
   );
 
   const activeJobIds = useMemo(
-    () => jobs.filter((job) => !isTerminalJobStatus(job.status)).map((job) => job.id),
+    () =>
+      jobs
+        .filter((job) => !isTerminalJobStatus(job.status))
+        .map((job) => job.id),
     [jobs],
   );
 
@@ -135,9 +142,9 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
             id: jobId,
             label: meta.label,
             kind: meta.kind,
-            status: 'pending' as JobStatus,
+            status: "pending" as JobStatus,
             error: null,
-            progressLabel: 'Queued',
+            progressLabel: "Queued",
             finishedAt: null,
           },
         ];
@@ -152,15 +159,15 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
         applyJobUpdate(jobId, job);
         return job;
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Job failed';
+        const message = err instanceof Error ? err.message : "Job failed";
         setJobs((current) =>
           current.map((job) =>
             job.id === jobId
               ? {
                   ...job,
-                  status: 'failed',
+                  status: "failed",
                   error: message,
-                  progressLabel: 'Failed',
+                  progressLabel: "Failed",
                   finishedAt: Date.now(),
                 }
               : job,
@@ -185,9 +192,9 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
           id: jobId,
           label: meta.label,
           kind: meta.kind,
-          status: 'running' as JobStatus,
+          status: "running" as JobStatus,
           error: null,
-          progressLabel: 'Running locally',
+          progressLabel: "Running locally",
           finishedAt: null,
         },
       ]);
@@ -200,8 +207,8 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
             job.id === jobId
               ? {
                   ...job,
-                  status: 'done',
-                  progressLabel: 'Complete',
+                  status: "done",
+                  progressLabel: "Complete",
                   finishedAt: Date.now(),
                 }
               : job,
@@ -210,15 +217,15 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
         scheduleRemoval(jobId);
         return result;
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Task failed';
+        const message = err instanceof Error ? err.message : "Task failed";
         setJobs((current) =>
           current.map((job) =>
             job.id === jobId
               ? {
                   ...job,
-                  status: 'failed',
+                  status: "failed",
                   error: message,
-                  progressLabel: 'Failed',
+                  progressLabel: "Failed",
                   finishedAt: Date.now(),
                 }
               : job,
@@ -232,10 +239,14 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
   );
 
   const dismissCompleted = useCallback(() => {
-    setJobs((current) => current.filter((job) => !isTerminalJobStatus(job.status)));
+    setJobs((current) =>
+      current.filter((job) => !isTerminalJobStatus(job.status)),
+    );
   }, []);
 
-  const activeCount = jobs.filter((job) => !isTerminalJobStatus(job.status)).length;
+  const activeCount = jobs.filter(
+    (job) => !isTerminalJobStatus(job.status),
+  ).length;
 
   const value = useMemo(
     () => ({
@@ -247,18 +258,29 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
       trackLocalTask,
       dismissCompleted,
     }),
-    [jobs, activeCount, panelExpanded, trackAndWait, trackLocalTask, dismissCompleted],
+    [
+      jobs,
+      activeCount,
+      panelExpanded,
+      trackAndWait,
+      trackLocalTask,
+      dismissCompleted,
+    ],
   );
 
   return (
-    <BackgroundJobsContext.Provider value={value}>{children}</BackgroundJobsContext.Provider>
+    <BackgroundJobsContext.Provider value={value}>
+      {children}
+    </BackgroundJobsContext.Provider>
   );
 }
 
 export function useBackgroundJobs(): BackgroundJobsContextValue {
   const context = useContext(BackgroundJobsContext);
   if (!context) {
-    throw new Error('useBackgroundJobs must be used within BackgroundJobsProvider');
+    throw new Error(
+      "useBackgroundJobs must be used within BackgroundJobsProvider",
+    );
   }
   return context;
 }

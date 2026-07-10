@@ -1,37 +1,47 @@
-import { useEffect, useRef } from 'react';
-import Link from 'next/link';
-import type { DocumentWithPartsResponse, InferenceModelResponse, LineResponse } from '../../api/client';
-import { PageEditorBackLink } from './PageEditorNavHeader';
-import { editorButton } from './editorButton';
-import { PageEditorModelSelect } from './PageEditorModelSelect';
-import { PageEditorSharingMenu } from './PageEditorSharingMenu';
-import { SettingsIcon } from './EditorIcons';
-import { PageEditorSettingsPanel } from './PageEditorSettingsPanel';
-import { PageEditorInferenceStatus } from './PageEditorInferenceStatus';
-import { PAGE_EDITOR_SHORTCUTS } from './pageEditorShortcuts';
-import type { InferencePreference } from '../../inference/preference';
-import type { HostEligibility } from '../../inference/types';
-import type { PageEditorCanvasSettings } from './pageEditorSettings';
-import { ToolbarKbd } from './ToolbarKbd';
+import { useEffect, useRef } from "react";
+import Link from "next/link";
+import type {
+  DocumentWithPartsResponse,
+  InferenceModelResponse,
+  LineResponse,
+} from "../../api/client";
+import { PageEditorBackLink } from "./PageEditorNavHeader";
+import { editorButton } from "./editorButton";
+import { PageEditorModelSelect } from "./PageEditorModelSelect";
+import { PageEditorSharingMenu } from "./PageEditorSharingMenu";
+import { SettingsIcon } from "./EditorIcons";
+import { PageEditorSettingsPanel } from "./PageEditorSettingsPanel";
+import { PageEditorInferenceStatus } from "./PageEditorInferenceStatus";
+import { PAGE_EDITOR_SHORTCUTS } from "./pageEditorShortcuts";
+import type { InferencePreference } from "../../inference/preference";
+import type { HostEligibility } from "../../inference/types";
+import type { PageEditorCanvasSettings } from "./pageEditorSettings";
+import { ToolbarKbd } from "./ToolbarKbd";
 
 type PageEditorToolbarProps = {
   projectId: string | undefined;
   documentId: string | undefined;
   document: DocumentWithPartsResponse;
   partIndex: number;
-  editorMode: 'layout' | 'transcription';
-  onEditorModeChange: (mode: 'layout' | 'transcription') => void;
-  drawMode: 'none' | 'rectangle' | 'polygon';
-  onPickDrawMode: (mode: 'rectangle' | 'polygon') => void;
+  editorMode: "layout" | "transcription";
+  onEditorModeChange: (mode: "layout" | "transcription") => void;
+  drawMode: "none" | "rectangle" | "polygon";
+  onPickDrawMode: (mode: "rectangle" | "polygon") => void;
   onPanSelect: () => void;
   lines: LineResponse[];
-  pairingProgress: { paired_lines: number; total_lines: number; percent: number };
+  pairingProgress: {
+    paired_lines: number;
+    total_lines: number;
+    percent: number;
+  };
   partId: string;
   selectedSegmentId: string | null;
   selectedLineId: string | null;
   textLines: { order: number; text: string; paired_line_id: string | null }[];
   onPairTextLine: (order: number) => void;
-  onDocumentWorkflowChange: (workflow: DocumentWithPartsResponse['workflow']) => void;
+  onDocumentWorkflowChange: (
+    workflow: DocumentWithPartsResponse["workflow"],
+  ) => void;
   onDeleteSelectedSegment: () => void;
   onResetSelectedLine: () => void;
   actionsOpen: boolean;
@@ -42,7 +52,7 @@ type PageEditorToolbarProps = {
   onOtsuSphereRadiusChange: (value: number) => void;
   segmenting: boolean;
   ocrRunning: boolean;
-  ocrScope?: 'segment' | 'page' | null;
+  ocrScope?: "segment" | "page" | null;
   transcribeModels: InferenceModelResponse[];
   selectedTranscribeModelId: string | null;
   onSelectedTranscribeModelIdChange: (modelId: string | null) => void;
@@ -119,42 +129,53 @@ export function PageEditorToolbar({
     if (!actionsOpen && !settingsOpen) return;
     function handleClick(event: MouseEvent) {
       const target = event.target as Node;
-      if (actionsOpen && dropdownRef.current && !dropdownRef.current.contains(target)) {
+      if (
+        actionsOpen &&
+        dropdownRef.current &&
+        !dropdownRef.current.contains(target)
+      ) {
         onActionsOpenChange(false);
       }
-      if (settingsOpen && settingsRef.current && !settingsRef.current.contains(target)) {
+      if (
+        settingsOpen &&
+        settingsRef.current &&
+        !settingsRef.current.contains(target)
+      ) {
         onSettingsOpenChange(false);
       }
     }
-    globalThis.document.addEventListener('click', handleClick);
-    return () => globalThis.document.removeEventListener('click', handleClick);
+    globalThis.document.addEventListener("click", handleClick);
+    return () => globalThis.document.removeEventListener("click", handleClick);
   }, [actionsOpen, settingsOpen, onActionsOpenChange, onSettingsOpenChange]);
 
-  const segmentLabel = lines.length === 1 ? 'seg' : 'segs';
+  const segmentLabel = lines.length === 1 ? "seg" : "segs";
   const pairingPercent =
     pairingProgress.total_lines > 0
-      ? Math.round((pairingProgress.paired_lines / pairingProgress.total_lines) * 100)
+      ? Math.round(
+          (pairingProgress.paired_lines / pairingProgress.total_lines) * 100,
+        )
       : 0;
   const processing = segmenting || ocrRunning;
   const processingLabel = segmenting
-    ? 'Segmenting'
+    ? "Segmenting"
     : ocrRunning
-      ? ocrScope === 'page'
-        ? 'Transcribing page'
-        : 'Transcribing'
+      ? ocrScope === "page"
+        ? "Transcribing page"
+        : "Transcribing"
       : null;
 
   return (
     <header className="pe-toolbar" role="banner">
       <span className="visually-hidden">ANNOTE PAGE WORKSPACE</span>
       <h2 className="visually-hidden">
-        {editorMode === 'layout' ? 'Layout edit' : 'Transcription edit'}
+        {editorMode === "layout" ? "Layout edit" : "Transcription edit"}
       </h2>
       <span className="visually-hidden">
-        Pairing progress: {pairingProgress.paired_lines}/{pairingProgress.total_lines} Lines paired
+        Pairing progress: {pairingProgress.paired_lines}/
+        {pairingProgress.total_lines} Lines paired
       </span>
       <span className="visually-hidden">
-        {lines.length} {lines.length === 1 ? 'Segment' : 'Segments'}
+        {lines.length} {lines.length === 1 ? "Segment" : "Segments"}
       </span>
 
       <div className="visually-hidden">
@@ -175,17 +196,26 @@ export function PageEditorToolbar({
         {document.name} · Page {partIndex}
       </span>
 
-      <Link href="/projects" className="pe-toolbar__logo" aria-label="nomicous home">
+      <Link
+        href="/projects"
+        className="pe-toolbar__logo"
+        aria-label="nomicous home"
+      >
         <img src="/nomos.svg" alt="" />
         <span>nomicous</span>
       </Link>
 
       <div className="pe-toolbar__title">
         {projectId && documentId && (
-          <PageEditorBackLink to={`/projects/${projectId}/documents/${documentId}`} />
+          <PageEditorBackLink
+            to={`/projects/${projectId}/documents/${documentId}`}
+          />
         )}
         <div className="pe-toolbar__sep" aria-hidden="true" />
-        <h1 className="pe-toolbar__doc" title={`${document.name} · Page ${partIndex}`}>
+        <h1
+          className="pe-toolbar__doc"
+          title={`${document.name} · Page ${partIndex}`}
+        >
           {document.name}
           <span className="pe-toolbar__doc-page"> · p.{partIndex}</span>
         </h1>
@@ -198,7 +228,11 @@ export function PageEditorToolbar({
           preferCloud={preferCloud}
         />
         {processingLabel && (
-          <div className="pe-toolbar__processing" role="status" aria-live="polite">
+          <div
+            className="pe-toolbar__processing"
+            role="status"
+            aria-live="polite"
+          >
             <span className="pe-toolbar__processing-dot" aria-hidden="true" />
             {processingLabel}
           </div>
@@ -211,7 +245,8 @@ export function PageEditorToolbar({
           title={`${pairingProgress.paired_lines} of ${pairingProgress.total_lines} lines paired`}
         >
           <span className="pe-toolbar__stat">
-            <strong>{pairingProgress.paired_lines}</strong>/{pairingProgress.total_lines}
+            <strong>{pairingProgress.paired_lines}</strong>/
+            {pairingProgress.total_lines}
           </span>
           <div
             className="pe-toolbar__progress-track"
@@ -221,37 +256,50 @@ export function PageEditorToolbar({
             aria-valuemax={100}
             aria-label="Pairing progress"
           >
-            <div className="pe-toolbar__progress-fill" style={{ width: `${pairingPercent}%` }} />
+            <div
+              className="pe-toolbar__progress-fill"
+              style={{ width: `${pairingPercent}%` }}
+            />
           </div>
         </div>
       </div>
 
       <div className="pe-toolbar__actions">
-        <div className="pe-toolbar__modes" role="group" aria-label="Editor mode">
+        <div
+          className="pe-toolbar__modes"
+          role="group"
+          aria-label="Editor mode"
+        >
           <button
             type="button"
-            className={`pe-toolbar__mode ${editorMode === 'layout' ? 'pe-toolbar__mode--active' : ''}`}
-            aria-pressed={editorMode === 'layout'}
-            onClick={() => onEditorModeChange('layout')}
+            className={`pe-toolbar__mode ${editorMode === "layout" ? "pe-toolbar__mode--active" : ""}`}
+            aria-pressed={editorMode === "layout"}
+            onClick={() => onEditorModeChange("layout")}
           >
             Layout
           </button>
           <button
             type="button"
-            className={`pe-toolbar__mode ${editorMode === 'transcription' ? 'pe-toolbar__mode--active' : ''}`}
+            className={`pe-toolbar__mode ${editorMode === "transcription" ? "pe-toolbar__mode--active" : ""}`}
             aria-label="Transcription edit"
-            aria-pressed={editorMode === 'transcription'}
-            onClick={() => onEditorModeChange('transcription')}
+            aria-pressed={editorMode === "transcription"}
+            onClick={() => onEditorModeChange("transcription")}
           >
             Transcription
           </button>
         </div>
 
-        <div className="pe-toolbar__cluster" role="group" aria-label="Drawing tools">
+        <div
+          className="pe-toolbar__cluster"
+          role="group"
+          aria-label="Drawing tools"
+        >
           <button
             type="button"
             onClick={onPanSelect}
-            className={editorButton(drawMode === 'none' && editorMode === 'layout')}
+            className={editorButton(
+              drawMode === "none" && editorMode === "layout",
+            )}
             title={`Select / pan (${PAGE_EDITOR_SHORTCUTS.SELECT})`}
             aria-keyshortcuts={PAGE_EDITOR_SHORTCUTS.SELECT}
           >
@@ -262,8 +310,8 @@ export function PageEditorToolbar({
             aria-label={`Rectangle segment (${PAGE_EDITOR_SHORTCUTS.RECTANGLE})`}
             aria-keyshortcuts={PAGE_EDITOR_SHORTCUTS.RECTANGLE}
             title={`Draw rectangle segment (${PAGE_EDITOR_SHORTCUTS.RECTANGLE})`}
-            onClick={() => onPickDrawMode('rectangle')}
-            className={editorButton(drawMode === 'rectangle')}
+            onClick={() => onPickDrawMode("rectangle")}
+            className={editorButton(drawMode === "rectangle")}
           >
             Rect
             <ToolbarKbd>{PAGE_EDITOR_SHORTCUTS.RECTANGLE}</ToolbarKbd>
@@ -273,8 +321,8 @@ export function PageEditorToolbar({
             aria-label={`Polygon segment (${PAGE_EDITOR_SHORTCUTS.POLYGON})`}
             aria-keyshortcuts={PAGE_EDITOR_SHORTCUTS.POLYGON}
             title={`Draw polygon segment (${PAGE_EDITOR_SHORTCUTS.POLYGON})`}
-            onClick={() => onPickDrawMode('polygon')}
-            className={editorButton(drawMode === 'polygon')}
+            onClick={() => onPickDrawMode("polygon")}
+            className={editorButton(drawMode === "polygon")}
           >
             Poly
             <ToolbarKbd>{PAGE_EDITOR_SHORTCUTS.POLYGON}</ToolbarKbd>
@@ -300,7 +348,9 @@ export function PageEditorToolbar({
           <PageEditorModelSelect
             transcribeModels={transcribeModels}
             selectedTranscribeModelId={selectedTranscribeModelId}
-            onSelectedTranscribeModelIdChange={onSelectedTranscribeModelIdChange}
+            onSelectedTranscribeModelIdChange={
+              onSelectedTranscribeModelIdChange
+            }
             disabled={processing}
           />
         </div>
@@ -311,12 +361,16 @@ export function PageEditorToolbar({
             aria-haspopup="menu"
             aria-expanded={actionsOpen}
             onClick={() => onActionsOpenChange(!actionsOpen)}
-            className={`pe-tb-btn${actionsOpen ? ' pe-tb-btn--on' : ''}`}
+            className={`pe-tb-btn${actionsOpen ? " pe-tb-btn--on" : ""}`}
           >
             Process ▾
           </button>
           {actionsOpen && (
-            <div className="pe-dropdown" role="menu" aria-label="Processing actions">
+            <div
+              className="pe-dropdown"
+              role="menu"
+              aria-label="Processing actions"
+            >
               <div className="pe-dd-section">Segment</div>
               <p className="pe-dd-model">
                 Engine <strong>greek-kraken-segment-v1</strong> (fixed)
@@ -327,7 +381,9 @@ export function PageEditorToolbar({
                   checked={useOtsuRefinement}
                   disabled={processing}
                   aria-label="Refine Kraken segments with Otsu"
-                  onChange={(event) => onUseOtsuRefinementChange(event.target.checked)}
+                  onChange={(event) =>
+                    onUseOtsuRefinementChange(event.target.checked)
+                  }
                   onClick={(event) => event.stopPropagation()}
                 />
                 Otsu refinement
@@ -368,15 +424,16 @@ export function PageEditorToolbar({
                 }}
                 className="pe-dd-item"
               >
-                {segmenting ? 'Segmenting…' : 'Auto segment page'}
+                {segmenting ? "Segmenting…" : "Auto segment page"}
               </button>
               <div className="pe-dd-divider" />
               <div className="pe-dd-section">HTR</div>
               <p className="pe-dd-model">
-                Model{' '}
+                Model{" "}
                 <strong>
-                  {transcribeModels.find((m) => m.id === selectedTranscribeModelId)?.name ??
-                    'not selected'}
+                  {transcribeModels.find(
+                    (m) => m.id === selectedTranscribeModelId,
+                  )?.name ?? "not selected"}
                 </strong>
               </p>
               <button
@@ -391,19 +448,21 @@ export function PageEditorToolbar({
                 }}
                 className="pe-dd-item"
               >
-                {ocrRunning ? 'OCR…' : 'OCR selected segment'}
+                {ocrRunning ? "OCR…" : "OCR selected segment"}
               </button>
               <button
                 type="button"
                 role="menuitem"
-                disabled={processing || lines.length === 0 || !selectedTranscribeModelId}
+                disabled={
+                  processing || lines.length === 0 || !selectedTranscribeModelId
+                }
                 onClick={() => {
                   onActionsOpenChange(false);
                   void onRunPageOcr();
                 }}
                 className="pe-dd-item"
               >
-                {ocrRunning ? 'OCR…' : 'OCR full page'}
+                {ocrRunning ? "OCR…" : "OCR full page"}
               </button>
               {projectId && documentId && (
                 <PageEditorSharingMenu
@@ -421,7 +480,7 @@ export function PageEditorToolbar({
         <div className="pe-toolbar__cluster">
           <button
             type="button"
-            className={`pe-tb-btn${transcriptionPdfOpen ? ' pe-tb-btn--on' : ''}`}
+            className={`pe-tb-btn${transcriptionPdfOpen ? " pe-tb-btn--on" : ""}`}
             aria-pressed={transcriptionPdfOpen}
             aria-label="Toggle transcription PDF"
             title="Toggle transcription PDF"
@@ -435,7 +494,7 @@ export function PageEditorToolbar({
           <div className="pe-dropdown-wrap" ref={settingsRef}>
             <button
               type="button"
-              className={`pe-tb-btn pe-tb-btn--icon${settingsOpen ? ' pe-tb-btn--on' : ''}`}
+              className={`pe-tb-btn pe-tb-btn--icon${settingsOpen ? " pe-tb-btn--on" : ""}`}
               aria-haspopup="dialog"
               aria-expanded={settingsOpen}
               aria-label="Editor settings"

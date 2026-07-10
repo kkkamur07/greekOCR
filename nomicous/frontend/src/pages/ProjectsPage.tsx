@@ -1,13 +1,17 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { useRouter } from 'next/navigation';
-import { toast } from '../components/ui/toast';
-import { api, type ProjectResponse } from '../api/client';
-import { ApiError } from '../api/errors';
-import { hasAccessToken, isUnauthorized, navigateToLogin } from '../auth/session';
-import { AppPageShell } from '../components/layout/AppPageShell';
-import { ProjectsTable } from '../components/projects/ProjectsTable';
-import { FormModal } from '../components/ui/FormModal';
-import { slugify } from '../utils/slugify';
+import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "../components/ui/toast";
+import { api, type ProjectResponse } from "../api/client";
+import { ApiError } from "../api/errors";
+import {
+  hasAccessToken,
+  isUnauthorized,
+  navigateToLogin,
+} from "../auth/session";
+import { AppPageShell } from "../components/layout/AppPageShell";
+import { ProjectsTable } from "../components/projects/ProjectsTable";
+import { FormModal } from "../components/ui/FormModal";
+import { slugify } from "../utils/slugify";
 
 export function ProjectsPage() {
   const router = useRouter();
@@ -17,9 +21,11 @@ export function ProjectsPage() {
   const [loading, setLoading] = useState(true);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
+  const [deletingProjectId, setDeletingProjectId] = useState<string | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
-  const [newName, setNewName] = useState('');
+  const [newName, setNewName] = useState("");
 
   const load = useCallback(async () => {
     if (!hasAccessToken()) {
@@ -39,7 +45,8 @@ export function ProjectsPage() {
         navigateToLogin(router);
         return;
       }
-      const msg = err instanceof ApiError ? err.message : 'Failed to load projects';
+      const msg =
+        err instanceof ApiError ? err.message : "Failed to load projects";
       setProjects([]);
       setUserId(null);
       setUsername(null);
@@ -60,12 +67,13 @@ export function ProjectsPage() {
     setCreating(true);
     try {
       await api.createProject({ name: newName.trim(), slug: slugify(newName) });
-      toast.success('Project created');
+      toast.success("Project created");
       setCreateModalOpen(false);
-      setNewName('');
+      setNewName("");
       await load();
     } catch (err) {
-      const msg = err instanceof ApiError ? err.message : 'Failed to create project';
+      const msg =
+        err instanceof ApiError ? err.message : "Failed to create project";
       toast.error(msg);
     } finally {
       setCreating(false);
@@ -86,10 +94,11 @@ export function ProjectsPage() {
     setDeletingProjectId(projectId);
     try {
       await api.deleteProject(projectId);
-      toast.success('Project deleted');
+      toast.success("Project deleted");
       await load();
     } catch (err) {
-      const msg = err instanceof ApiError ? err.message : 'Failed to delete project';
+      const msg =
+        err instanceof ApiError ? err.message : "Failed to delete project";
       toast.error(msg);
     } finally {
       setDeletingProjectId(null);

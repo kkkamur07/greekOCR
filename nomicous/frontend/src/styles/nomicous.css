@@ -1,5 +1,5 @@
-@import './theme-shell.css';
-@import './page-editor.css';
+@import "./theme-shell.css";
+@import "./page-editor.css";
 
 /* Page editor status bar */
 .pe-inference-banner {
@@ -11,7 +11,7 @@
   background: var(--accent-bg);
   border-bottom: 1px solid var(--border);
   padding: 8px 14px;
-  font-size: .875rem;
+  font-size: 0.875rem;
   color: var(--text-2);
 }
 .pe-inference-banner--active {
@@ -28,14 +28,14 @@
 .pe-helper-install-modal__lead {
   margin: 0 0 16px;
   color: var(--text-2);
-  font-size: .9375rem;
+  font-size: 0.9375rem;
   line-height: 1.5;
 }
 .pe-helper-install-modal__steps {
   margin: 0 0 20px;
   padding-left: 1.25rem;
   color: var(--text-2);
-  font-size: .875rem;
+  font-size: 0.875rem;
   line-height: 1.55;
 }
 .pe-helper-install-modal__steps li + li {
@@ -52,7 +52,7 @@
   color: #065f46;
   border-radius: 6px;
   padding: 4px 10px;
-  font-size: .8125rem;
+  font-size: 0.8125rem;
   cursor: pointer;
 }
 .pe-inference-banner__action:hover {
@@ -63,13 +63,25 @@
   background: var(--green-banner-bg);
   border-bottom: 1px solid var(--green-banner-border);
   padding: 8px 14px;
-  font-size: .875rem;
+  font-size: 0.875rem;
   color: #065f46;
 }
-.pe-status-bar .pe-status-alerts { display: flex; flex-direction: column; gap: 4px; }
-.pe-status-bar .pe-status-item { display: flex; align-items: center; gap: 8px; }
-.pe-status-bar .pe-status-item--error { color: #991b1b; }
-.pe-status-bar .pe-status-item--warning { color: #92400e; }
+.pe-status-bar .pe-status-alerts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pe-status-bar .pe-status-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pe-status-bar .pe-status-item--error {
+  color: #991b1b;
+}
+.pe-status-bar .pe-status-item--warning {
+  color: #92400e;
+}
 
 .pe-baseline-bar {
   flex-shrink: 0;
@@ -79,6 +91,9 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: .875rem;
+  font-size: 0.875rem;
 }
-.pe-baseline-bar span { color: var(--text-2); font-weight: 500; }
+.pe-baseline-bar span {
+  color: var(--text-2);
+  font-weight: 500;
+}

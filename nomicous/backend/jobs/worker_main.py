@@ -25,7 +25,7 @@ def validate_worker_settings() -> None:
     """Resolve worker dependencies before connecting to the database."""
     get_infrastructure_settings()
     get_job_settings()
-    get_ml_settings()
+    get_ml_settings().require_job_dispatcher_configuration()
 
 
 async def _run() -> None:

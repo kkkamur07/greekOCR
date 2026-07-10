@@ -11,6 +11,7 @@
 **/dist
 **/build
 .cursor
+.docker-cache/
 .git
 .gitignore
 agent-transcripts

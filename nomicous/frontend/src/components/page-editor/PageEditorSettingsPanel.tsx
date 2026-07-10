@@ -1,6 +1,6 @@
-import type { InferencePreference } from '../../inference/preference';
-import type { HostEligibility } from '../../inference/types';
-import type { PageEditorCanvasSettings } from './pageEditorSettings';
+import type { InferencePreference } from "../../inference/preference";
+import type { HostEligibility } from "../../inference/types";
+import type { PageEditorCanvasSettings } from "./pageEditorSettings";
 
 type PageEditorSettingsPanelProps = {
   settings: PageEditorCanvasSettings;
@@ -19,18 +19,24 @@ export function PageEditorSettingsPanel({
   helperAvailable,
   selectedModelHostEligibility,
 }: PageEditorSettingsPanelProps) {
-  const remoteOnly = selectedModelHostEligibility === 'remote';
+  const remoteOnly = selectedModelHostEligibility === "remote";
 
   return (
-    <div className="pe-dropdown pe-dropdown--settings" role="dialog" aria-label="Editor settings">
+    <div
+      className="pe-dropdown pe-dropdown--settings"
+      role="dialog"
+      aria-label="Editor settings"
+    >
       <div className="pe-dd-section">Inference</div>
       <label className="pe-dd-field pe-dd-field--checkbox">
         <input
           type="checkbox"
-          checked={remoteOnly || inferencePreference === 'cloud'}
+          checked={remoteOnly || inferencePreference === "cloud"}
           disabled={remoteOnly}
           onChange={(event) =>
-            onInferencePreferenceChange(event.target.checked ? 'cloud' : 'local')
+            onInferencePreferenceChange(
+              event.target.checked ? "cloud" : "local",
+            )
           }
           onClick={(event) => event.stopPropagation()}
         />
@@ -38,20 +44,21 @@ export function PageEditorSettingsPanel({
       </label>
       <p className="pe-dd-model">
         {remoteOnly
-          ? 'The selected model runs on the server only.'
+          ? "The selected model runs on the server only."
           : helperAvailable
-            ? 'Local inference uses the Nomicous helper on this machine when available.'
-            : 'Install the Inference Helper to run OCR and segmentation on your CPU.'}
+            ? "Local inference uses the Nomicous helper on this machine when available."
+            : "Install the Inference Helper to run OCR and segmentation on your CPU."}
       </p>
 
       <div className="pe-dd-section">Canvas overlays</div>
       <p className="pe-dd-model">
-        Stroke widths stay consistent while zooming. Baselines from Kraken layout use their own
-        control.
+        Stroke widths stay consistent while zooming. Baselines from Kraken
+        layout use their own control.
       </p>
       <div className="pe-dd-field pe-dd-field--stack">
         <label htmlFor="pe-stroke-width">
-          Segment stroke <strong>{settings.overlayStrokeWidth.toFixed(1)}×</strong>
+          Segment stroke{" "}
+          <strong>{settings.overlayStrokeWidth.toFixed(1)}×</strong>
         </label>
         <input
           id="pe-stroke-width"
@@ -75,7 +82,8 @@ export function PageEditorSettingsPanel({
       </div>
       <div className="pe-dd-field pe-dd-field--stack">
         <label htmlFor="pe-baseline-width">
-          Baseline width <strong>{settings.baselineStrokeWidth.toFixed(2)}×</strong>
+          Baseline width{" "}
+          <strong>{settings.baselineStrokeWidth.toFixed(2)}×</strong>
         </label>
         <input
           id="pe-baseline-width"
@@ -100,7 +108,8 @@ export function PageEditorSettingsPanel({
       </div>
       <div className="pe-dd-field pe-dd-field--stack">
         <label htmlFor="pe-segment-fill">
-          Segment fill <strong>{Math.round(settings.segmentFillOpacity * 100)}%</strong>
+          Segment fill{" "}
+          <strong>{Math.round(settings.segmentFillOpacity * 100)}%</strong>
         </label>
         <input
           id="pe-segment-fill"
@@ -152,14 +161,18 @@ export function PageEditorSettingsPanel({
 
       <div className="pe-dd-section">Visibility</div>
       <p className="pe-dd-model">
-        Hide Kraken layout overlays when you only want segment polygons and transcription.
+        Hide Kraken layout overlays when you only want segment polygons and
+        transcription.
       </p>
       <label className="pe-dd-check">
         <input
           type="checkbox"
           checked={settings.showLayoutBlocks}
           onChange={(event) =>
-            onSettingsChange({ ...settings, showLayoutBlocks: event.target.checked })
+            onSettingsChange({
+              ...settings,
+              showLayoutBlocks: event.target.checked,
+            })
           }
           onClick={(event) => event.stopPropagation()}
         />
@@ -170,7 +183,10 @@ export function PageEditorSettingsPanel({
           type="checkbox"
           checked={settings.showBaselines}
           onChange={(event) =>
-            onSettingsChange({ ...settings, showBaselines: event.target.checked })
+            onSettingsChange({
+              ...settings,
+              showBaselines: event.target.checked,
+            })
           }
           onClick={(event) => event.stopPropagation()}
         />
@@ -181,8 +197,8 @@ export function PageEditorSettingsPanel({
 
       <div className="pe-dd-section">Polygon tool</div>
       <p className="pe-dd-model">
-        Click to place corners one at a time. Double-click or press <strong>Enter</strong> to close
-        the shape. <strong>Esc</strong> cancels.
+        Click to place corners one at a time. Double-click or press{" "}
+        <strong>Enter</strong> to close the shape. <strong>Esc</strong> cancels.
       </p>
     </div>
   );

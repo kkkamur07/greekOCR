@@ -32,7 +32,9 @@ class AppSettings(BaseSettings):
         if not entries:
             return None
         if "*" in entries:
-            raise ValueError("FORWARDED_ALLOW_IPS must contain explicit proxy IPs or CIDRs, never '*'")
+            raise ValueError(
+                "FORWARDED_ALLOW_IPS must contain explicit proxy IPs or CIDRs, never '*'"
+            )
 
         networks: list[str] = []
         for entry in entries:

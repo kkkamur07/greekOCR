@@ -1,9 +1,9 @@
-import { useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
-import type { DocumentPartResponse } from '../../api/client';
-import { prefetchPartImage } from '../../api/imageCache';
-import { ReviewBadge } from '../WorkflowBadge';
-import { AuthenticatedImage } from '../AuthenticatedImage';
+import { useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
+import type { DocumentPartResponse } from "../../api/client";
+import { prefetchPartImage } from "../../api/imageCache";
+import { ReviewBadge } from "../WorkflowBadge";
+import { AuthenticatedImage } from "../AuthenticatedImage";
 
 type PartListProps = {
   parts: DocumentPartResponse[];
@@ -48,7 +48,9 @@ export function PartList({
           onMoveDown={onMoveDown ? () => onMoveDown(index) : undefined}
           onDelete={onDelete ? () => onDelete(part.id) : undefined}
           onToggleReview={
-            onToggleReview ? (reviewed) => onToggleReview(part.id, reviewed) : undefined
+            onToggleReview
+              ? (reviewed) => onToggleReview(part.id, reviewed)
+              : undefined
           }
           reviewUpdating={reviewUpdatingPartId === part.id}
           reordering={reordering}
@@ -88,10 +90,12 @@ function PartRow({
   const router = useRouter();
   const prefetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dim =
-    part.width && part.height ? `${part.width} × ${part.height}` : 'Dimensions pending';
+    part.width && part.height
+      ? `${part.width} × ${part.height}`
+      : "Dimensions pending";
   const editorPath = `/projects/${projectId}/documents/${documentId}/parts/${part.id}`;
   const thumbnailUrl = part.image_url
-    ? `${part.image_url}${part.image_url.includes('?') ? '&' : '?'}w=200`
+    ? `${part.image_url}${part.image_url.includes("?") ? "&" : "?"}w=200`
     : null;
 
   const cancelPrefetch = () => {
@@ -121,7 +125,7 @@ function PartRow({
   };
 
   const onRowKeyDown = (event: React.KeyboardEvent) => {
-    if (event.key === 'Enter' || event.key === ' ') {
+    if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       openEditor();
     }
@@ -146,7 +150,12 @@ function PartRow({
             compact
             src={thumbnailUrl}
             alt={`Part ${index + 1}`}
-            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              display: "block",
+            }}
           />
         ) : (
           <svg
@@ -169,7 +178,9 @@ function PartRow({
           <span className="part-num">Part {index + 1}</span>
           <ReviewBadge reviewed={part.reviewed} />
         </div>
-        <div className="part-desc">Page {index + 1} of {total}</div>
+        <div className="part-desc">
+          Page {index + 1} of {total}
+        </div>
         <div className="part-dim">{dim}</div>
       </div>
       <div className="part-actions" onClick={(e) => e.stopPropagation()}>
@@ -179,9 +190,13 @@ function PartRow({
             className="btn btn-ghost btn-sm"
             disabled={reviewUpdating}
             onClick={() => onToggleReview(!part.reviewed)}
-            aria-label={part.reviewed ? `Mark part ${index + 1} unreviewed` : `Mark part ${index + 1} reviewed`}
+            aria-label={
+              part.reviewed
+                ? `Mark part ${index + 1} unreviewed`
+                : `Mark part ${index + 1} reviewed`
+            }
           >
-            {part.reviewed ? 'Unreview' : 'Review'}
+            {part.reviewed ? "Unreview" : "Review"}
           </button>
         )}
         {onMoveUp && (

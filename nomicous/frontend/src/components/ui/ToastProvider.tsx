@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { registerToastHandler, type ToastItem } from './toast';
+import { useEffect, useState } from "react";
+import { registerToastHandler, type ToastItem } from "./toast";
 
 const DISMISS_MS = 2800;
 
@@ -25,7 +25,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           <div
             key={item.id}
             className={`toast toast--${item.variant}`}
-            role={item.variant === 'error' ? 'alert' : 'status'}
+            role={item.variant === "error" ? "alert" : "status"}
           >
             {item.message}
           </div>

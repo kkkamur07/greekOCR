@@ -1,10 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
-import { FormModal } from './FormModal';
+import { FormModal } from "./FormModal";
 
-describe('FormModal', () => {
-  it('moves focus into the dialog, traps Tab, and restores the opener', async () => {
+describe("FormModal", () => {
+  it("moves focus into the dialog, traps Tab, and restores the opener", async () => {
     const onClose = vi.fn();
     render(
       <>
@@ -22,22 +22,25 @@ describe('FormModal', () => {
       </>,
     );
 
-    const opener = screen.getByRole('button', { name: 'Open dialog' });
+    const opener = screen.getByRole("button", { name: "Open dialog" });
     opener.focus();
-    await waitFor(() => expect(screen.getByLabelText('Name')).toHaveFocus());
+    await waitFor(() => expect(screen.getByLabelText("Name")).toHaveFocus());
 
-    const submit = screen.getByRole('button', { name: 'Create' });
+    const submit = screen.getByRole("button", { name: "Create" });
     submit.focus();
-    fireEvent.keyDown(submit, { key: 'Tab' });
-    expect(screen.getByLabelText('Name')).toHaveFocus();
-    fireEvent.keyDown(screen.getByLabelText('Name'), { key: 'Tab', shiftKey: true });
+    fireEvent.keyDown(submit, { key: "Tab" });
+    expect(screen.getByLabelText("Name")).toHaveFocus();
+    fireEvent.keyDown(screen.getByLabelText("Name"), {
+      key: "Tab",
+      shiftKey: true,
+    });
     expect(submit).toHaveFocus();
 
-    fireEvent.keyDown(screen.getByLabelText('Name'), { key: 'Escape' });
+    fireEvent.keyDown(screen.getByLabelText("Name"), { key: "Escape" });
     expect(onClose).toHaveBeenCalledOnce();
   });
 
-  it('restores focus after the dialog closes', async () => {
+  it("restores focus after the dialog closes", async () => {
     const onClose = vi.fn();
     const { rerender } = render(
       <>
@@ -54,7 +57,7 @@ describe('FormModal', () => {
         </FormModal>
       </>,
     );
-    const opener = screen.getByRole('button', { name: 'Open dialog' });
+    const opener = screen.getByRole("button", { name: "Open dialog" });
     opener.focus();
     rerender(
       <>
@@ -71,7 +74,7 @@ describe('FormModal', () => {
         </FormModal>
       </>,
     );
-    await waitFor(() => expect(screen.getByLabelText('Name')).toHaveFocus());
+    await waitFor(() => expect(screen.getByLabelText("Name")).toHaveFocus());
 
     rerender(
       <>
@@ -89,6 +92,6 @@ describe('FormModal', () => {
       </>,
     );
 
-    expect(screen.getByRole('button', { name: 'Open dialog' })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Open dialog" })).toHaveFocus();
   });
 });

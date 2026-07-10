@@ -4,7 +4,7 @@ import {
   useRef,
   type FormEvent,
   type ReactNode,
-} from 'react';
+} from "react";
 
 type FormModalProps = {
   open: boolean;
@@ -33,7 +33,9 @@ export function FormModal({
   useEffect(() => {
     if (!open) return;
     const previousFocus =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     const focusInitialElement = () => {
       const panel = panelRef.current;
       if (!panel) return;
@@ -43,12 +45,12 @@ export function FormModal({
     const animationFrame = window.requestAnimationFrame(focusInitialElement);
 
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
+      if (event.key === "Escape") {
         event.preventDefault();
         closeRef.current();
         return;
       }
-      if (event.key !== 'Tab') return;
+      if (event.key !== "Tab") return;
       const panel = panelRef.current;
       if (!panel) return;
       const focusable = getFocusableElements(panel);
@@ -67,10 +69,10 @@ export function FormModal({
         first.focus();
       }
     }
-    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener("keydown", onKeyDown);
     return () => {
       window.cancelAnimationFrame(animationFrame);
-      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener("keydown", onKeyDown);
       if (previousFocus?.isConnected) previousFocus.focus();
     };
   }, [open]);
@@ -97,8 +99,12 @@ export function FormModal({
         <h2 id={titleId}>{title}</h2>
         <form onSubmit={onSubmit}>
           {children}
-          <button type="submit" className="btn btn-primary btn-block mt-4" disabled={loading}>
-            {loading ? 'Saving…' : submitLabel}
+          <button
+            type="submit"
+            className="btn btn-primary btn-block mt-4"
+            disabled={loading}
+          >
+            {loading ? "Saving…" : submitLabel}
           </button>
         </form>
       </div>
@@ -111,5 +117,9 @@ function getFocusableElements(container: HTMLElement): HTMLElement[] {
     container.querySelectorAll<HTMLElement>(
       'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
     ),
-  ).filter((element) => !element.hasAttribute('hidden') && element.getAttribute('aria-hidden') !== 'true');
+  ).filter(
+    (element) =>
+      !element.hasAttribute("hidden") &&
+      element.getAttribute("aria-hidden") !== "true",
+  );
 }

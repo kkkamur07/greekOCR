@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
-import { api } from '../../api/client';
-import { ApiError } from '../../api/errors';
-import { PublicZoomSurface } from './PublicZoomSurface';
+import { useEffect, useState } from "react";
+import { api } from "../../api/client";
+import { ApiError } from "../../api/errors";
+import { PublicZoomSurface } from "./PublicZoomSurface";
 
 type PublicCanvasPdfViewProps = {
   projectId: string;
@@ -25,7 +25,11 @@ export function PublicCanvasPdfView({
 
     void (async () => {
       try {
-        const blob = await api.getPublicTranscriptionPdf(projectId, documentId, partId);
+        const blob = await api.getPublicTranscriptionPdf(
+          projectId,
+          documentId,
+          partId,
+        );
         if (!active) return;
         const url = URL.createObjectURL(blob);
         setPdfUrl((previous) => {
@@ -34,7 +38,11 @@ export function PublicCanvasPdfView({
         });
       } catch (err) {
         if (!active) return;
-        setError(err instanceof ApiError ? err.message : 'Failed to load transcription PDF');
+        setError(
+          err instanceof ApiError
+            ? err.message
+            : "Failed to load transcription PDF",
+        );
         setPdfUrl((previous) => {
           if (previous) URL.revokeObjectURL(previous);
           return null;
@@ -54,7 +62,11 @@ export function PublicCanvasPdfView({
   }, [projectId, documentId, partId]);
 
   if (loading) {
-    return <p className="pub-pdf-view__status text-sm text-muted">Loading transcription PDF…</p>;
+    return (
+      <p className="pub-pdf-view__status text-sm text-muted">
+        Loading transcription PDF…
+      </p>
+    );
   }
 
   if (error) {
@@ -79,7 +91,8 @@ export function PublicCanvasPdfView({
           className="pub-pdf-view__frame"
         >
           <p className="text-sm text-muted">
-            Your browser cannot display PDFs inline. Use Export → Transcription PDF to download.
+            Your browser cannot display PDFs inline. Use Export → Transcription
+            PDF to download.
           </p>
         </object>
       </div>

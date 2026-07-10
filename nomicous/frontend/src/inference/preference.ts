@@ -1,13 +1,13 @@
-const STORAGE_KEY = 'nomicous_inference_preference';
+const STORAGE_KEY = "nomicous_inference_preference";
 
-export type InferencePreference = 'local' | 'cloud';
+export type InferencePreference = "local" | "cloud";
 
 export function loadInferencePreference(): InferencePreference {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw === 'cloud' ? 'cloud' : 'local';
+    return raw === "cloud" ? "cloud" : "local";
   } catch {
-    return 'local';
+    return "local";
   }
 }
 
@@ -16,5 +16,5 @@ export function saveInferencePreference(preference: InferencePreference): void {
 }
 
 export function preferCloudInference(): boolean {
-  return loadInferencePreference() === 'cloud';
+  return loadInferencePreference() === "cloud";
 }

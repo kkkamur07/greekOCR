@@ -1,4 +1,4 @@
-import { fetchWithAuthRecovery, type JobResponse } from '../api/client';
+import { fetchWithAuthRecovery, type JobResponse } from "../api/client";
 
 export const JOB_NO_EVENT_TIMEOUT_MS = 12_000;
 
@@ -33,19 +33,22 @@ type JobSubscriptionOwner = {
 const owners = new Map<string, JobSubscriptionOwner>();
 
 function isTerminal(job: JobResponse): boolean {
-  return job.status === 'done' || job.status === 'failed';
+  return job.status === "done" || job.status === "failed";
 }
 
-function parseSseChunk(buffer: string): { events: string[]; remainder: string } {
-  const parts = buffer.replace(/\r\n/g, '\n').split('\n\n');
-  const remainder = parts.pop() ?? '';
+function parseSseChunk(buffer: string): {
+  events: string[];
+  remainder: string;
+} {
+  const parts = buffer.replace(/\r\n/g, "\n").split("\n\n");
+  const remainder = parts.pop() ?? "";
   const events = parts
     .map((part) =>
       part
-        .split('\n')
-        .filter((line) => line.startsWith('data:'))
+        .split("\n")
+        .filter((line) => line.startsWith("data:"))
         .map((line) => line.slice(5).trimStart())
-        .join('\n'),
+        .join("\n"),
     )
     .filter(Boolean);
   return { events, remainder };
@@ -62,7 +65,12 @@ function stop(owner: JobSubscriptionOwner): void {
 
 function emit(owner: JobSubscriptionOwner, job: JobResponse): void {
   const previous = owner.lastJob;
-  if (previous && previous.status === job.status && previous.updated_at === job.updated_at) return;
+  if (
+    previous &&
+    previous.status === job.status &&
+    previous.updated_at === job.updated_at
+  )
+    return;
   owner.lastJob = job;
   for (const listener of owner.listeners) listener(job);
   if (isTerminal(job)) stop(owner);
@@ -98,7 +106,7 @@ function touchHeartbeat(owner: JobSubscriptionOwner): void {
 }
 
 async function startSse(owner: JobSubscriptionOwner): Promise<void> {
-  if (typeof fetch === 'undefined' || typeof ReadableStream === 'undefined') {
+  if (typeof fetch === "undefined" || typeof ReadableStream === "undefined") {
     startPolling(owner);
     return;
   }
@@ -108,12 +116,12 @@ async function startSse(owner: JobSubscriptionOwner): Promise<void> {
   touchHeartbeat(owner);
 
   try {
-    const headers = new Headers({ Accept: 'text/event-stream' });
-    if (owner.token) headers.set('Authorization', `Bearer ${owner.token}`);
+    const headers = new Headers({ Accept: "text/event-stream" });
+    if (owner.token) headers.set("Authorization", `Bearer ${owner.token}`);
     const response = await fetchWithAuthRecovery(owner.eventsUrl, {
       headers,
       signal: controller.signal,
-      credentials: 'include',
+      credentials: "include",
     });
     if (!response.ok || !response.body) {
       startPolling(owner);
@@ -123,7 +131,7 @@ async function startSse(owner: JobSubscriptionOwner): Promise<void> {
     touchHeartbeat(owner);
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
-    let buffer = '';
+    let buffer = "";
     while (!owner.stopped && !controller.signal.aborted) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -139,7 +147,8 @@ async function startSse(owner: JobSubscriptionOwner): Promise<void> {
 
     if (!owner.stopped && !controller.signal.aborted) startPolling(owner);
   } catch (error) {
-    const aborted = error instanceof DOMException && error.name === 'AbortError';
+    const aborted =
+      error instanceof DOMException && error.name === "AbortError";
     if (!owner.stopped && !aborted) startPolling(owner);
   }
 }
@@ -149,7 +158,10 @@ async function startSse(owner: JobSubscriptionOwner): Promise<void> {
  * receives the same update stream and the owner is removed after its final
  * listener unsubscribes or the job reaches a terminal state.
  */
-export function subscribeToJob(jobId: string, options: JobSubscriptionOptions): () => void {
+export function subscribeToJob(
+  jobId: string,
+  options: JobSubscriptionOptions,
+): () => void {
   let owner = owners.get(jobId);
   if (!owner) {
     owner = {
@@ -180,7 +192,7 @@ export function subscribeToJob(jobId: string, options: JobSubscriptionOptions): 
 
 export function waitForSubscribedJob(
   jobId: string,
-  options: Omit<JobSubscriptionOptions, 'onUpdate'> & {
+  options: Omit<JobSubscriptionOptions, "onUpdate"> & {
     timeoutMs?: number;
     onUpdate?: JobListener;
   },
@@ -188,21 +200,21 @@ export function waitForSubscribedJob(
   return new Promise((resolve, reject) => {
     const timeout = window.setTimeout(() => {
       unsubscribe();
-      reject(new Error('Job timed out.'));
+      reject(new Error("Job timed out."));
     }, options.timeoutMs ?? 120_000);
 
     const unsubscribe = subscribeToJob(jobId, {
       ...options,
       onUpdate: (job) => {
         options.onUpdate?.(job);
-        if (job.status === 'done') {
+        if (job.status === "done") {
           window.clearTimeout(timeout);
           unsubscribe();
           resolve(job);
-        } else if (job.status === 'failed') {
+        } else if (job.status === "failed") {
           window.clearTimeout(timeout);
           unsubscribe();
-          reject(new Error(job.error ?? 'Job failed.'));
+          reject(new Error(job.error ?? "Job failed."));
         }
       },
     });

@@ -1,11 +1,11 @@
-import { ApiError } from '../api/errors';
-import { clearAccessToken, getAccessToken } from './storage';
+import { ApiError } from "../api/errors";
+import { clearAccessToken, getAccessToken } from "./storage";
 
 let loginRedirectInFlight = false;
 
 export function hasAccessToken(): boolean {
   const token = getAccessToken();
-  return typeof token === 'string' && token.trim().length > 0;
+  return typeof token === "string" && token.trim().length > 0;
 }
 
 export function clearLoginRedirectGuard(): void {
@@ -15,9 +15,9 @@ export function clearLoginRedirectGuard(): void {
 function beginLoginRedirect(): boolean {
   if (
     loginRedirectInFlight ||
-    typeof window === 'undefined' ||
-    window.location.pathname === '/login' ||
-    window.location.pathname === '/register'
+    typeof window === "undefined" ||
+    window.location.pathname === "/login" ||
+    window.location.pathname === "/register"
   ) {
     return false;
   }
@@ -30,10 +30,14 @@ export function redirectToLogin(): void {
   clearAccessToken();
   if (!beginLoginRedirect()) return;
   const callbackUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-  window.location.assign(`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`);
+  window.location.assign(
+    `/login?callbackUrl=${encodeURIComponent(callbackUrl)}`,
+  );
 }
 
-export function navigateToLogin(router: Pick<{ replace: (href: string) => void }, 'replace'>): void {
+export function navigateToLogin(
+  router: Pick<{ replace: (href: string) => void }, "replace">,
+): void {
   clearAccessToken();
   if (!beginLoginRedirect()) return;
   const callbackUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;

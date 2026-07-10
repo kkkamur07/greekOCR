@@ -1,6 +1,6 @@
-export type InferenceTask = 'segment' | 'transcribe' | 'binarize';
+export type InferenceTask = "segment" | "transcribe" | "binarize";
 
-export type HostEligibility = 'local' | 'remote' | 'any';
+export type HostEligibility = "local" | "remote" | "any";
 
 export type CharacterConfidence = {
   char: string;
@@ -27,5 +27,8 @@ export type SegmentRunOutput = {
 };
 
 export type InferenceRunResponse =
-  | { task: 'transcribe'; output: TranscribeRunOutput | TranscribeBatchRunOutput }
-  | { task: 'segment'; output: SegmentRunOutput };
+  | {
+      task: "transcribe";
+      output: TranscribeRunOutput | TranscribeBatchRunOutput;
+    }
+  | { task: "segment"; output: SegmentRunOutput };

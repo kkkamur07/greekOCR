@@ -1,5 +1,5 @@
-import { invalidateAuthGetCache } from '../api/getCache';
-import { clearImageCache } from '../api/imageCache';
+import { invalidateAuthGetCache } from "../api/getCache";
+import { clearImageCache } from "../api/imageCache";
 
 let accessToken: string | null = null;
 

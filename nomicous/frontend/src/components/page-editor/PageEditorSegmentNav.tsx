@@ -20,7 +20,7 @@ export function PageEditorSegmentNav({
       ? `${segmentNumber} / ${totalSegments}`
       : totalSegments > 0
         ? `- / ${totalSegments}`
-        : '-';
+        : "-";
 
   return (
     <nav className="pe-seg-nav" aria-label="Segment navigation">

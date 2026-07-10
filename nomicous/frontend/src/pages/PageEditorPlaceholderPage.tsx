@@ -1,66 +1,72 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useParams } from 'next/navigation';
-import { type LayoutPoint, type LinePoint, api } from '../api/client';
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useParams } from "next/navigation";
+import { type LayoutPoint, type LinePoint, api } from "../api/client";
 import {
   DEFAULT_SEGMENT_REGISTRY_MODEL_ID,
   fetchLocalCacheStatus,
   isModelRemoteOnly,
   registrySelectionFromArtifactRef,
   useInferenceHost,
-} from '../inference';
-import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
-import { PageEditorCanvas } from '../components/page-editor/PageEditorCanvas';
-import { PageEditorTranscriptionStrip } from '../components/page-editor/PageEditorTranscriptionStrip';
-import { PageEditorShell } from '../components/page-editor/PageEditorShell';
+} from "../inference";
+import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
+import { PageEditorCanvas } from "../components/page-editor/PageEditorCanvas";
+import { PageEditorTranscriptionStrip } from "../components/page-editor/PageEditorTranscriptionStrip";
+import { PageEditorShell } from "../components/page-editor/PageEditorShell";
 import {
   loadPageEditorSettings,
   savePageEditorSettings,
-} from '../components/page-editor/pageEditorSettings';
+} from "../components/page-editor/pageEditorSettings";
 import {
   PageEditorStatusAlerts,
   hasPageEditorStatusAlerts,
-} from '../components/page-editor/PageEditorStatusAlerts';
-import { PageEditorInferenceBanner } from '../components/page-editor/PageEditorInferenceBanner';
-import { PageEditorLocalInferenceBanner } from '../components/page-editor/PageEditorLocalInferenceBanner';
-import { PageEditorToolbar } from '../components/page-editor/PageEditorToolbar';
+} from "../components/page-editor/PageEditorStatusAlerts";
+import { PageEditorInferenceBanner } from "../components/page-editor/PageEditorInferenceBanner";
+import { PageEditorLocalInferenceBanner } from "../components/page-editor/PageEditorLocalInferenceBanner";
+import { PageEditorToolbar } from "../components/page-editor/PageEditorToolbar";
 import {
   getPageEditorProcessingLabel,
   type PageEditorProcessingKind,
-} from '../components/page-editor/PageEditorProcessingBanner';
-import { PageEditorTranscriptionPdfWrap } from '../components/page-editor/PageEditorTranscriptionPdfWrap';
-import { rectanglePoints } from '../components/page-editor/canvasGeometry';
+} from "../components/page-editor/PageEditorProcessingBanner";
+import { PageEditorTranscriptionPdfWrap } from "../components/page-editor/PageEditorTranscriptionPdfWrap";
+import { rectanglePoints } from "../components/page-editor/canvasGeometry";
 import {
   useLayoutMutations,
   usePageEditorData,
   usePageEditorJobQueue,
   usePairingState,
-} from '../components/page-editor/hooks';
+} from "../components/page-editor/hooks";
 import {
   segmentHasGroundTruth,
   segmentIdsWithGroundTruth,
-} from '../components/page-editor/hooks/utils';
+} from "../components/page-editor/hooks/utils";
 
 export function PageEditorPlaceholderPage() {
-  const { projectId, documentId, partId } = useParams<{
-    projectId: string;
-    documentId: string;
-    partId: string;
-  }>() ?? {};
+  const { projectId, documentId, partId } =
+    useParams<{
+      projectId: string;
+      documentId: string;
+      partId: string;
+    }>() ?? {};
 
-  const [editorMode, setEditorMode] = useState<'layout' | 'transcription'>('layout');
-  const [drawMode, setDrawMode] = useState<'none' | 'rectangle' | 'polygon'>('none');
+  const [editorMode, setEditorMode] = useState<"layout" | "transcription">(
+    "layout",
+  );
+  const [drawMode, setDrawMode] = useState<"none" | "rectangle" | "polygon">(
+    "none",
+  );
   const [draftStart, setDraftStart] = useState<LayoutPoint | null>(null);
   const [draftPolygon, setDraftPolygon] = useState<LinePoint[]>([]);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [canvasSettings, setCanvasSettings] = useState(loadPageEditorSettings);
   const [transcriptionPdfOpen, setTranscriptionPdfOpen] = useState(false);
-  const [transcriptionPdfRefreshKey, setTranscriptionPdfRefreshKey] = useState(0);
+  const [transcriptionPdfRefreshKey, setTranscriptionPdfRefreshKey] =
+    useState(0);
   const [stripDismissed, setStripDismissed] = useState(false);
 
   const editorData = usePageEditorData(projectId, documentId, partId, () => {
-    setEditorMode('layout');
-    setDrawMode('none');
+    setEditorMode("layout");
+    setDrawMode("none");
     setDraftPolygon([]);
     setDraftStart(null);
   });
@@ -96,19 +102,26 @@ export function PageEditorPlaceholderPage() {
 
   const jobQueue = usePageEditorJobQueue();
   const inferenceHost = useInferenceHost();
-  const [segmentRegistryModelId, setSegmentRegistryModelId] = useState<string | null>(null);
-  const [localInferenceModelId, setLocalInferenceModelId] = useState<string | null>(null);
+  const [segmentRegistryModelId, setSegmentRegistryModelId] = useState<
+    string | null
+  >(null);
+  const [localInferenceModelId, setLocalInferenceModelId] = useState<
+    string | null
+  >(null);
   const localInferenceAbortRef = useRef<AbortController | null>(null);
   const switchToCloudRef = useRef(false);
 
   const localInference = useMemo(
     () => ({
-      onStart: async (registryModelId: string, registryTag = 'stable') => {
+      onStart: async (registryModelId: string, registryTag = "stable") => {
         localInferenceAbortRef.current?.abort();
         localInferenceAbortRef.current = new AbortController();
         // Only surface the download banner the first time a model is used on this
         // machine. Once the weights are cached locally, the run proceeds silently.
-        const cached = await fetchLocalCacheStatus(registryModelId, registryTag);
+        const cached = await fetchLocalCacheStatus(
+          registryModelId,
+          registryTag,
+        );
         setLocalInferenceModelId(cached === false ? registryModelId : null);
       },
       onEnd: () => {
@@ -127,7 +140,7 @@ export function PageEditorPlaceholderPage() {
   function useCloudInstead() {
     switchToCloudRef.current = true;
     localInferenceAbortRef.current?.abort();
-    inferenceHost.setInferencePreference('cloud');
+    inferenceHost.setInferencePreference("cloud");
     setLocalInferenceModelId(null);
   }
 
@@ -138,10 +151,12 @@ export function PageEditorPlaceholderPage() {
     }
     let cancelled = false;
     void api
-      .resolvePartModelBinding(projectId, documentId, partId, 'segment')
+      .resolvePartModelBinding(projectId, documentId, partId, "segment")
       .then((resolved) => {
         if (cancelled) return;
-        const { registryModelId } = registrySelectionFromArtifactRef(resolved.model.artifact_ref);
+        const { registryModelId } = registrySelectionFromArtifactRef(
+          resolved.model.artifact_ref,
+        );
         setSegmentRegistryModelId(registryModelId);
       })
       .catch(() => {
@@ -156,22 +171,27 @@ export function PageEditorPlaceholderPage() {
 
   const partImageUrl = part?.image_url ?? null;
   const shouldUseLocalPath = useCallback(
-    (registryModelId: string) => inferenceHost.shouldUseLocalPath(registryModelId),
+    (registryModelId: string) =>
+      inferenceHost.shouldUseLocalPath(registryModelId),
     [inferenceHost],
   );
 
   const selectedModelHostEligibility = useMemo(() => {
-    const model = transcribeModels.find((entry) => entry.id === selectedTranscribeModelId);
+    const model = transcribeModels.find(
+      (entry) => entry.id === selectedTranscribeModelId,
+    );
     if (!model) return null;
     try {
-      const { registryModelId } = registrySelectionFromArtifactRef(model.artifact_ref);
+      const { registryModelId } = registrySelectionFromArtifactRef(
+        model.artifact_ref,
+      );
       if (isModelRemoteOnly(inferenceHost.catalog, registryModelId)) {
-        return 'remote' as const;
+        return "remote" as const;
       }
       if (inferenceHost.shouldUseLocalPath(registryModelId)) {
-        return 'local' as const;
+        return "local" as const;
       }
-      return 'any' as const;
+      return "any" as const;
     } catch {
       return null;
     }
@@ -215,7 +235,7 @@ export function PageEditorPlaceholderPage() {
     selectedSegmentId: pairing.selectedSegmentId,
     setSelectedSegmentId: pairing.setSelectedSegmentId,
     setApprovedTextDraft: pairing.setApprovedTextDraft,
-    onDrawComplete: () => setDrawMode('none'),
+    onDrawComplete: () => setDrawMode("none"),
     partImageUrl,
     shouldUseLocalPath,
     segmentRegistryModelId,
@@ -280,38 +300,38 @@ export function PageEditorPlaceholderPage() {
   }
 
   const processingKind: PageEditorProcessingKind = segmenting
-    ? 'segmentation'
+    ? "segmentation"
     : ocrRunning
-      ? ocrScope === 'page'
-        ? 'transcription-page'
-        : 'transcription-segment'
+      ? ocrScope === "page"
+        ? "transcription-page"
+        : "transcription-segment"
       : null;
 
   const canvasHint = processingKind
     ? `${getPageEditorProcessingLabel(processingKind)}…`
-    : editorMode === 'layout' && drawMode === 'polygon'
+    : editorMode === "layout" && drawMode === "polygon"
       ? draftPolygon.length === 0
-        ? 'Polygon: click to place the first corner'
-        : `Polygon: ${draftPolygon.length} point${draftPolygon.length === 1 ? '' : 's'} · click to add · double-click or Enter to finish`
-      : editorMode === 'layout' && selectedSegment && drawMode === 'none'
+        ? "Polygon: click to place the first corner"
+        : `Polygon: ${draftPolygon.length} point${draftPolygon.length === 1 ? "" : "s"} · click to add · double-click or Enter to finish`
+      : editorMode === "layout" && selectedSegment && drawMode === "none"
         ? `Segment ${selectedSegmentNumber} · click edge to add · click handle to remove · drag to move`
         : selectedSegment
           ? `Segment ${selectedSegmentNumber} selected · ${
-              segmentHasGroundTruth(selectedSegment) ? 'paired' : 'unpaired'
+              segmentHasGroundTruth(selectedSegment) ? "paired" : "unpaired"
             }`
-          : editorMode === 'layout'
-            ? 'Select a segment · click edges/handles to edit shape'
-            : 'Select a segment to view transcription';
+          : editorMode === "layout"
+            ? "Select a segment · click edges/handles to edit shape"
+            : "Select a segment to view transcription";
 
-  function pickDrawMode(nextMode: 'rectangle' | 'polygon') {
-    setDrawMode((mode) => (mode === nextMode ? 'none' : nextMode));
+  function pickDrawMode(nextMode: "rectangle" | "polygon") {
+    setDrawMode((mode) => (mode === nextMode ? "none" : nextMode));
     setDraftPolygon([]);
     setDraftStart(null);
     setActionsOpen(false);
   }
 
   const handlePanSelect = useCallback(() => {
-    setDrawMode('none');
+    setDrawMode("none");
     setDraftPolygon([]);
     setDraftStart(null);
     setActionsOpen(false);
@@ -319,16 +339,16 @@ export function PageEditorPlaceholderPage() {
 
   function completeDraftPolygon() {
     if (draftPolygon.length >= 3) {
-      void replaceWithManualLine('polygon', draftPolygon);
+      void replaceWithManualLine("polygon", draftPolygon);
     }
     setDraftPolygon([]);
   }
 
   useKeyboardShortcuts({
     onDrawBox:
-      editorMode === 'layout' ? () => pickDrawMode('rectangle') : undefined,
+      editorMode === "layout" ? () => pickDrawMode("rectangle") : undefined,
     onDrawPolygon:
-      editorMode === 'layout' ? () => pickDrawMode('polygon') : undefined,
+      editorMode === "layout" ? () => pickDrawMode("polygon") : undefined,
     onDelete:
       selectedSegmentId || selectedLineId
         ? () => {
@@ -338,7 +358,9 @@ export function PageEditorPlaceholderPage() {
         : undefined,
     onEscape: handlePanSelect,
     onEnter:
-      editorMode === 'layout' && drawMode === 'polygon' && draftPolygon.length >= 3
+      editorMode === "layout" &&
+      drawMode === "polygon" &&
+      draftPolygon.length >= 3
         ? completeDraftPolygon
         : undefined,
   });
@@ -372,7 +394,7 @@ export function PageEditorPlaceholderPage() {
   const documentHref =
     projectId && documentId
       ? `/projects/${projectId}/documents/${documentId}`
-      : '/projects';
+      : "/projects";
 
   return (
     <PageEditorShell
@@ -380,7 +402,7 @@ export function PageEditorPlaceholderPage() {
       backHref={documentHref}
       unavailableDescription={
         error || !document || !part
-          ? (error ?? 'This document part was not found.')
+          ? (error ?? "This document part was not found.")
           : null
       }
       showStatusAlerts={hasPageEditorStatusAlerts(statusAlertProps)}
@@ -411,7 +433,7 @@ export function PageEditorPlaceholderPage() {
             editorMode={editorMode}
             onEditorModeChange={(mode) => {
               setEditorMode(mode);
-              setDrawMode('none');
+              setDrawMode("none");
               setActionsOpen(false);
             }}
             drawMode={drawMode}
@@ -424,7 +446,9 @@ export function PageEditorPlaceholderPage() {
             textLines={textLines}
             onPairTextLine={pairTextLine}
             onDocumentWorkflowChange={(workflow) =>
-              setDocument((current) => (current ? { ...current, workflow } : current))
+              setDocument((current) =>
+                current ? { ...current, workflow } : current,
+              )
             }
             onDeleteSelectedSegment={deleteSelectedSegment}
             onResetSelectedLine={resetSelectedLine}
@@ -465,45 +489,51 @@ export function PageEditorPlaceholderPage() {
           <div className="pe-body">
             <div className="pe-canvas-pane">
               <PageEditorCanvas
-            imageUrl={part.image_url}
-            imageAlt={`Page ${partIndex}`}
-            imageWidth={part.width ?? 640}
-            imageHeight={part.height ?? 900}
-            layout={layout}
-            lines={lines}
-            selectedSegmentId={selectedSegmentId}
-            pairedSegmentIds={pairedIds}
-            settings={canvasSettings}
-            drawingRectangle={drawMode === 'rectangle'}
-            drawingPolygon={drawMode === 'polygon'}
-            draftStart={draftStart}
-            draftPolygon={draftPolygon}
-            onDraftStart={setDraftStart}
-            onRectangleDrawn={async (end) => {
-              if (!draftStart) return;
-              const rectangle = rectanglePoints(draftStart, end);
-              await replaceWithManualLine('rectangle', rectangle);
-              setDraftStart(null);
-            }}
-            onPolygonPoint={(point) => setDraftPolygon((current) => [...current, point])}
-            onPolygonComplete={completeDraftPolygon}
-            onSelectLine={(lineId) => {
-              const selectedLine = layout.lines.find((line) => line.id === lineId);
-              setSelectedLineId(lineId);
-              setSelectedSegmentId(null);
-              setSelectedLineSnapshot({
-                baseline: selectedLine?.baseline,
-                mask: selectedLine?.mask,
-              });
-            }}
-            onSelectSegment={handleSelectSegment}
-            segmentVertexEditEnabled={
-              editorMode === 'layout' && drawMode === 'none' && Boolean(selectedSegmentId)
-            }
-            onSegmentPointsChange={updateSegmentPoints}
-          />
+                imageUrl={part.image_url}
+                imageAlt={`Page ${partIndex}`}
+                imageWidth={part.width ?? 640}
+                imageHeight={part.height ?? 900}
+                layout={layout}
+                lines={lines}
+                selectedSegmentId={selectedSegmentId}
+                pairedSegmentIds={pairedIds}
+                settings={canvasSettings}
+                drawingRectangle={drawMode === "rectangle"}
+                drawingPolygon={drawMode === "polygon"}
+                draftStart={draftStart}
+                draftPolygon={draftPolygon}
+                onDraftStart={setDraftStart}
+                onRectangleDrawn={async (end) => {
+                  if (!draftStart) return;
+                  const rectangle = rectanglePoints(draftStart, end);
+                  await replaceWithManualLine("rectangle", rectangle);
+                  setDraftStart(null);
+                }}
+                onPolygonPoint={(point) =>
+                  setDraftPolygon((current) => [...current, point])
+                }
+                onPolygonComplete={completeDraftPolygon}
+                onSelectLine={(lineId) => {
+                  const selectedLine = layout.lines.find(
+                    (line) => line.id === lineId,
+                  );
+                  setSelectedLineId(lineId);
+                  setSelectedSegmentId(null);
+                  setSelectedLineSnapshot({
+                    baseline: selectedLine?.baseline,
+                    mask: selectedLine?.mask,
+                  });
+                }}
+                onSelectSegment={handleSelectSegment}
+                segmentVertexEditEnabled={
+                  editorMode === "layout" &&
+                  drawMode === "none" &&
+                  Boolean(selectedSegmentId)
+                }
+                onSegmentPointsChange={updateSegmentPoints}
+              />
               <p
-                className={`pe-canvas-hint${processingKind ? ' pe-canvas-hint--processing' : ''}`}
+                className={`pe-canvas-hint${processingKind ? " pe-canvas-hint--processing" : ""}`}
                 id="canvas-hint"
                 role="status"
               >
@@ -525,7 +555,7 @@ export function PageEditorPlaceholderPage() {
                 projectId={projectId}
                 documentId={documentId}
                 partId={partId}
-                downloadFilename={`${document.name.replace(/\s+/g, '_')}_page_${partIndex}_transcription.pdf`}
+                downloadFilename={`${document.name.replace(/\s+/g, "_")}_page_${partIndex}_transcription.pdf`}
                 refreshKey={transcriptionPdfRefreshKey}
                 onClose={() => setTranscriptionPdfOpen(false)}
                 onRefresh={refreshTranscriptionPdf}
@@ -543,7 +573,11 @@ export function PageEditorPlaceholderPage() {
               >
                 Move baseline down
               </button>
-              <button type="button" className="btn btn--active btn--sm" onClick={() => void saveSelectedLine()}>
+              <button
+                type="button"
+                className="btn btn--active btn--sm"
+                onClick={() => void saveSelectedLine()}
+              >
                 Save layout
               </button>
               <button
@@ -567,7 +601,9 @@ export function PageEditorPlaceholderPage() {
             approvedTextDraft={approvedTextDraft}
             onApprovedTextDraftChange={setApprovedTextDraft}
             onSaveGroundTruthText={saveGroundTruthText}
-            onPromoteSelectedSegmentToGroundTruth={promoteSelectedSegmentToGroundTruth}
+            onPromoteSelectedSegmentToGroundTruth={
+              promoteSelectedSegmentToGroundTruth
+            }
             onRunSegmentOcr={runSegmentOcr}
             onNavigateSegment={navigateSegment}
             onDismiss={() => setStripDismissed(true)}

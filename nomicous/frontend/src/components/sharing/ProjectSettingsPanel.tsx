@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
-import { api } from '../../api/client';
-import { ApiError } from '../../api/errors';
-import { toast } from '../ui/toast';
-import { slugify } from '../../utils/slugify';
+import { useEffect, useState } from "react";
+import { api } from "../../api/client";
+import { ApiError } from "../../api/errors";
+import { toast } from "../ui/toast";
+import { slugify } from "../../utils/slugify";
 
 type ProjectSettingsPanelProps = {
   projectId: string;
@@ -18,12 +18,12 @@ export function ProjectSettingsPanel({
   onUpdated,
 }: ProjectSettingsPanelProps) {
   const [draftName, setDraftName] = useState(name);
-  const [draftGuidelines, setDraftGuidelines] = useState(guidelines ?? '');
+  const [draftGuidelines, setDraftGuidelines] = useState(guidelines ?? "");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setDraftName(name);
-    setDraftGuidelines(guidelines ?? '');
+    setDraftGuidelines(guidelines ?? "");
   }, [name, guidelines]);
 
   async function handleSave() {
@@ -37,9 +37,10 @@ export function ProjectSettingsPanel({
         guidelines: draftGuidelines.trim() || null,
       });
       onUpdated({ name: updated.name, guidelines: updated.guidelines ?? null });
-      toast.success('Project updated');
+      toast.success("Project updated");
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : 'Failed to update project';
+      const message =
+        err instanceof ApiError ? err.message : "Failed to update project";
       toast.error(message);
     } finally {
       setSaving(false);
@@ -77,7 +78,7 @@ export function ProjectSettingsPanel({
         disabled={!hasChanges || !draftName.trim() || saving}
         onClick={() => void handleSave()}
       >
-        {saving ? 'Saving…' : 'Save changes'}
+        {saving ? "Saving…" : "Save changes"}
       </button>
     </div>
   );

@@ -8,33 +8,34 @@ export class ApiError extends Error {
 
   constructor(message: string, status: number) {
     super(message);
-    this.name = 'ApiError';
+    this.name = "ApiError";
     this.status = status;
   }
 }
 
 function formatDetail(body: unknown): string {
-  if (!body || typeof body !== 'object') {
-    return 'Request failed';
+  if (!body || typeof body !== "object") {
+    return "Request failed";
   }
-  const error = (body as { error?: { details?: unknown; message?: unknown } }).error;
+  const error = (body as { error?: { details?: unknown; message?: unknown } })
+    .error;
   if (error && Array.isArray(error.details)) {
     const detail = formatValidationDetails(error.details);
     if (detail) {
       return detail;
     }
   }
-  if (error && typeof error.message === 'string') {
+  if (error && typeof error.message === "string") {
     return error.message;
   }
   const detail = (body as { detail?: unknown }).detail;
-  if (typeof detail === 'string') {
+  if (typeof detail === "string") {
     return detail;
   }
   if (Array.isArray(detail)) {
-    return formatValidationDetails(detail) || 'Request failed';
+    return formatValidationDetails(detail) || "Request failed";
   }
-  return 'Request failed';
+  return "Request failed";
 }
 
 function formatValidationDetails(details: unknown[]): string {
@@ -42,14 +43,14 @@ function formatValidationDetails(details: unknown[]): string {
     .map((item) => {
       const err = item as ValidationErrorItem;
       const message = err.msg ?? String(item);
-      const location = Array.isArray(err.loc) ? err.loc.join('.') : '';
+      const location = Array.isArray(err.loc) ? err.loc.join(".") : "";
       return location ? `${location}: ${message}` : message;
     })
-    .join('; ');
+    .join("; ");
 }
 
 export async function parseApiError(response: Response): Promise<ApiError> {
-  let message = response.statusText || 'Request failed';
+  let message = response.statusText || "Request failed";
   try {
     const body = await response.json();
     message = formatDetail(body);

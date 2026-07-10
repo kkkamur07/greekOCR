@@ -22,6 +22,8 @@
     <string>__HOME__/.nomicous/hf/cache</string>
     <key>HELPER_REGISTRY_URL</key>
     <string>__REGISTRY_URL__</string>
+    <key>HELPER_CORS_ORIGINS</key>
+    <string>__CORS_ORIGINS__</string>
   </dict>
 </dict>
 </plist>

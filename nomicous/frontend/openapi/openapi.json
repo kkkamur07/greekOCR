@@ -92,10 +92,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "code",
-          "message"
-        ],
+        "required": ["code", "message"],
         "title": "ApiErrorDetail",
         "type": "object"
       },
@@ -105,9 +102,7 @@
             "$ref": "#/components/schemas/ApiErrorDetail"
           }
         },
-        "required": [
-          "error"
-        ],
+        "required": ["error"],
         "title": "ApiErrorResponse",
         "type": "object"
       },
@@ -124,10 +119,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "order",
-          "box"
-        ],
+        "required": ["order", "box"],
         "title": "BlockCreateRequest",
         "type": "object"
       },
@@ -211,9 +203,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "file"
-        ],
+        "required": ["file"],
         "title": "Body_upload_part_projects__project_id__documents__document_id__parts_post",
         "type": "object"
       },
@@ -232,10 +222,7 @@
             "type": "number"
           }
         },
-        "required": [
-          "char",
-          "confidence"
-        ],
+        "required": ["char", "confidence"],
         "title": "CharacterConfidence",
         "type": "object"
       },
@@ -271,9 +258,7 @@
             "type": "array"
           }
         },
-        "required": [
-          "copied_line_ids"
-        ],
+        "required": ["copied_line_ids"],
         "title": "CopyToGroundTruthResponse",
         "type": "object"
       },
@@ -286,9 +271,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "name"
-        ],
+        "required": ["name"],
         "title": "DocumentCreateRequest",
         "type": "object"
       },
@@ -313,9 +296,7 @@
             "title": "Next Cursor"
           }
         },
-        "required": [
-          "items"
-        ],
+        "required": ["items"],
         "title": "DocumentPageResponse",
         "type": "object"
       },
@@ -391,9 +372,7 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "reviewed"
-        ],
+        "required": ["reviewed"],
         "title": "DocumentPartUpdateRequest",
         "type": "object"
       },
@@ -514,11 +493,7 @@
         "type": "object"
       },
       "DocumentWorkflow": {
-        "enum": [
-          "draft",
-          "published",
-          "archived"
-        ],
+        "enum": ["draft", "published", "archived"],
         "title": "DocumentWorkflow",
         "type": "string"
       },
@@ -530,9 +505,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "job_id"
-        ],
+        "required": ["job_id"],
         "title": "EnqueueJobResponse",
         "type": "object"
       },
@@ -556,9 +529,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "job_id"
-        ],
+        "required": ["job_id"],
         "title": "EnqueueTestJobResponse",
         "type": "object"
       },
@@ -625,12 +596,7 @@
             "$ref": "#/components/schemas/ExportWarningsResponse"
           }
         },
-        "required": [
-          "exported_count",
-          "artifacts",
-          "warnings",
-          "steps"
-        ],
+        "required": ["exported_count", "artifacts", "warnings", "steps"],
         "title": "ExportResponse",
         "type": "object"
       },
@@ -651,20 +617,14 @@
             "type": "array"
           }
         },
-        "required": [
-          "unpaired_segments",
-          "unused_text_lines"
-        ],
+        "required": ["unpaired_segments", "unused_text_lines"],
         "title": "ExportWarningsResponse",
         "type": "object"
       },
       "HealthResponse": {
         "properties": {
           "database": {
-            "enum": [
-              "ok",
-              "error"
-            ],
+            "enum": ["ok", "error"],
             "title": "Database",
             "type": "string"
           },
@@ -673,20 +633,12 @@
             "type": "string"
           }
         },
-        "required": [
-          "status",
-          "database"
-        ],
+        "required": ["status", "database"],
         "title": "HealthResponse",
         "type": "object"
       },
       "InferenceJobStatus": {
-        "enum": [
-          "pending",
-          "running",
-          "done",
-          "failed"
-        ],
+        "enum": ["pending", "running", "done", "failed"],
         "title": "InferenceJobStatus",
         "type": "string"
       },
@@ -736,11 +688,7 @@
         "type": "object"
       },
       "InferenceTask": {
-        "enum": [
-          "segment",
-          "transcribe",
-          "binarize"
-        ],
+        "enum": ["segment", "transcribe", "binarize"],
         "title": "InferenceTask",
         "type": "string"
       },
@@ -799,12 +747,7 @@
             "$ref": "#/components/schemas/InferenceTask"
           }
         },
-        "required": [
-          "inference_job_id",
-          "product_job_id",
-          "task",
-          "status"
-        ],
+        "required": ["inference_job_id", "product_job_id", "task", "status"],
         "title": "JobCallbackRequest",
         "type": "object"
       },
@@ -829,9 +772,7 @@
             "title": "Next Cursor"
           }
         },
-        "required": [
-          "items"
-        ],
+        "required": ["items"],
         "title": "JobPageResponse",
         "type": "object"
       },
@@ -892,10 +833,7 @@
           "execution": {
             "anyOf": [
               {
-                "enum": [
-                  "local",
-                  "cloud"
-                ],
+                "enum": ["local", "cloud"],
                 "type": "string"
               },
               {
@@ -981,23 +919,12 @@
         "type": "object"
       },
       "JobStatus": {
-        "enum": [
-          "pending",
-          "waiting",
-          "running",
-          "done",
-          "failed"
-        ],
+        "enum": ["pending", "waiting", "running", "done", "failed"],
         "title": "JobStatus",
         "type": "string"
       },
       "JobType": {
-        "enum": [
-          "segment",
-          "transcribe",
-          "binarize",
-          "pipeline"
-        ],
+        "enum": ["segment", "transcribe", "binarize", "pipeline"],
         "title": "JobType",
         "type": "string"
       },
@@ -1039,10 +966,7 @@
             "type": "array"
           }
         },
-        "required": [
-          "blocks",
-          "lines"
-        ],
+        "required": ["blocks", "lines"],
         "title": "LayoutResponse",
         "type": "object"
       },
@@ -1105,18 +1029,12 @@
             "type": "array"
           }
         },
-        "required": [
-          "order",
-          "points"
-        ],
+        "required": ["order", "points"],
         "title": "LineCreateRequest",
         "type": "object"
       },
       "LineGeometryKind": {
-        "enum": [
-          "polygon",
-          "rectangle"
-        ],
+        "enum": ["polygon", "rectangle"],
         "title": "LineGeometryKind",
         "type": "string"
       },
@@ -1317,11 +1235,7 @@
         "type": "object"
       },
       "LineSource": {
-        "enum": [
-          "manual",
-          "kraken",
-          "model"
-        ],
+        "enum": ["manual", "kraken", "model"],
         "title": "LineSource",
         "type": "string"
       },
@@ -1332,9 +1246,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "text"
-        ],
+        "required": ["text"],
         "title": "LineTranscriptionPatchRequest",
         "type": "object"
       },
@@ -1494,10 +1406,7 @@
             "title": "Source Metadata"
           }
         },
-        "required": [
-          "order",
-          "points"
-        ],
+        "required": ["order", "points"],
         "title": "LineUpsertRequest",
         "type": "object"
       },
@@ -1534,10 +1443,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "registry_model_id",
-          "output"
-        ],
+        "required": ["registry_model_id", "output"],
         "title": "LocalSegmentPersistRequest",
         "type": "object"
       },
@@ -1613,11 +1519,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "line_id",
-          "text",
-          "confidence"
-        ],
+        "required": ["line_id", "text", "confidence"],
         "title": "LocalTranscribeLinePersistRequest",
         "type": "object"
       },
@@ -1643,10 +1545,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "registry_model_id",
-          "lines"
-        ],
+        "required": ["registry_model_id", "lines"],
         "title": "LocalTranscribePersistRequest",
         "type": "object"
       },
@@ -1671,11 +1570,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "job_id",
-          "transcription_id",
-          "lines"
-        ],
+        "required": ["job_id", "transcription_id", "lines"],
         "title": "LocalTranscribePersistResponse",
         "type": "object"
       },
@@ -1693,10 +1588,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "email",
-          "password"
-        ],
+        "required": ["email", "password"],
         "title": "LoginRequest",
         "type": "object"
       },
@@ -1716,10 +1608,7 @@
             "$ref": "#/components/schemas/InferenceTask"
           }
         },
-        "required": [
-          "task",
-          "model_id"
-        ],
+        "required": ["task", "model_id"],
         "title": "ModelBindingCreateRequest",
         "type": "object"
       },
@@ -1841,10 +1730,7 @@
             "type": "array"
           }
         },
-        "required": [
-          "text_lines",
-          "pairing_progress"
-        ],
+        "required": ["text_lines", "pairing_progress"],
         "title": "PagePairingResponse",
         "type": "object"
       },
@@ -1856,9 +1742,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "text"
-        ],
+        "required": ["text"],
         "title": "PageTranscriptionImportRequest",
         "type": "object"
       },
@@ -1885,11 +1769,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "order",
-          "text",
-          "paired_line_id"
-        ],
+        "required": ["order", "text", "paired_line_id"],
         "title": "PageTranscriptionTextLineResponse",
         "type": "object"
       },
@@ -1906,10 +1786,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "line_id",
-          "text_line_order"
-        ],
+        "required": ["line_id", "text_line_order"],
         "title": "PairTextLineRequest",
         "type": "object"
       },
@@ -1928,11 +1805,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "paired_lines",
-          "total_lines",
-          "percent"
-        ],
+        "required": ["paired_lines", "total_lines", "percent"],
         "title": "PairingProgressResponse",
         "type": "object"
       },
@@ -1962,10 +1835,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "name",
-          "slug"
-        ],
+        "required": ["name", "slug"],
         "title": "ProjectCreateRequest",
         "type": "object"
       },
@@ -1990,9 +1860,7 @@
             "title": "Next Cursor"
           }
         },
-        "required": [
-          "items"
-        ],
+        "required": ["items"],
         "title": "ProjectPageResponse",
         "type": "object"
       },
@@ -2113,12 +1981,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "part_id",
-          "order",
-          "box"
-        ],
+        "required": ["id", "part_id", "order", "box"],
         "title": "PublicBlockResponse",
         "type": "object"
       },
@@ -2176,12 +2039,7 @@
             "type": "array"
           }
         },
-        "required": [
-          "id",
-          "part_id",
-          "order",
-          "points"
-        ],
+        "required": ["id", "part_id", "order", "points"],
         "title": "PublicLineResponse",
         "type": "object"
       },
@@ -2200,11 +2058,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "name",
-          "kind"
-        ],
+        "required": ["id", "name", "kind"],
         "title": "PublicTranscriptionLayerResponse",
         "type": "object"
       },
@@ -2228,11 +2082,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "email",
-          "username",
-          "password"
-        ],
+        "required": ["email", "username", "password"],
         "title": "RegisterRequest",
         "type": "object"
       },
@@ -2248,9 +2098,7 @@
             "type": "array"
           }
         },
-        "required": [
-          "part_ids"
-        ],
+        "required": ["part_ids"],
         "title": "ReorderPartsRequest",
         "type": "object"
       },
@@ -2268,11 +2116,7 @@
             "$ref": "#/components/schemas/InferenceModelResponse"
           }
         },
-        "required": [
-          "binding",
-          "model",
-          "effective_params"
-        ],
+        "required": ["binding", "model", "effective_params"],
         "title": "ResolvedModelBindingResponse",
         "type": "object"
       },
@@ -2294,19 +2138,12 @@
             "type": "integer"
           }
         },
-        "required": [
-          "external_id",
-          "order",
-          "box"
-        ],
+        "required": ["external_id", "order", "box"],
         "title": "SegmentBlock",
         "type": "object"
       },
       "SegmentGeometryKind": {
-        "enum": [
-          "polygon",
-          "rectangle"
-        ],
+        "enum": ["polygon", "rectangle"],
         "title": "SegmentGeometryKind",
         "type": "string"
       },
@@ -2321,10 +2158,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "kind",
-          "data"
-        ],
+        "required": ["kind", "data"],
         "title": "SegmentJobOutput",
         "type": "object"
       },
@@ -2406,12 +2240,7 @@
             "type": "object"
           }
         },
-        "required": [
-          "external_id",
-          "order",
-          "baseline",
-          "points"
-        ],
+        "required": ["external_id", "order", "baseline", "points"],
         "title": "SegmentLine",
         "type": "object"
       },
@@ -2507,9 +2336,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "username"
-        ],
+        "required": ["username"],
         "title": "ShareUserRequest",
         "type": "object"
       },
@@ -2525,9 +2352,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "access_token"
-        ],
+        "required": ["access_token"],
         "title": "TokenResponse",
         "type": "object"
       },
@@ -2553,10 +2378,7 @@
             "$ref": "#/components/schemas/TranscribeRunResponse"
           }
         },
-        "required": [
-          "line_index",
-          "output"
-        ],
+        "required": ["line_index", "output"],
         "title": "TranscribeBatchLineResult",
         "type": "object"
       },
@@ -2571,9 +2393,7 @@
             "type": "array"
           }
         },
-        "required": [
-          "lines"
-        ],
+        "required": ["lines"],
         "title": "TranscribeBatchRunResponse",
         "type": "object"
       },
@@ -2588,10 +2408,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "kind",
-          "data"
-        ],
+        "required": ["kind", "data"],
         "title": "TranscribeJobOutput",
         "type": "object"
       },
@@ -2648,19 +2465,12 @@
             "type": "string"
           }
         },
-        "required": [
-          "text",
-          "confidence",
-          "character_confidences"
-        ],
+        "required": ["text", "confidence", "character_confidences"],
         "title": "TranscribeRunResponse",
         "type": "object"
       },
       "TranscriptionKind": {
-        "enum": [
-          "ground_truth",
-          "model"
-        ],
+        "enum": ["ground_truth", "model"],
         "title": "TranscriptionKind",
         "type": "string"
       },
@@ -2733,12 +2543,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "email",
-          "username",
-          "created_at"
-        ],
+        "required": ["id", "email", "username", "created_at"],
         "title": "UserResponse",
         "type": "object"
       },
@@ -2765,13 +2570,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "service",
-          "message",
-          "version",
-          "docs_url",
-          "health_url"
-        ],
+        "required": ["service", "message", "version", "docs_url", "health_url"],
         "title": "WelcomeResponse",
         "type": "object"
       }
@@ -2876,9 +2675,7 @@
           }
         },
         "summary": "Welcome",
-        "tags": [
-          "root"
-        ]
+        "tags": ["root"]
       }
     },
     "/auth/login": {
@@ -2977,9 +2774,7 @@
           }
         },
         "summary": "Login",
-        "tags": [
-          "auth"
-        ]
+        "tags": ["auth"]
       }
     },
     "/auth/logout": {
@@ -3061,9 +2856,7 @@
           }
         },
         "summary": "Logout",
-        "tags": [
-          "auth"
-        ]
+        "tags": ["auth"]
       }
     },
     "/auth/refresh": {
@@ -3152,9 +2945,7 @@
           }
         },
         "summary": "Refresh",
-        "tags": [
-          "auth"
-        ]
+        "tags": ["auth"]
       }
     },
     "/auth/register": {
@@ -3253,9 +3044,7 @@
           }
         },
         "summary": "Register",
-        "tags": [
-          "auth"
-        ]
+        "tags": ["auth"]
       }
     },
     "/health": {
@@ -3354,9 +3143,7 @@
           }
         },
         "summary": "Health",
-        "tags": [
-          "health"
-        ]
+        "tags": ["health"]
       }
     },
     "/inference/models": {
@@ -3454,9 +3241,7 @@
           }
         ],
         "summary": "List Inference Models",
-        "tags": [
-          "ml"
-        ]
+        "tags": ["ml"]
       }
     },
     "/inference/v1/registry": {
@@ -3544,9 +3329,7 @@
           }
         },
         "summary": "Get Inference Registry",
-        "tags": [
-          "ml"
-        ]
+        "tags": ["ml"]
       }
     },
     "/internal/inference/job-complete": {
@@ -3656,9 +3439,7 @@
           }
         },
         "summary": "Complete Inference Job",
-        "tags": [
-          "internal-inference"
-        ]
+        "tags": ["internal-inference"]
       }
     },
     "/jobs/test": {
@@ -3769,9 +3550,7 @@
           }
         ],
         "summary": "Enqueue Test Job",
-        "tags": [
-          "jobs"
-        ]
+        "tags": ["jobs"]
       }
     },
     "/jobs/{job_id}": {
@@ -3877,9 +3656,7 @@
           }
         ],
         "summary": "Get Job",
-        "tags": [
-          "jobs"
-        ]
+        "tags": ["jobs"]
       }
     },
     "/jobs/{job_id}/events": {
@@ -3978,9 +3755,7 @@
           }
         ],
         "summary": "Stream Job Events",
-        "tags": [
-          "jobs"
-        ]
+        "tags": ["jobs"]
       }
     },
     "/me": {
@@ -4074,9 +3849,7 @@
           }
         ],
         "summary": "Me",
-        "tags": [
-          "auth"
-        ]
+        "tags": ["auth"]
       }
     },
     "/media/parts/{part_id}": {
@@ -4244,9 +4017,7 @@
           }
         ],
         "summary": "Get Part Image",
-        "tags": [
-          "media"
-        ]
+        "tags": ["media"]
       }
     },
     "/projects": {
@@ -4371,9 +4142,7 @@
           }
         ],
         "summary": "List Projects",
-        "tags": [
-          "projects"
-        ]
+        "tags": ["projects"]
       },
       "post": {
         "operationId": "create_project_projects_post",
@@ -4475,9 +4244,7 @@
           }
         ],
         "summary": "Create Project",
-        "tags": [
-          "projects"
-        ]
+        "tags": ["projects"]
       }
     },
     "/projects/{project_id}": {
@@ -4576,9 +4343,7 @@
           }
         ],
         "summary": "Delete Project",
-        "tags": [
-          "projects"
-        ]
+        "tags": ["projects"]
       },
       "get": {
         "operationId": "get_project_projects__project_id__get",
@@ -4682,9 +4447,7 @@
           }
         ],
         "summary": "Get Project",
-        "tags": [
-          "projects"
-        ]
+        "tags": ["projects"]
       },
       "patch": {
         "operationId": "update_project_projects__project_id__patch",
@@ -4798,9 +4561,7 @@
           }
         ],
         "summary": "Update Project",
-        "tags": [
-          "projects"
-        ]
+        "tags": ["projects"]
       }
     },
     "/projects/{project_id}/documents": {
@@ -4945,9 +4706,7 @@
           }
         ],
         "summary": "List Documents",
-        "tags": [
-          "documents"
-        ]
+        "tags": ["documents"]
       },
       "post": {
         "operationId": "create_document_projects__project_id__documents_post",
@@ -5061,9 +4820,7 @@
           }
         ],
         "summary": "Create Document",
-        "tags": [
-          "documents"
-        ]
+        "tags": ["documents"]
       }
     },
     "/projects/{project_id}/documents/{document_id}": {
@@ -5172,9 +4929,7 @@
           }
         ],
         "summary": "Delete Document",
-        "tags": [
-          "documents"
-        ]
+        "tags": ["documents"]
       },
       "get": {
         "operationId": "get_document_projects__project_id__documents__document_id__get",
@@ -5288,9 +5043,7 @@
           }
         ],
         "summary": "Get Document",
-        "tags": [
-          "documents"
-        ]
+        "tags": ["documents"]
       },
       "patch": {
         "operationId": "update_document_projects__project_id__documents__document_id__patch",
@@ -5414,9 +5167,7 @@
           }
         ],
         "summary": "Update Document",
-        "tags": [
-          "documents"
-        ]
+        "tags": ["documents"]
       }
     },
     "/projects/{project_id}/documents/{document_id}/model-bindings": {
@@ -5536,9 +5287,7 @@
           }
         ],
         "summary": "List Document Model Bindings",
-        "tags": [
-          "ml"
-        ]
+        "tags": ["ml"]
       },
       "post": {
         "operationId": "create_document_model_binding_projects__project_id__documents__document_id__model_bindings_post",
@@ -5662,9 +5411,7 @@
           }
         ],
         "summary": "Create Document Model Binding",
-        "tags": [
-          "ml"
-        ]
+        "tags": ["ml"]
       }
     },
     "/projects/{project_id}/documents/{document_id}/parts": {
@@ -5790,9 +5537,7 @@
           }
         ],
         "summary": "Upload Part",
-        "tags": [
-          "documents"
-        ]
+        "tags": ["documents"]
       }
     },
     "/projects/{project_id}/documents/{document_id}/parts/reorder": {
@@ -5922,9 +5667,7 @@
           }
         ],
         "summary": "Reorder Parts",
-        "tags": [
-          "documents"
-        ]
+        "tags": ["documents"]
       }
     },
     "/projects/{project_id}/documents/{document_id}/parts/{part_id}": {
@@ -6043,9 +5786,7 @@
           }
         ],
         "summary": "Delete Part",
-        "tags": [
-          "documents"
-        ]
+        "tags": ["documents"]
       },
       "patch": {
         "operationId": "update_part_projects__project_id__documents__document_id__parts__part_id__patch",
@@ -6179,9 +5920,7 @@
           }
         ],
         "summary": "Update Part",
-        "tags": [
-          "documents"
-        ]
+        "tags": ["documents"]
       }
     },
     "/projects/{project_id}/documents/{document_id}/parts/{part_id}/blocks": {
@@ -6317,9 +6056,7 @@
           }
         ],
         "summary": "Create Part Block",
-        "tags": [
-          "documents"
-        ]
+        "tags": ["documents"]
       }
     },
     "/projects/{project_id}/documents/{document_id}/parts/{part_id}/blocks/{block_id}": {
@@ -6448,9 +6185,7 @@
           }
         ],
         "summary": "Delete Part Block",
-        "tags": [
-          "documents"
-        ]
+        "tags": ["documents"]
       },
       "patch": {
         "operationId": "patch_part_block_projects__project_id__documents__document_id__parts__part_id__blocks__block_id__patch",
@@ -6594,9 +6329,7 @@
           }
         ],
         "summary": "Patch Part Block",
-        "tags": [
-          "documents"
-        ]
+        "tags": ["documents"]
       }
     },
     "/projects/{project_id}/documents/{document_id}/parts/{part_id}/export": {
@@ -6722,9 +6455,7 @@
           }
         ],
         "summary": "Export Approved Line Artifacts",
-        "tags": [
-          "documents"
-        ]
+        "tags": ["documents"]
       }
     },
     "/projects/{project_id}/documents/{document_id}/parts/{part_id}/history": {
@@ -6854,9 +6585,7 @@
           }
         ],
         "summary": "List History Snapshots",
-        "tags": [
-          "annotation-history"
-        ]
+        "tags": ["annotation-history"]
       },
       "post": {
         "operationId": "create_history_snapshot_projects__project_id__documents__document_id__parts__part_id__history_post",
@@ -6980,9 +6709,7 @@
           }
         ],
         "summary": "Create History Snapshot",
-        "tags": [
-          "annotation-history"
-        ]
+        "tags": ["annotation-history"]
       }
     },
     "/projects/{project_id}/documents/{document_id}/parts/{part_id}/history/{snapshot_id}/restore": {
@@ -7122,9 +6849,7 @@
           }
         ],
         "summary": "Restore History Snapshot",
-        "tags": [
-          "annotation-history"
-        ]
+        "tags": ["annotation-history"]
       }
     },
     "/projects/{project_id}/documents/{document_id}/parts/{part_id}/layout": {
@@ -7250,9 +6975,7 @@
           }
         ],
         "summary": "List Part Layout",
-        "tags": [
-          "documents"
-        ]
+        "tags": ["documents"]
       }
     },
     "/projects/{project_id}/documents/{document_id}/parts/{part_id}/layout/reset": {
@@ -7388,9 +7111,7 @@
           }
         ],
         "summary": "Reset Part Layout",
-        "tags": [
-          "documents"
-        ]
+        "tags": ["documents"]
       }
     },
     "/projects/{project_id}/documents/{document_id}/parts/{part_id}/lines": {
@@ -7520,9 +7241,7 @@
           }
         ],
         "summary": "List Part Lines",
-        "tags": [
-          "documents"
-        ]
+        "tags": ["documents"]
       },
       "post": {
         "operationId": "create_part_line_projects__project_id__documents__document_id__parts__part_id__lines_post",
@@ -7656,9 +7375,7 @@
           }
         ],
         "summary": "Create Part Line",
-        "tags": [
-          "documents"
-        ]
+        "tags": ["documents"]
       },
       "put": {
         "operationId": "replace_part_lines_projects__project_id__documents__document_id__parts__part_id__lines_put",
@@ -7796,9 +7513,7 @@
           }
         ],
         "summary": "Replace Part Lines",
-        "tags": [
-          "documents"
-        ]
+        "tags": ["documents"]
       }
     },
     "/projects/{project_id}/documents/{document_id}/parts/{part_id}/lines/{line_id}": {
@@ -7927,9 +7642,7 @@
           }
         ],
         "summary": "Delete Part Line",
-        "tags": [
-          "documents"
-        ]
+        "tags": ["documents"]
       },
       "patch": {
         "operationId": "patch_part_line_projects__project_id__documents__document_id__parts__part_id__lines__line_id__patch",
@@ -8073,9 +7786,7 @@
           }
         ],
         "summary": "Patch Part Line",
-        "tags": [
-          "documents"
-        ]
+        "tags": ["documents"]
       }
     },
     "/projects/{project_id}/documents/{document_id}/parts/{part_id}/local-inference/segment": {
@@ -8211,9 +7922,7 @@
           }
         ],
         "summary": "Persist Local Segment",
-        "tags": [
-          "documents"
-        ]
+        "tags": ["documents"]
       }
     },
     "/projects/{project_id}/documents/{document_id}/parts/{part_id}/local-inference/transcribe": {
@@ -8349,9 +8058,7 @@
           }
         ],
         "summary": "Persist Local Transcribe",
-        "tags": [
-          "documents"
-        ]
+        "tags": ["documents"]
       }
     },
     "/projects/{project_id}/documents/{document_id}/parts/{part_id}/model-bindings": {
@@ -8481,9 +8188,7 @@
           }
         ],
         "summary": "List Part Model Bindings",
-        "tags": [
-          "ml"
-        ]
+        "tags": ["ml"]
       },
       "post": {
         "operationId": "create_part_model_binding_projects__project_id__documents__document_id__parts__part_id__model_bindings_post",
@@ -8617,9 +8322,7 @@
           }
         ],
         "summary": "Create Part Model Binding",
-        "tags": [
-          "ml"
-        ]
+        "tags": ["ml"]
       }
     },
     "/projects/{project_id}/documents/{document_id}/parts/{part_id}/model-bindings/resolve": {
@@ -8753,9 +8456,7 @@
           }
         ],
         "summary": "Resolve Part Model Binding",
-        "tags": [
-          "ml"
-        ]
+        "tags": ["ml"]
       }
     },
     "/projects/{project_id}/documents/{document_id}/parts/{part_id}/page-transcription": {
@@ -8891,9 +8592,7 @@
           }
         ],
         "summary": "Import Page Transcription",
-        "tags": [
-          "documents"
-        ]
+        "tags": ["documents"]
       }
     },
     "/projects/{project_id}/documents/{document_id}/parts/{part_id}/page-xml": {
@@ -9020,9 +8719,7 @@
           }
         ],
         "summary": "Export Part Page Xml",
-        "tags": [
-          "documents"
-        ]
+        "tags": ["documents"]
       }
     },
     "/projects/{project_id}/documents/{document_id}/parts/{part_id}/pairing": {
@@ -9148,9 +8845,7 @@
           }
         ],
         "summary": "Get Page Pairing",
-        "tags": [
-          "documents"
-        ]
+        "tags": ["documents"]
       }
     },
     "/projects/{project_id}/documents/{document_id}/parts/{part_id}/pairings": {
@@ -9286,9 +8981,7 @@
           }
         ],
         "summary": "Pair Page Text Line",
-        "tags": [
-          "documents"
-        ]
+        "tags": ["documents"]
       }
     },
     "/projects/{project_id}/documents/{document_id}/parts/{part_id}/segment": {
@@ -9431,9 +9124,7 @@
           }
         ],
         "summary": "Segment Part",
-        "tags": [
-          "documents"
-        ]
+        "tags": ["documents"]
       }
     },
     "/projects/{project_id}/documents/{document_id}/parts/{part_id}/transcribe": {
@@ -9576,9 +9267,7 @@
           }
         ],
         "summary": "Transcribe Part",
-        "tags": [
-          "documents"
-        ]
+        "tags": ["documents"]
       }
     },
     "/projects/{project_id}/documents/{document_id}/parts/{part_id}/transcription-pdf": {
@@ -9705,9 +9394,7 @@
           }
         ],
         "summary": "Get Transcription Pdf",
-        "tags": [
-          "documents"
-        ]
+        "tags": ["documents"]
       },
       "post": {
         "operationId": "generate_transcription_pdf_projects__project_id__documents__document_id__parts__part_id__transcription_pdf_post",
@@ -9832,9 +9519,7 @@
           }
         ],
         "summary": "Generate Transcription Pdf",
-        "tags": [
-          "documents"
-        ]
+        "tags": ["documents"]
       }
     },
     "/projects/{project_id}/documents/{document_id}/transcriptions": {
@@ -9954,9 +9639,7 @@
           }
         ],
         "summary": "List Transcriptions",
-        "tags": [
-          "documents"
-        ]
+        "tags": ["documents"]
       }
     },
     "/projects/{project_id}/documents/{document_id}/transcriptions/{transcription_id}/copy-to-ground-truth": {
@@ -10092,9 +9775,7 @@
           }
         ],
         "summary": "Copy To Ground Truth",
-        "tags": [
-          "documents"
-        ]
+        "tags": ["documents"]
       }
     },
     "/projects/{project_id}/documents/{document_id}/transcriptions/{transcription_id}/lines/{line_id}": {
@@ -10240,9 +9921,7 @@
           }
         ],
         "summary": "Patch Ground Truth Line Text",
-        "tags": [
-          "documents"
-        ]
+        "tags": ["documents"]
       }
     },
     "/projects/{project_id}/jobs": {
@@ -10377,9 +10056,7 @@
           }
         ],
         "summary": "List Project Jobs",
-        "tags": [
-          "projects"
-        ]
+        "tags": ["projects"]
       }
     },
     "/projects/{project_id}/model-bindings": {
@@ -10489,9 +10166,7 @@
           }
         ],
         "summary": "List Project Model Bindings",
-        "tags": [
-          "ml"
-        ]
+        "tags": ["ml"]
       },
       "post": {
         "operationId": "create_project_model_binding_projects__project_id__model_bindings_post",
@@ -10605,9 +10280,7 @@
           }
         ],
         "summary": "Create Project Model Binding",
-        "tags": [
-          "ml"
-        ]
+        "tags": ["ml"]
       }
     },
     "/projects/{project_id}/model-bindings/{binding_id}": {
@@ -10716,9 +10389,7 @@
           }
         ],
         "summary": "Delete Model Binding",
-        "tags": [
-          "ml"
-        ]
+        "tags": ["ml"]
       },
       "patch": {
         "operationId": "update_model_binding_projects__project_id__model_bindings__binding_id__patch",
@@ -10842,9 +10513,7 @@
           }
         ],
         "summary": "Update Model Binding",
-        "tags": [
-          "ml"
-        ]
+        "tags": ["ml"]
       }
     },
     "/projects/{project_id}/share": {
@@ -10953,9 +10622,7 @@
           }
         ],
         "summary": "Share Project",
-        "tags": [
-          "projects"
-        ]
+        "tags": ["projects"]
       }
     },
     "/projects/{project_id}/share/{username}": {
@@ -11063,9 +10730,7 @@
           }
         ],
         "summary": "Unshare Project",
-        "tags": [
-          "projects"
-        ]
+        "tags": ["projects"]
       }
     },
     "/public/media/parts/{part_id}": {
@@ -11228,9 +10893,7 @@
           }
         },
         "summary": "Get Public Part Image",
-        "tags": [
-          "public"
-        ]
+        "tags": ["public"]
       }
     },
     "/public/projects/{project_id}/documents/{document_id}": {
@@ -11341,9 +11004,7 @@
           }
         },
         "summary": "Get Published Document",
-        "tags": [
-          "public"
-        ]
+        "tags": ["public"]
       }
     },
     "/public/projects/{project_id}/documents/{document_id}/layout": {
@@ -11454,9 +11115,7 @@
           }
         },
         "summary": "Get Published Layout",
-        "tags": [
-          "public"
-        ]
+        "tags": ["public"]
       }
     },
     "/public/projects/{project_id}/documents/{document_id}/parts/{part_id}/page-xml": {
@@ -11578,9 +11237,7 @@
           }
         },
         "summary": "Get Published Page Xml",
-        "tags": [
-          "public"
-        ]
+        "tags": ["public"]
       }
     },
     "/public/projects/{project_id}/documents/{document_id}/parts/{part_id}/transcription-pdf": {
@@ -11702,9 +11359,7 @@
           }
         },
         "summary": "Get Published Transcription Pdf",
-        "tags": [
-          "public"
-        ]
+        "tags": ["public"]
       }
     },
     "/public/projects/{project_id}/documents/{document_id}/transcriptions": {
@@ -11819,9 +11474,7 @@
           }
         },
         "summary": "List Published Transcriptions",
-        "tags": [
-          "public"
-        ]
+        "tags": ["public"]
       }
     }
   }

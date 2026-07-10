@@ -1,5 +1,5 @@
-import type { DocumentWorkflow } from '../../api/client';
-import { DocumentLiveSharingControls } from '../sharing/DocumentLiveSharingControls';
+import type { DocumentWorkflow } from "../../api/client";
+import { DocumentLiveSharingControls } from "../sharing/DocumentLiveSharingControls";
 
 type PageEditorSharingMenuProps = {
   projectId: string;

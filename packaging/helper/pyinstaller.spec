@@ -50,10 +50,17 @@ hiddenimports = [
     "uvicorn.lifespan.on",
 ]
 
-# Kraken, SciPy and scikit-image import large parts of their surface
-# dynamically; collect submodules so the frozen segment path does not hit
-# ModuleNotFoundError at runtime.
-hiddenimports += collect_submodules("kraken")
+# The helper imports Kraken lazily for BLLA segmentation. Include those two
+# entry points, then let PyInstaller follow their normal imports instead of
+# freezing Kraken's CLI, training, and model-conversion modules wholesale.
+# A packaged segment smoke test guards this intentionally narrow surface.
+hiddenimports += [
+    "kraken.blla",
+    "kraken.lib.vgsl",
+]
+
+# SciPy and scikit-image import parts of their surface dynamically during BLLA
+# post-processing, so retain their complete runtime modules.
 hiddenimports += collect_submodules("scipy")
 hiddenimports += collect_submodules("skimage")
 

@@ -90,6 +90,9 @@ def _line_value(item: Any, *keys: str) -> Any:
 @lru_cache(maxsize=4)
 def _load_segmentation_model(model_path: str) -> Any:
     try:
+        from inference.architectures.kraken_runtime import prepare_kraken_inference_runtime
+
+        prepare_kraken_inference_runtime()
         from kraken.lib import vgsl
     except ImportError as exc:
         raise KrakenUnavailableError(
@@ -101,6 +104,9 @@ def _load_segmentation_model(model_path: str) -> Any:
 
 def _run_blla_segment(image: Image.Image, model: Any) -> Any:
     try:
+        from inference.architectures.kraken_runtime import prepare_kraken_inference_runtime
+
+        prepare_kraken_inference_runtime()
         from kraken import blla
     except ImportError as exc:
         raise KrakenUnavailableError(

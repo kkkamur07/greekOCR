@@ -1,9 +1,9 @@
-import type { CharacterConfidence } from './characterConfidence';
+import type { CharacterConfidence } from "./characterConfidence";
 import {
   confidenceTierClass,
   confidenceTierLabel,
   formatConfidencePercent,
-} from './characterConfidence';
+} from "./characterConfidence";
 
 type CharacterConfidenceTextProps = {
   characterConfidences: CharacterConfidence[];

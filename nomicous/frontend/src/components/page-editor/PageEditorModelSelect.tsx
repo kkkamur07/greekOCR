@@ -1,4 +1,4 @@
-import type { InferenceModelResponse } from '../../api/client';
+import type { InferenceModelResponse } from "../../api/client";
 
 type PageEditorModelSelectProps = {
   transcribeModels: InferenceModelResponse[];
@@ -19,9 +19,11 @@ export function PageEditorModelSelect({
       <select
         className="pe-model__select"
         aria-label="HTR transcription model"
-        value={selectedTranscribeModelId ?? ''}
+        value={selectedTranscribeModelId ?? ""}
         disabled={disabled || transcribeModels.length === 0}
-        onChange={(event) => onSelectedTranscribeModelIdChange(event.target.value || null)}
+        onChange={(event) =>
+          onSelectedTranscribeModelIdChange(event.target.value || null)
+        }
       >
         {transcribeModels.length === 0 ? (
           <option value="">No models</option>

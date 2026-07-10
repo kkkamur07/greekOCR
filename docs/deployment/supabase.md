@@ -225,7 +225,7 @@ Cloud path:  Browser → API creates job → INFERENCE_URL service → webhook c
 
 | | Local helper | Cloud (`INFERENCE_URL`) |
 |--|--------------|-------------------------|
-| **Frontend config** | `VITE_INFERENCE_HELPER_URL` (default `http://127.0.0.1:8001`) | “Use cloud inference” toggle in page editor |
+| **Frontend config** | `NEXT_PUBLIC_INFERENCE_HELPER_URL` (default `http://127.0.0.1:8001`) | “Use cloud inference” toggle in page editor |
 | **Backend env** | Not required | `INFERENCE_URL`, `INFERENCE_WEBHOOK_SECRET`, `INFERENCE_SERVICE_SECRET` |
 | **Pros** | GPU on your machine; no hosted inference cost | Works without local install; async job queue |
 | **Cons** | Must run helper; model weights local | Needs inference-api + worker; secrets must match |
@@ -357,7 +357,7 @@ publishes on host **8010** so it never shadows a locally installed helper.
 
 ```bash
 # nomicous/frontend/.env.local
-VITE_API_BASE_URL=http://localhost:8000
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 ```
 
 Dev login after seed: `dev@example.com` / `dev-pass-123`

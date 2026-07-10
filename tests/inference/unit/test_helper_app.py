@@ -20,6 +20,7 @@ def helper_client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> TestClient
     monkeypatch.delenv("HELPER_REGISTRY_URL", raising=False)
     monkeypatch.delenv("HELPER_SECURE_MODE", raising=False)
     monkeypatch.delenv("HELPER_AUTH_SECRET", raising=False)
+    monkeypatch.delenv("HELPER_CORS_ORIGINS", raising=False)
     monkeypatch.setenv("INFERENCE_REGISTRY_PATH", str(REPO_REGISTRY))
     monkeypatch.setenv("HELPER_BUNDLED_REGISTRY_PATH", str(REPO_REGISTRY))
     monkeypatch.setenv("HELPER_CACHED_REGISTRY_PATH", str(tmp_path / "registry.yaml"))
@@ -55,6 +56,44 @@ def test_helper_run_requires_no_service_secret_for_unknown_model(helper_client: 
         },
     )
     assert response.status_code == 404
+
+
+def test_helper_allows_only_configured_browser_origin(helper_client: TestClient):
+    allowed_origin = "https://app.nomicous.com"
+    preflight = helper_client.options(
+        "/inference/v1/run",
+        headers={
+            "Origin": allowed_origin,
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+    assert preflight.status_code == 200
+    assert preflight.headers["access-control-allow-origin"] == allowed_origin
+    assert "access-control-allow-credentials" not in preflight.headers
+
+    blocked = helper_client.options(
+        "/inference/v1/run",
+        headers={
+            "Origin": "https://untrusted.example.com",
+            "Access-Control-Request-Method": "POST",
+        },
+    )
+    assert "access-control-allow-origin" not in blocked.headers
+
+
+@pytest.mark.parametrize(
+    "origins",
+    [
+        "*",
+        "https://app.nomicous.com/path",
+        "https://user:password@app.nomicous.com",
+        "ftp://app.nomicous.com",
+    ],
+)
+def test_helper_rejects_unsafe_cors_origins(origins: str):
+    with pytest.raises(ValidationError, match="HELPER_CORS_ORIGINS"):
+        HelperSettings(HELPER_CORS_ORIGINS=origins)
 
 
 def test_helper_rejects_non_loopback_binding_without_secure_mode(

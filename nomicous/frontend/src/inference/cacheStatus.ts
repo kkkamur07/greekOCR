@@ -1,4 +1,4 @@
-import { HELPER_BASE_URL } from './constants';
+import { HELPER_BASE_URL } from "./constants";
 
 type CacheStatusResponse = {
   registry_model_id: string;
@@ -14,16 +14,19 @@ type CacheStatusResponse = {
  */
 export async function fetchLocalCacheStatus(
   registryModelId: string,
-  registryTag = 'stable',
+  registryTag = "stable",
 ): Promise<boolean | null> {
   try {
     const params = new URLSearchParams({
       registry_model_id: registryModelId,
       registry_tag: registryTag,
     });
-    const response = await fetch(`${HELPER_BASE_URL}/inference/v1/cache-status?${params.toString()}`, {
-      method: 'GET',
-    });
+    const response = await fetch(
+      `${HELPER_BASE_URL}/inference/v1/cache-status?${params.toString()}`,
+      {
+        method: "GET",
+      },
+    );
     if (!response.ok) return null;
     const body = (await response.json()) as CacheStatusResponse;
     return body.cached === true;

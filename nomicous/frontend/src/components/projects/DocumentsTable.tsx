@@ -1,6 +1,6 @@
-import { useRouter } from 'next/navigation';
-import type { DocumentResponse } from '../../api/client';
-import { WorkflowBadge } from '../WorkflowBadge';
+import { useRouter } from "next/navigation";
+import type { DocumentResponse } from "../../api/client";
+import { WorkflowBadge } from "../WorkflowBadge";
 
 type DocumentsTableProps = {
   projectId: string;
@@ -12,7 +12,10 @@ type DocumentsTableProps = {
 };
 
 function formatUpdated(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+  return new Date(iso).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+  });
 }
 
 export function DocumentsTable({
@@ -30,7 +33,7 @@ export function DocumentsTable({
   };
 
   const onRowKeyDown = (event: React.KeyboardEvent, documentId: string) => {
-    if (event.key === 'Enter' || event.key === ' ') {
+    if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       openDocument(documentId);
     }

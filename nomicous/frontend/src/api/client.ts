@@ -2,47 +2,60 @@
  * Platform API client — short-lived JWT in memory, OpenAPI-aligned types.
  * Regenerate types: `npm run codegen:api` (after `python scripts/platform/export_openapi.py`).
  */
-import { redirectToLogin } from '../auth/session';
-import { getAccessToken, setAccessToken } from '../auth/storage';
-import { JOB_WAIT_POLL_INTERVAL_MS } from '../utils/jobPolling';
-import { waitForSubscribedJob } from '../utils/jobSubscription';
+import { redirectToLogin } from "../auth/session";
+import { getAccessToken, setAccessToken } from "../auth/storage";
+import { JOB_WAIT_POLL_INTERVAL_MS } from "../utils/jobPolling";
+import { waitForSubscribedJob } from "../utils/jobSubscription";
 import {
   collectCursorPages,
   type CursorPage,
   type CursorPageOptions,
-} from './cursorPagination';
-import { ApiError, parseApiError } from './errors';
-import { dedupedGet, getAuthRequestVersion } from './getCache';
-import type { components } from './schema';
+} from "./cursorPagination";
+import { ApiError, parseApiError } from "./errors";
+import { dedupedGet, getAuthRequestVersion } from "./getCache";
+import type { components } from "./schema";
 
-export type TokenResponse = components['schemas']['TokenResponse'];
-export type UserResponse = components['schemas']['UserResponse'];
-export type LoginRequest = components['schemas']['LoginRequest'];
-export type RegisterRequest = components['schemas']['RegisterRequest'];
-export type ProjectResponse = components['schemas']['ProjectResponse'];
-export type ProjectCreateRequest = components['schemas']['ProjectCreateRequest'];
-export type ProjectUpdateRequest = components['schemas']['ProjectUpdateRequest'];
-export type DocumentResponse = components['schemas']['DocumentResponse'];
-export type DocumentWithPartsResponse = components['schemas']['DocumentWithPartsResponse'];
-export type DocumentCreateRequest = components['schemas']['DocumentCreateRequest'];
-export type DocumentUpdateRequest = components['schemas']['DocumentUpdateRequest'];
-export type DocumentPartResponse = components['schemas']['DocumentPartResponse'];
-export type DocumentPartUpdateRequest = components['schemas']['DocumentPartUpdateRequest'];
-export type DocumentWorkflow = components['schemas']['DocumentWorkflow'];
-export type ReorderPartsRequest = components['schemas']['ReorderPartsRequest'];
-export type PublicLayoutResponse = components['schemas']['PublicLayoutResponse'];
-export type PublicLineResponse = NonNullable<PublicLayoutResponse['lines']>[number];
+export type TokenResponse = components["schemas"]["TokenResponse"];
+export type UserResponse = components["schemas"]["UserResponse"];
+export type LoginRequest = components["schemas"]["LoginRequest"];
+export type RegisterRequest = components["schemas"]["RegisterRequest"];
+export type ProjectResponse = components["schemas"]["ProjectResponse"];
+export type ProjectCreateRequest =
+  components["schemas"]["ProjectCreateRequest"];
+export type ProjectUpdateRequest =
+  components["schemas"]["ProjectUpdateRequest"];
+export type DocumentResponse = components["schemas"]["DocumentResponse"];
+export type DocumentWithPartsResponse =
+  components["schemas"]["DocumentWithPartsResponse"];
+export type DocumentCreateRequest =
+  components["schemas"]["DocumentCreateRequest"];
+export type DocumentUpdateRequest =
+  components["schemas"]["DocumentUpdateRequest"];
+export type DocumentPartResponse =
+  components["schemas"]["DocumentPartResponse"];
+export type DocumentPartUpdateRequest =
+  components["schemas"]["DocumentPartUpdateRequest"];
+export type DocumentWorkflow = components["schemas"]["DocumentWorkflow"];
+export type ReorderPartsRequest = components["schemas"]["ReorderPartsRequest"];
+export type PublicLayoutResponse =
+  components["schemas"]["PublicLayoutResponse"];
+export type PublicLineResponse = NonNullable<
+  PublicLayoutResponse["lines"]
+>[number];
 export type PublicTranscriptionLayerResponse =
-  components['schemas']['PublicTranscriptionLayerResponse'];
-export type TranscriptionLayerResponse = components['schemas']['TranscriptionLayerResponse'];
-export type LineTranscriptionResponse = components['schemas']['LineTranscriptionResponse'] & {
-  text_source?: string | null;
-  character_confidences?: components['schemas']['CharacterConfidence'][] | null;
-};
-export type CharacterConfidence = components['schemas']['CharacterConfidence'];
-export type JobResponse = components['schemas']['JobResponse'];
-export type JobStatus = components['schemas']['JobStatus'];
-export type EnqueueJobResponse = components['schemas']['EnqueueJobResponse'];
+  components["schemas"]["PublicTranscriptionLayerResponse"];
+export type TranscriptionLayerResponse =
+  components["schemas"]["TranscriptionLayerResponse"];
+export type LineTranscriptionResponse =
+  components["schemas"]["LineTranscriptionResponse"] & {
+    text_source?: string | null;
+    character_confidences?:
+      components["schemas"]["CharacterConfidence"][] | null;
+  };
+export type CharacterConfidence = components["schemas"]["CharacterConfidence"];
+export type JobResponse = components["schemas"]["JobResponse"];
+export type JobStatus = components["schemas"]["JobStatus"];
+export type EnqueueJobResponse = components["schemas"]["EnqueueJobResponse"];
 export type SegmentPartRequest = {
   use_otsu_refinement?: boolean;
   otsu_sphere_radius?: number;
@@ -52,11 +65,15 @@ export type SegmentPartRequest = {
   split_large_lines?: boolean;
   split_vertical_gap_px?: number;
 };
-export type InferenceModelResponse = components['schemas']['InferenceModelResponse'];
-export type InferenceTask = components['schemas']['InferenceTask'];
-export type ResolvedModelBindingResponse = components['schemas']['ResolvedModelBindingResponse'];
-export type EnqueueTestJobRequest = components['schemas']['EnqueueTestJobRequest'];
-export type EnqueueTestJobResponse = components['schemas']['EnqueueTestJobResponse'];
+export type InferenceModelResponse =
+  components["schemas"]["InferenceModelResponse"];
+export type InferenceTask = components["schemas"]["InferenceTask"];
+export type ResolvedModelBindingResponse =
+  components["schemas"]["ResolvedModelBindingResponse"];
+export type EnqueueTestJobRequest =
+  components["schemas"]["EnqueueTestJobRequest"];
+export type EnqueueTestJobResponse =
+  components["schemas"]["EnqueueTestJobResponse"];
 export type LayoutPoint = [number, number];
 export type GeometryValue =
   | LayoutPoint[]
@@ -81,8 +98,8 @@ export type PartLayoutResponse = {
   blocks: LayoutBlockResponse[];
   lines: LayoutLineResponse[];
 };
-export type LineGeometryKind = 'polygon' | 'rectangle';
-export type LineSource = 'manual' | 'kraken' | 'model';
+export type LineGeometryKind = "polygon" | "rectangle";
+export type LineSource = "manual" | "kraken" | "model";
 export type LinePoint = [number, number];
 export type LineResponse = {
   id: string;
@@ -162,29 +179,34 @@ export type PairTextLineRequest = {
 export type LineTranscriptionPatchRequest = {
   text: string;
 };
-export type CopyToGroundTruthRequest = components['schemas']['CopyToGroundTruthRequest'];
-export type CopyToGroundTruthResponse = components['schemas']['CopyToGroundTruthResponse'];
+export type CopyToGroundTruthRequest =
+  components["schemas"]["CopyToGroundTruthRequest"];
+export type CopyToGroundTruthResponse =
+  components["schemas"]["CopyToGroundTruthResponse"];
 
 export type PageResponse<T> = CursorPage<T>;
 
 export type ListPageOptions = CursorPageOptions;
 
-function cursorQuery(options: CursorPageOptions, extra?: (params: URLSearchParams) => void): string {
+function cursorQuery(
+  options: CursorPageOptions,
+  extra?: (params: URLSearchParams) => void,
+): string {
   const params = new URLSearchParams();
-  if (options.cursor) params.set('cursor', options.cursor);
-  if (options.limit) params.set('limit', String(options.limit));
+  if (options.cursor) params.set("cursor", options.cursor);
+  if (options.limit) params.set("limit", String(options.limit));
   extra?.(params);
   return params.toString();
 }
 
 export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, '') ||
-  'http://localhost:8000';
+  process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ||
+  "http://localhost:8000";
 export const API_ORIGIN = new URL(API_BASE_URL).origin;
 const CSRF_COOKIE_NAME =
-  process.env.NEXT_PUBLIC_CSRF_COOKIE_NAME || 'greekocr-csrf';
+  process.env.NEXT_PUBLIC_CSRF_COOKIE_NAME || "greekocr-csrf";
 
-type RequestOptions = Omit<RequestInit, 'body'> & {
+type RequestOptions = Omit<RequestInit, "body"> & {
   body?: unknown;
   skipAuth?: boolean;
   /** Bypass in-flight GET deduplication (default: dedupe GETs). */
@@ -194,9 +216,11 @@ type RequestOptions = Omit<RequestInit, 'body'> & {
 let refreshPromise: Promise<TokenResponse> | null = null;
 
 function csrfToken(): string | null {
-  if (typeof document === 'undefined') return null;
+  if (typeof document === "undefined") return null;
   const encodedName = `${encodeURIComponent(CSRF_COOKIE_NAME)}=`;
-  const cookie = document.cookie.split('; ').find((item) => item.startsWith(encodedName));
+  const cookie = document.cookie
+    .split("; ")
+    .find((item) => item.startsWith(encodedName));
   if (!cookie) return null;
   try {
     return decodeURIComponent(cookie.slice(encodedName.length));
@@ -206,9 +230,9 @@ function csrfToken(): string | null {
 }
 
 function addCsrfHeader(headers: Headers, method: string): void {
-  if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) return;
+  if (!["POST", "PUT", "PATCH", "DELETE"].includes(method)) return;
   const token = csrfToken();
-  if (token) headers.set('X-CSRF-Token', token);
+  if (token) headers.set("X-CSRF-Token", token);
 }
 
 /**
@@ -216,8 +240,8 @@ function addCsrfHeader(headers: Headers, method: string): void {
  * The refresh route deliberately bypasses auth recovery to avoid recursion.
  */
 export function refreshAccessToken(): Promise<TokenResponse> {
-  refreshPromise ??= apiRequest<TokenResponse>('/auth/refresh', {
-    method: 'POST',
+  refreshPromise ??= apiRequest<TokenResponse>("/auth/refresh", {
+    method: "POST",
     skipAuth: true,
   })
     .then((token) => {
@@ -249,43 +273,46 @@ async function fetchWithAuthRecoveryAttempt(
 ): Promise<Response> {
   const headers = new Headers(init.headers);
   const token = getAccessToken();
-  if (token) headers.set('Authorization', `Bearer ${token}`);
+  if (token) headers.set("Authorization", `Bearer ${token}`);
 
   const response = await fetch(input, {
     ...init,
-    credentials: init.credentials ?? 'include',
+    credentials: init.credentials ?? "include",
     headers,
   });
   if (response.status !== 401) return response;
 
   if (retried) {
     redirectToLogin();
-    throw new ApiError('Unauthorized', 401);
+    throw new ApiError("Unauthorized", 401);
   }
 
   try {
     await refreshAccessToken();
   } catch {
     redirectToLogin();
-    throw new ApiError('Unauthorized', 401);
+    throw new ApiError("Unauthorized", 401);
   }
 
   return fetchWithAuthRecoveryAttempt(input, init, true);
 }
 
-async function requestApiResponse(path: string, options: RequestOptions): Promise<Response> {
+async function requestApiResponse(
+  path: string,
+  options: RequestOptions,
+): Promise<Response> {
   const { body, skipAuth, headers: initHeaders, ...rest } = options;
   const headers = new Headers(initHeaders);
-  const method = (options.method ?? 'GET').toUpperCase();
+  const method = (options.method ?? "GET").toUpperCase();
 
   if (body !== undefined && !(body instanceof FormData)) {
-    headers.set('Content-Type', 'application/json');
+    headers.set("Content-Type", "application/json");
   }
   addCsrfHeader(headers, method);
 
   const init: RequestInit = {
     ...rest,
-    credentials: 'include',
+    credentials: "include",
     headers,
     body:
       body === undefined
@@ -305,10 +332,10 @@ export async function apiRequest<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<T> {
-  const method = (options.method ?? 'GET').toUpperCase();
+  const method = (options.method ?? "GET").toUpperCase();
   // Abort signals belong to one component lifecycle. Sharing an abortable
   // fetch lets one Strict Mode cleanup cancel a newer mount's request.
-  if (method === 'GET' && !options.skipDedup && !options.signal) {
+  if (method === "GET" && !options.skipDedup && !options.signal) {
     return dedupedGet(`auth:${getAuthRequestVersion()} GET ${path}`, () =>
       apiRequest<T>(path, { ...options, skipDedup: true }),
     );
@@ -351,22 +378,34 @@ export type TranscribeJobResult = {
 
 export const api = {
   login: (body: LoginRequest) =>
-    apiRequest<TokenResponse>('/auth/login', { method: 'POST', body, skipAuth: true }),
+    apiRequest<TokenResponse>("/auth/login", {
+      method: "POST",
+      body,
+      skipAuth: true,
+    }),
 
   register: (body: RegisterRequest) =>
-    apiRequest<TokenResponse>('/auth/register', { method: 'POST', body, skipAuth: true }),
+    apiRequest<TokenResponse>("/auth/register", {
+      method: "POST",
+      body,
+      skipAuth: true,
+    }),
 
   refresh: refreshAccessToken,
 
-  logout: () => apiRequest<void>('/auth/logout', { method: 'POST', skipAuth: true }),
+  logout: () =>
+    apiRequest<void>("/auth/logout", { method: "POST", skipAuth: true }),
 
-  me: () => apiRequest<UserResponse>('/me'),
+  me: () => apiRequest<UserResponse>("/me"),
 
   listProjectsPage: (options: ListPageOptions = {}) => {
     const query = cursorQuery(options);
-    return apiRequest<PageResponse<ProjectResponse>>(query ? `/projects?${query}` : '/projects', {
-      signal: options.signal,
-    });
+    return apiRequest<PageResponse<ProjectResponse>>(
+      query ? `/projects?${query}` : "/projects",
+      {
+        signal: options.signal,
+      },
+    );
   },
 
   listProjects: (options?: { maxPages?: number; signal?: AbortSignal }) =>
@@ -375,18 +414,20 @@ export const api = {
       options,
     ),
 
-
   createProject: (body: ProjectCreateRequest) =>
-    apiRequest<ProjectResponse>('/projects', { method: 'POST', body }),
+    apiRequest<ProjectResponse>("/projects", { method: "POST", body }),
 
   getProject: (projectId: string) =>
     apiRequest<ProjectResponse>(`/projects/${projectId}`),
 
   updateProject: (projectId: string, body: ProjectUpdateRequest) =>
-    apiRequest<ProjectResponse>(`/projects/${projectId}`, { method: 'PATCH', body }),
+    apiRequest<ProjectResponse>(`/projects/${projectId}`, {
+      method: "PATCH",
+      body,
+    }),
 
   deleteProject: (projectId: string) =>
-    apiRequest<void>(`/projects/${projectId}`, { method: 'DELETE' }),
+    apiRequest<void>(`/projects/${projectId}`, { method: "DELETE" }),
 
   listDocumentsPage: (
     projectId: string,
@@ -394,7 +435,7 @@ export const api = {
     options: ListPageOptions = {},
   ) => {
     const query = cursorQuery(options, (params) =>
-      params.set('include_archived', String(includeArchived)),
+      params.set("include_archived", String(includeArchived)),
     );
     return apiRequest<PageResponse<DocumentResponse>>(
       `/projects/${projectId}/documents?${query}`,
@@ -408,13 +449,14 @@ export const api = {
     options?: { maxPages?: number; signal?: AbortSignal },
   ) =>
     collectCursorPages(
-      (pageOptions) => api.listDocumentsPage(projectId, includeArchived, pageOptions),
+      (pageOptions) =>
+        api.listDocumentsPage(projectId, includeArchived, pageOptions),
       options,
     ),
 
   createDocument: (projectId: string, body: DocumentCreateRequest) =>
     apiRequest<DocumentResponse>(`/projects/${projectId}/documents`, {
-      method: 'POST',
+      method: "POST",
       body,
     }),
 
@@ -423,15 +465,22 @@ export const api = {
       `/projects/${projectId}/documents/${documentId}`,
     ),
 
-  updateDocument: (projectId: string, documentId: string, body: DocumentUpdateRequest) =>
-    apiRequest<DocumentResponse>(`/projects/${projectId}/documents/${documentId}`, {
-      method: 'PATCH',
-      body,
-    }),
+  updateDocument: (
+    projectId: string,
+    documentId: string,
+    body: DocumentUpdateRequest,
+  ) =>
+    apiRequest<DocumentResponse>(
+      `/projects/${projectId}/documents/${documentId}`,
+      {
+        method: "PATCH",
+        body,
+      },
+    ),
 
   deleteDocument: (projectId: string, documentId: string) =>
     apiRequest<void>(`/projects/${projectId}/documents/${documentId}`, {
-      method: 'DELETE',
+      method: "DELETE",
     }),
 
   listTranscriptions: (projectId: string, documentId: string) =>
@@ -441,23 +490,27 @@ export const api = {
 
   uploadPart: (projectId: string, documentId: string, file: File) => {
     const form = new FormData();
-    form.append('file', file);
+    form.append("file", file);
     return apiRequest<DocumentPartResponse>(
       `/projects/${projectId}/documents/${documentId}/parts`,
-      { method: 'POST', body: form },
+      { method: "POST", body: form },
     );
   },
 
-  reorderParts: (projectId: string, documentId: string, body: ReorderPartsRequest) =>
+  reorderParts: (
+    projectId: string,
+    documentId: string,
+    body: ReorderPartsRequest,
+  ) =>
     apiRequest<DocumentPartResponse[]>(
       `/projects/${projectId}/documents/${documentId}/parts/reorder`,
-      { method: 'PATCH', body },
+      { method: "PATCH", body },
     ),
 
   deletePart: (projectId: string, documentId: string, partId: string) =>
     apiRequest<void>(
       `/projects/${projectId}/documents/${documentId}/parts/${partId}`,
-      { method: 'DELETE' },
+      { method: "DELETE" },
     ),
 
   updatePartReviewStatus: (
@@ -468,7 +521,7 @@ export const api = {
   ) =>
     apiRequest<DocumentPartResponse>(
       `/projects/${projectId}/documents/${documentId}/parts/${partId}`,
-      { method: 'PATCH', body },
+      { method: "PATCH", body },
     ),
 
   getPartLayout: (projectId: string, documentId: string, partId: string) =>
@@ -489,7 +542,7 @@ export const api = {
   ) =>
     apiRequest<LineResponse>(
       `/projects/${projectId}/documents/${documentId}/parts/${partId}/lines`,
-      { method: 'POST', body },
+      { method: "POST", body },
     ),
 
   replacePartLines: (
@@ -500,13 +553,18 @@ export const api = {
   ) =>
     apiRequest<LineResponse[]>(
       `/projects/${projectId}/documents/${documentId}/parts/${partId}/lines`,
-      { method: 'PUT', body },
+      { method: "PUT", body },
     ),
 
-  deletePartLine: (projectId: string, documentId: string, partId: string, lineId: string) =>
+  deletePartLine: (
+    projectId: string,
+    documentId: string,
+    partId: string,
+    lineId: string,
+  ) =>
     apiRequest<void>(
       `/projects/${projectId}/documents/${documentId}/parts/${partId}/lines/${lineId}`,
-      { method: 'DELETE' },
+      { method: "DELETE" },
     ),
 
   patchPartLine: (
@@ -518,7 +576,7 @@ export const api = {
   ) =>
     apiRequest<LineResponse>(
       `/projects/${projectId}/documents/${documentId}/parts/${partId}/lines/${lineId}`,
-      { method: 'PATCH', body },
+      { method: "PATCH", body },
     ),
 
   updateLineGeometry: (
@@ -530,7 +588,7 @@ export const api = {
   ) =>
     apiRequest<LineResponse>(
       `/projects/${projectId}/documents/${documentId}/parts/${partId}/lines/${lineId}`,
-      { method: 'PATCH', body },
+      { method: "PATCH", body },
     ),
 
   resetPartLayout: (
@@ -541,7 +599,7 @@ export const api = {
   ) =>
     apiRequest<PartLayoutResponse>(
       `/projects/${projectId}/documents/${documentId}/parts/${partId}/layout/reset`,
-      { method: 'POST', body },
+      { method: "POST", body },
     ),
 
   getPagePairing: (projectId: string, documentId: string, partId: string) =>
@@ -557,7 +615,7 @@ export const api = {
   ) =>
     apiRequest<PagePairingResponse>(
       `/projects/${projectId}/documents/${documentId}/parts/${partId}/page-transcription`,
-      { method: 'PUT', body },
+      { method: "PUT", body },
     ),
 
   pairTextLine: (
@@ -568,13 +626,17 @@ export const api = {
   ) =>
     apiRequest<PagePairingResponse>(
       `/projects/${projectId}/documents/${documentId}/parts/${partId}/pairings`,
-      { method: 'POST', body },
+      { method: "POST", body },
     ),
 
-  generateTranscriptionPdf: (projectId: string, documentId: string, partId: string) =>
+  generateTranscriptionPdf: (
+    projectId: string,
+    documentId: string,
+    partId: string,
+  ) =>
     fetchBinaryApi(
       `/projects/${projectId}/documents/${documentId}/parts/${partId}/transcription-pdf`,
-      { method: 'POST' },
+      { method: "POST" },
     ),
 
   segmentPart: (
@@ -585,7 +647,7 @@ export const api = {
   ) =>
     apiRequest<EnqueueJobResponse>(
       `/projects/${projectId}/documents/${documentId}/parts/${partId}/segment`,
-      { method: 'POST', body: body ?? {} },
+      { method: "POST", body: body ?? {} },
     ),
 
   enqueueTranscribePart: (
@@ -596,7 +658,7 @@ export const api = {
   ) =>
     apiRequest<EnqueueJobResponse>(
       `/projects/${projectId}/documents/${documentId}/parts/${partId}/transcribe`,
-      { method: 'POST', body: body ?? {} },
+      { method: "POST", body: body ?? {} },
     ),
 
   persistLocalTranscribe: (
@@ -620,7 +682,7 @@ export const api = {
       lines: Array<{ line_id: string; text: string; confidence: number }>;
     }>(
       `/projects/${projectId}/documents/${documentId}/parts/${partId}/local-inference/transcribe`,
-      { method: 'POST', body },
+      { method: "POST", body },
     ),
 
   persistLocalSegment: (
@@ -642,10 +704,11 @@ export const api = {
       preserved_manual_lines: number;
     }>(
       `/projects/${projectId}/documents/${documentId}/parts/${partId}/local-inference/segment`,
-      { method: 'POST', body },
+      { method: "POST", body },
     ),
 
-  listInferenceModels: () => apiRequest<InferenceModelResponse[]>('/inference/models'),
+  listInferenceModels: () =>
+    apiRequest<InferenceModelResponse[]>("/inference/models"),
 
   resolvePartModelBinding: (
     projectId: string,
@@ -666,7 +729,7 @@ export const api = {
   ) =>
     apiRequest<LineTranscriptionResponse>(
       `/projects/${projectId}/documents/${documentId}/transcriptions/${transcriptionId}/lines/${lineId}`,
-      { method: 'PATCH', body },
+      { method: "PATCH", body },
     ),
 
   copyToGroundTruth: (
@@ -677,7 +740,7 @@ export const api = {
   ) =>
     apiRequest<CopyToGroundTruthResponse>(
       `/projects/${projectId}/documents/${documentId}/transcriptions/${transcriptionId}/copy-to-ground-truth`,
-      { method: 'POST', body },
+      { method: "POST", body },
     ),
 
   getPublicDocument: (projectId: string, documentId: string) =>
@@ -698,7 +761,11 @@ export const api = {
       { skipAuth: true },
     ),
 
-  getPublicTranscriptionPdf: (projectId: string, documentId: string, partId: string) =>
+  getPublicTranscriptionPdf: (
+    projectId: string,
+    documentId: string,
+    partId: string,
+  ) =>
     fetchBinaryApi(
       `/public/projects/${projectId}/documents/${documentId}/parts/${partId}/transcription-pdf`,
       { skipAuth: true },
@@ -710,20 +777,23 @@ export const api = {
       { skipAuth: true },
     ),
 
-  enqueueTestJob: (body: EnqueueTestJobRequest = { handler: 'noop' }) =>
-    apiRequest<EnqueueTestJobResponse>('/jobs/test', { method: 'POST', body }),
+  enqueueTestJob: (body: EnqueueTestJobRequest = { handler: "noop" }) =>
+    apiRequest<EnqueueTestJobResponse>("/jobs/test", { method: "POST", body }),
 
   getJob: (jobId: string) => apiRequest<JobResponse>(`/jobs/${jobId}`),
 
   listProjectJobsPage: (projectId: string, options: ListPageOptions = {}) => {
     const query = cursorQuery(options);
     return apiRequest<PageResponse<JobResponse>>(
-      `/projects/${projectId}/jobs${query ? `?${query}` : ''}`,
+      `/projects/${projectId}/jobs${query ? `?${query}` : ""}`,
       { signal: options.signal },
     );
   },
 
-  listProjectJobs: (projectId: string, options?: { maxPages?: number; signal?: AbortSignal }) =>
+  listProjectJobs: (
+    projectId: string,
+    options?: { maxPages?: number; signal?: AbortSignal },
+  ) =>
     collectCursorPages(
       (pageOptions) => api.listProjectJobsPage(projectId, pageOptions),
       options,

@@ -1,4 +1,4 @@
-const STORAGE_KEY = 'nomicous_page_editor_settings';
+const STORAGE_KEY = "nomicous_page_editor_settings";
 
 export type PageEditorCanvasSettings = {
   /** Multiplier for segment/block overlay stroke width (0.5–4). */
@@ -22,8 +22,15 @@ export const DEFAULT_PAGE_EDITOR_SETTINGS: PageEditorCanvasSettings = {
   showBaselines: false,
 };
 
-function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
-  return typeof value === 'number' && value >= min && value <= max ? value : fallback;
+function clampNumber(
+  value: unknown,
+  min: number,
+  max: number,
+  fallback: number,
+): number {
+  return typeof value === "number" && value >= min && value <= max
+    ? value
+    : fallback;
 }
 
 export function loadPageEditorSettings(): PageEditorCanvasSettings {
@@ -57,11 +64,11 @@ export function loadPageEditorSettings(): PageEditorCanvasSettings {
         DEFAULT_PAGE_EDITOR_SETTINGS.handleSize,
       ),
       showLayoutBlocks:
-        typeof parsed.showLayoutBlocks === 'boolean'
+        typeof parsed.showLayoutBlocks === "boolean"
           ? parsed.showLayoutBlocks
           : DEFAULT_PAGE_EDITOR_SETTINGS.showLayoutBlocks,
       showBaselines:
-        typeof parsed.showBaselines === 'boolean'
+        typeof parsed.showBaselines === "boolean"
           ? parsed.showBaselines
           : DEFAULT_PAGE_EDITOR_SETTINGS.showBaselines,
     };
@@ -70,6 +77,8 @@ export function loadPageEditorSettings(): PageEditorCanvasSettings {
   }
 }
 
-export function savePageEditorSettings(settings: PageEditorCanvasSettings): void {
+export function savePageEditorSettings(
+  settings: PageEditorCanvasSettings,
+): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
 }

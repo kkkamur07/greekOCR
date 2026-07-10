@@ -1,13 +1,13 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useState } from "react";
 
 import {
   INFERENCE_HELPER_LINUX_TARBALL_URL,
   INFERENCE_HELPER_MACOS_DMG_URL,
   INFERENCE_HELPER_RELEASES_URL,
   INFERENCE_HELPER_WINDOWS_ZIP_URL,
-} from '../../inference/constants';
+} from "../../inference/constants";
 
-type HelperPlatform = 'macos' | 'windows' | 'linux';
+type HelperPlatform = "macos" | "windows" | "linux";
 
 type HelperDownload = {
   platform: HelperPlatform;
@@ -16,17 +16,30 @@ type HelperDownload = {
 };
 
 const HELPER_DOWNLOADS: HelperDownload[] = [
-  { platform: 'macos', label: 'Download for macOS', url: INFERENCE_HELPER_MACOS_DMG_URL },
-  { platform: 'windows', label: 'Download for Windows', url: INFERENCE_HELPER_WINDOWS_ZIP_URL },
-  { platform: 'linux', label: 'Download for Linux', url: INFERENCE_HELPER_LINUX_TARBALL_URL },
+  {
+    platform: "macos",
+    label: "Download for macOS",
+    url: INFERENCE_HELPER_MACOS_DMG_URL,
+  },
+  {
+    platform: "windows",
+    label: "Download for Windows",
+    url: INFERENCE_HELPER_WINDOWS_ZIP_URL,
+  },
+  {
+    platform: "linux",
+    label: "Download for Linux",
+    url: INFERENCE_HELPER_LINUX_TARBALL_URL,
+  },
 ];
 
 function detectPlatform(): HelperPlatform | null {
-  if (typeof navigator === 'undefined') return null;
-  const hint = `${navigator.platform ?? ''} ${navigator.userAgent ?? ''}`.toLowerCase();
-  if (hint.includes('mac')) return 'macos';
-  if (hint.includes('win')) return 'windows';
-  if (hint.includes('linux') || hint.includes('x11')) return 'linux';
+  if (typeof navigator === "undefined") return null;
+  const hint =
+    `${navigator.platform ?? ""} ${navigator.userAgent ?? ""}`.toLowerCase();
+  if (hint.includes("mac")) return "macos";
+  if (hint.includes("win")) return "windows";
+  if (hint.includes("linux") || hint.includes("x11")) return "linux";
   return null;
 }
 
@@ -66,12 +79,12 @@ export function PageEditorInferenceBanner({
   useEffect(() => {
     if (!modalOpen) return;
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
+      if (event.key === "Escape") {
         setModalOpen(false);
       }
     }
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
   }, [modalOpen]);
 
   if (!shouldPrompt) {
@@ -106,12 +119,18 @@ export function PageEditorInferenceBanner({
           >
             <h2 id={titleId}>Install Inference Helper</h2>
             <p className="pe-helper-install-modal__lead">
-              Run OCR and segmentation on your computer&apos;s CPU — faster and private. The helper
-              runs in the background after you install it.
+              Run OCR and segmentation on your computer&apos;s CPU — faster and
+              private. The helper runs in the background after you install it.
             </p>
             <ol className="pe-helper-install-modal__steps">
-              <li>Download the installer for your operating system from GitHub releases.</li>
-              <li>Install <strong>Nomicous Inference Helper</strong> and launch it once.</li>
+              <li>
+                Download the installer for your operating system from GitHub
+                releases.
+              </li>
+              <li>
+                Install <strong>Nomicous Inference Helper</strong> and launch it
+                once.
+              </li>
               <li>Refresh this page.</li>
             </ol>
             <div className="pe-helper-install-modal__actions">
@@ -122,7 +141,9 @@ export function PageEditorInferenceBanner({
                   target="_blank"
                   rel="noreferrer"
                   className={
-                    index === 0 ? 'btn btn-primary btn-block' : 'btn btn-ghost btn-block'
+                    index === 0
+                      ? "btn btn-primary btn-block"
+                      : "btn btn-ghost btn-block"
                   }
                 >
                   {download.label}
@@ -136,10 +157,18 @@ export function PageEditorInferenceBanner({
               >
                 View release notes
               </a>
-              <button type="button" className="btn btn-ghost btn-block" onClick={handleUseCloud}>
+              <button
+                type="button"
+                className="btn btn-ghost btn-block"
+                onClick={handleUseCloud}
+              >
                 Use cloud inference instead
               </button>
-              <button type="button" className="btn btn-ghost btn-block" onClick={handleNotNow}>
+              <button
+                type="button"
+                className="btn btn-ghost btn-block"
+                onClick={handleNotNow}
+              >
                 Not now
               </button>
             </div>
@@ -147,7 +176,10 @@ export function PageEditorInferenceBanner({
         </div>
       ) : (
         <div className="pe-inference-banner" role="status">
-          <span>Local inference is faster with the Nomicous Inference Helper installed on this computer.</span>
+          <span>
+            Local inference is faster with the Nomicous Inference Helper
+            installed on this computer.
+          </span>
           <button
             type="button"
             className="pe-inference-banner__action"

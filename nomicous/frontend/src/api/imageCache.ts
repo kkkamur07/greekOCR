@@ -9,17 +9,24 @@ const pending = new Map<string, Promise<CacheEntry>>();
 let cacheGeneration = 0;
 
 const PART_IMAGE_PATH = /^\/(?:public\/)?media\/parts\/[^/]+$/;
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, '') || 'http://localhost:8000';
+const apiBaseUrl =
+  process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ||
+  "http://localhost:8000";
 const apiOrigin = new URL(apiBaseUrl).origin;
 
 function isLocalHost(hostname: string): boolean {
-  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+  return (
+    hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1"
+  );
 }
 
 function isPermittedOrigin(url: URL): boolean {
   const api = new URL(apiBaseUrl);
   if (url.origin !== apiOrigin) return false;
-  return api.protocol === 'https:' || (api.protocol === 'http:' && isLocalHost(api.hostname));
+  return (
+    api.protocol === "https:" ||
+    (api.protocol === "http:" && isLocalHost(api.hostname))
+  );
 }
 
 /**
@@ -29,15 +36,19 @@ function isPermittedOrigin(url: URL): boolean {
 export function normalizePartImagePath(src: string): string | null {
   try {
     const url = new URL(src, `${apiBaseUrl}/`);
-    if (!isPermittedOrigin(url) || !PART_IMAGE_PATH.test(url.pathname)) return null;
+    if (!isPermittedOrigin(url) || !PART_IMAGE_PATH.test(url.pathname))
+      return null;
 
-    const width = url.searchParams.get('w');
-    if (width !== null && (!/^[1-9]\d*$/.test(width) || url.searchParams.size !== 1)) {
+    const width = url.searchParams.get("w");
+    if (
+      width !== null &&
+      (!/^[1-9]\d*$/.test(width) || url.searchParams.size !== 1)
+    ) {
       return null;
     }
     if (width === null && url.searchParams.size !== 0) return null;
 
-    return `${url.pathname}${width === null ? '' : `?w=${width}`}`;
+    return `${url.pathname}${width === null ? "" : `?w=${width}`}`;
   } catch {
     return null;
   }
@@ -50,11 +61,13 @@ async function getEntry(path: string): Promise<CacheEntry> {
   let request = pending.get(path);
   if (!request) {
     const generation = cacheGeneration;
-    request = import('./client')
+    request = import("./client")
       .then(({ fetchBinaryApi }) => fetchBinaryApi(path))
       .then((blob) => {
         if (generation !== cacheGeneration) {
-          throw new Error('Image cache was cleared while the request was in flight.');
+          throw new Error(
+            "Image cache was cleared while the request was in flight.",
+          );
         }
         const entry = {
           blob,
@@ -72,7 +85,7 @@ async function getEntry(path: string): Promise<CacheEntry> {
 
 export async function fetchPartImage(pathOrUrl: string): Promise<Blob> {
   const path = normalizePartImagePath(pathOrUrl);
-  if (!path) throw new Error('Invalid protected part-image URL.');
+  if (!path) throw new Error("Invalid protected part-image URL.");
   return (await getEntry(path)).blob;
 }
 
@@ -80,7 +93,7 @@ export async function acquirePartImage(
   pathOrUrl: string,
 ): Promise<{ objectUrl: string; release: () => void }> {
   const path = normalizePartImagePath(pathOrUrl);
-  if (!path) throw new Error('Invalid protected part-image URL.');
+  if (!path) throw new Error("Invalid protected part-image URL.");
   const entry = await getEntry(path);
   entry.references += 1;
 
@@ -102,7 +115,7 @@ export function prefetchPartImage(pathOrUrl: string): void {
 
 export function invalidatePartImage(partId: string): void {
   for (const [path, entry] of entries) {
-    const pathPartId = path.split('?')[0].split('/').at(-1);
+    const pathPartId = path.split("?")[0].split("/").at(-1);
     if (pathPartId === partId) {
       URL.revokeObjectURL(entry.objectUrl);
       entries.delete(path);

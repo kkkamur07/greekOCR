@@ -50,14 +50,14 @@ frontend/
 
 ## Main Libraries
 
-| Library | Role |
-|---------|------|
-| React 19 | UI framework |
-| Next.js App Router | Client routing, dev server, and production build |
-| Ant Design 6 | Forms, cards, buttons, alerts, notifications |
-| Vitest + Testing Library | Component and route behavior tests |
-| openapi-typescript | Generates `src/api/schema.d.ts` |
-| react-zoom-pan-pinch | Image canvas zoom/pan |
+| Library                  | Role                                             |
+| ------------------------ | ------------------------------------------------ |
+| React 19                 | UI framework                                     |
+| Next.js App Router       | Client routing, dev server, and production build |
+| Ant Design 6             | Forms, cards, buttons, alerts, notifications     |
+| Vitest + Testing Library | Component and route behavior tests               |
+| openapi-typescript       | Generates `src/api/schema.d.ts`                  |
+| react-zoom-pan-pinch     | Image canvas zoom/pan                            |
 
 ## Scripts
 
@@ -95,14 +95,14 @@ Committed API artifacts:
 
 ## Route Pages
 
-| Page | Purpose |
-|------|---------|
-| `LoginPage.tsx`, `RegisterPage.tsx` | Authentication |
-| `ProjectsPage.tsx` | Project list/create entry |
-| `ProjectDashboardPage.tsx` | Project-level navigation |
-| `DocumentDetailPage.tsx` | Document metadata, parts, workflow actions |
-| `PublicDocumentPage.tsx` | Anonymous read-only view for published Documents |
-| `PageEditorPlaceholderPage.tsx` | Main Page/Document part editor |
+| Page                                | Purpose                                          |
+| ----------------------------------- | ------------------------------------------------ |
+| `LoginPage.tsx`, `RegisterPage.tsx` | Authentication                                   |
+| `ProjectsPage.tsx`                  | Project list/create entry                        |
+| `ProjectDashboardPage.tsx`          | Project-level navigation                         |
+| `DocumentDetailPage.tsx`            | Document metadata, parts, workflow actions       |
+| `PublicDocumentPage.tsx`            | Anonymous read-only view for published Documents |
+| `PageEditorPlaceholderPage.tsx`     | Main Page/Document part editor                   |
 
 Each route page should have behavior tests next to it. Prefer Testing Library
 queries that describe user-visible behavior rather than component internals.
@@ -130,13 +130,13 @@ Transcription PDF.
 
 ## Component Map
 
-| Component | Role |
-|-----------|------|
-| `ProtectedRoute` | Redirects unauthenticated users |
-| `AuthenticatedImage` | Fetches protected media with JWT |
-| `WorkflowBadge` | Document workflow display |
-| `document/JobsNotice` | Document-level job status notices |
-| `page-editor/` | Page editor canvas, strips, panes, hooks, and job queue |
+| Component             | Role                                                    |
+| --------------------- | ------------------------------------------------------- |
+| `ProtectedRoute`      | Redirects unauthenticated users                         |
+| `AuthenticatedImage`  | Fetches protected media with JWT                        |
+| `WorkflowBadge`       | Document workflow display                               |
+| `document/JobsNotice` | Document-level job status notices                       |
+| `page-editor/`        | Page editor canvas, strips, panes, hooks, and job queue |
 
 The editor borrows ideas from eScriptorium's manuscript workflow, but it is not
 a line-for-line Vue port.
@@ -177,7 +177,11 @@ Full-stack findings, critical issues, and phased fix order (July 2026):
 
 ## Dead code
 
-Cleanup ritual and audit trail:
+Cleanup audit (candidates, confidence levels, PR order):
+
+[`docs/repository-cleanup-plan.md`](../../docs/repository-cleanup-plan.md)
+
+Ritual (grep → test → commit message):
 
 [`docs/repository-hygiene.md#dead-code-ritual`](../../docs/repository-hygiene.md#dead-code-ritual)
 

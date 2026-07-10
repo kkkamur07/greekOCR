@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
-import { api, type DocumentWorkflow } from '../../api/client';
-import { ApiError } from '../../api/errors';
-import { toast } from '../ui/toast';
-import { DocumentLiveSharingControls } from './DocumentLiveSharingControls';
+import { useEffect, useState } from "react";
+import { api, type DocumentWorkflow } from "../../api/client";
+import { ApiError } from "../../api/errors";
+import { toast } from "../ui/toast";
+import { DocumentLiveSharingControls } from "./DocumentLiveSharingControls";
 
 type DocumentLiveSharingPanelProps = {
   projectId: string;
@@ -31,11 +31,14 @@ export function DocumentLiveSharingPanel({
     if (!trimmed || trimmed === name) return;
     setSavingName(true);
     try {
-      const updated = await api.updateDocument(projectId, documentId, { name: trimmed });
+      const updated = await api.updateDocument(projectId, documentId, {
+        name: trimmed,
+      });
       onUpdated({ name: updated.name });
-      toast.success('Document renamed');
+      toast.success("Document renamed");
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : 'Failed to rename document';
+      const message =
+        err instanceof ApiError ? err.message : "Failed to rename document";
       toast.error(message);
     } finally {
       setSavingName(false);
@@ -55,7 +58,7 @@ export function DocumentLiveSharingPanel({
             value={draftName}
             onChange={(event) => setDraftName(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === 'Enter') {
+              if (event.key === "Enter") {
                 event.preventDefault();
                 void handleSaveName();
               }
@@ -68,19 +71,22 @@ export function DocumentLiveSharingPanel({
           disabled={!nameChanged || savingName}
           onClick={() => void handleSaveName()}
         >
-          {savingName ? 'Saving…' : 'Save name'}
+          {savingName ? "Saving…" : "Save name"}
         </button>
       </div>
       <div className="entity-panel__section">
         <h2 className="entity-panel__heading">Live sharing</h2>
         <p className="entity-panel__hint">
-          Publish this document as a read-only public page for collaborators and readers.
+          Publish this document as a read-only public page for collaborators and
+          readers.
         </p>
         <DocumentLiveSharingControls
           projectId={projectId}
           documentId={documentId}
           workflow={workflow}
-          onWorkflowChange={(nextWorkflow) => onUpdated({ workflow: nextWorkflow })}
+          onWorkflowChange={(nextWorkflow) =>
+            onUpdated({ workflow: nextWorkflow })
+          }
         />
       </div>
     </>
