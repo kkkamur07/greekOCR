@@ -18,6 +18,17 @@ Copy-Item -Recurse -Force (Join-Path $SourceDir "*") $InstallRoot
 $env:HELPER_REGISTRY_URL = $RegistryUrl
 [Environment]::SetEnvironmentVariable("HELPER_CORS_ORIGINS", $CorsOrigins, "User")
 $env:HELPER_CORS_ORIGINS = $CorsOrigins
+$InferenceLimits = @{
+  "INFERENCE_MAX_REQUEST_BODY_BYTES" = "167772160"
+  "INFERENCE_MAX_ENCODED_IMAGE_BYTES" = "167772160"
+  "INFERENCE_MAX_DECODED_IMAGE_BYTES" = "104857600"
+  "INFERENCE_MAX_IMAGE_PIXELS" = "200000000"
+  "INFERENCE_MAX_TRANSCRIBE_LINES" = "10000"
+}
+foreach ($entry in $InferenceLimits.GetEnumerator()) {
+  [Environment]::SetEnvironmentVariable($entry.Key, $entry.Value, "User")
+  Set-Item -Path "Env:$($entry.Key)" -Value $entry.Value
+}
 
 $Exe = Join-Path $InstallRoot "nomicous-inference-helper.exe"
 $Action = New-ScheduledTaskAction -Execute $Exe -WorkingDirectory $InstallRoot

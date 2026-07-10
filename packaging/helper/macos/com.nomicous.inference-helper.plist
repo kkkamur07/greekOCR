@@ -24,6 +24,16 @@
     <string>__REGISTRY_URL__</string>
     <key>HELPER_CORS_ORIGINS</key>
     <string>__CORS_ORIGINS__</string>
+    <key>INFERENCE_MAX_REQUEST_BODY_BYTES</key>
+    <string>167772160</string>
+    <key>INFERENCE_MAX_ENCODED_IMAGE_BYTES</key>
+    <string>167772160</string>
+    <key>INFERENCE_MAX_DECODED_IMAGE_BYTES</key>
+    <string>104857600</string>
+    <key>INFERENCE_MAX_IMAGE_PIXELS</key>
+    <string>200000000</string>
+    <key>INFERENCE_MAX_TRANSCRIBE_LINES</key>
+    <string>10000</string>
   </dict>
 </dict>
 </plist>
