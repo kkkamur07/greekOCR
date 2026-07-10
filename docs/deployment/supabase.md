@@ -61,7 +61,7 @@ When Supabase asks about Data API and RLS defaults:
 |---------|----------------|------|------|
 | **Enable Data API** | **Off** (or On but unused) | Smaller attack surface; matches our stack (no `supabase-js` DB access) | Cannot use PostgREST / client SDK against tables without re-enabling |
 | **Automatically expose new tables** | **Disable** | Alembic tables stay private; no accidental `anon` access to new tables | Must grant manually if you later want Data API |
-| **Enable automatic RLS** | **Disable** | Matches app-layer auth; migration `021` drops RLS anyway | No DB-level row isolation if API is compromised |
+| **Enable automatic RLS** | **Disable** | Matches app-layer auth and the consolidated baseline | No DB-level row isolation if API is compromised |
 
 We authorize in **FastAPI**, not Postgres RLS. The backend connects with the database password / service credentials, not the publishable key.
 
@@ -287,9 +287,24 @@ receive the app JWT, storage service-role key, or migration URL.
 ### 3. Migrate
 
 ```bash
-# One-time per database: follow docs/deployment/database-roles.md first.
+# The schema migration creates the service groups when the operator permits it.
 ./scripts/platform/migrate_supabase.sh
 ```
+
+For the disposable pre-production project only, reset the application schema
+and rerun the consolidated migrations with an explicit guard:
+
+```bash
+export SUPABASE_NON_PRODUCTION=true
+export CONFIRM_SUPABASE_RESET=RESET
+./scripts/platform/reset_supabase_nonprod.sh
+```
+
+This drops only the application tables, enums, Alembic history, and obsolete
+RLS helper functions before applying `001_initial_schema` and
+`002_service_roles`. It does not delete Supabase Storage objects; clear the
+disposable `document-media` bucket separately if required. Never set the
+confirmation variables for a production project.
 
 ### 4. Seed
 
@@ -404,7 +419,7 @@ Dev login after seed: `dev@example.com` / `dev-pass-123`
 | `JWT_SECRET` missing | Only `.env.supabase` exists, old code path | Update repo; or copy to `.env` |
 | `connect() got unexpected keyword argument 'sslmode'` | asyncpg URL | Use `ssl=` or let `db.py` rewrite |
 | `DuplicatePreparedStatementError` | Pooler + asyncpg | Fixed in `db.py`; restart process |
-| `role nomicous_app cannot be dropped` | Supabase default privileges | Fixed in migration `021` |
+| `role nomicous_app cannot be dropped` | Legacy pre-squash role | Remove it during a non-production reset or through the provider operator |
 | Upload 401/403 to Storage | Wrong key or missing bucket | Secret key + private `document-media` |
 | Connection refused on `:5433` | Docker not running | `docker compose up db -d` |
 | Integration tests hang | Stale DB advisory locks | Stop API; terminate idle sessions |

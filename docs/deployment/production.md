@@ -191,7 +191,7 @@ Supabase operator/migration URI.
 Ship the macOS DMG from GitHub Releases. The installer configures the loopback-only
 helper for `https://app.nomicous.com` at runtime; it does not embed a browser secret.
 For another stable app origin, set `HELPER_CORS_ORIGINS` while installing as described
-in [`packaging/helper/README.md`](../packaging/helper/README.md). Do not use wildcard
+in [`packaging/helper/README.md`](../../packaging/helper/README.md). Do not use wildcard
 origins or preview domains.
 
 ---

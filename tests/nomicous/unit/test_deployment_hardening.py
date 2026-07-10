@@ -76,12 +76,7 @@ def test_vercel_frontend_permits_helper_loopback_origins() -> None:
 
 def test_role_migration_defines_service_boundaries_without_passwords() -> None:
     migration = (
-        REPO_ROOT
-        / "nomicous"
-        / "infrastructure"
-        / "alembic"
-        / "versions"
-        / "025_service_database_roles.py"
+        REPO_ROOT / "nomicous" / "infrastructure" / "alembic" / "versions" / "002_service_roles.py"
     ).read_text(encoding="utf-8")
 
     for role in (

@@ -20,11 +20,18 @@ credentials.
 
 1. Open a SQL session with a provider/operator principal that has `CREATEROLE`
    and owns the `public` schema objects.
-2. Apply `scripts/platform/provision_database_roles.sql`.
-3. Create or select provider-managed LOGIN principals. The exact command and
+2. Run the schema migration first:
+
+   ```bash
+   ./scripts/platform/migrate_supabase.sh
+   ```
+
+3. Apply `scripts/platform/provision_database_roles.sql` if the migration could
+   not create the groups or if the provider requires operator bootstrap.
+4. Create or select provider-managed LOGIN principals. The exact command and
    password lifecycle is provider-specific; do not create password-bearing
    `CREATE ROLE ... LOGIN PASSWORD ...` statements in this repository.
-4. Grant exactly one service group to each LOGIN principal. For example:
+5. Grant exactly one service group to each LOGIN principal. For example:
 
    ```sql
    GRANT nomicous_api TO <provider-managed-api-login>;
@@ -33,14 +40,14 @@ credentials.
    GRANT nomicous_migrator TO <provider-managed-migrator-login>;
    ```
 
-5. Store the four connection URLs in the appropriate provider services:
+6. Store the four connection URLs in the appropriate provider services:
    - Alembic runner: `MIGRATOR_DATABASE_URL`
    - platform API: `DATABASE_URL`, `SYNC_DATABASE_URL`
    - platform worker: `DATABASE_URL`, `SYNC_DATABASE_URL`
    - inference API and worker: `INFERENCE_DATABASE_URL`
-6. Run `alembic upgrade head` through the migrator/operator connection.
+7. Run `alembic upgrade head` through the migrator/operator connection.
 
-Migration `025_service_roles` performs the same grants when the current
+Migration `002_service_roles` performs the same grants when the current
 operator can create roles. On providers that forbid `CREATEROLE`, it emits a
 notice and leaves the existing operator setup running; apply the bootstrap
 script once to enforce the policy. It intentionally does not transfer table
