@@ -21,16 +21,16 @@ class AdmissionSettings(BaseSettings):
     """Environment-configurable, process-local inference admission limits."""
 
     inference_max_request_body_bytes: int = Field(
-        default=12 * 1024 * 1024, ge=1024, alias="INFERENCE_MAX_REQUEST_BODY_BYTES"
+        default=160 * 1024 * 1024, ge=1024, alias="INFERENCE_MAX_REQUEST_BODY_BYTES"
     )
     inference_max_encoded_image_bytes: int = Field(
-        default=10 * 1024 * 1024, ge=1024, alias="INFERENCE_MAX_ENCODED_IMAGE_BYTES"
+        default=160 * 1024 * 1024, ge=1024, alias="INFERENCE_MAX_ENCODED_IMAGE_BYTES"
     )
     inference_max_decoded_image_bytes: int = Field(
-        default=7 * 1024 * 1024, ge=1024, alias="INFERENCE_MAX_DECODED_IMAGE_BYTES"
+        default=100 * 1024 * 1024, ge=1024, alias="INFERENCE_MAX_DECODED_IMAGE_BYTES"
     )
     inference_max_image_pixels: int = Field(
-        default=32_000_000, ge=1, alias="INFERENCE_MAX_IMAGE_PIXELS"
+        default=200_000_000, ge=1, alias="INFERENCE_MAX_IMAGE_PIXELS"
     )
     inference_allowed_image_formats: str = Field(
         default="JPEG,PNG,TIFF,WEBP", alias="INFERENCE_ALLOWED_IMAGE_FORMATS"

@@ -127,11 +127,11 @@ Packaging for `.dmg` / `.msi` / Linux installers: [`packaging/helper/README.md`]
 
 ## Admission control and helper exposure
 
-Both the API and local helper enforce the same conservative `INFERENCE_*` limits before
-base64 decoding or model loading. Defaults are: 12 MiB request body, 10 MiB encoded image,
-7 MiB decoded image/job payload, 32 million pixels, 64 KiB parameters, depth 8, 1,000
-parameter items, 200 transcription lines, 256 geometry points per line, 100 queued/running
-jobs, one worker thread, and 60 POSTs per minute per process. Allowed image formats default
+Both the API and local helper enforce the same `INFERENCE_*` limits before
+base64 decoding or model loading. Defaults are: 160 MiB request body, 160 MiB encoded image,
+100 MiB decoded image, 128 MiB job payload, 200 million pixels, 64 MiB parameters, depth 8,
+8,000,000 parameter items, 10,000 transcription lines, 256 geometry points per line,
+100 queued/running jobs, one worker thread, and 60 POSTs per minute per process. Allowed image formats default
 to `JPEG,PNG,TIFF,WEBP`. Operators may lower or raise these with the corresponding
 `INFERENCE_MAX_*`, `INFERENCE_WORKER_CONCURRENCY`, and
 `INFERENCE_RATE_LIMIT_PER_MINUTE` environment variables; only trusted deployment
