@@ -100,6 +100,45 @@ We plan a **persistent Docker deployment** (API + workers on one host) where `JO
 | Media 404 | Local storage on serverless | `STORAGE_BACKEND=supabase` + bucket configured |
 | Function too large / timeout | ML code in API bundle | Inference stays in separate Docker image only |
 
+### Production deployment incident: July 2026
+
+The API build completed successfully, but the first production requests returned
+`FUNCTION_INVOCATION_FAILED`. The failure happened while importing the FastAPI
+application: production settings were intentionally stricter than the old
+Vercel environment. The runtime never reached a route handler.
+
+The fixes were configuration changes, not application workarounds:
+
+| Startup error | Why it failed | Production fix |
+|--------------|---------------|----------------|
+| `FORWARDED_ALLOW_IPS=*` | Wildcard forwarded-header trust permits spoofed client IPs | Remove the variable |
+| `BEHIND_PROXY=true` without a CIDR | Forwarded headers were enabled without a known trusted proxy range | Set `BEHIND_PROXY=false` |
+| Missing or non-HTTPS `INFERENCE_URL` | Production ML settings require an HTTPS cloud endpoint | Set `https://inference.nomicous.com` |
+| Placeholder/missing inference secrets | Production callbacks require real shared secrets | Store `INFERENCE_WEBHOOK_SECRET` and `INFERENCE_SERVICE_SECRET` as encrypted Vercel variables |
+| Only `VITE_*` frontend variables | The frontend migrated from Vite to Next.js | Use `NEXT_PUBLIC_*` names |
+
+The API is deployed at **`https://api.nomicous.com`** and pinned to Vercel's
+Frankfurt region (`fra1`). The landing page and frontend remain globally served.
+After configuration changes, verify the API before testing application flows:
+
+```bash
+curl -sS https://api.nomicous.com/health
+# {"status":"ok","database":"ok"}
+```
+
+### Local helper versus cloud inference
+
+Local OCR is currently the default. The browser connects to the user's local
+Inference Helper at `http://localhost:8001`; the helper is not a Vercel service.
+`NEXT_PUBLIC_INFERENCE_HELPER_URL` controls this browser-side probe, and the
+frontend Content Security Policy must allow the same loopback origin.
+
+Do **not** set the Vercel API's `INFERENCE_URL` to `localhost:8001`. From inside a
+Vercel function, `localhost` means the ephemeral function container, not the
+researcher's computer. Keep cloud inference disabled until a persistent
+inference host is available. When enabled later, use the HTTPS endpoint and
+configure the callback and shared secrets together.
+
 Runbook: [`docs/deployment/production.md`](../deployment/production.md). Vercel Python notes: [`docs/deployment/vercel-platform-api.md`](../deployment/vercel-platform-api.md).
 
 ---
