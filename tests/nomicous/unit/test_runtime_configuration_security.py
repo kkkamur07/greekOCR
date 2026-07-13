@@ -119,10 +119,15 @@ def test_platform_production_inference_url_requires_https(url: str, expected: st
         assert MLSettings(_env_file=None, **values).inference_url == url
 
 
-def test_platform_local_inference_mode_needs_no_cloud_credentials() -> None:
+def test_platform_local_inference_mode_needs_no_cloud_credentials(monkeypatch) -> None:
+    # CI injects inference secrets for other jobs; isolate this local-mode check.
+    monkeypatch.delenv("INFERENCE_URL", raising=False)
+    monkeypatch.delenv("INFERENCE_WEBHOOK_SECRET", raising=False)
+    monkeypatch.delenv("INFERENCE_SERVICE_SECRET", raising=False)
     settings = MLSettings(ENVIRONMENT="production", _env_file=None)
 
     assert settings.cloud_inference_enabled is False
+    assert settings.inference_service_secret is None
 
 
 @pytest.mark.parametrize("secret", [None, "", "replace-me", "replace-with-a-secret"])

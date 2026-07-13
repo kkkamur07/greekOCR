@@ -174,7 +174,7 @@ flowchart LR
    client queue, sends the current `JobResponse` snapshot immediately, then
    streams further `job` events when the broadcaster receives NOTIFY payloads.
    Heartbeat comments (`: heartbeat`) are sent every `JOB_SSE_HEARTBEAT_SECONDS`
-   (default 30) while waiting. The stream closes after `done` or `failed`.
+   (default 45) while waiting. The stream closes after `done`, `failed`, or `cancelled`.
 
 ### When NOTIFY fires
 
@@ -201,7 +201,7 @@ the `useJobPolling` hook and poll every 1.5 seconds when needed.
 | Variable | Purpose | Default |
 |----------|---------|---------|
 | `PLATFORM_JOB_NOTIFY_CHANNEL` | Postgres `NOTIFY` channel name | `platform_jobs` |
-| `JOB_SSE_HEARTBEAT_SECONDS` | SSE keep-alive interval while idle | `30` |
+| `JOB_SSE_HEARTBEAT_SECONDS` | SSE keep-alive interval while idle | `45` |
 | `SYNC_DATABASE_URL` | DSN for the asyncpg notification listener | `postgresql://…` |
 
 The notification listener must use a plain `postgresql://` DSN (`SYNC_DATABASE_URL`).
@@ -271,7 +271,7 @@ Settings are loaded by `backend/core/settings/` from environment variables and
 | `MEDIA_ROOT` | Uploaded Document part media | `nomicous/backend/media` |
 | `ENABLE_TEST_JOB_ROUTES` | Enables dev-only noop job route | `false` in `.env.example` |
 | `PLATFORM_JOB_NOTIFY_CHANNEL` | Postgres channel for platform job status NOTIFY | `platform_jobs` |
-| `JOB_SSE_HEARTBEAT_SECONDS` | SSE idle heartbeat interval for `/jobs/{id}/events` | `30` |
+| `JOB_SSE_HEARTBEAT_SECONDS` | SSE idle heartbeat interval for `/jobs/{id}/events` | `45` |
 | `JOB_WORKER_ENABLED` | Start in-process platform job worker on API boot | `true` |
 | `JOB_SSE_NOTIFICATIONS_ENABLED` | Start the in-process Postgres NOTIFY listener for SSE | `true` |
 
