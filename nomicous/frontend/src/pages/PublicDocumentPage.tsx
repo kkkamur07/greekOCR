@@ -9,6 +9,7 @@ import {
 } from "../api/client";
 import { ApiError } from "../api/errors";
 import { getAccessToken } from "../auth/storage";
+import { ContentRegionLoading } from "../components/layout/ContentRegionLoading";
 import { PublicCanvasPdfView } from "../components/public/PublicCanvasPdfView";
 import { PublicDocumentExports } from "../components/public/PublicDocumentExports";
 import { PublicPageCanvas } from "../components/public/PublicPageCanvas";
@@ -55,6 +56,9 @@ export function PublicDocumentPage() {
         setActivePartId(sorted[0]?.id ?? null);
       } catch (err) {
         if (cancelled) return;
+        setDocument(null);
+        setLayout(null);
+        setActivePartId(null);
         if (err instanceof ApiError && err.status === 404) {
           setNotFound(true);
           return;
@@ -111,76 +115,26 @@ export function PublicDocumentPage() {
     setCanvasView("image");
   }, [activePartId]);
 
-  if (notFound) {
-    return (
-      <div className="page">
-        <main className="content-wrap">
-          <div className="notice-banner" role="alert">
-            <strong>Document not available</strong>
-            This document is not published or does not exist.
-          </div>
-        </main>
+  let content;
+  if (loading) {
+    content = <ContentRegionLoading label="Loading document" />;
+  } else if (notFound) {
+    content = (
+      <div className="notice-banner" role="alert">
+        <strong>Document not available</strong>
+        This document is not published or does not exist.
       </div>
     );
-  }
-
-  if (errorMessage) {
-    return (
-      <div className="page">
-        <main className="content-wrap">
-          <div className="notice-banner" role="alert">
-            <strong>Could not load document</strong>
-            {errorMessage}
-          </div>
-        </main>
+  } else if (errorMessage) {
+    content = (
+      <div className="notice-banner" role="alert">
+        <strong>Could not load document</strong>
+        {errorMessage}
       </div>
     );
-  }
-
-  return (
-    <div className="page page--public">
-      <nav className="topnav" aria-label="Main navigation">
-        <Link href="/" className="topnav-logo" aria-label="nomicous home">
-          <img src="/nomos.svg" alt="" />
-          <span>nomicous</span>
-        </Link>
-        <div className="topnav-sep" aria-hidden="true" />
-        <div className="topnav-breadcrumb">
-          <span className="current" aria-current="page">
-            Public view
-          </span>
-        </div>
-        <div className="topnav-spacer" />
-        <div className="topnav-actions">
-          {isLoggedIn && projectId && documentId && (
-            <Link
-              href={`/projects/${projectId}/documents/${documentId}`}
-              className="btn btn-outline btn-sm"
-            >
-              Editor
-            </Link>
-          )}
-          {!isLoggedIn && (
-            <Link href="/login" className="btn btn-ghost btn-sm">
-              Sign in
-            </Link>
-          )}
-        </div>
-      </nav>
-
-      <header className="pub-header pub-header--compact">
-        <div className="pub-header__main">
-          <div className="pub-header__title-row">
-            <h1>{document?.name ?? "Document"}</h1>
-            {document && <WorkflowBadge workflow={document.workflow} />}
-          </div>
-          <p className="pub-header__meta">
-            {parts.length} page{parts.length === 1 ? "" : "s"}
-          </p>
-        </div>
-      </header>
-
-      <main className="pub-workspace content-wrap">
+  } else {
+    content = (
+      <>
         <div className="pub-workspace__toolbar">
           <PublicPartTabs
             parts={partTabs}
@@ -222,7 +176,7 @@ export function PublicDocumentPage() {
           </div>
         </div>
 
-        <div className="pub-split" style={{ opacity: loading ? 0.6 : 1 }}>
+        <div className="pub-split">
           <div
             className="pub-canvas"
             role="img"
@@ -266,12 +220,61 @@ export function PublicDocumentPage() {
           )}
         </div>
 
-        {!loading && parts.length === 0 && (
+        {parts.length === 0 && (
           <p className="list-hint">
             This published document has no page images yet.
           </p>
         )}
-      </main>
+      </>
+    );
+  }
+
+  return (
+    <div className="page page--public">
+      <nav className="topnav" aria-label="Main navigation">
+        <Link href="/" className="topnav-logo" aria-label="nomicous home">
+          <img src="/nomos.svg" alt="" />
+          <span>nomicous</span>
+        </Link>
+        <div className="topnav-sep" aria-hidden="true" />
+        <div className="topnav-breadcrumb">
+          <span className="current" aria-current="page">
+            Public view
+          </span>
+        </div>
+        <div className="topnav-spacer" />
+        <div className="topnav-actions">
+          {isLoggedIn && projectId && documentId && (
+            <Link
+              href={`/projects/${projectId}/documents/${documentId}`}
+              className="btn btn-outline btn-sm"
+            >
+              Editor
+            </Link>
+          )}
+          {!isLoggedIn && (
+            <Link href="/login" className="btn btn-ghost btn-sm">
+              Sign in
+            </Link>
+          )}
+        </div>
+      </nav>
+
+      <header className="pub-header pub-header--compact">
+        <div className="pub-header__main">
+          <div className="pub-header__title-row">
+            <h1>{document?.name ?? "Document"}</h1>
+            {document && <WorkflowBadge workflow={document.workflow} />}
+          </div>
+          {document && (
+            <p className="pub-header__meta">
+              {parts.length} page{parts.length === 1 ? "" : "s"}
+            </p>
+          )}
+        </div>
+      </header>
+
+      <main className="pub-workspace content-wrap">{content}</main>
     </div>
   );
 }

@@ -13,6 +13,7 @@ import { JobsNotice } from "../components/document/JobsNotice";
 import { PartList } from "../components/document/PartList";
 import { UploadZone } from "../components/document/UploadZone";
 import { AppPageShell } from "../components/layout/AppPageShell";
+import { ContentRegionLoading } from "../components/layout/ContentRegionLoading";
 import { DocumentLiveSharingPanel } from "../components/sharing/DocumentLiveSharingPanel";
 import { WorkflowBadge } from "../components/WorkflowBadge";
 
@@ -208,42 +209,48 @@ export function DocumentDetailPage() {
         ) : null
       }
     >
-      {error && (
-        <div className="notice-banner" role="alert">
-          <strong>Document unavailable</strong>
-          {error}
-        </div>
-      )}
-
-      {document && <JobsNotice enableTestJobs={ENABLE_TEST_JOBS} />}
-
-      {document && (
-        <UploadZone
-          onUpload={handleUpload}
-          disabled={loading}
-          loading={uploading}
-        />
-      )}
-
-      {document && (
+      {loading && !document && !error ? (
+        <ContentRegionLoading label="Loading document" />
+      ) : (
         <>
-          <p className="section-label" id="pages-label">
-            Pages
-          </p>
-          <PartList
-            parts={parts}
-            projectId={projectId!}
-            documentId={documentId!}
-            loading={loading}
-            onMoveUp={(i) => movePart(i, -1)}
-            onMoveDown={(i) => movePart(i, 1)}
-            onDelete={(id) => void handleDelete(id)}
-            onToggleReview={(partId, reviewed) =>
-              void handleToggleReview(partId, reviewed)
-            }
-            reviewUpdatingPartId={reviewUpdatingPartId}
-            reordering={reordering}
-          />
+          {error && (
+            <div className="notice-banner" role="alert">
+              <strong>Document unavailable</strong>
+              {error}
+            </div>
+          )}
+
+          {document && <JobsNotice enableTestJobs={ENABLE_TEST_JOBS} />}
+
+          {document && (
+            <UploadZone
+              onUpload={handleUpload}
+              disabled={loading}
+              loading={uploading}
+            />
+          )}
+
+          {document && (
+            <>
+              <p className="section-label" id="pages-label">
+                Pages
+              </p>
+              <PartList
+                parts={parts}
+                projectId={projectId!}
+                documentId={documentId!}
+                loading={loading}
+                onMoveUp={(i) => movePart(i, -1)}
+                onMoveDown={(i) => movePart(i, 1)}
+                onDelete={(id) => void handleDelete(id)}
+                onToggleReview={(partId, reviewed) =>
+                  void handleToggleReview(partId, reviewed)
+                }
+                reviewUpdatingPartId={reviewUpdatingPartId}
+                reordering={reordering}
+              />
+            </>
+          )}
         </>
       )}
     </AppPageShell>
