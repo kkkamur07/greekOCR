@@ -14,6 +14,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 
 os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production-at-least-32-bytes")
+os.environ.setdefault("INFERENCE_URL", "http://localhost:8001")
 os.environ.setdefault(
     "DATABASE_URL",
     "postgresql+asyncpg://postgres:dev@localhost:5433/kalamos",

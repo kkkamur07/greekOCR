@@ -43,7 +43,9 @@ RUN mkdir -p /app/backend/media \
   && JWT_SECRET=container-build-validation-secret \
      INFERENCE_WEBHOOK_SECRET=container-build-validation-secret \
      INFERENCE_SERVICE_SECRET=container-build-validation-secret \
-     python -c "from backend.core.main import app; assert app.title"
+     python -c "from backend.core.main import app; assert app.title" \
+  && /usr/local/bin/python -m pip uninstall -y pip setuptools wheel \
+  && rm -rf /usr/local/lib/python3.11/ensurepip
 
 USER appuser
 

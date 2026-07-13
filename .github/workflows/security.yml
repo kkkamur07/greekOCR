@@ -30,7 +30,8 @@ jobs:
       - run: npm ci --prefix nomicous/frontend
       - run: npm audit --prefix nomicous/frontend --omit=dev --audit-level=high
       # Kraken/CoreML currently constrain protobuf and torch below audited fixes.
-      # click is transitive (uvicorn/kraken); bump blocked without a direct pin.
+      # PYSEC-2026-2132 (Click <8.3.3): kraken==7.0.2 requires click<8.3; see
+      # docs/security/vex-click-pysec-2026-2132.md (owned, time-bounded VEX).
       - run: >-
           uv run --locked --group dev --group platform --group inference pip-audit
           --ignore-vuln PYSEC-2026-1806

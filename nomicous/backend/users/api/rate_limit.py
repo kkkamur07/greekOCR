@@ -24,6 +24,11 @@ def clear_auth_rate_limit_state() -> None:
     """No-op — state lives in Postgres and is cleared by database truncation in tests."""
 
 
+def client_ip_for_request(request: Request) -> str:
+    """Public helper for IP-based throttles outside auth routes."""
+    return _real_ip(request)
+
+
 def _is_trusted_proxy_peer(host: str | None, forwarded_allow_ips: str | None) -> bool:
     if not host or not forwarded_allow_ips:
         return False

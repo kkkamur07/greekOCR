@@ -11,6 +11,7 @@ from sqlalchemy import func, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.api.pagination import PageCursor
+from backend.core.exceptions import ConflictError
 from backend.document.infrastructure.orm_models import Document
 from backend.jobs.infrastructure.notifications import notify_platform_job_status_changed
 from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
@@ -236,12 +237,38 @@ def mark_job_done(job_id: uuid.UUID, result: dict | None = None) -> None:
 _CANCELABLE = (JobStatus.pending, JobStatus.running, JobStatus.waiting)
 
 
-def cancel_job(job_id: uuid.UUID) -> Job | None:
-    """Cancel a pending/running/waiting job and discard unapplied partials.
+async def cancel_job_async(session: AsyncSession, job_id: uuid.UUID) -> Job | None:
+    """Atomically cancel a pending/running/waiting job under ``FOR UPDATE``.
 
-    Returns the job row. When the job was already terminal, returns it unchanged
-    so callers can distinguish missing vs not-cancelable.
+    Raises ConflictError when the job is already terminal or a callback has been
+    claimed (merge may already be applying document changes).
     """
+    now = datetime.now(UTC)
+    job = (
+        await session.execute(select(Job).where(Job.id == job_id).with_for_update())
+    ).scalar_one_or_none()
+    if job is None:
+        return None
+    if job.status not in _CANCELABLE:
+        raise ConflictError(f"job {job_id} cannot be cancelled from status {job.status.value}")
+    if job.callback_claimed_at is not None:
+        raise ConflictError(
+            f"job {job_id} cannot be cancelled while an inference callback is applied"
+        )
+    job.status = JobStatus.cancelled
+    job.error = None
+    job.result = None
+    job.callback_claimed_at = None
+    job.completed_at = now
+    job.updated_at = now
+    await session.commit()
+    await session.refresh(job)
+    notify_platform_job_status_changed(job.id, JobStatus.cancelled)
+    return job
+
+
+def cancel_job(job_id: uuid.UUID) -> Job | None:
+    """Sync cancel helper for non-request contexts (tests/scripts)."""
     now = datetime.now(UTC)
     with sync_system_session() as session:
         job = session.execute(
@@ -250,10 +277,11 @@ def cancel_job(job_id: uuid.UUID) -> Job | None:
         if job is None:
             return None
         if job.status not in _CANCELABLE:
-            session.expunge(job)
-            return job
-        # Discard partials: clear result/callback claim so later inference
-        # callbacks are ignored (_TERMINAL_STATUSES includes cancelled).
+            raise ConflictError(f"job {job_id} cannot be cancelled from status {job.status.value}")
+        if job.callback_claimed_at is not None:
+            raise ConflictError(
+                f"job {job_id} cannot be cancelled while an inference callback is applied"
+            )
         job.status = JobStatus.cancelled
         job.error = None
         job.result = None
