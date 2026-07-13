@@ -24,7 +24,7 @@ class JobSettings(BaseSettings):
         default="platform_jobs",
         alias="PLATFORM_JOB_NOTIFY_CHANNEL",
     )
-    job_sse_heartbeat_seconds: float = Field(default=30.0, alias="JOB_SSE_HEARTBEAT_SECONDS")
+    job_sse_heartbeat_seconds: float = Field(default=45.0, alias="JOB_SSE_HEARTBEAT_SECONDS")
     job_worker_claim_test_only: bool | None = Field(
         default=None,
         alias="JOB_WORKER_CLAIM_TEST_ONLY",

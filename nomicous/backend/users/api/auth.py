@@ -113,7 +113,7 @@ async def refresh(
 @router.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(
     request: Request, response: Response, db: Annotated[AsyncSession, Depends(get_db)]
-) -> Response:
+) -> None:
     settings = get_auth_settings()
     await BrowserSessionService(settings).revoke(
         db,
@@ -122,7 +122,7 @@ async def logout(
         csrf_header=request.headers.get("X-CSRF-Token"),
     )
     _clear_session_cookies(response)
-    return response
+    response.status_code = status.HTTP_204_NO_CONTENT
 
 
 @router.get("/me", response_model=UserResponse)
