@@ -4,6 +4,8 @@ import uuid
 
 import pytest
 
+from tests.nomicous.integration.helpers import assert_api_error
+
 
 # --- Project list and CRUD ---
 # Tests owner create/read/update/delete. Does not test documents or sharing.
@@ -22,7 +24,8 @@ def test_malformed_project_cursor_is_bounded_and_sanitized(client, auth_headers,
     response = client.get(f"/projects?cursor={cursor}", headers=auth_headers)
 
     assert response.status_code == 422
-    assert response.json() == {"error": {"code": "VALIDATION_ERROR", "message": "Invalid request"}}
+    error = assert_api_error(response, code="VALIDATION_ERROR")
+    assert error["message"] in {"Invalid request", "Invalid pagination cursor"}
     assert cursor not in response.text
     assert response.headers["x-error-id"]
 

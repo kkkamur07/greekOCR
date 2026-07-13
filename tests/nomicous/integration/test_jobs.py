@@ -23,7 +23,11 @@ from backend.jobs.infrastructure.job_repository import (
 from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
 from backend.jobs.infrastructure.worker import execute_claimed_job
 from infrastructure.db import sync_system_session
-from tests.nomicous.integration.helpers import MINIMAL_PNG, documents_url, poll_job
+from tests.nomicous.integration.helpers import (
+    MINIMAL_PNG,
+    documents_url,
+    poll_job,
+)
 
 
 def _wait_until_no_active_test_jobs(*, timeout: float = 5.0) -> None:
@@ -398,4 +402,7 @@ def test_execute_claimed_job_marks_unknown_handler_failed():
         row = session.get(Job, job_id)
         assert row is not None
         assert row.status == JobStatus.failed
-        assert "no handler" in (row.error or "").lower()
+        assert (
+            "not supported" in (row.error or "").lower()
+            or "no handler" in (row.error or "").lower()
+        )

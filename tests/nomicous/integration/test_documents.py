@@ -11,7 +11,11 @@ from backend.document.infrastructure.orm_models import Document, DocumentPart
 from backend.project.infrastructure.orm_models import Project
 from infrastructure.db import sync_system_session
 from tests.fixtures.paths import MINIMAL_PNG
-from tests.nomicous.integration.helpers import documents_url, stored_minimal_page_bytes
+from tests.nomicous.integration.helpers import (
+    assert_api_error,
+    documents_url,
+    stored_minimal_page_bytes,
+)
 
 
 def _create_document_with_part(client, owner_headers, owner_project) -> tuple[str, str, str]:
@@ -213,10 +217,11 @@ def test_upload_part_rejects_non_image_bytes(client, owner_headers, owner_projec
     )
 
     assert response.status_code == 422
-    assert response.json()["error"] == {
-        "code": "VALIDATION_ERROR",
-        "message": "Invalid request",
-    }
+    assert_api_error(
+        response,
+        code="VALIDATION_ERROR",
+        message="Invalid request",
+    )
 
 
 @pytest.mark.integration
