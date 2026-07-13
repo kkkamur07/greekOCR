@@ -1,0 +1,28 @@
+# Nomicous
+
+> AI-assisted annotation platform for historical manuscripts. Models draft segments and transcriptions. Researchers review and edit. Open HTR models on Hugging Face. Part of the NOMOS research ecosystem.
+
+Nomicous is open research tooling for manuscript HTR workflows: page annotation, model-assisted transcription, local or cloud inference, and export of training-ready line data.
+
+## Site
+
+- [Home](https://nomicous.com/): Product overview, features, and published models
+- [App](https://app.nomicous.com/): Hosted annotation platform
+- [llms.txt](https://nomicous.com/llms.txt): This file
+
+## Models
+
+- [syriac-htr-calamari](https://huggingface.co/kkkamur07/syriac-htr-calamari): Syriac line HTR (Calamari), published
+- greek-htr-calamari: Greek line HTR (Calamari), coming soon
+- coptic-htr-calamari: Coptic line HTR (Calamari), coming soon
+- armenian-htr-calamari: Armenian line HTR (Calamari), coming soon
+- Datasets: training and evaluation sets on Hugging Face, coming soon
+- [Author models on Hugging Face](https://huggingface.co/kkkamur07): Published checkpoints
+
+## Project
+
+- [NOMOS project](https://nomosproject.de): Research context for Nomicous
+
+## Optional
+
+- [Sitemap](https://nomicous.com/sitemap.xml): Machine-readable page list
