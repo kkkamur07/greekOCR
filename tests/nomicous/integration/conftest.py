@@ -60,6 +60,12 @@ _truncate_engine = sync_engine
 _TRUNCATE_ADVISORY_LOCK_ID = 73450123
 
 
+def _ensure_job_status_cancelled() -> None:
+    """Dev/test DBs created before cancelled existed need the enum value."""
+    with _truncate_engine.begin() as connection:
+        connection.execute(text("ALTER TYPE job_status ADD VALUE IF NOT EXISTS 'cancelled'"))
+
+
 def _truncate_database() -> None:
     table_names = [
         sync_engine.dialect.identifier_preparer.quote(table.name)
@@ -87,6 +93,7 @@ def _truncate_database() -> None:
 @pytest.fixture(scope="session")
 def client() -> TestClient:
     """Session TestClient — lifespan runs the platform job worker."""
+    _ensure_job_status_cancelled()
     with TestClient(create_app()) as test_client:
         yield test_client
 
