@@ -158,6 +158,39 @@ def test_get_job_returns_status_and_timestamps(client: TestClient, registered_us
     assert missing.status_code == 404
 
 
+def test_cancel_pending_job_marks_cancelled_and_discards_partials(
+    client: TestClient, registered_user: dict[str, str]
+):
+    auth_headers = {"Authorization": f"Bearer {registered_user['access_token']}"}
+    me = client.get("/auth/me", headers=auth_headers)
+    assert me.status_code == 200
+    user_id = uuid.UUID(me.json()["id"])
+
+    # Keep the job from completing before we cancel: insert directly as pending
+    # without relying on the worker race.
+    with sync_system_session() as session:
+        job = Job(
+            type=JobType.pipeline,
+            status=JobStatus.pending,
+            payload={"handler": "noop", "test": True},
+            user_id=user_id,
+        )
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        job_id = str(job.id)
+
+    cancelled = client.post(f"/jobs/{job_id}/cancel", headers=auth_headers)
+    assert cancelled.status_code == 200
+    body = cancelled.json()
+    assert body["status"] == "cancelled"
+    assert body["result"] is None
+    assert body["completed_at"] is not None
+
+    again = client.post(f"/jobs/{job_id}/cancel", headers=auth_headers)
+    assert again.status_code == 409
+
+
 def test_job_events_streams_current_snapshot(client: TestClient, registered_user: dict[str, str]):
     auth_headers = {"Authorization": f"Bearer {registered_user['access_token']}"}
     created = client.post("/jobs/test", headers=auth_headers)
