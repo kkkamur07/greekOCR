@@ -59,11 +59,15 @@ export function PageEditorShell({
 
       {processingBanner}
 
-      {showStatusAlerts && statusAlerts && (
-        <div className="pe-status-bar" role="status" aria-live="polite">
-          {statusAlerts}
-        </div>
-      )}
+      {/* Always mount statusAlerts so success toast effects run; wrap only for sticky errors. */}
+      {statusAlerts &&
+        (showStatusAlerts ? (
+          <div className="pe-status-bar" role="status" aria-live="polite">
+            {statusAlerts}
+          </div>
+        ) : (
+          statusAlerts
+        ))}
 
       <main className="pe-main">{children}</main>
     </div>
