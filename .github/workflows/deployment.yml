@@ -13,6 +13,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+          enable-cache: true
       - run: bash deploy/platform/build.sh
       - run: test -f deploy/platform/nomicous/backend/core/app.py
       - run: test -f deploy/platform/inference/contracts/__init__.py
@@ -20,7 +24,7 @@ jobs:
       - run: test -f deploy/platform/inference/infrastructure/settings.py
       - name: Verify platform contract import surface
         run: |
-          PYTHONPATH=deploy/platform python -c \
+          PYTHONPATH=deploy/platform uv run --locked --group platform python -c \
             "from inference.contracts.jobs import JobCallbackRequest; assert JobCallbackRequest"
       - run: docker build --target runtime --tag nomicous-api:ci -f nomicous/Dockerfile .
       - run: docker build --target builder -f nomicous/frontend/Dockerfile nomicous

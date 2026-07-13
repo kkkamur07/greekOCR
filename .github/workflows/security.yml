@@ -30,9 +30,11 @@ jobs:
       - run: npm ci --prefix nomicous/frontend
       - run: npm audit --prefix nomicous/frontend --omit=dev --audit-level=high
       # Kraken/CoreML currently constrain protobuf and torch below audited fixes.
+      # click is transitive (uvicorn/kraken); bump blocked without a direct pin.
       - run: >-
           uv run --locked --group dev --group platform --group inference pip-audit
           --ignore-vuln PYSEC-2026-1806
           --ignore-vuln PYSEC-2026-1805
           --ignore-vuln PYSEC-2026-139
           --ignore-vuln CVE-2025-3000
+          --ignore-vuln PYSEC-2026-2132
