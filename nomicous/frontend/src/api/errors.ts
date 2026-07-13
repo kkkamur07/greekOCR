@@ -5,11 +5,13 @@ type ValidationErrorItem = {
 
 export class ApiError extends Error {
   readonly status: number;
+  readonly ref: string | null;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, ref: string | null = null) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.ref = ref;
   }
 }
 
@@ -49,13 +51,25 @@ function formatValidationDetails(details: unknown[]): string {
     .join("; ");
 }
 
+function extractRef(body: unknown, response: Response): string | null {
+  if (body && typeof body === "object") {
+    const error = (body as { error?: { ref?: unknown } }).error;
+    if (error && typeof error.ref === "string" && error.ref.trim()) {
+      return error.ref.trim();
+    }
+  }
+  const header = response.headers.get("X-Error-ID");
+  return header && header.trim() ? header.trim() : null;
+}
+
 export async function parseApiError(response: Response): Promise<ApiError> {
   let message = response.statusText || "Request failed";
+  let body: unknown = null;
   try {
-    const body = await response.json();
+    body = await response.json();
     message = formatDetail(body);
   } catch {
     // non-JSON body
   }
-  return new ApiError(message, response.status);
+  return new ApiError(message, response.status, extractRef(body, response));
 }

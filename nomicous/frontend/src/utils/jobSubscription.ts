@@ -33,7 +33,11 @@ type JobSubscriptionOwner = {
 const owners = new Map<string, JobSubscriptionOwner>();
 
 function isTerminal(job: JobResponse): boolean {
-  return job.status === "done" || job.status === "failed";
+  return (
+    job.status === "done" ||
+    job.status === "failed" ||
+    job.status === "cancelled"
+  );
 }
 
 function parseSseChunk(buffer: string): {

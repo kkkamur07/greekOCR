@@ -7,11 +7,13 @@ type PageEditorJobProgressPanelProps = {
   expanded: boolean;
   onExpandedChange: (expanded: boolean) => void;
   onDismissCompleted: () => void;
+  onCancelJob: (jobId: string) => void;
 };
 
 function statusClass(status: TrackedBackgroundJob["status"]): string {
   if (status === "done") return "pe-job-item--done";
   if (status === "failed") return "pe-job-item--failed";
+  if (status === "cancelled") return "pe-job-item--failed";
   return "pe-job-item--active";
 }
 
@@ -21,6 +23,7 @@ export function PageEditorJobProgressPanel({
   expanded,
   onExpandedChange,
   onDismissCompleted,
+  onCancelJob,
 }: PageEditorJobProgressPanelProps) {
   if (jobs.length === 0) return null;
 
@@ -100,6 +103,15 @@ export function PageEditorJobProgressPanel({
               </div>
               <strong className="pe-job-item__label">{job.label}</strong>
               {job.error && <p className="pe-job-item__error">{job.error}</p>}
+              {!isTerminalJobStatus(job.status) && (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-xs"
+                  onClick={() => onCancelJob(job.id)}
+                >
+                  Cancel
+                </button>
+              )}
             </div>
           </li>
         ))}

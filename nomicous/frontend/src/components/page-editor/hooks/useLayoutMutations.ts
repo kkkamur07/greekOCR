@@ -1,4 +1,11 @@
-import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import {
   api,
   type JobResponse,
@@ -17,6 +24,12 @@ import {
   isAbortError,
 } from "../../../inference";
 import { cleanPolygonPoints, offsetGeometry } from "../canvasGeometry";
+import {
+  applyCanvasEdit,
+  applyCanvasEditInverse,
+  pushEditOntoStack,
+  type CanvasEdit,
+} from "../editUndo";
 import { SEGMENT_JOB_TIMEOUT_MS, type PageEditorJobKind } from "../jobProgress";
 import {
   applyLayoutLineGeometryToSegments,
@@ -106,6 +119,11 @@ export function useLayoutMutations({
   const [useOtsuRefinement, setUseOtsuRefinement] = useState(false);
   const [otsuSphereRadius, setOtsuSphereRadius] = useState(4);
   const [segmentMessage, setSegmentMessage] = useState<string | null>(null);
+  const undoStackRef = useRef<CanvasEdit[]>([]);
+  const redoStackRef = useRef<CanvasEdit[]>([]);
+  const [editUndoRevision, setEditUndoRevision] = useState(0);
+  const linesRef = useRef(lines);
+  linesRef.current = lines;
 
   useEffect(() => {
     setSelectedLineId(null);
@@ -113,7 +131,24 @@ export function useLayoutMutations({
     setSaveMessage(null);
     setMutationError(null);
     setSegmentMessage(null);
+    undoStackRef.current = [];
+    redoStackRef.current = [];
+    setEditUndoRevision((value) => value + 1);
   }, [projectId, documentId, partId]);
+
+  const recordEdit = useCallback((edit: CanvasEdit) => {
+    undoStackRef.current = pushEditOntoStack(undoStackRef.current, edit);
+    redoStackRef.current = [];
+    setEditUndoRevision((value) => value + 1);
+  }, []);
+
+  const applyLocalLines = useCallback(
+    (nextLines: LineResponse[]) => {
+      setLines(nextLines);
+      setLayout((current) => syncLayoutLinesFromSegments(current, nextLines));
+    },
+    [setLines, setLayout],
+  );
 
   const sortedLines = [...lines].sort((a, b) => a.order - b.order);
 
@@ -241,8 +276,8 @@ export function useLayoutMutations({
         points,
       });
       const nextLines = mergeSavedLine(lines, saved);
-      setLines(nextLines);
-      setLayout((current) => syncLayoutLinesFromSegments(current, nextLines));
+      applyLocalLines(nextLines);
+      recordEdit({ kind: "create", line: saved });
       setLineError(null);
       onDrawComplete();
     } catch (err) {
@@ -260,15 +295,24 @@ export function useLayoutMutations({
       return;
     }
     const previousLines = lines;
+    const before =
+      previousLines.find((line) => line.id === segmentId)?.points ?? null;
+    if (!before) return;
+    const pointsUnchanged =
+      before.length === cleanedPoints.length &&
+      before.every(
+        (point, index) =>
+          point[0] === cleanedPoints[index][0] &&
+          point[1] === cleanedPoints[index][1],
+      );
+    if (pointsUnchanged) return;
+
     const optimisticLines = lines.map((line) =>
       line.id === segmentId
         ? { ...line, points: cleanedPoints, source: "manual" as const }
         : line,
     );
-    setLines(optimisticLines);
-    setLayout((current) =>
-      syncLayoutLinesFromSegments(current, optimisticLines),
-    );
+    applyLocalLines(optimisticLines);
     try {
       const saved = await api.patchPartLine(
         projectId,
@@ -280,14 +324,16 @@ export function useLayoutMutations({
         },
       );
       const nextLines = mergeSavedLine(optimisticLines, saved);
-      setLines(nextLines);
-      setLayout((current) => syncLayoutLinesFromSegments(current, nextLines));
+      applyLocalLines(nextLines);
+      recordEdit({
+        kind: "points",
+        segmentId,
+        before,
+        after: cleanedPoints,
+      });
       setLineError(null);
     } catch (err) {
-      setLines(previousLines);
-      setLayout((current) =>
-        syncLayoutLinesFromSegments(current, previousLines),
-      );
+      applyLocalLines(previousLines);
       setLineError(layoutMutationMessage(err));
     }
   }
@@ -299,34 +345,29 @@ export function useLayoutMutations({
     const nextPoints = selectedLine.points.map(
       ([x, y]) => [x + 5, y] as LinePoint,
     );
-    const saved = await api.patchPartLine(
-      projectId,
-      documentId,
-      partId,
-      selectedSegmentId,
-      {
-        points: nextPoints,
-      },
-    );
-    const nextLines = mergeSavedLine(lines, saved);
-    setLines(nextLines);
-    setLayout((current) => syncLayoutLinesFromSegments(current, nextLines));
+    await updateSegmentPoints(selectedSegmentId, nextPoints);
   }
 
   async function deleteSelectedSegment() {
     if (!projectId || !documentId || !partId || !selectedSegmentId) return;
+    if (
+      !window.confirm(
+        "Delete this Segment? Its geometry and pairing on this Page will be removed.",
+      )
+    ) {
+      return;
+    }
     const deletedId = selectedSegmentId;
+    const deletedLine = lines.find((line) => line.id === deletedId);
+    if (!deletedLine) return;
     const previousLines = lines;
     const previousLayout = layout;
     const optimisticLines = lines.filter((line) => line.id !== deletedId);
-    setLines(optimisticLines);
-    setLayout((current) => ({
-      ...current,
-      lines: current.lines.filter((line) => line.id !== deletedId),
-    }));
+    applyLocalLines(optimisticLines);
     setSelectedSegmentId(null);
     try {
       await api.deletePartLine(projectId, documentId, partId, deletedId);
+      recordEdit({ kind: "delete", line: deletedLine });
       setLineError(null);
       const pairing = await api.getPagePairing(projectId, documentId, partId);
       setTextLines(pairing.text_lines);
@@ -335,6 +376,87 @@ export function useLayoutMutations({
       setLines(previousLines);
       setLayout(previousLayout);
       setLineError(layoutMutationMessage(err));
+    }
+  }
+
+  async function undoEdit() {
+    const edit = undoStackRef.current.pop();
+    if (!edit || !projectId || !documentId || !partId) {
+      if (edit) undoStackRef.current.push(edit);
+      return;
+    }
+    const previous = linesRef.current;
+    try {
+      if (edit.kind === "points") {
+        applyLocalLines(applyCanvasEditInverse(previous, edit));
+        await api.patchPartLine(projectId, documentId, partId, edit.segmentId, {
+          points: edit.before,
+        });
+        redoStackRef.current = pushEditOntoStack(redoStackRef.current, edit);
+      } else if (edit.kind === "create") {
+        applyLocalLines(applyCanvasEditInverse(previous, edit));
+        await api.deletePartLine(projectId, documentId, partId, edit.line.id);
+        if (selectedSegmentId === edit.line.id) setSelectedSegmentId(null);
+        redoStackRef.current = pushEditOntoStack(redoStackRef.current, edit);
+      } else {
+        const saved = await api.createPartLine(projectId, documentId, partId, {
+          order: edit.line.order,
+          kind: edit.line.kind,
+          points: edit.line.points,
+        });
+        const restored: CanvasEdit = { kind: "delete", line: saved };
+        applyLocalLines(applyCanvasEditInverse(previous, restored));
+        redoStackRef.current = pushEditOntoStack(
+          redoStackRef.current,
+          restored,
+        );
+      }
+      setLineError(null);
+      setEditUndoRevision((value) => value + 1);
+    } catch (err) {
+      undoStackRef.current = pushEditOntoStack(undoStackRef.current, edit);
+      applyLocalLines(previous);
+      setLineError(layoutMutationMessage(err));
+      setEditUndoRevision((value) => value + 1);
+    }
+  }
+
+  async function redoEdit() {
+    const edit = redoStackRef.current.pop();
+    if (!edit || !projectId || !documentId || !partId) {
+      if (edit) redoStackRef.current.push(edit);
+      return;
+    }
+    const previous = linesRef.current;
+    try {
+      if (edit.kind === "points") {
+        applyLocalLines(applyCanvasEdit(previous, edit));
+        await api.patchPartLine(projectId, documentId, partId, edit.segmentId, {
+          points: edit.after,
+        });
+        undoStackRef.current = pushEditOntoStack(undoStackRef.current, edit);
+      } else if (edit.kind === "create") {
+        const saved = await api.createPartLine(projectId, documentId, partId, {
+          order: edit.line.order,
+          kind: edit.line.kind,
+          points: edit.line.points,
+        });
+        const created: CanvasEdit = { kind: "create", line: saved };
+        applyLocalLines(applyCanvasEdit(previous, created));
+        undoStackRef.current = pushEditOntoStack(undoStackRef.current, created);
+      } else {
+        applyLocalLines(applyCanvasEdit(previous, edit));
+        await api.deletePartLine(projectId, documentId, partId, edit.line.id);
+        if (selectedSegmentId === edit.line.id) setSelectedSegmentId(null);
+        undoStackRef.current = pushEditOntoStack(undoStackRef.current, edit);
+      }
+      setLineError(null);
+      setEditUndoRevision((value) => value + 1);
+    } catch (err) {
+      redoStackRef.current = pushEditOntoStack(redoStackRef.current, edit);
+      applyLocalLines(previous);
+      setLineError(layoutMutationMessage(err));
+      setEditUndoRevision((value) => value + 1);
     }
   }
 
@@ -483,6 +605,11 @@ export function useLayoutMutations({
     updateSegmentPoints,
     moveSelectedSegmentRight,
     deleteSelectedSegment,
+    undoEdit,
+    redoEdit,
+    canUndo: undoStackRef.current.length > 0,
+    canRedo: redoStackRef.current.length > 0,
+    editUndoRevision,
     runAutoSegment,
   };
 }

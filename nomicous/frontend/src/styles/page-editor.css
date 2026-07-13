@@ -1389,7 +1389,7 @@
 
 .pe-job-panel {
   position: fixed;
-  right: 16px;
+  left: 16px;
   bottom: 16px;
   z-index: 40;
   width: min(360px, calc(100vw - 32px));

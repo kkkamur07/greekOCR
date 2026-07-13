@@ -35,7 +35,7 @@ def _create_document_part_with_segments(
     upload = client.post(
         f"{base}/{document_id}/parts",
         headers=owner_headers,
-        files={"file": ("folio.png", _png_bytes(), "image/png")},
+        files={"file": ("page.png", _png_bytes(), "image/png")},
     )
     assert upload.status_code == 201
     part_id = upload.json()["id"]
@@ -79,7 +79,7 @@ def test_member_generates_transcription_pdf_from_paired_ground_truth(
     import_response = client.put(
         f"{base}/{document_id}/parts/{part_id}/page-transcription",
         headers=owner_headers,
-        json={"text": "alpha\nunused"},
+        json={"text": "Αθήνα\nunused"},
     )
     assert import_response.status_code == 200
     pair = client.post(
@@ -99,7 +99,7 @@ def test_member_generates_transcription_pdf_from_paired_ground_truth(
     assert response.content.startswith(b"%PDF")
     reader = _pdf_reader(response.content)
     assert len(reader.pages) == 1
-    assert reader.pages[0].extract_text() == "alpha\n"
+    assert "Αθήνα" in (reader.pages[0].extract_text() or "")
     assert reader.pages[0].mediabox.width == 160
     assert reader.pages[0].mediabox.height == 90
 

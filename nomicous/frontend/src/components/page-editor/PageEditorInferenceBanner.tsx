@@ -124,14 +124,17 @@ export function PageEditorInferenceBanner({
             </p>
             <ol className="pe-helper-install-modal__steps">
               <li>
-                Download the installer for your operating system from GitHub
-                releases.
+                Download the installer for your operating system from the latest
+                GitHub release.
               </li>
               <li>
                 Install <strong>Nomicous Inference Helper</strong> and launch it
                 once.
               </li>
-              <li>Refresh this page.</li>
+              <li>
+                Keep this page open — it detects the helper automatically once
+                it is running.
+              </li>
             </ol>
             <div className="pe-helper-install-modal__actions">
               {downloads.map((download, index) => (

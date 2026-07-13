@@ -12,11 +12,12 @@ export function jobStatusLabel(job: JobResponse): string {
   if (job.status === "waiting") return "Processing…";
   if (job.status === "done") return "Complete";
   if (job.status === "failed") return "Failed";
+  if (job.status === "cancelled") return "Cancelled";
   return job.status;
 }
 
 export function isTerminalJobStatus(status: JobStatus): boolean {
-  return status === "done" || status === "failed";
+  return status === "done" || status === "failed" || status === "cancelled";
 }
 
 export function pageEditorJobKindLabel(kind: PageEditorJobKind): string {

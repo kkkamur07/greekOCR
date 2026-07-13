@@ -25,7 +25,7 @@ from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
 from backend.ml.infrastructure.ml_client import InferenceClient
 from infrastructure.db import sync_system_session
 
-_TERMINAL_STATUSES = frozenset({JobStatus.done, JobStatus.failed})
+_TERMINAL_STATUSES = frozenset({JobStatus.done, JobStatus.failed, JobStatus.cancelled})
 
 
 @dataclass(frozen=True)

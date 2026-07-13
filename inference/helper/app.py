@@ -15,14 +15,17 @@ from inference.api.health import router as health_router
 from inference.helper.routes.cache import router as cache_router
 from inference.helper.routes.catalog import router as catalog_router
 from inference.helper.routes.run import router as run_router
+from inference.helper.prefetch import start_weight_prefetch
 from inference.helper.settings import apply_helper_environment
 
 HELPER_AUTH_SECRET_HEADER = "X-Inference-Helper-Secret"
 
 
-def create_helper_app() -> FastAPI:
+def create_helper_app(*, prefetch_weights: bool = True) -> FastAPI:
     settings = apply_helper_environment()
     app = FastAPI(title="Nomicous Inference Helper", version="0.1.3")
+    if prefetch_weights:
+        start_weight_prefetch(settings.inference_registry_path)
     app.add_middleware(
         RequestBodyLimitMiddleware,
         max_body_bytes=settings.inference_max_request_body_bytes,

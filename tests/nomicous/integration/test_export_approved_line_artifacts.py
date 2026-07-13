@@ -29,7 +29,7 @@ def _create_document_part_with_segments(
     upload = client.post(
         f"{base}/{document_id}/parts",
         headers=owner_headers,
-        files={"file": ("folio.png", _png_bytes(), "image/png")},
+        files={"file": ("page.png", _png_bytes(), "image/png")},
     )
     assert upload.status_code == 201
     part_id = upload.json()["id"]
@@ -99,8 +99,8 @@ def test_member_exports_paired_line_image_and_transcription_with_warnings(
         {
             "line_id": line_ids[0],
             "segment_number": 1,
-            "image_filename": "folio_1.jpg",
-            "transcription_filename": "folio_1.txt",
+            "image_filename": "page_1.jpg",
+            "transcription_filename": "page_1.txt",
             "transcription_text": "alpha",
             "image_base64": body["artifacts"][0]["image_base64"],
         }

@@ -8,7 +8,13 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { waitForJob, type JobResponse, type JobStatus } from "../api/client";
+import {
+  api,
+  waitForJob,
+  type JobResponse,
+  type JobStatus,
+} from "../api/client";
+import { toast } from "../components/ui/toast";
 import { useJobPolling } from "../hooks/useJobPolling";
 import {
   isTerminalJobStatus,
@@ -40,6 +46,7 @@ type BackgroundJobsContextValue = {
     meta: { label: string; kind: PageEditorJobKind },
     run: () => Promise<T>,
   ) => Promise<T>;
+  cancelJob: (jobId: string) => Promise<void>;
   dismissCompleted: () => void;
 };
 
@@ -244,6 +251,39 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
+  const cancelJob = useCallback(
+    async (jobId: string) => {
+      if (jobId.startsWith("local-")) {
+        setJobs((current) =>
+          current.map((job) =>
+            job.id === jobId
+              ? {
+                  ...job,
+                  status: "cancelled",
+                  progressLabel: "Cancelled",
+                  finishedAt: Date.now(),
+                }
+              : job,
+          ),
+        );
+        scheduleRemoval(jobId);
+        toast.success("Job cancelled");
+        return;
+      }
+      try {
+        const latest = await api.cancelJob(jobId);
+        applyJobUpdate(jobId, latest);
+        toast.success("Job cancelled");
+      } catch (err) {
+        toast.error(
+          err instanceof Error ? err.message : "Could not cancel that job",
+        );
+        throw err;
+      }
+    },
+    [applyJobUpdate, scheduleRemoval],
+  );
+
   const activeCount = jobs.filter(
     (job) => !isTerminalJobStatus(job.status),
   ).length;
@@ -256,6 +296,7 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
       setPanelExpanded,
       trackAndWait,
       trackLocalTask,
+      cancelJob,
       dismissCompleted,
     }),
     [
@@ -264,6 +305,7 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
       panelExpanded,
       trackAndWait,
       trackLocalTask,
+      cancelJob,
       dismissCompleted,
     ],
   );

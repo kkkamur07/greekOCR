@@ -12,7 +12,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core.exceptions import NotFoundError
+from backend.core.exceptions import NotFoundError, ValidationError
 from backend.core.fonts import resolve_unicode_font
 from backend.document.application.document_service import DocumentService
 from backend.document.infrastructure.document_repository import DocumentRepository
@@ -80,7 +80,10 @@ class TranscriptionPdfService:
         )
 
     def _render_pdf(self, *, width: int, height: int, lines: list[Line]) -> bytes:
-        font_path = resolve_unicode_font()
+        try:
+            font_path = resolve_unicode_font()
+        except RuntimeError as exc:
+            raise ValidationError(str(exc)) from exc
         font_name = _ensure_font(font_path)
         buffer = io.BytesIO()
         pdf = canvas.Canvas(buffer, pagesize=(width, height))

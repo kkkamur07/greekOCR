@@ -28,7 +28,10 @@ import {
   type PageEditorProcessingKind,
 } from "../components/page-editor/PageEditorProcessingBanner";
 import { PageEditorTranscriptionPdfWrap } from "../components/page-editor/PageEditorTranscriptionPdfWrap";
-import { rectanglePoints } from "../components/page-editor/canvasGeometry";
+import {
+  rectanglePoints,
+  removePolygonVertex,
+} from "../components/page-editor/canvasGeometry";
 import {
   useLayoutMutations,
   usePageEditorData,
@@ -63,6 +66,10 @@ export function PageEditorPlaceholderPage() {
   const [transcriptionPdfRefreshKey, setTranscriptionPdfRefreshKey] =
     useState(0);
   const [stripDismissed, setStripDismissed] = useState(false);
+  const [selectedVertexIndex, setSelectedVertexIndex] = useState<number | null>(
+    null,
+  );
+  const [vertexCommitSignal, setVertexCommitSignal] = useState(0);
 
   const editorData = usePageEditorData(projectId, documentId, partId, () => {
     setEditorMode("layout");
@@ -263,6 +270,8 @@ export function PageEditorPlaceholderPage() {
     replaceWithManualLine,
     updateSegmentPoints,
     deleteSelectedSegment,
+    undoEdit,
+    redoEdit,
     runAutoSegment,
   } = layoutMutations;
 
@@ -296,7 +305,18 @@ export function PageEditorPlaceholderPage() {
     setSelectedLineId(null);
     setSaveMessage(null);
     setStripDismissed(false);
+    setSelectedVertexIndex(null);
     selectSegment(lineId);
+  }
+
+  function handleRemoveSelectedVertex() {
+    if (!selectedSegmentId || selectedVertexIndex === null) return;
+    const segment = lines.find((line) => line.id === selectedSegmentId);
+    if (!segment) return;
+    const nextPoints = removePolygonVertex(segment.points, selectedVertexIndex);
+    if (!nextPoints) return;
+    setSelectedVertexIndex(null);
+    void updateSegmentPoints(selectedSegmentId, nextPoints);
   }
 
   const processingKind: PageEditorProcessingKind = segmenting
@@ -314,13 +334,15 @@ export function PageEditorPlaceholderPage() {
         ? "Polygon: click to place the first corner"
         : `Polygon: ${draftPolygon.length} point${draftPolygon.length === 1 ? "" : "s"} · click to add · double-click or Enter to finish`
       : editorMode === "layout" && selectedSegment && drawMode === "none"
-        ? `Segment ${selectedSegmentNumber} · click edge to add · click handle to remove · drag to move`
+        ? selectedVertexIndex !== null
+          ? `Segment ${selectedSegmentNumber} · vertex ${selectedVertexIndex + 1} selected · Delete removes point · Esc deselects`
+          : `Segment ${selectedSegmentNumber} · click edge to add · click handle to select · Delete removes Segment · Esc deselects`
         : selectedSegment
           ? `Segment ${selectedSegmentNumber} selected · ${
               segmentHasGroundTruth(selectedSegment) ? "paired" : "unpaired"
             }`
           : editorMode === "layout"
-            ? "Select a segment · click edges/handles to edit shape"
+            ? "Select a segment · click edges/handles to edit shape · Esc to deselect"
             : "Select a segment to view transcription";
 
   function pickDrawMode(nextMode: "rectangle" | "polygon") {
@@ -335,7 +357,13 @@ export function PageEditorPlaceholderPage() {
     setDraftPolygon([]);
     setDraftStart(null);
     setActionsOpen(false);
-  }, []);
+    setVertexCommitSignal((value) => value + 1);
+    setSelectedVertexIndex(null);
+    setSelectedSegmentId(null);
+    setSelectedLineId(null);
+    setApprovedTextDraft("");
+    setStripDismissed(false);
+  }, [setSelectedSegmentId, setSelectedLineId, setApprovedTextDraft]);
 
   function completeDraftPolygon() {
     if (draftPolygon.length >= 3) {
@@ -350,13 +378,17 @@ export function PageEditorPlaceholderPage() {
     onDrawPolygon:
       editorMode === "layout" ? () => pickDrawMode("polygon") : undefined,
     onDelete:
-      selectedSegmentId || selectedLineId
-        ? () => {
-            if (selectedSegmentId) void deleteSelectedSegment();
-            if (selectedLineId) void resetSelectedLine();
-          }
-        : undefined,
+      selectedVertexIndex !== null && selectedSegmentId
+        ? () => handleRemoveSelectedVertex()
+        : selectedSegmentId || selectedLineId
+          ? () => {
+              if (selectedSegmentId) void deleteSelectedSegment();
+              if (selectedLineId) void resetSelectedLine();
+            }
+          : undefined,
     onEscape: handlePanSelect,
+    onUndo: () => void undoEdit(),
+    onRedo: () => void redoEdit(),
     onEnter:
       editorMode === "layout" &&
       drawMode === "polygon" &&
@@ -519,6 +551,7 @@ export function PageEditorPlaceholderPage() {
                   );
                   setSelectedLineId(lineId);
                   setSelectedSegmentId(null);
+                  setSelectedVertexIndex(null);
                   setSelectedLineSnapshot({
                     baseline: selectedLine?.baseline,
                     mask: selectedLine?.mask,
@@ -530,6 +563,9 @@ export function PageEditorPlaceholderPage() {
                   drawMode === "none" &&
                   Boolean(selectedSegmentId)
                 }
+                selectedVertexIndex={selectedVertexIndex}
+                onSelectedVertexChange={setSelectedVertexIndex}
+                commitSignal={vertexCommitSignal}
                 onSegmentPointsChange={updateSegmentPoints}
               />
               <p

@@ -20,7 +20,7 @@ def _create_document_part_with_segments(
     upload = client.post(
         f"{base}/{document_id}/parts",
         headers=owner_headers,
-        files={"file": ("folio.png", MINIMAL_PNG, "image/png")},
+        files={"file": ("page.png", MINIMAL_PNG, "image/png")},
     )
     assert upload.status_code == 201
     part_id = upload.json()["id"]
