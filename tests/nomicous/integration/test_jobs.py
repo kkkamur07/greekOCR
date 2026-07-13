@@ -162,7 +162,7 @@ def test_cancel_pending_job_marks_cancelled_and_discards_partials(
     client: TestClient, registered_user: dict[str, str]
 ):
     auth_headers = {"Authorization": f"Bearer {registered_user['access_token']}"}
-    me = client.get("/auth/me", headers=auth_headers)
+    me = client.get("/me", headers=auth_headers)
     assert me.status_code == 200
     user_id = uuid.UUID(me.json()["id"])
 
@@ -181,7 +181,7 @@ def test_cancel_pending_job_marks_cancelled_and_discards_partials(
         job_id = str(job.id)
 
     cancelled = client.post(f"/jobs/{job_id}/cancel", headers=auth_headers)
-    assert cancelled.status_code == 200
+    assert cancelled.status_code == 200, cancelled.text
     body = cancelled.json()
     assert body["status"] == "cancelled"
     assert body["result"] is None
