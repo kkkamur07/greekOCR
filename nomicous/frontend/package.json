@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit",
     "typecheck:api": "tsc --noEmit",
     "codegen:api": "openapi-typescript openapi/openapi.json -o src/api/schema.d.ts",
-    "generate:api": "cd ../.. && uv run --locked --group platform python scripts/platform/export_openapi.py && cd nomicous/frontend && npm run codegen:api",
+    "generate:api": "cd ../.. && uv run --locked --group platform python scripts/platform/export_openapi.py && cd nomicous/frontend && npm run codegen:api && prettier --write openapi/openapi.json src/api/schema.d.ts",
     "check:api": "tmpdir=$(mktemp -d) && trap 'rm -rf \"$tmpdir\"' EXIT && cp openapi/openapi.json \"$tmpdir/openapi.json\" && cp src/api/schema.d.ts \"$tmpdir/schema.d.ts\" && npm run generate:api && cmp -s \"$tmpdir/openapi.json\" openapi/openapi.json && cmp -s \"$tmpdir/schema.d.ts\" src/api/schema.d.ts",
     "lint": "eslint .",
     "format": "prettier --write .",
