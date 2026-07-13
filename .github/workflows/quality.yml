@@ -30,6 +30,10 @@ jobs:
   python-lint-unit:
     name: Python lint and unit tests
     runs-on: ubuntu-latest
+    env:
+      JWT_SECRET: test-secret-not-for-production-at-least-32-bytes
+      INFERENCE_WEBHOOK_SECRET: test-inference-webhook-secret
+      INFERENCE_SERVICE_SECRET: test-inference-webhook-secret
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -76,6 +80,10 @@ jobs:
   api-contracts:
     name: API contract artifacts
     runs-on: ubuntu-latest
+    env:
+      JWT_SECRET: test-secret-not-for-production-at-least-32-bytes
+      INFERENCE_WEBHOOK_SECRET: test-inference-webhook-secret
+      INFERENCE_SERVICE_SECRET: test-inference-webhook-secret
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5

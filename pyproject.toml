@@ -13,7 +13,7 @@ kraken = ["kraken>=7.0.2"]
 train = [
     "accelerate>=1.13.0",
     "jiwer>=4.0.0",
-    "pillow>=12.2.0",
+    "pillow>=12.3.0",
     "torch>=2.10.0",
     "torchvision>=0.25.0",
     "transformers>=5.11.0",
@@ -31,7 +31,7 @@ inference = [
     "fastapi>=0.115.0",
     "httpx>=0.28.0",
     "opencv-python-headless>=4.8,<4.13",
-    "pillow>=12.2.0",
+    "pillow>=12.3.0",
     "pydantic>=2.10.0",
     "pydantic-settings>=2.6.0",
     "psycopg2-binary>=2.9.10",
@@ -49,7 +49,7 @@ load-testing = [
 packaging = [
     "pyinstaller>=6.21.0",
     "pystray>=0.19.5",
-    "pillow>=12.2.0",
+    "pillow>=12.3.0",
 ]
 # Nomicous platform API + Postgres + tests (deps only — repo is not installed as a package)
 platform = [
@@ -70,7 +70,7 @@ platform = [
     "pytest>=8.3.0",
     "pytest-asyncio>=0.24.0",
     "pypdf>=6.13.2",
-    "pillow>=12.2.0",
+    "pillow>=12.3.0",
     "opencv-python-headless>=4.8,<4.13",
     "reportlab>=5.0.0",
     "supabase>=2.13.0",
@@ -89,7 +89,7 @@ platform-prod = [
     "PyYAML>=6.0",
     "python-multipart>=0.0.18",
     "sqlalchemy[asyncio]>=2.0.36",
-    "pillow>=12.2.0",
+    "pillow>=12.3.0",
     "reportlab>=5.0.0",
     "supabase>=2.13.0",
 ]
