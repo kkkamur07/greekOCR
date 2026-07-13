@@ -16,8 +16,9 @@ MINIMAL_PNG = (
     b"\x92\xef\x00\x00\x00\x00IEND\xaeB`\x82"
 )
 
-SEGMENT_PAGE = MANUSCRIPTS_DIR / "segment_page.jpeg"
-TRANSCRIBE_LINE = MANUSCRIPTS_DIR / "transcribe_line.jpg"
+# Script-scoped manuscript fixtures (script folder matches registry model script).
+SEGMENT_PAGE = MANUSCRIPTS_DIR / "greek" / "segment_page.jpeg"
+TRANSCRIBE_LINE = MANUSCRIPTS_DIR / "syriac" / "transcribe_line.jpg"
 
 
 def segment_page_bytes() -> bytes:

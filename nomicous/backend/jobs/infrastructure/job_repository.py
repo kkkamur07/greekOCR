@@ -167,25 +167,6 @@ def seconds_until_next_stale_running_job(*, running_timeout_seconds: float) -> f
     return max((reclaim_at - now).total_seconds(), 0.0)
 
 
-def mark_job_done(job_id: uuid.UUID, result: dict | None = None) -> None:
-    now = datetime.now(UTC)
-    with sync_system_session() as session:
-        update_result = session.execute(
-            update(Job)
-            .where(Job.id == job_id)
-            .values(
-                status=JobStatus.done,
-                result=result or {},
-                error=None,
-                completed_at=now,
-                updated_at=now,
-            )
-        )
-        session.commit()
-    if update_result.rowcount:
-        notify_platform_job_status_changed(job_id, JobStatus.done)
-
-
 def mark_job_waiting(
     job_id: uuid.UUID,
     *,
@@ -197,7 +178,7 @@ def mark_job_waiting(
         job = session.get(Job, job_id)
         if job is None:
             raise ValueError(f"job {job_id} not found")
-        if job.status in (JobStatus.done, JobStatus.failed):
+        if job.status in (JobStatus.done, JobStatus.failed, JobStatus.cancelled):
             return
         payload = dict(job.payload or {})
         if payload_patch:
@@ -218,6 +199,7 @@ def mark_job_failed(job_id: uuid.UUID, error: str) -> None:
         update_result = session.execute(
             update(Job)
             .where(Job.id == job_id)
+            .where(Job.status.notin_((JobStatus.cancelled, JobStatus.done)))
             .values(
                 status=JobStatus.failed,
                 error=error,
@@ -229,3 +211,57 @@ def mark_job_failed(job_id: uuid.UUID, error: str) -> None:
         session.commit()
     if update_result.rowcount:
         notify_platform_job_status_changed(job_id, JobStatus.failed)
+
+
+def mark_job_done(job_id: uuid.UUID, result: dict | None = None) -> None:
+    now = datetime.now(UTC)
+    with sync_system_session() as session:
+        update_result = session.execute(
+            update(Job)
+            .where(Job.id == job_id)
+            .where(Job.status.notin_((JobStatus.cancelled, JobStatus.failed)))
+            .values(
+                status=JobStatus.done,
+                result=result or {},
+                error=None,
+                completed_at=now,
+                updated_at=now,
+            )
+        )
+        session.commit()
+    if update_result.rowcount:
+        notify_platform_job_status_changed(job_id, JobStatus.done)
+
+
+_CANCELABLE = (JobStatus.pending, JobStatus.running, JobStatus.waiting)
+
+
+def cancel_job(job_id: uuid.UUID) -> Job | None:
+    """Cancel a pending/running/waiting job and discard unapplied partials.
+
+    Returns the job row. When the job was already terminal, returns it unchanged
+    so callers can distinguish missing vs not-cancelable.
+    """
+    now = datetime.now(UTC)
+    with sync_system_session() as session:
+        job = session.execute(
+            select(Job).where(Job.id == job_id).with_for_update()
+        ).scalar_one_or_none()
+        if job is None:
+            return None
+        if job.status not in _CANCELABLE:
+            session.expunge(job)
+            return job
+        # Discard partials: clear result/callback claim so later inference
+        # callbacks are ignored (_TERMINAL_STATUSES includes cancelled).
+        job.status = JobStatus.cancelled
+        job.error = None
+        job.result = None
+        job.callback_claimed_at = None
+        job.completed_at = now
+        job.updated_at = now
+        session.commit()
+        session.refresh(job)
+        session.expunge(job)
+        notify_platform_job_status_changed(job.id, JobStatus.cancelled)
+        return job

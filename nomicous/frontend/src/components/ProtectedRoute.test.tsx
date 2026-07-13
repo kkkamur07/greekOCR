@@ -38,9 +38,29 @@ describe("ProtectedRoute", () => {
     );
 
     expect(screen.queryByText("Projects content")).toBeNull();
+    expect(screen.getByText(/redirecting to sign in/i)).toBeTruthy();
     await waitFor(() => {
       expect(navigateToLogin).toHaveBeenCalled();
     });
+  });
+
+  it("shows restoring chrome and never navigates to login while restoring", () => {
+    vi.mocked(useAuthSession).mockReturnValue({
+      status: "restoring",
+      establish: vi.fn(),
+      logout: vi.fn(),
+    });
+
+    render(
+      <ProtectedRoute>
+        <div>Projects content</div>
+      </ProtectedRoute>,
+    );
+
+    expect(screen.queryByText("Projects content")).toBeNull();
+    expect(screen.queryByRole("heading", { name: /sign in/i })).toBeNull();
+    expect(screen.getByText(/restoring your session/i)).toBeTruthy();
+    expect(navigateToLogin).not.toHaveBeenCalled();
   });
 
   it("renders children for authenticated users", () => {

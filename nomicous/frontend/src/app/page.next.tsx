@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthSession } from "../auth/AuthProvider";
+import { SessionRestoring } from "../components/SessionRestoring";
 
 export default function HomePage() {
   const router = useRouter();
@@ -14,5 +15,15 @@ export default function HomePage() {
     }
   }, [router, status]);
 
-  return null;
+  return (
+    <SessionRestoring
+      label={
+        status === "restoring"
+          ? "Restoring your session…"
+          : status === "authenticated"
+            ? "Opening your projects…"
+            : "Redirecting to sign in…"
+      }
+    />
+  );
 }

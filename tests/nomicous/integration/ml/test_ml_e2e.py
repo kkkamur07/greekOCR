@@ -85,7 +85,7 @@ def _create_document_with_empty_part(
         client,
         owner_headers,
         owner_project,
-        filename="folio.png",
+        filename="page.png",
         image_bytes=MINIMAL_PNG,
         content_type="image/png",
         document_name="Empty layout codex",

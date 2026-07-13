@@ -62,10 +62,15 @@ type CanvasSurfaceProps = {
   vertexEditPoints: LinePoint[] | null;
   draggedVertexIndex: number | null;
   pendingVertexIndex: number | null;
-  onVertexPointerDown: (vertexIndex: number) => void;
+  selectedVertexIndex: number | null;
+  onVertexPointerDown: (
+    vertexIndex: number,
+    event: PointerEvent<SVGCircleElement>,
+  ) => void;
   onVertexPointerMove: (point: LinePoint) => void;
   onInsertVertexOnEdge: (nextPoints: LinePoint[]) => void;
   onRemoveVertex: (vertexIndex: number) => void;
+  onSelectVertex: (vertexIndex: number | null) => void;
 };
 
 const VERTEX_DRAG_THRESHOLD = 3;
@@ -100,10 +105,12 @@ function CanvasSurface({
   vertexEditPoints,
   draggedVertexIndex,
   pendingVertexIndex,
+  selectedVertexIndex,
   onVertexPointerDown,
   onVertexPointerMove,
   onInsertVertexOnEdge,
   onRemoveVertex,
+  onSelectVertex,
 }: CanvasSurfaceProps) {
   const [naturalSize, setNaturalSize] = useState<{
     width: number;
@@ -281,6 +288,7 @@ function CanvasSurface({
           return (
             <polygon
               key={line.id}
+              className="pe-segment-shape"
               role="button"
               tabIndex={0}
               aria-label={`Segment ${line.order + 1}${paired ? ", paired" : ""}`}
@@ -303,6 +311,7 @@ function CanvasSurface({
                     return;
                   }
                 }
+                onSelectVertex(null);
                 onSelectSegment(line.id);
               }}
               onKeyDown={(event) =>
@@ -423,31 +432,36 @@ function CanvasSurface({
         {segmentVertexEditEnabled &&
           selectedSegmentId &&
           vertexEditPoints &&
-          vertexEditPoints.map(([x, y], index) => (
-            <circle
-              key={`segment-vertex-${selectedSegmentId}-${index}`}
-              cx={x}
-              cy={y}
-              r={handleRadius(2.4)}
-              fill="#fff"
-              stroke="var(--red, #b40000)"
-              strokeWidth={strokeWidth(0.9)}
-              style={{
-                cursor: isDraggingVertex ? "grabbing" : "pointer",
-                pointerEvents: "all",
-              }}
-              role="button"
-              tabIndex={0}
-              aria-label={`Segment vertex ${index + 1} · click to remove · drag to move`}
-              onPointerDown={(event) => {
-                event.stopPropagation();
-                onVertexPointerDown(index);
-              }}
-              onKeyDown={(event) =>
-                activateWithKeyboard(event, () => onRemoveVertex(index))
-              }
-            />
-          ))}
+          vertexEditPoints.map(([x, y], index) => {
+            const selectedVertex = selectedVertexIndex === index;
+            return (
+              <circle
+                key={`segment-vertex-${selectedSegmentId}-${index}`}
+                className="pe-vertex-handle"
+                cx={x}
+                cy={y}
+                r={handleRadius(selectedVertex ? 3.1 : 2.4)}
+                fill={selectedVertex ? "var(--red, #b40000)" : "#fff"}
+                stroke="var(--red, #b40000)"
+                strokeWidth={strokeWidth(selectedVertex ? 1.2 : 0.9)}
+                style={{
+                  cursor: isDraggingVertex ? "grabbing" : "pointer",
+                  pointerEvents: "all",
+                }}
+                role="button"
+                tabIndex={0}
+                aria-label={`Segment vertex ${index + 1}${selectedVertex ? ", selected" : ""} · drag to move · Delete to remove`}
+                aria-current={selectedVertex ? "true" : undefined}
+                onPointerDown={(event) => {
+                  event.stopPropagation();
+                  onVertexPointerDown(index, event);
+                }}
+                onKeyDown={(event) =>
+                  activateWithKeyboard(event, () => onRemoveVertex(index))
+                }
+              />
+            );
+          })}
       </svg>
     </div>
   );
@@ -469,7 +483,11 @@ type PageEditorCanvasProps = Omit<
   | "draftPolygonCursor"
   | "onDraftPolygonCursor"
   | "suppressBaselineSegmentId"
+  | "onSelectVertex"
 > & {
+  selectedVertexIndex: number | null;
+  onSelectedVertexChange: (vertexIndex: number | null) => void;
+  commitSignal: number;
   onSegmentPointsChange: (
     segmentId: string,
     points: LinePoint[],
@@ -491,6 +509,9 @@ export function PageEditorCanvas({
   draftPolygon,
   settings,
   segmentVertexEditEnabled,
+  selectedVertexIndex,
+  onSelectedVertexChange,
+  commitSignal,
   onDraftStart,
   onRectangleDrawn,
   onPolygonPoint,
@@ -510,6 +531,7 @@ export function PageEditorCanvas({
     pendingVertexIndex: number | null;
   } | null>(null);
   const transformRef = useRef<ReactZoomPanPinchRef>(null);
+  const vertexInteractingRef = useRef(false);
   const canvasWidth = imageWidth;
   const canvasHeight = imageHeight;
   const isDrawing = drawingRectangle || drawingPolygon;
@@ -537,60 +559,84 @@ export function PageEditorCanvas({
   useEffect(() => {
     if (!segmentVertexEditEnabled || !selectedSegmentId) {
       setVertexEdit(null);
+      vertexInteractingRef.current = false;
     }
   }, [segmentVertexEditEnabled, selectedSegmentId]);
+
+  useEffect(() => {
+    if (commitSignal === 0) return;
+    setVertexEdit((current) => {
+      if (!current) return current;
+      if (current.draggedIndex === null) {
+        vertexInteractingRef.current = false;
+        return null;
+      }
+      const pending = {
+        segmentId: current.segmentId,
+        points: current.points,
+        draggedIndex: null as number | null,
+        pendingVertexIndex: null as number | null,
+      };
+      void Promise.resolve(
+        onSegmentPointsChange(pending.segmentId, pending.points),
+      ).finally(() => {
+        setVertexEdit((latest) =>
+          latest?.segmentId === pending.segmentId ? null : latest,
+        );
+        vertexInteractingRef.current = false;
+      });
+      return pending;
+    });
+  }, [commitSignal, onSegmentPointsChange]);
 
   useEffect(() => {
     if (!isVertexInteracting) return;
     const finishInteraction = () => {
       setVertexEdit((current) => {
-        if (!current) return current;
+        if (!current) {
+          vertexInteractingRef.current = false;
+          return current;
+        }
 
+        // Click without drag: select the vertex (Delete removes it later).
         if (
           current.pendingVertexIndex !== null &&
           current.draggedIndex === null
         ) {
-          const removed = removePolygonVertex(
-            current.points,
-            current.pendingVertexIndex,
-          );
-          if (!removed) return null;
-          const pending = {
-            segmentId: current.segmentId,
-            points: removed,
-            draggedIndex: null as number | null,
-            pendingVertexIndex: null as number | null,
-          };
-          void Promise.resolve(
-            onSegmentPointsChange(pending.segmentId, pending.points),
-          ).finally(() => {
-            setVertexEdit((latest) =>
-              latest?.segmentId === pending.segmentId ? null : latest,
-            );
-          });
-          return pending;
+          onSelectedVertexChange(current.pendingVertexIndex);
+          vertexInteractingRef.current = false;
+          return null;
         }
 
-        if (current.draggedIndex === null) return current;
+        if (current.draggedIndex === null) {
+          vertexInteractingRef.current = false;
+          return current;
+        }
         const pending = {
           segmentId: current.segmentId,
           points: current.points,
           draggedIndex: null as number | null,
           pendingVertexIndex: null as number | null,
         };
+        onSelectedVertexChange(current.draggedIndex);
         void Promise.resolve(
           onSegmentPointsChange(pending.segmentId, pending.points),
         ).finally(() => {
           setVertexEdit((latest) =>
             latest?.segmentId === pending.segmentId ? null : latest,
           );
+          vertexInteractingRef.current = false;
         });
         return pending;
       });
     };
+    window.addEventListener("pointerup", finishInteraction);
     window.addEventListener("mouseup", finishInteraction);
-    return () => window.removeEventListener("mouseup", finishInteraction);
-  }, [isVertexInteracting, onSegmentPointsChange]);
+    return () => {
+      window.removeEventListener("pointerup", finishInteraction);
+      window.removeEventListener("mouseup", finishInteraction);
+    };
+  }, [isVertexInteracting, onSegmentPointsChange, onSelectedVertexChange]);
 
   const zoomAnimated = (direction: "in" | "out") => {
     const ref = transformRef.current;
@@ -622,10 +668,12 @@ export function PageEditorCanvas({
           animationTime: ZOOM_ANIMATION_MS,
         }}
         panning={{
-          disabled: isDrawing || isVertexInteracting,
+          disabled:
+            isDrawing || isVertexInteracting || vertexInteractingRef.current,
           velocityDisabled: false,
           wheelPanning: false,
           allowLeftClickPan: true,
+          excluded: ["pe-vertex-handle", "pe-segment-shape"],
         }}
         zoomAnimation={{
           disabled: false,
@@ -733,13 +781,18 @@ export function PageEditorCanvas({
                 vertexEditPoints={vertexEditPoints}
                 draggedVertexIndex={vertexEdit?.draggedIndex ?? null}
                 pendingVertexIndex={vertexEdit?.pendingVertexIndex ?? null}
-                onVertexPointerDown={(vertexIndex) => {
+                selectedVertexIndex={selectedVertexIndex}
+                onSelectVertex={onSelectedVertexChange}
+                onVertexPointerDown={(vertexIndex, event) => {
                   if (!selectedSegmentId) return;
                   const basePoints =
                     vertexEdit?.segmentId === selectedSegmentId
                       ? vertexEdit.points
                       : selectedSegment?.points;
                   if (!basePoints || basePoints.length < 3) return;
+                  vertexInteractingRef.current = true;
+                  event.currentTarget.setPointerCapture?.(event.pointerId);
+                  onSelectedVertexChange(vertexIndex);
                   setVertexEdit({
                     segmentId: selectedSegmentId,
                     points: [...basePoints],
@@ -780,6 +833,7 @@ export function PageEditorCanvas({
                     pendingVertexIndex: null as number | null,
                   };
                   setVertexEdit(pending);
+                  onSelectedVertexChange(null);
                   void Promise.resolve(
                     onSegmentPointsChange(pending.segmentId, pending.points),
                   ).finally(() => {
@@ -802,6 +856,7 @@ export function PageEditorCanvas({
                     pendingVertexIndex: null as number | null,
                   };
                   setVertexEdit(pending);
+                  onSelectedVertexChange(null);
                   void Promise.resolve(
                     onSegmentPointsChange(pending.segmentId, pending.points),
                   ).finally(() => {

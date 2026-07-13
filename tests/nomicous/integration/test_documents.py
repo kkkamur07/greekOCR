@@ -23,7 +23,7 @@ def _create_document_with_part(client, owner_headers, owner_project) -> tuple[st
     upload = client.post(
         f"{base}/{document_id}/parts",
         headers=owner_headers,
-        files={"file": ("folio.png", MINIMAL_PNG, "image/png")},
+        files={"file": ("page.png", MINIMAL_PNG, "image/png")},
     )
     assert upload.status_code == 201
     return project_id, document_id, upload.json()["id"]
@@ -140,7 +140,7 @@ def test_upload_reorder_delete_part_and_serve_media(client, owner_headers, owner
     upload_a = client.post(
         f"{base}/{document_id}/parts",
         headers=owner_headers,
-        files={"file": ("folio-a.png", MINIMAL_PNG, "image/png")},
+        files={"file": ("page-a.png", MINIMAL_PNG, "image/png")},
     )
     assert upload_a.status_code == 201
     part_a = upload_a.json()
@@ -150,7 +150,7 @@ def test_upload_reorder_delete_part_and_serve_media(client, owner_headers, owner
     upload_b = client.post(
         f"{base}/{document_id}/parts",
         headers=owner_headers,
-        files={"file": ("folio-b.png", MINIMAL_PNG, "image/png")},
+        files={"file": ("page-b.png", MINIMAL_PNG, "image/png")},
     )
     assert upload_b.status_code == 201
     part_b = upload_b.json()
@@ -230,7 +230,7 @@ def test_reorder_rejects_duplicate_part_ids(client, owner_headers, owner_project
     upload = client.post(
         f"{base}/{document_id}/parts",
         headers=owner_headers,
-        files={"file": ("folio.png", MINIMAL_PNG, "image/png")},
+        files={"file": ("page.png", MINIMAL_PNG, "image/png")},
     )
     assert upload.status_code == 201
     part_id = upload.json()["id"]

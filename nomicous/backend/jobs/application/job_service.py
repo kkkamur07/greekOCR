@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.exceptions import NotFoundError
 from backend.jobs.infrastructure.job_repository import JobRepository
+from backend.jobs.infrastructure.job_repository import cancel_job as cancel_job_row
 from backend.jobs.infrastructure.orm_models import Job
 
 
@@ -34,3 +35,9 @@ class JobService:
         cursor=None,
     ) -> list[Job]:
         return await self._repo.list_for_project(project_id, limit=limit, cursor=cursor)
+
+    async def cancel_job(self, job_id: uuid.UUID) -> Job:
+        job = cancel_job_row(job_id)
+        if job is None:
+            raise NotFoundError(f"job {job_id} not found")
+        return job

@@ -65,6 +65,22 @@ def test_platform_bundle_includes_contract_dependencies() -> None:
     assert '"inference" / "infrastructure" / "settings.py"' in build_script
 
 
+def test_platform_backend_ships_bundled_unicode_pdf_font() -> None:
+    font = REPO_ROOT / "nomicous" / "backend" / "core" / "assets" / "fonts" / "NotoSans-Regular.ttf"
+    assert font.is_file()
+    assert font.stat().st_size > 100_000
+
+    fonts_module = (REPO_ROOT / "nomicous" / "backend" / "core" / "fonts.py").read_text(
+        encoding="utf-8"
+    )
+    assert "assets" in fonts_module
+    assert "NotoSans-Regular.ttf" in fonts_module
+
+    # deploy/platform/build.sh copytree of nomicous/backend includes assets/fonts.
+    build_script = (REPO_ROOT / "deploy" / "platform" / "build.sh").read_text(encoding="utf-8")
+    assert '"nomicous" / "backend"' in build_script
+
+
 def test_vercel_frontend_permits_helper_loopback_origins() -> None:
     vercel_config = (REPO_ROOT / "nomicous" / "frontend" / "vercel.json").read_text(
         encoding="utf-8"

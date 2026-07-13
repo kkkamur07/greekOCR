@@ -56,7 +56,7 @@ async def _job_events(job_id: UUID, current_user: User, request: Request) -> Asy
     try:
         current = await _load_authorized_job(job_id, current_user)
         yield _sse_event("job", current.model_dump_json())
-        if current.status in (JobStatus.done, JobStatus.failed):
+        if current.status in (JobStatus.done, JobStatus.failed, JobStatus.cancelled):
             return
 
         while not await request.is_disconnected():
@@ -71,7 +71,7 @@ async def _job_events(job_id: UUID, current_user: User, request: Request) -> Asy
 
             current = await _load_authorized_job(job_id, current_user)
             yield _sse_event("job", current.model_dump_json())
-            if current.status in (JobStatus.done, JobStatus.failed):
+            if current.status in (JobStatus.done, JobStatus.failed, JobStatus.cancelled):
                 return
     finally:
         await job_status_broadcaster.unsubscribe(job_id, queue)
@@ -98,6 +98,18 @@ async def get_job(
     job = await service.get_job(job_id)
     _assert_job_access(job, current_user)
     return job_response_from_orm(job)
+
+
+@router.post("/{job_id}/cancel", response_model=JobResponse)
+async def cancel_job(
+    job_id: UUID,
+    service: JobService = Depends(_job_service),
+    current_user: User = Depends(get_current_user),
+) -> JobResponse:
+    job = await service.get_job(job_id)
+    _assert_job_access(job, current_user)
+    cancelled = await service.cancel_job(job_id)
+    return job_response_from_orm(cancelled)
 
 
 @router.get("/{job_id}/events", response_class=StreamingResponse)

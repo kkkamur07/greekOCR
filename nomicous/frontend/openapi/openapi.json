@@ -919,7 +919,14 @@
         "type": "object"
       },
       "JobStatus": {
-        "enum": ["pending", "waiting", "running", "done", "failed"],
+        "enum": [
+          "pending",
+          "waiting",
+          "running",
+          "done",
+          "failed",
+          "cancelled"
+        ],
         "title": "JobStatus",
         "type": "string"
       },

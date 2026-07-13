@@ -36,7 +36,7 @@ def test_persist_local_transcribe_writes_model_transcription(client, owner_heade
         f"{base}/{document_id}/parts/{part_id}/local-inference/transcribe",
         headers=owner_headers,
         json={
-            "registry_model_id": "greek-calamari-v1",
+            "registry_model_id": "syriac-calamari-v1",
             "registry_tag": "stable",
             "lines": [
                 {
