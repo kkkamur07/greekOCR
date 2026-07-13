@@ -44,6 +44,7 @@ describe("AuthProvider refresh recovery", () => {
         <SessionStatus />
       </AuthProvider>,
     );
+    expect(screen.getByText("restoring")).toBeInTheDocument();
     const request = apiRequest<{ id: string }>("/projects/project-1");
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
@@ -57,5 +58,25 @@ describe("AuthProvider refresh recovery", () => {
       fetchMock.mock.calls.filter(([url]) => url.endsWith("/auth/refresh")),
     ).toHaveLength(1);
     expect(getAccessToken()).toBe("restored-token");
+  });
+
+  it("stays restoring until refresh fails, then becomes anonymous", async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url.endsWith("/auth/refresh")) {
+        return Promise.resolve(new Response(null, { status: 401 }));
+      }
+      return Promise.resolve(new Response(null, { status: 500 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <AuthProvider>
+        <SessionStatus />
+      </AuthProvider>,
+    );
+    expect(screen.getByText("restoring")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByText("anonymous")).toBeInTheDocument(),
+    );
   });
 });
