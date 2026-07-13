@@ -220,7 +220,7 @@ def test_upload_part_rejects_non_image_bytes(client, owner_headers, owner_projec
     assert_api_error(
         response,
         code="VALIDATION_ERROR",
-        message="Invalid request",
+        message="Uploaded file is not a valid image",
     )
 
 
