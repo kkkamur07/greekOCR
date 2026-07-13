@@ -195,6 +195,44 @@ def test_cancel_pending_job_marks_cancelled_and_discards_partials(
     assert again.status_code == 409
 
 
+def test_cancel_rejects_when_callback_already_claimed(
+    client: TestClient, registered_user: dict[str, str]
+):
+    auth_headers = {"Authorization": f"Bearer {registered_user['access_token']}"}
+    me = client.get("/me", headers=auth_headers)
+    assert me.status_code == 200
+    user_id = uuid.UUID(me.json()["id"])
+
+    with sync_system_session() as session:
+        job = Job(
+            type=JobType.segment,
+            status=JobStatus.waiting,
+            # Avoid payload test=True so the autouse drain fixture is not blocked
+            # by a permanently waiting row.
+            payload={"handler": "noop"},
+            user_id=user_id,
+            callback_claimed_at=datetime.now(UTC),
+        )
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        job_id = str(job.id)
+
+    rejected = client.post(f"/jobs/{job_id}/cancel", headers=auth_headers)
+    assert rejected.status_code == 409, rejected.text
+
+    with sync_system_session() as session:
+        row = session.get(Job, uuid.UUID(job_id))
+        assert row is not None
+        assert row.status == JobStatus.waiting
+        assert row.callback_claimed_at is not None
+        # Leave no active row for later tests / workers.
+        row.status = JobStatus.failed
+        row.error = "test cleanup"
+        row.completed_at = datetime.now(UTC)
+        session.commit()
+
+
 def test_job_events_streams_current_snapshot(client: TestClient, registered_user: dict[str, str]):
     auth_headers = {"Authorization": f"Bearer {registered_user['access_token']}"}
     created = client.post("/jobs/test", headers=auth_headers)

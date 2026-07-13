@@ -142,6 +142,47 @@ def test_resolve_rejects_mutable_only_hf_reference(tmp_path: Path):
         )
 
 
+def test_resolve_serializes_concurrent_downloads_for_same_model_tag(tmp_path: Path):
+    import threading
+    import time
+
+    class SlowHubClient(MockHubClient):
+        def snapshot_download(self, repo_id: str, revision: str, local_dir: Path) -> None:
+            time.sleep(0.05)
+            super().snapshot_download(repo_id, revision, local_dir)
+
+    client = SlowHubClient()
+    kwargs = dict(
+        uri="hf://nomicous/greek-htr-calamari@stable",
+        registry_model_id="greek-calamari-v1",
+        registry_tag="stable",
+        hub_revision=HUB_REVISION,
+        artifact_sha256=ARTIFACT_SHA256,
+        architecture="calamari",
+        hub_client=client,
+        cache_root=tmp_path,
+    )
+    results: list[Path] = []
+    errors: list[BaseException] = []
+
+    def worker() -> None:
+        try:
+            results.append(resolve_hf_weights_source(**kwargs))
+        except BaseException as exc:  # noqa: BLE001 - collect any thread failure
+            errors.append(exc)
+
+    threads = [threading.Thread(target=worker) for _ in range(4)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert errors == []
+    assert len(results) == 4
+    assert len({path.resolve() for path in results}) == 1
+    assert len(client.downloads) == 1
+
+
 def test_inference_delegate_requires_hf_context():
     with pytest.raises(ValueError, match="registry_model_id and registry_tag"):
         resolve_weights_source("hf://nomicous/greek-htr-calamari@stable")

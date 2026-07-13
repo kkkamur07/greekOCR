@@ -6,14 +6,14 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core.exceptions import ConflictError, NotFoundError
-from backend.jobs.infrastructure.job_repository import JobRepository
-from backend.jobs.infrastructure.job_repository import cancel_job as cancel_job_row
-from backend.jobs.infrastructure.orm_models import Job, JobStatus
+from backend.core.exceptions import NotFoundError
+from backend.jobs.infrastructure.job_repository import JobRepository, cancel_job_async
+from backend.jobs.infrastructure.orm_models import Job
 
 
 class JobService:
     def __init__(self, session: AsyncSession) -> None:
+        self._session = session
         self._repo = JobRepository(session)
 
     async def enqueue_test_job(
@@ -37,12 +37,7 @@ class JobService:
         return await self._repo.list_for_project(project_id, limit=limit, cursor=cursor)
 
     async def cancel_job(self, job_id: uuid.UUID) -> Job:
-        existing = await self.get_job(job_id)
-        if existing.status in (JobStatus.done, JobStatus.failed, JobStatus.cancelled):
-            raise ConflictError(
-                f"job {job_id} cannot be cancelled from status {existing.status.value}"
-            )
-        job = cancel_job_row(job_id)
+        job = await cancel_job_async(self._session, job_id)
         if job is None:
             raise NotFoundError(f"job {job_id} not found")
         return job

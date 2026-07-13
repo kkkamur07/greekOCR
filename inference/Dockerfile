@@ -39,7 +39,9 @@ ENV PATH="/app/.venv/bin:${PATH}" \
 
 RUN mkdir -p /app/src/hf/cache \
   && chown -R appuser:appuser /app/src/hf/cache /home/appuser \
-  && python -c "from inference.api.main import app; assert app.title"
+  && python -c "from inference.api.main import app; assert app.title" \
+  && /usr/local/bin/python -m pip uninstall -y pip setuptools wheel \
+  && rm -rf /usr/local/lib/python3.11/ensurepip
 
 USER appuser
 

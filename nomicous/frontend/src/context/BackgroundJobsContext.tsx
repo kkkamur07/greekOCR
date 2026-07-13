@@ -21,6 +21,7 @@ import {
   jobStatusLabel,
   type PageEditorJobKind,
 } from "../components/page-editor/jobProgress";
+import { isAbortError } from "../inference/localInferenceCallbacks";
 
 export type TrackedBackgroundJob = {
   id: string;
@@ -44,7 +45,7 @@ type BackgroundJobsContextValue = {
   ) => Promise<JobResponse>;
   trackLocalTask: <T>(
     meta: { label: string; kind: PageEditorJobKind },
-    run: () => Promise<T>,
+    run: (signal: AbortSignal) => Promise<T>,
   ) => Promise<T>;
   cancelJob: (jobId: string) => Promise<void>;
   dismissCompleted: () => void;
@@ -77,6 +78,9 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
   const [jobs, setJobs] = useState<TrackedBackgroundJob[]>([]);
   const [panelExpanded, setPanelExpanded] = useState(false);
   const timersRef = useRef<Map<string, number>>(new Map());
+  const localAbortControllersRef = useRef<Map<string, AbortController>>(
+    new Map(),
+  );
 
   const scheduleRemoval = useCallback((jobId: string) => {
     const existing = timersRef.current.get(jobId);
@@ -94,6 +98,10 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
         window.clearTimeout(timer);
       }
       timersRef.current.clear();
+      for (const controller of localAbortControllersRef.current.values()) {
+        controller.abort();
+      }
+      localAbortControllersRef.current.clear();
     },
     [],
   );
@@ -187,12 +195,33 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
     [applyJobUpdate, scheduleRemoval],
   );
 
+  const markLocalCancelled = useCallback(
+    (jobId: string) => {
+      setJobs((current) =>
+        current.map((job) =>
+          job.id === jobId
+            ? {
+                ...job,
+                status: "cancelled",
+                progressLabel: "Cancelled",
+                finishedAt: Date.now(),
+              }
+            : job,
+        ),
+      );
+      scheduleRemoval(jobId);
+    },
+    [scheduleRemoval],
+  );
+
   const trackLocalTask = useCallback(
     async <T,>(
       meta: { label: string; kind: PageEditorJobKind },
-      run: () => Promise<T>,
+      run: (signal: AbortSignal) => Promise<T>,
     ): Promise<T> => {
       const jobId = createLocalJobId();
+      const controller = new AbortController();
+      localAbortControllersRef.current.set(jobId, controller);
       setJobs((current) => [
         ...current,
         {
@@ -208,7 +237,11 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
       setPanelExpanded(false);
 
       try {
-        const result = await run();
+        const result = await run(controller.signal);
+        if (controller.signal.aborted) {
+          markLocalCancelled(jobId);
+          throw new DOMException("Local job cancelled", "AbortError");
+        }
         setJobs((current) =>
           current.map((job) =>
             job.id === jobId
@@ -224,6 +257,10 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
         scheduleRemoval(jobId);
         return result;
       } catch (err) {
+        if (controller.signal.aborted || isAbortError(err)) {
+          markLocalCancelled(jobId);
+          throw err;
+        }
         const message = err instanceof Error ? err.message : "Task failed";
         setJobs((current) =>
           current.map((job) =>
@@ -240,9 +277,11 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
         );
         scheduleRemoval(jobId);
         throw err;
+      } finally {
+        localAbortControllersRef.current.delete(jobId);
       }
     },
-    [scheduleRemoval],
+    [markLocalCancelled, scheduleRemoval],
   );
 
   const dismissCompleted = useCallback(() => {
@@ -254,19 +293,11 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
   const cancelJob = useCallback(
     async (jobId: string) => {
       if (jobId.startsWith("local-")) {
-        setJobs((current) =>
-          current.map((job) =>
-            job.id === jobId
-              ? {
-                  ...job,
-                  status: "cancelled",
-                  progressLabel: "Cancelled",
-                  finishedAt: Date.now(),
-                }
-              : job,
-          ),
-        );
-        scheduleRemoval(jobId);
+        const controller = localAbortControllersRef.current.get(jobId);
+        if (controller) {
+          controller.abort();
+        }
+        markLocalCancelled(jobId);
         toast.success("Job cancelled");
         return;
       }
@@ -281,7 +312,7 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
         throw err;
       }
     },
-    [applyJobUpdate, scheduleRemoval],
+    [applyJobUpdate, markLocalCancelled],
   );
 
   const activeCount = jobs.filter(

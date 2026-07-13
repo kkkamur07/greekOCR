@@ -1,7 +1,7 @@
 # PRD: Bug-fix and annotation polish (grilling 2026-07-13)
 
-**Status:** ready-for-agent  
-**Parent glossary:** `nomicous/CONTEXT.md`, `inference/CONTEXT.md`  
+**Status:** ready-for-agent
+**Parent glossary:** `nomicous/CONTEXT.md`, `inference/CONTEXT.md`
 **ADRs:** 0001 (browser auth memory + cookie + CSRF), 0002 (job SSE + polling fallback), 0003 (image canvas archival boundary)
 
 ## Problem Statement

@@ -81,7 +81,7 @@ type LayoutMutationsInput = {
   ) => Promise<JobResponse>;
   trackLocalTask: <T>(
     meta: { label: string; kind: PageEditorJobKind },
-    run: () => Promise<T>,
+    run: (signal: AbortSignal) => Promise<T>,
   ) => Promise<T>;
 };
 
@@ -483,7 +483,7 @@ export function useLayoutMutations({
               label: "Kraken line segmentation",
               kind: "segmentation",
             },
-            async () => {
+            async (signal) => {
               if (!partImageUrl) {
                 throw new Error(
                   "Page image is not available for local segmentation.",
@@ -494,16 +494,23 @@ export function useLayoutMutations({
                 const imageBytes = await blobToBase64(
                   await fetchPartImage(partImageUrl),
                 );
+                signal.throwIfAborted();
+                const cloudSwitchSignal = localInference.getSignal();
+                const combinedSignal = cloudSwitchSignal
+                  ? AbortSignal.any([signal, cloudSwitchSignal])
+                  : signal;
                 const response = await runLocalInference({
                   task: "segment",
                   registry_model_id: resolvedSegmentModelId,
                   image_bytes: imageBytes,
-                  signal: localInference.getSignal(),
+                  signal: combinedSignal,
                   params: {
                     use_otsu_refinement: useOtsuRefinement,
                     otsu_sphere_radius: otsuSphereRadius,
                   },
                 });
+                signal.throwIfAborted();
+                cloudSwitchSignal?.throwIfAborted();
                 if (response.task !== "segment") {
                   throw new Error(
                     "Local segment returned an unexpected response.",

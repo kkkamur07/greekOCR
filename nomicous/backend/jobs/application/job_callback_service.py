@@ -237,6 +237,13 @@ def _apply_callback_locked(callback: JobCallbackRequest) -> bool:
     if not applied or context is None:
         return applied
 
+    # Defense in depth: a cancel that raced the claim leaves the job terminal;
+    # never merge document changes after durable cancellation.
+    with sync_system_session() as session:
+        job = session.get(Job, context.job_id)
+        if job is None or job.status in _TERMINAL_STATUSES:
+            return False
+
     try:
         result = _run_merge(context, callback)
     except Exception:

@@ -90,6 +90,26 @@ def test_vercel_frontend_permits_helper_loopback_origins() -> None:
     assert "http://localhost:8001" in vercel_config
 
 
+def test_landing_csp_uses_json_ld_hash_instead_of_unsafe_inline() -> None:
+    import base64
+    import hashlib
+    import re
+
+    html = (REPO_ROOT / "landing" / "index.html").read_text(encoding="utf-8")
+    vercel = (REPO_ROOT / "landing" / "vercel.json").read_text(encoding="utf-8")
+    match = re.search(r'<script type="application/ld\+json">(.*?)</script>', html, re.S)
+    assert match is not None
+    digest = base64.b64encode(hashlib.sha256(match.group(1).encode("utf-8")).digest()).decode()
+    assert f"'sha256-{digest}'" in vercel
+    assert "'unsafe-inline'" not in vercel
+
+
+def test_runtime_images_uninstall_vulnerable_system_packaging_tools() -> None:
+    for relative in ("nomicous/Dockerfile", "inference/Dockerfile"):
+        dockerfile = (REPO_ROOT / relative).read_text(encoding="utf-8")
+        assert "pip uninstall -y pip setuptools wheel" in dockerfile
+
+
 def test_role_migration_defines_service_boundaries_without_passwords() -> None:
     migration = (
         REPO_ROOT / "nomicous" / "infrastructure" / "alembic" / "versions" / "002_service_roles.py"
