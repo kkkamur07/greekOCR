@@ -17,13 +17,68 @@ vi.mock("../api/client", async (importOriginal) => {
   };
 });
 
+vi.mock("../auth/AuthProvider", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../auth/AuthProvider")>();
+  return {
+    ...actual,
+    useAuthSession: vi.fn(),
+  };
+});
+
+import { useAuthSession } from "../auth/AuthProvider";
+
 describe("LoginPage", () => {
   beforeEach(() => {
     clearAccessToken();
     vi.clearAllMocks();
+    vi.mocked(useAuthSession).mockReturnValue({
+      status: "anonymous",
+      establish: vi.fn(),
+      logout: vi.fn(),
+    });
+  });
+
+  it("does not show the sign-in form while session restore is in flight", () => {
+    vi.mocked(useAuthSession).mockReturnValue({
+      status: "restoring",
+      establish: vi.fn(),
+      logout: vi.fn(),
+    });
+
+    render(<LoginPage />);
+
+    expect(screen.queryByRole("heading", { name: /sign in/i })).toBeNull();
+    expect(screen.getByText(/restoring your session/i)).toBeTruthy();
+    expect(testRouter().replace).not.toHaveBeenCalled();
+  });
+
+  it("redirects authenticated users away from login without flashing the form", async () => {
+    vi.mocked(useAuthSession).mockReturnValue({
+      status: "authenticated",
+      establish: vi.fn(),
+      logout: vi.fn(),
+    });
+    window.history.replaceState(
+      {},
+      "",
+      "/login?callbackUrl=%2Fprojects%2Fproject-1",
+    );
+
+    render(<LoginPage />);
+
+    expect(screen.queryByRole("heading", { name: /sign in/i })).toBeNull();
+    await waitFor(() => {
+      expect(testRouter().replace).toHaveBeenCalledWith("/projects/project-1");
+    });
   });
 
   it("signs in and returns the user to the protected page they requested", async () => {
+    const establish = vi.fn();
+    vi.mocked(useAuthSession).mockReturnValue({
+      status: "anonymous",
+      establish,
+      logout: vi.fn(),
+    });
     vi.mocked(api.login).mockResolvedValue({
       access_token: "jwt-token",
       token_type: "bearer",
@@ -49,8 +104,6 @@ describe("LoginPage", () => {
         "/projects/project-1/documents/doc-1/parts/part-1?panel=history",
       );
     });
-    await waitFor(() => {
-      expect(getAccessToken()).toBe("jwt-token");
-    });
+    expect(establish).toHaveBeenCalledWith("jwt-token");
   });
 });
