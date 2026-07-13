@@ -96,8 +96,8 @@ Job callbacks use a tagged output union: `output.kind` is either `segment` or `t
 `inference/registry.yaml` lists available models and weight locations. Example entries:
 
 - `syriac-calamari-v1` — transcribe, Calamari architecture, pinned Hub revision and digest
-- `greek-calamari-v1` — transcribe, Calamari architecture, legacy unpinned Hub entry
-- `greek-kraken-segment-v1` — segment, Kraken BLLA
+- `greek-calamari-v1` — commented out until Hub revision + artifact SHA are pinned
+- `greek-kraken-segment-v1` — segment, Kraken BLLA package weights
 
 Weights are resolved at runtime from Hub cache (`src/hf/cache/`), local bundled paths (`src/hf/local/`), or `package://` (Kraken).
 New `hf://` entries should include both `hub_revision` and `artifact_sha256`; see
@@ -116,7 +116,7 @@ curl -s http://127.0.0.1:8001/health
 curl -s http://127.0.0.1:8001/inference/v1/catalog
 ```
 
-On startup the helper fetches `registry.yaml` from the hosted platform (`GET /inference/v1/registry`, public, ETag-aware) into `~/.nomicous/registry.yaml`. The bundled copy in the installer is only a fallback when offline. Model **weights** still download on first `/run` via existing `hf://` resolution.
+On startup the helper fetches `registry.yaml` from the hosted platform (`GET /inference/v1/registry`, public, ETag-aware) into `~/.nomicous/registry.yaml`. The bundled copy in the installer is only a fallback when offline. Local-eligible `hf://` weights are prefetched in a background thread on first launch so the first `/run` does not stall on download.
 
 The browser probes `127.0.0.1:8001`, calls `/inference/v1/run`, and persists results through
 the hosted platform API. The production Vercel CSP permits that exact loopback URL. Set an
