@@ -1,7 +1,8 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "../../api/errors";
+import { toast } from "../../components/ui/toast";
 import {
   DOCUMENT,
   flushPageEditorEffects,
@@ -268,7 +269,8 @@ describe("PageEditorPlaceholderPage transcription", () => {
     );
     expect(textArea).toHaveValue("old approved text");
     fireEvent.change(textArea, { target: { value: "corrected ground truth" } });
-    fireEvent.click(screen.getByRole("button", { name: /save ground truth/i }));
+    const toastSuccess = vi.spyOn(toast, "success");
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
 
     await waitFor(() => {
       expect(mockedApi.updateGroundTruthLineText).toHaveBeenLastCalledWith(
@@ -279,7 +281,9 @@ describe("PageEditorPlaceholderPage transcription", () => {
         { text: "corrected ground truth" },
       );
     });
-    expect(await screen.findByText("Ground truth text saved")).toBeTruthy();
+    await waitFor(() => {
+      expect(toastSuccess).toHaveBeenCalledWith("Ground truth text saved");
+    });
   });
 
   it("re-runs OCR on the selected segment from the pairing strip", async () => {
@@ -636,7 +640,7 @@ describe("PageEditorPlaceholderPage transcription", () => {
       /ground truth text for selected segment/i,
     );
     fireEvent.change(textArea, { target: { value: "typed but rejected" } });
-    fireEvent.click(screen.getByRole("button", { name: /save ground truth/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
 
     expect(
       await screen.findByText(
