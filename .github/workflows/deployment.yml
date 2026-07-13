@@ -33,7 +33,11 @@ jobs:
         run: |
           test "$(docker run --rm --entrypoint id nomicous-api:ci -u)" != "0"
           test "$(docker run --rm --entrypoint id nomicous-inference:ci -u)" != "0"
-          docker run --rm --entrypoint python nomicous-api:ci -c "from backend.core.main import app; assert app.title"
+          docker run --rm \
+            -e JWT_SECRET=test-secret-not-for-production-at-least-32-bytes \
+            -e ENVIRONMENT=development \
+            --entrypoint python nomicous-api:ci \
+            -c "from backend.core.main import app; assert app.title"
           docker run --rm --entrypoint python nomicous-inference:ci -c "from inference.api.main import app; assert app.title"
       - name: Verify health checks and minimal Hub resolver image content
         run: |
