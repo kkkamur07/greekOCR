@@ -1556,6 +1556,18 @@ button {
   color: var(--text-4);
 }
 
+.content-region-loading {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 240px;
+  padding: 24px;
+  text-align: center;
+}
+
 /* ─── Modal ──────────────────────────────────────────────────────── */
 .modal-overlay {
   position: fixed;

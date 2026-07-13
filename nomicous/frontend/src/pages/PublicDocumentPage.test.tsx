@@ -6,6 +6,7 @@ import {
   type DocumentWithPartsResponse,
   type PublicLayoutResponse,
 } from "../api/client";
+import { ApiError } from "../api/errors";
 import { PublicDocumentPage } from "./PublicDocumentPage";
 
 vi.mock("../components/public/PublicPageCanvas", () => ({
@@ -106,6 +107,16 @@ function renderPublicPage() {
   return render(<PublicDocumentPage />);
 }
 
+function defer<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 describe("PublicDocumentPage", () => {
   beforeEach(() => {
     vi.mocked(api.getPublicDocument).mockResolvedValue(DOCUMENT);
@@ -116,6 +127,99 @@ describe("PublicDocumentPage", () => {
     vi.mocked(api.getPublicPageXml).mockResolvedValue(
       new Blob(["xml"], { type: "application/xml" }),
     );
+  });
+
+  it("keeps public chrome and spins only in the content region while loading", async () => {
+    const documentFetch = defer<DocumentWithPartsResponse>();
+    const layoutFetch = defer<PublicLayoutResponse>();
+    vi.mocked(api.getPublicDocument).mockReturnValue(documentFetch.promise);
+    vi.mocked(api.getPublicLayout).mockReturnValue(layoutFetch.promise);
+
+    renderPublicPage();
+
+    expect(
+      screen.getByRole("navigation", { name: "Main navigation" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Public view")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Document" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: "Loading document" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Document not available"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("No page image available"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("This published document has no page images yet."),
+    ).not.toBeInTheDocument();
+
+    documentFetch.resolve(DOCUMENT);
+    layoutFetch.resolve(LAYOUT);
+
+    expect(
+      await screen.findByRole("heading", { name: "MS Or. 1445 — Genesis" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("status", { name: "Loading document" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("public-page-canvas")).toBeInTheDocument();
+  });
+
+  it("shows document-not-available only after a settled 404", async () => {
+    const documentFetch = defer<DocumentWithPartsResponse>();
+    const layoutFetch = defer<PublicLayoutResponse>();
+    vi.mocked(api.getPublicDocument).mockReturnValue(documentFetch.promise);
+    vi.mocked(api.getPublicLayout).mockReturnValue(layoutFetch.promise);
+
+    renderPublicPage();
+
+    expect(
+      screen.getByRole("status", { name: "Loading document" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Document not available"),
+    ).not.toBeInTheDocument();
+
+    documentFetch.reject(new ApiError("Not found", 404));
+    layoutFetch.reject(new ApiError("Not found", 404));
+
+    expect(
+      await screen.findByText("Document not available"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("navigation", { name: "Main navigation" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("status", { name: "Loading document" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows load error copy only after a settled failure", async () => {
+    const documentFetch = defer<DocumentWithPartsResponse>();
+    const layoutFetch = defer<PublicLayoutResponse>();
+    vi.mocked(api.getPublicDocument).mockReturnValue(documentFetch.promise);
+    vi.mocked(api.getPublicLayout).mockReturnValue(layoutFetch.promise);
+
+    renderPublicPage();
+
+    expect(
+      screen.queryByText("Could not load document"),
+    ).not.toBeInTheDocument();
+
+    documentFetch.reject(new ApiError("Server exploded", 500));
+    layoutFetch.reject(new ApiError("Server exploded", 500));
+
+    expect(
+      await screen.findByText("Could not load document"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Server exploded")).toBeInTheDocument();
+    expect(
+      screen.getByRole("navigation", { name: "Main navigation" }),
+    ).toBeInTheDocument();
   });
 
   it("shows line geometry, transcription text, and export actions", async () => {
