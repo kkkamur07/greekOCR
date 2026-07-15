@@ -174,9 +174,16 @@ def mark_job_waiting(
     inference_job_id: uuid.UUID | None = None,
     payload_patch: dict | None = None,
 ) -> None:
+    """Move a non-terminal job to ``waiting``. No-op if already terminal.
+
+    Uses ``FOR UPDATE`` so a concurrent cancel cannot be overwritten by the
+    status write after a stale unlocked read.
+    """
     now = datetime.now(UTC)
     with sync_system_session() as session:
-        job = session.get(Job, job_id)
+        job = session.execute(
+            select(Job).where(Job.id == job_id).with_for_update()
+        ).scalar_one_or_none()
         if job is None:
             raise ValueError(f"job {job_id} not found")
         if job.status in (JobStatus.done, JobStatus.failed, JobStatus.cancelled):

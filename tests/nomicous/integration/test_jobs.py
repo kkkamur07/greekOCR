@@ -195,6 +195,42 @@ def test_cancel_pending_job_marks_cancelled_and_discards_partials(
     assert again.status_code == 409
 
 
+def test_mark_job_waiting_does_not_overwrite_cancelled(
+    client: TestClient, registered_user: dict[str, str]
+):
+    """Cancel wins over a late waiting transition (worker race)."""
+    from backend.jobs.infrastructure.job_repository import mark_job_waiting
+
+    auth_headers = {"Authorization": f"Bearer {registered_user['access_token']}"}
+    me = client.get("/me", headers=auth_headers)
+    assert me.status_code == 200
+    user_id = uuid.UUID(me.json()["id"])
+
+    with sync_system_session() as session:
+        job = Job(
+            type=JobType.segment,
+            status=JobStatus.running,
+            payload={"handler": "noop"},
+            user_id=user_id,
+        )
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        job_id = job.id
+
+    cancelled = client.post(f"/jobs/{job_id}/cancel", headers=auth_headers)
+    assert cancelled.status_code == 200, cancelled.text
+    assert cancelled.json()["status"] == "cancelled"
+
+    mark_job_waiting(job_id, inference_job_id=uuid.uuid4())
+
+    with sync_system_session() as session:
+        row = session.get(Job, job_id)
+        assert row is not None
+        assert row.status == JobStatus.cancelled
+        assert row.inference_job_id is None
+
+
 def test_cancel_rejects_when_callback_already_claimed(
     client: TestClient, registered_user: dict[str, str]
 ):

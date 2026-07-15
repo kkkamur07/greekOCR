@@ -211,7 +211,7 @@ export function waitForSubscribedJob(
       ...options,
       onUpdate: (job) => {
         options.onUpdate?.(job);
-        if (job.status === "done") {
+        if (job.status === "done" || job.status === "cancelled") {
           window.clearTimeout(timeout);
           unsubscribe();
           resolve(job);
