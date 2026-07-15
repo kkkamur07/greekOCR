@@ -6,7 +6,7 @@
 # Compose reuses the tagged images; bake builds all three targets at once.
 
 variable "APP_VERSION" {
-  default = "0.3.2"
+  default = "0.3.3"
 }
 
 variable "NEXT_PUBLIC_API_BASE_URL" {

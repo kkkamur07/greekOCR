@@ -18,7 +18,7 @@ CMD ["npm", "run", "dev", "--", "--hostname", "0.0.0.0"]
 FROM node:20-alpine AS builder
 
 # Keep default in sync with ../VERSION; docker compose passes APP_VERSION from NOMICOUS_VERSION.
-ARG APP_VERSION=0.3.2
+ARG APP_VERSION=0.3.3
 ARG NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 ENV NEXT_PUBLIC_APP_VERSION=$APP_VERSION
 ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
@@ -39,7 +39,7 @@ RUN --mount=type=cache,target=/app/.next/cache \
 FROM node:20-alpine AS runner
 
 # Keep default in sync with ../VERSION; docker compose passes APP_VERSION from NOMICOUS_VERSION.
-ARG APP_VERSION=0.3.2
+ARG APP_VERSION=0.3.3
 LABEL org.opencontainers.image.title="nomicous-frontend" \
       org.opencontainers.image.version="${APP_VERSION}"
 

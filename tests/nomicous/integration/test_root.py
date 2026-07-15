@@ -1,8 +1,15 @@
 """Root welcome endpoint."""
 
+from pathlib import Path
 
 # --- Root metadata ---
 # Tests welcome payload and version fields. Does not test authenticated routes.
+
+_EXPECTED_VERSION = (
+    (Path(__file__).resolve().parents[3] / "nomicous" / "VERSION")
+    .read_text(encoding="utf-8")
+    .strip()
+)
 
 
 def test_root_welcome(client):
@@ -11,7 +18,7 @@ def test_root_welcome(client):
     body = response.json()
     assert body["service"] == "Kalamos API"
     assert "Kalamos" in body["message"]
-    assert body["version"] == "0.3.2"
+    assert body["version"] == _EXPECTED_VERSION
     assert body["docs_url"] == "/docs"
     assert body["health_url"] == "/health"
 
