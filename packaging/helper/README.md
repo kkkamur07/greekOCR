@@ -66,7 +66,7 @@ Review `dist/nomicous-inference-helper/` before signing — if unexpected large 
 
 The current release bundles are large because they carry the complete CPU
 runtime: approximately 311.6 MiB for macOS, 301.8 MiB for Windows, and
-432.2 MiB for Linux in the `inference-helper-v0.1.3` release. These figures are
+432.2 MiB for Linux in the `inference-helper-v0.1.4` release. These figures are
 compressed download sizes and can change with each build. Since the published
 model repositories are public, a future size-reduction pass could replace
 `huggingface_hub` and its HTTP stack with a minimal `wget`-based downloader.

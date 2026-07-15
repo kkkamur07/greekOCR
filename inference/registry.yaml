@@ -10,7 +10,9 @@ models:
         hub_revision: e01349626f934ee9526d486a42b5c4173b8d7a26
         artifact_sha256: ea711b918010aa31bd4a8a5de99c7953207421a7c7d4a39163166db380013053
 
-  # Hidden until Hub revision + artifact SHA are pinned (issue 011 / Hub-ready gate).
+  # greek-calamari-v1 is NOT shippable yet: Hub repo kkkamur07/greek-htr-calamari
+  # does not exist (404). Uncomment only after publishing weights + pinning
+  # hub_revision + artifact_sha256 (same pattern as syriac-calamari-v1).
   # greek-calamari-v1:
   #   task: transcribe
   #   architecture: calamari
@@ -19,8 +21,10 @@ models:
   #   versions:
   #     stable:
   #       weights_source: hf://kkkamur07/greek-htr-calamari@stable
+  #       hub_revision: <40-char-commit>
+  #       artifact_sha256: <sha256-of-best.pt>
 
-  greek-kraken-segment-v1:
+  kraken-segment:
     task: segment
     architecture: kraken-segment
     device: cpu

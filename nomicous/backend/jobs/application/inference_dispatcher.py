@@ -19,7 +19,7 @@ from backend.jobs.infrastructure.orm_models import Job, JobType
 from backend.ml.infrastructure.orm_models import InferenceModel, InferenceTask
 from infrastructure.db import sync_system_session
 
-_DEFAULT_SEGMENT_REGISTRY_MODEL = "greek-kraken-segment-v1"
+_DEFAULT_SEGMENT_REGISTRY_MODEL = "kraken-segment"
 _DEFAULT_SEGMENT_REGISTRY_TAG = "stable"
 _DEFAULT_TRANSCRIBE_REGISTRY_MODEL = "syriac-calamari-v1"
 _DEFAULT_TRANSCRIBE_REGISTRY_TAG = "stable"

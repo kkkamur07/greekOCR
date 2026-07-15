@@ -1,4 +1,5 @@
 import {
+  memo,
   useEffect,
   useMemo,
   useRef,
@@ -75,7 +76,7 @@ type CanvasSurfaceProps = {
 
 const VERTEX_DRAG_THRESHOLD = 3;
 
-function CanvasSurface({
+function CanvasSurfaceInner({
   imageUrl,
   imageAlt,
   imageWidth,
@@ -467,6 +468,8 @@ function CanvasSurface({
   );
 }
 
+const CanvasSurface = memo(CanvasSurfaceInner);
+
 type PageEditorCanvasProps = Omit<
   CanvasSurfaceProps,
   | "draftEnd"
@@ -565,6 +568,34 @@ export function PageEditorCanvas({
     }
   }, [segmentVertexEditEnabled, selectedSegmentId]);
 
+  const commitPendingVertexEdit = (
+    pending: {
+      segmentId: string;
+      points: LinePoint[];
+      draggedIndex: null;
+      pendingVertexIndex: null;
+    },
+    options?: {
+      selectedVertex?: number | null;
+      clearInteracting?: boolean;
+    },
+  ) => {
+    setVertexEdit(pending);
+    if (options && "selectedVertex" in options) {
+      onSelectedVertexChange(options.selectedVertex ?? null);
+    }
+    void Promise.resolve(
+      onSegmentPointsChange(pending.segmentId, pending.points),
+    ).finally(() => {
+      setVertexEdit((latest) =>
+        latest?.segmentId === pending.segmentId ? null : latest,
+      );
+      if (options?.clearInteracting) {
+        vertexInteractingRef.current = false;
+      }
+    });
+  };
+
   useEffect(() => {
     if (commitSignal === 0) return;
     const current = vertexEditRef.current;
@@ -574,21 +605,15 @@ export function PageEditorCanvas({
       setVertexEdit(null);
       return;
     }
-    const pending = {
-      segmentId: current.segmentId,
-      points: current.points,
-      draggedIndex: null as number | null,
-      pendingVertexIndex: null as number | null,
-    };
-    setVertexEdit(pending);
-    void Promise.resolve(
-      onSegmentPointsChange(pending.segmentId, pending.points),
-    ).finally(() => {
-      setVertexEdit((latest) =>
-        latest?.segmentId === pending.segmentId ? null : latest,
-      );
-      vertexInteractingRef.current = false;
-    });
+    commitPendingVertexEdit(
+      {
+        segmentId: current.segmentId,
+        points: current.points,
+        draggedIndex: null,
+        pendingVertexIndex: null,
+      },
+      { clearInteracting: true },
+    );
   }, [commitSignal, onSegmentPointsChange]);
 
   useEffect(() => {
@@ -615,22 +640,18 @@ export function PageEditorCanvas({
         vertexInteractingRef.current = false;
         return;
       }
-      const pending = {
-        segmentId: current.segmentId,
-        points: current.points,
-        draggedIndex: null as number | null,
-        pendingVertexIndex: null as number | null,
-      };
-      setVertexEdit(pending);
-      onSelectedVertexChange(current.draggedIndex);
-      void Promise.resolve(
-        onSegmentPointsChange(pending.segmentId, pending.points),
-      ).finally(() => {
-        setVertexEdit((latest) =>
-          latest?.segmentId === pending.segmentId ? null : latest,
-        );
-        vertexInteractingRef.current = false;
-      });
+      commitPendingVertexEdit(
+        {
+          segmentId: current.segmentId,
+          points: current.points,
+          draggedIndex: null,
+          pendingVertexIndex: null,
+        },
+        {
+          selectedVertex: current.draggedIndex,
+          clearInteracting: true,
+        },
+      );
     };
     window.addEventListener("pointerup", finishInteraction);
     window.addEventListener("mouseup", finishInteraction);
@@ -828,21 +849,15 @@ export function PageEditorCanvas({
                 }}
                 onInsertVertexOnEdge={(nextPoints) => {
                   if (!selectedSegmentId) return;
-                  const pending = {
-                    segmentId: selectedSegmentId,
-                    points: nextPoints,
-                    draggedIndex: null as number | null,
-                    pendingVertexIndex: null as number | null,
-                  };
-                  setVertexEdit(pending);
-                  onSelectedVertexChange(null);
-                  void Promise.resolve(
-                    onSegmentPointsChange(pending.segmentId, pending.points),
-                  ).finally(() => {
-                    setVertexEdit((latest) =>
-                      latest?.segmentId === pending.segmentId ? null : latest,
-                    );
-                  });
+                  commitPendingVertexEdit(
+                    {
+                      segmentId: selectedSegmentId,
+                      points: nextPoints,
+                      draggedIndex: null,
+                      pendingVertexIndex: null,
+                    },
+                    { selectedVertex: null },
+                  );
                 }}
                 onRemoveVertex={(vertexIndex) => {
                   if (!selectedSegmentId || !vertexEditPoints) return;
@@ -851,21 +866,15 @@ export function PageEditorCanvas({
                     vertexIndex,
                   );
                   if (!nextPoints) return;
-                  const pending = {
-                    segmentId: selectedSegmentId,
-                    points: nextPoints,
-                    draggedIndex: null as number | null,
-                    pendingVertexIndex: null as number | null,
-                  };
-                  setVertexEdit(pending);
-                  onSelectedVertexChange(null);
-                  void Promise.resolve(
-                    onSegmentPointsChange(pending.segmentId, pending.points),
-                  ).finally(() => {
-                    setVertexEdit((latest) =>
-                      latest?.segmentId === pending.segmentId ? null : latest,
-                    );
-                  });
+                  commitPendingVertexEdit(
+                    {
+                      segmentId: selectedSegmentId,
+                      points: nextPoints,
+                      draggedIndex: null,
+                      pendingVertexIndex: null,
+                    },
+                    { selectedVertex: null },
+                  );
                 }}
               />
             </TransformComponent>

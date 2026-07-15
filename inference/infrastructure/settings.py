@@ -62,10 +62,6 @@ class InferenceSettings(AdmissionSettings):
         default=INFERENCE_ROOT / "registry.yaml",
         alias="INFERENCE_REGISTRY_PATH",
     )
-    inference_weights_cache_dir: Path = Field(
-        default=INFERENCE_ROOT / "weights" / "cache",
-        alias="INFERENCE_WEIGHTS_CACHE_DIR",
-    )
     worker_notify_channel: str = Field(
         default="inference_jobs",
         alias="INFERENCE_WORKER_NOTIFY_CHANNEL",

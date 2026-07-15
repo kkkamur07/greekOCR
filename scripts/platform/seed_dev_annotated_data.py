@@ -58,6 +58,7 @@ from backend.document.infrastructure.media_store import MediaStore, get_media_st
 from backend.document.infrastructure.orm_models import (
     Document,
     DocumentPart,
+    DocumentWorkflow,
     LineGeometryKind,
     LineSource,
 )
@@ -618,6 +619,14 @@ async def run_seed(*, force: bool, import_history: bool) -> ImportStats:
             if doc_stats.documents_skipped:
                 log.info("  = already exists (use --force to re-import)")
             totals.merge(doc_stats)
+
+        # Landing / public live view needs published workflow.
+        published = await session.execute(select(Document).where(Document.project_id == project.id))
+        for document in published.scalars().all():
+            if document.workflow != DocumentWorkflow.published:
+                document.workflow = DocumentWorkflow.published
+        await session.commit()
+        log.info("Published all documents in project %s for public live view", project.slug)
 
     return totals
 

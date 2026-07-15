@@ -124,10 +124,10 @@ class PartServiceMixin(DocumentServiceSharedMixin):
         user: User,
         part_id: UUID,
     ) -> DocumentPart:
-        part = await self._documents.get_part(session, part_id)
+        part = await self._documents.get_part_row(session, part_id)
         if part is None:
             raise NotFoundError("Part not found")
-        document = await self._documents.get_by_id(session, part.document_id)
+        document = await self._documents.get_by_id_for_authz(session, part.document_id)
         if document is None:
             raise NotFoundError("Document not found")
         await self._require_member(session, document.project_id, user.id)
@@ -138,10 +138,10 @@ class PartServiceMixin(DocumentServiceSharedMixin):
         session: AsyncSession,
         part_id: UUID,
     ) -> DocumentPart:
-        part = await self._documents.get_part(session, part_id)
+        part = await self._documents.get_part_row(session, part_id)
         if part is None:
             raise NotFoundError("Part not found")
-        document = await self._documents.get_by_id(session, part.document_id)
+        document = await self._documents.get_by_id_for_authz(session, part.document_id)
         if document is None:
             raise NotFoundError("Document not found")
         project = await self._load_project(session, document.project_id)

@@ -86,7 +86,11 @@ class RequestBodyLimitMiddleware:
 
 
 class ServiceRateLimitMiddleware:
-    """Simple per-process sliding-window limiter for expensive inference routes."""
+    """Per-process sliding-window limiter for expensive inference routes.
+
+    Limits are process-local (not shared across workers/replicas). Acceptable for
+    damping bursty load on a single helper/inference worker; not a cluster quota.
+    """
 
     def __init__(
         self,

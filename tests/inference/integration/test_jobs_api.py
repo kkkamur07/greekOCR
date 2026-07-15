@@ -25,7 +25,7 @@ def test_submit_job_returns_inference_job_id(
 
     response, _ = submit_inference_job(
         task=InferenceTask.segment,
-        registry_model_id="greek-kraken-segment-v1",
+        registry_model_id="kraken-segment",
         product_job_id=product_job_id,
         image_bytes=segment_page_bytes(),
     )
@@ -63,7 +63,7 @@ def test_submit_job_rejects_task_mismatch(
 ):
     response, _ = submit_inference_job(
         task=InferenceTask.transcribe,
-        registry_model_id="greek-kraken-segment-v1",
+        registry_model_id="kraken-segment",
         image_bytes=transcribe_line_bytes(),
         params={"lines": [{"line_index": 0}]},
     )
@@ -80,7 +80,7 @@ def test_submit_job_requires_service_secret():
         "/inference/v1/jobs",
         json={
             "task": "segment",
-            "registry_model_id": "greek-kraken-segment-v1",
+            "registry_model_id": "kraken-segment",
             "registry_tag": "stable",
             "product_job_id": str(uuid4()),
             "image_bytes": "YQ==",

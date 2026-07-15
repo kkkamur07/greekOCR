@@ -245,10 +245,19 @@ def _register_exception_handlers(app: FastAPI) -> None:
 async def _lifespan(app: FastAPI):
     import asyncio
 
-    from infrastructure.db import engine, sync_engine
+    from infrastructure.db import AsyncSessionLocal, engine, sync_engine
 
     stop_event = asyncio.Event()
     job_settings = get_job_settings()
+    if get_infrastructure_settings().environment == "development":
+        from backend.dev.bootstrap import ensure_dev_user_exists
+
+        try:
+            async with AsyncSessionLocal() as session:
+                if await ensure_dev_user_exists(session):
+                    logger.info("Recreated missing dev login user after database reset")
+        except Exception:
+            logger.exception("Failed to ensure dev user exists at startup")
     notification_task = (
         asyncio.create_task(platform_job_notification_loop(stop_event))
         if job_settings.job_sse_notifications_enabled

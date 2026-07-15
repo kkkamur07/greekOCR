@@ -72,7 +72,7 @@ services:
       ENVIRONMENT: development
       INFERENCE_CALLBACK_URL: http://api:8000/internal/inference/job-complete
       INFERENCE_REGISTRY_PATH: /app/inference/registry.yaml
-      INFERENCE_WEIGHTS_CACHE_DIR: /app/inference/weights/cache
+      HF_CACHE_ROOT: /app/src/hf/cache
       INFERENCE_WEBHOOK_SECRET: ${INFERENCE_WEBHOOK_SECRET:?set INFERENCE_WEBHOOK_SECRET in the repository-root .env}
       INFERENCE_SERVICE_SECRET: ${INFERENCE_SERVICE_SECRET:?set INFERENCE_SERVICE_SECRET in the repository-root .env}
       INFERENCE_MAX_REQUEST_BODY_BYTES: "167772160"
@@ -90,7 +90,7 @@ services:
       ENVIRONMENT: development
       INFERENCE_CALLBACK_URL: http://api:8000/internal/inference/job-complete
       INFERENCE_REGISTRY_PATH: /app/inference/registry.yaml
-      INFERENCE_WEIGHTS_CACHE_DIR: /app/inference/weights/cache
+      HF_CACHE_ROOT: /app/src/hf/cache
       INFERENCE_WEBHOOK_SECRET: ${INFERENCE_WEBHOOK_SECRET:?set INFERENCE_WEBHOOK_SECRET in the repository-root .env}
       INFERENCE_SERVICE_SECRET: ${INFERENCE_SERVICE_SECRET:?set INFERENCE_SERVICE_SECRET in the repository-root .env}
       INFERENCE_MAX_DECODED_IMAGE_BYTES: "104857600"

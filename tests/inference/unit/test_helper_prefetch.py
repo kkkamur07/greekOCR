@@ -66,7 +66,7 @@ def test_prefetch_resolves_local_hf_models_only(monkeypatch, tmp_path: Path) -> 
                             }
                         },
                     },
-                    "greek-kraken-segment-v1": {
+                    "kraken-segment": {
                         "task": "segment",
                         "architecture": "kraken-segment",
                         "device": "cpu",

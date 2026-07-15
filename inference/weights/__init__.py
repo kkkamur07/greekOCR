@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from importlib import resources
 from pathlib import Path
 
@@ -11,9 +10,6 @@ from src.hf.paths import HF_ROOT
 INFERENCE_ROOT = Path(__file__).resolve().parents[1]
 
 DEFAULT_WEIGHTS_ROOT = INFERENCE_ROOT / "weights"
-DEFAULT_CACHE_ROOT = Path(
-    os.environ.get("INFERENCE_WEIGHTS_CACHE_DIR", DEFAULT_WEIGHTS_ROOT / "cache")
-)
 LOCAL_BUNDLED_PREFIX = "local/"
 
 

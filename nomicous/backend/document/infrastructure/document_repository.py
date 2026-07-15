@@ -31,6 +31,13 @@ class DocumentRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_by_id_for_authz(
+        self, session: AsyncSession, document_id: UUID
+    ) -> Document | None:
+        """Load a document row without parts/transcriptions (media authz hot path)."""
+        result = await session.execute(select(Document).where(Document.id == document_id))
+        return result.scalar_one_or_none()
+
     async def list_for_project(
         self,
         session: AsyncSession,
@@ -133,6 +140,11 @@ class DocumentRepository:
             )
             .where(DocumentPart.id == part_id)
         )
+        return result.scalar_one_or_none()
+
+    async def get_part_row(self, session: AsyncSession, part_id: UUID) -> DocumentPart | None:
+        """Load a part without lines/transcriptions (media serving authz)."""
+        result = await session.execute(select(DocumentPart).where(DocumentPart.id == part_id))
         return result.scalar_one_or_none()
 
     async def list_transcriptions(

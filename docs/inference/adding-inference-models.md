@@ -37,7 +37,7 @@ Follow the **registry model id** convention:
 {script}-{architecture}-{model_version}
 ```
 
-Examples: `greek-calamari-v1`, `greek-kraken-segment-v1`.
+Examples: `greek-calamari-v1`, `kraken-segment`.
 
 | Field | Meaning | Example |
 |-------|---------|---------|

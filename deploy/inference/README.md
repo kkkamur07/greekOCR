@@ -47,7 +47,7 @@ Shared across all three services (inference + platform worker):
 ```bash
 INFERENCE_CALLBACK_URL=https://api.nomicous.com/internal/inference/job-complete
 INFERENCE_REGISTRY_PATH=/app/inference/registry.yaml
-INFERENCE_WEIGHTS_CACHE_DIR=/app/inference/weights/cache
+HF_CACHE_ROOT=/app/src/hf/cache
 ```
 
 Configure connection URLs only in the host's secret manager:
@@ -133,7 +133,7 @@ services:
 2. Add service **inference-api** — Dockerfile path `inference/Dockerfile`, start command as above.
 3. Add service **inference-worker** — same image, worker start command.
 4. Add service **platform-worker** — Dockerfile `nomicous/Dockerfile`, `python -m backend.jobs.worker_main`.
-5. Attach a volume to inference services for `INFERENCE_WEIGHTS_CACHE_DIR` (models download on first run).
+5. Attach a volume to inference services for `HF_CACHE_ROOT` (models download on first run).
 6. Map custom domain `inference.nomicous.com` to inference-api.
 
 ---

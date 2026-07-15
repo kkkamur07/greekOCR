@@ -49,7 +49,7 @@ def create_helper_app(*, prefetch_weights: bool = True) -> FastAPI:
     settings = apply_helper_environment()
     app = FastAPI(
         title="Nomicous Inference Helper",
-        version="0.1.3",
+        version="0.1.4",
         lifespan=_helper_lifespan(settings, prefetch_weights=prefetch_weights),
     )
     app.add_middleware(

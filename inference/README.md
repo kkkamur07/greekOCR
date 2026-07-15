@@ -97,7 +97,7 @@ Job callbacks use a tagged output union: `output.kind` is either `segment` or `t
 
 - `syriac-calamari-v1` — transcribe, Calamari architecture, pinned Hub revision and digest
 - `greek-calamari-v1` — commented out until Hub revision + artifact SHA are pinned
-- `greek-kraken-segment-v1` — segment, Kraken BLLA package weights
+- `kraken-segment` — segment, Kraken BLLA package weights
 
 Weights are resolved at runtime from Hub cache (`src/hf/cache/`), local bundled paths (`src/hf/local/`), or `package://` (Kraken).
 New `hf://` entries should include both `hub_revision` and `artifact_sha256`; see

@@ -39,7 +39,7 @@ The repository contains both the research and production systems:
 |---|---|---|
 | Greek line transcription | `greek-calamari-v1` | [Greek HTR model on Hugging Face](https://huggingface.co/kkkamur07/greek-htr-calamari) |
 | Syriac line transcription | `syriac-calamari-v1` | [Syriac HTR model on Hugging Face](https://huggingface.co/kkkamur07/syriac-htr-calamari) |
-| Page segmentation | `greek-kraken-segment-v1` | Kraken's packaged BLLA model |
+| Page segmentation | `kraken-segment` | Kraken's packaged BLLA model |
 
 The model catalog is versioned in [`inference/registry.yaml`](inference/registry.yaml).
 Greek and Syriac checkpoints are currently published; the same registry and
@@ -181,14 +181,14 @@ curl http://127.0.0.1:8001/inference/v1/catalog
 
 Download the native helper installers from the
 [latest GitHub release](https://github.com/kkkamur07/greekOCR/releases/latest).
-The current `inference-helper-v0.1.3` release is distributed as follows
+The current `inference-helper-v0.1.4` release is distributed as follows
 (compressed download sizes; future builds may vary slightly):
 
 | Platform | Release asset | Approx. size |
 |---|---|---:|
-| macOS | [`nomicous-inference-helper-macos.dmg`](https://github.com/kkkamur07/greekOCR/releases/download/inference-helper-v0.1.3/nomicous-inference-helper-macos.dmg) | 311.6 MiB |
-| Windows | [`nomicous-inference-helper-windows.zip`](https://github.com/kkkamur07/greekOCR/releases/download/inference-helper-v0.1.3/nomicous-inference-helper-windows.zip) | 301.8 MiB |
-| Linux | [`nomicous-inference-helper-linux.tar.gz`](https://github.com/kkkamur07/greekOCR/releases/download/inference-helper-v0.1.3/nomicous-inference-helper-linux.tar.gz) | 432.2 MiB |
+| macOS | [`nomicous-inference-helper-macos.dmg`](https://github.com/kkkamur07/greekOCR/releases/download/inference-helper-v0.1.4/nomicous-inference-helper-macos.dmg) | 311.6 MiB |
+| Windows | [`nomicous-inference-helper-windows.zip`](https://github.com/kkkamur07/greekOCR/releases/download/inference-helper-v0.1.4/nomicous-inference-helper-windows.zip) | 301.8 MiB |
+| Linux | [`nomicous-inference-helper-linux.tar.gz`](https://github.com/kkkamur07/greekOCR/releases/download/inference-helper-v0.1.4/nomicous-inference-helper-linux.tar.gz) | 432.2 MiB |
 
 These bundles are large because they include the CPU PyTorch, Kraken, and
 Calamari runtime so the helper works without a separate Python installation.

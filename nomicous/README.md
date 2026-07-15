@@ -136,7 +136,7 @@ updated to match `VERSION`.
 `inference/registry.yaml` is the runtime model catalog. The development seed
 creates `InferenceModel` rows with `registry://<model-id>?tag=stable` artifact
 references and project-level bindings. Its defaults are
-`greek-kraken-segment-v1` for segmentation and `syriac-calamari-v1` for
+`kraken-segment` for segmentation and `syriac-calamari-v1` for
 transcription. `greek-calamari-v1` stays commented out in `registry.yaml` until
 Hub revision + artifact SHA are pinned.
 

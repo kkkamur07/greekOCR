@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
-"""Seed development inference models and project-level bindings."""
+"""Seed inference models and optional project-level segment bindings.
+
+Does not create a separate "Dev inference defaults" project. When
+``BINDING_PROJECT_SLUG`` (default: byzantine-greek-manuscripts) exists,
+attaches a project-level segment binding. Transcribe bindings are skipped
+until greek-calamari-v1 is Hub-pinned.
+"""
 
 import asyncio
 import os
-from pathlib import Path
 
 from sqlalchemy import select
 
@@ -17,17 +22,16 @@ from backend.ml.infrastructure.orm_models import (  # noqa: E402
     ModelBinding,
 )
 from backend.project.infrastructure.orm_models import Project  # noqa: E402
-from backend.users.infrastructure.orm_models import User  # noqa: E402
 
 from infrastructure import models as _orm_models  # noqa: E402, F401 — register all mappers
 from infrastructure.db import system_session  # noqa: E402
 
-DEFAULT_SEGMENT_MODEL = os.environ.get("DEFAULT_SEGMENT_MODEL", "greek-kraken-segment-v1")
+DEFAULT_SEGMENT_MODEL = os.environ.get("DEFAULT_SEGMENT_MODEL", "kraken-segment")
 DEFAULT_TRANSCRIBE_MODEL = os.environ.get("DEFAULT_TRANSCRIBE_MODEL", "syriac-calamari-v1")
-KRAKEN_MODEL_PATH = Path(os.environ.get("KRAKEN_MODEL_PATH", "../model/kraken"))
-DEV_PROJECT_SLUG = os.environ.get("DEV_INFERENCE_PROJECT_SLUG", "dev-inference")
-DEV_PROJECT_NAME = os.environ.get("DEV_INFERENCE_PROJECT_NAME", "Dev inference defaults")
-DEV_USER_EMAIL = os.environ.get("DEV_USER_EMAIL", "dev@example.com")
+BINDING_PROJECT_SLUG = os.environ.get(
+    "BINDING_PROJECT_SLUG",
+    os.environ.get("DEV_ANNOTATED_PROJECT_SLUG", "byzantine-greek-manuscripts"),
+)
 
 
 async def _upsert_model(
@@ -57,27 +61,6 @@ async def _upsert_model(
         await session.commit()
         await session.refresh(model)
         return model
-
-
-async def _ensure_dev_project() -> Project:
-    async with system_session() as session:
-        result = await session.execute(select(Project).where(Project.slug == DEV_PROJECT_SLUG))
-        project = result.scalar_one_or_none()
-        if project is not None:
-            return project
-
-        owner_result = await session.execute(select(User).where(User.email == DEV_USER_EMAIL))
-        owner = owner_result.scalar_one_or_none()
-        project = Project(
-            slug=DEV_PROJECT_SLUG,
-            name=DEV_PROJECT_NAME,
-            guidelines="Development project for default inference model bindings.",
-            owner_id=owner.id if owner is not None else None,
-        )
-        session.add(project)
-        await session.commit()
-        await session.refresh(project)
-        return project
 
 
 async def _upsert_project_binding(
@@ -113,7 +96,7 @@ async def main() -> None:
     segment_model = await _upsert_model(
         name=DEFAULT_SEGMENT_MODEL,
         task=InferenceTask.segment,
-        artifact_ref="registry://greek-kraken-segment-v1?tag=stable",
+        artifact_ref=f"registry://{DEFAULT_SEGMENT_MODEL}?tag=stable",
         default_params={"device": "cpu"},
     )
     transcribe_model = await _upsert_model(
@@ -122,23 +105,32 @@ async def main() -> None:
         artifact_ref=f"registry://{DEFAULT_TRANSCRIBE_MODEL}?tag=stable",
         default_params={"device": "cpu"},
     )
-    project = await _ensure_dev_project()
+
+    print(f"Seeded segment model: {segment_model.name} -> {segment_model.artifact_ref}")
+    print(f"Seeded transcribe model: {transcribe_model.name} -> {transcribe_model.artifact_ref}")
+    print(
+        "Note: no project-level transcribe binding "
+        "(greek-calamari-v1 not Hub-pinned yet; avoid binding Syriac to Greek pages)."
+    )
+
+    async with system_session() as session:
+        project = (
+            await session.execute(select(Project).where(Project.slug == BINDING_PROJECT_SLUG))
+        ).scalar_one_or_none()
+
+    if project is None:
+        print(
+            f"No project slug={BINDING_PROJECT_SLUG!r} yet — "
+            "run annotated seed first, then re-run this script for bindings."
+        )
+        return
+
     segment_binding = await _upsert_project_binding(
         project=project,
         task=InferenceTask.segment,
         model=segment_model,
     )
-    transcribe_binding = await _upsert_project_binding(
-        project=project,
-        task=InferenceTask.transcribe,
-        model=transcribe_model,
-    )
-
-    print(f"Seeded segment model: {segment_model.name} -> {segment_model.artifact_ref}")
-    print(f"Seeded transcribe model: {transcribe_model.name} -> {transcribe_model.artifact_ref}")
-    print(f"Seeded project: {project.slug} ({project.id})")
-    print(f"Segment binding: {segment_binding.id}")
-    print(f"Transcribe binding: {transcribe_binding.id}")
+    print(f"Segment binding on {project.slug} ({project.id}): {segment_binding.id}")
 
 
 if __name__ == "__main__":

@@ -2682,7 +2682,7 @@
   "info": {
     "description": "Greek manuscript OCR and annotation platform",
     "title": "greekOCR Platform",
-    "version": "0.3.2"
+    "version": "0.3.3"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -3245,6 +3245,7 @@
     },
     "/health": {
       "get": {
+        "description": "Liveness/readiness: SELECT 1 only. Dev-user seeding lives in app lifespan.",
         "operationId": "health_health_get",
         "responses": {
           "200": {

@@ -7,6 +7,13 @@ import { Providers } from "./providers";
 export const metadata: Metadata = {
   title: "Nomicous",
   description: "Nomicous annotation platform",
+  icons: {
+    icon: [
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico", sizes: "any" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
+  },
 };
 
 export default function RootLayout({
