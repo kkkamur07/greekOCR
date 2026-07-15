@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 
 import {
   INFERENCE_HELPER_LINUX_TARBALL_URL,
@@ -33,6 +33,12 @@ const HELPER_DOWNLOADS: HelperDownload[] = [
   },
 ];
 
+const PLATFORM_PRIMARY_LABEL: Record<HelperPlatform, string> = {
+  macos: "Download for this Mac",
+  windows: "Download for this PC (Windows)",
+  linux: "Download for this computer (Linux)",
+};
+
 function detectPlatform(): HelperPlatform | null {
   if (typeof navigator === "undefined") return null;
   const hint =
@@ -58,21 +64,29 @@ export function PageEditorInferenceBanner({
 }: PageEditorInferenceBannerProps) {
   const titleId = useId();
   const [modalOpen, setModalOpen] = useState(false);
+  const [showOtherPlatforms, setShowOtherPlatforms] = useState(false);
 
   const detected = detectPlatform();
-  const downloads = detected
-    ? [...HELPER_DOWNLOADS].sort((a, b) => {
-        if (a.platform === detected) return -1;
-        if (b.platform === detected) return 1;
-        return 0;
-      })
-    : HELPER_DOWNLOADS;
+  const { primary, others } = useMemo(() => {
+    if (!detected) {
+      return {
+        primary: null as HelperDownload | null,
+        others: HELPER_DOWNLOADS,
+      };
+    }
+    const match = HELPER_DOWNLOADS.find((d) => d.platform === detected) ?? null;
+    return {
+      primary: match,
+      others: HELPER_DOWNLOADS.filter((d) => d.platform !== detected),
+    };
+  }, [detected]);
 
   const shouldPrompt = !probing && !helperAvailable && !preferCloud;
 
   useEffect(() => {
     if (!shouldPrompt) {
       setModalOpen(false);
+      setShowOtherPlatforms(false);
     }
   }, [shouldPrompt]);
 
@@ -124,7 +138,8 @@ export function PageEditorInferenceBanner({
             </p>
             <ol className="pe-helper-install-modal__steps">
               <li>
-                Download the installer for your operating system from the latest
+                Download the installer
+                {detected ? " for your operating system" : ""} from the latest
                 GitHub release.
               </li>
               <li>
@@ -137,21 +152,56 @@ export function PageEditorInferenceBanner({
               </li>
             </ol>
             <div className="pe-helper-install-modal__actions">
-              {downloads.map((download, index) => (
+              {primary ? (
                 <a
-                  key={download.platform}
-                  href={download.url}
+                  href={primary.url}
                   target="_blank"
                   rel="noreferrer"
-                  className={
-                    index === 0
-                      ? "btn btn-primary btn-block"
-                      : "btn btn-ghost btn-block"
-                  }
+                  className="btn btn-primary btn-block"
                 >
-                  {download.label}
+                  {PLATFORM_PRIMARY_LABEL[primary.platform]}
                 </a>
-              ))}
+              ) : null}
+              {!primary
+                ? others.map((download) => (
+                    <a
+                      key={download.platform}
+                      href={download.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="btn btn-primary btn-block"
+                    >
+                      {download.label}
+                    </a>
+                  ))
+                : null}
+              {primary && others.length > 0 ? (
+                <>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-block"
+                    aria-expanded={showOtherPlatforms}
+                    onClick={() => setShowOtherPlatforms((open) => !open)}
+                  >
+                    {showOtherPlatforms
+                      ? "Hide other platforms"
+                      : "Other platforms"}
+                  </button>
+                  {showOtherPlatforms
+                    ? others.map((download) => (
+                        <a
+                          key={download.platform}
+                          href={download.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="btn btn-ghost btn-block"
+                        >
+                          {download.label}
+                        </a>
+                      ))
+                    : null}
+                </>
+              ) : null}
               <a
                 href={INFERENCE_HELPER_RELEASES_URL}
                 target="_blank"

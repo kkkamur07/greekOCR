@@ -46,13 +46,10 @@ describe("PageEditorInferenceBanner", () => {
     expect(
       screen.getByRole("dialog", { name: /install inference helper/i }),
     ).toBeTruthy();
-    expect(
-      screen.getByRole("link", { name: /download for macos/i }),
-    ).toBeTruthy();
     expect(screen.getByText(/detects the helper automatically/i)).toBeTruthy();
   });
 
-  it("puts the detected OS download first and links to releases/latest", () => {
+  it("shows a single primary download for the detected OS", () => {
     vi.stubGlobal("navigator", {
       platform: "Win32",
       userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
@@ -68,16 +65,22 @@ describe("PageEditorInferenceBanner", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: /install helper/i }));
-    const primary = screen.getByRole("link", { name: /download for windows/i });
+    const primary = screen.getByRole("link", {
+      name: /download for this pc \(windows\)/i,
+    });
     expect(primary).toHaveAttribute("href", INFERENCE_HELPER_WINDOWS_ZIP_URL);
     expect(primary.className).toContain("btn-primary");
+    expect(
+      screen.queryByRole("link", { name: /download for macos/i }),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /other platforms/i }));
+    expect(
+      screen.getByRole("link", { name: /download for macos/i }),
+    ).toHaveAttribute("href", INFERENCE_HELPER_MACOS_DMG_URL);
     expect(
       screen.getByRole("link", { name: /view release notes/i }),
     ).toHaveAttribute("href", INFERENCE_HELPER_RELEASES_URL);
     expect(INFERENCE_HELPER_RELEASES_URL).toContain("/releases/latest");
-    expect(INFERENCE_HELPER_MACOS_DMG_URL).toContain(
-      "/releases/latest/download/",
-    );
     expect(INFERENCE_HELPER_LINUX_TARBALL_URL).toContain(
       "/releases/latest/download/",
     );

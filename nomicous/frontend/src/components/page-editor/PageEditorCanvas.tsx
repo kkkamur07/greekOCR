@@ -520,7 +520,7 @@ export function PageEditorCanvas({
   onSelectSegment,
   onSegmentPointsChange,
 }: PageEditorCanvasProps) {
-  const [zoomLevel, setZoomLevel] = useState(0.75);
+  const [zoomLevel, setZoomLevel] = useState(1);
   const [draftEnd, setDraftEnd] = useState<LinePoint | null>(null);
   const [draftPolygonCursor, setDraftPolygonCursor] =
     useState<LinePoint | null>(null);
@@ -651,10 +651,10 @@ export function PageEditorCanvas({
     <div className="pe-canvas-host">
       <TransformWrapper
         ref={transformRef}
-        initialScale={0.75}
+        initialScale={1}
         minScale={0.15}
         maxScale={8}
-        centerOnInit
+        centerOnInit={false}
         limitToBounds={false}
         wheel={{
           step: 0.06,
