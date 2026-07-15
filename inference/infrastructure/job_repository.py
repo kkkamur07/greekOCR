@@ -1,4 +1,4 @@
-"""Inference job queue persistence — sync claim with FOR UPDATE SKIP LOCKED."""
+"""Inference job queue persistence - sync claim with FOR UPDATE SKIP LOCKED."""
 
 from __future__ import annotations
 

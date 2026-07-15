@@ -1,10 +1,10 @@
-"""FastAPI application factory — wires routers from core and bounded contexts."""
+"""FastAPI application factory - wires routers from core and bounded contexts."""
 
 import logging
 import uuid
 from contextlib import asynccontextmanager, suppress
 
-import infrastructure.models  # noqa: F401 — register all ORM mappers before first query
+import infrastructure.models  # noqa: F401 - register all ORM mappers before first query
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder

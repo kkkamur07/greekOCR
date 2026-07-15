@@ -1,4 +1,4 @@
-"""Frontend failure beacon — logging-first observability (no Prometheus)."""
+"""Frontend failure beacon - logging-first observability (no Prometheus)."""
 
 from __future__ import annotations
 

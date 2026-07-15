@@ -13,7 +13,7 @@ All persistence is under `data/` (path configurable via `NOMICOUS_DATA_ROOT` in 
 | `data/manuscripts/pages/` | Source page images (`.jpg`, `.png`, …) |
 | `data/transcriptions/pages/` | Page transcriptions (`<stem>.txt`, line-broken) |
 | `data/annotations/pages/` | Per-page annotation JSON (segments + pairings; tool-internal) |
-| `data/manuscripts/export/` | **Exported outputs** — paired `<stem>_<segment_number>.jpg` and `.txt` side by side |
+| `data/manuscripts/export/` | **Exported outputs** - paired `<stem>_<segment_number>.jpg` and `.txt` side by side |
 
 Missing subdirectories are **created automatically** when the API starts. If creation fails (permissions, bad path), startup aborts with a clear error pointing at `NOMICOUS_DATA_ROOT`.
 
@@ -44,7 +44,7 @@ npm install
 
 ## Development (two terminals)
 
-### Terminal 1 — API
+### Terminal 1 - API
 
 ```bash
 docker compose up db -d
@@ -55,7 +55,7 @@ uv run --project .. --group platform uvicorn backend.core.app:create_app --facto
 
 Default API URL: `http://127.0.0.1:8000`
 
-### Terminal 2 — Frontend
+### Terminal 2 - Frontend
 
 ```bash
 cd nomicous/frontend
@@ -87,7 +87,7 @@ Compose also starts **`inference-api`** and **`inference-worker`** from the repo
 
 Useful after `-d`: `docker compose ps`, `docker compose logs -f`, `docker compose down`.
 
-- `NEXT_PUBLIC_API_BASE_URL` (build/runtime env) — URL the browser uses (`http://localhost:8000`)
+- `NEXT_PUBLIC_API_BASE_URL` (build/runtime env) - URL the browser uses (`http://localhost:8000`)
 
 Rebuild the frontend image if you change `NEXT_PUBLIC_API_BASE_URL`.
 
@@ -95,7 +95,7 @@ Rebuild the frontend image if you change `NEXT_PUBLIC_API_BASE_URL`.
 
 **Release source of truth:** [`VERSION`](VERSION) at the repo root of `nomicous/`.
 
-1. Edit `VERSION` (semver, one line — e.g. `0.2.1`).
+1. Edit `VERSION` (semver, one line - e.g. `0.2.1`).
 2. From the repository root, export it and rebuild so Compose tags images correctly:
 
 ```bash
@@ -113,7 +113,7 @@ curl -s http://localhost:8000/health | python -m json.tool
 docker images 'nomicous-*'
 ```
 
-**When to bump:** any release you want to distinguish in image tags or `/health` — not required for every code change during dev (rebuild with the same `NOMICOUS_VERSION` is fine).
+**When to bump:** any release you want to distinguish in image tags or `/health` - not required for every code change during dev (rebuild with the same `NOMICOUS_VERSION` is fine).
 
 **Important:** set `NOMICOUS_VERSION` in a shell profile or root `.env` next to
 `docker-compose.yml` so the image tag always matches `VERSION`. The current
@@ -137,8 +137,7 @@ updated to match `VERSION`.
 creates `InferenceModel` rows with `registry://<model-id>?tag=stable` artifact
 references and project-level bindings. Its defaults are
 `kraken-segment` for segmentation and `syriac-calamari-v1` for
-transcription. `greek-calamari-v1` stays commented out in `registry.yaml` until
-Hub revision + artifact SHA are pinned.
+transcription.
 
 ```bash
 uv run --group platform python scripts/platform/seed_dev_inference.py

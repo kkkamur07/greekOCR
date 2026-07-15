@@ -6,7 +6,7 @@ import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-import infrastructure.models  # noqa: F401 — register MediaDeletionIntent mapper
+import infrastructure.models  # noqa: F401 - register MediaDeletionIntent mapper
 from sqlalchemy import select
 
 from backend.document.infrastructure.media_store import get_media_store

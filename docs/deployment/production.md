@@ -2,14 +2,14 @@
 
 Host Nomicous at **nomicous.com** with four public surfaces and Supabase as the shared database + storage backend.
 
-Architecture overview: [root README](../../README.md#production-hosting). Serverless constraints and pitfalls: [learnings — Vercel](../guides/learnings.md#serverless-api-vercel).
+Architecture overview: [root README](../../README.md#production-hosting). Serverless constraints and pitfalls: [learnings - Vercel](../guides/learnings.md#serverless-api-vercel).
 
 | Domain | Vercel project | Root directory | Role |
 |--------|----------------|----------------|------|
 | [nomicous.com](https://nomicous.com) | `nomicous-landing` | `landing/` | Static marketing site |
 | [app.nomicous.com](https://app.nomicous.com) | `nomicous-app` | `nomicous/frontend/` | Next.js App Router client |
 | [api.nomicous.com](https://api.nomicous.com) | `nomicous-api` | `deploy/platform/` | FastAPI platform API |
-| [inference.nomicous.com](https://inference.nomicous.com) | **Not Vercel** — optional | Docker image | Optional cloud ML inference API + worker |
+| [inference.nomicous.com](https://inference.nomicous.com) | **Not Vercel** - optional | Docker image | Optional cloud ML inference API + worker |
 
 Supabase setup: [`supabase.md`](supabase.md).
 Local development: [`../guides/local-development.md`](../guides/local-development.md).
@@ -63,7 +63,7 @@ cp nomicous/backend/core/.env.supabase.example nomicous/backend/core/.env.supaba
 ./scripts/platform/migrate_supabase.sh
 ```
 
-4. Seed production data if needed (admin user, model catalog) — do **not** run dev seed scripts in production.
+4. Seed production data if needed (admin user, model catalog) - do **not** run dev seed scripts in production.
 
 ---
 
@@ -159,8 +159,8 @@ Minimum services:
 | Service | Command | Port |
 |---------|---------|------|
 | `inference-api` | `uvicorn inference.api.main:app --host 0.0.0.0 --port 8001` | 8001 |
-| `inference-worker` | `python -m inference.jobs.worker` | — |
-| `platform-worker` | `python -m backend.jobs.worker_main` | — |
+| `inference-worker` | `python -m inference.jobs.worker` | - |
+| `platform-worker` | `python -m backend.jobs.worker_main` | - |
 
 Cloud inference is currently disabled. If it is enabled later, set
 `CLOUD_INFERENCE_ENABLED=true` and point `INFERENCE_URL` on the platform API to
@@ -234,7 +234,7 @@ If a secret scanner or Git-history review identifies a possible exposure:
 - [ ] Service-role bootstrap completed and each runtime has only its own DB URL
 - [ ] `CORS_ORIGINS` includes only production app origins (`https://app.nomicous.com`)
 - [ ] `AUTH_CSRF_COOKIE_DOMAIN=.nomicous.com` so `app.nomicous.com` can read the CSRF cookie for refresh
-- [ ] Production verification uses `app.nomicous.com` / `api.nomicous.com` only — never `*.vercel.app` deployment or Preview URLs
+- [ ] Production verification uses `app.nomicous.com` / `api.nomicous.com` only - never `*.vercel.app` deployment or Preview URLs
 - [ ] `ENABLE_TEST_JOB_ROUTES=false`
 - [ ] Platform worker + inference worker running and healthy
 - [ ] Vercel bundle contains no model weights, local media, `.env` files, or training artifacts
@@ -292,6 +292,6 @@ broken critical flow.
 | 401 on all API calls | Wrong `JWT_SECRET` or clock skew |
 | Jobs stuck in `pending` | Platform worker not running (`JOB_WORKER_ENABLED` must be `false` on API, worker elsewhere) |
 | Jobs stuck in `waiting` | Inference worker not running |
-| `DuplicatePreparedStatementError` | Using pooler URL without `statement_cache_size=0` — already handled in `infrastructure/db.py` |
+| `DuplicatePreparedStatementError` | Using pooler URL without `statement_cache_size=0` - already handled in `infrastructure/db.py` |
 | Media 404 | `STORAGE_BACKEND=supabase` but bucket/key wrong |
 | SSE never connects | Expected on Vercel; polling fallback should still complete jobs |

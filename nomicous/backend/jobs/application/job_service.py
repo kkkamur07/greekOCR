@@ -1,4 +1,4 @@
-"""Job application service — enqueue and read job state."""
+"""Job application service - enqueue and read job state."""
 
 from __future__ import annotations
 

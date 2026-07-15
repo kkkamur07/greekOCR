@@ -14,7 +14,7 @@ Ship a **minimal** native install (`.dmg`, Windows zip + installer script, Linux
 - Platform API (`nomicous/`), Postgres drivers, Alembic, frontend assets
 - Training stacks (`transformers`, `accelerate`, `datasets`, notebooks)
 - GPU/CUDA torch builds (CPU wheel only)
-- Desktop shells (Tauri/Electron) — helper is a background service + tray icon
+- Desktop shells (Tauri/Electron) - helper is a background service + tray icon
 
 ## Layout
 
@@ -62,7 +62,7 @@ uv run --group inference pyinstaller pyinstaller.spec
 
 The spec entry point is `packaging/helper/tray_launcher.py` (server + tray). Use `--no-tray` for headless/systemd installs.
 
-Review `dist/nomicous-inference-helper/` before signing — if unexpected large directories appear (e.g. `torch/test`), add them to `excludes.txt`. Do **not** exclude `scipy`, `torchvision`, `sklearn`, `skimage`, or `shapely`: Kraken segment requires them at runtime (importing `kraken.blla` pulls in `scipy`), and excluding them breaks the segment model. Do **not** exclude `httpx` either: `huggingface_hub` uses it as its HTTP backend, so excluding it breaks `hf://` weight downloads (Calamari transcribe).
+Review `dist/nomicous-inference-helper/` before signing - if unexpected large directories appear (e.g. `torch/test`), add them to `excludes.txt`. Do **not** exclude `scipy`, `torchvision`, `sklearn`, `skimage`, or `shapely`: Kraken segment requires them at runtime (importing `kraken.blla` pulls in `scipy`), and excluding them breaks the segment model. Do **not** exclude `httpx` either: `huggingface_hub` uses it as its HTTP backend, so excluding it breaks `hf://` weight downloads (Calamari transcribe).
 
 The current release bundles are large because they carry the complete CPU
 runtime: approximately 311.6 MiB for macOS, 301.8 MiB for Windows, and
@@ -114,11 +114,11 @@ MACOS_NOTARY_PROFILE="nomicous-notary" \
   bash packaging/helper/macos/build-dmg.sh
 ```
 
-- `MACOS_CODESIGN_IDENTITY` — deep-signs the `.app` (and inner dylibs) with the hardened runtime and signs the `.dmg`.
-- `MACOS_ENTITLEMENTS` — override the default `macos/entitlements.plist` (relaxes library validation / JIT for the bundled Python + torch).
-- `MACOS_NOTARY_PROFILE` — submits the `.dmg` to Apple, waits, and staples the ticket.
+- `MACOS_CODESIGN_IDENTITY` - deep-signs the `.app` (and inner dylibs) with the hardened runtime and signs the `.dmg`.
+- `MACOS_ENTITLEMENTS` - override the default `macos/entitlements.plist` (relaxes library validation / JIT for the bundled Python + torch).
+- `MACOS_NOTARY_PROFILE` - submits the `.dmg` to Apple, waits, and staples the ticket.
 
-Signing only (no notarization) still leaves a Gatekeeper prompt on first launch — set the notary profile for a clean install.
+Signing only (no notarization) still leaves a Gatekeeper prompt on first launch - set the notary profile for a clean install.
 
 ### Windows (Authenticode)
 

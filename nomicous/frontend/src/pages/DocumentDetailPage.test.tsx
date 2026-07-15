@@ -217,7 +217,7 @@ describe("DocumentDetailPage", () => {
     vi.mocked(api.updateDocument).mockResolvedValue({
       id: "doc-1",
       project_id: "project-1",
-      name: "MS Or. 1445 — Genesis",
+      name: "MS Or. 1445 - Genesis",
       workflow: "draft",
       part_count: 2,
       created_at: "2026-06-16T10:00:00Z",
@@ -230,17 +230,17 @@ describe("DocumentDetailPage", () => {
       await screen.findByRole("button", { name: /grec 1360, click to edit/i }),
     );
     fireEvent.change(screen.getByLabelText("Name"), {
-      target: { value: "MS Or. 1445 — Genesis" },
+      target: { value: "MS Or. 1445 - Genesis" },
     });
     fireEvent.click(screen.getByRole("button", { name: /save name/i }));
 
     await waitFor(() => {
       expect(api.updateDocument).toHaveBeenCalledWith("project-1", "doc-1", {
-        name: "MS Or. 1445 — Genesis",
+        name: "MS Or. 1445 - Genesis",
       });
     });
     expect(
-      screen.getByRole("heading", { name: "MS Or. 1445 — Genesis" }),
+      screen.getByRole("heading", { name: "MS Or. 1445 - Genesis" }),
     ).toBeTruthy();
   });
 

@@ -37,7 +37,7 @@ async function main() {
 
   await login(page);
 
-  // 1. Draft badge alignment — document detail header
+  // 1. Draft badge alignment - document detail header
   await page.goto(`${BASE}/projects/${PROJECT_ID}/documents/${DRAFT_DOC_ID}`);
   await page.waitForSelector(".page-header__title-row .badge-draft", {
     timeout: 15000,
@@ -57,7 +57,7 @@ async function main() {
     page.locator(".data-panel").first(),
   );
 
-  // 2. Transcription strip — ground truth only (no layer dropdown)
+  // 2. Transcription strip - ground truth only (no layer dropdown)
   await page.goto(
     `${BASE}/projects/${PROJECT_ID}/documents/${DRAFT_DOC_ID}/parts/${PART_ID}`,
   );
@@ -89,7 +89,7 @@ async function main() {
     page.locator(".project-jobs-panel"),
   );
 
-  // 4. Public view — image with polygons + PDF toggle
+  // 4. Public view - image with polygons + PDF toggle
   await page.goto(
     `${BASE}/public/projects/${PROJECT_ID}/documents/${PUBLISHED_DOC_ID}`,
   );

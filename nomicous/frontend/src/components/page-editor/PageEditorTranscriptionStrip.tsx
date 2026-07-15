@@ -225,7 +225,7 @@ export function PageEditorTranscriptionStrip({
               <i className="dot dot--high" aria-hidden="true" /> high &gt;90%
             </span>
             <span>
-              <i className="dot dot--mid" aria-hidden="true" /> mid 51–90%
+              <i className="dot dot--mid" aria-hidden="true" /> mid 51-90%
             </span>
             <span>
               <i className="dot dot--low" aria-hidden="true" /> low ≤50%

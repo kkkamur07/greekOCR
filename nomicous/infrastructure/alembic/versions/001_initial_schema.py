@@ -16,7 +16,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 from infrastructure.db import Base
-from infrastructure import models  # noqa: F401 — register all ORM tables
+from infrastructure import models  # noqa: F401 - register all ORM tables
 
 revision: str = "001_initial_schema"
 down_revision: str | None = None

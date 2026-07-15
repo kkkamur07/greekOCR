@@ -160,17 +160,17 @@ flowchart LR
   C --> D
 ```
 
-1. **Emit** — After a committed `jobs` status change, code calls
+1. **Emit** - After a committed `jobs` status change, code calls
    `notify_platform_job_status_changed()` (`jobs/infrastructure/notifications.py`),
    which runs `SELECT pg_notify(:channel, :payload)` on a sync session.
-2. **Listen** — The FastAPI lifespan starts `platform_job_notification_loop()` in
+2. **Listen** - The FastAPI lifespan starts `platform_job_notification_loop()` in
    `backend/core/app.py`. It opens a dedicated **asyncpg** connection (using
    `SYNC_DATABASE_URL`, not the SQLAlchemy `postgresql+asyncpg://` URL) and
    `LISTEN`s on `PLATFORM_JOB_NOTIFY_CHANNEL` (default `platform_jobs`).
-3. **Fan-out** — Each notification is parsed and passed to
+3. **Fan-out** - Each notification is parsed and passed to
    `job_status_broadcaster`, an in-memory registry of per-job `asyncio.Queue`s
    owned by active SSE handlers in that API process.
-4. **Deliver** — `GET /jobs/{job_id}/events` (`jobs/api/jobs.py`) subscribes the
+4. **Deliver** - `GET /jobs/{job_id}/events` (`jobs/api/jobs.py`) subscribes the
    client queue, sends the current `JobResponse` snapshot immediately, then
    streams further `job` events when the broadcaster receives NOTIFY payloads.
    Heartbeat comments (`: heartbeat`) are sent every `JOB_SSE_HEARTBEAT_SECONDS`
@@ -220,7 +220,7 @@ The notification listener must use a plain `postgresql://` DSN (`SYNC_DATABASE_U
 
 ### Tests
 
-- `tests/nomicous/integration/test_jobs.py` — `GET /jobs/{id}/events` auth and
+- `tests/nomicous/integration/test_jobs.py` - `GET /jobs/{id}/events` auth and
   snapshot streaming.
 
 **Inference worker notifications (separate channel):** The `inference/` service uses
@@ -279,7 +279,7 @@ Keep real secrets out of git. `backend/core/.env` is local-only.
 Production API hosts set both worker flags to `false`; run
 `backend.jobs.worker_main` as a separate persistent process. If
 `BEHIND_PROXY=true`, `FORWARDED_ALLOW_IPS` must contain explicit proxy IPs or
-CIDRs—never `*`.
+CIDRs-never `*`.
 
 ## Persistence and Media
 
@@ -316,7 +316,7 @@ platform FastAPI app.
 
 Segment and transcribe jobs call the repository-level **`inference/` service** through `InferenceClient` (`backend/ml/infrastructure/ml_client.py`).
 
-Compose sets `INFERENCE_URL=http://inference-api:8001` on the API container. The standalone service (health, sync `/inference/v1/run`, async job submission, contracts, registry — see [`inference/README.md`](../../inference/README.md)) runs as `inference-api` + `inference-worker`.
+Compose sets `INFERENCE_URL=http://inference-api:8001` on the API container. The standalone service (health, sync `/inference/v1/run`, async job submission, contracts, registry - see [`inference/README.md`](../../inference/README.md)) runs as `inference-api` + `inference-worker`.
 
 ## Special Notes
 

@@ -31,7 +31,7 @@ uv run poe test-fast
 # Platform integration (Postgres)
 uv run poe test-integration
 
-# Platform ML jobs (real Kraken/Calamari — slow)
+# Platform ML jobs (real Kraken/Calamari - slow)
 uv run poe test-ml
 
 # Inference service tests
@@ -85,7 +85,7 @@ Defined in `pyproject.toml`:
 
 With Compose running (`docker compose up`), hit the live API at `http://localhost:8000` and inference at `http://localhost:8010`. Integration tests use their own DB sessions and do not require the API container unless noted in a specific test.
 
-For Supabase-backed local testing, see [deployment/supabase.md](../deployment/supabase.md) — same pytest commands; set `DATABASE_URL` / `SYNC_DATABASE_URL` in env or `conftest.py` overrides.
+For Supabase-backed local testing, see [deployment/supabase.md](../deployment/supabase.md) - same pytest commands; set `DATABASE_URL` / `SYNC_DATABASE_URL` in env or `conftest.py` overrides.
 
 ---
 

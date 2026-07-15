@@ -163,35 +163,9 @@ see editor navigation affordances on the public page.
 The notice should move `pending` -> `running` -> `done`, or show the API error if
 the job fails.
 
-## Repository hygiene
-
-Docs drift, gitignore, dead-code rituals, and improvement roadmap:
-
-[`docs/repository-hygiene.md`](../../docs/repository-hygiene.md)
-
-## Code audit
-
-Launch readiness — scores, blockers, sprint order:
-
-[`docs/codebase-audit.md`](../../docs/codebase-audit.md)
-
-## Dead code
-
-Cleanup candidates and PR order:
-
-[`docs/repository-cleanup-plan.md`](../../docs/repository-cleanup-plan.md)
-
-Ritual: [`docs/repository-hygiene.md#dead-code-ritual`](../../docs/repository-hygiene.md#dead-code-ritual)
-
-## Performance
-
-[`docs/frontend/performance-optimization.md`](../../docs/frontend/performance-optimization.md)
-
-Full frontend docs: [`docs/frontend/README.md`](../../docs/frontend/README.md)
-
 ## Special Notes
 
 - API-generated types may mark fields optional even when current backend
   responses always include them; UI code should be robust where feasible.
-- Production build may warn about large chunks; see the performance doc for
-  bundle-splitting follow-ups.
+- Production build may warn about large chunks; treat bundle splitting as a
+  follow-up when needed.

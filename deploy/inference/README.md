@@ -130,9 +130,9 @@ services:
 ## Railway quick start
 
 1. Create a project from this repo.
-2. Add service **inference-api** — Dockerfile path `inference/Dockerfile`, start command as above.
-3. Add service **inference-worker** — same image, worker start command.
-4. Add service **platform-worker** — Dockerfile `nomicous/Dockerfile`, `python -m backend.jobs.worker_main`.
+2. Add service **inference-api** - Dockerfile path `inference/Dockerfile`, start command as above.
+3. Add service **inference-worker** - same image, worker start command.
+4. Add service **platform-worker** - Dockerfile `nomicous/Dockerfile`, `python -m backend.jobs.worker_main`.
 5. Attach a volume to inference services for `HF_CACHE_ROOT` (models download on first run).
 6. Map custom domain `inference.nomicous.com` to inference-api.
 

@@ -51,6 +51,7 @@ function executionClass(execution: JobResponse["execution"]): string {
 
 function statusClass(status: JobResponse["status"]): string {
   if (status === "failed") return "project-jobs-panel__status--failed";
+  if (status === "cancelled") return "project-jobs-panel__status--cancelled";
   if (status === "done") return "project-jobs-panel__status--done";
   if (status === "pending" || status === "waiting")
     return "project-jobs-panel__status--pending";
@@ -178,7 +179,8 @@ export function ProjectJobsPanel({
           Jobs
         </h2>
         <p className="project-jobs-panel__hint">
-          No background jobs yet. Segment or transcribe from a document page.
+          No jobs yet. Segment or transcribe from a document page - completed,
+          failed, and cancelled runs show up here.
         </p>
       </section>
     );

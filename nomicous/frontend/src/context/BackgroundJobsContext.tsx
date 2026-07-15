@@ -82,7 +82,10 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
     new Map(),
   );
 
-  const scheduleRemoval = useCallback((jobId: string) => {
+  const scheduleRemoval = useCallback((jobId: string, status?: JobStatus) => {
+    // Keep cancelled jobs visible until the user clears them - they are part
+    // of recent history, unlike done/failed which auto-dismiss after a TTL.
+    if (status === "cancelled") return;
     const existing = timersRef.current.get(jobId);
     if (existing) window.clearTimeout(existing);
     const timer = window.setTimeout(() => {
@@ -114,7 +117,7 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
         ),
       );
       if (isTerminalJobStatus(latest.status)) {
-        scheduleRemoval(jobId);
+        scheduleRemoval(jobId, latest.status);
       }
     },
     [scheduleRemoval],
@@ -139,7 +142,7 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
         if (index < 0) continue;
         next[index] = patchTrackedJob(next[index], update);
         if (isTerminalJobStatus(update.status)) {
-          scheduleRemoval(update.id);
+          scheduleRemoval(update.id, update.status);
         }
       }
       return next;
@@ -212,7 +215,7 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
             : job,
         ),
       );
-      scheduleRemoval(jobId);
+      scheduleRemoval(jobId, "cancelled");
     },
     [scheduleRemoval],
   );
@@ -297,7 +300,7 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
     async (jobId: string) => {
       if (jobId.startsWith("local-")) {
         const controller = localAbortControllersRef.current.get(jobId);
-        // Controller is removed in trackLocalTask's finally — missing means the
+        // Controller is removed in trackLocalTask's finally - missing means the
         // local job already finished; do not overwrite done/failed with cancelled.
         if (!controller) {
           return;

@@ -82,7 +82,7 @@ Production ships the platform API as a **Vercel Python serverless function** (`d
 
 Platform API functions are pinned to **`fra1` (Frankfurt)** in `deploy/platform/vercel.json` for European latency. Landing and SPA stay globally edge-served. Rollback: remove `regions` from `vercel.json` and redeploy.
 
-Frontend falls back to **HTTP polling** when SSE is unavailable — verified in production.
+Frontend falls back to **HTTP polling** when SSE is unavailable - verified in production.
 
 ### Future: all-Docker on our server
 
@@ -145,14 +145,14 @@ Runbook: [`docs/deployment/production.md`](../deployment/production.md). Vercel 
 
 ## Calamari training
 
-Training and finetuning use the **vendored TensorFlow Calamari tree** under `src/model/calamari/`. Inference does **not** import that tree — it runs a separate PyTorch graph under `inference/architectures/calamari/` and loads converted `.pt` checkpoints from Hugging Face Hub (`hf://`).
+Training and finetuning use the **vendored TensorFlow Calamari tree** under `src/model/calamari/`. Inference does **not** import that tree - it runs a separate PyTorch graph under `inference/architectures/calamari/` and loads converted `.pt` checkpoints from Hugging Face Hub (`hf://`).
 
 ### Layout
 
 ```text
 src/model/calamari/          # Canonical vendored Calamari (in git)
   calamari_ocr/              # Python package imported at training time
-    ocr/dataset/             # Required — do not omit when syncing from upstream
+    ocr/dataset/             # Required - do not omit when syncing from upstream
     scripts/train.py
     ...
 
@@ -195,7 +195,7 @@ ln -sfn ../src/model/calamari _support_repo/calamari
 | Training OOM / very slow on Apple Silicon | TensorFlow + emulation | Prefer Linux + GPU; reduce batch size |
 | `Expected train/ and val/ images under ...` | Wrong pack layout | Pack needs `train/` and `val/` image folders |
 | Checkpoint works in training but inference rejects `.ckpt` | Inference needs PyTorch `.pt` | Convert to `calamari-pytorch-v1` and publish to Hub |
-| Empty OCR despite job **done** | Wrong model for script | Greek HTR (`greek-calamari-v1`) is not on Hub yet — use Syriac model only for Syriac pages; Greek transcription awaits Hub publish + registry pin |
+| Empty OCR despite job **done** | Wrong model for script | Use a model matching the page script (e.g. Syriac model only for Syriac pages) |
 | First Hub transcribe slow in Docker | Cold download + CPU | `PYTHONPATH=. python scripts/hf/fetch_model.py syriac-calamari-v1 --registry-tag stable` (Greek model not published yet) |
 
 ---

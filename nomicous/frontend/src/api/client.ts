@@ -1,5 +1,5 @@
 /**
- * Platform API client — short-lived JWT in memory, OpenAPI-aligned types.
+ * Platform API client - short-lived JWT in memory, OpenAPI-aligned types.
  * Regenerate types: `npm run codegen:api` (after `python scripts/platform/export_openapi.py`).
  */
 import { redirectToLogin } from "../auth/session";

@@ -11,7 +11,7 @@ Usage (from repository root):
   python scripts/platform/seed_dev_nomicous.py
 
 Environment:
-  ANNOTATED_DATA_ROOT        — override annotated data path (see seed_dev_annotated_data.py)
+  ANNOTATED_DATA_ROOT        - override annotated data path (see seed_dev_annotated_data.py)
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ async def main() -> None:
 
     if not ANNOTATED_DATA_ROOT.is_dir():
         print(
-            f"\nSkipping annotated corpus — data root not found: {ANNOTATED_DATA_ROOT}",
+            f"\nSkipping annotated corpus - data root not found: {ANNOTATED_DATA_ROOT}",
             flush=True,
         )
         print("\n=== seed_dev_inference ===", flush=True)
@@ -50,7 +50,7 @@ async def main() -> None:
     stats = await run_seed(force=False, import_history=False)
     _print_summary(stats)
 
-    # Bindings attach to the annotated project slug — run after documents exist.
+    # Bindings attach to the annotated project slug - run after documents exist.
     print("\n=== seed_dev_inference ===", flush=True)
     await seed_inference()
 

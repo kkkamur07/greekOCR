@@ -47,7 +47,7 @@ This document covers setup, configuration choices, known pitfalls, and trade-off
 | Storage | Yes | Server-side via **secret (service role) key** |
 | Auth | **No** | App JWT (`JWT_SECRET`) |
 | Data API / PostgREST | **No** | Backend talks SQL directly |
-| Realtime / Edge Functions | **No** | — |
+| Realtime / Edge Functions | **No** | - |
 
 **Alembic** remains the schema source of truth. The Supabase CLI is **not** used for migrations.
 
@@ -71,7 +71,7 @@ We authorize in **FastAPI**, not Postgres RLS. The backend connects with the dat
 
 | Dashboard label | Old name | Use in Nomicous |
 |-----------------|----------|-----------------|
-| **Publishable** | `anon` | **Not used** — frontend talks to our API only |
+| **Publishable** | `anon` | **Not used** - frontend talks to our API only |
 | **Secret** | `service_role` | **`SUPABASE_SERVICE_ROLE_KEY`** in backend env only |
 
 | | Secret key | Publishable key |
@@ -99,7 +99,7 @@ secrets, never in an example file or command history.
 | `DATABASE_URL` | **Transaction pooler** `…pooler…` | 6543 | `postgresql+asyncpg://` | `nomicous_api` or platform-worker runtime |
 | `SYNC_DATABASE_URL` | **Transaction pooler** (or direct) | 6543 / 5432 | `postgresql://` | Matching runtime principal for sync listener/scripts |
 
-Database name is **`postgres`** (Supabase default) — not `kalamos`.
+Database name is **`postgres`** (Supabase default) - not `kalamos`.
 
 ### Assign service URLs
 
@@ -134,7 +134,7 @@ Characters like `@`, `#`, `%` in the password **break URL parsing**. URL-encode 
 
 Example: password `@Krrish@2021` → `%40Krrish%402021` in the URL.
 
-Alembic also needs `%` doubled (`%%`) when passed through ConfigParser — handled in `infrastructure/alembic/env.py`.
+Alembic also needs `%` doubled (`%%`) when passed through ConfigParser - handled in `infrastructure/alembic/env.py`.
 
 ---
 
@@ -158,7 +158,7 @@ Settings load **`.env` first**; if missing, fall back to **`.env.supabase`** (`b
 | Keep only `.env.supabase` | Local `.env` untouched | Must `source` before scripts, or rely on fallback |
 | `source .env.supabase` per shell | Explicit | Easy to forget in a new terminal |
 
-**Use `#` comments only** in env files. Do **not** use Python `"""` docstrings — shell `source` will fail.
+**Use `#` comments only** in env files. Do **not** use Python `"""` docstrings - shell `source` will fail.
 
 ```bash
 cp nomicous/backend/core/.env.supabase.example nomicous/backend/core/.env.supabase
@@ -173,7 +173,7 @@ cp nomicous/backend/core/.env.supabase.example nomicous/backend/core/.env.supaba
 
 1. **Storage** → New bucket → `document-media`
 2. **Private** (no public access)
-3. Backend uses **secret key** — no Storage policies needed for v1
+3. Backend uses **secret key** - no Storage policies needed for v1
 
 ### `STORAGE_BACKEND`
 
@@ -189,7 +189,7 @@ All new uploads and seeds are normalized to **WebP**:
 | Setting | Default | Pros | Cons |
 |---------|---------|------|------|
 | `MEDIA_WEBP_LOSSLESS=true` | on | Best OCR fidelity | Larger than lossy |
-| `MEDIA_WEBP_LOSSLESS=false` + `MEDIA_WEBP_QUALITY=95` | — | Smaller files | Slight quality loss |
+| `MEDIA_WEBP_LOSSLESS=false` + `MEDIA_WEBP_QUALITY=95` | - | Smaller files | Slight quality loss |
 
 Keys look like: `parts/<uuid>/<stem>.webp`
 
@@ -232,7 +232,7 @@ Cloud path:  Browser → API creates job → INFERENCE_URL service → webhook c
 
 **Typical Supabase test setup:** Supabase DB + Storage, API local, **inference helper local**. Leave `INFERENCE_WEBHOOK_SECRET=replace-me` until you run cloud inference.
 
-**Port conflict:** helper and `inference-api` both default to **8001** — run one, not both.
+**Port conflict:** helper and `inference-api` both default to **8001** - run one, not both.
 
 ---
 
@@ -341,7 +341,7 @@ docker compose -f docker-compose.yml -f docker-compose.supabase.yml up -d --buil
 |-----|---------|
 | http://localhost:5173 | Frontend |
 | http://localhost:8000 | Platform API |
-| http://localhost:8010 | Inference API (cloud jobs) — host port; container listens on 8001 |
+| http://localhost:8010 | Inference API (cloud jobs) - host port; container listens on 8001 |
 
 This profile **does not start local Postgres** (`db` is disabled). Apply
 Alembic from the operator/migrator host first; the Compose API only runs the
@@ -358,14 +358,14 @@ docker compose -f docker-compose.yml -f docker-compose.supabase.yml logs -f api 
 docker compose -f docker-compose.yml -f docker-compose.supabase.yml up --build api
 ```
 
-**Local inference helper** is not in Compose — run on the host if needed:
+**Local inference helper** is not in Compose - run on the host if needed:
 
 ```bash
 PYTHONPATH=. uv run python -m inference.helper
 ```
 
 The page editor probes `http://127.0.0.1:8001` from your browser (not from inside Docker).
-Host port **8001 is reserved for this helper** — the Docker `inference-api` (cloud jobs)
+Host port **8001 is reserved for this helper** - the Docker `inference-api` (cloud jobs)
 publishes on host **8010** so it never shadows a locally installed helper.
 
 ### 6. Run frontend (without Docker)
@@ -383,7 +383,7 @@ Dev login after seed: `dev@example.com` / `dev-pass-123`
 
 | Variable | Required (Supabase) | Purpose |
 |----------|---------------------|---------|
-| `MIGRATOR_DATABASE_URL` | Yes | Alembic operator/migrator — direct Postgres |
+| `MIGRATOR_DATABASE_URL` | Yes | Alembic operator/migrator - direct Postgres |
 | `DATABASE_URL` | Yes | Async SQLAlchemy (`+asyncpg`) API/worker principal |
 | `SYNC_DATABASE_URL` | Yes | Matching API/worker principal sync connection |
 | `STORAGE_BACKEND` | Yes | `supabase` |

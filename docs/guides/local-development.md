@@ -22,7 +22,7 @@ docker compose up --build
 | OpenAPI | http://localhost:8000/docs |
 | Inference API (cloud) | http://localhost:8010 |
 | Local Inference Helper | http://127.0.0.1:8001 (if installed) |
-| Postgres | `127.0.0.1:5433` — credentials from the ignored root `.env`, database `kalamos` |
+| Postgres | `127.0.0.1:5433` - credentials from the ignored root `.env`, database `kalamos` |
 
 Migrations run automatically when the API container starts.
 
@@ -66,7 +66,7 @@ npm install
 npm run dev
 ```
 
-App: http://localhost:5173 — see [`nomicous/frontend/README.md`](../../nomicous/frontend/README.md).
+App: http://localhost:5173 - see [`nomicous/frontend/README.md`](../../nomicous/frontend/README.md).
 
 ---
 

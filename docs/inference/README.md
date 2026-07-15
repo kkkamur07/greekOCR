@@ -11,6 +11,4 @@ Models, registry, Hub weights, and the local Inference Helper.
 **Helper installers:** [`packaging/helper/README.md`](../../packaging/helper/README.md)  
 **Hub publish/fetch:** [`scripts/hf/README.md`](../../scripts/hf/README.md)
 
-**Launch audit (inference section):** [codebase-audit.md](../codebase-audit.md)
-
 Back to [docs index](../README.md).

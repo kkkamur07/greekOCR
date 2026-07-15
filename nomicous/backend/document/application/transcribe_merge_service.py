@@ -1,4 +1,4 @@
-"""Transcribe merge — persist model transcription layer from ML output."""
+"""Transcribe merge - persist model transcription layer from ML output."""
 
 from __future__ import annotations
 

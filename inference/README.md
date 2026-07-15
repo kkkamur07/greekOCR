@@ -19,7 +19,7 @@ The root `docker-compose.yml` starts `inference-api` and `inference-worker` alon
 | Service | Port | Role |
 |---------|------|------|
 | `inference-api` | 8001 | Inference HTTP API |
-| `inference-worker` | — | Background job processor |
+| `inference-worker` | - | Background job processor |
 
 ## API vs worker
 
@@ -40,7 +40,7 @@ Registry models resolve weights at runtime from:
 
 | Source | Example | Cache / path |
 |--------|---------|----------------|
-| Hub | `hf://kkkamur07/greek-htr-calamari@stable` | `src/hf/cache/<registry_model_id>/<registry_tag>/` |
+| Hub | `hf://kkkamur07/syriac-htr-calamari@stable` | `src/hf/cache/<registry_model_id>/<registry_tag>/` |
 | Local bundled (offline) | `file://local/syriac/calamari/v1/stable/best.pt` | `src/hf/local/...` |
 | Kraken package | `package://kraken/blla.mlmodel` | Inside `kraken` pip package |
 
@@ -76,16 +76,16 @@ Environment:
 Prefetch Hub weights without running inference:
 
 ```bash
-PYTHONPATH=. python scripts/hf/fetch_model.py greek-calamari-v1 --registry-tag stable
+PYTHONPATH=. python scripts/hf/fetch_model.py syriac-calamari-v1 --registry-tag stable
 ```
 
 ## Contracts
 
 Shared Pydantic schemas in `inference/contracts/` define the wire format for inference endpoints:
 
-- **Run** — `InferenceRunRequest` / `InferenceRunResponse` (`inference/contracts/run.py`): task, registry model, image bytes, and params in; typed output out.
-- **Segment** — `SegmentRunResponse` (`inference/contracts/segment.py`): page image in, blocks and line polygons out.
-- **Transcribe** — `TranscribeRunResponse` / `TranscribeBatchRunResponse` (`inference/contracts/transcribe.py`): line image(s) in, text and per-character confidence out.
+- **Run** - `InferenceRunRequest` / `InferenceRunResponse` (`inference/contracts/run.py`): task, registry model, image bytes, and params in; typed output out.
+- **Segment** - `SegmentRunResponse` (`inference/contracts/segment.py`): page image in, blocks and line polygons out.
+- **Transcribe** - `TranscribeRunResponse` / `TranscribeBatchRunResponse` (`inference/contracts/transcribe.py`): line image(s) in, text and per-character confidence out.
 
 Both tasks reference models by `registry_model_id` and optional `registry_tag` (default `stable`).
 
@@ -95,9 +95,8 @@ Job callbacks use a tagged output union: `output.kind` is either `segment` or `t
 
 `inference/registry.yaml` lists available models and weight locations. Example entries:
 
-- `syriac-calamari-v1` — transcribe, Calamari architecture, pinned Hub revision and digest
-- `greek-calamari-v1` — commented out until Hub revision + artifact SHA are pinned
-- `kraken-segment` — segment, Kraken BLLA package weights
+- `syriac-calamari-v1` - transcribe, Calamari architecture, pinned Hub revision and digest
+- `kraken-segment` - segment, Kraken BLLA package weights
 
 Weights are resolved at runtime from Hub cache (`src/hf/cache/`), local bundled paths (`src/hf/local/`), or `package://` (Kraken).
 New `hf://` entries should include both `hub_revision` and `artifact_sha256`; see
@@ -123,7 +122,7 @@ the hosted platform API. The production Vercel CSP permits that exact loopback U
 explicit `HELPER_CORS_ORIGINS` runtime value only when the hosted SPA origin differs from
 `https://app.nomicous.com`; do not use `*` or ship a helper secret in frontend code.
 
-Packaging for `.dmg` / `.msi` / Linux installers: [`packaging/helper/README.md`](../packaging/helper/README.md) — PyInstaller spec excludes training stacks, platform API, and unused torch backends so installers ship only Calamari + Kraken runtime.
+Packaging for `.dmg` / `.msi` / Linux installers: [`packaging/helper/README.md`](../packaging/helper/README.md) - PyInstaller spec excludes training stacks, platform API, and unused torch backends so installers ship only Calamari + Kraken runtime.
 
 ## Admission control and helper exposure
 

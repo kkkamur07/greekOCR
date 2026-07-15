@@ -1,4 +1,4 @@
-/* Page editor — full-viewport canvas, resizable PDF, confidence strip */
+/* Page editor - full-viewport canvas, resizable PDF, confidence strip */
 
 .pe-shell {
   display: flex;
@@ -314,7 +314,7 @@
   outline-offset: 1px;
 }
 
-/* OCR model — always visible in toolbar */
+/* OCR model - always visible in toolbar */
 .pe-model {
   display: inline-flex;
   align-items: center;
@@ -680,7 +680,7 @@
   position: relative;
 }
 
-/* Canvas — full bleed */
+/* Canvas - full bleed */
 .pe-canvas-pane {
   flex: 1;
   min-width: 0;
@@ -727,7 +727,7 @@
   position: relative;
 }
 
-/* Segment states — paired vs unpaired only (review lives in toolbar badge) */
+/* Segment states - paired vs unpaired only (review lives in toolbar badge) */
 .pe-seg {
   position: absolute;
   border: 1.5px solid rgba(180, 83, 9, 0.5);
@@ -799,7 +799,7 @@
   padding: 0 4px;
 }
 
-/* ─── PDF pane — collapsible + resizable ────────────────────────── */
+/* ─── PDF pane - collapsible + resizable ────────────────────────── */
 .pe-pdf-wrap {
   display: flex;
   flex-shrink: 0;
@@ -919,7 +919,7 @@
   color: var(--text-4);
 }
 
-/* ─── Bottom strip — resizable transcription panel ─────────────── */
+/* ─── Bottom strip - resizable transcription panel ─────────────── */
 .pe-strip {
   flex-shrink: 0;
   position: relative;
@@ -1090,7 +1090,7 @@
   word-break: break-word;
 }
 
-/* Per-character OCR confidence (high >90%, mid 51–90%, low ≤50%) */
+/* Per-character OCR confidence (high >90%, mid 51-90%, low ≤50%) */
 .pe-confidence-text,
 .pe-model-preview {
   display: inline;
@@ -1354,7 +1354,7 @@
   display: block;
 }
 
-/* Pairing — tucked away, only when needed */
+/* Pairing - tucked away, only when needed */
 .pe-strip__pair {
   display: none;
   padding: 0 12px 8px;
@@ -1389,7 +1389,7 @@
 
 .pe-job-panel {
   position: fixed;
-  left: 16px;
+  right: 16px;
   bottom: 16px;
   z-index: 40;
   width: min(360px, calc(100vw - 32px));
@@ -1516,4 +1516,15 @@
   margin: 4px 0 0;
   font-size: 0.75rem;
   color: var(--red);
+}
+.pe-job-item__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+.pe-job-item--cancelled {
+  background: rgba(100, 116, 139, 0.08);
+}
+.pe-job-item--cancelled .pe-job-item__status {
+  color: var(--text-3);
 }

@@ -21,7 +21,7 @@ A manuscript or work inside a Project, made up of one or more Document parts.
 _Avoid_: Page, project
 
 **Page**:
-A single manuscript image file — one folio or fragment photograph.
+A single manuscript image file - one folio or fragment photograph.
 _Avoid_: Image (when meaning a stored file)
 
 **Document part**:
@@ -57,7 +57,7 @@ A Segment defined by free-form corner points (four or more) tracing the ink boun
 _Avoid_: Mask, boundary (fine for export; avoid in UI copy)
 
 **Rectangle segment**:
-A Segment defined by four corners forming a rectangle (may be rotated relative to the Page). Placed by click-drag and clicking corners — not a single axis-aligned drag-only box.
+A Segment defined by four corners forming a rectangle (may be rotated relative to the Page). Placed by click-drag and clicking corners - not a single axis-aligned drag-only box.
 _Avoid_: Bounding box, axis-aligned box
 
 **Processed line image**:
@@ -69,7 +69,7 @@ A pluggable sequence of steps applied to a Segment's ink region before export. v
 _Avoid_: Preprocessing (generic image ops)
 
 **OCR prediction**:
-Running a trained line OCR model (Calamari) on one Segment's line image to produce a **Model transcription**. Uses the same **rectify** step as **Export** (polygon masked onto an axis-aligned rectangle) so the model sees the same kind of line image it was trained on. On-demand assist only — does not change **Pairing** unless the researcher explicitly accepts the result.
+Running a trained line OCR model (Calamari) on one Segment's line image to produce a **Model transcription**. Uses the same **rectify** step as **Export** (polygon masked onto an axis-aligned rectangle) so the model sees the same kind of line image it was trained on. On-demand assist only - does not change **Pairing** unless the researcher explicitly accepts the result.
 _Avoid_: Inference (too generic), auto-transcription
 
 **Model transcription**:
@@ -89,7 +89,7 @@ Whether a Page's current Ground truth transcriptions have been checked by a huma
 _Avoid_: Lock state, export state
 
 **Pairing assist**:
-Using **OCR prediction** to suggest a **Model transcription** while the researcher pairs a selected Segment. Triggered on demand — either for one selected Segment or for all Segments on the Page. The researcher may accept the suggestion (into inline text or by matching a **Text line**), edit it, or ignore it. No automatic pairing.
+Using **OCR prediction** to suggest a **Model transcription** while the researcher pairs a selected Segment. Triggered on demand - either for one selected Segment or for all Segments on the Page. The researcher may accept the suggestion (into inline text or by matching a **Text line**), edit it, or ignore it. No automatic pairing.
 _Avoid_: Auto-pair, auto-match
 
 **Processing step**:
@@ -109,7 +109,7 @@ Produce a Processed line image and Line transcription file for each paired Segme
 _Avoid_: Save, download
 
 **Transcription PDF**:
-A single-page PDF for one **Page**: a blank page the same size as the **Page** image, with paired transcription text placed at each **Segment**'s position (using segment geometry coordinates). Plain text only — no facsimile, highlights, boxes, or borders. Text is drawn horizontal inside each segment's axis-aligned bounding box, auto-sized to fit, on a white page with dark text (not configurable in v1). No manuscript facsimile appears in the PDF. Only **paired** segments appear (unpaired segments are omitted). If none are paired, the PDF is still a blank page at the same dimensions. Used to **review** pairings while editing and as a **shareable artefact** for others who do not use annote. Distinct from **Export** (per-segment `.jpg`/`.txt` training crops).
+A single-page PDF for one **Page**: a blank page the same size as the **Page** image, with paired transcription text placed at each **Segment**'s position (using segment geometry coordinates). Plain text only - no facsimile, highlights, boxes, or borders. Text is drawn horizontal inside each segment's axis-aligned bounding box, auto-sized to fit, on a white page with dark text (not configurable in v1). No manuscript facsimile appears in the PDF. Only **paired** segments appear (unpaired segments are omitted). If none are paired, the PDF is still a blank page at the same dimensions. Used to **review** pairings while editing and as a **shareable artefact** for others who do not use annote. Distinct from **Export** (per-segment `.jpg`/`.txt` training crops).
 _Avoid_: Export PDF, report, facsimile PDF
 
 **Export state**:
@@ -118,10 +118,10 @@ _Avoid_: Unsaved, modified
 
 ## On-disk layout (Option D)
 
-- `data/manuscripts/pages/` — full **Page** images
-- `data/transcriptions/pages/` — full **Page transcription** files (same stem as the Page image)
-- `data/annotations/pages/` — segment geometry and pairings per Page (`<page_stem>.json`)
-- `data/manuscripts/export/` — exported **Processed line image**s and **Line transcription file**s together: `<manuscript_name>_<segment_number>.jpg` and `<manuscript_name>_<segment_number>.txt`
+- `data/manuscripts/pages/` - full **Page** images
+- `data/transcriptions/pages/` - full **Page transcription** files (same stem as the Page image)
+- `data/annotations/pages/` - segment geometry and pairings per Page (`<page_stem>.json`)
+- `data/manuscripts/export/` - exported **Processed line image**s and **Line transcription file**s together: `<manuscript_name>_<segment_number>.jpg` and `<manuscript_name>_<segment_number>.txt`
 
 ## Relationships
 
@@ -154,26 +154,26 @@ _Avoid_: Alignment, matching (implies automation)
 
 ## Example dialogue
 
-> **Dev:** "I drew a polygon around two lines by mistake — is that one Segment or two?"
+> **Dev:** "I drew a polygon around two lines by mistake - is that one Segment or two?"
 > **Domain expert:** "Two. A Segment is always one written line on the page."
 >
-> **Dev:** "The page transcription has 40 text lines — do I need automatic matching?"
+> **Dev:** "The page transcription has 40 text lines - do I need automatic matching?"
 > **Domain expert:** "No. I select a Segment first, then pick the matching Text line from the list or fix the wording inline."
 >
 > **Dev:** "If I close the browser mid-page, is the work lost?"
-> **Domain expert:** "No — resume from saved annotations. Export is when the training images are ready."
+> **Domain expert:** "No - resume from saved annotations. Export is when the training images are ready."
 >
-> **Dev:** "These two line polygons share a border — is that overlap?"
-> **Domain expert:** "No. Touching edges are fine. Overlap means the interiors share ink area — two segments claiming the same pixels."
+> **Dev:** "These two line polygons share a border - is that overlap?"
+> **Domain expert:** "No. Touching edges are fine. Overlap means the interiors share ink area - two segments claiming the same pixels."
 >
-> **Dev:** "Kraken's box is too fat — can we tighten it automatically?"
-> **Domain expert:** "Yes — shrink inward to the ink, but never past the Kraken boundary. I'll fix stubborn ones by hand afterward."
+> **Dev:** "Kraken's box is too fat - can we tighten it automatically?"
+> **Domain expert:** "Yes - shrink inward to the ink, but never past the Kraken boundary. I'll fix stubborn ones by hand afterward."
 
 ## Build phases (implementation order)
 
-1. **Merged manual annotation slice** — login, Project, Document, Document part/Page editor, Lines/Segments, Pairing, Pairing progress, Review status, Annotation history, and Export
-2. **OCR prediction design** — decide line/page/document execution model before porting automatic transcription behavior
-3. **Processing + Export refinement** — polygon-to-rectangle and further processing; write `.jpg` + `.txt` per segment
+1. **Merged manual annotation slice** - login, Project, Document, Document part/Page editor, Lines/Segments, Pairing, Pairing progress, Review status, Annotation history, and Export
+2. **OCR prediction design** - decide line/page/document execution model before porting automatic transcription behavior
+3. **Processing + Export refinement** - polygon-to-rectangle and further processing; write `.jpg` + `.txt` per segment
 
 Processing logic is pluggable; v1 UI/backend must not assume it is finished.
 
@@ -187,8 +187,8 @@ annote backend is now the **platform FastAPI app** in `nomicous/backend/`, compo
 
 Primary deliverables per paired Segment:
 
-- `<manuscript_name>_<segment_number>.jpg` — **Processed line image**
-- `<manuscript_name>_<segment_number>.txt` — paired transcription text
+- `<manuscript_name>_<segment_number>.jpg` - **Processed line image**
+- `<manuscript_name>_<segment_number>.txt` - paired transcription text
 
 Intermediate files (`annotations/pages/<stem>.json`, page transcription sources) exist for the tool to work but are not the user's focus. Internal geometry encoding is an implementation detail.
 
@@ -213,7 +213,7 @@ How far a Page's **Pairing** work has gone: paired segments vs total segments on
 _Avoid_: Completion percentage (ambiguous with export state)
 
 **Segment overlap**:
-Two **Segments** on the same **Page** whose polygon interiors share area. Shared edges or corner contact alone is permitted — only interior area counts.
+Two **Segments** on the same **Page** whose polygon interiors share area. Shared edges or corner contact alone is permitted - only interior area counts.
 _Avoid_: Touching (too vague), collision (implies physics)
 
 **Overlap repair**:
@@ -225,11 +225,11 @@ Whether a **Segment**'s geometry came from the annotator (**manual**) or **Krake
 _Avoid_: Origin, provenance (fine in code; avoid in UI copy)
 
 **Segment refinement**:
-Improving a **Kraken** segment's polygon by snapping it to actual ink edges while shrinking inward. The original **Kraken** boundary is the maximum extent — the refined polygon may only shrink inside it, never grow beyond it. The annotator may still edit vertices afterward.
+Improving a **Kraken** segment's polygon by snapping it to actual ink edges while shrinking inward. The original **Kraken** boundary is the maximum extent - the refined polygon may only shrink inside it, never grow beyond it. The annotator may still edit vertices afterward.
 _Avoid_: Auto-segment (that's Kraken itself), rectify (that's export-time)
 
 **Refinement margin**:
-How far inward from the **Kraken** boundary **Segment refinement** may shrink (in image pixels). v1: fixed **4 px** (tunable in the 2–5 px range). Later: adaptive per line from segment height.
+How far inward from the **Kraken** boundary **Segment refinement** may shrink (in image pixels). v1: fixed **4 px** (tunable in the 2-5 px range). Later: adaptive per line from segment height.
 _Avoid_: Padding (implies crop only), overlap gap (different concern)
 
 **Auto-refine**:
@@ -237,7 +237,7 @@ _Avoid_: Padding (implies crop only), overlap gap (different concern)
 _Avoid_: Post-process (too generic)
 
 **Kraken ceiling**:
-The original **Kraken** polygon stored alongside the refined segment geometry. Hard maximum extent during **Auto-refine** only — hand-edits are not clamped to it.
+The original **Kraken** polygon stored alongside the refined segment geometry. Hard maximum extent during **Auto-refine** only - hand-edits are not clamped to it.
 _Avoid_: Original boundary, max extent (fine in code)
 
 **Refinement fallback**:
@@ -249,7 +249,7 @@ What **Segment refinement** snaps to inside the **Kraken ceiling**. v1: grayscal
 _Avoid_: Threshold (implies binarization only)
 
 **Contour simplification**:
-Reducing refined polygon vertex count after **Segment refinement** (e.g. Douglas–Peucker, ~2 px tolerance) so segments remain hand-editable.
+Reducing refined polygon vertex count after **Segment refinement** (e.g. Douglas-Peucker, ~2 px tolerance) so segments remain hand-editable.
 _Avoid_: Decimation (too implementation-specific for glossary)
 
 **Kraken ceiling overlay**:
@@ -260,7 +260,7 @@ _Avoid_: Ghost boundary, max extent preview
 Annotation is resumable across sessions. **Export** produces processed `.jpg`/`.txt` deliverables; there is no Page lock in the merged product.
 
 **Product job**:
-A background job the platform queues for the user (segment, transcribe, or future task types). The user tracks one product job — not separate "segment done" vs "transcribe done" notifications. Work may be delegated to inference; when inference reports back once, the platform merges the result and marks that product job done.
+A background job the platform queues for the user (segment, transcribe, or future task types). The user tracks one product job - not separate "segment done" vs "transcribe done" notifications. Work may be delegated to inference; when inference reports back once, the platform merges the result and marks that product job done.
 _Avoid_: Inference job (internal delegate), ML job, per-task completion events
 
 **Local inference**:
@@ -276,7 +276,7 @@ A native process on the researcher's machine that runs the inference service (he
 _Avoid_: Browser inference, embedded WASM model
 
 **Inference helper**:
-The installable app that runs the **Inference sidecar** on a researcher's machine — one-click install, auto-starts on login, no Docker or terminal. Required for **local inference** when the platform is hosted in the browser.
+The installable app that runs the **Inference sidecar** on a researcher's machine - one-click install, auto-starts on login, no Docker or terminal. Required for **local inference** when the platform is hosted in the browser.
 _Avoid_: Docker Compose (developer-only), manual setup
 
 **Inference preference**:
@@ -288,19 +288,19 @@ The frontend opens `GET /jobs/{id}/events` (SSE) and receives `JobResponse` JSON
 
 ## Flagged ambiguities
 
-- **Overlap repair** (manual clip of neighbour segments) — discussed, deferred in favour of **Segment refinement** via active contours inside Kraken boundaries.
-- "page" vs Kalamos "DocumentPart" — resolved: same concept; use **Document part** for the platform hierarchy and **Page** when speaking about the manuscript image in the editor.
-- "segment" vs Kalamos "Line" — resolved: same intent; the merged app should fit annote Segments into the Kalamos document hierarchy.
-- "line" alone is ambiguous — use **Segment** (image) or **Text line** (transcription).
-- "page transcription" vs canonical transcription — resolved: Page transcription is an import/pairing helper; approved per-line **Line transcription** is canonical.
-- frontend stack — resolved: port the platform frontend into `nomicous/frontend` and keep annote's editor theme.
-- OCR prediction execution — resolved: job-backed via inference; one **Product job** per user action, one callback, one completion. **Local inference** uses **Inference helper** + browser-orchestrated `/inference/v1/run`; **remote inference** uses the same job path on hosted servers. Researchers choose via **Inference preference** (default local when helper is present).
-- Segment model selection UI — deferred; backend uses the same model-resolution path as transcribe with a Kraken default until the picker ships.
-- Transcribe job progress UI — resolved: keep batched Calamari inference; banner may show total segment count and "Processing…" until the product job completes. No live per-line counter (1/10, 2/10).
-- Inference naming — resolved: rename Python types (`MLJob` → `InferenceJob`, etc.) in code; internal callbacks now use `/internal/inference` and `X-Inference-Webhook-Secret`.
-- Exact rectangle draw gesture (how many clicks before corners are editable) — TBD at implementation.
+- **Overlap repair** (manual clip of neighbour segments) - discussed, deferred in favour of **Segment refinement** via active contours inside Kraken boundaries.
+- "page" vs Kalamos "DocumentPart" - resolved: same concept; use **Document part** for the platform hierarchy and **Page** when speaking about the manuscript image in the editor.
+- "segment" vs Kalamos "Line" - resolved: same intent; the merged app should fit annote Segments into the Kalamos document hierarchy.
+- "line" alone is ambiguous - use **Segment** (image) or **Text line** (transcription).
+- "page transcription" vs canonical transcription - resolved: Page transcription is an import/pairing helper; approved per-line **Line transcription** is canonical.
+- frontend stack - resolved: port the platform frontend into `nomicous/frontend` and keep annote's editor theme.
+- OCR prediction execution - resolved: job-backed via inference; one **Product job** per user action, one callback, one completion. **Local inference** uses **Inference helper** + browser-orchestrated `/inference/v1/run`; **remote inference** uses the same job path on hosted servers. Researchers choose via **Inference preference** (default local when helper is present).
+- Segment model selection UI - deferred; backend uses the same model-resolution path as transcribe with a Kraken default until the picker ships.
+- Transcribe job progress UI - resolved: keep batched Calamari inference; banner may show total segment count and "Processing…" until the product job completes. No live per-line counter (1/10, 2/10).
+- Inference naming - resolved: rename Python types (`MLJob` → `InferenceJob`, etc.) in code; internal callbacks now use `/internal/inference` and `X-Inference-Webhook-Secret`.
+- Exact rectangle draw gesture (how many clicks before corners are editable) - TBD at implementation.
 - Hybrid pairing UI may ship after core segment draw/select; workflow order (select Segment first) is fixed.
-- Undo — resolved: **Edit undo** (in-session canvas steps) is separate from **Annotation history** restore.
-- Escape while editing a Segment — resolved: commit geometry + deselect (hide selection chrome / pairing strip); does not delete the Segment.
-- Segment editing — resolved: click vertex selects it; Delete/Backspace removes that vertex only (≥3 remain); click edge inserts a vertex; whole-Segment delete always confirms; vertex drag must not pan the Page.
-- "automatic transcription" was used to mean both model output and accepted text — resolved: use **Model transcription** until a researcher accepts or edits it into **Ground truth transcription**.
+- Undo - resolved: **Edit undo** (in-session canvas steps) is separate from **Annotation history** restore.
+- Escape while editing a Segment - resolved: commit geometry + deselect (hide selection chrome / pairing strip); does not delete the Segment.
+- Segment editing - resolved: click vertex selects it; Delete/Backspace removes that vertex only (≥3 remain); click edge inserts a vertex; whole-Segment delete always confirms; vertex drag must not pan the Page.
+- "automatic transcription" was used to mean both model output and accepted text - resolved: use **Model transcription** until a researcher accepts or edits it into **Ground truth transcription**.

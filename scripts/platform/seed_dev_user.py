@@ -9,7 +9,7 @@ from _bootstrap import ensure_nomicous_on_path
 ensure_nomicous_on_path()
 
 from infrastructure.db import system_session
-from infrastructure import models as _orm_models  # noqa: F401 — register all mappers
+from infrastructure import models as _orm_models  # noqa: F401 - register all mappers
 from backend.dev.bootstrap import DEV_EMAIL, DEV_PASSWORD, reset_dev_user_password
 from backend.users.application.auth_service import AuthService
 

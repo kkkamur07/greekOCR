@@ -10,7 +10,7 @@ APP_NAME="Nomicous Inference Helper"
 APP_BUNDLE="$DIST_DIR/${APP_NAME}.app"
 DMG_PATH="$DIST_DIR/nomicous-inference-helper-macos.dmg"
 
-# Code signing / notarization (all optional — unset = unsigned build).
+# Code signing / notarization (all optional - unset = unsigned build).
 #   MACOS_CODESIGN_IDENTITY  "Developer ID Application: Name (TEAMID)"
 #   MACOS_ENTITLEMENTS       path to entitlements plist (default: macos/entitlements.plist)
 #   MACOS_NOTARY_PROFILE     notarytool keychain profile (from `notarytool store-credentials`)
@@ -27,7 +27,7 @@ export MACOS_ENTITLEMENTS="$ENTITLEMENTS"
 # correct macOS layout: the Python framework and shared libraries live under
 # Contents/Frameworks/, which is where the bootloader looks when the executable
 # runs from inside a .app. Do NOT hand-assemble the bundle by copying the onedir
-# output into Contents/MacOS/ — that leaves libpython in Contents/MacOS/_internal/
+# output into Contents/MacOS/ - that leaves libpython in Contents/MacOS/_internal/
 # and the helper crashes on launch with "Failed to load Python shared library".
 if [ ! -d "$APP_BUNDLE" ]; then
   echo "ERROR: expected PyInstaller app bundle at '$APP_BUNDLE'." >&2
@@ -63,7 +63,7 @@ if [ -n "$CODESIGN_IDENTITY" ]; then
     "$DIST_DIR/payload/Applications/${APP_NAME}.app"
   codesign --verify --deep --strict --verbose=2 "$DIST_DIR/payload/Applications/${APP_NAME}.app"
 else
-  echo "WARNING: MACOS_CODESIGN_IDENTITY not set — building UNSIGNED .app (Gatekeeper will warn on install)."
+  echo "WARNING: MACOS_CODESIGN_IDENTITY not set - building UNSIGNED .app (Gatekeeper will warn on install)."
 fi
 
 hdiutil create -volname "Nomicous Inference Helper" -srcfolder "$DIST_DIR/payload" -ov -format UDZO "$DMG_PATH"

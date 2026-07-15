@@ -46,7 +46,7 @@ vi.mock("../api/client", async (importOriginal) => {
 const DOCUMENT: DocumentWithPartsResponse = {
   id: "doc-1",
   project_id: "project-1",
-  name: "MS Or. 1445 — Genesis",
+  name: "MS Or. 1445 - Genesis",
   workflow: "published",
   created_at: "2026-06-16T10:00:00Z",
   updated_at: "2026-06-16T10:00:00Z",
@@ -161,7 +161,7 @@ describe("PublicDocumentPage", () => {
     layoutFetch.resolve(LAYOUT);
 
     expect(
-      await screen.findByRole("heading", { name: "MS Or. 1445 — Genesis" }),
+      await screen.findByRole("heading", { name: "MS Or. 1445 - Genesis" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("status", { name: "Loading document" }),
@@ -226,7 +226,7 @@ describe("PublicDocumentPage", () => {
     renderPublicPage();
 
     expect(
-      await screen.findByRole("heading", { name: "MS Or. 1445 — Genesis" }),
+      await screen.findByRole("heading", { name: "MS Or. 1445 - Genesis" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Live")).toBeInTheDocument();
     expect(screen.getByText("1 page")).toBeInTheDocument();
@@ -247,7 +247,7 @@ describe("PublicDocumentPage", () => {
 
   it("syncs canvas selection with the transcript panel", async () => {
     renderPublicPage();
-    await screen.findByRole("heading", { name: "MS Or. 1445 — Genesis" });
+    await screen.findByRole("heading", { name: "MS Or. 1445 - Genesis" });
 
     fireEvent.click(screen.getByRole("button", { name: "Select line 1" }));
 

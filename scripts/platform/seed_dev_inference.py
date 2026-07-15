@@ -3,8 +3,8 @@
 
 Does not create a separate "Dev inference defaults" project. When
 ``BINDING_PROJECT_SLUG`` (default: byzantine-greek-manuscripts) exists,
-attaches a project-level segment binding. Transcribe bindings are skipped
-until greek-calamari-v1 is Hub-pinned.
+attaches a project-level segment binding. Transcribe bindings are skipped by
+default so script-specific models are attached per project when available.
 """
 
 import asyncio
@@ -23,7 +23,7 @@ from backend.ml.infrastructure.orm_models import (  # noqa: E402
 )
 from backend.project.infrastructure.orm_models import Project  # noqa: E402
 
-from infrastructure import models as _orm_models  # noqa: E402, F401 — register all mappers
+from infrastructure import models as _orm_models  # noqa: E402, F401 - register all mappers
 from infrastructure.db import system_session  # noqa: E402
 
 DEFAULT_SEGMENT_MODEL = os.environ.get("DEFAULT_SEGMENT_MODEL", "kraken-segment")
@@ -110,7 +110,7 @@ async def main() -> None:
     print(f"Seeded transcribe model: {transcribe_model.name} -> {transcribe_model.artifact_ref}")
     print(
         "Note: no project-level transcribe binding "
-        "(greek-calamari-v1 not Hub-pinned yet; avoid binding Syriac to Greek pages)."
+        "(attach script-specific models per project when available)."
     )
 
     async with system_session() as session:
@@ -120,7 +120,7 @@ async def main() -> None:
 
     if project is None:
         print(
-            f"No project slug={BINDING_PROJECT_SLUG!r} yet — "
+            f"No project slug={BINDING_PROJECT_SLUG!r} yet - "
             "run annotated seed first, then re-run this script for bindings."
         )
         return

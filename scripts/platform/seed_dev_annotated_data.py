@@ -3,10 +3,10 @@
 
 Reads the Option D layout under ``data/annotated/data/`` (or ``ANNOTATED_DATA_ROOT``):
 
-  manuscripts/pages/        — page images
-  annotations/pages/        — current segment geometry + pairings
-  annotations/history/      — restorable annotation snapshots (per page stem)
-  transcriptions/pages/     — optional page transcription text (line-broken)
+  manuscripts/pages/        - page images
+  annotations/pages/        - current segment geometry + pairings
+  annotations/history/      - restorable annotation snapshots (per page stem)
+  transcriptions/pages/     - optional page transcription text (line-broken)
 
 Creates one owned project with documents grouped by manuscript prefix
 (e.g. ``Grec_1360_..._6/7/8`` become one multi-part document). Images are copied
@@ -66,7 +66,7 @@ from backend.project.application.project_service import ProjectService
 from backend.project.infrastructure.orm_models import Project
 from backend.users.application.auth_service import AuthService
 from backend.users.infrastructure.orm_models import User
-from infrastructure import models as _orm_models  # noqa: F401 — register all mappers
+from infrastructure import models as _orm_models  # noqa: F401 - register all mappers
 from infrastructure.db import system_session
 
 log = logging.getLogger("seed_dev_annotated_data")
@@ -147,7 +147,7 @@ def _document_display_name(doc_key: str, page_stems: list[str]) -> str:
     if len(page_stems) == 1:
         return page_stems[0]
     if doc_key.startswith("Grec_1360_"):
-        return "Grec 1360 — Harmenopulus (btv1b10721710m)"
+        return "Grec 1360 - Harmenopulus (btv1b10721710m)"
     return doc_key.replace("_", " ")
 
 

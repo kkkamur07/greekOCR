@@ -1,4 +1,4 @@
-"""Background job worker — polls Postgres and runs claimed jobs.
+"""Background job worker - polls Postgres and runs claimed jobs.
 
 Multiple Uvicorn workers are safe: claim uses ``FOR UPDATE SKIP LOCKED`` so only
 one process runs a given job. Parallelism here means *different* jobs at once,

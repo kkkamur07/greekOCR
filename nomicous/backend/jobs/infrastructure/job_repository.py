@@ -1,4 +1,4 @@
-"""Job persistence — async enqueue/read; sync claim with SKIP LOCKED."""
+"""Job persistence - async enqueue/read; sync claim with SKIP LOCKED."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import asyncio
 import uuid
 from datetime import UTC, datetime, timedelta
 
-import infrastructure.models  # noqa: F401 — register all ORM mappers
+import infrastructure.models  # noqa: F401 - register all ORM mappers
 from infrastructure.db import sync_system_session
 from sqlalchemy import func, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -275,6 +275,6 @@ async def cancel_job_async(session: AsyncSession, job_id: uuid.UUID) -> Job | No
     _apply_cancellation(job, now)
     await session.commit()
     await session.refresh(job)
-    # pg_notify uses a sync DB session — keep it off the event loop.
+    # pg_notify uses a sync DB session - keep it off the event loop.
     await asyncio.to_thread(notify_platform_job_status_changed, job.id, JobStatus.cancelled)
     return job

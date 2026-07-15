@@ -77,7 +77,7 @@ volume.
 ## Supabase test deploy
 
 For a shared Supabase Postgres + Storage profile (migrations still via Alembic),
-see [`docs/deployment/supabase.md`](../../docs/deployment/supabase.md) and [learnings — Supabase](../../docs/guides/learnings.md#supabase-hosted-postgres--storage).
+see [`docs/deployment/supabase.md`](../../docs/deployment/supabase.md) and [learnings - Supabase](../../docs/guides/learnings.md#supabase-hosted-postgres--storage).
 
 ## Migration Commands
 
@@ -280,7 +280,7 @@ Create a dev user (default login: `dev@example.com` / `dev-pass-123`):
 python scripts/platform/seed_dev_user.py
 ```
 
-Use `dev@example.com`, not `*.local` addresses — the API rejects reserved TLDs such as `.local`.
+Use `dev@example.com`, not `*.local` addresses - the API rejects reserved TLDs such as `.local`.
 
 Seed ML catalog defaults:
 
@@ -318,8 +318,8 @@ BINDING_PROJECT_SLUG=byzantine-greek-manuscripts
 
 The inference seed upserts catalog models and attaches a **segment** binding to
 ``BINDING_PROJECT_SLUG`` when that project exists. It does **not** create a
-separate Dev inference project, and it does not bind Syriac transcription onto
-Greek pages while ``greek-calamari-v1`` remains unpublished.
+separate Dev inference project, and it does not attach a default transcribe
+binding (script-specific models are bound per project when available).
 
 ## Troubleshooting
 
@@ -328,7 +328,7 @@ Greek pages while ``greek-calamari-v1`` remains unpublished.
 Default credentials are **`dev@example.com`** / **`dev-pass-123`** (hyphens, not spaces).
 
 Seeding scripts **do not restart Postgres**. They only insert/update rows. Login breaks when the
-database was reset or emptied while the API container kept running — seed runs on **API startup**,
+database was reset or emptied while the API container kept running - seed runs on **API startup**,
 not on every DB restart.
 
 Fix (pick one):
