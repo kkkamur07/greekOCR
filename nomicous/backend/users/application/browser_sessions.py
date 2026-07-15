@@ -60,7 +60,7 @@ class BrowserSessionService:
         )
 
     async def create(self, db: AsyncSession, user: User) -> BrowserSessionTokens:
-        # Assign id before issuing the cookie — SQLAlchemy column defaults run on flush.
+        # Assign id before issuing the cookie - SQLAlchemy column defaults run on flush.
         session = AuthSession(
             id=uuid.uuid4(),
             user_id=user.id,

@@ -2,7 +2,7 @@
 
 Each auth attempt is recorded as a row in ``auth_rate_limit_attempts``.
 Because the store lives in the shared database, the limit is enforced
-uniformly across all uvicorn worker processes — an in-process dict would
+uniformly across all uvicorn worker processes - an in-process dict would
 silently divide the effective limit by the number of workers.
 """
 
@@ -21,7 +21,7 @@ from infrastructure.db import AsyncSessionLocal
 
 
 def clear_auth_rate_limit_state() -> None:
-    """No-op — state lives in Postgres and is cleared by database truncation in tests."""
+    """No-op - state lives in Postgres and is cleared by database truncation in tests."""
 
 
 def client_ip_for_request(request: Request) -> str:

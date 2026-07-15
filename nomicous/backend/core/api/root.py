@@ -1,4 +1,4 @@
-"""API root — public welcome and service discovery."""
+"""API root - public welcome and service discovery."""
 
 from fastapi import APIRouter
 

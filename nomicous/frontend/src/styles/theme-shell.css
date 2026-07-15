@@ -1,6 +1,6 @@
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lora:ital,wght@0,500;1,400&display=swap");
 
-/* ─── Tokens (navy + warm neutrals — no blue) ───────────────────── */
+/* ─── Tokens (navy + warm neutrals - no blue) ───────────────────── */
 :root {
   --navy: #0d1f3c;
   --navy-mid: #162d52;
@@ -1502,6 +1502,9 @@ button {
 }
 .project-jobs-panel__status--failed {
   color: #dc2626;
+}
+.project-jobs-panel__status--cancelled {
+  color: var(--text-3);
 }
 .project-jobs-panel__status--pending {
   color: var(--text-3);

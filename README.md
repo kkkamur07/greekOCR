@@ -1,4 +1,4 @@
-# Nomicous — HTR for Historical Manuscripts
+# Nomicous - HTR for Historical Manuscripts
 
 Nomicous (formerly **greekOCR / Kalamos**) combines handwriting-text-recognition
 (HTR) models with a manuscript editor. It is built for researchers working with
@@ -6,7 +6,6 @@ Greek, Syriac, Coptic, Armenian, and related historical scripts.
 
 [![Project website](https://img.shields.io/badge/website-nomicous.com-0f766e)](https://nomicous.com)
 [![Application](https://img.shields.io/badge/app-app.nomicous.com-2563eb)](https://app.nomicous.com)
-[![Greek HTR model](https://img.shields.io/badge/Hugging%20Face-Greek%20HTR-ffcc4d?logo=huggingface&logoColor=black)](https://huggingface.co/kkkamur07/greek-htr-calamari)
 [![Syriac HTR model](https://img.shields.io/badge/Hugging%20Face-Syriac%20HTR-ffcc4d?logo=huggingface&logoColor=black)](https://huggingface.co/kkkamur07/syriac-htr-calamari)
 [![GitHub](https://img.shields.io/badge/GitHub-kkkamur07%2FgreekOCR-181717?logo=github)](https://github.com/kkkamur07/greekOCR)
 
@@ -37,21 +36,20 @@ The repository contains both the research and production systems:
 
 | Capability | Model | Link |
 |---|---|---|
-| Greek line transcription | `greek-calamari-v1` | [Greek HTR model on Hugging Face](https://huggingface.co/kkkamur07/greek-htr-calamari) |
 | Syriac line transcription | `syriac-calamari-v1` | [Syriac HTR model on Hugging Face](https://huggingface.co/kkkamur07/syriac-htr-calamari) |
 | Page segmentation | `kraken-segment` | Kraken's packaged BLLA model |
 
 The model catalog is versioned in [`inference/registry.yaml`](inference/registry.yaml).
-Greek and Syriac checkpoints are currently published; the same registry and
-training pipeline are designed to add Coptic, Armenian, and other script-specific
-models as labelled data becomes available.
+Syriac checkpoints are published; the same registry and training pipeline are
+designed to add Coptic, Armenian, Greek, and other script-specific models as
+labelled data becomes available.
 
 ## 2. Faster manuscript research
 
 If you practise HTR on Greek, Syriac, Coptic, or Armenian manuscripts, Nomicous
 is intended to make the repetitive first transcription pass **up to 10× faster**.
 That means less time retyping lines and more time for critical editing, collation,
-and interpretation—ultimately helping you publish your research sooner.
+and interpretation-ultimately helping you publish your research sooner.
 
 The system is designed around an expert-in-the-loop workflow: models provide a
 strong draft, while the researcher remains in control of segmentation,
@@ -61,7 +59,7 @@ be exported as training data for better models on your own material.
 For an example of the current Greek recognition work, the Calamari experiment
 achieved 1.69% CER on one held-out line in the evaluation notebook:
 [`experiments/calamari.ipyn_greek.ipynb`](experiments/calamari.ipyn_greek.ipynb).
-Treat this as an experiment result, not a universal accuracy guarantee—performance
+Treat this as an experiment result, not a universal accuracy guarantee-performance
 depends on script, hand, image quality, layout, and training data.
 
 ## 3. Install and get started
@@ -105,7 +103,7 @@ model resolution, registry, and API details.
 
 ### Option B: run services individually
 
-Prerequisites: Python 3.11–3.12, [uv](https://docs.astral.sh/uv/), Node.js 20+,
+Prerequisites: Python 3.11-3.12, [uv](https://docs.astral.sh/uv/), Node.js 20+,
 and Docker for the local Postgres database.
 
 Install the Python environments from the repository root:
@@ -453,6 +451,3 @@ docs/                  Deployment, testing, architecture, and decisions
 - [Deployment guide](docs/deployment/production.md)
 - [Hugging Face publishing and model registry guide](scripts/hf/README.md)
 - [Project documentation index](docs/README.md)
-- [Launch readiness audit](docs/codebase-audit.md)
-- [Repository hygiene](docs/repository-hygiene.md)
-- [Cleanup plan](docs/repository-cleanup-plan.md)

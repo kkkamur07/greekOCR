@@ -1,4 +1,4 @@
-"""Public inference registry for helper sync (no auth — metadata only)."""
+"""Public inference registry for helper sync (no auth - metadata only)."""
 
 from __future__ import annotations
 

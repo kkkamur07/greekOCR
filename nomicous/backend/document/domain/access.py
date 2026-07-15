@@ -1,4 +1,4 @@
-"""Document access policy — members vs public published read."""
+"""Document access policy - members vs public published read."""
 
 from backend.core.exceptions import AccessDeniedError, NotFoundError
 from backend.document.infrastructure.orm_models import Document, DocumentWorkflow

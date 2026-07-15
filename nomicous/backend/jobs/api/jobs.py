@@ -1,4 +1,4 @@
-"""Job routes — test enqueue and status polling."""
+"""Job routes - test enqueue and status polling."""
 
 import asyncio
 from collections.abc import AsyncIterator

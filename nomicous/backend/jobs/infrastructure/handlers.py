@@ -1,4 +1,4 @@
-"""Test job handlers — noop sleep and intentional failure."""
+"""Test job handlers - noop sleep and intentional failure."""
 
 from __future__ import annotations
 

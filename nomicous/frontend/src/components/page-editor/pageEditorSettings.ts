@@ -1,13 +1,13 @@
 const STORAGE_KEY = "nomicous_page_editor_settings";
 
 export type PageEditorCanvasSettings = {
-  /** Multiplier for segment/block overlay stroke width (0.5–4). */
+  /** Multiplier for segment/block overlay stroke width (0.5-4). */
   overlayStrokeWidth: number;
-  /** Multiplier for Kraken/layout baseline stroke width (0.25–2.5). */
+  /** Multiplier for Kraken/layout baseline stroke width (0.25-2.5). */
   baselineStrokeWidth: number;
-  /** Segment polygon fill strength (0–0.35). */
+  /** Segment polygon fill strength (0-0.35). */
   segmentFillOpacity: number;
-  /** Multiplier for polygon corner handles (0.4–2.5). */
+  /** Multiplier for polygon corner handles (0.4-2.5). */
   handleSize: number;
   showLayoutBlocks: boolean;
   showBaselines: boolean;

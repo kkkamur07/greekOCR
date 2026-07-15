@@ -348,7 +348,7 @@ document part.
 
 ### 3.5 Job tables
 
-#### `jobs` — platform job queue
+#### `jobs` - platform job queue
 
 This is the user-visible state machine.
 
@@ -370,7 +370,7 @@ index supports payload filtering. References to users, documents, parts,
 models, and bindings use `SET NULL`, preserving job history if source objects
 are later removed.
 
-#### `inference_jobs` — inference-owned queue
+#### `inference_jobs` - inference-owned queue
 
 This queue is used by the inference API and inference worker.
 

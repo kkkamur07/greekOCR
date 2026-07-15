@@ -133,7 +133,7 @@ export function PageEditorInferenceBanner({
           >
             <h2 id={titleId}>Install Inference Helper</h2>
             <p className="pe-helper-install-modal__lead">
-              Run OCR and segmentation on your computer&apos;s CPU — faster and
+              Run OCR and segmentation on your computer&apos;s CPU - faster and
               private. The helper runs in the background after you install it.
             </p>
             <ol className="pe-helper-install-modal__steps">
@@ -147,7 +147,7 @@ export function PageEditorInferenceBanner({
                 once.
               </li>
               <li>
-                Keep this page open — it detects the helper automatically once
+                Keep this page open - it detects the helper automatically once
                 it is running.
               </li>
             </ol>

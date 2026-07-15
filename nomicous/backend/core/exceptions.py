@@ -1,4 +1,4 @@
-"""Platform exception types — map to HTTP responses in API layers (issue 001+)."""
+"""Platform exception types - map to HTTP responses in API layers (issue 001+)."""
 
 
 class GreekOCRException(Exception):

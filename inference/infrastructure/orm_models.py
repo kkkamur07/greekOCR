@@ -1,4 +1,4 @@
-"""ML-owned Postgres models — only the ML service reads/writes these tables."""
+"""ML-owned Postgres models - only the ML service reads/writes these tables."""
 
 from __future__ import annotations
 

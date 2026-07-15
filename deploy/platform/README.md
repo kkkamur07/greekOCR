@@ -1,4 +1,4 @@
-# Platform API — Vercel deploy
+# Platform API - Vercel deploy
 
 Serverless FastAPI bundle for **api.nomicous.com**. Full production runbook: [`docs/deployment/production.md`](../../docs/deployment/production.md).
 Vercel-specific build and bundle notes: [`docs/deployment/vercel-platform-api.md`](../../docs/deployment/vercel-platform-api.md).

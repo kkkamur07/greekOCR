@@ -82,15 +82,11 @@ def test_platform_backend_ships_bundled_unicode_pdf_font() -> None:
 
 
 def test_vercel_frontend_permits_helper_loopback_origins() -> None:
-    # CSP lives in next.config.ts (not vercel.json) so Preview can also
-    # allow the Platform API origin from NEXT_PUBLIC_API_BASE_URL.
-    next_config = (REPO_ROOT / "nomicous" / "frontend" / "next.config.ts").read_text(
-        encoding="utf-8"
-    )
+    vercel = (REPO_ROOT / "nomicous" / "frontend" / "vercel.json").read_text(encoding="utf-8")
 
-    assert "http://127.0.0.1:8001" in next_config
-    assert "http://localhost:8001" in next_config
-    assert "connect-src" in next_config
+    assert "http://127.0.0.1:8001" in vercel
+    assert "http://localhost:8001" in vercel
+    assert "connect-src" in vercel
 
 
 def test_landing_csp_uses_json_ld_hash_instead_of_unsafe_inline() -> None:

@@ -17,7 +17,7 @@ The single-segment name of a **Hub model repo**, derived from script and archite
 _Avoid_: ancient-greek-htr (fine as display title, not slug), registry model id (includes model_version)
 
 **Model version**:
-The family generation of a model (`v1`, `v2`) — distinct from **registry tag** (`stable`). Encoded in **registry model id** and local staging path, not in **Hub repo slug** when architecture already disambiguates repos.
+The family generation of a model (`v1`, `v2`) - distinct from **registry tag** (`stable`). Encoded in **registry model id** and local staging path, not in **Hub repo slug** when architecture already disambiguates repos.
 _Avoid_: version (too generic), release
 
 **Script**:
@@ -49,7 +49,7 @@ The immutable 40-character git commit on a **Hub model repo** selected by a **re
 _Avoid_: mutable tag as a runtime revision, version (too generic), release branch
 
 **Hub artifact**:
-The checkpoint files published inside a **Hub model repo** at one **Hub revision** — Calamari inference uses converted PyTorch `.pt` checkpoints; Kraken may use `.mlmodel` or `.safetensors`.
+The checkpoint files published inside a **Hub model repo** at one **Hub revision** - Calamari inference uses converted PyTorch `.pt` checkpoints; Kraken may use `.mlmodel` or `.safetensors`.
 _Avoid_: weights (too generic), model file
 
 **Artifact SHA-256**:
@@ -77,7 +77,7 @@ Python code under `src/hf/` that resolves `hf://` URIs, checks **Hub cache**, an
 _Avoid_: huggingface module (too generic)
 
 **Inference host**:
-The machine where model weights are cached and inference executes — either the researcher's machine (**local inference**) or a hosted server (**remote inference**).
+The machine where model weights are cached and inference executes - either the researcher's machine (**local inference**) or a hosted server (**remote inference**).
 _Avoid_: Runtime (too generic), worker node (infra jargon)
 
 **Lite model tier**:
@@ -85,11 +85,11 @@ A registry model id sized for CPU on a typical researcher laptop; eligible for *
 _Avoid_: Small model (vague), edge model (mobile jargon)
 
 **Server model tier**:
-A registry model id for **remote inference** only — too large or too slow for typical laptops.
+A registry model id for **remote inference** only - too large or too slow for typical laptops.
 _Avoid_: Large model (vague), cloud model (ambiguous with Hub hosting)
 
 **Host eligibility**:
-Whether a registry model id may run on the researcher's machine (`local`), only on a hosted server (`remote`), or either (`any`). Distinct from **Compute device** (`cpu` / `cuda`), which says what hardware to use once a host is chosen. All `local` models — transcribe and segment — run on **Inference helper** when it is present; cloud is fallback only.
+Whether a registry model id may run on the researcher's machine (`local`), only on a hosted server (`remote`), or either (`any`). Distinct from **Compute device** (`cpu` / `cuda`), which says what hardware to use once a host is chosen. All `local` models - transcribe and segment - run on **Inference helper** when it is present; cloud is fallback only.
 _Avoid_: device (already means cpu/cuda), tier alone (ambiguous)
 
 **Hub namespace**:
@@ -119,12 +119,12 @@ _Avoid_: org (when meaning the namespace generically)
 
 ## Flagged ambiguities
 
-- "data" was used to mean both weights and training material — resolved: use **Hub model repo** vs **Hub dataset repo**.
-- "kalamos" vs "nomicous" as public product name — resolved for Hub: product is **nomicous**; **Hub namespace** may be personal until the org exists.
-- Checkpoint filename at repo root — resolved: use architecture-native names (**Hub artifact**), e.g. Calamari `best.pt`, not a forced `model.ckpt` rename.
+- "data" was used to mean both weights and training material - resolved: use **Hub model repo** vs **Hub dataset repo**.
+- "kalamos" vs "nomicous" as public product name - resolved for Hub: product is **nomicous**; **Hub namespace** may be personal until the org exists.
+- Checkpoint filename at repo root - resolved: use architecture-native names (**Hub artifact**), e.g. Calamari `best.pt`, not a forced `model.ckpt` rename.
 - Calamari **Hub artifact** format is a converted PyTorch checkpoint (`.pt`); Kraken may use `.safetensors` or `.mlmodel`.
-- Legacy registry ids (`greek-calamariv1`) — resolved: migrate to `{script}-{architecture}-{model_version}` (e.g. `greek-calamari-v1`); **Hub repo slug** uses hybrid `{script}-htr-{architecture}` pattern.
-- **Hub cache** invalidation — resolved: manifest hash (not files-exist-only).
+- Legacy registry ids (`greek-calamariv1`) - resolved: migrate to `{script}-{architecture}-{model_version}` (e.g. `greek-calamari-v1`); **Hub repo slug** uses hybrid `{script}-htr-{architecture}` pattern.
+- **Hub cache** invalidation - resolved: manifest hash (not files-exist-only).
 
 ## Implementation notes (not domain)
 

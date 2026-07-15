@@ -13,7 +13,6 @@ Nomicous is open research tooling for manuscript HTR workflows: page annotation,
 ## Models
 
 - [syriac-htr-calamari](https://huggingface.co/kkkamur07/syriac-htr-calamari): Syriac line HTR (Calamari), published
-- greek-htr-calamari: Greek line HTR (Calamari), coming soon
 - coptic-htr-calamari: Coptic line HTR (Calamari), coming soon
 - armenian-htr-calamari: Armenian line HTR (Calamari), coming soon
 - Datasets: training and evaluation sets on Hugging Face, coming soon

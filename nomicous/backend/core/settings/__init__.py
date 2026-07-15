@@ -1,4 +1,4 @@
-"""Application settings — split by concern, single .env at backend/core/.env."""
+"""Application settings - split by concern, single .env at backend/core/.env."""
 
 from backend.core.settings.app import AppSettings, get_app_settings
 from backend.core.settings.auth import AuthSettings, get_auth_settings

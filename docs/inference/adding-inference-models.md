@@ -25,7 +25,7 @@ Train / export checkpoint
 
 **Registry sync:** deployed API serves `GET /inference/v1/registry` (public YAML + `ETag`). The Inference Helper fetches it into `~/.nomicous/registry.yaml` on startup when `HELPER_REGISTRY_URL` is set. The bundled copy in the installer is an offline fallback only.
 
-**Weights:** resolved lazily from `weights_source` on first inference run — same path for cloud inference and the helper. See [`scripts/hf/README.md`](../../scripts/hf/README.md).
+**Weights:** resolved lazily from `weights_source` on first inference run - same path for cloud inference and the helper. See [`scripts/hf/README.md`](../../scripts/hf/README.md).
 
 ---
 
@@ -37,19 +37,19 @@ Follow the **registry model id** convention:
 {script}-{architecture}-{model_version}
 ```
 
-Examples: `greek-calamari-v1`, `kraken-segment`.
+Examples: `syriac-calamari-v1`, `kraken-segment`.
 
 | Field | Meaning | Example |
 |-------|---------|---------|
-| **script** | Writing system / language family | `greek`, `syriac` |
+| **script** | Writing system / language family | `syriac`, `coptic` |
 | **architecture** | Runtime adapter | `calamari`, `kraken-segment` |
 | **model_version** | Family generation | `v1`, `v2` |
 | **registry tag** | Named weight snapshot | `stable` (default) |
 
-**Hub repo slug** (separate from registry model id): `{script}-htr-{architecture}` → `greek-htr-calamari`.
+**Hub repo slug** (separate from registry model id): `{script}-htr-{architecture}` → `syriac-htr-calamari`.
 
 **Platform `artifact_ref`** (Postgres): `registry://<registry_model_id>?tag=<registry_tag>`
-Example: `registry://greek-calamari-v1?tag=stable`.
+Example: `registry://syriac-calamari-v1?tag=stable`.
 
 ---
 
@@ -68,7 +68,7 @@ Example: `registry://greek-calamari-v1?tag=stable`.
 
    ```bash
    PYTHONPATH=. python scripts/hf/publish_model.py \
-     --script greek \
+     --script syriac \
      --architecture calamari \
      --model-version v1 \
      --registry-tag stable \
@@ -76,7 +76,7 @@ Example: `registry://greek-calamari-v1?tag=stable`.
 
    export HF_TOKEN=hf_...
    PYTHONPATH=. python scripts/hf/publish_model.py \
-     --script greek \
+     --script syriac \
      --architecture calamari \
      --model-version v1 \
      --registry-tag stable \
@@ -87,7 +87,7 @@ Example: `registry://greek-calamari-v1?tag=stable`.
 3. Optional: warm cache locally:
 
    ```bash
-   PYTHONPATH=. python scripts/hf/fetch_model.py greek-calamari-v1 --registry-tag stable
+   PYTHONPATH=. python scripts/hf/fetch_model.py syriac-calamari-v1 --registry-tag stable
    ```
 
 4. Optional: add the Hub repo to [`src/hf/publish/collection.yaml`](../../src/hf/publish/collection.yaml) and run `sync_collection.py`.
@@ -120,14 +120,14 @@ metadata lookup for public repositories.
 
 ### Kraken segment (bundled)
 
-Kraken BLLA ships via `package://kraken/blla.mlmodel` inside the `kraken` Python package — no Hub upload for the default segment model. For a custom Kraken checkpoint, use `file://` (bundled under `src/hf/local/`) or `hf://` like Calamari.
+Kraken BLLA ships via `package://kraken/blla.mlmodel` inside the `kraken` Python package - no Hub upload for the default segment model. For a custom Kraken checkpoint, use `file://` (bundled under `src/hf/local/`) or `hf://` like Calamari.
 
 ### Local / offline dev
 
 Point `weights_source` at bundled files under `src/hf/local/`:
 
 ```yaml
-weights_source: file://local/greek/calamari/v1/stable/best.pt
+weights_source: file://local/syriac/calamari/v1/stable/best.pt
 ```
 
 (`file://` paths are relative to `src/hf/`.)
@@ -140,14 +140,14 @@ Add a model block under `models:`:
 
 ```yaml
 models:
-  greek-calamari-v1:
+  syriac-calamari-v1:
     task: transcribe          # transcribe | segment
     architecture: calamari    # calamari | kraken-segment
     device: cpu               # compute hint (cpu | cuda)
     host_eligibility: local   # local | remote | any
     versions:
       stable:
-        weights_source: hf://<namespace>/greek-htr-calamari@stable
+        weights_source: hf://<namespace>/syriac-htr-calamari@stable
         hub_revision: <40-character-resolved-Hub-commit>
         artifact_sha256: <sha256-of-best.pt>
 ```
@@ -226,15 +226,15 @@ uv run --group platform --group inference pytest tests/nomicous/integration/test
 
 ## 6. Deploy
 
-1. **Deploy platform API** — ships the updated `inference/registry.yaml` in the container (`/app/inference/registry.yaml`). The new endpoint is live:
+1. **Deploy platform API** - ships the updated `inference/registry.yaml` in the container (`/app/inference/registry.yaml`). The new endpoint is live:
 
    ```bash
    curl -s https://api.example.com/inference/v1/registry
    ```
 
-2. **Deploy cloud inference** (`inference-api` / `inference-worker`) if remote inference should serve the model — same `registry.yaml` mount.
+2. **Deploy cloud inference** (`inference-api` / `inference-worker`) if remote inference should serve the model - same `registry.yaml` mount.
 
-3. **Inference Helper** — **no new installer required**. On next helper start (login / reboot), it fetches the registry when `HELPER_REGISTRY_URL` points at your API. Weights download on first local OCR/segment run.
+3. **Inference Helper** - **no new installer required**. On next helper start (login / reboot), it fetches the registry when `HELPER_REGISTRY_URL` points at your API. Weights download on first local OCR/segment run.
 
    Verify locally:
 
@@ -245,7 +245,7 @@ uv run --group platform --group inference pytest tests/nomicous/integration/test
    curl -s http://127.0.0.1:8001/inference/v1/catalog
    ```
 
-4. **New helper releases** are only needed for **code** or **packaging** changes — not for new models.
+4. **New helper releases** are only needed for **code** or **packaging** changes - not for new models.
 
 Set the production registry URL when building installers:
 
@@ -279,7 +279,7 @@ See [`packaging/helper/README.md`](../../packaging/helper/README.md).
 
 ## Related docs
 
-- [`inference/README.md`](../../inference/README.md) — inference service and helper
-- [`scripts/hf/README.md`](../../scripts/hf/README.md) — Hub publish and prefetch
-- [`README.md`](../../README.md#local-inference-helper) — local vs remote inference architecture
-- Issue **036** — registry id naming migration (historical; see git history on branches with `issues/done/`)
+- [`inference/README.md`](../../inference/README.md) - inference service and helper
+- [`scripts/hf/README.md`](../../scripts/hf/README.md) - Hub publish and prefetch
+- [`README.md`](../../README.md#local-inference-helper) - local vs remote inference architecture
+- Issue **036** - registry id naming migration (historical; see git history on branches with `issues/done/`)

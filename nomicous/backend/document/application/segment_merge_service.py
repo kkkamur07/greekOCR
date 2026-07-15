@@ -1,4 +1,4 @@
-"""Segment merge — preserve manual geometry, replace machine geometry."""
+"""Segment merge - preserve manual geometry, replace machine geometry."""
 
 from __future__ import annotations
 

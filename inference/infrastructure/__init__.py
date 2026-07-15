@@ -1,1 +1,1 @@
-"""ML service infrastructure — Postgres queue owned by inference only."""
+"""ML service infrastructure - Postgres queue owned by inference only."""
