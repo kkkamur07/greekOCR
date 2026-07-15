@@ -65,13 +65,52 @@ def test_platform_bundle_includes_contract_dependencies() -> None:
     assert '"inference" / "infrastructure" / "settings.py"' in build_script
 
 
+def test_platform_backend_ships_bundled_unicode_pdf_font() -> None:
+    font = REPO_ROOT / "nomicous" / "backend" / "core" / "assets" / "fonts" / "NotoSans-Regular.ttf"
+    assert font.is_file()
+    assert font.stat().st_size > 100_000
+
+    fonts_module = (REPO_ROOT / "nomicous" / "backend" / "core" / "fonts.py").read_text(
+        encoding="utf-8"
+    )
+    assert "assets" in fonts_module
+    assert "NotoSans-Regular.ttf" in fonts_module
+
+    # deploy/platform/build.sh copytree of nomicous/backend includes assets/fonts.
+    build_script = (REPO_ROOT / "deploy" / "platform" / "build.sh").read_text(encoding="utf-8")
+    assert '"nomicous" / "backend"' in build_script
+
+
 def test_vercel_frontend_permits_helper_loopback_origins() -> None:
-    vercel_config = (REPO_ROOT / "nomicous" / "frontend" / "vercel.json").read_text(
+    # CSP lives in next.config.ts (not vercel.json) so Preview can also
+    # allow the Platform API origin from NEXT_PUBLIC_API_BASE_URL.
+    next_config = (REPO_ROOT / "nomicous" / "frontend" / "next.config.ts").read_text(
         encoding="utf-8"
     )
 
-    assert "http://127.0.0.1:8001" in vercel_config
-    assert "http://localhost:8001" in vercel_config
+    assert "http://127.0.0.1:8001" in next_config
+    assert "http://localhost:8001" in next_config
+    assert "connect-src" in next_config
+
+
+def test_landing_csp_uses_json_ld_hash_instead_of_unsafe_inline() -> None:
+    import base64
+    import hashlib
+    import re
+
+    html = (REPO_ROOT / "landing" / "index.html").read_text(encoding="utf-8")
+    vercel = (REPO_ROOT / "landing" / "vercel.json").read_text(encoding="utf-8")
+    match = re.search(r'<script type="application/ld\+json">(.*?)</script>', html, re.S)
+    assert match is not None
+    digest = base64.b64encode(hashlib.sha256(match.group(1).encode("utf-8")).digest()).decode()
+    assert f"'sha256-{digest}'" in vercel
+    assert "'unsafe-inline'" not in vercel
+
+
+def test_runtime_images_uninstall_vulnerable_system_packaging_tools() -> None:
+    for relative in ("nomicous/Dockerfile", "inference/Dockerfile"):
+        dockerfile = (REPO_ROOT / relative).read_text(encoding="utf-8")
+        assert "pip uninstall -y pip setuptools wheel" in dockerfile
 
 
 def test_role_migration_defines_service_boundaries_without_passwords() -> None:

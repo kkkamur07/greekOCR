@@ -25,7 +25,7 @@ from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
 from backend.ml.infrastructure.ml_client import InferenceClient
 from infrastructure.db import sync_system_session
 
-_TERMINAL_STATUSES = frozenset({JobStatus.done, JobStatus.failed})
+_TERMINAL_STATUSES = frozenset({JobStatus.done, JobStatus.failed, JobStatus.cancelled})
 
 
 @dataclass(frozen=True)
@@ -236,6 +236,13 @@ def _apply_callback_locked(callback: JobCallbackRequest) -> bool:
     applied, context = _validate_callback(callback)
     if not applied or context is None:
         return applied
+
+    # Defense in depth: a cancel that raced the claim leaves the job terminal;
+    # never merge document changes after durable cancellation.
+    with sync_system_session() as session:
+        job = session.get(Job, context.job_id)
+        if job is None or job.status in _TERMINAL_STATUSES:
+            return False
 
     try:
         result = _run_merge(context, callback)

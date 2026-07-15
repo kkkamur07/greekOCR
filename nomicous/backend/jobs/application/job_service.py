@@ -7,12 +7,13 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.exceptions import NotFoundError
-from backend.jobs.infrastructure.job_repository import JobRepository
+from backend.jobs.infrastructure.job_repository import JobRepository, cancel_job_async
 from backend.jobs.infrastructure.orm_models import Job
 
 
 class JobService:
     def __init__(self, session: AsyncSession) -> None:
+        self._session = session
         self._repo = JobRepository(session)
 
     async def enqueue_test_job(
@@ -34,3 +35,9 @@ class JobService:
         cursor=None,
     ) -> list[Job]:
         return await self._repo.list_for_project(project_id, limit=limit, cursor=cursor)
+
+    async def cancel_job(self, job_id: uuid.UUID) -> Job:
+        job = await cancel_job_async(self._session, job_id)
+        if job is None:
+            raise NotFoundError(f"job {job_id} not found")
+        return job

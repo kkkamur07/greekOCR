@@ -33,7 +33,11 @@ type JobSubscriptionOwner = {
 const owners = new Map<string, JobSubscriptionOwner>();
 
 function isTerminal(job: JobResponse): boolean {
-  return job.status === "done" || job.status === "failed";
+  return (
+    job.status === "done" ||
+    job.status === "failed" ||
+    job.status === "cancelled"
+  );
 }
 
 function parseSseChunk(buffer: string): {
@@ -207,7 +211,7 @@ export function waitForSubscribedJob(
       ...options,
       onUpdate: (job) => {
         options.onUpdate?.(job);
-        if (job.status === "done") {
+        if (job.status === "done" || job.status === "cancelled") {
           window.clearTimeout(timeout);
           unsubscribe();
           resolve(job);

@@ -1556,6 +1556,18 @@ button {
   color: var(--text-4);
 }
 
+.content-region-loading {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 240px;
+  padding: 24px;
+  text-align: center;
+}
+
 /* ─── Modal ──────────────────────────────────────────────────────── */
 .modal-overlay {
   position: fixed;
@@ -1634,6 +1646,43 @@ button {
   .tab,
   .toast {
     transition: none;
+  }
+}
+
+/* ─── Session restore (keep chrome, no login flash) ──────────────── */
+.session-restoring__main {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: min(60vh, 480px);
+}
+.session-restoring__panel {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  color: var(--text-2);
+  font-size: 0.9375rem;
+}
+.session-restoring__spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(13, 31, 60, 0.18);
+  border-top-color: var(--navy, #0d1f3c);
+  border-radius: 50%;
+  animation: session-restoring-spin 0.8s linear infinite;
+}
+.session-restoring__label {
+  margin: 0;
+}
+@keyframes session-restoring-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .session-restoring__spinner {
+    animation: none;
   }
 }
 

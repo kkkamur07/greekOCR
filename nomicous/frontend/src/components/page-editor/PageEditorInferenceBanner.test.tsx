@@ -1,9 +1,19 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
+import {
+  INFERENCE_HELPER_LINUX_TARBALL_URL,
+  INFERENCE_HELPER_MACOS_DMG_URL,
+  INFERENCE_HELPER_RELEASES_URL,
+  INFERENCE_HELPER_WINDOWS_ZIP_URL,
+} from "../../inference/constants";
 import { PageEditorInferenceBanner } from "./PageEditorInferenceBanner";
 
 describe("PageEditorInferenceBanner", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("shows the compact banner (not a blocking modal) when helper is unavailable", () => {
     render(
       <PageEditorInferenceBanner
@@ -39,6 +49,38 @@ describe("PageEditorInferenceBanner", () => {
     expect(
       screen.getByRole("link", { name: /download for macos/i }),
     ).toBeTruthy();
+    expect(screen.getByText(/detects the helper automatically/i)).toBeTruthy();
+  });
+
+  it("puts the detected OS download first and links to releases/latest", () => {
+    vi.stubGlobal("navigator", {
+      platform: "Win32",
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+    });
+
+    render(
+      <PageEditorInferenceBanner
+        helperAvailable={false}
+        probing={false}
+        preferCloud={false}
+        onUseCloudInstead={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /install helper/i }));
+    const primary = screen.getByRole("link", { name: /download for windows/i });
+    expect(primary).toHaveAttribute("href", INFERENCE_HELPER_WINDOWS_ZIP_URL);
+    expect(primary.className).toContain("btn-primary");
+    expect(
+      screen.getByRole("link", { name: /view release notes/i }),
+    ).toHaveAttribute("href", INFERENCE_HELPER_RELEASES_URL);
+    expect(INFERENCE_HELPER_RELEASES_URL).toContain("/releases/latest");
+    expect(INFERENCE_HELPER_MACOS_DMG_URL).toContain(
+      "/releases/latest/download/",
+    );
+    expect(INFERENCE_HELPER_LINUX_TARBALL_URL).toContain(
+      "/releases/latest/download/",
+    );
   });
 
   it("calls onUseCloudInstead from the modal", () => {

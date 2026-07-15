@@ -1,8 +1,12 @@
 """Resolve Unicode-capable fonts for generated artifacts."""
 
+from __future__ import annotations
+
 from pathlib import Path
 
-_FONT_CANDIDATES = (
+_ASSETS_FONT = Path(__file__).resolve().parent / "assets" / "fonts" / "NotoSans-Regular.ttf"
+
+_OS_FONT_CANDIDATES = (
     Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
     Path("/usr/share/fonts/TTF/DejaVuSans.ttf"),
     Path("/System/Library/Fonts/Supplemental/Arial Unicode.ttf"),
@@ -10,12 +14,17 @@ _FONT_CANDIDATES = (
     Path("/opt/homebrew/share/fonts/DejaVuSans.ttf"),
 )
 
+_FONT_MISSING_MESSAGE = (
+    "Transcription PDF could not be generated because no Unicode font is available. "
+    "The app expects its bundled Noto Sans font; contact support if this keeps happening."
+)
+
 
 def resolve_unicode_font() -> Path:
-    for candidate in _FONT_CANDIDATES:
+    """Return a Greek-capable Unicode TTF, preferring the bundled font."""
+    if _ASSETS_FONT.is_file():
+        return _ASSETS_FONT
+    for candidate in _OS_FONT_CANDIDATES:
         if candidate.is_file():
             return candidate
-    raise RuntimeError(
-        "No Unicode font found for PDF generation. "
-        "Install DejaVu Sans (e.g. fonts-dejavu-core on Debian/Ubuntu)."
-    )
+    raise RuntimeError(_FONT_MISSING_MESSAGE)

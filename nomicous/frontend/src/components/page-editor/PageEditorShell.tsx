@@ -59,8 +59,14 @@ export function PageEditorShell({
 
       {processingBanner}
 
-      {showStatusAlerts && statusAlerts && (
-        <div className="pe-status-bar" role="status" aria-live="polite">
+      {/* Always mount statusAlerts under a stable wrapper so toast effects do not remount. */}
+      {statusAlerts && (
+        <div
+          className="pe-status-bar"
+          role="status"
+          aria-live="polite"
+          style={{ display: showStatusAlerts ? undefined : "none" }}
+        >
           {statusAlerts}
         </div>
       )}

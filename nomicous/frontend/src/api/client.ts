@@ -781,6 +781,8 @@ export const api = {
     apiRequest<EnqueueTestJobResponse>("/jobs/test", { method: "POST", body }),
 
   getJob: (jobId: string) => apiRequest<JobResponse>(`/jobs/${jobId}`),
+  cancelJob: (jobId: string) =>
+    apiRequest<JobResponse>(`/jobs/${jobId}/cancel`, { method: "POST" }),
 
   listProjectJobsPage: (projectId: string, options: ListPageOptions = {}) => {
     const query = cursorQuery(options);

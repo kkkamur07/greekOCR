@@ -13,6 +13,7 @@ import {
   navigateToLogin,
 } from "../auth/session";
 import { AppPageShell } from "../components/layout/AppPageShell";
+import { ContentRegionLoading } from "../components/layout/ContentRegionLoading";
 import { DocumentsTable } from "../components/projects/DocumentsTable";
 import { ProjectJobsPanel } from "../components/projects/ProjectJobsPanel";
 import { ProjectSettingsPanel } from "../components/sharing/ProjectSettingsPanel";
@@ -215,25 +216,31 @@ export function ProjectDashboardPage() {
         ) : undefined
       }
     >
-      {error && (
-        <div className="notice-banner" role="alert">
-          <strong>Project unavailable</strong>
-          {error}
-        </div>
-      )}
-
-      {project && (
+      {loading && !project && !error ? (
+        <ContentRegionLoading label="Loading project" />
+      ) : (
         <>
-          <DocumentsTable
-            projectId={projectId!}
-            documents={documents}
-            loading={loading}
-            emptyText="No documents yet"
-            onDelete={(documentId) => void handleDeleteDocument(documentId)}
-            deletingDocumentId={deletingDocumentId}
-          />
+          {error && (
+            <div className="notice-banner" role="alert">
+              <strong>Project unavailable</strong>
+              {error}
+            </div>
+          )}
 
-          <ProjectJobsPanel projectId={projectId!} documents={documents} />
+          {project && (
+            <>
+              <DocumentsTable
+                projectId={projectId!}
+                documents={documents}
+                loading={loading}
+                emptyText="No documents yet"
+                onDelete={(documentId) => void handleDeleteDocument(documentId)}
+                deletingDocumentId={deletingDocumentId}
+              />
+
+              <ProjectJobsPanel projectId={projectId!} documents={documents} />
+            </>
+          )}
         </>
       )}
 

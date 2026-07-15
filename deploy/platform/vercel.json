@@ -1,11 +1,14 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "git": {
+    "deploymentEnabled": true
+  },
   "buildCommand": "bash build.sh",
   "outputDirectory": ".",
   "regions": ["fra1"],
   "functions": {
     "api/index.py": {
-      "maxDuration": 60
+      "maxDuration": 300
     }
   },
   "rewrites": [

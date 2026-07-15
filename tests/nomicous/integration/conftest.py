@@ -14,6 +14,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 
 os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production-at-least-32-bytes")
+os.environ.setdefault("INFERENCE_URL", "http://localhost:8001")
 os.environ.setdefault(
     "DATABASE_URL",
     "postgresql+asyncpg://postgres:dev@localhost:5433/kalamos",
@@ -60,6 +61,12 @@ _truncate_engine = sync_engine
 _TRUNCATE_ADVISORY_LOCK_ID = 73450123
 
 
+def _ensure_job_status_cancelled() -> None:
+    """Dev/test DBs created before cancelled existed need the enum value."""
+    with _truncate_engine.begin() as connection:
+        connection.execute(text("ALTER TYPE job_status ADD VALUE IF NOT EXISTS 'cancelled'"))
+
+
 def _truncate_database() -> None:
     table_names = [
         sync_engine.dialect.identifier_preparer.quote(table.name)
@@ -87,6 +94,7 @@ def _truncate_database() -> None:
 @pytest.fixture(scope="session")
 def client() -> TestClient:
     """Session TestClient — lifespan runs the platform job worker."""
+    _ensure_job_status_cancelled()
     with TestClient(create_app()) as test_client:
         yield test_client
 

@@ -23,7 +23,11 @@ from backend.jobs.infrastructure.job_repository import (
 from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
 from backend.jobs.infrastructure.worker import execute_claimed_job
 from infrastructure.db import sync_system_session
-from tests.nomicous.integration.helpers import MINIMAL_PNG, documents_url, poll_job
+from tests.nomicous.integration.helpers import (
+    MINIMAL_PNG,
+    documents_url,
+    poll_job,
+)
 
 
 def _wait_until_no_active_test_jobs(*, timeout: float = 5.0) -> None:
@@ -58,7 +62,7 @@ def _create_document_part_with_lines(
     upload = client.post(
         f"{base}/{document_id}/parts",
         headers=owner_headers,
-        files={"file": ("folio.png", MINIMAL_PNG, "image/png")},
+        files={"file": ("page.png", MINIMAL_PNG, "image/png")},
     )
     assert upload.status_code == 201
     part_id = upload.json()["id"]
@@ -156,6 +160,113 @@ def test_get_job_returns_status_and_timestamps(client: TestClient, registered_us
 
     missing = client.get(f"/jobs/{uuid.uuid4()}", headers=auth_headers)
     assert missing.status_code == 404
+
+
+def test_cancel_pending_job_marks_cancelled_and_discards_partials(
+    client: TestClient, registered_user: dict[str, str]
+):
+    auth_headers = {"Authorization": f"Bearer {registered_user['access_token']}"}
+    me = client.get("/me", headers=auth_headers)
+    assert me.status_code == 200
+    user_id = uuid.UUID(me.json()["id"])
+
+    # Keep the job from completing before we cancel: insert directly as pending
+    # without relying on the worker race.
+    with sync_system_session() as session:
+        job = Job(
+            type=JobType.pipeline,
+            status=JobStatus.pending,
+            payload={"handler": "noop", "test": True},
+            user_id=user_id,
+        )
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        job_id = str(job.id)
+
+    cancelled = client.post(f"/jobs/{job_id}/cancel", headers=auth_headers)
+    assert cancelled.status_code == 200, cancelled.text
+    body = cancelled.json()
+    assert body["status"] == "cancelled"
+    assert body["result"] is None
+    assert body["completed_at"] is not None
+
+    again = client.post(f"/jobs/{job_id}/cancel", headers=auth_headers)
+    assert again.status_code == 409
+
+
+def test_mark_job_waiting_does_not_overwrite_cancelled(
+    client: TestClient, registered_user: dict[str, str]
+):
+    """Cancel wins over a late waiting transition (worker race)."""
+    from backend.jobs.infrastructure.job_repository import mark_job_waiting
+
+    auth_headers = {"Authorization": f"Bearer {registered_user['access_token']}"}
+    me = client.get("/me", headers=auth_headers)
+    assert me.status_code == 200
+    user_id = uuid.UUID(me.json()["id"])
+
+    with sync_system_session() as session:
+        job = Job(
+            type=JobType.segment,
+            status=JobStatus.running,
+            payload={"handler": "noop"},
+            user_id=user_id,
+        )
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        job_id = job.id
+
+    cancelled = client.post(f"/jobs/{job_id}/cancel", headers=auth_headers)
+    assert cancelled.status_code == 200, cancelled.text
+    assert cancelled.json()["status"] == "cancelled"
+
+    mark_job_waiting(job_id, inference_job_id=uuid.uuid4())
+
+    with sync_system_session() as session:
+        row = session.get(Job, job_id)
+        assert row is not None
+        assert row.status == JobStatus.cancelled
+        assert row.inference_job_id is None
+
+
+def test_cancel_rejects_when_callback_already_claimed(
+    client: TestClient, registered_user: dict[str, str]
+):
+    auth_headers = {"Authorization": f"Bearer {registered_user['access_token']}"}
+    me = client.get("/me", headers=auth_headers)
+    assert me.status_code == 200
+    user_id = uuid.UUID(me.json()["id"])
+
+    with sync_system_session() as session:
+        job = Job(
+            type=JobType.segment,
+            status=JobStatus.waiting,
+            # Avoid payload test=True so the autouse drain fixture is not blocked
+            # by a permanently waiting row.
+            payload={"handler": "noop"},
+            user_id=user_id,
+            callback_claimed_at=datetime.now(UTC),
+        )
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        job_id = str(job.id)
+
+    rejected = client.post(f"/jobs/{job_id}/cancel", headers=auth_headers)
+    assert rejected.status_code == 409, rejected.text
+
+    with sync_system_session() as session:
+        row = session.get(Job, uuid.UUID(job_id))
+        assert row is not None
+        assert row.status == JobStatus.waiting
+        assert row.callback_claimed_at is not None
+        # Leave no active row for later tests / workers.
+        row.status = JobStatus.failed
+        row.error = "test cleanup"
+        row.completed_at = datetime.now(UTC)
+        session.commit()
 
 
 def test_job_events_streams_current_snapshot(client: TestClient, registered_user: dict[str, str]):
@@ -365,4 +476,7 @@ def test_execute_claimed_job_marks_unknown_handler_failed():
         row = session.get(Job, job_id)
         assert row is not None
         assert row.status == JobStatus.failed
-        assert "no handler" in (row.error or "").lower()
+        assert (
+            "not supported" in (row.error or "").lower()
+            or "no handler" in (row.error or "").lower()
+        )

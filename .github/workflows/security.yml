@@ -29,10 +29,15 @@ jobs:
           cache-dependency-path: nomicous/frontend/package-lock.json
       - run: npm ci --prefix nomicous/frontend
       - run: npm audit --prefix nomicous/frontend --omit=dev --audit-level=high
-      # Kraken/CoreML currently constrain protobuf and torch below audited fixes.
+      # Remaining pip-audit ignores are owned, time-bounded VEX (not silent CI green):
+      # - PYSEC-2026-2132 (Click <8.3.3): kraken==7.0.2 requires click<8.3;
+      #   docs/security/vex-click-pysec-2026-2132.md
+      # - PYSEC-2026-139 / CVE-2025-3000 (torch 2.10.0, local-only, no fix yet):
+      #   docs/security/vex-torch-pysec-2026-139-cve-2025-3000.md
+      # protobuf CVE-2025-4565 / CVE-2026-0994 are fixed via protobuf>=5.29.6
+      # in the inference group (no ignore).
       - run: >-
           uv run --locked --group dev --group platform --group inference pip-audit
-          --ignore-vuln PYSEC-2026-1806
-          --ignore-vuln PYSEC-2026-1805
           --ignore-vuln PYSEC-2026-139
           --ignore-vuln CVE-2025-3000
+          --ignore-vuln PYSEC-2026-2132

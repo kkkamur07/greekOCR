@@ -146,6 +146,7 @@ _Avoid_: Unsaved, modified
 - A **Review status** may be reviewed even when **Pairing progress** is partial
 - Annotation happens on the full **Page** image; **Processed line image**s and **Line transcription file**s are **Export** artefacts
 - A paired Segment produces one **Processed line image** and one **Line transcription file**, named `<manuscript_name>_<segment_number>`
+- **Edit undo** / **Edit redo** reverse fine-grained canvas edits in the current session; **Annotation history** restores a saved **History snapshot**
 
 **Pairing**:
 The manual act of linking a selected Segment to its Text line. UI is hybrid: pick from the page's text line list or edit the text inline.
@@ -193,11 +194,19 @@ Intermediate files (`annotations/pages/<stem>.json`, page transcription sources)
 
 **Annotation history**:
 A time-ordered sequence of saved Page annotation states. Used to **restore** a prior state when a mishap occurs (bad edit, accidental overwrite). Restoring replaces the current annotation with the chosen state.
-_Avoid_: Backup (implies full-disk copy), version control (implies git)
+_Avoid_: Backup (implies full-disk copy), version control (implies git), Edit undo
 
 **History snapshot**:
 One compact persisted copy of a Page's restorable annotation state at a point in time; it excludes images, generated exports, and raw edit-by-edit events.
 _Avoid_: Checkpoint (reserved for optional manual save if added later)
+
+**Edit undo**:
+Reversing the most recent in-session canvas edit on the current Page (e.g. move/add/remove a Segment vertex, draw a Segment) one step at a time. Distinct from restoring an **Annotation history** snapshot.
+_Avoid_: History restore, Annotation history
+
+**Edit redo**:
+Re-applying an **Edit undo** step that was just undone in the same session.
+_Avoid_: History restore
 
 **Pairing progress**:
 How far a Page's **Pairing** work has gone: paired segments vs total segments on that Page. A segment counts as paired when linked to a **Text line** or given inline text. Drives the progress UI, history milestones at 50% and 100%, and is the primary signal for **Human review** readiness.
@@ -291,4 +300,7 @@ The frontend opens `GET /jobs/{id}/events` (SSE) and receives `JobResponse` JSON
 - Inference naming — resolved: rename Python types (`MLJob` → `InferenceJob`, etc.) in code; internal callbacks now use `/internal/inference` and `X-Inference-Webhook-Secret`.
 - Exact rectangle draw gesture (how many clicks before corners are editable) — TBD at implementation.
 - Hybrid pairing UI may ship after core segment draw/select; workflow order (select Segment first) is fixed.
+- Undo — resolved: **Edit undo** (in-session canvas steps) is separate from **Annotation history** restore.
+- Escape while editing a Segment — resolved: commit geometry + deselect (hide selection chrome / pairing strip); does not delete the Segment.
+- Segment editing — resolved: click vertex selects it; Delete/Backspace removes that vertex only (≥3 remain); click edge inserts a vertex; whole-Segment delete always confirms; vertex drag must not pan the Page.
 - "automatic transcription" was used to mean both model output and accepted text — resolved: use **Model transcription** until a researcher accepts or edits it into **Ground truth transcription**.

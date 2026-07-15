@@ -10,14 +10,15 @@ models:
         hub_revision: e01349626f934ee9526d486a42b5c4173b8d7a26
         artifact_sha256: ea711b918010aa31bd4a8a5de99c7953207421a7c7d4a39163166db380013053
 
-  greek-calamari-v1:
-    task: transcribe
-    architecture: calamari
-    device: cpu
-    host_eligibility: local
-    versions:
-      stable:
-        weights_source: hf://kkkamur07/greek-htr-calamari@stable
+  # Hidden until Hub revision + artifact SHA are pinned (issue 011 / Hub-ready gate).
+  # greek-calamari-v1:
+  #   task: transcribe
+  #   architecture: calamari
+  #   device: cpu
+  #   host_eligibility: local
+  #   versions:
+  #     stable:
+  #       weights_source: hf://kkkamur07/greek-htr-calamari@stable
 
   greek-kraken-segment-v1:
     task: segment

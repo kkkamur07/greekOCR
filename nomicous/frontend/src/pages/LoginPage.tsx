@@ -1,12 +1,13 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "../components/ui/toast";
 import { api, type LoginRequest } from "../api/client";
-import { ApiError } from "../api/errors";
+import { userFacingMessage } from "../api/userFacingError";
 import { authRedirectTarget } from "../auth/redirect";
 import { useAuthSession } from "../auth/AuthProvider";
 import { AuthFormWrap, AuthLayout } from "../components/layout/AuthLayout";
+import { SessionRestoring } from "../components/SessionRestoring";
 import { PasswordInput } from "../components/ui/PasswordInput";
 
 export function LoginPage() {
@@ -16,7 +17,21 @@ export function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const from = authRedirectTarget(searchParams?.get("callbackUrl"));
-  const { establish } = useAuthSession();
+  const { status, establish } = useAuthSession();
+
+  useEffect(() => {
+    if (status === "authenticated") {
+      router.replace(from);
+    }
+  }, [from, router, status]);
+
+  if (status === "restoring") {
+    return <SessionRestoring />;
+  }
+
+  if (status === "authenticated") {
+    return <SessionRestoring label="Taking you back…" />;
+  }
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -28,8 +43,7 @@ export function LoginPage() {
       toast.success("Signed in");
       router.replace(from);
     } catch (err) {
-      const msg = err instanceof ApiError ? err.message : "Login failed";
-      toast.error(msg);
+      toast.error(userFacingMessage(err, "Sign in failed"));
     } finally {
       setLoading(false);
     }

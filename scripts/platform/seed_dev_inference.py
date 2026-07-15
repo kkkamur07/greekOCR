@@ -122,12 +122,6 @@ async def main() -> None:
         artifact_ref=f"registry://{DEFAULT_TRANSCRIBE_MODEL}?tag=stable",
         default_params={"device": "cpu"},
     )
-    greek_transcribe_model = await _upsert_model(
-        name="greek-calamari-v1",
-        task=InferenceTask.transcribe,
-        artifact_ref="registry://greek-calamari-v1?tag=stable",
-        default_params={"device": "cpu"},
-    )
     project = await _ensure_dev_project()
     segment_binding = await _upsert_project_binding(
         project=project,
@@ -142,10 +136,6 @@ async def main() -> None:
 
     print(f"Seeded segment model: {segment_model.name} -> {segment_model.artifact_ref}")
     print(f"Seeded transcribe model: {transcribe_model.name} -> {transcribe_model.artifact_ref}")
-    print(
-        "Seeded additional transcribe model: "
-        f"{greek_transcribe_model.name} -> {greek_transcribe_model.artifact_ref}"
-    )
     print(f"Seeded project: {project.slug} ({project.id})")
     print(f"Segment binding: {segment_binding.id}")
     print(f"Transcribe binding: {transcribe_binding.id}")

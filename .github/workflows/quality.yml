@@ -30,6 +30,8 @@ jobs:
   python-lint-unit:
     name: Python lint and unit tests
     runs-on: ubuntu-latest
+    env:
+      JWT_SECRET: test-secret-not-for-production-at-least-32-bytes
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -71,11 +73,15 @@ jobs:
           python-version: "3.11"
           enable-cache: true
       - run: PYTHONPATH=nomicous uv run --locked --group platform alembic -c nomicous/infrastructure/alembic.ini upgrade head
-      - run: uv run --locked --group platform --group inference pytest tests/nomicous/integration -m "not ml"
+      - run: uv run --locked --group platform --group inference pytest tests/nomicous/integration tests/inference/integration -m "not ml"
 
   api-contracts:
     name: API contract artifacts
     runs-on: ubuntu-latest
+    env:
+      JWT_SECRET: test-secret-not-for-production-at-least-32-bytes
+      INFERENCE_WEBHOOK_SECRET: test-inference-webhook-secret
+      INFERENCE_SERVICE_SECRET: test-inference-webhook-secret
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
