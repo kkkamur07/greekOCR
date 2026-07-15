@@ -232,7 +232,9 @@ If a secret scanner or Git-history review identifies a possible exposure:
 
 - [ ] Supabase migrations applied (`alembic upgrade head`)
 - [ ] Service-role bootstrap completed and each runtime has only its own DB URL
-- [ ] `CORS_ORIGINS` includes only production app origins
+- [ ] `CORS_ORIGINS` includes only production app origins (`https://app.nomicous.com`)
+- [ ] `AUTH_CSRF_COOKIE_DOMAIN=.nomicous.com` so `app.nomicous.com` can read the CSRF cookie for refresh
+- [ ] Production verification uses `app.nomicous.com` / `api.nomicous.com` only — never `*.vercel.app` deployment or Preview URLs
 - [ ] `ENABLE_TEST_JOB_ROUTES=false`
 - [ ] Platform worker + inference worker running and healthy
 - [ ] Vercel bundle contains no model weights, local media, `.env` files, or training artifacts
