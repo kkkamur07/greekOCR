@@ -18,13 +18,6 @@ def can_read_document(
     return document.workflow == DocumentWorkflow.published
 
 
-def can_mutate_document(project: Project, user: User | None) -> bool:
-    """Only authenticated project members may change documents or parts."""
-    if user is None:
-        return False
-    return is_member(project, user.id)
-
-
 def require_can_read(
     document: Document,
     project: Project,
@@ -35,11 +28,3 @@ def require_can_read(
     if document.workflow != DocumentWorkflow.published:
         raise NotFoundError("Document not found")
     raise AccessDeniedError("You do not have access to this document")
-
-
-def require_can_mutate(project: Project, user: User | None) -> None:
-    if can_mutate_document(project, user):
-        return
-    if user is None:
-        raise AccessDeniedError("Authentication required")
-    raise AccessDeniedError("You do not have access to this project")

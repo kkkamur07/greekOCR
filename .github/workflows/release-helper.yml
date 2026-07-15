@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing release tag to attach artifacts to (e.g. inference-helper-v0.1.3)"
+        description: "Existing release tag to attach artifacts to (e.g. inference-helper-v0.1.4)"
         required: true
         type: string
 

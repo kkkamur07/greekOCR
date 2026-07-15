@@ -278,20 +278,3 @@ async def cancel_job_async(session: AsyncSession, job_id: uuid.UUID) -> Job | No
     # pg_notify uses a sync DB session — keep it off the event loop.
     await asyncio.to_thread(notify_platform_job_status_changed, job.id, JobStatus.cancelled)
     return job
-
-
-def cancel_job(job_id: uuid.UUID) -> Job | None:
-    """Sync cancel helper for non-request contexts (tests/scripts)."""
-    now = datetime.now(UTC)
-    with sync_system_session() as session:
-        job = session.execute(
-            select(Job).where(Job.id == job_id).with_for_update()
-        ).scalar_one_or_none()
-        if job is None:
-            return None
-        _apply_cancellation(job, now)
-        session.commit()
-        session.refresh(job)
-        session.expunge(job)
-        notify_platform_job_status_changed(job.id, JobStatus.cancelled)
-        return job

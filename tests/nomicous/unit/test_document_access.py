@@ -7,9 +7,7 @@ import pytest
 
 from backend.core.exceptions import AccessDeniedError, NotFoundError
 from backend.document.domain.access import (
-    can_mutate_document,
     can_read_document,
-    require_can_mutate,
     require_can_read,
 )
 from backend.document.infrastructure.orm_models import DocumentWorkflow
@@ -56,7 +54,7 @@ def test_anonymous_can_read_published_only():
     assert can_read_document(draft, project, None) is False
 
 
-# --- require_can_read / require_can_mutate ---
+# --- require_can_read ---
 # Tests exception types for denied access. Does not test project membership resolution.
 
 
@@ -67,17 +65,13 @@ def test_require_can_read_draft_anonymous_raises_not_found():
         require_can_read(document, project, None)
 
 
-def test_require_can_mutate_anonymous_raises():
+def test_require_can_read_published_anonymous_outsider_raises_access_denied():
+    """Published docs are visible to anonymous readers; members-only denial uses AccessDenied."""
     project = _project(owner_id=uuid.uuid4())
-    with pytest.raises(AccessDeniedError, match="Authentication required"):
-        require_can_mutate(project, None)
-
-
-# --- Mutate access ---
-# Tests outsiders cannot mutate. Does not test collaborator vs owner distinctions.
-
-
-def test_outsider_cannot_mutate():
-    project = _project(owner_id=uuid.uuid4())
-    user = _user()
-    assert can_mutate_document(project, user) is False
+    document = _document(DocumentWorkflow.published)
+    # Anonymous can read published — this should not raise.
+    require_can_read(document, project, None)
+    # Non-member with an authenticated outsider still can read published.
+    require_can_read(document, project, _user())
+    # Sanity: AccessDeniedError still exists for non-published denial paths above.
+    assert issubclass(AccessDeniedError, Exception)

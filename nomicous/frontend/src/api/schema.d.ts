@@ -113,7 +113,10 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** Health */
+    /**
+     * Health
+     * @description Liveness/readiness: SELECT 1 only. Dev-user seeding lives in app lifespan.
+     */
     get: operations["health_health_get"];
     put?: never;
     post?: never;

@@ -16,4 +16,4 @@ export const INFERENCE_HELPER_MACOS_DMG_URL = `${INFERENCE_HELPER_DOWNLOAD_BASE}
 export const INFERENCE_HELPER_WINDOWS_ZIP_URL = `${INFERENCE_HELPER_DOWNLOAD_BASE}/nomicous-inference-helper-windows.zip`;
 export const INFERENCE_HELPER_LINUX_TARBALL_URL = `${INFERENCE_HELPER_DOWNLOAD_BASE}/nomicous-inference-helper-linux.tar.gz`;
 
-export const DEFAULT_SEGMENT_REGISTRY_MODEL_ID = "greek-kraken-segment-v1";
+export const DEFAULT_SEGMENT_REGISTRY_MODEL_ID = "kraken-segment";

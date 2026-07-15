@@ -311,13 +311,15 @@ python scripts/platform/seed_dev_annotated_data.py --skip-history
 The seed defaults can be overridden with registry model ids:
 
 ```bash
-DEFAULT_SEGMENT_MODEL=greek-kraken-segment-v1
+DEFAULT_SEGMENT_MODEL=kraken-segment
 DEFAULT_TRANSCRIBE_MODEL=syriac-calamari-v1
+BINDING_PROJECT_SLUG=byzantine-greek-manuscripts
 ```
 
-The seed records `registry://` artifact references only; it does not download
-or modify model weights. The inference service resolves the corresponding
-`inference/registry.yaml` entry at run time.
+The inference seed upserts catalog models and attaches a **segment** binding to
+``BINDING_PROJECT_SLUG`` when that project exists. It does **not** create a
+separate Dev inference project, and it does not bind Syriac transcription onto
+Greek pages while ``greek-calamari-v1`` remains unpublished.
 
 ## Troubleshooting
 
@@ -338,7 +340,7 @@ docker compose exec api python scripts/platform/seed_dev_user.py
 # Or restart the API container (re-runs migrations + full seed)
 docker compose restart api
 
-# In development, /health also recreates the dev user when it is missing
+# In development, app lifespan recreates the missing dev user (not /health)
 curl -s http://localhost:8000/health
 ```
 

@@ -8,7 +8,6 @@ from inference.architectures.calamari.adapter import (
 from inference.architectures.calamari.config import (
     CalamariTorchConfig,
     CalamariTorchLayerConfig,
-    load_calamari_config,
 )
 from inference.architectures.calamari.model import CalamariTorchModel
 from inference.architectures.calamari.preprocessing import (
@@ -20,7 +19,6 @@ __all__ = [
     "CalamariTorchLayerConfig",
     "CalamariTorchModel",
     "CalamariUnavailableError",
-    "load_calamari_config",
     "preprocess_line_image_to_calamari_tensor",
     "run_calamari_transcribe",
     "run_calamari_transcribe_many",

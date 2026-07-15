@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 interface ShortcutHandlers {
   onDrawBox?: () => void;
@@ -16,6 +16,9 @@ interface ShortcutHandlers {
 }
 
 export const useKeyboardShortcuts = (handlers: ShortcutHandlers) => {
+  const handlersRef = useRef(handlers);
+  handlersRef.current = handlers;
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Ignore if typing in input/textarea
@@ -26,65 +29,66 @@ export const useKeyboardShortcuts = (handlers: ShortcutHandlers) => {
         return;
       }
 
+      const current = handlersRef.current;
       const key = e.key.toLowerCase();
       const ctrl = e.ctrlKey || e.metaKey;
 
       // B - Draw Box
       if (key === "b" && !ctrl) {
         e.preventDefault();
-        handlers.onDrawBox?.();
+        current.onDrawBox?.();
       }
       // P - Draw Polygon
       else if (key === "p" && !ctrl) {
         e.preventDefault();
-        handlers.onDrawPolygon?.();
+        current.onDrawPolygon?.();
       }
       // V - Edit Vertices
       else if (key === "v" && !ctrl) {
         e.preventDefault();
-        handlers.onEditVertices?.();
+        current.onEditVertices?.();
       }
       // Delete/Backspace - Delete selected
       else if ((key === "delete" || key === "backspace") && !ctrl) {
         e.preventDefault();
-        handlers.onDelete?.();
+        current.onDelete?.();
       }
       // Escape - Cancel
       else if (key === "escape") {
         e.preventDefault();
-        handlers.onEscape?.();
+        current.onEscape?.();
       }
       // Enter - Complete (e.g. polygon)
       else if (key === "enter") {
-        handlers.onEnter?.();
+        current.onEnter?.();
       }
       // Ctrl+Z - Undo
       else if (ctrl && key === "z" && !e.shiftKey) {
         e.preventDefault();
-        handlers.onUndo?.();
+        current.onUndo?.();
       }
       // Ctrl+Shift+Z or Ctrl+Y - Redo
       else if ((ctrl && e.shiftKey && key === "z") || (ctrl && key === "y")) {
         e.preventDefault();
-        handlers.onRedo?.();
+        current.onRedo?.();
       }
       // Arrow keys - Move selected region
       else if (key === "arrowup") {
         e.preventDefault();
-        handlers.onMoveUp?.();
+        current.onMoveUp?.();
       } else if (key === "arrowdown") {
         e.preventDefault();
-        handlers.onMoveDown?.();
+        current.onMoveDown?.();
       } else if (key === "arrowleft") {
         e.preventDefault();
-        handlers.onMoveLeft?.();
+        current.onMoveLeft?.();
       } else if (key === "arrowright") {
         e.preventDefault();
-        handlers.onMoveRight?.();
+        current.onMoveRight?.();
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handlers]);
+  }, []);
 };

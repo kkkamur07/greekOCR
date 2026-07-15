@@ -25,7 +25,7 @@ def test_registry_yaml_validates_model_entries():
     )
     assert "greek-calamari-v1" not in registry.models
 
-    kraken = get_model_entry(registry, "greek-kraken-segment-v1", "stable")
+    kraken = get_model_entry(registry, "kraken-segment", "stable")
     assert kraken.task == InferenceTask.segment
     assert kraken.architecture == RegistryArchitecture.kraken_segment
     assert kraken.device == ComputeDevice.cpu
@@ -42,7 +42,7 @@ def test_registry_yaml_validates_model_entries():
 
 def test_registry_package_weights_source_resolves_package_resource():
     registry = load_registry()
-    version = registry.models["greek-kraken-segment-v1"].versions["stable"]
+    version = registry.models["kraken-segment"].versions["stable"]
     path = resolve_weights_source(
         version.weights_source,
         artifact_sha256=version.artifact_sha256,

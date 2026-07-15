@@ -52,7 +52,7 @@ def _submit_segment(product_job_id=None) -> InferenceJob:
     return create_job(
         JobSubmitRequest(
             task=InferenceTask.segment,
-            registry_model_id="greek-kraken-segment-v1",
+            registry_model_id="kraken-segment",
             product_job_id=product_job_id or uuid4(),
             image_bytes=segment_page_bytes(),
         )

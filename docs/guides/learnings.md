@@ -195,8 +195,8 @@ ln -sfn ../src/model/calamari _support_repo/calamari
 | Training OOM / very slow on Apple Silicon | TensorFlow + emulation | Prefer Linux + GPU; reduce batch size |
 | `Expected train/ and val/ images under ...` | Wrong pack layout | Pack needs `train/` and `val/` image folders |
 | Checkpoint works in training but inference rejects `.ckpt` | Inference needs PyTorch `.pt` | Convert to `calamari-pytorch-v1` and publish to Hub |
-| Empty OCR despite job **done** | Wrong model for script | Use `greek-calamari-v1` for Byzantine Greek |
-| First Hub transcribe slow in Docker | Cold download + CPU | `PYTHONPATH=. python scripts/hf/fetch_model.py greek-calamari-v1 --registry-tag stable` |
+| Empty OCR despite job **done** | Wrong model for script | Greek HTR (`greek-calamari-v1`) is not on Hub yet — use Syriac model only for Syriac pages; Greek transcription awaits Hub publish + registry pin |
+| First Hub transcribe slow in Docker | Cold download + CPU | `PYTHONPATH=. python scripts/hf/fetch_model.py syriac-calamari-v1 --registry-tag stable` (Greek model not published yet) |
 
 ---
 

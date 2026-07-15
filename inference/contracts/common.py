@@ -28,7 +28,6 @@ class InferenceJobStatus(StrEnum):
 
 class RegistryArchitecture(StrEnum):
     calamari = "calamari"
-    trocr = "trocr"
     kraken_segment = "kraken-segment"
 
 

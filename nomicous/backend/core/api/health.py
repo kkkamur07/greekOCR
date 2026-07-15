@@ -9,8 +9,6 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.schemas.health import HealthResponse
-from backend.core.settings import get_infrastructure_settings
-from backend.dev.bootstrap import ensure_dev_user_exists
 from infrastructure.db import get_db
 
 logger = logging.getLogger(__name__)
@@ -23,17 +21,11 @@ router = APIRouter(tags=["health"])
     responses={503: {"model": HealthResponse, "description": "Database unreachable"}},
 )
 async def health(db: AsyncSession = Depends(get_db)) -> HealthResponse | JSONResponse:
+    """Liveness/readiness: SELECT 1 only. Dev-user seeding lives in app lifespan."""
     try:
         await db.execute(text("SELECT 1"))
     except SQLAlchemyError:
         body = HealthResponse(status="degraded", database="error")
         return JSONResponse(status_code=503, content=body.model_dump())
-
-    if get_infrastructure_settings().environment == "development":
-        try:
-            if await ensure_dev_user_exists(db):
-                logger.info("Recreated missing dev login user after database reset")
-        except SQLAlchemyError:
-            logger.exception("Failed to ensure dev user exists")
 
     return HealthResponse(status="ok", database="ok")

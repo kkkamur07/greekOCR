@@ -1,8 +1,12 @@
 """Create the final application schema.
 
 This is the squashed replacement for the pre-production migration history.
-Application authorization remains in FastAPI; this schema intentionally does
-not enable PostgreSQL row-level security.
+ORM metadata is the source of truth (includes cancelled job status,
+jobs.callback_claimed_at, auth_rate_limit_attempts, etc.). Application
+authorization remains in FastAPI; this schema intentionally does not enable
+PostgreSQL row-level security.
+
+Service role grants live in 002_service_roles.
 """
 
 from collections.abc import Sequence
