@@ -532,6 +532,8 @@ export function PageEditorCanvas({
   } | null>(null);
   const transformRef = useRef<ReactZoomPanPinchRef>(null);
   const vertexInteractingRef = useRef(false);
+  const vertexEditRef = useRef(vertexEdit);
+  vertexEditRef.current = vertexEdit;
   const canvasWidth = imageWidth;
   const canvasHeight = imageHeight;
   const isDrawing = drawingRectangle || drawingPolygon;
@@ -565,11 +567,53 @@ export function PageEditorCanvas({
 
   useEffect(() => {
     if (commitSignal === 0) return;
-    setVertexEdit((current) => {
-      if (!current) return current;
+    const current = vertexEditRef.current;
+    if (!current) return;
+    if (current.draggedIndex === null) {
+      vertexInteractingRef.current = false;
+      setVertexEdit(null);
+      return;
+    }
+    const pending = {
+      segmentId: current.segmentId,
+      points: current.points,
+      draggedIndex: null as number | null,
+      pendingVertexIndex: null as number | null,
+    };
+    setVertexEdit(pending);
+    void Promise.resolve(
+      onSegmentPointsChange(pending.segmentId, pending.points),
+    ).finally(() => {
+      setVertexEdit((latest) =>
+        latest?.segmentId === pending.segmentId ? null : latest,
+      );
+      vertexInteractingRef.current = false;
+    });
+  }, [commitSignal, onSegmentPointsChange]);
+
+  useEffect(() => {
+    if (!isVertexInteracting) return;
+    const finishInteraction = () => {
+      const current = vertexEditRef.current;
+      if (!current) {
+        vertexInteractingRef.current = false;
+        return;
+      }
+
+      // Click without drag: select the vertex (Delete removes it later).
+      if (
+        current.pendingVertexIndex !== null &&
+        current.draggedIndex === null
+      ) {
+        onSelectedVertexChange(current.pendingVertexIndex);
+        vertexInteractingRef.current = false;
+        setVertexEdit(null);
+        return;
+      }
+
       if (current.draggedIndex === null) {
         vertexInteractingRef.current = false;
-        return null;
+        return;
       }
       const pending = {
         segmentId: current.segmentId,
@@ -577,6 +621,8 @@ export function PageEditorCanvas({
         draggedIndex: null as number | null,
         pendingVertexIndex: null as number | null,
       };
+      setVertexEdit(pending);
+      onSelectedVertexChange(current.draggedIndex);
       void Promise.resolve(
         onSegmentPointsChange(pending.segmentId, pending.points),
       ).finally(() => {
@@ -584,50 +630,6 @@ export function PageEditorCanvas({
           latest?.segmentId === pending.segmentId ? null : latest,
         );
         vertexInteractingRef.current = false;
-      });
-      return pending;
-    });
-  }, [commitSignal, onSegmentPointsChange]);
-
-  useEffect(() => {
-    if (!isVertexInteracting) return;
-    const finishInteraction = () => {
-      setVertexEdit((current) => {
-        if (!current) {
-          vertexInteractingRef.current = false;
-          return current;
-        }
-
-        // Click without drag: select the vertex (Delete removes it later).
-        if (
-          current.pendingVertexIndex !== null &&
-          current.draggedIndex === null
-        ) {
-          onSelectedVertexChange(current.pendingVertexIndex);
-          vertexInteractingRef.current = false;
-          return null;
-        }
-
-        if (current.draggedIndex === null) {
-          vertexInteractingRef.current = false;
-          return current;
-        }
-        const pending = {
-          segmentId: current.segmentId,
-          points: current.points,
-          draggedIndex: null as number | null,
-          pendingVertexIndex: null as number | null,
-        };
-        onSelectedVertexChange(current.draggedIndex);
-        void Promise.resolve(
-          onSegmentPointsChange(pending.segmentId, pending.points),
-        ).finally(() => {
-          setVertexEdit((latest) =>
-            latest?.segmentId === pending.segmentId ? null : latest,
-          );
-          vertexInteractingRef.current = false;
-        });
-        return pending;
       });
     };
     window.addEventListener("pointerup", finishInteraction);

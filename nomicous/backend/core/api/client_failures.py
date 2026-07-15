@@ -9,7 +9,7 @@ import time
 import uuid
 from collections import defaultdict, deque
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 
 from backend.users.api.rate_limit import client_ip_for_request
@@ -35,10 +35,15 @@ def _sanitize_log_field(value: str, *, max_len: int) -> str:
 
 
 def _throttle_client_failure(request: Request) -> None:
+    """Rate-limit before body validation (route dependency)."""
     host = client_ip_for_request(request)
     now = time.monotonic()
     cutoff = now - _RATE_WINDOW_SECONDS
     with _rate_lock:
+        # Drop idle IPs so the map cannot grow without bound in long-lived workers.
+        stale = [ip for ip, stamps in _rate_buckets.items() if not stamps or stamps[-1] < cutoff]
+        for ip in stale:
+            del _rate_buckets[ip]
         bucket = _rate_buckets[host]
         while bucket and bucket[0] < cutoff:
             bucket.popleft()
@@ -73,12 +78,16 @@ class ClientFailureResponse(BaseModel):
     ref: str
 
 
-@router.post("/client-failures", response_model=ClientFailureResponse, status_code=202)
+@router.post(
+    "/client-failures",
+    response_model=ClientFailureResponse,
+    status_code=202,
+    dependencies=[Depends(_throttle_client_failure)],
+)
 async def report_client_failure(
     body: ClientFailureRequest,
     request: Request,
 ) -> ClientFailureResponse:
-    _throttle_client_failure(request)
     correlation_id = _sanitize_log_field((body.ref or "").strip(), max_len=64) or uuid.uuid4().hex
     logger.warning(
         "client_failure correlation_id=%s method=%s path=%s ui_path=%s status=%s source=%s message=%s",

@@ -52,3 +52,12 @@ def test_client_failure_beacon_rate_limits_by_ip(client: TestClient):
     limited = client.post("/client-failures", json={"message": "too many"})
     assert limited.status_code == 429
     assert limited.headers.get("Retry-After")
+
+
+def test_client_failure_beacon_rate_limits_malformed_bodies(client: TestClient):
+    """Throttle is a route dependency so 422s still consume the IP budget."""
+    for _ in range(30):
+        bad = client.post("/client-failures", json={"message": ""})
+        assert bad.status_code == 422, bad.text
+    limited = client.post("/client-failures", json={"message": "after spam"})
+    assert limited.status_code == 429

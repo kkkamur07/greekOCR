@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import re
 import shutil
-import threading
 from pathlib import Path
 
 from src.hf.paths import DEFAULT_CACHE_ROOT
@@ -21,8 +20,6 @@ from src.hf.resolve.uri import parse_hf_weights_uri
 
 _COMMIT_SHA_PATTERN = re.compile(r"[0-9a-f]{40}")
 _SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
-_resolve_locks_guard = threading.Lock()
-_resolve_locks: dict[str, threading.Lock] = {}
 
 
 def default_cache_root() -> Path:
@@ -37,16 +34,6 @@ def cache_dir_for(
 ) -> Path:
   root = cache_root or default_cache_root()
   return root / registry_model_id / registry_tag
-
-
-def _lock_for_model_tag(registry_model_id: str, registry_tag: str) -> threading.Lock:
-  key = f"{registry_model_id}\0{registry_tag}"
-  with _resolve_locks_guard:
-    lock = _resolve_locks.get(key)
-    if lock is None:
-      lock = threading.Lock()
-      _resolve_locks[key] = lock
-    return lock
 
 
 def _validate_provenance(*, hub_revision: str | None, artifact_sha256: str | None) -> None:
@@ -75,30 +62,6 @@ def _snapshot_download(
 
 
 def resolve_hf_weights_source(
-  uri: str,
-  *,
-  registry_model_id: str,
-  registry_tag: str,
-  hub_revision: str | None,
-  artifact_sha256: str | None,
-  architecture: str | None = None,
-  hub_client: HubClient | None = None,
-  cache_root: Path | None = None,
-) -> Path:
-  with _lock_for_model_tag(registry_model_id, registry_tag):
-    return _resolve_hf_weights_source_locked(
-      uri,
-      registry_model_id=registry_model_id,
-      registry_tag=registry_tag,
-      hub_revision=hub_revision,
-      artifact_sha256=artifact_sha256,
-      architecture=architecture,
-      hub_client=hub_client,
-      cache_root=cache_root,
-    )
-
-
-def _resolve_hf_weights_source_locked(
   uri: str,
   *,
   registry_model_id: str,

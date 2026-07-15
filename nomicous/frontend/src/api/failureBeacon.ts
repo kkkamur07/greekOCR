@@ -52,12 +52,16 @@ export function reportClientFailure(
   }
 
   try {
-    void fetch(url, {
+    fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body,
       credentials: "include",
       keepalive: true,
+    }).catch((err) => {
+      if (typeof console !== "undefined") {
+        console.warn("client_failure_beacon_failed", payload, err);
+      }
     });
   } catch {
     if (typeof console !== "undefined") {

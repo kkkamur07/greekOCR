@@ -156,12 +156,13 @@ below). Prefer Hub + download script over growing git blobs.
 
 ### H6 — Pre-commit does not mirror CI
 
-Pre-commit runs **lint and format only**. CI also runs **tests**, **build**, and
-**`check:api`**.
+Pre-commit runs **lint**, **format**, and **OpenAPI artifact generation**
+(`openapi-generate` → `npm run generate:api` when backend Python changes).
+CI still also runs **tests**, **build**, and **`check:api`** (drift gate).
 
-**Fix:** Add a documented local check script (see [Local check script](#local-check-script))
-and a short `CONTRIBUTING.md`. Do not put Postgres integration in pre-commit
-(too slow).
+**Fix:** Keep heavy gates (Postgres integration, full frontend build) in CI /
+the local check script (see [Local check script](#local-check-script)), not
+pre-commit. Do not put Postgres integration in pre-commit (too slow).
 
 ---
 
@@ -391,7 +392,7 @@ product/    ← nomicous/, inference/, landing/
 | Frontend build | No | Yes |
 | Python unit tests | No | Yes |
 | Postgres integration | No | Yes |
-| OpenAPI drift (`check:api`) | No | Yes |
+| OpenAPI generate (`generate:api`) | Yes (`openapi-generate`) | Yes (`check:api` drift gate) |
 | gitleaks / dependency audit | No | Yes |
 | Docker / deployment build | No | Disabled (`deployment.yml`) |
 

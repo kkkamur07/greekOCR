@@ -181,6 +181,12 @@ def test_kraken_adapter_preserves_raw_ceiling_and_stores_refined_points(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
+    """Post-BLLA refinement only.
+
+    Stubs ``_run_blla_segment`` to inject a fixed dense ceiling so this unit
+    test can assert Otsu/simplify metadata without loading Kraken weights.
+    Live BLLA is covered by ``@pytest.mark.ml`` run/worker/e2e suites.
+    """
     image, _ = _synthetic_ink_fixture()
     dense_ceiling = _dense_rectangle(20, 25, 200, 90)
     model_path = tmp_path / "model.mlmodel"
@@ -225,6 +231,7 @@ def test_kraken_adapter_uses_raw_boundaries_when_otsu_refinement_is_disabled(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
+    """Post-BLLA simplify only — BLLA stub justified as in the Otsu test above."""
     image, _ = _synthetic_ink_fixture()
     dense_ceiling = _dense_rectangle(20, 25, 200, 90)
     model_path = tmp_path / "model.mlmodel"
@@ -264,6 +271,7 @@ def test_kraken_adapter_splits_oversized_refined_line(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
+    """Post-BLLA split only — BLLA stub justified as in the Otsu test above."""
     image, ceiling = _merged_two_line_fixture()
     model_path = tmp_path / "model.mlmodel"
     model_path.write_text("stub", encoding="utf-8")

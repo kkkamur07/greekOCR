@@ -413,6 +413,9 @@ export function useLayoutMutations({
       }
       setLineError(null);
       setEditUndoRevision((value) => value + 1);
+      const pairing = await api.getPagePairing(projectId, documentId, partId);
+      setTextLines(pairing.text_lines);
+      setPairingProgress(pairing.pairing_progress);
     } catch (err) {
       undoStackRef.current = pushEditOntoStack(undoStackRef.current, edit);
       applyLocalLines(previous);
@@ -452,6 +455,9 @@ export function useLayoutMutations({
       }
       setLineError(null);
       setEditUndoRevision((value) => value + 1);
+      const pairing = await api.getPagePairing(projectId, documentId, partId);
+      setTextLines(pairing.text_lines);
+      setPairingProgress(pairing.pairing_progress);
     } catch (err) {
       redoStackRef.current = pushEditOntoStack(redoStackRef.current, edit);
       applyLocalLines(previous);

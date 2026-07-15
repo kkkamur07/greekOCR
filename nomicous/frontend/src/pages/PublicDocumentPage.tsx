@@ -44,6 +44,9 @@ export function PublicDocumentPage() {
       setLoading(true);
       setNotFound(false);
       setErrorMessage(null);
+      setDocument(null);
+      setLayout(null);
+      setActivePartId(null);
       try {
         const [doc, layoutRes] = await Promise.all([
           api.getPublicDocument(projectId, documentId),
