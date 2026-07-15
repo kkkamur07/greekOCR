@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { JobResponse } from "../api/client";
-import { subscribeToJob } from "./jobSubscription";
+import { subscribeToJob, waitForSubscribedJob } from "./jobSubscription";
 
 function job(overrides: Partial<JobResponse> = {}): JobResponse {
   return {
@@ -65,5 +65,32 @@ describe("subscribeToJob", () => {
     expect(secondListener).toHaveBeenCalledWith(job());
     first();
     second();
+  });
+});
+
+describe("waitForSubscribedJob", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("resolves when the job is cancelled instead of timing out as failed", async () => {
+    vi.useFakeTimers();
+    const cancelled = job({ status: "cancelled", result: null, error: null });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(null, { status: 500 }),
+    );
+    const getJob = vi.fn().mockResolvedValue(cancelled);
+
+    const pending = waitForSubscribedJob("job-1", {
+      eventsUrl: "http://localhost:8000/jobs/job-1/events",
+      getJob,
+      intervalMs: 100,
+      noEventTimeoutMs: 50,
+      timeoutMs: 5_000,
+    });
+
+    await vi.advanceTimersByTimeAsync(50);
+    await expect(pending).resolves.toEqual(cancelled);
   });
 });
