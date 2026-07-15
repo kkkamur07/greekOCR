@@ -15,7 +15,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 FROM python:3.11-slim AS runtime
 
-ARG APP_VERSION=0.3.2
+ARG APP_VERSION=0.3.3
 LABEL org.opencontainers.image.title="nomicous-api" \
       org.opencontainers.image.version="${APP_VERSION}"
 

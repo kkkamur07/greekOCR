@@ -117,7 +117,7 @@ docker images 'nomicous-*'
 
 **Important:** set `NOMICOUS_VERSION` in a shell profile or root `.env` next to
 `docker-compose.yml` so the image tag always matches `VERSION`. The current
-Compose fallback is `0.3.2`; do not rely on it for a release unless it has been
+Compose fallback is `0.3.3`; do not rely on it for a release unless it has been
 updated to match `VERSION`.
 
 ## Environment variables

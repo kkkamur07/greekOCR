@@ -4,7 +4,7 @@ x-api-build: &api-build
   context: .
   dockerfile: nomicous/Dockerfile
   args:
-    APP_VERSION: ${NOMICOUS_VERSION:-0.3.2}
+    APP_VERSION: ${NOMICOUS_VERSION:-0.3.3}
 
 x-inference-build: &inference-build
   context: .
@@ -165,7 +165,7 @@ services:
       dockerfile: frontend/Dockerfile
       target: dev
       args:
-        APP_VERSION: ${NOMICOUS_VERSION:-0.3.2}
+        APP_VERSION: ${NOMICOUS_VERSION:-0.3.3}
         NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
     ports:
       - "127.0.0.1:5173:5173"
