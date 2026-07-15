@@ -15,6 +15,7 @@ describe("PageEditorPlaceholderPage segment mutations", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await flushPageEditorEffects();
   });
 

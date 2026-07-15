@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import threading
 from pathlib import Path
 
 from inference.contracts.common import HostEligibility
@@ -54,16 +53,3 @@ def prefetch_local_eligible_weights(registry_path: Path) -> None:
                     model_id,
                     tag,
                 )
-
-
-def start_weight_prefetch(registry_path: Path) -> threading.Thread:
-    """Run :func:`prefetch_local_eligible_weights` in a daemon thread."""
-
-    thread = threading.Thread(
-        target=prefetch_local_eligible_weights,
-        args=(registry_path,),
-        name="helper-weight-prefetch",
-        daemon=True,
-    )
-    thread.start()
-    return thread

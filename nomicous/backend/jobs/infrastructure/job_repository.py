@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -244,6 +245,21 @@ def mark_job_done(job_id: uuid.UUID, result: dict | None = None) -> None:
 _CANCELABLE = (JobStatus.pending, JobStatus.running, JobStatus.waiting)
 
 
+def _apply_cancellation(job: Job, now: datetime) -> None:
+    if job.status not in _CANCELABLE:
+        raise ConflictError(f"job {job.id} cannot be cancelled from status {job.status.value}")
+    if job.callback_claimed_at is not None:
+        raise ConflictError(
+            f"job {job.id} cannot be cancelled while an inference callback is applied"
+        )
+    job.status = JobStatus.cancelled
+    job.error = None
+    job.result = None
+    job.callback_claimed_at = None
+    job.completed_at = now
+    job.updated_at = now
+
+
 async def cancel_job_async(session: AsyncSession, job_id: uuid.UUID) -> Job | None:
     """Atomically cancel a pending/running/waiting job under ``FOR UPDATE``.
 
@@ -256,21 +272,11 @@ async def cancel_job_async(session: AsyncSession, job_id: uuid.UUID) -> Job | No
     ).scalar_one_or_none()
     if job is None:
         return None
-    if job.status not in _CANCELABLE:
-        raise ConflictError(f"job {job_id} cannot be cancelled from status {job.status.value}")
-    if job.callback_claimed_at is not None:
-        raise ConflictError(
-            f"job {job_id} cannot be cancelled while an inference callback is applied"
-        )
-    job.status = JobStatus.cancelled
-    job.error = None
-    job.result = None
-    job.callback_claimed_at = None
-    job.completed_at = now
-    job.updated_at = now
+    _apply_cancellation(job, now)
     await session.commit()
     await session.refresh(job)
-    notify_platform_job_status_changed(job.id, JobStatus.cancelled)
+    # pg_notify uses a sync DB session — keep it off the event loop.
+    await asyncio.to_thread(notify_platform_job_status_changed, job.id, JobStatus.cancelled)
     return job
 
 
@@ -283,18 +289,7 @@ def cancel_job(job_id: uuid.UUID) -> Job | None:
         ).scalar_one_or_none()
         if job is None:
             return None
-        if job.status not in _CANCELABLE:
-            raise ConflictError(f"job {job_id} cannot be cancelled from status {job.status.value}")
-        if job.callback_claimed_at is not None:
-            raise ConflictError(
-                f"job {job_id} cannot be cancelled while an inference callback is applied"
-            )
-        job.status = JobStatus.cancelled
-        job.error = None
-        job.result = None
-        job.callback_claimed_at = None
-        job.completed_at = now
-        job.updated_at = now
+        _apply_cancellation(job, now)
         session.commit()
         session.refresh(job)
         session.expunge(job)

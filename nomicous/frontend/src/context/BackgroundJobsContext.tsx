@@ -297,9 +297,12 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
     async (jobId: string) => {
       if (jobId.startsWith("local-")) {
         const controller = localAbortControllersRef.current.get(jobId);
-        if (controller) {
-          controller.abort();
+        // Controller is removed in trackLocalTask's finally — missing means the
+        // local job already finished; do not overwrite done/failed with cancelled.
+        if (!controller) {
+          return;
         }
+        controller.abort();
         markLocalCancelled(jobId);
         toast.success("Job cancelled");
         return;

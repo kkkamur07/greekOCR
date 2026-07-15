@@ -1,6 +1,4 @@
-1. Loading when it taskes time to fetch stuff. 
-2. Verification of the whole codebase including the tests. 
-3. Development of the local helpers - like more ui side so that they are convenient to use. 
-4. The release note link in the frontend is not dynamics need to make it dynamics and simplify the flow of downloading the local helpers. 
-5. On reload it doesn't reload from just asks me to log back in you know. 
-6. Detailed errors please in the frontend. 
+1. Verification of the whole codebase including the tests
+2. Development of the local helpers - like more ui side so that they are convenient to use.
+3. Move off Kraken for segmentation: port the BLLA/segment model + obtain/publish weights under our registry (same pattern as Calamari). Goal — drop `kraken` (and its click/torch constraint drag) from the inference runtime so the helper and inference image stay lighter, and we can clear the Click/Torch pip-audit VEX entries once replacements land.
+4. After (3): remove Click VEX (`docs/security/vex-click-pysec-2026-2132.md`) and Torch VEX (`docs/security/vex-torch-pysec-2026-139-cve-2025-3000.md`) when deps no longer pull vulnerable click/torch floors.

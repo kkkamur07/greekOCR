@@ -59,15 +59,17 @@ export function PageEditorShell({
 
       {processingBanner}
 
-      {/* Always mount statusAlerts so success toast effects run; wrap only for sticky errors. */}
-      {statusAlerts &&
-        (showStatusAlerts ? (
-          <div className="pe-status-bar" role="status" aria-live="polite">
-            {statusAlerts}
-          </div>
-        ) : (
-          statusAlerts
-        ))}
+      {/* Always mount statusAlerts under a stable wrapper so toast effects do not remount. */}
+      {statusAlerts && (
+        <div
+          className="pe-status-bar"
+          role="status"
+          aria-live="polite"
+          style={{ display: showStatusAlerts ? undefined : "none" }}
+        >
+          {statusAlerts}
+        </div>
+      )}
 
       <main className="pe-main">{children}</main>
     </div>
