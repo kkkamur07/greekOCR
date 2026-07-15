@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { reportClientFailure } from "../../api/failureBeacon";
 import { registerToastHandler, type ToastItem } from "./toast";
 
 const DISMISS_MS = 2800;
@@ -10,6 +11,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     registerToastHandler(({ message, variant }) => {
       const id = crypto.randomUUID();
       setToasts((prev) => [...prev, { id, message, variant }]);
+      if (variant === "error") {
+        reportClientFailure(new Error(message), "toast");
+      }
       window.setTimeout(() => {
         setToasts((prev) => prev.filter((t) => t.id !== id));
       }, DISMISS_MS);

@@ -19,7 +19,10 @@ Missing subdirectories are **created automatically** when the API starts. If cre
 
 ### Sample fixture
 
-`data/manuscripts/pages/sample_folio.jpg` and `data/transcriptions/pages/sample_folio.txt` are included for local testing.
+Place page images under `data/manuscripts/pages/` and matching line-broken
+transcriptions under `data/transcriptions/pages/` for local testing. Uploaded
+Document parts are stored as normal WebP objects (`parts/<uuid>/<stem>.webp`),
+not special `folio*` names.
 
 ## Setup
 
@@ -134,8 +137,8 @@ updated to match `VERSION`.
 creates `InferenceModel` rows with `registry://<model-id>?tag=stable` artifact
 references and project-level bindings. Its defaults are
 `greek-kraken-segment-v1` for segmentation and `syriac-calamari-v1` for
-transcription; `greek-calamari-v1` is also seeded as an available transcription
-model.
+transcription. `greek-calamari-v1` stays commented out in `registry.yaml` until
+Hub revision + artifact SHA are pinned.
 
 ```bash
 uv run --group platform python scripts/platform/seed_dev_inference.py

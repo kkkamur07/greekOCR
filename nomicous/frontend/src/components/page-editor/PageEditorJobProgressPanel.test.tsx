@@ -22,6 +22,7 @@ describe("PageEditorJobProgressPanel", () => {
         expanded
         onExpandedChange={() => undefined}
         onDismissCompleted={() => undefined}
+        onCancelJob={() => undefined}
       />,
     );
 
@@ -30,5 +31,6 @@ describe("PageEditorJobProgressPanel", () => {
     ).toBeTruthy();
     expect(screen.getByText("Segment 2")).toBeTruthy();
     expect(screen.getByText("Transcribing 0/1 segment")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^cancel$/i })).toBeTruthy();
   });
 });

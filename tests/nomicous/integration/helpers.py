@@ -9,7 +9,31 @@ from fastapi.testclient import TestClient
 
 from tests.fixtures.paths import MINIMAL_PNG
 
-__all__ = ["MINIMAL_PNG", "documents_url", "poll_job", "stored_minimal_page_bytes"]
+__all__ = [
+    "MINIMAL_PNG",
+    "assert_api_error",
+    "documents_url",
+    "poll_job",
+    "stored_minimal_page_bytes",
+]
+
+
+def assert_api_error(
+    response,
+    *,
+    code: str,
+    message: str | None = None,
+) -> dict:
+    """Assert allowlisted API error shape (code/message); allow correlation `ref`."""
+    body = response.json()
+    assert "error" in body
+    error = body["error"]
+    assert error["code"] == code
+    if message is not None:
+        assert error["message"] == message
+    if "ref" in error:
+        assert isinstance(error["ref"], str) and error["ref"]
+    return error
 
 
 @lru_cache

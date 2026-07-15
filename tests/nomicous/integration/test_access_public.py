@@ -23,7 +23,7 @@ def published_document(client, owner_headers, owner_project):
     upload = client.post(
         f"{base}/{document_id}/parts",
         headers=owner_headers,
-        files={"file": ("folio.png", MINIMAL_PNG, "image/png")},
+        files={"file": ("page.png", MINIMAL_PNG, "image/png")},
     )
     assert upload.status_code == 201
     part_id = upload.json()["id"]

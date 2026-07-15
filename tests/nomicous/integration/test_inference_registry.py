@@ -1,5 +1,6 @@
 """Hosted inference registry endpoint for helper sync."""
 
+import yaml
 from fastapi.testclient import TestClient
 
 
@@ -8,7 +9,9 @@ def test_inference_registry_returns_yaml(client: TestClient):
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("application/yaml")
     assert "models:" in response.text
-    assert "greek-calamari-v1:" in response.text
+    document = yaml.safe_load(response.text)
+    assert "syriac-calamari-v1" in document["models"]
+    assert "greek-calamari-v1" not in document["models"]
     assert "etag" in response.headers
 
 

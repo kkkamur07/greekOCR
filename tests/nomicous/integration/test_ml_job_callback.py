@@ -17,6 +17,7 @@ from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
 from backend.project.infrastructure.orm_models import Project
 from fastapi.testclient import TestClient
 from inference.contracts.webhooks import INFERENCE_WEBHOOK_SECRET_HEADER
+from sqlalchemy import select
 
 from infrastructure.db import sync_system_session
 
@@ -348,6 +349,37 @@ def test_callback_on_terminal_job_is_idempotent(client: TestClient):
     assert after_second.completed_at == after_first.completed_at
     assert after_second.result == after_first.result
     assert after_second.error == after_first.error
+
+
+def test_callback_after_cancel_skips_merge(client: TestClient):
+    """Cancelled waiting jobs stay cancelled; document merge must not run."""
+    product_job_id, inference_job_id = _seed_waiting_job()
+    with sync_system_session() as session:
+        job = session.get(Job, product_job_id)
+        assert job is not None
+        job.status = JobStatus.cancelled
+        job.completed_at = datetime.now(UTC)
+        job.updated_at = job.completed_at
+        session.commit()
+        part_id = job.document_part_id
+        assert part_id is not None
+
+    response = client.post(
+        CALLBACK_URL,
+        headers=WEBHOOK_HEADERS,
+        json=_segment_done_payload(
+            product_job_id=product_job_id, inference_job_id=inference_job_id
+        ),
+    )
+    assert response.status_code == 204
+
+    job = _get_job(product_job_id)
+    assert job.status == JobStatus.cancelled
+    assert job.result is None
+
+    with sync_system_session() as session:
+        lines = list(session.execute(select(Line).where(Line.part_id == part_id)).scalars().all())
+    assert lines == []
 
 
 def test_parallel_callback_replays_merge_once(client: TestClient):

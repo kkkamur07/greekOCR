@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -11,6 +12,7 @@ from sqlalchemy import func, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.api.pagination import PageCursor
+from backend.core.exceptions import ConflictError
 from backend.document.infrastructure.orm_models import Document
 from backend.jobs.infrastructure.notifications import notify_platform_job_status_changed
 from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
@@ -167,37 +169,25 @@ def seconds_until_next_stale_running_job(*, running_timeout_seconds: float) -> f
     return max((reclaim_at - now).total_seconds(), 0.0)
 
 
-def mark_job_done(job_id: uuid.UUID, result: dict | None = None) -> None:
-    now = datetime.now(UTC)
-    with sync_system_session() as session:
-        update_result = session.execute(
-            update(Job)
-            .where(Job.id == job_id)
-            .values(
-                status=JobStatus.done,
-                result=result or {},
-                error=None,
-                completed_at=now,
-                updated_at=now,
-            )
-        )
-        session.commit()
-    if update_result.rowcount:
-        notify_platform_job_status_changed(job_id, JobStatus.done)
-
-
 def mark_job_waiting(
     job_id: uuid.UUID,
     *,
     inference_job_id: uuid.UUID | None = None,
     payload_patch: dict | None = None,
 ) -> None:
+    """Move a non-terminal job to ``waiting``. No-op if already terminal.
+
+    Uses ``FOR UPDATE`` so a concurrent cancel cannot be overwritten by the
+    status write after a stale unlocked read.
+    """
     now = datetime.now(UTC)
     with sync_system_session() as session:
-        job = session.get(Job, job_id)
+        job = session.execute(
+            select(Job).where(Job.id == job_id).with_for_update()
+        ).scalar_one_or_none()
         if job is None:
             raise ValueError(f"job {job_id} not found")
-        if job.status in (JobStatus.done, JobStatus.failed):
+        if job.status in (JobStatus.done, JobStatus.failed, JobStatus.cancelled):
             return
         payload = dict(job.payload or {})
         if payload_patch:
@@ -218,6 +208,7 @@ def mark_job_failed(job_id: uuid.UUID, error: str) -> None:
         update_result = session.execute(
             update(Job)
             .where(Job.id == job_id)
+            .where(Job.status.notin_((JobStatus.cancelled, JobStatus.done)))
             .values(
                 status=JobStatus.failed,
                 error=error,
@@ -229,3 +220,78 @@ def mark_job_failed(job_id: uuid.UUID, error: str) -> None:
         session.commit()
     if update_result.rowcount:
         notify_platform_job_status_changed(job_id, JobStatus.failed)
+
+
+def mark_job_done(job_id: uuid.UUID, result: dict | None = None) -> None:
+    now = datetime.now(UTC)
+    with sync_system_session() as session:
+        update_result = session.execute(
+            update(Job)
+            .where(Job.id == job_id)
+            .where(Job.status.notin_((JobStatus.cancelled, JobStatus.failed)))
+            .values(
+                status=JobStatus.done,
+                result=result or {},
+                error=None,
+                completed_at=now,
+                updated_at=now,
+            )
+        )
+        session.commit()
+    if update_result.rowcount:
+        notify_platform_job_status_changed(job_id, JobStatus.done)
+
+
+_CANCELABLE = (JobStatus.pending, JobStatus.running, JobStatus.waiting)
+
+
+def _apply_cancellation(job: Job, now: datetime) -> None:
+    if job.status not in _CANCELABLE:
+        raise ConflictError(f"job {job.id} cannot be cancelled from status {job.status.value}")
+    if job.callback_claimed_at is not None:
+        raise ConflictError(
+            f"job {job.id} cannot be cancelled while an inference callback is applied"
+        )
+    job.status = JobStatus.cancelled
+    job.error = None
+    job.result = None
+    job.callback_claimed_at = None
+    job.completed_at = now
+    job.updated_at = now
+
+
+async def cancel_job_async(session: AsyncSession, job_id: uuid.UUID) -> Job | None:
+    """Atomically cancel a pending/running/waiting job under ``FOR UPDATE``.
+
+    Raises ConflictError when the job is already terminal or a callback has been
+    claimed (merge may already be applying document changes).
+    """
+    now = datetime.now(UTC)
+    job = (
+        await session.execute(select(Job).where(Job.id == job_id).with_for_update())
+    ).scalar_one_or_none()
+    if job is None:
+        return None
+    _apply_cancellation(job, now)
+    await session.commit()
+    await session.refresh(job)
+    # pg_notify uses a sync DB session — keep it off the event loop.
+    await asyncio.to_thread(notify_platform_job_status_changed, job.id, JobStatus.cancelled)
+    return job
+
+
+def cancel_job(job_id: uuid.UUID) -> Job | None:
+    """Sync cancel helper for non-request contexts (tests/scripts)."""
+    now = datetime.now(UTC)
+    with sync_system_session() as session:
+        job = session.execute(
+            select(Job).where(Job.id == job_id).with_for_update()
+        ).scalar_one_or_none()
+        if job is None:
+            return None
+        _apply_cancellation(job, now)
+        session.commit()
+        session.refresh(job)
+        session.expunge(job)
+        notify_platform_job_status_changed(job.id, JobStatus.cancelled)
+        return job

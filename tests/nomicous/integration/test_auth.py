@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from backend.core.settings.auth import AuthSettings, get_auth_settings
 from backend.core.settings import get_app_settings, get_infrastructure_settings
 from backend.users.api.rate_limit import clear_auth_rate_limit_state
+from tests.nomicous.integration.helpers import assert_api_error
 
 
 def _session_headers(response) -> dict[str, str]:
@@ -99,10 +100,11 @@ def test_login_wrong_password_fails(client, registered_user):
         json={"email": registered_user["email"], "password": "wrong-password-xyz"},
     )
     assert response.status_code == 401
-    assert response.json()["error"] == {
-        "code": "UNAUTHORIZED",
-        "message": "Authentication failed",
-    }
+    assert_api_error(
+        response,
+        code="UNAUTHORIZED",
+        message="Authentication failed",
+    )
 
 
 @pytest.mark.integration
@@ -380,6 +382,10 @@ def test_auth_rejects_passwords_over_bcrypt_utf8_byte_limit(client, unique_user)
     )
 
     assert response.status_code == 422
-    assert response.json() == {"error": {"code": "VALIDATION_ERROR", "message": "Invalid request"}}
+    assert_api_error(
+        response,
+        code="VALIDATION_ERROR",
+        message="Invalid request",
+    )
     assert oversized_password not in response.text
     assert response.headers["x-error-id"]

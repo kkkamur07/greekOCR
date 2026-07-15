@@ -3,13 +3,100 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Nomicous</title>
+    <title>Nomicous | AI-assisted manuscript annotation and HTR</title>
     <meta
       name="description"
-      content="Annotation platform and open HTR models for historical manuscripts."
+      content="AI-assisted annotation for historical manuscripts. Models draft segments and transcriptions. You review and edit. Open HTR models for Greek, Syriac, Coptic, and Armenian."
     />
+    <meta
+      name="keywords"
+      content="HTR, handwritten text recognition, manuscript annotation, Greek HTR, Syriac HTR, Coptic HTR, Armenian HTR, digital humanities, NOMOS, open source"
+    />
+    <meta name="author" content="NOMOS project" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://nomicous.com/" />
     <link rel="icon" href="assets/nomos.svg" type="image/svg+xml" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Nomicous" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:url" content="https://nomicous.com/" />
+    <meta
+      property="og:title"
+      content="Nomicous | AI-assisted manuscript annotation and HTR"
+    />
+    <meta
+      property="og:description"
+      content="Models draft segments and transcriptions. You review and edit. Open research tooling for historical scripts."
+    />
+    <meta
+      property="og:image"
+      content="https://nomicous.com/assets/screenshots/live-view-1280.webp"
+    />
+    <meta property="og:image:width" content="1280" />
+    <meta property="og:image:height" content="698" />
+    <meta
+      property="og:image:alt"
+      content="Nomicous live public view of a manuscript page with transcription"
+    />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta
+      name="twitter:title"
+      content="Nomicous | AI-assisted manuscript annotation and HTR"
+    />
+    <meta
+      name="twitter:description"
+      content="Models draft segments and transcriptions. You review and edit. Open HTR for historical manuscripts."
+    />
+    <meta
+      name="twitter:image"
+      content="https://nomicous.com/assets/screenshots/live-view-1280.webp"
+    />
+
     <link rel="stylesheet" href="styles.css" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://nomicous.com/#website",
+            "url": "https://nomicous.com/",
+            "name": "Nomicous",
+            "description": "AI-assisted annotation platform for historical manuscripts. Models draft. You review.",
+            "publisher": { "@id": "https://nomicous.com/#org" }
+          },
+          {
+            "@type": "SoftwareApplication",
+            "@id": "https://nomicous.com/#app",
+            "name": "Nomicous",
+            "applicationCategory": "https://schema.org/DesignApplication",
+            "operatingSystem": "Web",
+            "url": "https://app.nomicous.com",
+            "description": "AI-assisted manuscript annotation and handwritten text recognition. Review model drafts, correct where needed, export training-ready data.",
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "EUR"
+            },
+            "publisher": { "@id": "https://nomicous.com/#org" }
+          },
+          {
+            "@type": "Organization",
+            "@id": "https://nomicous.com/#org",
+            "name": "Nomicous",
+            "url": "https://nomicous.com/",
+            "logo": "https://nomicous.com/assets/nomos.svg",
+            "sameAs": [
+              "https://huggingface.co/kkkamur07",
+              "https://nomosproject.de",
+              "https://app.nomicous.com"
+            ]
+          }
+        ]
+      }
+    </script>
   </head>
   <body>
     <header class="header">
@@ -34,11 +121,14 @@
             <a class="hero__logo" href="/" aria-label="Nomicous home">
               <img src="assets/nomos.svg" alt="" width="96" height="141" />
             </a>
-            <h1>Manuscript annotation and handwritten text recognition</h1>
+            <h1>AI-assisted manuscript annotation</h1>
             <p class="hero__lead">
-              Segment folio images, run line-level HTR, and export training-ready data.
-              Built for Greek, Syriac, and related historical scripts in the NOMOS research
-              ecosystem.
+              Models draft the segments and transcriptions. You review their work and
+              edit where needed so you finish more pages.
+            </p>
+            <p class="hero__scope">
+              Built for Greek, Syriac, Coptic, Armenian, and related scripts in the NOMOS
+              research ecosystem.
             </p>
             <p class="hero__cta">
               <a class="btn" href="https://app.nomicous.com">Open the platform</a>
@@ -53,14 +143,14 @@
                 assets/screenshots/editor-1280.webp 1280w
               "
               sizes="(min-width: 56rem) min(48vw, 34rem), calc(100vw - 2rem)"
-              alt="Page editor showing a manuscript folio with line segments and the transcription panel"
+              alt="Nomicous page editor with a manuscript folio, line segments, and transcription panel"
               width="1280"
               height="758"
               fetchpriority="high"
               decoding="async"
             />
             <figcaption class="hero-split__caption">
-              Segment lines, run HTR, and review model output on each page.
+              Review AI drafts on each page. Edit only where needed.
             </figcaption>
           </figure>
         </div>
@@ -69,75 +159,71 @@
       <section class="section section--wide" id="features" aria-labelledby="features-title">
         <div class="section--wide__inner">
           <p class="eyebrow">Features</p>
-          <h2 class="section-title" id="features-title">Built for manuscript HTR workflows</h2>
+          <h2 class="section-title" id="features-title">AI drafts. You review.</h2>
 
           <ul class="feature-list">
             <li class="feature">
-              <h3 class="feature__title">Page editor</h3>
+              <h3 class="feature__title">AI-assisted transcription</h3>
               <p class="feature__text">
-                Draw line regions on each folio, pair transcriptions with segments, and
-                compare ground truth against model output on the same canvas.
+                Run segmentation and line HTR so the page arrives with proposed regions
+                and readings. Review the AI work. Correct what needs a human eye. That is
+                how you get more pages done.
               </p>
             </li>
             <li class="feature">
-              <h3 class="feature__title">Segmentation and transcribe</h3>
+              <h3 class="feature__title">Page editor</h3>
               <p class="feature__text">
-                Run layout segmentation and line OCR from the editor. Switch models per
-                task and keep results as separate transcription layers.
+                Compare model output with ground truth on the same canvas. Edit segments
+                or text in place. Keep layers separate per model or pass.
               </p>
             </li>
             <li class="feature">
               <h3 class="feature__title">Local or cloud inference</h3>
               <p class="feature__text">
-                Use hosted inference by default, or install the Inference Helper to run
-                OCR and segmentation on your CPU with models cached on disk.
+                Use hosted inference by default, or the Inference Helper to run OCR and
+                segmentation on your CPU with models cached on disk.
               </p>
             </li>
             <li class="feature">
               <h3 class="feature__title">Projects and export</h3>
               <p class="feature__text">
-                Organize work into projects and documents, publish live pages, and export
-                line crops plus transcriptions for training pipelines.
+                Organize manuscripts into projects. Publish live pages. Export line crops
+                and transcriptions for training pipelines.
               </p>
             </li>
           </ul>
 
-          <div class="shots">
-            <figure class="shot">
+          <figure class="shot shot--wide">
+            <a
+              class="shot__link"
+              href="https://app.nomicous.com/public/projects/5d50c171-7913-4bd0-9d7b-770ab2501180/documents/7b8a9bb5-7391-4a73-92d0-899a46f80e47"
+              target="_blank"
+              rel="noreferrer"
+            >
               <img
-                src="assets/screenshots/projects-1280.webp"
+                src="assets/screenshots/live-view-1280.webp"
                 srcset="
-                  assets/screenshots/projects-640.webp 640w,
-                  assets/screenshots/projects-960.webp 960w,
-                  assets/screenshots/projects-1280.webp 1280w
+                  assets/screenshots/live-view-640.webp 640w,
+                  assets/screenshots/live-view-960.webp 960w,
+                  assets/screenshots/live-view-1280.webp 1280w
                 "
-                sizes="(min-width: 1024px) 448px, (min-width: 720px) 46vw, calc(100vw - 32px)"
-                alt="Projects list with manuscript documents and upload controls"
+                sizes="(min-width: 64rem) 60rem, calc(100vw - 2rem)"
+                alt="Public live view of a manuscript page with aligned transcription"
                 width="1280"
-                height="753"
+                height="698"
                 loading="lazy"
                 decoding="async"
               />
-              <figcaption>Projects and document upload.</figcaption>
-            </figure>
-            <figure class="shot">
-              <img
-                src="assets/screenshots/home-1280.webp"
-                srcset="
-                  assets/screenshots/home-640.webp 640w,
-                  assets/screenshots/home-960.webp 960w,
-                  assets/screenshots/home-1280.webp 1280w
-                "
-                sizes="(min-width: 1024px) 448px, (min-width: 720px) 46vw, calc(100vw - 32px)"
-                alt="Document detail view with page thumbnails and part list"
-                width="1280"
-                height="763"
-                loading="lazy"
-                decoding="async"
-              />
-              <figcaption>Page list and editor entry.</figcaption>
-            </figure>
-          </div>
+            </a>
+            <figcaption>
+              Live public page view for shared manuscript transcriptions.
+              <a
+                href="https://app.nomicous.com/public/projects/5d50c171-7913-4bd0-9d7b-770ab2501180/documents/7b8a9bb5-7391-4a73-92d0-899a46f80e47"
+                target="_blank"
+                rel="noreferrer"
+              >Open live example</a>
+            </figcaption>
+          </figure>
         </div>
       </section>
 
@@ -156,30 +242,55 @@
           <div class="section__head">
             <div>
               <p class="eyebrow">Models</p>
-              <h2 class="section-title">Published on Hugging Face</h2>
+              <h2 class="section-title">On Hugging Face</h2>
             </div>
             <a
               class="hf-badge"
-              href="https://huggingface.co/nomicous"
+              href="https://huggingface.co/kkkamur07"
               target="_blank"
               rel="noreferrer"
-              aria-label="Nomicous on Hugging Face"
+              aria-label="Models on Hugging Face"
             >
               <img src="assets/huggingface.svg" alt="" width="32" height="30" />
             </a>
           </div>
           <ul class="links">
             <li>
-              <a href="https://huggingface.co/nomicous/greek-htr-calamari" target="_blank" rel="noreferrer">
-                greek-htr-calamari
-              </a>
-              <span>Greek line HTR, Calamari</span>
+              <div class="links__main">
+                <a href="https://huggingface.co/kkkamur07/syriac-htr-calamari" target="_blank" rel="noreferrer">
+                  syriac-htr-calamari
+                </a>
+                <span class="links__desc">Syriac line HTR, Calamari</span>
+              </div>
+              <span class="status status--live"><span class="status__dot" aria-hidden="true"></span>Live</span>
             </li>
             <li>
-              <a href="https://huggingface.co/nomicous/syriac-htr-calamari" target="_blank" rel="noreferrer">
-                syriac-htr-calamari
-              </a>
-              <span>Syriac line HTR, Calamari</span>
+              <div class="links__main">
+                <span class="links__name">greek-htr-calamari</span>
+                <span class="links__desc">Greek line HTR, Calamari</span>
+              </div>
+              <span class="status status--soon"><span class="status__dot" aria-hidden="true"></span>Coming soon</span>
+            </li>
+            <li>
+              <div class="links__main">
+                <span class="links__name">coptic-htr-calamari</span>
+                <span class="links__desc">Coptic line HTR, Calamari</span>
+              </div>
+              <span class="status status--soon"><span class="status__dot" aria-hidden="true"></span>Coming soon</span>
+            </li>
+            <li>
+              <div class="links__main">
+                <span class="links__name">armenian-htr-calamari</span>
+                <span class="links__desc">Armenian line HTR, Calamari</span>
+              </div>
+              <span class="status status--soon"><span class="status__dot" aria-hidden="true"></span>Coming soon</span>
+            </li>
+            <li>
+              <div class="links__main">
+                <span class="links__name">Curated HTR datasets</span>
+                <span class="links__desc">Training and evaluation sets on Hugging Face</span>
+              </div>
+              <span class="status status--soon"><span class="status__dot" aria-hidden="true"></span>Coming soon</span>
             </li>
           </ul>
         </section>

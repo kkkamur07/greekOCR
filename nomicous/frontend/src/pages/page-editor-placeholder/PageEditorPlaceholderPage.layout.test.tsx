@@ -1,7 +1,8 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "../../api/errors";
+import { toast } from "../../components/ui/toast";
 import {
   DOCUMENT,
   enableBaselinesOnCanvas,
@@ -240,6 +241,7 @@ describe("PageEditorPlaceholderPage layout", () => {
     fireEvent.click(
       screen.getByRole("button", { name: /move baseline down/i }),
     );
+    const toastSuccess = vi.spyOn(toast, "success");
     fireEvent.click(screen.getByRole("button", { name: /save layout/i }));
 
     await waitFor(() => {
@@ -266,7 +268,9 @@ describe("PageEditorPlaceholderPage layout", () => {
         },
       );
     });
-    expect(await screen.findByText("Manual geometry saved")).toBeTruthy();
+    await waitFor(() => {
+      expect(toastSuccess).toHaveBeenCalledWith("Manual geometry saved");
+    });
   });
 
   it("resets selected Line layout through the API and refreshes the canvas state", async () => {
@@ -346,6 +350,7 @@ describe("PageEditorPlaceholderPage layout", () => {
     await enableBaselinesOnCanvas();
 
     fireEvent.click(await screen.findByLabelText("Line line-1 baseline"));
+    const toastSuccess = vi.spyOn(toast, "success");
     fireEvent.click(screen.getByRole("button", { name: /reset layout/i }));
 
     await waitFor(() => {
@@ -356,7 +361,9 @@ describe("PageEditorPlaceholderPage layout", () => {
         { line_ids: ["line-1"] },
       );
     });
-    expect(await screen.findByText("Layout reset")).toBeTruthy();
+    await waitFor(() => {
+      expect(toastSuccess).toHaveBeenCalledWith("Layout reset");
+    });
   });
 
   it("shows a member-only error when the layout save API rejects access", async () => {

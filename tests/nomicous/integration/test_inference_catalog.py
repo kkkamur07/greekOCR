@@ -64,7 +64,7 @@ def _create_project_document_part(client, headers) -> tuple[str, str, str]:
     part = client.post(
         f"/projects/{project_id}/documents/{document_id}/parts",
         headers=headers,
-        files={"file": ("folio.png", MINIMAL_PNG, "image/png")},
+        files={"file": ("page.png", MINIMAL_PNG, "image/png")},
     )
     assert part.status_code == 201
     return project_id, document_id, part.json()["id"]

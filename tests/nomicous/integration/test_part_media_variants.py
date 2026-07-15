@@ -23,7 +23,7 @@ def _create_part(client, owner_headers, owner_project, image: bytes) -> tuple[st
     upload = client.post(
         f"{documents_url}/{document.json()['id']}/parts",
         headers=owner_headers,
-        files={"file": ("folio.png", image, "image/png")},
+        files={"file": ("page.png", image, "image/png")},
     )
     assert upload.status_code == 201
     return document.json()["id"], upload.json()["id"]

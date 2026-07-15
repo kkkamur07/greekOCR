@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   fetchHelperCatalog,
   isModelLocalEligible,
   type HelperCatalogModel,
 } from "./catalog";
+import { HELPER_PROBE_INTERVAL_MS } from "./constants";
 import {
   preferCloudInference,
   saveInferencePreference,
@@ -18,9 +19,14 @@ export function useInferenceHost() {
     preferCloudInference() ? "cloud" : "local",
   );
   const [probing, setProbing] = useState(true);
+  const probingRef = useRef(false);
 
-  const refresh = useCallback(async () => {
-    setProbing(true);
+  const refresh = useCallback(async (options?: { quiet?: boolean }) => {
+    if (probingRef.current) return;
+    probingRef.current = true;
+    if (!options?.quiet) {
+      setProbing(true);
+    }
     try {
       const healthy = await probeHelperHealth();
       setHelperAvailable(healthy);
@@ -33,12 +39,36 @@ export function useInferenceHost() {
       setHelperAvailable(false);
       setCatalog([]);
     } finally {
-      setProbing(false);
+      probingRef.current = false;
+      if (!options?.quiet) {
+        setProbing(false);
+      }
     }
   }, []);
 
   useEffect(() => {
     void refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    function onFocus() {
+      void refresh({ quiet: true });
+    }
+    function onVisibility() {
+      if (document.visibilityState === "visible") {
+        void refresh({ quiet: true });
+      }
+    }
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    const interval = window.setInterval(() => {
+      void refresh({ quiet: true });
+    }, HELPER_PROBE_INTERVAL_MS);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.clearInterval(interval);
+    };
   }, [refresh]);
 
   function setInferencePreference(next: InferencePreference) {

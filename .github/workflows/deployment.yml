@@ -13,6 +13,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+          enable-cache: true
       - run: bash deploy/platform/build.sh
       - run: test -f deploy/platform/nomicous/backend/core/app.py
       - run: test -f deploy/platform/inference/contracts/__init__.py
@@ -20,7 +24,7 @@ jobs:
       - run: test -f deploy/platform/inference/infrastructure/settings.py
       - name: Verify platform contract import surface
         run: |
-          PYTHONPATH=deploy/platform python -c \
+          PYTHONPATH=deploy/platform uv run --locked --group platform python -c \
             "from inference.contracts.jobs import JobCallbackRequest; assert JobCallbackRequest"
       - run: docker build --target runtime --tag nomicous-api:ci -f nomicous/Dockerfile .
       - run: docker build --target builder -f nomicous/frontend/Dockerfile nomicous
@@ -29,7 +33,11 @@ jobs:
         run: |
           test "$(docker run --rm --entrypoint id nomicous-api:ci -u)" != "0"
           test "$(docker run --rm --entrypoint id nomicous-inference:ci -u)" != "0"
-          docker run --rm --entrypoint python nomicous-api:ci -c "from backend.core.main import app; assert app.title"
+          docker run --rm \
+            -e JWT_SECRET=test-secret-not-for-production-at-least-32-bytes \
+            -e ENVIRONMENT=development \
+            --entrypoint python nomicous-api:ci \
+            -c "from backend.core.main import app; assert app.title"
           docker run --rm --entrypoint python nomicous-inference:ci -c "from inference.api.main import app; assert app.title"
       - name: Verify health checks and minimal Hub resolver image content
         run: |
@@ -42,6 +50,8 @@ jobs:
             test ! -d /app/src/hf/staging
             test ! -d /app/src/hf/publish
           '
+      - name: Prepare SBOM output directory
+        run: mkdir -p sbom
       - name: Generate API image SBOM
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
         with:

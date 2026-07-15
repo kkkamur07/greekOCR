@@ -66,7 +66,7 @@ type PairingStateInput = {
   ) => Promise<JobResponse>;
   trackLocalTask: <T>(
     meta: { label: string; kind: PageEditorJobKind },
-    run: () => Promise<T>,
+    run: (signal: AbortSignal) => Promise<T>,
   ) => Promise<T>;
 };
 
@@ -346,7 +346,7 @@ export function usePairingState({
     return blobToBase64(blob);
   }
 
-  async function runLocalTranscribe(lineIds: string[]) {
+  async function runLocalTranscribe(lineIds: string[], signal: AbortSignal) {
     const model = selectedTranscribeModel();
     if (!model) {
       throw new Error("Select an HTR model before running OCR.");
@@ -366,14 +366,19 @@ export function usePairingState({
     }
 
     const imageBytes = await loadPartImageBase64();
+    signal.throwIfAborted();
     await localInference.onStart(registryModelId, registryTag);
     try {
+      const cloudSwitchSignal = localInference.getSignal();
+      const combinedSignal = cloudSwitchSignal
+        ? AbortSignal.any([signal, cloudSwitchSignal])
+        : signal;
       const response = await runLocalInference({
         task: "transcribe",
         registry_model_id: registryModelId,
         registry_tag: registryTag,
         image_bytes: imageBytes,
-        signal: localInference.getSignal(),
+        signal: combinedSignal,
         params: {
           lines: targetLines.map((line, index) => ({
             line_id: line.id,
@@ -382,6 +387,8 @@ export function usePairingState({
           })),
         },
       });
+      signal.throwIfAborted();
+      cloudSwitchSignal?.throwIfAborted();
 
       if (response.task !== "transcribe" || !("lines" in response.output)) {
         throw new Error("Local transcribe returned an unexpected response.");
@@ -416,7 +423,9 @@ export function usePairingState({
     jobMeta: { label: string; kind: PageEditorJobKind },
   ) {
     try {
-      return await trackLocalTask(jobMeta, () => runLocalTranscribe(lineIds));
+      return await trackLocalTask(jobMeta, (signal) =>
+        runLocalTranscribe(lineIds, signal),
+      );
     } catch (err) {
       if (isAbortError(err) && localInference.shouldFallbackToCloud()) {
         localInference.clearFallbackToCloud();

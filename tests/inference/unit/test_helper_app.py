@@ -26,7 +26,7 @@ def helper_client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> TestClient
     monkeypatch.setenv("HELPER_CACHED_REGISTRY_PATH", str(tmp_path / "registry.yaml"))
     monkeypatch.setenv("HELPER_CACHED_REGISTRY_ETAG_PATH", str(tmp_path / "registry.etag"))
     get_helper_settings.cache_clear()
-    return TestClient(create_helper_app())
+    return TestClient(create_helper_app(prefetch_weights=False))
 
 
 def test_helper_health_returns_ok(helper_client: TestClient):
@@ -39,10 +39,12 @@ def test_helper_catalog_lists_host_eligibility(helper_client: TestClient):
     response = helper_client.get("/inference/v1/catalog")
     assert response.status_code == 200
     models = response.json()["models"]
-    assert len(models) >= 3
-    calamari = next(item for item in models if item["registry_model_id"] == "greek-calamari-v1")
-    assert calamari["host_eligibility"] == "local"
-    assert calamari["task"] == "transcribe"
+    assert len(models) >= 2
+    model_ids = {item["registry_model_id"] for item in models}
+    assert "greek-calamari-v1" not in model_ids
+    syriac = next(item for item in models if item["registry_model_id"] == "syriac-calamari-v1")
+    assert syriac["host_eligibility"] == "local"
+    assert syriac["task"] == "transcribe"
 
 
 def test_helper_run_requires_no_service_secret_for_unknown_model(helper_client: TestClient):
@@ -128,7 +130,7 @@ def test_helper_secure_mode_requires_authentication(
     monkeypatch.setenv("HELPER_CACHED_REGISTRY_ETAG_PATH", str(tmp_path / "registry.etag"))
     monkeypatch.setenv("HF_CACHE_ROOT", str(tmp_path / "hf-cache"))
     get_helper_settings.cache_clear()
-    client = TestClient(create_helper_app())
+    client = TestClient(create_helper_app(prefetch_weights=False))
 
     assert client.get("/health").status_code == 401
     assert (

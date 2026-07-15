@@ -5,6 +5,7 @@ export {
 } from "./catalog";
 export {
   HELPER_BASE_URL,
+  HELPER_PROBE_INTERVAL_MS,
   DEFAULT_SEGMENT_REGISTRY_MODEL_ID,
 } from "./constants";
 export { runLocalInference } from "./localClient";

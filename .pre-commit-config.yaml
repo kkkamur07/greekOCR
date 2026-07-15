@@ -28,3 +28,18 @@ repos:
         entry: npm --prefix nomicous/frontend exec -- prettier --write
         language: system
         files: ^nomicous/frontend/.*\.(?:[cm]?[jt]sx?|json|css|html|md|ya?ml)$
+
+      # When Platform API routes/schemas change, refresh openapi.json + schema.d.ts
+      # so commits cannot drift from CI `check:api`. Uses non-production secrets
+      # only to instantiate the FastAPI app for schema export.
+      - id: openapi-generate
+        name: Regenerate OpenAPI client artifacts
+        entry: >-
+          env
+          JWT_SECRET=test-secret-not-for-production-at-least-32-bytes
+          INFERENCE_WEBHOOK_SECRET=test-inference-webhook-secret
+          INFERENCE_SERVICE_SECRET=test-inference-webhook-secret
+          npm --prefix nomicous/frontend run generate:api
+        language: system
+        files: ^(nomicous/backend/.*\.py|scripts/platform/export_openapi\.py)$
+        pass_filenames: false

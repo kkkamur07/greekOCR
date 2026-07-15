@@ -8,6 +8,7 @@ export function BackgroundJobsPanel() {
     panelExpanded,
     setPanelExpanded,
     dismissCompleted,
+    cancelJob,
   } = useBackgroundJobs();
 
   return (
@@ -17,6 +18,9 @@ export function BackgroundJobsPanel() {
       expanded={panelExpanded}
       onExpandedChange={setPanelExpanded}
       onDismissCompleted={dismissCompleted}
+      onCancelJob={(jobId) => {
+        void cancelJob(jobId);
+      }}
     />
   );
 }

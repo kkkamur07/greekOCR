@@ -25,10 +25,13 @@ def test_platform_bundle_excludes_env_files_from_all_copied_trees(tmp_path: Path
     _write_source_file(source_root, "nomicous/infrastructure/.env.production")
     _write_source_file(source_root, "nomicous/infrastructure/__pycache__/settings.cpython-311.pyc")
     _write_source_file(source_root, "inference/__init__.py")
+    _write_source_file(source_root, "inference/admission.py")
     _write_source_file(source_root, "inference/registry.yaml")
     _write_source_file(source_root, "inference/contracts/__init__.py")
     _write_source_file(source_root, "inference/contracts/.env")
     _write_source_file(source_root, "inference/contracts/__pycache__/common.cpython-311.pyc")
+    _write_source_file(source_root, "inference/infrastructure/__init__.py")
+    _write_source_file(source_root, "inference/infrastructure/settings.py")
     _write_source_file(source_root, "inference/registry/__init__.py")
     _write_source_file(source_root, "inference/registry/.env.production")
     _write_source_file(source_root, "inference/registry/__pycache__/resolve.cpython-311.pyc")
@@ -53,7 +56,10 @@ def test_platform_bundle_excludes_env_files_from_all_copied_trees(tmp_path: Path
         if path.is_file()
     } == {
         "inference/__init__.py",
+        "inference/admission.py",
         "inference/contracts/__init__.py",
+        "inference/infrastructure/__init__.py",
+        "inference/infrastructure/settings.py",
         "inference/registry.yaml",
         "inference/registry/__init__.py",
         "nomicous/VERSION",

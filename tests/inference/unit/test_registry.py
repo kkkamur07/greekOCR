@@ -23,12 +23,7 @@ def test_registry_yaml_validates_model_entries():
         syriac.versions["stable"].artifact_sha256
         == "ea711b918010aa31bd4a8a5de99c7953207421a7c7d4a39163166db380013053"
     )
-
-    calamari = get_model_entry(registry, "greek-calamari-v1", "stable")
-    assert calamari.task == InferenceTask.transcribe
-    assert calamari.architecture == RegistryArchitecture.calamari
-    assert calamari.device == ComputeDevice.cpu
-    assert calamari.versions["stable"].weights_source.startswith("hf://")
+    assert "greek-calamari-v1" not in registry.models
 
     kraken = get_model_entry(registry, "greek-kraken-segment-v1", "stable")
     assert kraken.task == InferenceTask.segment

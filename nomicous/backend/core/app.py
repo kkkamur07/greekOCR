@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from backend.annotation.api.history import router as annotation_history_router
+from backend.core.api.client_failures import router as client_failures_router
 from backend.core.api.health import router as health_router
 from backend.core.api.root import router as root_router
 from backend.core.exceptions import (
@@ -87,7 +88,10 @@ def _error_response(
     headers: dict[str, str] | None = None,
     correlation_id: str | None = None,
 ) -> JSONResponse:
-    content: dict[str, object] = {"error": {"code": code, "message": message}}
+    error: dict[str, object] = {"code": code, "message": message}
+    if correlation_id:
+        error["ref"] = correlation_id
+    content: dict[str, object] = {"error": error}
     response_headers = dict(headers or {})
     if correlation_id:
         response_headers["X-Error-ID"] = correlation_id
@@ -173,7 +177,7 @@ def _register_exception_handlers(app: FastAPI) -> None:
             request=request,
             status_code=422,
             code="VALIDATION_ERROR",
-            message="Invalid request",
+            message=str(exc).strip() or "Invalid request",
             exc=exc,
         )
 
@@ -183,7 +187,7 @@ def _register_exception_handlers(app: FastAPI) -> None:
             request=request,
             status_code=409,
             code="CONFLICT",
-            message="Request conflicts with current state",
+            message=str(exc).strip() or "Request conflicts with current state",
             exc=exc,
         )
 
@@ -310,6 +314,7 @@ def create_app() -> FastAPI:
     _register_exception_handlers(app)
     app.include_router(root_router)
     app.include_router(health_router)
+    app.include_router(client_failures_router)
     app.include_router(auth_router)
     app.include_router(projects_router)
     app.include_router(documents_router)
