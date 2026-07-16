@@ -98,7 +98,7 @@ Environment variables (Production):
 ```bash
 NEXT_PUBLIC_API_BASE_URL=https://api.nomicous.com
 NEXT_PUBLIC_CSRF_COOKIE_NAME=greekocr-csrf
-NEXT_PUBLIC_INFERENCE_HELPER_URL=http://localhost:8001
+NEXT_PUBLIC_INFERENCE_HELPER_URL=http://127.0.0.1:8001
 NEXT_PUBLIC_ENABLE_TEST_JOBS=false
 ```
 
