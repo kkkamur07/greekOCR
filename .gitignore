@@ -69,3 +69,4 @@ lerna-debug.log*
 *.sw?
 
 data/
+.vercel
