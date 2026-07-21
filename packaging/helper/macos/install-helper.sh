@@ -7,6 +7,23 @@ if ! command -v curl >/dev/null 2>&1; then
   exit 1
 fi
 
+REGISTRY_URL="${HELPER_REGISTRY_URL:-https://api.nomicous.com/inference/v1/registry}"
+
+# REGISTRY_URL is templated into the LaunchAgent plist with sed. Reject
+# anything that could escape the template before use.
+case "$REGISTRY_URL" in
+  https://*) ;;
+  http://127.0.0.1*|http://localhost*|"http://[::1]"*) ;;
+  *)
+    echo "ERROR: HELPER_REGISTRY_URL must be https:// (plain http is allowed only for loopback)." >&2
+    exit 1
+    ;;
+esac
+if [ "$(printf '%s' "$REGISTRY_URL" | LC_ALL=C tr -d 'A-Za-z0-9._~:/?#@%=+[]-' | wc -c)" -ne 0 ]; then
+  echo "ERROR: HELPER_REGISTRY_URL contains characters that are not allowed by the installer." >&2
+  exit 1
+fi
+
 APP_SRC="$(cd "$(dirname "$0")" && pwd)/Applications/Nomicous Inference Helper.app"
 APP_DST="$HOME/Applications/Nomicous Inference Helper.app"
 APP_STAGE="$HOME/Applications/.Nomicous Inference Helper.staging.app"
@@ -79,7 +96,7 @@ PLIST_CHANGED=true
 sed \
   -e "s|__INSTALL_DIR__|$INSTALL_DIR|g" \
   -e "s|__HOME__|$HOME|g" \
-  -e "s|__REGISTRY_URL__|${HELPER_REGISTRY_URL:-https://api.nomicous.com/inference/v1/registry}|g" \
+  -e "s|__REGISTRY_URL__|$REGISTRY_URL|g" \
   "$INSTALL_DIR/../Resources/com.nomicous.inference-helper.plist" > "$PLIST_DST"
 
 launchctl bootstrap "gui/$(id -u)" "$PLIST_DST"

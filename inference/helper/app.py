@@ -24,7 +24,7 @@ def create_helper_app() -> FastAPI:
     settings = apply_helper_environment()
     app = FastAPI(
         title="Nomicous Inference Helper",
-        version="0.1.4",
+        version="0.1.6",
     )
     app.add_middleware(
         RequestBodyLimitMiddleware,
@@ -53,12 +53,17 @@ def create_helper_app() -> FastAPI:
 
     # Added last so CORS is the outermost middleware and 401/429/413 responses
     # still carry CORS headers that browser clients can read.
+    # allow_private_network: Chrome/Edge send Access-Control-Request-Private-Network
+    # on preflight for public HTTPS → loopback POSTs. Without this, GET /health and
+    # /catalog succeed (simple requests, no preflight) while POST /inference/v1/run
+    # fails in the browser as TypeError "Failed to fetch".
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["https://app.nomicous.com"],
         allow_credentials=False,
         allow_methods=["GET", "POST", "OPTIONS"],
         allow_headers=["Content-Type", HELPER_AUTH_SECRET_HEADER],
+        allow_private_network=True,
     )
 
     @app.exception_handler(RequestValidationError)

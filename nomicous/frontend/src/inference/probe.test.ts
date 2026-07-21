@@ -21,12 +21,18 @@ describe("probeHelperHealth", () => {
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
       `${HELPER_BASE_URLS[0]}/health`,
-      expect.objectContaining({ method: "GET" }),
+      expect.objectContaining({
+        method: "GET",
+        targetAddressSpace: "loopback",
+      }),
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       `${HELPER_BASE_URLS[1]}/health`,
-      expect.objectContaining({ method: "GET" }),
+      expect.objectContaining({
+        method: "GET",
+        targetAddressSpace: "loopback",
+      }),
     );
   });
 });

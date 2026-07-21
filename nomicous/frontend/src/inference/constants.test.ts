@@ -29,7 +29,7 @@ describe("inference helper download constants", () => {
     );
     expect(HELPER_PROBE_INTERVAL_MS).toBeGreaterThan(0);
     expect(HELPER_BASE_URLS).toContain("http://127.0.0.1:8001");
-    expect(HELPER_BASE_URLS).toContain("http://[::1]:8001");
     expect(HELPER_BASE_URLS).toContain("http://localhost:8001");
+    expect(HELPER_BASE_URLS).toContain("http://[::1]:8001");
   });
 });

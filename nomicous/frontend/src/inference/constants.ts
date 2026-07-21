@@ -6,11 +6,17 @@ const configuredHelperBaseUrl = process.env.NEXT_PUBLIC_INFERENCE_HELPER_URL
 export const HELPER_BASE_URL =
   configuredHelperBaseUrl || DEFAULT_HELPER_BASE_URL;
 
+/** All loopback hosts the browser may use to reach the local helper. */
+export const HELPER_LOOPBACK_BASE_URLS = [
+  "http://127.0.0.1:8001",
+  "http://localhost:8001",
+  "http://[::1]:8001",
+] as const;
+
+// Try configured URL first, then every IPv4 / IPv6 / localhost loopback form.
 export const HELPER_BASE_URLS = [
   HELPER_BASE_URL,
-  DEFAULT_HELPER_BASE_URL,
-  "http://[::1]:8001",
-  "http://localhost:8001",
+  ...HELPER_LOOPBACK_BASE_URLS,
 ].filter((url, index, urls) => urls.indexOf(url) === index);
 
 export const HELPER_PROBE_TIMEOUT_MS = 2_000;

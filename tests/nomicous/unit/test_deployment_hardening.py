@@ -82,6 +82,11 @@ def test_helper_installers_are_user_scoped_and_verify_startup() -> None:
         encoding="utf-8"
     )
 
+    # HELPER_REGISTRY_URL is templated into sed/heredoc content, so both shell
+    # installers must reject values that could escape those templates.
+    for installer in (linux_install, mac_install):
+        assert "HELPER_REGISTRY_URL must be https://" in installer
+        assert "tr -d 'A-Za-z0-9._~:/?#@%=+[]-'" in installer
     assert "HELPER_CORS_ORIGINS" not in linux_install
     assert "AUTOSTART_FILE" in linux_install
     assert "RUNNER=" in linux_install
@@ -169,8 +174,11 @@ def test_vercel_frontend_permits_helper_loopback_origins() -> None:
     vercel = (REPO_ROOT / "nomicous" / "frontend" / "vercel.json").read_text(encoding="utf-8")
 
     assert "http://127.0.0.1:8001" in vercel
+    assert "http://127.0.0.1:*" in vercel
     assert "http://localhost:8001" in vercel
+    assert "http://localhost:*" in vercel
     assert "http://[::1]:8001" in vercel
+    assert "http://[::1]:*" in vercel
     assert "connect-src" in vercel
 
 
