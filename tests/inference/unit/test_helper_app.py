@@ -93,10 +93,12 @@ def test_helper_allows_only_configured_browser_origin(helper_client: TestClient)
             "Origin": allowed_origin,
             "Access-Control-Request-Method": "POST",
             "Access-Control-Request-Headers": "content-type",
+            "Access-Control-Request-Private-Network": "true",
         },
     )
     assert preflight.status_code == 200
     assert preflight.headers["access-control-allow-origin"] == allowed_origin
+    assert preflight.headers["access-control-allow-private-network"] == "true"
     assert "access-control-allow-credentials" not in preflight.headers
 
     local = helper_client.options(

@@ -79,11 +79,16 @@ if [ -n "$CODESIGN_IDENTITY" ]; then
   echo "Signing app bundle with: $CODESIGN_IDENTITY"
   # Sign every Mach-O inside the bundle from the inside out, then the bundle
   # itself. Signing nested binaries first avoids the pitfalls of --deep.
+  # The permission-bit predicate also matches shell scripts and other
+  # non-Mach-O files, so filter with file(1); actual signing failures on real
+  # Mach-O binaries must fail the build instead of being silently swallowed.
   find "$DIST_DIR/payload/Applications/${APP_NAME}.app" \
     \( -type f \( -name "*.dylib" -o -name "*.so" -o -perm -111 \) \) -print0 \
-    | while IFS= read -r -d '' macho; do
-        codesign --force --timestamp --options runtime \
-          --entitlements "$ENTITLEMENTS" --sign "$CODESIGN_IDENTITY" "$macho" 2>/dev/null || true
+    | while IFS= read -r -d '' candidate; do
+        if file --brief "$candidate" | grep -q "Mach-O"; then
+          codesign --force --timestamp --options runtime \
+            --entitlements "$ENTITLEMENTS" --sign "$CODESIGN_IDENTITY" "$candidate"
+        fi
       done
   codesign --force --timestamp --options runtime \
     --entitlements "$ENTITLEMENTS" --sign "$CODESIGN_IDENTITY" \

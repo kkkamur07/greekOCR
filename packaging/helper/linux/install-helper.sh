@@ -8,6 +8,21 @@ BACKUP_ROOT="${INSTALL_ROOT}.previous"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REGISTRY_URL="${HELPER_REGISTRY_URL:-https://api.nomicous.com/inference/v1/registry}"
 
+# REGISTRY_URL is templated into a systemd unit (sed) and a runner script
+# (heredoc). Reject anything that could escape those templates before use.
+case "$REGISTRY_URL" in
+  https://*) ;;
+  http://127.0.0.1*|http://localhost*|"http://[::1]"*) ;;
+  *)
+    echo "ERROR: HELPER_REGISTRY_URL must be https:// (plain http is allowed only for loopback)." >&2
+    exit 1
+    ;;
+esac
+if [ "$(printf '%s' "$REGISTRY_URL" | LC_ALL=C tr -d 'A-Za-z0-9._~:/?#@%=+[]-' | wc -c)" -ne 0 ]; then
+  echo "ERROR: HELPER_REGISTRY_URL contains characters that are not allowed by the installer." >&2
+  exit 1
+fi
+
 if ! command -v curl >/dev/null 2>&1; then
   echo "ERROR: curl is required to verify the helper after installation." >&2
   exit 1

@@ -8,10 +8,9 @@ describe("fetchHelper", () => {
     vi.unstubAllGlobals();
   });
 
-  it("tries the IPv6 and localhost fallbacks after connection failures", async () => {
+  it("tries localhost after connection failures on earlier loopback URLs", async () => {
     const fetchMock = vi
       .fn()
-      .mockRejectedValueOnce(new TypeError("connection refused"))
       .mockRejectedValueOnce(new TypeError("connection refused"))
       .mockResolvedValueOnce(new Response("ok", { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
@@ -22,12 +21,12 @@ describe("fetchHelper", () => {
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
       `${HELPER_BASE_URLS[0]}/health`,
-      undefined,
+      { targetAddressSpace: "loopback" },
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
-      3,
-      `${HELPER_BASE_URLS[2]}/health`,
-      undefined,
+      2,
+      `${HELPER_BASE_URLS[1]}/health`,
+      { targetAddressSpace: "loopback" },
     );
   });
 
