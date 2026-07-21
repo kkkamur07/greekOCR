@@ -284,7 +284,7 @@ Whether OCR and segment jobs use **local inference** (via **Inference helper**) 
 _Avoid_: Sync vs async (execution mode, not host)
 
 **Product job status delivery (browser)**:
-The frontend opens `GET /jobs/{id}/events` (SSE) and receives `JobResponse` JSON on each status change. Postgres `NOTIFY` on `platform_jobs` wakes API listeners after commit; the API fans out to local SSE subscribers. HTTP polling (`GET /jobs/{id}`) remains as fallback when SSE is unavailable. See [root README](../README.md#job-status-sse-not-polling) and [`nomicous/backend/README.md`](backend/README.md#job-status-notifications).
+The frontend opens `GET /jobs/{id}/events` (SSE) and receives `JobResponse` JSON on each status change. Postgres `NOTIFY` on `platform_jobs` wakes API listeners after commit; the API fans out to local SSE subscribers. HTTP polling (`GET /jobs/{id}`) remains as fallback when SSE is unavailable. See [technical architecture](../docs/architecture.md) and [`nomicous/backend/README.md`](backend/README.md#job-status-notifications).
 
 ## Flagged ambiguities
 

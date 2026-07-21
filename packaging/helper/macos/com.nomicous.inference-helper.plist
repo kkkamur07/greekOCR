@@ -22,8 +22,6 @@
     <string>__HOME__/.nomicous/hf/cache</string>
     <key>HELPER_REGISTRY_URL</key>
     <string>__REGISTRY_URL__</string>
-    <key>HELPER_CORS_ORIGINS</key>
-    <string>__CORS_ORIGINS__</string>
     <key>INFERENCE_MAX_REQUEST_BODY_BYTES</key>
     <string>167772160</string>
     <key>INFERENCE_MAX_ENCODED_IMAGE_BYTES</key>

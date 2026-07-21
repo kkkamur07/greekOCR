@@ -25,6 +25,14 @@ def verify_artifact_sha256(path: Path, expected_sha256: str) -> None:
 
 def find_hub_artifact(cache_dir: Path, *, architecture: str | None) -> Path:
   if architecture == "calamari":
+    # Prefer the self-contained ONNX artifact over the legacy Torch formats.
+    for name in ("model.onnx", "best.onnx", "stable.onnx"):
+      candidate = cache_dir / name
+      if candidate.is_file():
+        return candidate
+    for path in sorted(cache_dir.glob("*.onnx")):
+      if path.is_file():
+        return path
     for name in ("best.pt", "stable.pt"):
       candidate = cache_dir / name
       if candidate.is_file():
@@ -40,8 +48,28 @@ def find_hub_artifact(cache_dir: Path, *, architecture: str | None) -> Path:
       if path.is_dir() or path.is_file():
         return path
 
-  if architecture in (None, "kraken-segment", "kraken_segment"):
+  if architecture in ("blla", "blla-segment", "blla_segment"):
+    # Prefer the Torch-free ONNX artifact over the native safetensors one.
+    candidate = cache_dir / "blla.onnx"
+    if candidate.is_file():
+      return candidate
+    for path in sorted(cache_dir.glob("*.onnx")):
+      if path.is_file():
+        return path
+
+  if architecture in (None, "blla-segment", "kraken_segment"):
     for path in sorted(cache_dir.glob("*.mlmodel")):
+      if path.is_file():
+        return path
+    candidate = cache_dir / "blla.safetensors"
+    if candidate.is_file():
+      return candidate
+
+  if architecture in ("blla", "blla-segment", "blla_segment"):
+    candidate = cache_dir / "blla.safetensors"
+    if candidate.is_file():
+      return candidate
+    for path in sorted(cache_dir.glob("*.safetensors")):
       if path.is_file():
         return path
 

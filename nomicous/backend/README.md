@@ -78,7 +78,7 @@ with **Postgres `NOTIFY` for detection** and **Server-Sent Events (SSE) for
 delivery**. Polling (`GET /jobs/{id}`) remains as a fallback when SSE is
 unavailable (e.g. Vercel with `JOB_SSE_NOTIFICATIONS_ENABLED=false`).
 
-Overview in the [root README](../../README.md#job-status-sse-not-polling).
+Overview in the [technical architecture guide](../../docs/architecture.md).
 
 ### End-to-end flow
 

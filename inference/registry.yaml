@@ -7,8 +7,8 @@ models:
     versions:
       stable:
         weights_source: hf://kkkamur07/syriac-htr-calamari@stable
-        hub_revision: e01349626f934ee9526d486a42b5c4173b8d7a26
-        artifact_sha256: ea711b918010aa31bd4a8a5de99c7953207421a7c7d4a39163166db380013053
+        hub_revision: 5ff715e873f1ae3f325ebea4d2c4a95eb5094601
+        artifact_sha256: 3cb01b58be5809032318c717c079a5b681a87074a372ea4334b9767c67ce301c
 
   # greek-calamari-v1 is NOT shippable yet: Hub repo kkkamur07/greek-htr-calamari
   # does not exist (404). Uncomment only after publishing weights + pinning
@@ -24,12 +24,13 @@ models:
   #       hub_revision: <40-char-commit>
   #       artifact_sha256: <sha256-of-best.pt>
 
-  kraken-segment:
+  blla-segment:
     task: segment
-    architecture: kraken-segment
+    architecture: blla
     device: cpu
     host_eligibility: local
     versions:
       stable:
-        weights_source: package://kraken/blla.mlmodel
-        artifact_sha256: 77a638a83c9e535620827a09e410ed36391e9e8e8126d5796a0f15b978186056
+        weights_source: hf://kkkamur07/segmentation-blla@stable
+        hub_revision: 444d51dd7b34cd2012b1ffe1c9c9442c875d8230
+        artifact_sha256: 5871e3755d414c00380794bafd570c1bb3d6a3255cdfb11b1bbe99dcec084d5e

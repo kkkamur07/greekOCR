@@ -18,38 +18,30 @@ def test_registry_yaml_validates_model_entries():
     assert syriac.device == ComputeDevice.cpu
     assert syriac.host_eligibility.value == "local"
     assert syriac.versions["stable"].weights_source.startswith("hf://")
-    assert syriac.versions["stable"].hub_revision == "e01349626f934ee9526d486a42b5c4173b8d7a26"
+    assert syriac.versions["stable"].hub_revision == "5ff715e873f1ae3f325ebea4d2c4a95eb5094601"
     assert (
         syriac.versions["stable"].artifact_sha256
-        == "ea711b918010aa31bd4a8a5de99c7953207421a7c7d4a39163166db380013053"
+        == "3cb01b58be5809032318c717c079a5b681a87074a372ea4334b9767c67ce301c"
     )
     assert "greek-calamari-v1" not in registry.models
 
-    kraken = get_model_entry(registry, "kraken-segment", "stable")
-    assert kraken.task == InferenceTask.segment
-    assert kraken.architecture == RegistryArchitecture.kraken_segment
-    assert kraken.device == ComputeDevice.cpu
-    assert kraken.versions["stable"].weights_source == "package://kraken/blla.mlmodel"
+    blla = get_model_entry(registry, "blla-segment", "stable")
+    assert blla.task == InferenceTask.segment
+    assert blla.architecture == RegistryArchitecture.blla
+    assert blla.device == ComputeDevice.cpu
     assert (
-        kraken.versions["stable"].artifact_sha256
-        == "77a638a83c9e535620827a09e410ed36391e9e8e8126d5796a0f15b978186056"
+        blla.versions["stable"].weights_source
+        == "hf://kkkamur07/segmentation-blla@stable"
     )
+    assert (
+        blla.versions["stable"].artifact_sha256
+        == "5871e3755d414c00380794bafd570c1bb3d6a3255cdfb11b1bbe99dcec084d5e"
+    )
+    assert blla.versions["stable"].hub_revision == "444d51dd7b34cd2012b1ffe1c9c9442c875d8230"
 
 
 # --- Weight path resolution ---
-# Tests package:// URIs resolve to real paths. Hub local/hf:// paths live in tests/hf.
-
-
-def test_registry_package_weights_source_resolves_package_resource():
-    registry = load_registry()
-    version = registry.models["kraken-segment"].versions["stable"]
-    path = resolve_weights_source(
-        version.weights_source,
-        artifact_sha256=version.artifact_sha256,
-    )
-
-    assert path.name == "blla.mlmodel"
-    assert path.is_file()
+# Hub weights are resolved in tests/hf; this verifies the native artifact shape.
 
 
 def test_registry_rejects_partial_hf_provenance():
@@ -60,20 +52,23 @@ def test_registry_rejects_partial_hf_provenance():
         )
 
 
-def test_package_weights_reject_digest_mismatch():
+def test_native_blla_rejects_digest_mismatch_before_runtime_load():
+    from inference.architectures.blla.blla import run_blla_segment
+
+    model_path = (
+        DEFAULT_WEIGHTS_ROOT.parent.parent
+        / "src"
+        / "hf"
+        / "staging"
+        / "models"
+        / "segmentation"
+        / "blla"
+        / "v1"
+        / "stable"
+        / "blla.safetensors"
+    )
     with pytest.raises(ValueError, match="artifact SHA-256 mismatch"):
-        resolve_weights_source(
-            "package://kraken/blla.mlmodel",
-            artifact_sha256="0" * 64,
-        )
-
-
-def test_kraken_rejects_digest_mismatch_before_runtime_load():
-    from inference.architectures.kraken import run_kraken_segment
-
-    model_path = resolve_weights_source("package://kraken/blla.mlmodel")
-    with pytest.raises(ValueError, match="artifact SHA-256 mismatch"):
-        run_kraken_segment(
+        run_blla_segment(
             b"not-read-after-integrity-failure",
             model_path=model_path,
             artifact_sha256="0" * 64,

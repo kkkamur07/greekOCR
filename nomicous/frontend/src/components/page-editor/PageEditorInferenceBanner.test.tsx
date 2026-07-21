@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   INFERENCE_HELPER_LINUX_TARBALL_URL,
+  INFERENCE_HELPER_MACOS_INTEL_DMG_URL,
   INFERENCE_HELPER_MACOS_DMG_URL,
   INFERENCE_HELPER_RELEASES_URL,
   INFERENCE_HELPER_WINDOWS_ZIP_URL,
@@ -75,8 +76,13 @@ describe("PageEditorInferenceBanner", () => {
     ).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /other platforms/i }));
     expect(
-      screen.getByRole("link", { name: /download for macos/i }),
+      screen.getByRole("link", {
+        name: /download for macos \(apple silicon\)/i,
+      }),
     ).toHaveAttribute("href", INFERENCE_HELPER_MACOS_DMG_URL);
+    expect(
+      screen.getByRole("link", { name: /download for macos \(intel\)/i }),
+    ).toHaveAttribute("href", INFERENCE_HELPER_MACOS_INTEL_DMG_URL);
     expect(
       screen.getByRole("link", { name: /view release notes/i }),
     ).toHaveAttribute("href", INFERENCE_HELPER_RELEASES_URL);

@@ -165,7 +165,7 @@ Source of truth: [`src/hf/publish/collection.yaml`](../src/hf/publish/collection
 ## Tests
 
 ```bash
-uv run --group inference pytest tests/hf
+uv run --group inference --group export pytest tests/hf
 ```
 
 Publish/sync tests use `MockPublishClient` and default to dry-run — no Hub credentials required in CI.

@@ -1,7 +1,12 @@
 # PyInstaller excludes for the Inference Helper bundle.
 # One import name per line; lines starting with # are ignored.
-# Goal: ship only Calamari transcribe + Kraken segment on CPU.
+# Goal: ship only Calamari and BLLA ONNX inference on CPU.
 
+torch
+torchgen
+torchvision
+safetensors
+kraken
 matplotlib
 notebook
 jupyter
@@ -34,7 +39,11 @@ inference.api.jobs
 inference.api.dependencies
 inference.api.main
 src.hf.publish
-# Kraken BLLA imports this training-only package but does not use it for
-# inference. `inference.architectures.kraken_runtime` supplies its placeholder.
-kraken.lib.dataset
-pyarrow
+# Native model implementations are retained for training/export/parity, but
+# must never enter the frozen helper's import graph.
+src.model.inference_export
+inference.architectures.blla.blla
+inference.architectures.blla.blla_model
+inference.architectures.calamari.config
+inference.architectures.calamari.layers
+inference.architectures.calamari.model

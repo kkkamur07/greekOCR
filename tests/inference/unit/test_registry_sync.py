@@ -59,8 +59,30 @@ def test_sync_registry_writes_validated_cache(tmp_path: Path, mock_registry_tran
         fallback_path=fallback,
     )
     assert resolved == cached
-    assert etag_file.read_text(encoding="utf-8") == "abc123"
+    assert etag_file.read_text(encoding="utf-8") == '"abc123"'
     load_registry(cached)
+
+
+def test_sync_registry_replays_weak_etag_verbatim(tmp_path: Path, mock_registry_transport):
+    cached = tmp_path / "registry.yaml"
+    cached.write_text(VALID_REGISTRY, encoding="utf-8")
+    etag_file = tmp_path / "registry.etag"
+    etag_file.write_text('W/"weak123"', encoding="utf-8")
+    fallback = tmp_path / "bundled.yaml"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers.get("if-none-match") == 'W/"weak123"'
+        return httpx.Response(304)
+
+    mock_registry_transport(handler)
+
+    resolved = sync_registry_from_url(
+        "http://api.test/inference/v1/registry",
+        cached_path=cached,
+        etag_path=etag_file,
+        fallback_path=fallback,
+    )
+    assert resolved == cached
 
 
 def test_sync_registry_uses_cache_on_304(tmp_path: Path, mock_registry_transport):

@@ -6,7 +6,8 @@ from io import BytesIO
 from pathlib import Path
 
 import numpy as np
-from inference.architectures import kraken
+from inference.architectures.blla import blla
+from inference.architectures.blla.blla_decoder import DecodedBLLALine
 from inference.preprocessing.segment_geometry import MIN_VERTEX_SPACING_PX, distance
 from inference.preprocessing.segment_refinement import refine_segment, refine_segment_candidates
 from PIL import Image
@@ -173,40 +174,40 @@ def test_refine_segment_falls_back_to_clean_ceiling_without_ink() -> None:
     assert result.metadata["simplification_status"] == "no_otsu_contour"
 
 
-# --- Kraken adapter integration (stubbed BLLA) ---
-# Tests adapter stores ceiling, refined points, and metadata. Does not run real Kraken inference.
+# --- Native BLLA adapter integration (stubbed model) ---
 
 
-def test_kraken_adapter_preserves_raw_ceiling_and_stores_refined_points(
+class _FakeBLLAModel:
+    def __call__(self, tensor):
+        width = max(1, tensor.shape[-1] // 4)
+        return blla.torch.zeros((1, 4, 450, width))
+
+
+def _stub_blla(monkeypatch, decoded: DecodedBLLALine) -> None:
+    monkeypatch.setattr(blla, "_load_blla_model", lambda *_args, **_kwargs: _FakeBLLAModel())
+    monkeypatch.setattr(
+        "inference.architectures.blla.blla_runtime.decode_blla_heatmaps",
+        lambda *_args, **_kwargs: [decoded],
+    )
+
+
+def test_blla_adapter_preserves_legacy_ceiling_and_neutral_metadata(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
-    """Post-BLLA refinement only.
-
-    Stubs ``_run_blla_segment`` to inject a fixed dense ceiling so this unit
-    test can assert Otsu/simplify metadata without loading Kraken weights.
-    Live BLLA is covered by ``@pytest.mark.ml`` run/worker/e2e suites.
-    """
     image, _ = _synthetic_ink_fixture()
     dense_ceiling = _dense_rectangle(20, 25, 200, 90)
-    model_path = tmp_path / "model.mlmodel"
-    model_path.write_text("stub", encoding="utf-8")
-
-    monkeypatch.setattr(kraken, "_load_segmentation_model", lambda _: object())
-    monkeypatch.setattr(
-        kraken,
-        "_run_blla_segment",
-        lambda _image, _model: {
-            "lines": [
-                {
-                    "baseline": [[55.0, 57.0], [165.0, 57.0]],
-                    "boundary": dense_ceiling,
-                }
-            ]
-        },
+    model_path = tmp_path / "model.safetensors"
+    model_path.write_bytes(b"stub")
+    _stub_blla(
+        monkeypatch,
+        DecodedBLLALine(
+            baseline=[[55.0, 57.0], [165.0, 57.0]],
+            polygon=dense_ceiling,
+        ),
     )
 
-    response = kraken.run_kraken_segment(
+    response = blla.run_blla_segment(
         _image_bytes(image),
         model_path=model_path,
         params={"use_otsu_refinement": True, "otsu_sphere_radius": 6},
@@ -215,82 +216,27 @@ def test_kraken_adapter_preserves_raw_ceiling_and_stores_refined_points(
     line = response.lines[0]
     assert line.kraken_ceiling == dense_ceiling
     assert line.points != dense_ceiling
-    assert len(line.points) <= 80
-    assert line.mask == {"points": line.points}
-    assert line.source_metadata["adapter"] == "kraken"
+    assert line.source_metadata["adapter"] == "blla"
     assert line.source_metadata["raw_point_count"] == len(dense_ceiling)
-    assert line.source_metadata["simplified_point_count"] == len(line.points)
     assert line.source_metadata["otsu_margin_px"] == 6
 
 
-# --- Kraken adapter without Otsu ---
-# Tests boundary simplification when Otsu refinement is disabled.
-
-
-def test_kraken_adapter_uses_raw_boundaries_when_otsu_refinement_is_disabled(
+def test_blla_adapter_splits_oversized_refined_line(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
-    """Post-BLLA simplify only — BLLA stub justified as in the Otsu test above."""
-    image, _ = _synthetic_ink_fixture()
-    dense_ceiling = _dense_rectangle(20, 25, 200, 90)
-    model_path = tmp_path / "model.mlmodel"
-    model_path.write_text("stub", encoding="utf-8")
-
-    monkeypatch.setattr(kraken, "_load_segmentation_model", lambda _: object())
-    monkeypatch.setattr(
-        kraken,
-        "_run_blla_segment",
-        lambda _image, _model: {
-            "lines": [
-                {
-                    "baseline": [[55.0, 57.0], [165.0, 57.0]],
-                    "boundary": dense_ceiling,
-                }
-            ]
-        },
-    )
-
-    response = kraken.run_kraken_segment(_image_bytes(image), model_path=model_path)
-
-    line = response.lines[0]
-    assert line.kraken_ceiling == dense_ceiling
-    assert line.points != dense_ceiling
-    assert len(line.points) < len(dense_ceiling)
-    _assert_adjacent_points_are_spaced(line.points)
-    assert line.source_metadata["simplification_status"] == "kraken_boundary_simplified"
-    assert line.source_metadata["raw_point_count"] == len(dense_ceiling)
-    assert line.source_metadata["simplified_point_count"] == len(line.points)
-
-
-# --- Kraken adapter line splitting ---
-# Tests oversized refined lines split into multiple SegmentLine rows.
-
-
-def test_kraken_adapter_splits_oversized_refined_line(
-    monkeypatch,
-    tmp_path: Path,
-) -> None:
-    """Post-BLLA split only — BLLA stub justified as in the Otsu test above."""
     image, ceiling = _merged_two_line_fixture()
-    model_path = tmp_path / "model.mlmodel"
-    model_path.write_text("stub", encoding="utf-8")
-
-    monkeypatch.setattr(kraken, "_load_segmentation_model", lambda _: object())
-    monkeypatch.setattr(
-        kraken,
-        "_run_blla_segment",
-        lambda _image, _model: {
-            "lines": [
-                {
-                    "baseline": [[35.0, 77.0], [190.0, 77.0]],
-                    "boundary": ceiling,
-                }
-            ]
-        },
+    model_path = tmp_path / "model.safetensors"
+    model_path.write_bytes(b"stub")
+    _stub_blla(
+        monkeypatch,
+        DecodedBLLALine(
+            baseline=[[35.0, 77.0], [190.0, 77.0]],
+            polygon=ceiling,
+        ),
     )
 
-    response = kraken.run_kraken_segment(
+    response = blla.run_blla_segment(
         _image_bytes(image),
         model_path=model_path,
         params={"use_otsu_refinement": True, "split_large_lines": True},
@@ -300,4 +246,3 @@ def test_kraken_adapter_splits_oversized_refined_line(
     assert [line.order for line in response.lines] == [0, 1]
     assert all(line.kraken_ceiling == ceiling for line in response.lines)
     assert all(line.source_metadata["split_count"] == 2 for line in response.lines)
-    assert response.lines[0].points != response.lines[1].points

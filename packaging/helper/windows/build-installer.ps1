@@ -10,11 +10,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ScriptDir = $PSScriptRoot
-$Root = Resolve-Path (Join-Path $ScriptDir "../../..")
+$Root = (Resolve-Path (Join-Path $ScriptDir "../../..")).Path
 $HelperDir = Join-Path $Root "packaging/helper"
 $DistDir = Join-Path $HelperDir "dist"
 $BundleDir = Join-Path $DistDir "nomicous-inference-helper"
-$BuildScript = Join-Path $HelperDir "scripts/build-pyinstaller.sh"
 
 function Resolve-SignTool {
   $cmd = Get-Command signtool.exe -ErrorAction SilentlyContinue
@@ -47,9 +46,18 @@ function Invoke-AuthenticodeSign([string[]]$Paths) {
 
 Push-Location $HelperDir
 try {
-  & bash $BuildScript
+  # Build natively from an isolated ONNX-only environment. Passing a Windows
+  # path through Bash causes path conversion issues and an existing developer
+  # environment could otherwise leak Torch into PyInstaller Analysis.
+  & uv run --isolated --no-dev --group helper --group packaging pyinstaller --noconfirm --clean pyinstaller.spec
+  if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed (exit $LASTEXITCODE)" }
+
+  $HelperExe = Join-Path $BundleDir "nomicous-inference-helper.exe"
+  & python (Join-Path $HelperDir "scripts/verify-bundle.py") $BundleDir $HelperExe
+  if ($LASTEXITCODE -ne 0) { throw "Frozen helper verification failed (exit $LASTEXITCODE)" }
 
   $InstallDir = Join-Path $DistDir "windows-installer"
+  if (Test-Path $InstallDir) { Remove-Item -Recurse -Force $InstallDir }
   New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
   Copy-Item -Recurse -Force $BundleDir (Join-Path $InstallDir "nomicous-inference-helper")
   Copy-Item -Force (Join-Path $ScriptDir "install-helper.ps1") (Join-Path $InstallDir "install-helper.ps1")

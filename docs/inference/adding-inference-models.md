@@ -37,12 +37,12 @@ Follow the **registry model id** convention:
 {script}-{architecture}-{model_version}
 ```
 
-Examples: `syriac-calamari-v1`, `kraken-segment`.
+Examples: `syriac-calamari-v1`, `blla-segment`.
 
 | Field | Meaning | Example |
 |-------|---------|---------|
 | **script** | Writing system / language family | `syriac`, `coptic` |
-| **architecture** | Runtime adapter | `calamari`, `kraken-segment` |
+| **architecture** | Runtime adapter | `calamari`, `blla-segment` |
 | **model_version** | Family generation | `v1`, `v2` |
 | **registry tag** | Named weight snapshot | `stable` (default) |
 
@@ -118,9 +118,13 @@ uv run --group inference python -c \
 `HF_TOKEN` is only required by the publish command, not by model download or
 metadata lookup for public repositories.
 
-### Kraken segment (bundled)
+### BLLA segment
 
-Kraken BLLA ships via `package://kraken/blla.mlmodel` inside the `kraken` Python package - no Hub upload for the default segment model. For a custom Kraken checkpoint, use `file://` (bundled under `src/hf/local/`) or `hf://` like Calamari.
+The BLLA runtime loads `blla.onnx` from the registry-pinned
+`segmentation-blla` Hub artifact. The inference image does not install
+the Kraken Python package. The optional `parity` dependency group is reserved
+for comparing the ONNX runtime against Kraken's original model during
+development.
 
 ### Local / offline dev
 
@@ -142,7 +146,7 @@ Add a model block under `models:`:
 models:
   syriac-calamari-v1:
     task: transcribe          # transcribe | segment
-    architecture: calamari    # calamari | kraken-segment
+    architecture: calamari    # calamari | blla-segment
     device: cpu               # compute hint (cpu | cuda)
     host_eligibility: local   # local | remote | any
     versions:
@@ -171,7 +175,7 @@ Kraken loads it.
 Run unit tests:
 
 ```bash
-uv run --group inference pytest tests/inference/unit/test_registry.py -q
+uv run --group inference --group export pytest tests/inference/unit/test_registry.py -q
 ```
 
 ---
@@ -218,7 +222,7 @@ Update or add coverage as needed:
 | ML integration (optional) | `tests/nomicous/integration/ml/` |
 
 ```bash
-uv run --group inference pytest tests/inference tests/hf -q
+uv run --group inference --group export pytest tests/inference tests/hf -q
 uv run --group platform --group inference pytest tests/nomicous/integration/test_inference_registry.py -q
 ```
 

@@ -19,7 +19,7 @@ describe("runLocalInference", () => {
 
     await runLocalInference({
       task: "segment",
-      registry_model_id: "kraken-segment",
+      registry_model_id: "blla-segment",
       image_bytes: "encoded-image",
     });
 

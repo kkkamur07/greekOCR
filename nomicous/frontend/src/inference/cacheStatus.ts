@@ -1,4 +1,4 @@
-import { HELPER_BASE_URL } from "./constants";
+import { fetchHelper } from "./helperClient";
 
 type CacheStatusResponse = {
   registry_model_id: string;
@@ -21,11 +21,9 @@ export async function fetchLocalCacheStatus(
       registry_model_id: registryModelId,
       registry_tag: registryTag,
     });
-    const response = await fetch(
-      `${HELPER_BASE_URL}/inference/v1/cache-status?${params.toString()}`,
-      {
-        method: "GET",
-      },
+    const response = await fetchHelper(
+      `/inference/v1/cache-status?${params.toString()}`,
+      { method: "GET" },
     );
     if (!response.ok) return null;
     const body = (await response.json()) as CacheStatusResponse;

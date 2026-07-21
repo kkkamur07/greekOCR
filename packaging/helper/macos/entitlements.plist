@@ -2,10 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
   Hardened-runtime entitlements for the notarized Inference Helper.
-  PyInstaller bundles a private CPython plus many third-party .dylibs (torch,
-  numpy, scipy, opencv), so we must relax library validation and allow the
-  JIT / unsigned executable memory those native stacks rely on. Without these,
-  the app crashes on launch under the hardened runtime required for notarization.
+  PyInstaller bundles a private CPython plus third-party native libraries
+  (ONNX Runtime, numpy, scipy, opencv). Keep the existing hardened-runtime
+  allowances until signed/notarized release builds have verified that each
+  library loads without them.
 -->
 <plist version="1.0">
 <dict>

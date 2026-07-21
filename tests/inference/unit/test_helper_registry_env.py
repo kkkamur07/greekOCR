@@ -34,7 +34,7 @@ def test_apply_helper_environment_uses_synced_registry(tmp_path: Path, monkeypat
         return real_client(transport=httpx.MockTransport(handler), timeout=kwargs.get("timeout"))
 
     monkeypatch.setattr("inference.helper.registry_sync.httpx.Client", client_factory)
-    monkeypatch.setenv("HELPER_REGISTRY_URL", "http://api.test/inference/v1/registry")
+    monkeypatch.setenv("HELPER_REGISTRY_URL", "https://api.test/inference/v1/registry")
     monkeypatch.setenv("HELPER_CACHED_REGISTRY_PATH", str(cached))
     monkeypatch.setenv("HELPER_CACHED_REGISTRY_ETAG_PATH", str(etag_file))
     monkeypatch.setenv("HELPER_BUNDLED_REGISTRY_PATH", str(bundled))

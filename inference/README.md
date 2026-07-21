@@ -2,13 +2,18 @@
 
 Standalone FastAPI service for manuscript **segment** and **transcribe** inference. It lives at the repository root in `inference/`, separate from the Nomicous platform API in `nomicous/backend/`.
 
+For the public product overview, setup, model availability, and architecture,
+see the [root README](../README.md), [use and hosting guide](../docs/guides/using-and-hosting.md),
+[models and datasets guide](../docs/inference/models-and-datasets.md), and
+[technical architecture](../docs/architecture.md).
+
 ## Status
 
 | Piece | State |
 |-------|--------|
 | HTTP API (`inference/api/`) | Health, sync `/inference/v1/run`, and async `/inference/v1/jobs` submission |
 | Request/response contracts (`inference/contracts/`) | Defined for segment, transcribe, jobs, and callbacks |
-| Model registry (`inference/registry.yaml`) | Calamari transcribe + Kraken segment entries |
+| Model registry (`inference/registry.yaml`) | Calamari transcribe + BLLA segmentation entries |
 | Worker (`inference/jobs/worker.py`) | Postgres-backed queue worker with LISTEN/NOTIFY wakeups |
 | Nomicous backend integration | Platform jobs delegate segment/transcribe work via `InferenceClient` |
 
@@ -18,14 +23,14 @@ The root `docker-compose.yml` starts `inference-api` and `inference-worker` alon
 
 | Service | Port | Role |
 |---------|------|------|
-| `inference-api` | 8001 | Inference HTTP API |
+| `inference-api` | 8010 on the host (`8001` in the container) | Inference HTTP API |
 | `inference-worker` | - | Background job processor |
 
 ## API vs worker
 
 `inference-api` is the HTTP-facing boundary. It owns health checks, synchronous `/inference/v1/run`, and async job submission (`POST /inference/v1/jobs`). It stays responsive even when model work is slow.
 
-`inference-worker` is the background executor for long-running CPU/GPU work: Kraken segmentation, Calamari transcription, model loading, retries, and posting job callbacks.
+`inference-worker` is the background executor for long-running CPU/GPU work: BLLA segmentation, Calamari transcription, model loading, retries, and posting job callbacks.
 
 Keeping them separate lets the API and workers scale, restart, and fail independently. Workers can later run on different resources (e.g. GPU nodes) without changing the HTTP contract.
 
@@ -42,15 +47,16 @@ Registry models resolve weights at runtime from:
 |--------|---------|----------------|
 | Hub | `hf://kkkamur07/syriac-htr-calamari@stable` | `src/hf/cache/<registry_model_id>/<registry_tag>/` |
 | Local bundled (offline) | `file://local/syriac/calamari/v1/stable/best.pt` | `src/hf/local/...` |
-| Kraken package | `package://kraken/blla.mlmodel` | Inside `kraken` pip package |
+| BLLA segmentation | `hf://kkkamur07/segmentation-blla@stable` | `blla.onnx` in the Hub cache |
 
-Docker Compose mounts `./src/hf` at `/app/src/hf` on `inference-api` and `inference-worker` and sets `HF_CACHE_ROOT=/app/src/hf/cache`. No local weight checkout is required for the default Hub models; they download from their public repos on first use. The default Kraken segment model is packaged with the `kraken` dependency.
+Docker Compose mounts `./src/hf` at `/app/src/hf` on `inference-api` and `inference-worker` and sets `HF_CACHE_ROOT=/app/src/hf/cache`. No local weight checkout is required for the default Hub models; they download from their public repos on first use.
 
-### Calamari (PyTorch runtime)
+### Calamari (ONNX runtime)
 
-Transcribe uses the local PyTorch Calamari implementation under `inference/architectures/calamari/`.
-Runtime artifacts are converted `.pt` checkpoints (`calamari-pytorch-v1`), so inference images do not install TensorFlow
-or copy the vendored Calamari source tree.
+Transcribe uses the ONNX Runtime Calamari adapter under
+`inference/architectures/calamari/`. Runtime artifacts are self-contained
+`.onnx` files; the native PyTorch graph remains in `src/model/inference_export/`
+for conversion and parity tests.
 
 Training and vendored TensorFlow Calamari: [`docs/guides/learnings.md`](../docs/guides/learnings.md#calamari-training).
 
@@ -96,9 +102,9 @@ Job callbacks use a tagged output union: `output.kind` is either `segment` or `t
 `inference/registry.yaml` lists available models and weight locations. Example entries:
 
 - `syriac-calamari-v1` - transcribe, Calamari architecture, pinned Hub revision and digest
-- `kraken-segment` - segment, Kraken BLLA package weights
+- `blla-segment` - segment, BLLA ONNX weights
 
-Weights are resolved at runtime from Hub cache (`src/hf/cache/`), local bundled paths (`src/hf/local/`), or `package://` (Kraken).
+Weights are resolved at runtime from Hub cache (`src/hf/cache/`) or local bundled paths (`src/hf/local/`).
 New `hf://` entries should include both `hub_revision` and `artifact_sha256`; see
 the migration note in [`docs/inference/adding-inference-models.md`](../docs/inference/adding-inference-models.md).
 
@@ -115,14 +121,14 @@ curl -s http://127.0.0.1:8001/health
 curl -s http://127.0.0.1:8001/inference/v1/catalog
 ```
 
-On startup the helper fetches `registry.yaml` from the hosted platform (`GET /inference/v1/registry`, public, ETag-aware) into `~/.nomicous/registry.yaml`. The bundled copy in the installer is only a fallback when offline. Local-eligible `hf://` weights are prefetched in a background thread on first launch so the first `/run` does not stall on download.
+On startup the helper fetches `registry.yaml` from the hosted platform (`GET /inference/v1/registry`, public, ETag-aware) into `~/.nomicous/registry.yaml`. The bundled copy in the installer is only a fallback when offline. Model weights download lazily when the first `/run` needs them.
 
-The browser probes `127.0.0.1:8001`, calls `/inference/v1/run`, and persists results through
-the hosted platform API. The production Vercel CSP permits that exact loopback URL. Set an
-explicit `HELPER_CORS_ORIGINS` runtime value only when the hosted SPA origin differs from
-`https://app.nomicous.com`; do not use `*` or ship a helper secret in frontend code.
+The browser calls `/inference/v1/run` through the configured helper URL, then falls back
+to `127.0.0.1:8001`, `[::1]:8001`, and `localhost:8001`. The production Vercel CSP permits
+these loopback URLs. The helper accepts browser requests only from
+`https://app.nomicous.com`; do not ship a helper secret in frontend code.
 
-Packaging for `.dmg` / `.msi` / Linux installers: [`packaging/helper/README.md`](../packaging/helper/README.md) - PyInstaller spec excludes training stacks, platform API, and unused torch backends so installers ship only Calamari + Kraken runtime.
+Packaging for `.dmg` / `.msi` / Linux installers: [`packaging/helper/README.md`](../packaging/helper/README.md) - PyInstaller spec excludes training stacks, platform API, and unused torch backends so installers ship the Calamari + BLLA ONNX runtimes.
 
 ## Admission control and helper exposure
 
@@ -152,7 +158,14 @@ authenticated reverse proxy when exposing it beyond the local machine.
 ## Tests
 
 ```bash
-uv run --group inference pytest tests/inference tests/hf
+uv run --group inference --group export pytest tests/inference tests/hf
+```
+
+The slow native-BLLA parity suite installs the original Kraken implementation
+only through the development-only `parity` group:
+
+```bash
+uv run --group inference --group export --group parity pytest tests/inference/integration/test_blla_parity.py -q
 ```
 
 Stop the Compose `inference-worker` before local integration runs (`docker stop nomicous-inference-worker-1`).

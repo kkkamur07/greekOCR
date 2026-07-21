@@ -4,6 +4,11 @@ AI-assisted transcription platform for manuscript pages. `nomicous/` is the prod
 
 See `CONTEXT.md` for domain glossary and [`docs/README.md`](../docs/README.md) for guides, deployment, and audits.
 
+Public-facing documentation:
+[overview](../README.md) ·
+[use and hosting](../docs/guides/using-and-hosting.md) ·
+[architecture](../docs/architecture.md)
+
 ## Data layout
 
 All persistence is under `data/` (path configurable via `NOMICOUS_DATA_ROOT` in `backend/.env`):
@@ -136,7 +141,7 @@ updated to match `VERSION`.
 `inference/registry.yaml` is the runtime model catalog. The development seed
 creates `InferenceModel` rows with `registry://<model-id>?tag=stable` artifact
 references and project-level bindings. Its defaults are
-`kraken-segment` for segmentation and `syriac-calamari-v1` for
+`blla-segment` for segmentation and `syriac-calamari-v1` for
 transcription.
 
 ```bash

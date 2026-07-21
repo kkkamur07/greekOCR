@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import tomllib
+
 from tests.fixtures.paths import REPO_ROOT
 
 
@@ -17,15 +19,97 @@ def test_inference_image_reincludes_only_required_hub_resolver_sources() -> None
     assert "COPY src/hf /app/src/hf" not in dockerfile
 
 
-def test_helper_freeze_excludes_kraken_training_dataset_dependencies() -> None:
+def test_helper_freeze_is_onnx_only() -> None:
     spec = (REPO_ROOT / "packaging" / "helper" / "pyinstaller.spec").read_text(encoding="utf-8")
     excludes = (REPO_ROOT / "packaging" / "helper" / "excludes.txt").read_text(encoding="utf-8")
 
     assert 'collect_submodules("kraken")' not in spec
-    assert '"kraken.blla"' in spec
-    assert '"kraken.lib.vgsl"' in spec
-    assert "kraken.lib.dataset" in excludes
-    assert "pyarrow" in excludes
+    assert '"kraken.blla"' not in spec
+    assert '"kraken.lib.vgsl"' not in spec
+    assert '"inference.architectures.blla.blla"' not in spec
+    assert '"inference.architectures.blla.blla_model"' not in spec
+    assert '"safetensors.torch"' not in spec
+    assert '"inference.architectures.blla.blla_decoder"' in spec
+    assert '"inference.architectures.blla.onnx"' in spec
+    for dependency in ("torch", "torchvision", "safetensors", "kraken"):
+        assert f"\n{dependency}\n" in excludes
+
+    pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    groups = pyproject["dependency-groups"]
+    assert not any(dependency.startswith(("torch", "safetensors")) for dependency in groups["inference"])
+    assert any(dependency.startswith("torch") for dependency in groups["export"])
+    assert any(dependency.startswith("safetensors") for dependency in groups["export"])
+
+
+def test_helper_packaging_uses_one_foreground_server() -> None:
+    launcher = (REPO_ROOT / "packaging" / "helper" / "tray_launcher.py").read_text(
+        encoding="utf-8"
+    )
+    pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    windows_build = (
+        REPO_ROOT / "packaging" / "helper" / "windows" / "build-installer.ps1"
+    ).read_text(encoding="utf-8")
+    shared_build = (
+        REPO_ROOT / "packaging" / "helper" / "scripts" / "build-pyinstaller.sh"
+    ).read_text(encoding="utf-8")
+    bundle_verifier = (
+        REPO_ROOT / "packaging" / "helper" / "scripts" / "verify-bundle.py"
+    ).read_text(encoding="utf-8")
+
+    assert "multiprocessing" not in launcher
+    assert "pystray" not in pyproject
+    for build in (shared_build, windows_build):
+        assert "--isolated --no-dev --group helper --group packaging" in build
+        assert "--group inference" not in build
+        assert "verify-bundle.py" in build
+    assert "& bash" not in windows_build
+    assert '"PYZ-00.toc"' in bundle_verifier
+    assert '"COLLECT-00.toc"' in bundle_verifier
+    assert '"src.model.inference_export"' in bundle_verifier
+
+
+def test_helper_installers_are_user_scoped_and_verify_startup() -> None:
+    linux_install = (
+        REPO_ROOT / "packaging" / "helper" / "linux" / "install-helper.sh"
+    ).read_text(encoding="utf-8")
+    mac_install = (
+        REPO_ROOT / "packaging" / "helper" / "macos" / "install-helper.sh"
+    ).read_text(encoding="utf-8")
+    windows_install = (
+        REPO_ROOT / "packaging" / "helper" / "windows" / "install-helper.ps1"
+    ).read_text(encoding="utf-8")
+    workflow = (REPO_ROOT / ".github" / "workflows" / "release-helper.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "HELPER_CORS_ORIGINS" not in linux_install
+    assert "AUTOSTART_FILE" in linux_install
+    assert "RUNNER=" in linux_install
+    assert "STAGE_ROOT=" in linux_install
+    assert "BACKUP_ROOT=" in linux_install
+    assert "restore_previous_install" in linux_install
+    assert "curl --fail --silent --max-time 2 http://127.0.0.1:8001/health" in linux_install
+    assert 'APP_DST="$HOME/Applications/' in mac_install
+    assert 'cp -R "$APP_SRC" /Applications/' not in mac_install
+    assert "APP_STAGE=" in mac_install
+    assert "APP_BACKUP=" in mac_install
+    assert "restore_previous_install" in mac_install
+    assert 's|__INSTALL_DIR__|$INSTALL_DIR|g' in mac_install
+    assert 's|__INSTALL_DIR__|$INSTALL_DIR/nomicous-inference-helper|g' not in mac_install
+    assert 'launchctl bootstrap "gui/$(id -u)"' in mac_install
+    assert "Invoke-WebRequest" in windows_install
+    assert "Stop-ScheduledTask" in windows_install
+    assert '"HF_CACHE_ROOT" = $CacheDir' in windows_install
+    assert "$StageRoot" in windows_install
+    assert "$BackupRoot" in windows_install
+    assert "$PreviousTaskExisted" in windows_install
+    assert "$PreviousUserEnvironment" in windows_install
+    assert "Stop-HelperTaskAndWait" in windows_install
+    assert "Wait-InstallUnlocked" in windows_install
+    assert windows_install.index("Stop-ScheduledTask") < windows_install.index(
+        "Move-Item -LiteralPath $InstallRoot"
+    )
+    assert "ubuntu-22.04" in workflow
 
 
 def test_runtime_images_are_non_root_and_have_import_and_health_checks() -> None:
@@ -86,6 +170,7 @@ def test_vercel_frontend_permits_helper_loopback_origins() -> None:
 
     assert "http://127.0.0.1:8001" in vercel
     assert "http://localhost:8001" in vercel
+    assert "http://[::1]:8001" in vercel
     assert "connect-src" in vercel
 
 
@@ -140,3 +225,8 @@ def test_release_workflow_refuses_asset_replacement_and_generates_evidence() -> 
     assert "overwrite: false" in workflow
     assert "types: [published]" in workflow
     assert 'gh release view "$RELEASE_TAG"' in workflow
+    assert "macos-15" in workflow
+    assert "macos-15-intel" in workflow
+    assert "nomicous-inference-helper-macos.dmg" in workflow
+    assert "nomicous-inference-helper-macos-intel.dmg" in workflow
+    assert "expected four installer assets" in workflow

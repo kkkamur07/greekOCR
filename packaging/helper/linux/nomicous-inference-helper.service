@@ -1,15 +1,15 @@
 [Unit]
 Description=Nomicous Inference Helper
-After=network.target
+Wants=network-online.target
+After=network-online.target
 
 [Service]
 Type=simple
-ExecStart=__INSTALL_DIR__/nomicous-inference-helper --no-tray
-WorkingDirectory=__INSTALL_DIR__
+ExecStart="__INSTALL_DIR__/nomicous-inference-helper"
+WorkingDirectory="__INSTALL_DIR__"
 Restart=on-failure
-Environment=HF_CACHE_ROOT=__HOME__/.nomicous/hf/cache
-Environment=HELPER_REGISTRY_URL=__REGISTRY_URL__
-Environment=HELPER_CORS_ORIGINS=__CORS_ORIGINS__
+Environment="HF_CACHE_ROOT=__HOME__/.nomicous/hf/cache"
+Environment="HELPER_REGISTRY_URL=__REGISTRY_URL__"
 Environment=INFERENCE_MAX_REQUEST_BODY_BYTES=167772160
 Environment=INFERENCE_MAX_ENCODED_IMAGE_BYTES=167772160
 Environment=INFERENCE_MAX_DECODED_IMAGE_BYTES=104857600

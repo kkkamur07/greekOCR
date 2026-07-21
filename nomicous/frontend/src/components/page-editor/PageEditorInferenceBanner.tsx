@@ -3,6 +3,7 @@ import { useEffect, useId, useMemo, useState } from "react";
 import {
   INFERENCE_HELPER_LINUX_TARBALL_URL,
   INFERENCE_HELPER_MACOS_DMG_URL,
+  INFERENCE_HELPER_MACOS_INTEL_DMG_URL,
   INFERENCE_HELPER_RELEASES_URL,
   INFERENCE_HELPER_WINDOWS_ZIP_URL,
 } from "../../inference/constants";
@@ -10,6 +11,7 @@ import {
 type HelperPlatform = "macos" | "windows" | "linux";
 
 type HelperDownload = {
+  id: string;
   platform: HelperPlatform;
   label: string;
   url: string;
@@ -17,16 +19,25 @@ type HelperDownload = {
 
 const HELPER_DOWNLOADS: HelperDownload[] = [
   {
+    id: "macos-arm64",
     platform: "macos",
-    label: "Download for macOS",
+    label: "Download for macOS (Apple silicon)",
     url: INFERENCE_HELPER_MACOS_DMG_URL,
   },
   {
+    id: "macos-intel",
+    platform: "macos",
+    label: "Download for macOS (Intel)",
+    url: INFERENCE_HELPER_MACOS_INTEL_DMG_URL,
+  },
+  {
+    id: "windows",
     platform: "windows",
     label: "Download for Windows",
     url: INFERENCE_HELPER_WINDOWS_ZIP_URL,
   },
   {
+    id: "linux",
     platform: "linux",
     label: "Download for Linux",
     url: INFERENCE_HELPER_LINUX_TARBALL_URL,
@@ -34,7 +45,9 @@ const HELPER_DOWNLOADS: HelperDownload[] = [
 ];
 
 const PLATFORM_PRIMARY_LABEL: Record<HelperPlatform, string> = {
-  macos: "Download for this Mac",
+  // Browser APIs do not reliably expose Apple-silicon vs Intel on every
+  // macOS browser, so the Intel choice remains visible under Other platforms.
+  macos: "Download for macOS (Apple silicon)",
   windows: "Download for this PC (Windows)",
   linux: "Download for this computer (Linux)",
 };
@@ -74,10 +87,15 @@ export function PageEditorInferenceBanner({
         others: HELPER_DOWNLOADS,
       };
     }
-    const match = HELPER_DOWNLOADS.find((d) => d.platform === detected) ?? null;
+    const match =
+      HELPER_DOWNLOADS.find(
+        (d) =>
+          d.platform === detected &&
+          (detected !== "macos" || d.id === "macos-arm64"),
+      ) ?? null;
     return {
       primary: match,
-      others: HELPER_DOWNLOADS.filter((d) => d.platform !== detected),
+      others: HELPER_DOWNLOADS.filter((d) => d.id !== match?.id),
     };
   }, [detected]);
 
@@ -165,7 +183,7 @@ export function PageEditorInferenceBanner({
               {!primary
                 ? others.map((download) => (
                     <a
-                      key={download.platform}
+                      key={download.id}
                       href={download.url}
                       target="_blank"
                       rel="noreferrer"
@@ -190,7 +208,7 @@ export function PageEditorInferenceBanner({
                   {showOtherPlatforms
                     ? others.map((download) => (
                         <a
-                          key={download.platform}
+                          key={download.id}
                           href={download.url}
                           target="_blank"
                           rel="noreferrer"

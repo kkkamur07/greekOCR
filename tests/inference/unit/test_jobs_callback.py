@@ -18,7 +18,7 @@ def _sample_job() -> InferenceJob:
         id=uuid4(),
         product_job_id=uuid4(),
         task=InferenceTask.segment,
-        registry_model_id="kraken-segment",
+        registry_model_id="blla-segment",
         registry_tag="stable",
         status=InferenceJobStatus.done,
         image_bytes=b"page",

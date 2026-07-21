@@ -42,7 +42,7 @@ def _create_part_with_lines(
                     "kind": "rectangle",
                     "points": [[0, 10], [10, 10], [10, 15], [0, 15]],
                     "source": "kraken",
-                    "source_metadata": {"model": "kraken:blla"},
+                    "source_metadata": {"model": "blla"},
                     "kraken_ceiling": [[-1, 9], [11, 9], [11, 16], [-1, 16]],
                 },
             ]
@@ -92,7 +92,7 @@ def test_member_can_create_and_list_compact_history_snapshots(
             "kind": "rectangle",
             "points": [[0, 10], [10, 10], [10, 15], [0, 15]],
             "source": "kraken",
-            "source_metadata": {"model": "kraken:blla"},
+            "source_metadata": {"model": "blla"},
             "kraken_ceiling": [[-1, 9], [11, 9], [11, 16], [-1, 16]],
             "approved_text": None,
         },

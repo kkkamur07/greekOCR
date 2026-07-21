@@ -32,22 +32,22 @@ This document covers setup, configuration choices, known pitfalls, and trade-off
 
 ### What goes where
 
-| Layer | Supabase product | Contents |
-|-------|------------------|----------|
-| Database | Postgres (`postgres` DB) | Users, projects, documents, layout, transcriptions, jobs, history |
-| Storage | Private bucket `document-media` | Document part **page images only** (WebP) |
+| Layer    | Supabase product                | Contents                                                          |
+| -------- | ------------------------------- | ----------------------------------------------------------------- |
+| Database | Postgres (`postgres` DB)        | Users, projects, documents, layout, transcriptions, jobs, history |
+| Storage  | Private bucket `document-media` | Document part **page images only** (WebP)                         |
 
 **Not stored in Supabase Storage:** exports (PDF/XML), model weights, annotation JSON (that lives in Postgres).
 
 ### What we use from Supabase
 
-| Product | Used? | How |
-|---------|-------|-----|
-| Postgres | Yes | Direct SQL via SQLAlchemy + Alembic |
-| Storage | Yes | Server-side via **secret (service role) key** |
-| Auth | **No** | App JWT (`JWT_SECRET`) |
-| Data API / PostgREST | **No** | Backend talks SQL directly |
-| Realtime / Edge Functions | **No** | - |
+| Product                   | Used?  | How                                           |
+| ------------------------- | ------ | --------------------------------------------- |
+| Postgres                  | Yes    | Direct SQL via SQLAlchemy + Alembic           |
+| Storage                   | Yes    | Server-side via **secret (service role) key** |
+| Auth                      | **No** | App JWT (`JWT_SECRET`)                        |
+| Data API / PostgREST      | **No** | Backend talks SQL directly                    |
+| Realtime / Edge Functions | **No** | -                                             |
 
 **Alembic** remains the schema source of truth. The Supabase CLI is **not** used for migrations.
 
@@ -57,11 +57,11 @@ This document covers setup, configuration choices, known pitfalls, and trade-off
 
 When Supabase asks about Data API and RLS defaults:
 
-| Setting | Recommendation | Pros | Cons |
-|---------|----------------|------|------|
-| **Enable Data API** | **Off** (or On but unused) | Smaller attack surface; matches our stack (no `supabase-js` DB access) | Cannot use PostgREST / client SDK against tables without re-enabling |
-| **Automatically expose new tables** | **Disable** | Alembic tables stay private; no accidental `anon` access to new tables | Must grant manually if you later want Data API |
-| **Enable automatic RLS** | **Disable** | Matches app-layer auth and the consolidated baseline | No DB-level row isolation if API is compromised |
+| Setting                             | Recommendation             | Pros                                                                   | Cons                                                                 |
+| ----------------------------------- | -------------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| **Enable Data API**                 | **Off** (or On but unused) | Smaller attack surface; matches our stack (no `supabase-js` DB access) | Cannot use PostgREST / client SDK against tables without re-enabling |
+| **Automatically expose new tables** | **Disable**                | Alembic tables stay private; no accidental `anon` access to new tables | Must grant manually if you later want Data API                       |
+| **Enable automatic RLS**            | **Disable**                | Matches app-layer auth and the consolidated baseline                   | No DB-level row isolation if API is compromised                      |
 
 We authorize in **FastAPI**, not Postgres RLS. The backend connects with the database password / service credentials, not the publishable key.
 
@@ -69,15 +69,15 @@ We authorize in **FastAPI**, not Postgres RLS. The backend connects with the dat
 
 ## API keys: publishable vs secret
 
-| Dashboard label | Old name | Use in Nomicous |
-|-----------------|----------|-----------------|
-| **Publishable** | `anon` | **Not used** - frontend talks to our API only |
-| **Secret** | `service_role` | **`SUPABASE_SERVICE_ROLE_KEY`** in backend env only |
+| Dashboard label | Old name       | Use in Nomicous                                     |
+| --------------- | -------------- | --------------------------------------------------- |
+| **Publishable** | `anon`         | **Not used** - frontend talks to our API only       |
+| **Secret**      | `service_role` | **`SUPABASE_SERVICE_ROLE_KEY`** in backend env only |
 
-| | Secret key | Publishable key |
-|--|------------|-----------------|
-| **Pros** | Full Storage access; server can upload/read/delete page images | Safe to embed in browsers; limited scope |
-| **Cons** | Must never leak to frontend or git | Cannot manage private Storage server-side; wrong tool for our backend |
+|          | Secret key                                                     | Publishable key                                                       |
+| -------- | -------------------------------------------------------------- | --------------------------------------------------------------------- |
+| **Pros** | Full Storage access; server can upload/read/delete page images | Safe to embed in browsers; limited scope                              |
+| **Cons** | Must never leak to frontend or git                             | Cannot manage private Storage server-side; wrong tool for our backend |
 
 ```bash
 SUPABASE_URL=https://<project-ref>.supabase.co
@@ -93,11 +93,11 @@ separate provider-managed service principals where the plan supports them; see
 [database-roles.md](database-roles.md). Their credentials stay in provider
 secrets, never in an example file or command history.
 
-| Variable | Connection | Port | Driver | Purpose |
-|----------|------------|------|--------|---------|
-| `MIGRATOR_DATABASE_URL` | **Direct** `db.<ref>.supabase.co` | 5432 | `postgresql://` (psycopg2) | Alembic operator/migrator only |
-| `DATABASE_URL` | **Transaction pooler** `…pooler…` | 6543 | `postgresql+asyncpg://` | `nomicous_api` or platform-worker runtime |
-| `SYNC_DATABASE_URL` | **Transaction pooler** (or direct) | 6543 / 5432 | `postgresql://` | Matching runtime principal for sync listener/scripts |
+| Variable                | Connection                         | Port        | Driver                     | Purpose                                              |
+| ----------------------- | ---------------------------------- | ----------- | -------------------------- | ---------------------------------------------------- |
+| `MIGRATOR_DATABASE_URL` | **Direct** `db.<ref>.supabase.co`  | 5432        | `postgresql://` (psycopg2) | Alembic operator/migrator only                       |
+| `DATABASE_URL`          | **Transaction pooler** `…pooler…`  | 6543        | `postgresql+asyncpg://`    | `nomicous_api` or platform-worker runtime            |
+| `SYNC_DATABASE_URL`     | **Transaction pooler** (or direct) | 6543 / 5432 | `postgresql://`            | Matching runtime principal for sync listener/scripts |
 
 Database name is **`postgres`** (Supabase default) - not `kalamos`.
 
@@ -111,10 +111,10 @@ worker. Add `?sslmode=require` to libpq URLs when the provider URI omits it.
 
 ### Direct vs transaction pooler
 
-| | Direct (`:5432`) | Transaction pooler (`:6543`) |
-|--|------------------|-------------------------------|
+|          | Direct (`:5432`)                                            | Transaction pooler (`:6543`)                                         |
+| -------- | ----------------------------------------------------------- | -------------------------------------------------------------------- |
 | **Pros** | Full Postgres features; Alembic DDL; prepared statements OK | Many short-lived connections; good for serverless / high concurrency |
-| **Cons** | Connection limits on free tier; one session per connection | No prepared statements with asyncpg (see below); not for migrations |
+| **Cons** | Connection limits on free tier; one session per connection  | No prepared statements with asyncpg (see below); not for migrations  |
 
 **Rule:** migrations → direct; app runtime → pooler.
 
@@ -127,10 +127,10 @@ Supabase also offers **session mode** on pooler port `5432`. It supports prepare
 Characters like `@`, `#`, `%` in the password **break URL parsing**. URL-encode them in the URI:
 
 | Character | Encoded |
-|-----------|---------|
-| `@` | `%40` |
-| `#` | `%23` |
-| `%` | `%25` |
+| --------- | ------- |
+| `@`       | `%40`   |
+| `#`       | `%23`   |
+| `%`       | `%25`   |
 
 Example: password `@Krrish@2021` → `%40Krrish%402021` in the URL.
 
@@ -140,23 +140,23 @@ Alembic also needs `%` doubled (`%%`) when passed through ConfigParser - handled
 
 ## Environment files
 
-| File | Purpose |
-|------|---------|
-| `nomicous/backend/core/.env` | Default local dev (Docker Postgres) |
-| `nomicous/backend/core/.env.supabase` | Supabase profile (gitignored) |
-| `nomicous/backend/core/.env.supabase.example` | Template (committed) |
-| `nomicous/backend/core/.env.inference` | Cloud inference containers only (gitignored) |
+| File                                           | Purpose                                        |
+| ---------------------------------------------- | ---------------------------------------------- |
+| `nomicous/backend/core/.env`                   | Default local dev (Docker Postgres)            |
+| `nomicous/backend/core/.env.supabase`          | Supabase profile (gitignored)                  |
+| `nomicous/backend/core/.env.supabase.example`  | Template (committed)                           |
+| `nomicous/backend/core/.env.inference`         | Cloud inference containers only (gitignored)   |
 | `nomicous/backend/core/.env.inference.example` | Least-privilege inference template (committed) |
 
 Settings load **`.env` first**; if missing, fall back to **`.env.supabase`** (`backend/core/settings/_env.py`).
 
 ### Options
 
-| Approach | Pros | Cons |
-|----------|------|------|
-| Copy `.env.supabase` → `.env` | Simple; all tools pick it up automatically | Overwrites local Docker config |
-| Keep only `.env.supabase` | Local `.env` untouched | Must `source` before scripts, or rely on fallback |
-| `source .env.supabase` per shell | Explicit | Easy to forget in a new terminal |
+| Approach                         | Pros                                       | Cons                                              |
+| -------------------------------- | ------------------------------------------ | ------------------------------------------------- |
+| Copy `.env.supabase` → `.env`    | Simple; all tools pick it up automatically | Overwrites local Docker config                    |
+| Keep only `.env.supabase`        | Local `.env` untouched                     | Must `source` before scripts, or rely on fallback |
+| `source .env.supabase` per shell | Explicit                                   | Easy to forget in a new terminal                  |
 
 **Use `#` comments only** in env files. Do **not** use Python `"""` docstrings - shell `source` will fail.
 
@@ -177,38 +177,38 @@ cp nomicous/backend/core/.env.supabase.example nomicous/backend/core/.env.supaba
 
 ### `STORAGE_BACKEND`
 
-| Value | Pros | Cons |
-|-------|------|------|
-| `local` (default) | Fast; no network; works offline | Not shared across machines |
-| `supabase` | Shared test DB + images; no local disk | Upload latency; bucket + key setup |
+| Value             | Pros                                   | Cons                               |
+| ----------------- | -------------------------------------- | ---------------------------------- |
+| `local` (default) | Fast; no network; works offline        | Not shared across machines         |
+| `supabase`        | Shared test DB + images; no local disk | Upload latency; bucket + key setup |
 
 ### WebP page images
 
 All new uploads and seeds are normalized to **WebP**:
 
-| Setting | Default | Pros | Cons |
-|---------|---------|------|------|
-| `MEDIA_WEBP_LOSSLESS=true` | on | Best OCR fidelity | Larger than lossy |
-| `MEDIA_WEBP_LOSSLESS=false` + `MEDIA_WEBP_QUALITY=95` | - | Smaller files | Slight quality loss |
+| Setting                                               | Default | Pros              | Cons                |
+| ----------------------------------------------------- | ------- | ----------------- | ------------------- |
+| `MEDIA_WEBP_LOSSLESS=true`                            | on      | Best OCR fidelity | Larger than lossy   |
+| `MEDIA_WEBP_LOSSLESS=false` + `MEDIA_WEBP_QUALITY=95` | -       | Smaller files     | Slight quality loss |
 
 Keys look like: `parts/<uuid>/<stem>.webp`
 
 ### Image serving
 
-| Approach | Current | Pros | Cons |
-|----------|---------|------|------|
-| **API proxy** (implemented) | API reads bytes from Storage → HTTP response | Same auth as today; private bucket | More API bandwidth |
-| Signed URLs (future) | Browser fetches Storage directly | Offloads bandwidth | TTL + policy complexity |
+| Approach                    | Current                                      | Pros                               | Cons                    |
+| --------------------------- | -------------------------------------------- | ---------------------------------- | ----------------------- |
+| **API proxy** (implemented) | API reads bytes from Storage → HTTP response | Same auth as today; private bucket | More API bandwidth      |
+| Signed URLs (future)        | Browser fetches Storage directly             | Offloads bandwidth                 | TTL + policy complexity |
 
 ---
 
 ## Auth
 
-| | App JWT (`JWT_SECRET`) | Supabase Auth |
-|--|----------------------|---------------|
-| **Used?** | Yes | No |
-| **Pros** | Full control; same code local + Supabase | Built-in OAuth, magic links |
-| **Cons** | You manage secrets + rotation | Second auth system; migration effort |
+|           | App JWT (`JWT_SECRET`)                   | Supabase Auth                        |
+| --------- | ---------------------------------------- | ------------------------------------ |
+| **Used?** | Yes                                      | No                                   |
+| **Pros**  | Full control; same code local + Supabase | Built-in OAuth, magic links          |
+| **Cons**  | You manage secrets + rotation            | Second auth system; migration effort |
 
 `JWT_SECRET` must be set in `.env.supabase` (≥32 bytes). It is **not** the Supabase secret key.
 
@@ -223,16 +223,19 @@ Local path:  Browser → Inference helper (127.0.0.1:8001) → API persists resu
 Cloud path:  Browser → API creates job → INFERENCE_URL service → webhook callback
 ```
 
-| | Local helper | Cloud (`INFERENCE_URL`) |
-|--|--------------|-------------------------|
-| **Frontend config** | `NEXT_PUBLIC_INFERENCE_HELPER_URL` (default `http://127.0.0.1:8001`) | “Use cloud inference” toggle in page editor |
-| **Backend env** | Not required | `INFERENCE_URL`, `INFERENCE_WEBHOOK_SECRET`, `INFERENCE_SERVICE_SECRET` |
-| **Pros** | GPU on your machine; no hosted inference cost | Works without local install; async job queue |
-| **Cons** | Must run helper; model weights local | Needs inference-api + worker; secrets must match |
+|                     | Local helper                                                         | Cloud (`INFERENCE_URL`)                                                 |
+| ------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| **Frontend config** | `NEXT_PUBLIC_INFERENCE_HELPER_URL` (default `http://127.0.0.1:8001`) | “Use cloud inference” toggle in page editor                             |
+| **Backend env**     | Not required                                                         | `INFERENCE_URL`, `INFERENCE_WEBHOOK_SECRET`, `INFERENCE_SERVICE_SECRET` |
+| **Pros**            | GPU on your machine; no hosted inference cost                        | Works without local install; async job queue                            |
+| **Cons**            | Must run helper; model weights local                                 | Needs inference-api + worker; secrets must match                        |
 
 **Typical Supabase test setup:** Supabase DB + Storage, API local, **inference helper local**. Leave `INFERENCE_WEBHOOK_SECRET=replace-me` until you run cloud inference.
 
-**Port conflict:** helper and `inference-api` both default to **8001** - run one, not both.
+The local helper uses host port **8001**. In the Compose profile, the cloud
+inference API uses host port **8010** while its container still listens on
+**8001**, so both can run without a host-port conflict. A standalone
+inference API started directly on the host still uses **8001**.
 
 ---
 
@@ -240,9 +243,9 @@ Cloud path:  Browser → API creates job → INFERENCE_URL service → webhook c
 
 ### `sslmode` vs `ssl` (asyncpg)
 
-| | psycopg2 (sync, Alembic) | asyncpg (`DATABASE_URL`) |
-|--|--------------------------|---------------------------|
-| SSL query param | `?sslmode=require` | `?ssl=require` |
+|                 | psycopg2 (sync, Alembic) | asyncpg (`DATABASE_URL`) |
+| --------------- | ------------------------ | ------------------------ |
+| SSL query param | `?sslmode=require`       | `?ssl=require`           |
 
 `infrastructure/db.py` rewrites `sslmode=` → `ssl=` for the async engine.
 
@@ -254,10 +257,10 @@ Cloud path:  Browser → API creates job → INFERENCE_URL service → webhook c
 
 **Fix (automatic):** When URL contains `pooler.supabase.com` or `:6543`, async engine sets `connect_args={"statement_cache_size": 0}`.
 
-| | Statement cache on | Statement cache off |
-|--|-------------------|---------------------|
+|          | Statement cache on                         | Statement cache off        |
+| -------- | ------------------------------------------ | -------------------------- |
 | **Pros** | Faster repeated queries on direct Postgres | Works with Supabase pooler |
-| **Cons** | Breaks on transaction pooler | Slight per-query overhead |
+| **Cons** | Breaks on transaction pooler               | Slight per-query overhead  |
 
 ---
 
@@ -318,7 +321,7 @@ uv run python scripts/platform/seed_dev_annotated_data.py   # optional corpus
 
 ```bash
 cd nomicous
-PYTHONPATH=. uvicorn backend.core.main:app --reload --port 8000
+PYTHONPATH=. uvicorn backend.core.app:create_app --factory --reload --port 8000
 ```
 
 ### 5b. Run full stack with Docker (recommended)
@@ -337,10 +340,10 @@ docker compose -f docker-compose.yml -f docker-compose.supabase.yml up
 docker compose -f docker-compose.yml -f docker-compose.supabase.yml up -d --build
 ```
 
-| URL | Service |
-|-----|---------|
-| http://localhost:5173 | Frontend |
-| http://localhost:8000 | Platform API |
+| URL                   | Service                                                           |
+| --------------------- | ----------------------------------------------------------------- |
+| http://localhost:5173 | Frontend                                                          |
+| http://localhost:8000 | Platform API                                                      |
 | http://localhost:8010 | Inference API (cloud jobs) - host port; container listens on 8001 |
 
 This profile **does not start local Postgres** (`db` is disabled). Apply
@@ -381,48 +384,48 @@ Dev login after seed: `dev@example.com` / `dev-pass-123`
 
 ## Environment reference
 
-| Variable | Required (Supabase) | Purpose |
-|----------|---------------------|---------|
-| `MIGRATOR_DATABASE_URL` | Yes | Alembic operator/migrator - direct Postgres |
-| `DATABASE_URL` | Yes | Async SQLAlchemy (`+asyncpg`) API/worker principal |
-| `SYNC_DATABASE_URL` | Yes | Matching API/worker principal sync connection |
-| `STORAGE_BACKEND` | Yes | `supabase` |
-| `SUPABASE_URL` | Yes | Project API URL |
-| `SUPABASE_SERVICE_ROLE_KEY` | Yes | Storage (secret key) |
-| `SUPABASE_STORAGE_BUCKET` | Yes | Default `document-media` |
-| `JWT_SECRET` | Yes | App auth (not Supabase) |
-| `MEDIA_WEBP_LOSSLESS` | No | Default `true` |
-| `INFERENCE_URL` | Only for cloud jobs | Default `http://localhost:8001` |
-| `INFERENCE_WEBHOOK_SECRET` | Only for cloud jobs | Shared with inference service |
-| `INFERENCE_SERVICE_SECRET` | Only for cloud jobs | Same as webhook secret in dev |
+| Variable                    | Required (Supabase) | Purpose                                            |
+| --------------------------- | ------------------- | -------------------------------------------------- |
+| `MIGRATOR_DATABASE_URL`     | Yes                 | Alembic operator/migrator - direct Postgres        |
+| `DATABASE_URL`              | Yes                 | Async SQLAlchemy (`+asyncpg`) API/worker principal |
+| `SYNC_DATABASE_URL`         | Yes                 | Matching API/worker principal sync connection      |
+| `STORAGE_BACKEND`           | Yes                 | `supabase`                                         |
+| `SUPABASE_URL`              | Yes                 | Project API URL                                    |
+| `SUPABASE_SERVICE_ROLE_KEY` | Yes                 | Storage (secret key)                               |
+| `SUPABASE_STORAGE_BUCKET`   | Yes                 | Default `document-media`                           |
+| `JWT_SECRET`                | Yes                 | App auth (not Supabase)                            |
+| `MEDIA_WEBP_LOSSLESS`       | No                  | Default `true`                                     |
+| `INFERENCE_URL`             | Only for cloud jobs | Default `http://localhost:8001`                    |
+| `INFERENCE_WEBHOOK_SECRET`  | Only for cloud jobs | Shared with inference service                      |
+| `INFERENCE_SERVICE_SECRET`  | Only for cloud jobs | Same as webhook secret in dev                      |
 
 ---
 
 ## Local vs Supabase summary
 
-| | Local dev | Supabase test deploy |
-|--|-----------|----------------------|
-| Database | Docker `kalamos` @ `:5433` | Supabase `postgres` |
-| Migrations | `alembic upgrade head` | Same Alembic → direct URL |
-| Page images | `MEDIA_ROOT` filesystem | Storage bucket (WebP) |
-| Auth | App JWT | App JWT |
-| Inference | Local helper and/or Docker inference | Local helper typical |
-| Cost / setup | Free, offline | Hosted; needs network |
+|              | Local dev                            | Supabase test deploy      |
+| ------------ | ------------------------------------ | ------------------------- |
+| Database     | Docker `kalamos` @ `:5433`           | Supabase `postgres`       |
+| Migrations   | `alembic upgrade head`               | Same Alembic → direct URL |
+| Page images  | `MEDIA_ROOT` filesystem              | Storage bucket (WebP)     |
+| Auth         | App JWT                              | App JWT                   |
+| Inference    | Local helper and/or Docker inference | Local helper typical      |
+| Cost / setup | Free, offline                        | Hosted; needs network     |
 
 ---
 
 ## Troubleshooting
 
-| Symptom | Cause | Fix |
-|---------|-------|-----|
-| `No such file or directory` on migrate | Python `"""` in `.env.supabase` | Use `#` comments only |
-| `JWT_SECRET` missing | Only `.env.supabase` exists, old code path | Update repo; or copy to `.env` |
-| `connect() got unexpected keyword argument 'sslmode'` | asyncpg URL | Use `ssl=` or let `db.py` rewrite |
-| `DuplicatePreparedStatementError` | Pooler + asyncpg | Fixed in `db.py`; restart process |
-| `role nomicous_app cannot be dropped` | Legacy pre-squash role | Remove it during a non-production reset or through the provider operator |
-| Upload 401/403 to Storage | Wrong key or missing bucket | Secret key + private `document-media` |
-| Connection refused on `:5433` | Docker not running | `docker compose up db -d` |
-| Integration tests hang | Stale DB advisory locks | Stop API; terminate idle sessions |
+| Symptom                                               | Cause                                      | Fix                                                                      |
+| ----------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------ |
+| `No such file or directory` on migrate                | Python `"""` in `.env.supabase`            | Use `#` comments only                                                    |
+| `JWT_SECRET` missing                                  | Only `.env.supabase` exists, old code path | Update repo; or copy to `.env`                                           |
+| `connect() got unexpected keyword argument 'sslmode'` | asyncpg URL                                | Use `ssl=` or let `db.py` rewrite                                        |
+| `DuplicatePreparedStatementError`                     | Pooler + asyncpg                           | Fixed in `db.py`; restart process                                        |
+| `role nomicous_app cannot be dropped`                 | Legacy pre-squash role                     | Remove it during a non-production reset or through the provider operator |
+| Upload 401/403 to Storage                             | Wrong key or missing bucket                | Secret key + private `document-media`                                    |
+| Connection refused on `:5433`                         | Docker not running                         | `docker compose up db -d`                                                |
+| Integration tests hang                                | Stale DB advisory locks                    | Stop API; terminate idle sessions                                        |
 
 ---
 

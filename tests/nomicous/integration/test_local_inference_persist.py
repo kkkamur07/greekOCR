@@ -105,7 +105,7 @@ def test_persist_local_segment_preserves_manual_geometry(client, owner_headers, 
                     "kind": "rectangle",
                     "points": [[0, 10], [10, 10], [10, 15], [0, 15]],
                     "source": "kraken",
-                    "source_metadata": {"model": "kraken:blla"},
+                    "source_metadata": {"model": "blla"},
                 },
             ]
         },
@@ -117,7 +117,7 @@ def test_persist_local_segment_preserves_manual_geometry(client, owner_headers, 
         f"{base}/{document_id}/parts/{part_id}/local-inference/segment",
         headers=owner_headers,
         json={
-            "registry_model_id": "kraken-segment",
+            "registry_model_id": "blla-segment",
             "registry_tag": "stable",
             "output": {
                 "blocks": [],

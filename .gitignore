@@ -70,3 +70,4 @@ lerna-debug.log*
 
 data/
 .vercel
+.lgraph/

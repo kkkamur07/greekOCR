@@ -8,7 +8,34 @@ HELPER_DIR="$ROOT/packaging/helper"
 DIST_DIR="$HELPER_DIR/dist"
 APP_NAME="Nomicous Inference Helper"
 APP_BUNDLE="$DIST_DIR/${APP_NAME}.app"
-DMG_PATH="$DIST_DIR/nomicous-inference-helper-macos.dmg"
+
+# PyInstaller must run on the target architecture. CI sets MACOS_ARCH
+# explicitly; local builds default to the current machine architecture.
+REQUESTED_ARCH="${MACOS_ARCH:-$(uname -m)}"
+case "$REQUESTED_ARCH" in
+  arm64|aarch64)
+    MACOS_ARCH="arm64"
+    DEFAULT_DMG_NAME="nomicous-inference-helper-macos.dmg"
+    ;;
+  x86_64|amd64)
+    MACOS_ARCH="x86_64"
+    DEFAULT_DMG_NAME="nomicous-inference-helper-macos-intel.dmg"
+    ;;
+  *)
+    echo "ERROR: unsupported MACOS_ARCH '$REQUESTED_ARCH' (use arm64 or x86_64)." >&2
+    exit 1
+    ;;
+esac
+
+ACTUAL_ARCH="$(uname -m)"
+if [ "$ACTUAL_ARCH" != "$MACOS_ARCH" ]; then
+  echo "ERROR: requested macOS architecture '$MACOS_ARCH' but runner is '$ACTUAL_ARCH'." >&2
+  echo "       PyInstaller builds must run natively on the target architecture." >&2
+  exit 1
+fi
+
+DMG_NAME="${MACOS_DMG_NAME:-$DEFAULT_DMG_NAME}"
+DMG_PATH="$DIST_DIR/$DMG_NAME"
 
 # Code signing / notarization (all optional - unset = unsigned build).
 #   MACOS_CODESIGN_IDENTITY  "Developer ID Application: Name (TEAMID)"

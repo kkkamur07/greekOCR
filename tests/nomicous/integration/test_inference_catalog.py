@@ -77,7 +77,7 @@ def _create_project_document_part(client, headers) -> tuple[str, str, str]:
 @pytest.mark.integration
 def test_list_inference_models_returns_catalog_entries(client, auth_headers):
     segment_model = _seed_model(
-        name=f"kraken-segment-{uuid.uuid4().hex[:8]}",
+        name=f"blla-segment-{uuid.uuid4().hex[:8]}",
         task=InferenceTask.segment,
     )
     transcribe_model = _seed_model(

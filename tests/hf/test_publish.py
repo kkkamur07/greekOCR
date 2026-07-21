@@ -11,8 +11,10 @@ from src.hf.publish import (
     DatasetStagingRef,
     MockPublishClient,
     ModelStagingRef,
+    build_model_card,
     build_dataset_readme,
     dataset_staging_dir,
+    hub_repo_slug,
     model_staging_dir,
     plan_collection_sync,
     plan_dataset_publish,
@@ -46,6 +48,19 @@ def _seed_dataset_staging(staging_root: Path) -> Path:
         encoding="utf-8",
     )
     return staging_dir
+
+
+def test_blla_uses_script_agnostic_segmentation_repo_slug():
+    assert hub_repo_slug("segmentation", "blla") == "segmentation-blla"
+    assert hub_repo_slug("syriac", "calamari") == "syriac-htr-calamari"
+    card = build_model_card(
+        ModelStagingRef("segmentation", "blla", "v1", "stable"),
+        namespace="nomicous",
+        task="segment",
+        registry_model_id="blla-segment",
+    )
+    assert "language:" not in card
+    assert "# Document Segmentation (blla)" in card
 
 
 def test_publish_model_uploads_and_tags_revision(tmp_path: Path):

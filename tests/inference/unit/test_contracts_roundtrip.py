@@ -89,7 +89,7 @@ def _transcribe_batch_response() -> TranscribeBatchRunResponse:
 def test_image_bytes_json_contract():
     request = InferenceRunRequest(
         task=InferenceTask.segment,
-        registry_model_id="kraken-segment",
+        registry_model_id="blla-segment",
         image_bytes=b"\x89PNG\r\n",
         params={"refine": True},
     )
@@ -101,7 +101,7 @@ def test_image_bytes_accepts_whitespace_wrapped_base64():
     encoded = base64.b64encode(b"\x89PNG\r\n").decode()
     request = InferenceRunRequest(
         task=InferenceTask.segment,
-        registry_model_id="kraken-segment",
+        registry_model_id="blla-segment",
         image_bytes=f"\n{encoded[:4]} {encoded[4:]}\t",
     )
 
@@ -112,7 +112,7 @@ def test_image_bytes_rejects_invalid_base64():
     with pytest.raises(ValidationError, match="Invalid inference request"):
         InferenceRunRequest(
             task=InferenceTask.segment,
-            registry_model_id="kraken-segment",
+            registry_model_id="blla-segment",
             image_bytes="not-base64!!!",
         )
 
@@ -153,7 +153,7 @@ def test_job_submit_round_trip():
     product_job_id = uuid4()
     request = JobSubmitRequest(
         task=InferenceTask.segment,
-        registry_model_id="kraken-segment",
+        registry_model_id="blla-segment",
         product_job_id=product_job_id,
         image_bytes=b"page-bytes",
     )

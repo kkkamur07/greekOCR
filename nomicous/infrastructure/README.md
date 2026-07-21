@@ -311,7 +311,7 @@ python scripts/platform/seed_dev_annotated_data.py --skip-history
 The seed defaults can be overridden with registry model ids:
 
 ```bash
-DEFAULT_SEGMENT_MODEL=kraken-segment
+DEFAULT_SEGMENT_MODEL=blla-segment
 DEFAULT_TRANSCRIBE_MODEL=syriac-calamari-v1
 BINDING_PROJECT_SLUG=byzantine-greek-manuscripts
 ```

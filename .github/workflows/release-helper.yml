@@ -29,10 +29,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
+          # PyInstaller builds must run on the architecture they package.
+          - os: macos-15
             artifact: nomicous-inference-helper-macos.dmg
-            build: bash packaging/helper/macos/build-dmg.sh
-          - os: ubuntu-latest
+            build: MACOS_ARCH=arm64 bash packaging/helper/macos/build-dmg.sh
+          - os: macos-15-intel
+            artifact: nomicous-inference-helper-macos-intel.dmg
+            build: MACOS_ARCH=x86_64 bash packaging/helper/macos/build-dmg.sh
+          # Build against an older glibc so the PyInstaller bundle works on
+          # more supported Linux distributions.
+          - os: ubuntu-22.04
             artifact: nomicous-inference-helper-linux.tar.gz
             build: bash packaging/helper/linux/build-tarball.sh
           - os: windows-latest
@@ -120,8 +126,8 @@ jobs:
               for path in root.iterdir()
               if path.is_file() and not path.name.endswith(".sha256")
           )
-          if len(assets) != 3:
-              raise SystemExit(f"expected three installer assets, found: {[path.name for path in assets]}")
+          if len(assets) != 4:
+              raise SystemExit(f"expected four installer assets, found: {[path.name for path in assets]}")
           lines = []
           for asset in assets:
               expected = (asset.parent / f"{asset.name}.sha256").read_text(encoding="utf-8").strip()

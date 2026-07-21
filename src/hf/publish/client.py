@@ -170,13 +170,20 @@ class HuggingFacePublishClient:
     repo_type: str,
   ) -> None:
     from huggingface_hub import HfApi
+    from huggingface_hub.utils import HfHubHTTPError
 
-    HfApi().create_tag(
+    api = HfApi()
+    try:
+      api.delete_tag(repo_id=repo_id, tag=tag, repo_type=repo_type)
+    except HfHubHTTPError as error:
+      if error.response is None or error.response.status_code != 404:
+        raise
+    api.create_tag(
       repo_id=repo_id,
       tag=tag,
       revision=revision,
       repo_type=repo_type,
-      exist_ok=True,
+      exist_ok=False,
     )
 
   def update_collection_metadata(

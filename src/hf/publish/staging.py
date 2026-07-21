@@ -32,6 +32,8 @@ class ModelStagingRef:
 
 
 def hub_repo_slug(script: str, architecture: str) -> str:
+  if architecture in {"blla", "blla-segment", "blla_segment"}:
+    return "segmentation-blla"
   return f"{script}-htr-{architecture}"
 
 
@@ -42,7 +44,9 @@ _SCRIPT_LANGUAGE_CODES: dict[str, str] = {
 }
 
 
-def hub_language_code(script: str) -> str:
+def hub_language_code(script: str) -> str | None:
+  if script == "segmentation":
+    return None
   return _SCRIPT_LANGUAGE_CODES.get(script, script)
 
 
@@ -91,19 +95,26 @@ def build_model_card(
   title_script = ref.script.capitalize()
 
   language_code = hub_language_code(ref.script)
+  is_segmentation = task == "segment"
+  task_tag = "layout-analysis" if is_segmentation else "handwritten-text-recognition"
+  usage_description = (
+    "General-purpose page segmentation checkpoint for manuscript images."
+    if is_segmentation
+    else f"Handwritten text recognition checkpoint for **{ref.script}** manuscripts."
+  )
+  title = "Document Segmentation" if is_segmentation else f"{title_script} HTR"
+  language_frontmatter = f"language:\n- {language_code}\n" if language_code else ""
   return f"""---
-language:
-- {language_code}
-tags:
-- handwritten-text-recognition
+{language_frontmatter}tags:
+- {task_tag}
 - {ref.architecture}
 - ocr
 library_name: {ref.architecture}
 ---
 
-# {title_script} HTR ({ref.architecture})
+# {title} ({ref.architecture})
 
-Handwritten text recognition checkpoint for **{ref.script}** manuscripts, published from the nomicous **Hub staging tree**.
+{usage_description} Published from the nomicous **Hub staging tree**.
 
 | Field | Value |
 |-------|-------|

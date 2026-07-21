@@ -47,7 +47,7 @@ Direct `pytest` examples:
 uv run --group platform --group inference pytest tests/nomicous -m "not integration and not ml" -q
 uv run --group platform --group inference pytest tests/nomicous -m integration -q
 uv run --group platform --group inference pytest tests/nomicous -m ml -q
-uv run --group platform --group inference pytest tests/inference -q
+uv run --group platform --group inference --group export pytest tests/inference -q
 ```
 
 Frontend:
