@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { isModelLocalEligible, isModelRemoteOnly } from "./catalog";
+import {
+  isModelLocalEligible,
+  isModelRemoteOnly,
+  shouldRunOnLocalHelper,
+} from "./catalog";
 import type { HelperCatalogModel } from "./catalog";
 import {
   loadInferencePreference,
@@ -16,6 +20,22 @@ const catalog: HelperCatalogModel[] = [
     architecture: "calamari",
     device: "cpu",
     host_eligibility: "local",
+    tags: ["stable"],
+  },
+  {
+    registry_model_id: "blla-segment",
+    task: "segment",
+    architecture: "blla",
+    device: "cpu",
+    host_eligibility: "local",
+    tags: ["stable"],
+  },
+  {
+    registry_model_id: "flexible-model",
+    task: "transcribe",
+    architecture: "calamari",
+    device: "cpu",
+    host_eligibility: "any",
     tags: ["stable"],
   },
   {
@@ -58,6 +78,47 @@ describe("helper catalog eligibility", () => {
   it("flags remote-only models", () => {
     expect(isModelRemoteOnly(catalog, "future-cloud-model")).toBe(true);
     expect(isModelRemoteOnly(catalog, "greek-calamari-v1")).toBe(false);
+  });
+});
+
+describe("shouldRunOnLocalHelper", () => {
+  it("uses the helper for local-only models even when cloud is preferred", () => {
+    expect(
+      shouldRunOnLocalHelper(catalog, "blla-segment", {
+        helperAvailable: true,
+        preferCloud: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("honors cloud preference for any-host models", () => {
+    expect(
+      shouldRunOnLocalHelper(catalog, "flexible-model", {
+        helperAvailable: true,
+        preferCloud: true,
+      }),
+    ).toBe(false);
+    expect(
+      shouldRunOnLocalHelper(catalog, "flexible-model", {
+        helperAvailable: true,
+        preferCloud: false,
+      }),
+    ).toBe(true);
+  });
+
+  it("never uses the helper when it is down or the model is remote-only", () => {
+    expect(
+      shouldRunOnLocalHelper(catalog, "blla-segment", {
+        helperAvailable: false,
+        preferCloud: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldRunOnLocalHelper(catalog, "future-cloud-model", {
+        helperAvailable: true,
+        preferCloud: false,
+      }),
+    ).toBe(false);
   });
 });
 

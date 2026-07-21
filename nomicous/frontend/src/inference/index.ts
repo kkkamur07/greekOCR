@@ -2,6 +2,7 @@ export {
   fetchHelperCatalog,
   isModelLocalEligible,
   isModelRemoteOnly,
+  shouldRunOnLocalHelper,
 } from "./catalog";
 export {
   HELPER_BASE_URL,
