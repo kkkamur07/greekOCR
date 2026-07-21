@@ -1,179 +1,53 @@
-"""Calamari OCR inference adapter backed by the local PyTorch graph."""
+"""Calamari OCR adapter with ONNX and legacy PyTorch dispatch."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
-import torch
 from src.hf.resolve.artifacts import verify_artifact_sha256
 
-from inference.architectures.calamari.config import CalamariTorchConfig, CalamariTorchLayerConfig
-from inference.architectures.calamari.model import CalamariTorchModel
+from inference.architectures.calamari.onnx import (
+    CalamariUnavailableError,
+    _decode_greedy,
+    _response_from_decoded,
+    run_calamari_onnx_transcribe_many,
+)
 from inference.architectures.calamari.preprocessing import (
     preprocess_line_image_bytes_to_calamari_tensor,
 )
-from inference.contracts.transcribe import CharacterConfidence, TranscribeRunResponse
+from inference.contracts.transcribe import TranscribeRunResponse
 
 
-class CalamariUnavailableError(RuntimeError):
-    """Raised when a Calamari PyTorch checkpoint cannot be used."""
-
-
-def _validate_checkpoint(checkpoint: object) -> Mapping[str, object]:
-    """Validate the supported, tensor-only checkpoint schema before model use."""
-    if not isinstance(checkpoint, Mapping):
-        raise CalamariUnavailableError("Calamari checkpoint must be a mapping")
-    if checkpoint.get("format") != "calamari-pytorch-v1":
-        raise CalamariUnavailableError("unsupported Calamari checkpoint format")
-
-    classes = checkpoint.get("classes")
-    if not isinstance(classes, int) or isinstance(classes, bool) or classes < 2:
-        raise CalamariUnavailableError("Calamari checkpoint has an invalid class count")
-
-    line_height = checkpoint.get("line_height", 48)
-    if not isinstance(line_height, int) or isinstance(line_height, bool) or line_height < 1:
-        raise CalamariUnavailableError("Calamari checkpoint has an invalid line height")
-
-    charset = checkpoint.get("charset")
-    if charset is not None and (
-        not isinstance(charset, list)
-        or len(charset) != classes
-        or not all(isinstance(character, str) for character in charset)
-    ):
-        raise CalamariUnavailableError("Calamari checkpoint has invalid codec metadata")
-
-    state_dict = checkpoint.get("state_dict")
-    if not isinstance(state_dict, Mapping) or not state_dict:
-        raise CalamariUnavailableError("Calamari checkpoint has no model state dictionary")
-    if not all(
-        isinstance(name, str) and isinstance(value, torch.Tensor)
-        for name, value in state_dict.items()
-    ):
-        raise CalamariUnavailableError("Calamari checkpoint has an invalid model state dictionary")
-
-    return checkpoint
-
-
-def _default_config(*, classes: int) -> CalamariTorchConfig:
-    return CalamariTorchConfig(
-        layers=(
-            CalamariTorchLayerConfig(
-                kind="conv2d",
-                name="conv2d_0",
-                filters=40,
-                kernel_size=(3, 3),
-                strides=(1, 1),
-                padding="same",
-                activation="relu",
-            ),
-            CalamariTorchLayerConfig(
-                kind="maxpool2d",
-                name="maxpool2d_0",
-                pool_size=(2, 2),
-                strides=(-1, -1),
-                padding="same",
-            ),
-            CalamariTorchLayerConfig(
-                kind="conv2d",
-                name="conv2d_1",
-                filters=60,
-                kernel_size=(3, 3),
-                strides=(1, 1),
-                padding="same",
-                activation="relu",
-            ),
-            CalamariTorchLayerConfig(
-                kind="maxpool2d",
-                name="maxpool2d_1",
-                pool_size=(2, 2),
-                strides=(-1, -1),
-                padding="same",
-            ),
-            CalamariTorchLayerConfig(
-                kind="bilstm",
-                name="lstm_0",
-                hidden_nodes=200,
-                merge_mode="concat",
-            ),
-            CalamariTorchLayerConfig(
-                kind="dropout",
-                name="dropout_0",
-                rate=0.5,
-            ),
-        ),
-        classes=classes,
-    )
+def _file_fingerprint(path: Path) -> tuple[int, int]:
+    """Cache-key component so replaced artifact files are reloaded."""
+    stat = path.stat()
+    return stat.st_mtime_ns, stat.st_size
 
 
 @lru_cache(maxsize=4)
-def _load_checkpoint(checkpoint_path: str) -> tuple[CalamariTorchModel, list[str] | None, int]:
+def _load_checkpoint(
+    checkpoint_path: str,
+    fingerprint: tuple[int, int] | None = None,
+) -> tuple[object, list[str] | None, int]:
+    """Load the legacy checkpoint only for the transition period."""
     try:
-        checkpoint = _validate_checkpoint(
-            torch.load(checkpoint_path, map_location="cpu", weights_only=True)
-        )
-    except CalamariUnavailableError:
-        raise
+        from src.model.inference_export.calamari.export import load_calamari_checkpoint
+
+        model, metadata = load_calamari_checkpoint(Path(checkpoint_path))
+    except ValueError as error:
+        message = str(error)
+        if "safely load" in message:
+            raise CalamariUnavailableError("unable to safely load Calamari checkpoint") from error
+        if "state dictionary" in message:
+            raise CalamariUnavailableError(
+                "Calamari checkpoint state dictionary is incompatible with the runtime"
+            ) from error
+        raise CalamariUnavailableError(message) from error
     except Exception as error:
         raise CalamariUnavailableError("unable to safely load Calamari checkpoint") from error
-
-    classes = checkpoint["classes"]
-    line_height = checkpoint.get("line_height", 48)
-    model = CalamariTorchModel(_default_config(classes=classes))
-    model.eval()
-    dummy = torch.zeros((1, 4, line_height, 1), dtype=torch.float32)
-    _ = model(dummy, image_lengths=torch.tensor([4]))
-    try:
-        model.load_state_dict(checkpoint["state_dict"], strict=True)
-    except (RuntimeError, TypeError, ValueError) as error:
-        raise CalamariUnavailableError(
-            "Calamari checkpoint state dictionary is incompatible with the runtime"
-        ) from error
-    model.eval()
-    return model, checkpoint.get("charset"), line_height
-
-
-def _decode_greedy(
-    softmax: np.ndarray,
-    *,
-    charset: list[str],
-) -> tuple[str, list[float]]:
-    labels = np.argmax(softmax, axis=1)
-    text_parts: list[str] = []
-    confidences: list[float] = []
-    last_label = 0
-
-    for index, label in enumerate(labels):
-        label = int(label)
-        if label == 0:
-            last_label = label
-            continue
-        if label != last_label:
-            char = charset[label] if label < len(charset) else ""
-            if char:
-                text_parts.append(char)
-                confidences.append(float(softmax[index, label]))
-        elif confidences:
-            confidences[-1] = max(confidences[-1], float(softmax[index, label]))
-        last_label = label
-
-    return "".join(text_parts).strip(), confidences
-
-
-def _response_from_decoded(text: str, confidences: list[float]) -> TranscribeRunResponse:
-    if len(confidences) != len(text):
-        confidences = [float(np.mean(confidences)) if confidences else 0.0 for _ in text]
-    confidence = float(np.mean(confidences)) if confidences else 0.0
-    return TranscribeRunResponse(
-        text=text,
-        confidence=max(0.0, min(1.0, confidence)),
-        character_confidences=[
-            CharacterConfidence(char=char, confidence=max(0.0, min(1.0, confidence)))
-            for char, confidence in zip(text, confidences, strict=True)
-        ],
-    )
+    return model, list(metadata.charset), metadata.line_height
 
 
 def run_calamari_transcribe_many(
@@ -184,16 +58,37 @@ def run_calamari_transcribe_many(
 ) -> list[TranscribeRunResponse]:
     if not checkpoint_path.exists():
         raise FileNotFoundError(f"Calamari checkpoint not found: {checkpoint_path}")
-    if checkpoint_path.suffix != ".pt":
+    if checkpoint_path.suffix not in {".pt", ".onnx"}:
         raise CalamariUnavailableError(
-            f"Calamari runtime now requires a PyTorch .pt checkpoint: {checkpoint_path}"
+            f"Calamari runtime requires a self-contained .onnx artifact: {checkpoint_path}"
         )
     if artifact_sha256:
         verify_artifact_sha256(checkpoint_path, artifact_sha256)
     if not line_images:
         raise ValueError("at least one line image is required")
 
-    model, charset, line_height = _load_checkpoint(str(checkpoint_path))
+    if checkpoint_path.suffix == ".onnx":
+        return run_calamari_onnx_transcribe_many(
+            line_images,
+            checkpoint_path=checkpoint_path,
+        )
+
+    return _run_legacy_pytorch_transcribe_many(
+        line_images,
+        checkpoint_path=checkpoint_path,
+    )
+
+
+def _run_legacy_pytorch_transcribe_many(
+    line_images: list[bytes],
+    *,
+    checkpoint_path: Path,
+) -> list[TranscribeRunResponse]:
+    import torch
+
+    model, charset, line_height = _load_checkpoint(
+        str(checkpoint_path), _file_fingerprint(checkpoint_path)
+    )
     if not charset:
         raise CalamariUnavailableError(
             f"Calamari checkpoint has no codec metadata: {checkpoint_path}"
@@ -226,3 +121,10 @@ def run_calamari_transcribe(
         checkpoint_path=checkpoint_path,
         artifact_sha256=artifact_sha256,
     )[0]
+
+
+__all__ = [
+    "CalamariUnavailableError",
+    "run_calamari_transcribe",
+    "run_calamari_transcribe_many",
+]

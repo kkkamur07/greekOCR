@@ -41,7 +41,7 @@ jobs:
           python-version: "3.11"
           enable-cache: true
       - run: uv run --locked --group dev ruff check nomicous/backend inference scripts/platform tests/nomicous tests/inference tests/hf
-      - run: uv run --locked --group platform --group inference pytest tests/nomicous/unit tests/inference/unit tests/hf
+      - run: uv run --locked --group platform --group inference --group export pytest tests/nomicous/unit tests/inference/unit tests/hf
 
   postgres-integration:
     name: Postgres integration tests
@@ -75,7 +75,7 @@ jobs:
           python-version: "3.11"
           enable-cache: true
       - run: PYTHONPATH=nomicous uv run --locked --group platform alembic -c nomicous/infrastructure/alembic.ini upgrade head
-      - run: uv run --locked --group platform --group inference pytest tests/nomicous/integration tests/inference/integration -m "not ml"
+      - run: uv run --locked --group platform --group inference --group export pytest tests/nomicous/integration tests/inference/integration -m "not ml"
 
   api-contracts:
     name: API contract artifacts

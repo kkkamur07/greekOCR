@@ -16,7 +16,9 @@ mkdir -p "$INSTALL_DIR/nomicous-inference-helper"
 cp -R "$DIST_DIR/nomicous-inference-helper/"* "$INSTALL_DIR/nomicous-inference-helper/"
 cp "$SCRIPT_DIR/nomicous-inference-helper.service" "$INSTALL_DIR/"
 cp "$SCRIPT_DIR/install-helper.sh" "$INSTALL_DIR/"
+cp "$SCRIPT_DIR/diagnose-helper.sh" "$INSTALL_DIR/"
 chmod +x "$INSTALL_DIR/install-helper.sh"
+chmod +x "$INSTALL_DIR/diagnose-helper.sh"
 
 tar -czf "$ARCHIVE" -C "$INSTALL_DIR" .
 echo "Built $ARCHIVE"

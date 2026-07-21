@@ -1,6 +1,9 @@
 # Local development
 
-Run the full Nomicous stack on your machine. For production hosting, see [deployment/production.md](../deployment/production.md).
+Run the full Nomicous stack on your machine. For the concise user-facing
+setup and hosting guide, see [using and hosting Nomicous](using-and-hosting.md).
+This page keeps service-by-service contributor instructions. For production
+hosting, see [deployment/production.md](../deployment/production.md).
 
 ---
 
@@ -14,15 +17,15 @@ cp nomicous/backend/core/.env.example nomicous/backend/core/.env
 docker compose up --build
 ```
 
-| Service | URL |
-|---------|-----|
-| Frontend | http://localhost:5173 |
-| Platform API | http://localhost:8000 |
-| API health | http://localhost:8000/health |
-| OpenAPI | http://localhost:8000/docs |
-| Inference API (cloud) | http://localhost:8010 |
-| Local Inference Helper | http://127.0.0.1:8001 (if installed) |
-| Postgres | `127.0.0.1:5433` - credentials from the ignored root `.env`, database `kalamos` |
+| Service                | URL                                                                             |
+| ---------------------- | ------------------------------------------------------------------------------- |
+| Frontend               | http://localhost:5173                                                           |
+| Platform API           | http://localhost:8000                                                           |
+| API health             | http://localhost:8000/health                                                    |
+| OpenAPI                | http://localhost:8000/docs                                                      |
+| Inference API (cloud)  | http://localhost:8010                                                           |
+| Local Inference Helper | http://127.0.0.1:8001 (if installed)                                            |
+| Postgres               | `127.0.0.1:5433` - credentials from the ignored root `.env`, database `kalamos` |
 
 Migrations run automatically when the API container starts.
 
@@ -52,7 +55,7 @@ cd nomicous
 export PYTHONPATH=.
 cp backend/core/.env.example backend/core/.env
 uv run --project .. --group platform alembic -c infrastructure/alembic.ini upgrade head
-uv run --project .. --group platform uvicorn backend.core.main:app --reload --host 0.0.0.0 --port 8000
+uv run --project .. --group platform uvicorn backend.core.app:create_app --factory --reload --host 0.0.0.0 --port 8000
 ```
 
 ---
@@ -82,11 +85,11 @@ Probes `http://127.0.0.1:8001`. Packaging and DMG install: [`packaging/helper/RE
 
 ## More detail
 
-| Doc | Topic |
-|-----|--------|
-| [Root README](../../README.md) | Repo overview, training, domain model |
-| [`nomicous/README.md`](../../nomicous/README.md) | App operations, env vars, version bumps |
-| [`nomicous/infrastructure/README.md`](../../nomicous/infrastructure/README.md) | Alembic, database wiring |
-| [`inference/README.md`](../../inference/README.md) | Inference service, registry, Compose ports |
-| [learnings.md](learnings.md) | Supabase, serverless (Vercel), Calamari training, frequent errors |
-| [testing.md](testing.md) | Pytest commands |
+| Doc                                                                            | Topic                                                             |
+| ------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| [Root README](../../README.md)                                                 | Repo overview, training, domain model                             |
+| [`nomicous/README.md`](../../nomicous/README.md)                               | App operations, env vars, version bumps                           |
+| [`nomicous/infrastructure/README.md`](../../nomicous/infrastructure/README.md) | Alembic, database wiring                                          |
+| [`inference/README.md`](../../inference/README.md)                             | Inference service, registry, Compose ports                        |
+| [learnings.md](learnings.md)                                                   | Supabase, serverless (Vercel), Calamari training, frequent errors |
+| [testing.md](testing.md)                                                       | Pytest commands                                                   |

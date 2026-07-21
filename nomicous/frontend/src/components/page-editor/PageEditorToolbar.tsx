@@ -373,7 +373,7 @@ export function PageEditorToolbar({
             >
               <div className="pe-dd-section">Segment</div>
               <p className="pe-dd-model">
-                Engine <strong>kraken-segment</strong> (fixed)
+                Engine <strong>blla-segment</strong> (fixed)
               </p>
               <label className="pe-dd-check">
                 <input

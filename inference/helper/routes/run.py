@@ -22,16 +22,30 @@ def run_inference(body: InferenceRunRequest) -> InferenceRunResponse:
             registry_tag=body.registry_tag,
             image_bytes=body.image_bytes,
             params=body.params,
+            onnx_only=True,
         )
     except KeyError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(exc),
+            detail="Unknown registry model or tag",
+        ) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Model weights are not available locally",
         ) from exc
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=CLIENT_INPUT_ERROR,
+        ) from exc
+    except RuntimeError as exc:
+        # BLLAUnavailableError, CalamariUnavailableError, and the ONNX runtime
+        # errors all subclass RuntimeError: the artifact or runtime is broken,
+        # not the client request.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Inference runtime is unavailable for this model",
         ) from exc
 
     return InferenceRunResponse(task=body.task, output=output)

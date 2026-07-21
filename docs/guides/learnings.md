@@ -129,9 +129,10 @@ curl -sS https://api.nomicous.com/health
 ### Local helper versus cloud inference
 
 Local OCR is currently the default. The browser connects to the user's local
-Inference Helper at `http://localhost:8001`; the helper is not a Vercel service.
-`NEXT_PUBLIC_INFERENCE_HELPER_URL` controls this browser-side probe, and the
-frontend Content Security Policy must allow the same loopback origin.
+Inference Helper; the helper is not a Vercel service. The browser tries
+`NEXT_PUBLIC_INFERENCE_HELPER_URL` first, then `127.0.0.1:8001`, `[::1]:8001`,
+and `localhost:8001`. The frontend Content Security Policy allows these loopback
+origins.
 
 Do **not** set the Vercel API's `INFERENCE_URL` to `localhost:8001`. From inside a
 Vercel function, `localhost` means the ephemeral function container, not the

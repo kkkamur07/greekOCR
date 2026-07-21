@@ -3,18 +3,18 @@
 Ship a **minimal** native install (`.dmg`, Windows zip + installer script, Linux tarball) containing only what local inference needs:
 
 - `inference/helper` slim FastAPI app (`health`, `catalog`, `/inference/v1/run`)
-- Calamari transcribe (PyTorch **CPU**)
-- Kraken segment (`package://kraken/blla.mlmodel`)
+- Calamari transcribe (ONNX Runtime **CPU**)
+- BLLA page segmentation (`hf://kkkamur07/segmentation-blla@stable`, ONNX)
 - `src/hf/resolve` for `hf://` weight download into `~/.nomicous/hf/cache/`
 - Bundled `inference/registry.yaml`
-- Optional system tray via `pystray` (packaging-only dependency)
 
 ## Explicitly excluded from installers
 
 - Platform API (`nomicous/`), Postgres drivers, Alembic, frontend assets
 - Training stacks (`transformers`, `accelerate`, `datasets`, notebooks)
-- GPU/CUDA torch builds (CPU wheel only)
-- Desktop shells (Tauri/Electron) - helper is a background service + tray icon
+- Torch, torchvision, safetensors, and all native model implementations
+- GPU/CUDA runtime libraries
+- Desktop shells (Tauri/Electron) - helper is a background service
 
 ## Layout
 
@@ -32,6 +32,7 @@ packaging/helper/
   linux/
     build-tarball.sh
     install-helper.sh
+    diagnose-helper.sh
     nomicous-inference-helper.service
   windows/
     build-installer.ps1
@@ -47,7 +48,12 @@ bash packaging/helper/scripts/build-pyinstaller.sh
 Or via a platform installer script (runs the shared build first):
 
 ```bash
-bash packaging/helper/macos/build-dmg.sh
+# Run on Apple silicon:
+MACOS_ARCH=arm64 bash packaging/helper/macos/build-dmg.sh
+
+# Run on an Intel Mac:
+MACOS_ARCH=x86_64 bash packaging/helper/macos/build-dmg.sh
+
 bash packaging/helper/linux/build-tarball.sh
 powershell packaging/helper/windows/build-installer.ps1
 ```
@@ -56,45 +62,47 @@ Manual PyInstaller (same as the shared script):
 
 ```bash
 cd packaging/helper
-uv pip install pyinstaller pystray
-uv run --group inference pyinstaller pyinstaller.spec
+uv run --isolated --no-dev --group helper --group packaging pyinstaller --clean pyinstaller.spec
 ```
 
-The spec entry point is `packaging/helper/tray_launcher.py` (server + tray). Use `--no-tray` for headless/systemd installs.
+The spec entry point is `packaging/helper/tray_launcher.py` and runs the server directly.
 
-Review `dist/nomicous-inference-helper/` before signing - if unexpected large directories appear (e.g. `torch/test`), add them to `excludes.txt`. Do **not** exclude `scipy`, `torchvision`, `sklearn`, `skimage`, or `shapely`: Kraken segment requires them at runtime (importing `kraken.blla` pulls in `scipy`), and excluding them breaks the segment model. Do **not** exclude `httpx` either: `huggingface_hub` uses it as its HTTP backend, so excluding it breaks `hf://` weight downloads (Calamari transcribe).
+Every platform build runs `scripts/verify-bundle.py` before assembling its
+installer. The verifier rejects leaked Torch/safetensors files, launches the
+actual frozen executable (the `.app` executable on macOS), and checks both
+`/health` and `/inference/v1/catalog`. Do **not** exclude `onnxruntime`,
+`opencv`, `Pillow`, or `httpx`: those are required by inference, preprocessing,
+and `hf://` downloads.
 
-The current release bundles are large because they carry the complete CPU
-runtime: approximately 311.6 MiB for macOS, 301.8 MiB for Windows, and
-432.2 MiB for Linux in the `inference-helper-v0.1.4` release. These figures are
-compressed download sizes and can change with each build. Since the published
-model repositories are public, a future size-reduction pass could replace
-`huggingface_hub` and its HTTP stack with a minimal `wget`-based downloader.
-That should only happen after preserving pinned revisions, artifact hashes,
-multi-file snapshots, and the existing cache layout.
+The native Python/Torch implementations remain available in the `train`,
+`export`, and `parity` environments for training, export, and parity checks.
+The production `inference` dependency set and frozen helper are ONNX-only; the
+helper explicitly rejects non-`.onnx` artifacts.
 
 ## Per-OS installers
 
 | OS | Command | Auto-start |
 |----|---------|------------|
-| macOS | `bash packaging/helper/macos/build-dmg.sh` | LaunchAgent |
+| macOS (Apple silicon) | `MACOS_ARCH=arm64 bash packaging/helper/macos/build-dmg.sh` | LaunchAgent |
+| macOS (Intel) | `MACOS_ARCH=x86_64 bash packaging/helper/macos/build-dmg.sh` | LaunchAgent |
 | Windows | `powershell packaging/helper/windows/build-installer.ps1` | Scheduled Task at logon |
-| Linux | `bash packaging/helper/linux/build-tarball.sh` | systemd user unit |
+| Linux | `bash packaging/helper/linux/build-tarball.sh` | systemd user unit or desktop autostart |
 
 Outputs land in `packaging/helper/dist/`:
 
-- `nomicous-inference-helper-macos.dmg`
+- `nomicous-inference-helper-macos.dmg` (Apple silicon; existing asset name)
+- `nomicous-inference-helper-macos-intel.dmg`
 - `nomicous-inference-helper-windows.zip`
 - `nomicous-inference-helper-linux.tar.gz`
 
 Each installer runs `install-helper` which copies the PyInstaller bundle, creates `~/.nomicous/hf/cache/`, and registers auto-start.
+macOS builds must run natively on the architecture being packaged; the build
+script rejects an `MACOS_ARCH`/runner mismatch instead of silently producing
+an incompatible bundle. The release workflow uses `macos-15` for Apple silicon
+and `macos-15-intel` for Intel.
 
-The helper is loopback-only and intentionally has no browser-shipped secret. Its installer
-sets `HELPER_CORS_ORIGINS=https://app.nomicous.com` at runtime. For a different hosted SPA
-origin, set an explicit origin while installing (for example,
-`HELPER_CORS_ORIGINS=https://app.example.com bash install-helper.sh` on macOS/Linux, or
-`.\install-helper.ps1 -CorsOrigins https://app.example.com` on Windows), then restart the
-helper. Wildcard origins are rejected.
+The helper is loopback-only and accepts browser requests only from
+`https://app.nomicous.com`. It intentionally has no browser-shipped secret.
 
 ## Code signing
 
@@ -115,7 +123,7 @@ MACOS_NOTARY_PROFILE="nomicous-notary" \
 ```
 
 - `MACOS_CODESIGN_IDENTITY` - deep-signs the `.app` (and inner dylibs) with the hardened runtime and signs the `.dmg`.
-- `MACOS_ENTITLEMENTS` - override the default `macos/entitlements.plist` (relaxes library validation / JIT for the bundled Python + torch).
+- `MACOS_ENTITLEMENTS` - override the default `macos/entitlements.plist` (relaxes library validation for bundled native Python/ONNX libraries).
 - `MACOS_NOTARY_PROFILE` - submits the `.dmg` to Apple, waits, and staples the ticket.
 
 Signing only (no notarization) still leaves a Gatekeeper prompt on first launch - set the notary profile for a clean install.
@@ -153,3 +161,12 @@ No OS-level signing gate. Distribute the tarball over HTTPS; optionally publish 
 curl -s http://127.0.0.1:8001/health
 curl -s http://127.0.0.1:8001/inference/v1/catalog
 ```
+
+If Ubuntu reports `connection refused`, run the packaged diagnostic script:
+
+```bash
+"${XDG_DATA_HOME:-$HOME/.local/share}/nomicous/inference-helper/diagnose-helper.sh"
+```
+
+It checks the loopback endpoint, the systemd user service or desktop-autostart
+fallback, listening sockets, and the helper log.

@@ -1,6 +1,6 @@
 /**
  * Human-friendly label for a registry model id, used in user-facing banners.
- * Avoids leaking raw registry ids like `kraken-segment` into the UI.
+ * Avoids leaking raw registry ids like `blla-segment` into the UI.
  */
 export function modelDisplayName(registryModelId: string | null): string {
   if (!registryModelId) return "inference model";

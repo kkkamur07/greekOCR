@@ -1,4 +1,4 @@
-"""Otsu contour extraction inside Kraken ceiling polygons."""
+"""Otsu contour extraction inside BLLA ceiling polygons."""
 
 from __future__ import annotations
 

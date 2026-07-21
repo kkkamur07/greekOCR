@@ -26,7 +26,7 @@ from backend.project.infrastructure.orm_models import Project  # noqa: E402
 from infrastructure import models as _orm_models  # noqa: E402, F401 - register all mappers
 from infrastructure.db import system_session  # noqa: E402
 
-DEFAULT_SEGMENT_MODEL = os.environ.get("DEFAULT_SEGMENT_MODEL", "kraken-segment")
+DEFAULT_SEGMENT_MODEL = os.environ.get("DEFAULT_SEGMENT_MODEL", "blla-segment")
 DEFAULT_TRANSCRIBE_MODEL = os.environ.get("DEFAULT_TRANSCRIBE_MODEL", "syriac-calamari-v1")
 BINDING_PROJECT_SLUG = os.environ.get(
     "BINDING_PROJECT_SLUG",

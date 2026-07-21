@@ -29,9 +29,22 @@ def _is_weights_cached(
     """Return True when the model weights are already available locally.
 
     Only inspects local disk; never contacts the Hub. Non-hf sources (bundled,
-    package, file) ship with the helper and are always considered cached.
+    package, file) ship with the helper, but their presence is still verified.
     """
     if not weights_source.startswith("hf://"):
+        from inference.weights import resolve_weights_source
+
+        try:
+            resolve_weights_source(
+                weights_source,
+                registry_model_id=registry_model_id,
+                registry_tag=registry_tag,
+                hub_revision=hub_revision,
+                artifact_sha256=artifact_sha256,
+                architecture=architecture,
+            )
+        except (FileNotFoundError, ValueError):
+            return False
         return True
 
     from src.hf.resolve.artifacts import find_hub_artifact, verify_artifact_sha256

@@ -5,8 +5,17 @@ set -euo pipefail
 HELPER_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 cd "$HELPER_DIR"
-# Build tools live in the `packaging` dependency group so a single `uv run`
-# keeps them in sync alongside the runtime `inference` group. Installing them
-# separately (pip/uv pip) is unreliable: a later `uv run` re-syncs the venv to
-# the lockfile and silently drops the externally-installed build tools.
-uv run --group inference --group packaging pyinstaller --noconfirm pyinstaller.spec
+# Build in an isolated environment containing only the ONNX helper runtime and
+# PyInstaller. This prevents an existing development venv from leaking Torch
+# or native model modules into Analysis.
+uv run --isolated --no-dev --group helper --group packaging \
+  pyinstaller --noconfirm --clean pyinstaller.spec
+
+BUNDLE_ROOT="$HELPER_DIR/dist/nomicous-inference-helper"
+EXECUTABLE="$BUNDLE_ROOT/nomicous-inference-helper"
+if [ "$(uname -s)" = "Darwin" ]; then
+  BUNDLE_ROOT="$HELPER_DIR/dist/Nomicous Inference Helper.app"
+  EXECUTABLE="$BUNDLE_ROOT/Contents/MacOS/nomicous-inference-helper"
+fi
+
+python "$HELPER_DIR/scripts/verify-bundle.py" "$BUNDLE_ROOT" "$EXECUTABLE"

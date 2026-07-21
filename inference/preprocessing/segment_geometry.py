@@ -214,12 +214,12 @@ def simplify_with_quality_gate(
     }
 
 
-def simplify_kraken_boundary(
+def simplify_blla_boundary(
     points: list[list[float]],
     *,
     min_distance: float = MIN_VERTEX_SPACING_PX,
 ) -> tuple[list[list[float]], dict[str, Any]]:
-    """Lightweight Douglas-Peucker + spacing cleanup for raw Kraken boundaries."""
+    """Lightweight Douglas-Peucker + spacing cleanup for raw BLLA boundaries."""
     if len(points) < 4:
         return points, {
             "simplification_status": "unchanged",
@@ -235,7 +235,7 @@ def simplify_kraken_boundary(
     simplified = clean_polygon(simplified, min_distance=spacing)
     if len(simplified) < 4:
         simplified = reference if len(reference) >= 4 else points
-    status = "kraken_boundary_simplified" if simplified != points else "kraken_boundary_unchanged"
+    status = "blla_boundary_simplified" if simplified != points else "blla_boundary_unchanged"
 
     return simplified, {
         "simplification_status": status,

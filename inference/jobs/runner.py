@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from inference.admission import validate_image_bytes, validate_request_params
 from inference.architectures.calamari import run_calamari_transcribe, run_calamari_transcribe_many
-from inference.architectures.kraken import run_kraken_segment
+from inference.architectures.blla import run_blla_onnx_segment, run_blla_segment
 from inference.contracts.common import InferenceTask, RegistryArchitecture
 from inference.contracts.segment import SegmentRunResponse
 from inference.contracts.transcribe import (
@@ -65,6 +65,7 @@ def run_model(
     registry_tag: str,
     image_bytes: bytes,
     params: dict[str, Any] | None = None,
+    onnx_only: bool = False,
 ) -> SegmentRunResponse | TranscribeRunResponse | TranscribeBatchRunResponse:
     settings = get_inference_settings()
     validate_image_bytes(image_bytes, settings)
@@ -87,8 +88,18 @@ def run_model(
     )
 
     if task == InferenceTask.segment:
-        if entry.architecture == RegistryArchitecture.kraken_segment:
-            return run_kraken_segment(
+        if entry.architecture in {
+            RegistryArchitecture.blla,
+            RegistryArchitecture.blla_segment,
+        }:
+            if onnx_only and weights_path.suffix != ".onnx":
+                raise RuntimeError(
+                    f"ONNX-only runtime cannot load BLLA artifact: {weights_path.name}"
+                )
+            run_segment = (
+                run_blla_onnx_segment if weights_path.suffix == ".onnx" else run_blla_segment
+            )
+            return run_segment(
                 image_bytes,
                 model_path=weights_path,
                 artifact_sha256=version.artifact_sha256,
@@ -98,6 +109,10 @@ def run_model(
 
     if task == InferenceTask.transcribe:
         if entry.architecture == RegistryArchitecture.calamari:
+            if onnx_only and weights_path.suffix != ".onnx":
+                raise RuntimeError(
+                    f"ONNX-only runtime cannot load Calamari artifact: {weights_path.name}"
+                )
             line_regions = _line_regions_from_params(params)
             if line_regions:
                 outputs = run_calamari_transcribe_many(

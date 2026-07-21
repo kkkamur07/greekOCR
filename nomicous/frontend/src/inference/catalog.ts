@@ -1,5 +1,5 @@
 import type { HostEligibility, InferenceTask } from "./types";
-import { HELPER_BASE_URL } from "./constants";
+import { fetchHelper } from "./helperClient";
 
 export type HelperCatalogModel = {
   registry_model_id: string;
@@ -11,7 +11,7 @@ export type HelperCatalogModel = {
 };
 
 export async function fetchHelperCatalog(): Promise<HelperCatalogModel[]> {
-  const response = await fetch(`${HELPER_BASE_URL}/inference/v1/catalog`);
+  const response = await fetchHelper("/inference/v1/catalog");
   if (!response.ok) {
     throw new Error("Inference helper catalog is unavailable.");
   }

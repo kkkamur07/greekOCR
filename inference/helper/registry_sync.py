@@ -26,8 +26,12 @@ def sync_registry_from_url(
     stored_etag = etag_path.read_text(encoding="utf-8").strip() if etag_path.exists() else None
     headers: dict[str, str] = {}
     if stored_etag:
-        quoted_etag = stored_etag if stored_etag.startswith('"') else f'"{stored_etag}"'
-        headers["If-None-Match"] = quoted_etag
+        # Quoted and weak tags are stored verbatim; older helpers stored the
+        # opaque value without quotes, so re-add them for those.
+        if stored_etag.startswith(('"', "W/")):
+            headers["If-None-Match"] = stored_etag
+        else:
+            headers["If-None-Match"] = f'"{stored_etag}"'
 
     try:
         with httpx.Client(timeout=timeout_seconds) as client:
@@ -47,7 +51,9 @@ def sync_registry_from_url(
         return _resolve_registry_path(cached_path, fallback_path)
 
     content = response.text
-    etag = response.headers.get("etag", "").strip().strip('"') or _registry_etag(content)
+    # Store the server ETag verbatim (stripping quotes corrupts weak tags
+    # such as W/"abc"); fall back to a quoted content hash.
+    etag = response.headers.get("etag", "").strip() or f'"{_registry_etag(content)}"'
     try:
         _validate_and_write(content, cached_path, etag_path, etag)
     except ValueError as exc:

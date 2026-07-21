@@ -1,4 +1,4 @@
-"""Line segment refinement orchestration for Kraken ceilings."""
+"""Line segment refinement orchestration for BLLA ceiling polygons."""
 
 from __future__ import annotations
 
@@ -112,7 +112,7 @@ def refine_segment(
     min_iou: float = MIN_IOU,
     min_area_ratio: float = MIN_AREA_RATIO,
 ) -> SegmentRefinementResult:
-    """Refine one Kraken ceiling without splitting it into multiple lines."""
+    """Refine one ceiling polygon without splitting it into multiple lines."""
     return refine_segment_candidates(
         image,
         ceiling,
@@ -137,7 +137,7 @@ def refine_segment_candidates(
     split_large_lines: bool = True,
     split_vertical_gap_px: float = SPLIT_VERTICAL_GAP_PX,
 ) -> list[SegmentRefinementResult]:
-    """Refine a Kraken ceiling, optionally splitting over-merged vertical text bands."""
+    """Refine a ceiling polygon, optionally splitting over-merged text bands."""
     raw_point_count = len(ceiling)
     if len(ceiling) < 3:
         return _fallback_result(

@@ -8,7 +8,7 @@ from ipaddress import ip_address
 from pathlib import Path
 from urllib.parse import urlparse
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import SettingsConfigDict
 
 from inference.admission import AdmissionSettings
@@ -65,54 +65,6 @@ class HelperSettings(AdmissionSettings):
         alias="INFERENCE_REGISTRY_PATH",
     )
     hf_cache_root: Path = Field(default=DEFAULT_HF_CACHE_ROOT, alias="HF_CACHE_ROOT")
-    helper_cors_origins: list[str] = Field(
-        default_factory=lambda: [
-            "https://app.nomicous.com",
-            "http://localhost:5173",
-            "http://127.0.0.1:5173",
-            "http://localhost:8000",
-            "http://127.0.0.1:8000",
-        ],
-        alias="HELPER_CORS_ORIGINS",
-    )
-
-    @field_validator("helper_cors_origins", mode="before")
-    @classmethod
-    def parse_cors_origins(cls, value: object) -> list[str]:
-        if isinstance(value, str):
-            return [origin.strip() for origin in value.split(",") if origin.strip()]
-        if isinstance(value, list):
-            return value
-        return []
-
-    @field_validator("helper_cors_origins")
-    @classmethod
-    def validate_cors_origins(cls, origins: list[str]) -> list[str]:
-        if not origins:
-            raise ValueError("HELPER_CORS_ORIGINS must contain at least one explicit origin")
-
-        normalized_origins: list[str] = []
-        for origin in origins:
-            if not isinstance(origin, str) or origin == "*":
-                raise ValueError("HELPER_CORS_ORIGINS must not contain wildcard origins")
-            parsed = urlparse(origin)
-            if (
-                parsed.scheme not in {"http", "https"}
-                or not parsed.netloc
-                or parsed.username
-                or parsed.password
-                or parsed.path not in {"", "/"}
-                or parsed.params
-                or parsed.query
-                or parsed.fragment
-            ):
-                raise ValueError(
-                    "HELPER_CORS_ORIGINS entries must be absolute http(s) origins without paths"
-                )
-            normalized = f"{parsed.scheme}://{parsed.netloc}"
-            if normalized not in normalized_origins:
-                normalized_origins.append(normalized)
-        return normalized_origins
 
     @model_validator(mode="after")
     def validate_exposure(self) -> HelperSettings:
@@ -125,6 +77,17 @@ class HelperSettings(AdmissionSettings):
             raise ValueError(
                 "HELPER_HOST must be loopback unless secure mode has a non-placeholder auth secret"
             )
+        if self.helper_registry_url:
+            # The synced registry defines weight sources and their digests, so
+            # it must not be fetchable over plaintext off-host transport.
+            parsed = urlparse(self.helper_registry_url)
+            is_loopback_http = parsed.scheme == "http" and _is_loopback_host(
+                parsed.hostname or ""
+            )
+            if parsed.scheme != "https" and not is_loopback_http:
+                raise ValueError(
+                    "HELPER_REGISTRY_URL must use https (plain http is allowed only for loopback)"
+                )
         return self
 
 

@@ -2,8 +2,9 @@
 
 Models, registry, Hub weights, and the local Inference Helper.
 
-| Doc | When to read |
-|-----|----------------|
+| Doc                                                      | When to read                                            |
+| -------------------------------------------------------- | ------------------------------------------------------- |
+| [models-and-datasets.md](models-and-datasets.md)         | Runtime models, dataset workflow, and current support   |
 | [adding-inference-models.md](adding-inference-models.md) | End-to-end checklist for a new segment/transcribe model |
 
 **Service implementation:** [`inference/README.md`](../../inference/README.md)  

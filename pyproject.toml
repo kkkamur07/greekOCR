@@ -5,11 +5,13 @@ description = "OCR and processing for Greek documents"
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "numpy>=1.24.4,<2",
-    "opencv-python>=4.8,<4.13",
+    # 1.24+ no longer publishes Intel macOS wheels; the helper still ships an
+    # x86_64 macOS artifact and PyInstaller cannot cross-compile it.
+    "onnxruntime>=1.23.2,<1.24",
+    "opencv-python-headless>=4.8,<4.13",
 ]
 
 [project.optional-dependencies]
-kraken = ["kraken>=7.0.2"]
 train = [
     "accelerate>=1.13.0",
     "jiwer>=4.0.0",
@@ -26,31 +28,52 @@ dev = [
     "pre-commit>=4.6.0",
     "ruff>=0.15.21",
 ]
+parity = ["kraken>=7.0.2"]
+export = [
+    "onnx>=1.17.0",
+    "safetensors>=0.5.0",
+    "torch>=2.10.0",
+]
 # Inference service API (separate container; contracts importable from nomicous)
 inference = [
     "fastapi>=0.115.0",
     "httpx>=0.28.0",
     "opencv-python-headless>=4.8,<4.13",
     "pillow>=12.3.0",
-    # Floor clears CVE-2025-4565 / CVE-2026-0994; kraken/coremltools only need >=3.
+    # Floor clears CVE-2025-4565 / CVE-2026-0994.
     "protobuf>=5.29.6",
     "pydantic>=2.10.0",
     "pydantic-settings>=2.6.0",
     "psycopg2-binary>=2.9.10",
     "pyyaml>=6.0.2",
+    "scikit-image>=0.25.0",
     "sqlalchemy>=2.0.36",
-    "torch>=2.10.0",
+    "shapely>=2.1.0",
+    "scipy>=1.15.0",
     "uvicorn[standard]>=0.32.0",
-    "kraken>=7.0.2",
     "huggingface-hub>=0.27.0",
+]
+helper = [
+    "fastapi>=0.115.0",
+    "httpx>=0.28.0",
+    "huggingface-hub>=0.27.0",
+    "pillow>=12.3.0",
+    # Floor clears CVE-2025-4565 / CVE-2026-0994.
+    "protobuf>=5.29.6",
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.6.0",
+    "pyyaml>=6.0.2",
+    "scikit-image>=0.25.0",
+    "scipy>=1.15.0",
+    "shapely>=2.1.0",
+    "uvicorn>=0.32.0",
 ]
 load-testing = [
     "locust>=2.45.0",
 ]
-# Inference Helper native packaging (PyInstaller freeze + system tray)
+# Inference Helper native packaging (PyInstaller freeze)
 packaging = [
     "pyinstaller>=6.21.0",
-    "pystray>=0.19.5",
     "pillow>=12.3.0",
 ]
 # Nomicous platform API + Postgres + tests (deps only — repo is not installed as a package)
@@ -98,9 +121,6 @@ platform-prod = [
 
 [tool.uv]
 package = false
-conflicts = [
-    [{ extra = "kraken" }, { extra = "train" }],
-]
 
 [tool.uv.sources]
 torch = [
@@ -125,8 +145,8 @@ inference-worker = "python -m inference.jobs.worker"
 test-fast = { shell = "uv run --group platform --group inference pytest tests/nomicous/unit" }
 test-integration = { shell = "uv run --group platform --group inference pytest tests/nomicous -m integration" }
 test-ml = { shell = "uv run --group platform --group inference pytest tests/nomicous -m ml" }
-test-inference = { shell = "uv run --group platform --group inference pytest tests/inference" }
-test-hf = { shell = "uv run --group inference pytest tests/hf" }
+test-inference = { shell = "uv run --group platform --group inference --group export pytest tests/inference" }
+test-hf = { shell = "uv run --group inference --group export pytest tests/hf" }
 
 [tool.pytest.ini_options]
 addopts = ["--import-mode=importlib"]

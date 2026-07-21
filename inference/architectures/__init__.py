@@ -1,1 +1,1 @@
-"""Inference architecture adapters (Calamari transcribe, Kraken segment)."""
+"""Inference architecture adapters (Calamari and native BLLA)."""

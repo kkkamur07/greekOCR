@@ -1,13 +1,14 @@
 # PyInstaller spec for the Nomicous Inference Helper.
 #
-# Goal: ship only runtime needed for Calamari transcribe + Kraken segment on CPU.
-# Exclude training stacks, notebooks, GUI toolkits, and unused torch backends.
+# Goal: ship only the ONNX Runtime paths for Calamari transcribe and BLLA
+# segmentation on CPU. Native Torch implementations remain in the repository
+# for training, export, parity checks, and the unfrozen inference service.
 
 import os
 import sys
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_submodules
 
 REPO_ROOT = Path(SPECPATH).resolve().parents[1]
 
@@ -32,16 +33,24 @@ datas = [
     (str(REPO_ROOT / "inference" / "registry.yaml"), "inference"),
 ]
 
-# Kraken segment weights ship via package://kraken/blla.mlmodel (importlib
-# resources), so its bundled data (blla.mlmodel, iso15924.json, ...) must be
-# collected explicitly — PyInstaller does not gather package data by default.
-datas += collect_data_files("kraken")
-
 hiddenimports = [
     "inference.helper",
     "inference.helper.__main__",
     "inference.architectures.calamari",
-    "inference.architectures.kraken",
+    "inference.architectures.calamari.adapter",
+    "inference.architectures.calamari.onnx",
+    "inference.architectures.blla",
+    "inference.architectures.blla.blla_decoder",
+    "inference.architectures.blla.blla_decoder.common",
+    "inference.architectures.blla.blla_decoder.lines",
+    "inference.architectures.blla.blla_decoder.polygon",
+    "inference.architectures.blla.blla_decoder.simple",
+    "inference.architectures.blla.blla_decoder.types",
+    "inference.architectures.blla.onnx",
+    "inference.architectures.blla.blla_preprocessing",
+    "inference.architectures.blla.blla_runtime",
+    "onnxruntime",
+    "onnxruntime.capi.onnxruntime_pybind11_state",
     "src.hf.resolve",
     "uvicorn.logging",
     "uvicorn.loops.auto",
@@ -49,20 +58,6 @@ hiddenimports = [
     "uvicorn.protocols.http.h11_impl",
     "uvicorn.lifespan.on",
 ]
-
-# The helper imports Kraken lazily for BLLA segmentation. Include those two
-# entry points, then let PyInstaller follow their normal imports instead of
-# freezing Kraken's CLI, training, and model-conversion modules wholesale.
-# A packaged segment smoke test guards this intentionally narrow surface.
-hiddenimports += [
-    "kraken.blla",
-    "kraken.lib.vgsl",
-]
-
-# SciPy and scikit-image import parts of their surface dynamically during BLLA
-# post-processing, so retain their complete runtime modules.
-hiddenimports += collect_submodules("scipy")
-hiddenimports += collect_submodules("skimage")
 
 # huggingface_hub loads its HTTP backend (httpx) lazily inside functions, so
 # PyInstaller's static analysis never discovers it. Force-collect httpx (and

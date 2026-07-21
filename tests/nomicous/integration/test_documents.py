@@ -383,7 +383,7 @@ def test_replace_part_lines_persists_segment_geometry_and_approved_text(
                     "kind": "rectangle",
                     "points": [[0, 10], [10, 10], [10, 15], [0, 15]],
                     "source": "kraken",
-                    "source_metadata": {"model": "kraken:blla"},
+                    "source_metadata": {"model": "blla"},
                     "kraken_ceiling": [[-1, 9], [11, 9], [11, 16], [-1, 16]],
                 },
             ]
@@ -471,7 +471,7 @@ def test_replace_part_lines_preserves_kraken_metadata_when_omitted(
     )
     base = documents_url(project_id)
     kraken_ceiling = [[-1, 9], [11, 9], [11, 16], [-1, 16]]
-    source_metadata = {"model": "kraken:blla", "version": "1.0"}
+    source_metadata = {"model": "blla", "version": "1.0"}
     seed = client.put(
         f"{base}/{document_id}/parts/{part_id}/lines",
         headers=owner_headers,

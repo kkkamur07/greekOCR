@@ -2,7 +2,8 @@
 
 Host Nomicous at **nomicous.com** with four public surfaces and Supabase as the shared database + storage backend.
 
-Architecture overview: [root README](../../README.md#production-hosting). Serverless constraints and pitfalls: [learnings - Vercel](../guides/learnings.md#serverless-api-vercel).
+Architecture overview: [technical architecture](../architecture.md).
+Serverless constraints and pitfalls: [learnings - Vercel](../guides/learnings.md#serverless-api-vercel).
 
 | Domain | Vercel project | Root directory | Role |
 |--------|----------------|----------------|------|
@@ -35,10 +36,10 @@ Background (persistent compute, not serverless):
 
 ### Why local inference is the default
 
-The local Inference Helper bundles the **PyTorch Calamari runtime** and **Kraken** and
-runs jobs for up to **30 minutes**. Hub weights are resolved lazily into the
-runtime cache; the default Kraken BLLA asset comes from the installed `kraken`
-package. Vercel serverless functions have strict size limits and short execution
+The local Inference Helper bundles the **ONNX Calamari runtime** and the
+inference-owned **ONNX BLLA runtime** and runs jobs for up to **30 minutes**.
+Hub weights are resolved lazily into the runtime cache; the BLLA asset is loaded
+from the registry-pinned `segmentation-blla` repository as `blla.onnx`. Vercel serverless functions have strict size limits and short execution
 timeouts, so researchers run inference on their own machines through the
 loopback-only helper; the hosted platform persists only the result.
 
@@ -188,11 +189,12 @@ Supabase operator/migration URI.
 
 ## 5. Inference Helper (local OCR)
 
-Ship the macOS DMG from GitHub Releases. The installer configures the loopback-only
-helper for `https://app.nomicous.com` at runtime; it does not embed a browser secret.
-For another stable app origin, set `HELPER_CORS_ORIGINS` while installing as described
-in [`packaging/helper/README.md`](../../packaging/helper/README.md). Do not use wildcard
-origins or preview domains.
+Ship the architecture-specific macOS DMGs from GitHub Releases
+(`nomicous-inference-helper-macos.dmg` for Apple silicon and
+`nomicous-inference-helper-macos-intel.dmg`). The installer configures the
+loopback-only helper for `https://app.nomicous.com` at runtime; it does not
+embed a browser secret. The helper accepts browser requests only from
+`https://app.nomicous.com`.
 
 ---
 

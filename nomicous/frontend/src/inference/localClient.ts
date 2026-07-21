@@ -1,4 +1,4 @@
-import { HELPER_BASE_URL } from "./constants";
+import { fetchHelper } from "./helperClient";
 import type { InferenceRunResponse, InferenceTask } from "./types";
 
 type RunRequest = {
@@ -13,7 +13,7 @@ type RunRequest = {
 export async function runLocalInference(
   request: RunRequest,
 ): Promise<InferenceRunResponse> {
-  const response = await fetch(`${HELPER_BASE_URL}/inference/v1/run`, {
+  const response = await fetchHelper("/inference/v1/run", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     signal: request.signal,

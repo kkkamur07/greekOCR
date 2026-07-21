@@ -9,11 +9,13 @@ The YAML catalog (`registry.yaml`) that lists runnable models by **registry mode
 _Avoid_: Model catalog (ambiguous with platform Postgres catalog)
 
 **Registry model id**:
-The stable runtime key for one inference model (e.g. `greek-calamari-v1`). Format: `{script}-{architecture}-{model_version}`.
+The stable runtime key for one inference model (e.g. `greek-calamari-v1`).
+Language-specific format: `{script}-{architecture}-{model_version}`;
+script-agnostic models may use a task-specific id such as `blla-segment`.
 _Avoid_: model_id (ambiguous with platform UUID), Hub repo slug
 
 **Hub repo slug**:
-The single-segment name of a **Hub model repo**, derived from script and architecture: `{script}-htr-{architecture}` (e.g. `greek-htr-calamari`). The model card title may be human-friendly (e.g. "Ancient Greek HTR"); the slug stays mechanical.
+The single-segment name of a **Hub model repo**, derived from task and architecture: HTR repos use `{script}-htr-{architecture}` (e.g. `greek-htr-calamari`), while the script-agnostic BLLA segmenter uses `segmentation-blla`. The model card title may be human-friendly; the slug stays mechanical.
 _Avoid_: ancient-greek-htr (fine as display title, not slug), registry model id (includes model_version)
 
 **Model version**:
@@ -21,7 +23,7 @@ The family generation of a model (`v1`, `v2`) - distinct from **registry tag** (
 _Avoid_: version (too generic), release
 
 **Script**:
-The writing system / language family the model targets (e.g. `greek`, `syriac`). First segment of local staging path and **registry model id**.
+The writing system / language family the model targets (e.g. `greek`, `syriac`). Script-agnostic models use a reserved task namespace such as `segmentation`. It is the first segment of the local staging path and **registry model id**.
 _Avoid_: language (fine in metadata), locale
 
 **Registry tag**:
@@ -33,11 +35,11 @@ A URI telling the inference service where to find checkpoint files for one regis
 _Avoid_: artifact path, model path
 
 **Hub model repo**:
-A Hugging Face **model** repository holding inference weights and a model card for one **registry model id** (e.g. `nomicous/greek-htr-calamari` for `greek-calamari-v1`).
+A Hugging Face **model** repository holding inference weights and a model card for one **registry model id** (e.g. `nomicous/greek-htr-calamari` for `greek-calamari-v1` or `nomicous/segmentation-blla` for `blla-segment`).
 _Avoid_: model folder, checkpoint repo
 
 **Hub dataset slug**:
-The single-segment name of a **Hub dataset repo**, optimized for search: `{script}-manuscript-lines` or `{script}-{corpus}-htr-lines` (e.g. `greek-byzantine-manuscript-lines`). May carry a `nomos-` prefix for brand cohesion. Distinct from **Hub repo slug** (models use `{script}-htr-{architecture}`).
+The single-segment name of a **Hub dataset repo**, optimized for search: `{script}-manuscript-lines` or `{script}-{corpus}-htr-lines` (e.g. `greek-byzantine-manuscript-lines`). May carry a `nomos-` prefix for brand cohesion. Distinct from **Hub repo slug** (models use task-specific slugs).
 _Avoid_: mirroring registry model id, generic `dataset-v1`
 
 **Hub collection**:
@@ -49,7 +51,7 @@ The immutable 40-character git commit on a **Hub model repo** selected by a **re
 _Avoid_: mutable tag as a runtime revision, version (too generic), release branch
 
 **Hub artifact**:
-The checkpoint files published inside a **Hub model repo** at one **Hub revision** - Calamari inference uses converted PyTorch `.pt` checkpoints; Kraken may use `.mlmodel` or `.safetensors`.
+The checkpoint files published inside a **Hub model repo** at one **Hub revision** - Calamari and BLLA inference use self-contained ONNX `.onnx` artifacts; native `.pt` and `.safetensors` files remain conversion/parity sources.
 _Avoid_: weights (too generic), model file
 
 **Artifact SHA-256**:
@@ -99,7 +101,7 @@ _Avoid_: org (when meaning the namespace generically)
 ## Relationships
 
 - The **Registry** maps each **registry model id** + **registry tag** to one **weights source**
-- One **Hub model repo** corresponds to one `{script}-htr-{architecture}` pair; **Hub repo slug** = `{script}-htr-{architecture}`
+- One **Hub model repo** corresponds to one task/architecture pair; HTR uses `{script}-htr-{architecture}` and BLLA segmentation uses `segmentation-blla`
 - **Registry model id** = `{script}-{architecture}-{model_version}`; maps to one **Hub repo slug** + **model version**
 - Local **Hub staging tree**: `src/hf/staging/models/{script}/{architecture}/{model_version}/{registry_tag}/`
 - **Hub cache**: `src/hf/cache/{registry_model_id}/{registry_tag}/`
@@ -121,9 +123,9 @@ _Avoid_: org (when meaning the namespace generically)
 
 - "data" was used to mean both weights and training material - resolved: use **Hub model repo** vs **Hub dataset repo**.
 - "kalamos" vs "nomicous" as public product name - resolved for Hub: product is **nomicous**; **Hub namespace** may be personal until the org exists.
-- Checkpoint filename at repo root - resolved: use architecture-native names (**Hub artifact**), e.g. Calamari `best.pt`, not a forced `model.ckpt` rename.
-- Calamari **Hub artifact** format is a converted PyTorch checkpoint (`.pt`); Kraken may use `.safetensors` or `.mlmodel`.
-- Legacy registry ids (`greek-calamariv1`) - resolved: migrate to `{script}-{architecture}-{model_version}` (e.g. `greek-calamari-v1`); **Hub repo slug** uses hybrid `{script}-htr-{architecture}` pattern.
+- Checkpoint filename at repo root - resolved: use runtime artifact names (**Hub artifact**), e.g. Calamari `best.onnx` and BLLA `blla.onnx`; native source checkpoints remain beside them for conversion and parity.
+- Calamari and BLLA runtime **Hub artifact** format is self-contained ONNX (`.onnx`); native source formats are retained only for conversion and parity.
+- Legacy registry ids (`greek-calamariv1`) - resolved: migrate to `{script}-{architecture}-{model_version}` (e.g. `greek-calamari-v1`); **Hub repo slug** is task-specific.
 - **Hub cache** invalidation - resolved: manifest hash (not files-exist-only).
 
 ## Implementation notes (not domain)
@@ -132,7 +134,7 @@ _Avoid_: org (when meaning the namespace generically)
 
 - Sync inference: `POST /inference/v1/run` via `inference/api/run.py` and `inference/jobs/runner.py`
 - Async jobs: `POST /inference/v1/jobs` plus `inference/jobs/worker.py` (Postgres queue, LISTEN/NOTIFY, callbacks)
-- Architectures implemented: **Calamari** (`inference/architectures/calamari/`) and **Kraken segment** (`inference/architectures/kraken.py`)
+- Architectures implemented: **Calamari** (`inference/architectures/calamari/`) and native **BLLA segment** (`inference/architectures/blla/`)
 - **Calamari runtime**: local PyTorch graph + local preprocessing; no TensorFlow or vendored `calamari_ocr` import at inference time.
 - Weight resolution: `file://`, `hf://`, and `package://` (`src/hf/` local/cache layout; see `inference/weights/__init__.py`)
 - Runtime cache: `src/hf/cache/<registry_model_id>/<registry_tag>/`

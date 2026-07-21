@@ -25,7 +25,7 @@ def test_run_segment_returns_kraken_layout(inference_client: TestClient) -> None
         "/inference/v1/run",
         json={
             "task": "segment",
-            "registry_model_id": "kraken-segment",
+            "registry_model_id": "blla-segment",
             "registry_tag": "stable",
             "image_bytes": _image_payload(SEGMENT_PAGE),
         },
