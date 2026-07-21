@@ -39,3 +39,25 @@ export function isModelRemoteOnly(
   );
   return entry?.host_eligibility === "remote";
 }
+
+/**
+ * Decide whether a run should hit the local helper.
+ *
+ * Local-only catalog entries (`host_eligibility: "local"`, e.g. blla-segment)
+ * always use the helper when it is up — a saved "prefer cloud" preference must
+ * not enqueue a cloud job that can never claim them.
+ */
+export function shouldRunOnLocalHelper(
+  catalog: HelperCatalogModel[],
+  registryModelId: string,
+  options: { helperAvailable: boolean; preferCloud: boolean },
+): boolean {
+  if (!options.helperAvailable) return false;
+  const entry = catalog.find(
+    (model) => model.registry_model_id === registryModelId,
+  );
+  if (!entry) return false;
+  if (entry.host_eligibility === "remote") return false;
+  if (entry.host_eligibility === "local") return true;
+  return !options.preferCloud;
+}

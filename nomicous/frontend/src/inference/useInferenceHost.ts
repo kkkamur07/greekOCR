@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   fetchHelperCatalog,
-  isModelLocalEligible,
+  shouldRunOnLocalHelper,
   type HelperCatalogModel,
 } from "./catalog";
 import { HELPER_PROBE_INTERVAL_MS } from "./constants";
@@ -77,8 +77,10 @@ export function useInferenceHost() {
   }
 
   function shouldUseLocalPath(registryModelId: string): boolean {
-    if (preference === "cloud" || !helperAvailable) return false;
-    return isModelLocalEligible(catalog, registryModelId);
+    return shouldRunOnLocalHelper(catalog, registryModelId, {
+      helperAvailable,
+      preferCloud: preference === "cloud",
+    });
   }
 
   return {

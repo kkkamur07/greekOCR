@@ -144,11 +144,17 @@ export function PageEditorPlaceholderPage() {
     [],
   );
 
-  function useCloudInstead() {
+  /** Abort the in-flight local run and fall through to cloud for this job only. */
+  function abortLocalRunToCloud() {
     switchToCloudRef.current = true;
     localInferenceAbortRef.current?.abort();
-    inferenceHost.setInferencePreference("cloud");
     setLocalInferenceModelId(null);
+  }
+
+  /** Persist cloud as the default host (install banner / settings intent). */
+  function preferCloudInferencePermanently() {
+    abortLocalRunToCloud();
+    inferenceHost.setInferencePreference("cloud");
   }
 
   useEffect(() => {
@@ -444,13 +450,13 @@ export function PageEditorPlaceholderPage() {
         <>
           <PageEditorLocalInferenceBanner
             registryModelId={localInferenceModelId}
-            onUseCloudInstead={useCloudInstead}
+            onUseCloudInstead={abortLocalRunToCloud}
           />
           <PageEditorInferenceBanner
             helperAvailable={inferenceHost.helperAvailable}
             probing={inferenceHost.probing}
             preferCloud={inferenceHost.preferCloud}
-            onUseCloudInstead={useCloudInstead}
+            onUseCloudInstead={preferCloudInferencePermanently}
           />
         </>
       }

@@ -20,15 +20,15 @@ export function PageEditorLocalInferenceBanner({
       aria-live="polite"
     >
       <span>
-        Downloading the <strong>{modelDisplayName(registryModelId)}</strong> on
-        this machine…
+        Preparing the <strong>{modelDisplayName(registryModelId)}</strong> on
+        this machine (first run may download weights)…
       </span>
       <button
         type="button"
         className="pe-inference-banner__action"
         onClick={onUseCloudInstead}
       >
-        Use cloud instead
+        Use cloud for this run
       </button>
     </div>
   );
