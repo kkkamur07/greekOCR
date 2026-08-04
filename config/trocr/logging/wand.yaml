@@ -1,0 +1,9 @@
+#! entity / project / run name
+
+
+enabled: true
+project: trocr-training
+entity: null
+name: tr_ocr_pretraining_syriac
+mode: online
+

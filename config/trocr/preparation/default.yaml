@@ -1,0 +1,4 @@
+# @package preparation
+
+raw_root: data/raw/syriacData
+output_dir: ${data.dir}
