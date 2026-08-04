@@ -1,0 +1,6 @@
+engine: trocr
+checkpoint: var/models/trocr
+device: null
+generation:
+  max_length: 50
+  num_beams: 1

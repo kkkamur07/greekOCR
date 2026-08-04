@@ -1,0 +1,3 @@
+level: INFO
+steps: 10
+root: var/logs

@@ -1,0 +1,21 @@
+defaults:
+  - training: default
+  - optimizer: default
+  - logging: default
+  - logging@wandb: wand
+  - output: local
+  - tokenizer: gpt_new
+  - augmentation: default
+  - evaluation: default
+  - preparation: default
+  - _self_
+
+data:
+  dir: data/trocr_processed/syriac/pretraining
+
+hydra:
+  job:
+    chdir: false
+  run:
+    dir: .
+  output_subdir: null

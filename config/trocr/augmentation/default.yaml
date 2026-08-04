@@ -1,0 +1,6 @@
+# @package augmentation
+
+probability: 0.0
+mode: random
+num_operations: 3
+magnitude: null
