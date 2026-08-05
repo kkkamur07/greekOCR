@@ -1,0 +1,4 @@
+path: bundled:trocr
+use_fast: false
+pad_token: "<pad>"
+reinitialize_decoder: false

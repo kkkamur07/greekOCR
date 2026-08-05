@@ -6,22 +6,23 @@ data:
 
 model:
   network: def
-  warmstart_checkpoint: outputs/calamari-greek-bible/best.ckpt
 
 training:
   epochs: 100
-  learning_rate: 0.0001
   n_augmentations: 5
   early_stopping_patience: 20
   early_stopping_frequency: 1
   gpu: 0
 
 output:
-  root: outputs/calamari-greek-finetune
+  root: var/runs/calamari/greek-bible
+
+logging:
+  root: var/logs
 
 wandb:
   enabled: false
-  project: calamari-finetune
+  project: calamari-training
   entity: null
   name: null
   mode: online

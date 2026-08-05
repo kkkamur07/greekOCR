@@ -1,0 +1,8 @@
+# @package evaluation
+
+checkpoint: ${output.root}/final
+split: test
+num_samples: 10
+seed: ${training.seed}
+max_length: ${training.max_target_length}
+num_beams: 1
