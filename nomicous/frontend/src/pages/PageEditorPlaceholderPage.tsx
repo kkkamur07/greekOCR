@@ -1,13 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { type LayoutPoint, type LinePoint, api } from "../api/client";
-import {
-  DEFAULT_SEGMENT_REGISTRY_MODEL_ID,
-  isModelRemoteOnly,
-  registrySelectionFromArtifactRef,
-  useInferenceHost,
-  useLocalInferenceRuns,
-} from "../inference";
+import { type LayoutPoint, type LinePoint } from "../api/client";
+import { useHostPreference } from "../inference";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import { PageEditorCanvas } from "../components/page-editor/PageEditorCanvas";
 import { PageEditorTranscriptionStrip } from "../components/page-editor/PageEditorTranscriptionStrip";
@@ -21,7 +15,6 @@ import {
   hasPageEditorStatusAlerts,
 } from "../components/page-editor/PageEditorStatusAlerts";
 import { PageEditorInferenceBanner } from "../components/page-editor/PageEditorInferenceBanner";
-import { PageEditorLocalInferenceBanner } from "../components/page-editor/PageEditorLocalInferenceBanner";
 import { PageEditorToolbar } from "../components/page-editor/PageEditorToolbar";
 import { PageEditorTranscriptionPdfWrap } from "../components/page-editor/PageEditorTranscriptionPdfWrap";
 import {
@@ -110,82 +103,12 @@ export function PageEditorPlaceholderPage() {
   } = editorData;
 
   const jobQueue = usePageEditorJobQueue();
-  const inferenceHost = useInferenceHost();
-  const [segmentRegistryModelId, setSegmentRegistryModelId] = useState<
-    string | null
-  >(null);
-  const {
-    localInference,
-    abortRunToCloud,
-    downloadingModelId: localInferenceModelId,
-  } = useLocalInferenceRuns(inferenceHost.isModelCached);
+  const hostPreference = useHostPreference();
 
   /** Turn the account setting off, from the install prompt's escape hatch. */
   function preferCloudInferencePermanently() {
-    abortRunToCloud();
-    void inferenceHost.setPreferLocalInference(false);
+    void hostPreference.setPreferLocalInference(false);
   }
-
-  function changeHostPreference(preferLocal: boolean) {
-    if (!preferLocal) {
-      // Leaving the local host mid-run must not strand the in-flight job.
-      abortRunToCloud();
-    }
-    void inferenceHost.setPreferLocalInference(preferLocal);
-  }
-
-  useEffect(() => {
-    if (!projectId || !documentId || !partId) {
-      setSegmentRegistryModelId(null);
-      return;
-    }
-    let cancelled = false;
-    void api
-      .resolvePartModelBinding(projectId, documentId, partId, "segment")
-      .then((resolved) => {
-        if (cancelled) return;
-        const { registryModelId } = registrySelectionFromArtifactRef(
-          resolved.model.artifact_ref,
-        );
-        setSegmentRegistryModelId(registryModelId);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setSegmentRegistryModelId(DEFAULT_SEGMENT_REGISTRY_MODEL_ID);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId, documentId, partId]);
-
-  const partImageUrl = part?.image_url ?? null;
-  const shouldUseLocalPath = useCallback(
-    (registryModelId: string) =>
-      inferenceHost.shouldUseLocalPath(registryModelId),
-    [inferenceHost],
-  );
-
-  const selectedModelHostEligibility = useMemo(() => {
-    const model = transcribeModels.find(
-      (entry) => entry.id === selectedTranscribeModelId,
-    );
-    if (!model) return null;
-    try {
-      const { registryModelId } = registrySelectionFromArtifactRef(
-        model.artifact_ref,
-      );
-      if (isModelRemoteOnly(inferenceHost.models, registryModelId)) {
-        return "remote" as const;
-      }
-      if (inferenceHost.shouldUseLocalPath(registryModelId)) {
-        return "local" as const;
-      }
-      return "any" as const;
-    } catch {
-      return null;
-    }
-  }, [inferenceHost, selectedTranscribeModelId, transcribeModels]);
 
   const pairing = usePairingState({
     projectId,
@@ -202,13 +125,8 @@ export function PageEditorPlaceholderPage() {
     setPairingProgress,
     setPairingError,
     selectedTranscribeModelId,
-    transcribeModels,
-    partImageUrl,
-    shouldUseLocalPath,
     setSubmissionRefusal,
-    localInference,
     trackJobAndWait: jobQueue.trackAndWait,
-    trackLocalTask: jobQueue.trackLocalTask,
   });
 
   const layoutMutations = useLayoutMutations({
@@ -227,13 +145,8 @@ export function PageEditorPlaceholderPage() {
     setSelectedSegmentId: pairing.setSelectedSegmentId,
     setApprovedTextDraft: pairing.setApprovedTextDraft,
     onDrawComplete: () => setDrawMode("none"),
-    partImageUrl,
-    shouldUseLocalPath,
     setSubmissionRefusal,
-    segmentRegistryModelId,
-    localInference,
     trackJobAndWait: jobQueue.trackAndWait,
-    trackLocalTask: jobQueue.trackLocalTask,
   });
 
   const {
@@ -420,19 +333,13 @@ export function PageEditorPlaceholderPage() {
       showStatusAlerts={hasPageEditorStatusAlerts(statusAlertProps)}
       statusAlerts={<PageEditorStatusAlerts {...statusAlertProps} />}
       inferenceBanner={
-        <>
-          <PageEditorLocalInferenceBanner
-            registryModelId={localInferenceModelId}
-            onUseCloudInstead={abortRunToCloud}
-          />
-          <PageEditorInferenceBanner
-            helperAvailable={inferenceHost.helperAvailable}
-            probing={inferenceHost.probing}
-            preferLocalInference={inferenceHost.preferLocalInference}
-            onRetry={() => void inferenceHost.refresh()}
-            onUseCloudInstead={preferCloudInferencePermanently}
-          />
-        </>
+        <PageEditorInferenceBanner
+          hasLocalCapacity={hostPreference.hasLocalCapacity}
+          loading={hostPreference.loading}
+          preferLocalInference={hostPreference.preferLocalInference}
+          onRetry={() => void hostPreference.refresh()}
+          onUseCloudInstead={preferCloudInferencePermanently}
+        />
       }
       toolbar={
         document && part ? (
@@ -486,12 +393,13 @@ export function PageEditorPlaceholderPage() {
             onSettingsOpenChange={setSettingsOpen}
             canvasSettings={canvasSettings}
             onCanvasSettingsChange={handleCanvasSettingsChange}
-            preferLocalInference={inferenceHost.preferLocalInference}
-            onPreferLocalInferenceChange={changeHostPreference}
-            preferenceSaving={inferenceHost.preferenceSaving}
-            helperAvailable={inferenceHost.helperAvailable}
-            helperProbing={inferenceHost.probing}
-            selectedModelHostEligibility={selectedModelHostEligibility}
+            preferLocalInference={hostPreference.preferLocalInference}
+            onPreferLocalInferenceChange={(preferLocal) =>
+              void hostPreference.setPreferLocalInference(preferLocal)
+            }
+            preferenceSaving={hostPreference.saving}
+            hasLocalCapacity={hostPreference.hasLocalCapacity}
+            hostPreferenceLoading={hostPreference.loading}
           />
         ) : null
       }

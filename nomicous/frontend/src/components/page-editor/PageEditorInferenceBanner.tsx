@@ -1,89 +1,74 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
-  INFERENCE_HELPER_LINUX_TARBALL_URL,
-  INFERENCE_HELPER_MACOS_DMG_URL,
-  INFERENCE_HELPER_MACOS_INTEL_DMG_URL,
-  INFERENCE_HELPER_RELEASES_URL,
-  INFERENCE_HELPER_WINDOWS_ZIP_URL,
+  AGENT_INSTALL_COMMAND,
+  AGENT_INSTALL_COMMAND_PIP,
+  AGENT_PAIR_COMMAND,
+  AGENT_RUN_COMMAND,
 } from "../../inference/constants";
 import { HOST_PREFERENCE_HINT } from "../../inference/hostPreference";
-
-type HelperPlatform = "macos" | "windows" | "linux";
-
-type HelperDownload = {
-  id: string;
-  platform: HelperPlatform;
-  label: string;
-  url: string;
-};
-
-const HELPER_DOWNLOADS: HelperDownload[] = [
-  {
-    id: "macos-arm64",
-    platform: "macos",
-    label: "Download for macOS (Apple silicon)",
-    url: INFERENCE_HELPER_MACOS_DMG_URL,
-  },
-  {
-    id: "macos-intel",
-    platform: "macos",
-    label: "Download for macOS (Intel)",
-    url: INFERENCE_HELPER_MACOS_INTEL_DMG_URL,
-  },
-  {
-    id: "windows",
-    platform: "windows",
-    label: "Download for Windows",
-    url: INFERENCE_HELPER_WINDOWS_ZIP_URL,
-  },
-  {
-    id: "linux",
-    platform: "linux",
-    label: "Download for Linux",
-    url: INFERENCE_HELPER_LINUX_TARBALL_URL,
-  },
-];
-
-const PLATFORM_PRIMARY_LABEL: Record<HelperPlatform, string> = {
-  // Browser APIs do not reliably expose Apple-silicon vs Intel on every
-  // macOS browser, so the Intel choice remains visible under Other platforms.
-  macos: "Download for macOS (Apple silicon)",
-  windows: "Download for this PC (Windows)",
-  linux: "Download for this computer (Linux)",
-};
-
-function detectPlatform(): HelperPlatform | null {
-  if (typeof navigator === "undefined") return null;
-  const hint =
-    `${navigator.platform ?? ""} ${navigator.userAgent ?? ""}`.toLowerCase();
-  if (hint.includes("mac")) return "macos";
-  if (hint.includes("win")) return "windows";
-  if (hint.includes("linux") || hint.includes("x11")) return "linux";
-  return null;
-}
 
 /**
  * What this computer can currently take, and nothing about where a job went.
  *
- * Nothing here can fail a run any more: with `local_only` retired there is no
- * setting under which an absent agent means "your work does not happen", so
- * absence reads as an ordinary announced state (ADR 0002).
+ * Nothing here can fail a run: with `local_only` retired there is no setting
+ * under which an absent agent means "your work does not happen", so absence
+ * reads as an ordinary announced state (ADR 0002).
+ *
+ * "Running" is the platform's answer, not this browser's. It is **capacity** on
+ * the account - a device seen recently - which is the same fact submission uses
+ * to fix an **execution target**. A loopback probe could have disagreed with it.
  */
-function helperStatusText(
+function agentStatusText(
   preferLocalInference: boolean,
-  probing: boolean,
-  helperAvailable: boolean,
+  loading: boolean,
+  hasLocalCapacity: boolean,
 ): string {
   if (!preferLocalInference) return HOST_PREFERENCE_HINT;
-  if (probing) return "Looking for the nomicous agent on this computer…";
-  if (helperAvailable) return "The agent is running on this computer.";
+  if (loading) return "Checking whether the nomicous agent is running…";
+  if (hasLocalCapacity) return "The agent is running on this computer.";
   return "The agent is not running on this computer, so jobs go to the cloud.";
 }
 
+type AgentStep = {
+  id: string;
+  lead: string;
+  command: string;
+  note?: string;
+};
+
+/**
+ * Three commands, in the order they are run.
+ *
+ * Deliberately not four per-OS download buttons: there is one **published
+ * package** and a hosted worker installs the same one, so a platform picker
+ * here would be describing a distinction that does not exist.
+ */
+const AGENT_STEPS: AgentStep[] = [
+  {
+    id: "install",
+    lead: "Install the agent",
+    command: AGENT_INSTALL_COMMAND,
+    note: `Needs uv 0.10 or newer. With pip instead: ${AGENT_INSTALL_COMMAND_PIP}`,
+  },
+  {
+    id: "pair",
+    lead: "Link this computer to your account",
+    command: AGENT_PAIR_COMMAND,
+    note: "It prints a code and a link. Approve it only if the code on the page matches the one in your terminal.",
+  },
+  {
+    id: "run",
+    lead: "Start taking work",
+    command: AGENT_RUN_COMMAND,
+    note: "Leave it running while you work. Closing it sends the next job to the cloud instead.",
+  },
+];
+
 type PageEditorInferenceBannerProps = {
-  helperAvailable: boolean;
-  probing: boolean;
+  /** **Capacity** for this account's own computer, as the platform reports it. */
+  hasLocalCapacity: boolean;
+  loading: boolean;
   /**
    * The account-level **host preference**, read only. The one control that
    * changes it lives in editor settings; a second copy here would read as a
@@ -95,51 +80,25 @@ type PageEditorInferenceBannerProps = {
 };
 
 export function PageEditorInferenceBanner({
-  helperAvailable,
-  probing,
+  hasLocalCapacity,
+  loading,
   preferLocalInference,
   onRetry,
   onUseCloudInstead,
 }: PageEditorInferenceBannerProps) {
-  const titleId = "pe-helper-install-title";
+  const titleId = "pe-agent-install-title";
   const [modalOpen, setModalOpen] = useState(false);
-  const [showOtherPlatforms, setShowOtherPlatforms] = useState(false);
 
-  const detected = detectPlatform();
-  const { primary, others } = useMemo(() => {
-    if (!detected) {
-      return {
-        primary: null as HelperDownload | null,
-        others: HELPER_DOWNLOADS,
-      };
-    }
-    const match =
-      HELPER_DOWNLOADS.find(
-        (d) =>
-          d.platform === detected &&
-          (detected !== "macos" || d.id === "macos-arm64"),
-      ) ?? null;
-    return {
-      primary: match,
-      others: HELPER_DOWNLOADS.filter((d) => d.id !== match?.id),
-    };
-  }, [detected]);
-
-  const shouldPrompt = !probing && !helperAvailable && preferLocalInference;
+  const shouldPrompt = !loading && !hasLocalCapacity && preferLocalInference;
 
   useEffect(() => {
-    if (!shouldPrompt) {
-      setModalOpen(false);
-      setShowOtherPlatforms(false);
-    }
+    if (!shouldPrompt) setModalOpen(false);
   }, [shouldPrompt]);
 
   useEffect(() => {
     if (!modalOpen) return;
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setModalOpen(false);
-      }
+      if (event.key === "Escape") setModalOpen(false);
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -158,99 +117,51 @@ export function PageEditorInferenceBanner({
     <>
       {modalOpen ? (
         <div
-          className="modal-overlay pe-helper-install-overlay"
+          className="modal-overlay pe-agent-install-overlay"
           role="presentation"
           onClick={(event) => {
             if (event.target === event.currentTarget) handleNotNow();
           }}
         >
           <div
-            className="modal-panel pe-helper-install-modal"
+            className="modal-panel pe-agent-install-modal"
             role="dialog"
             aria-modal="true"
             aria-labelledby={titleId}
             onClick={(event) => event.stopPropagation()}
           >
-            <h2 id={titleId}>Install Inference Helper</h2>
-            <p className="pe-helper-install-modal__lead">
+            <h2 id={titleId}>Run inference on this computer</h2>
+            <p className="pe-agent-install-modal__lead">
               Run OCR and segmentation on your own computer&apos;s CPU instead
               of waiting for a hosted worker. Page images are stored in nomicous
               either way, and your browser downloads them from there.
             </p>
-            <ol className="pe-helper-install-modal__steps">
-              <li>
-                Download the installer
-                {detected ? " for your operating system" : ""} from the latest
-                GitHub release.
-              </li>
-              <li>
-                Install <strong>Nomicous Inference Helper</strong> and launch it
-                once.
-              </li>
-              <li>
-                Keep this page open - it detects the helper automatically once
-                it is running.
-              </li>
+            <p className="pe-agent-install-modal__lead">
+              It is three commands in a terminal. The same three on macOS,
+              Windows and Linux.
+            </p>
+            <ol className="pe-agent-install-modal__steps">
+              {AGENT_STEPS.map((step) => (
+                <li key={step.id}>
+                  <span className="pe-agent-install-modal__lead-in">
+                    {step.lead}
+                  </span>
+                  <code className="pe-agent-install-modal__command">
+                    {step.command}
+                  </code>
+                  {step.note ? (
+                    <span className="pe-agent-install-modal__note">
+                      {step.note}
+                    </span>
+                  ) : null}
+                </li>
+              ))}
             </ol>
-            <div className="pe-helper-install-modal__actions">
-              {primary ? (
-                <a
-                  href={primary.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="btn btn-primary btn-block"
-                >
-                  {PLATFORM_PRIMARY_LABEL[primary.platform]}
-                </a>
-              ) : null}
-              {!primary
-                ? others.map((download) => (
-                    <a
-                      key={download.id}
-                      href={download.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="btn btn-primary btn-block"
-                    >
-                      {download.label}
-                    </a>
-                  ))
-                : null}
-              {primary && others.length > 0 ? (
-                <>
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-block"
-                    aria-expanded={showOtherPlatforms}
-                    onClick={() => setShowOtherPlatforms((open) => !open)}
-                  >
-                    {showOtherPlatforms
-                      ? "Hide other platforms"
-                      : "Other platforms"}
-                  </button>
-                  {showOtherPlatforms
-                    ? others.map((download) => (
-                        <a
-                          key={download.id}
-                          href={download.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="btn btn-ghost btn-block"
-                        >
-                          {download.label}
-                        </a>
-                      ))
-                    : null}
-                </>
-              ) : null}
-              <a
-                href={INFERENCE_HELPER_RELEASES_URL}
-                target="_blank"
-                rel="noreferrer"
-                className="btn btn-ghost btn-block"
-              >
-                View release notes
-              </a>
+            <p className="pe-agent-install-modal__note">
+              This page notices on its own once the agent starts claiming - keep
+              it open, or press Retry.
+            </p>
+            <div className="pe-agent-install-modal__actions">
               <button
                 type="button"
                 className="btn btn-ghost btn-block"
@@ -275,15 +186,15 @@ export function PageEditorInferenceBanner({
         aria-label="Where inference runs"
       >
         <span className="pe-inference-banner__status" role="status">
-          {helperStatusText(preferLocalInference, probing, helperAvailable)}{" "}
+          {agentStatusText(preferLocalInference, loading, hasLocalCapacity)}{" "}
           {preferLocalInference ? (
             <button
               type="button"
               className="pe-inference-banner__action"
               onClick={onRetry}
-              disabled={probing}
+              disabled={loading}
             >
-              {probing ? "Checking…" : "Retry"}
+              {loading ? "Checking…" : "Retry"}
             </button>
           ) : null}{" "}
           {shouldPrompt ? (
@@ -292,7 +203,7 @@ export function PageEditorInferenceBanner({
               className="pe-inference-banner__action"
               onClick={() => setModalOpen(true)}
             >
-              Install helper
+              How to run it here
             </button>
           ) : null}
         </span>

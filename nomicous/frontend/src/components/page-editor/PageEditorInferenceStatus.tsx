@@ -1,6 +1,7 @@
 type PageEditorInferenceStatusProps = {
-  probing: boolean;
-  helperAvailable: boolean;
+  loading: boolean;
+  /** **Capacity** for this account's own computer, as the platform reports it. */
+  hasLocalCapacity: boolean;
   /** The account-level **host preference**: "use my computer when available". */
   preferLocalInference: boolean;
 };
@@ -8,13 +9,13 @@ type PageEditorInferenceStatusProps = {
 type StatusVariant = "checking" | "connected" | "cloud" | "unavailable";
 
 function resolveVariant({
-  probing,
-  helperAvailable,
+  loading,
+  hasLocalCapacity,
   preferLocalInference,
 }: PageEditorInferenceStatusProps): StatusVariant {
   if (!preferLocalInference) return "cloud";
-  if (probing) return "checking";
-  if (helperAvailable) return "connected";
+  if (loading) return "checking";
+  if (hasLocalCapacity) return "connected";
   return "unavailable";
 }
 
@@ -31,7 +32,7 @@ const LABELS: Record<StatusVariant, string> = {
  * announcement line.
  */
 const TITLES: Record<StatusVariant, string> = {
-  checking: "Looking for the nomicous agent on this computer…",
+  checking: "Reading whether the nomicous agent is running on this computer…",
   connected:
     "The nomicous agent is running on this computer, so jobs can run here.",
   cloud:

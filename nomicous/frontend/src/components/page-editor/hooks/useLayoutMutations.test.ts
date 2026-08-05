@@ -1,7 +1,19 @@
+/**
+ * What survives the deletion of the local-first write path (#60).
+ *
+ * Most of this file used to be about the loopback transport: a local run, its
+ * three abort causes, and the fallback from the helper to the cloud. There is
+ * one path now, so those cases are gone rather than rewritten - a cloud-only
+ * "fallback" test would be asserting a decision nothing makes any more.
+ *
+ * What is left is the pair of rules that were never about the transport: a
+ * refused submission is an explanation the researcher can act on, and a failure
+ * of the reload *after* a stored segmentation must not be mistaken for a
+ * failure of the segmentation.
+ */
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useLocalInferenceRuns } from "../../../inference";
 import { ApiError } from "../../../api/errors";
 import { platformNoCapacityMessage } from "../../../inference/platformMessages";
 import { useLayoutMutations } from "./useLayoutMutations";
@@ -10,8 +22,6 @@ const segmentPart = vi.fn();
 const listPartLines = vi.fn();
 const getPartLayout = vi.fn();
 const getPagePairing = vi.fn();
-const persistLocalSegment = vi.fn();
-const runLocalInference = vi.fn();
 
 vi.mock("../../../api/client", () => ({
   api: {
@@ -19,44 +29,16 @@ vi.mock("../../../api/client", () => ({
     listPartLines: (...args: unknown[]) => listPartLines(...args),
     getPartLayout: (...args: unknown[]) => getPartLayout(...args),
     getPagePairing: (...args: unknown[]) => getPagePairing(...args),
-    persistLocalSegment: (...args: unknown[]) => persistLocalSegment(...args),
   },
 }));
 
-vi.mock("../../../api/imageCache", () => ({
-  fetchPartImage: async () => new Blob(["page-image"], { type: "image/png" }),
-}));
-
-vi.mock("../../../inference", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../../inference")>();
-  return {
-    ...actual,
-    runLocalInference: (...args: unknown[]) => runLocalInference(...args),
-  };
-});
-
-const SEGMENT_OUTPUT = { blocks: [], lines: [] };
-
-type TrackLocalTask = <T>(
-  meta: { label: string; kind: string },
-  run: (signal: AbortSignal) => Promise<T>,
-) => Promise<T>;
-
-function setup(options?: { trackLocalTask?: TrackLocalTask }) {
+function setup() {
   const setPairingError = vi.fn();
   const setSubmissionRefusal = vi.fn();
   const trackJobAndWait = vi.fn().mockResolvedValue({ status: "done" });
 
-  const defaultTrackLocalTask: TrackLocalTask = (_meta, run) =>
-    run(new AbortController().signal);
-
-  // The real run registry, so the three abort causes are told apart exactly the
-  // way the page tells them apart.
-  const view = renderHook(() => {
-    const { localInference, abortRunToCloud } = useLocalInferenceRuns(
-      () => true,
-    );
-    const mutations = useLayoutMutations({
+  const view = renderHook(() =>
+    useLayoutMutations({
       projectId: "project-1",
       documentId: "document-1",
       partId: "part-1",
@@ -72,39 +54,15 @@ function setup(options?: { trackLocalTask?: TrackLocalTask }) {
       setSelectedSegmentId: vi.fn(),
       setApprovedTextDraft: vi.fn(),
       onDrawComplete: vi.fn(),
-      partImageUrl: "http://localhost:8000/media/parts/part-1",
-      shouldUseLocalPath: () => true,
       setSubmissionRefusal,
-      segmentRegistryModelId: "blla-segment",
-      localInference,
       trackJobAndWait,
-      trackLocalTask: options?.trackLocalTask ?? defaultTrackLocalTask,
-    });
-    return { ...mutations, abortRunToCloud };
-  });
+    }),
+  );
 
   return { view, setPairingError, setSubmissionRefusal, trackJobAndWait };
 }
 
-/** A local run that never finishes on its own - only an abort ends it. */
-function helperRunBlockedUntilAbort() {
-  let reachedHelper: () => void;
-  const atHelper = new Promise<void>((resolve) => {
-    reachedHelper = resolve;
-  });
-  runLocalInference.mockImplementationOnce(
-    (request: { signal: AbortSignal }) =>
-      new Promise((_resolve, reject) => {
-        request.signal.addEventListener("abort", () => {
-          reject(new DOMException("The operation was aborted.", "AbortError"));
-        });
-        reachedHelper();
-      }),
-  );
-  return atHelper;
-}
-
-describe("useLayoutMutations auto segment fallback", () => {
+describe("useLayoutMutations auto segment", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     segmentPart.mockResolvedValue({ job_id: "cloud-job-1" });
@@ -114,41 +72,20 @@ describe("useLayoutMutations auto segment fallback", () => {
       text_lines: [],
       pairing_progress: { paired_lines: 0, total_lines: 0, percent: 0 },
     });
-    persistLocalSegment.mockResolvedValue({});
-    runLocalInference.mockResolvedValue({
-      task: "segment",
-      output: SEGMENT_OUTPUT,
-    });
   });
 
-  it("falls back to the cloud when the local run fails for a non-abort reason", async () => {
-    runLocalInference.mockRejectedValueOnce(
-      new Error("WEIGHTS_UNAVAILABLE: model weights are not on disk"),
-    );
-    const { view, setPairingError } = setup();
+  it("submits one job and waits for it", async () => {
+    const { view, trackJobAndWait } = setup();
 
     await act(async () => {
       await view.result.current.runAutoSegment();
     });
 
     expect(segmentPart).toHaveBeenCalledTimes(1);
-    expect(setPairingError).not.toHaveBeenCalledWith(
-      expect.stringContaining("WEIGHTS_UNAVAILABLE"),
-    );
+    expect(trackJobAndWait).toHaveBeenCalledTimes(1);
   });
 
-  it("does not touch the cloud when the local run succeeds", async () => {
-    const { view } = setup();
-
-    await act(async () => {
-      await view.result.current.runAutoSegment();
-    });
-
-    expect(persistLocalSegment).toHaveBeenCalledTimes(1);
-    expect(segmentPart).not.toHaveBeenCalled();
-  });
-
-  it("keeps a persisted local segmentation when the reload that follows it fails", async () => {
+  it("keeps a finished segmentation when the reload that follows it fails", async () => {
     // A blip on the cosmetic reload, after the segmentation is already stored.
     listPartLines.mockRejectedValue(new Error("network hiccup"));
     const { view, setPairingError } = setup();
@@ -157,94 +94,26 @@ describe("useLayoutMutations auto segment fallback", () => {
       await view.result.current.runAutoSegment();
     });
 
-    expect(persistLocalSegment).toHaveBeenCalledTimes(1);
     // Segmenting again would replace Segments that are already saved.
-    expect(segmentPart).not.toHaveBeenCalled();
+    expect(segmentPart).toHaveBeenCalledTimes(1);
     expect(setPairingError).toHaveBeenCalledWith("network hiccup");
   });
 
-  it("does not run in the cloud when the user cancels the local job", async () => {
-    const trackLocalTask: TrackLocalTask = async (_meta, run) => {
-      const controller = new AbortController();
-      controller.abort();
-      // Mirrors BackgroundJobsProvider: the UI-owned controller is aborted and
-      // the task rejects with the resulting AbortError.
-      await run(controller.signal).catch(() => undefined);
-      throw new DOMException("Local job cancelled", "AbortError");
-    };
-    const { view, setPairingError } = setup({ trackLocalTask });
+  it("does not name a host in the message it reports", async () => {
+    const { view } = setup();
 
     await act(async () => {
       await view.result.current.runAutoSegment();
     });
 
-    expect(segmentPart).not.toHaveBeenCalled();
-    expect(setPairingError).not.toHaveBeenCalledWith(expect.any(String));
-  });
-
-  it("cancels a superseded run outright instead of racing it in the cloud", async () => {
-    const atHelper = helperRunBlockedUntilAbort();
-    const { view, setPairingError } = setup();
-
-    await act(async () => {
-      // Double-clicking "Auto segment": the second run supersedes the first.
-      const superseded = view.result.current.runAutoSegment();
-      await atHelper;
-      const winner = view.result.current.runAutoSegment();
-      await Promise.all([superseded, winner]);
-    });
-
-    // Only the run that took over wrote to the page, and nothing was queued in
-    // the cloud behind it.
-    expect(persistLocalSegment).toHaveBeenCalledTimes(1);
-    expect(view.result.current.segmenting).toBe(false);
-    expect(segmentPart).not.toHaveBeenCalled();
-    expect(setPairingError).not.toHaveBeenCalledWith(expect.any(String));
-  });
-
-  it("keeps reporting the page as busy while the run that took over continues", async () => {
-    const atFirstHelper = helperRunBlockedUntilAbort();
-    const atSecondHelper = helperRunBlockedUntilAbort();
-    const { view } = setup();
-
-    let winner: Promise<void>;
-    await act(async () => {
-      const superseded = view.result.current.runAutoSegment();
-      await atFirstHelper;
-      winner = view.result.current.runAutoSegment();
-      await atSecondHelper;
-      // The superseded run unwinds first; the winner is still in the helper.
-      await superseded;
-    });
-
-    expect(view.result.current.segmenting).toBe(true);
-
-    await act(async () => {
-      view.result.current.abortRunToCloud();
-      await winner;
-    });
-
-    expect(view.result.current.segmenting).toBe(false);
-  });
-
-  it("falls back to the cloud when the run is switched to the cloud mid-flight", async () => {
-    const atHelper = helperRunBlockedUntilAbort();
-    const { view, setPairingError } = setup();
-
-    await act(async () => {
-      const running = view.result.current.runAutoSegment();
-      await atHelper;
-      view.result.current.abortRunToCloud();
-      await running;
-    });
-
-    expect(segmentPart).toHaveBeenCalledTimes(1);
-    expect(persistLocalSegment).not.toHaveBeenCalled();
-    expect(setPairingError).not.toHaveBeenCalledWith(expect.any(String));
+    // The job announces its **execution target**; a second sentence here, from
+    // a second source, is how the two come to disagree.
+    expect(view.result.current.segmentMessage).not.toMatch(
+      /locally|in the cloud|on your computer/i,
+    );
   });
 
   it("explains a refused submission instead of reporting a generic failure", async () => {
-    runLocalInference.mockRejectedValueOnce(new Error("helper crashed"));
     segmentPart.mockRejectedValueOnce(
       new ApiError(platformNoCapacityMessage(), 409),
     );
@@ -260,5 +129,20 @@ describe("useLayoutMutations auto segment fallback", () => {
     expect(setPairingError).not.toHaveBeenCalledWith(
       platformNoCapacityMessage(),
     );
+  });
+
+  it("stays quiet when the researcher cancels the job", async () => {
+    segmentPart.mockRejectedValueOnce(
+      new DOMException("The operation was aborted.", "AbortError"),
+    );
+    const { view, setPairingError, setSubmissionRefusal } = setup();
+
+    await act(async () => {
+      await view.result.current.runAutoSegment();
+    });
+
+    // The jobs panel already reported it.
+    expect(setPairingError).not.toHaveBeenCalledWith(expect.any(String));
+    expect(setSubmissionRefusal).not.toHaveBeenCalledWith(expect.any(String));
   });
 });

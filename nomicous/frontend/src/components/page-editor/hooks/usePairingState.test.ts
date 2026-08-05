@@ -1,41 +1,33 @@
+/**
+ * What survives the deletion of the local-first OCR path (#60).
+ *
+ * The local run, its three abort causes, and the fallback from the helper to
+ * the cloud were the loopback transport, and are deleted rather than rewritten.
+ * The refusal rule was never about the transport: when no **inference host**
+ * has **capacity** the platform answers 409 with a sentence the researcher can
+ * act on, and it belongs on the page rather than in the generic error line.
+ */
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useLocalInferenceRuns } from "../../../inference";
 import { ApiError } from "../../../api/errors";
 import { platformNoCapacityMessage } from "../../../inference/platformMessages";
 import { usePairingState } from "./usePairingState";
 
 const enqueueTranscribePart = vi.fn();
-const persistLocalTranscribe = vi.fn();
 const listPartLines = vi.fn();
 const listTranscriptions = vi.fn();
 const getPagePairing = vi.fn();
-const runLocalInference = vi.fn();
 
 vi.mock("../../../api/client", () => ({
   api: {
     enqueueTranscribePart: (...args: unknown[]) =>
       enqueueTranscribePart(...args),
-    persistLocalTranscribe: (...args: unknown[]) =>
-      persistLocalTranscribe(...args),
     listPartLines: (...args: unknown[]) => listPartLines(...args),
     listTranscriptions: (...args: unknown[]) => listTranscriptions(...args),
     getPagePairing: (...args: unknown[]) => getPagePairing(...args),
   },
 }));
-
-vi.mock("../../../api/imageCache", () => ({
-  fetchPartImage: async () => new Blob(["page-image"], { type: "image/png" }),
-}));
-
-vi.mock("../../../inference", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../../inference")>();
-  return {
-    ...actual,
-    runLocalInference: (...args: unknown[]) => runLocalInference(...args),
-  };
-});
 
 const LINE = {
   id: "line-1",
@@ -51,19 +43,7 @@ const LINE = {
   line_transcriptions: [],
 };
 
-const MODEL = {
-  id: "model-1",
-  name: "Greek Calamari",
-  task: "transcribe",
-  artifact_ref: "registry://greek-calamari-v1?tag=stable",
-};
-
-type TrackLocalTask = <T>(
-  meta: { label: string; kind: string },
-  run: (signal: AbortSignal) => Promise<T>,
-) => Promise<T>;
-
-function setup(options?: { trackLocalTask?: TrackLocalTask }) {
+function setup() {
   const setPairingError = vi.fn();
   const setSubmissionRefusal = vi.fn();
   const trackJobAndWait = vi.fn().mockResolvedValue({
@@ -74,13 +54,8 @@ function setup(options?: { trackLocalTask?: TrackLocalTask }) {
     },
   });
 
-  // The real run registry, so the three abort causes are told apart exactly the
-  // way the page tells them apart.
-  const view = renderHook(() => {
-    const { localInference, abortRunToCloud } = useLocalInferenceRuns(
-      () => true,
-    );
-    const pairing = usePairingState({
+  const view = renderHook(() =>
+    usePairingState({
       projectId: "project-1",
       documentId: "document-1",
       partId: "part-1",
@@ -94,42 +69,16 @@ function setup(options?: { trackLocalTask?: TrackLocalTask }) {
       setTextLines: vi.fn(),
       setPairingProgress: vi.fn(),
       setPairingError,
-      selectedTranscribeModelId: MODEL.id,
-      transcribeModels: [MODEL],
-      partImageUrl: "http://localhost:8000/media/parts/part-1",
-      shouldUseLocalPath: () => true,
+      selectedTranscribeModelId: "model-1",
       setSubmissionRefusal,
-      localInference,
       trackJobAndWait,
-      trackLocalTask:
-        options?.trackLocalTask ??
-        ((_meta, run) => run(new AbortController().signal)),
-    });
-    return { ...pairing, abortRunToCloud };
-  });
+    }),
+  );
 
   return { view, setPairingError, setSubmissionRefusal, trackJobAndWait };
 }
 
-/** A local run that never finishes on its own - only an abort ends it. */
-function helperRunBlockedUntilAbort() {
-  let reachedHelper: () => void;
-  const atHelper = new Promise<void>((resolve) => {
-    reachedHelper = resolve;
-  });
-  runLocalInference.mockImplementationOnce(
-    (request: { signal: AbortSignal }) =>
-      new Promise((_resolve, reject) => {
-        request.signal.addEventListener("abort", () => {
-          reject(new DOMException("The operation was aborted.", "AbortError"));
-        });
-        reachedHelper();
-      }),
-  );
-  return atHelper;
-}
-
-describe("usePairingState OCR fallback", () => {
+describe("usePairingState OCR", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     enqueueTranscribePart.mockResolvedValue({ job_id: "cloud-job-1" });
@@ -141,123 +90,19 @@ describe("usePairingState OCR fallback", () => {
     });
   });
 
-  it("falls back to the cloud when the local run fails for a non-abort reason", async () => {
-    runLocalInference.mockRejectedValue(new Error("503 WEIGHTS_UNAVAILABLE"));
-    const { view } = setup();
+  it("submits one job for a page and waits for it", async () => {
+    const { view, trackJobAndWait } = setup();
 
     await act(async () => {
       await view.result.current.runPageOcr();
     });
 
     expect(enqueueTranscribePart).toHaveBeenCalledTimes(1);
-  });
-
-  it("cancels a superseded run outright instead of racing it in the cloud", async () => {
-    const atHelper = helperRunBlockedUntilAbort();
-    runLocalInference.mockResolvedValue({
-      task: "transcribe",
-      output: {
-        lines: [
-          {
-            line_id: "line-1",
-            line_index: 0,
-            output: { text: "αβγ", confidence: 0.9, character_confidences: [] },
-          },
-        ],
-      },
-    });
-    persistLocalTranscribe.mockResolvedValue({
-      transcription_id: "transcription-1",
-      lines: [{ line_id: "line-1", text: "αβγ", confidence: 0.9 }],
-    });
-    const { view, setPairingError } = setup();
-
-    await act(async () => {
-      const superseded = view.result.current.runPageOcr();
-      await atHelper;
-      const winner = view.result.current.runPageOcr();
-      await Promise.all([superseded, winner]);
-    });
-
-    expect(persistLocalTranscribe).toHaveBeenCalledTimes(1);
-    expect(enqueueTranscribePart).not.toHaveBeenCalled();
-    expect(setPairingError).not.toHaveBeenCalledWith(expect.any(String));
-  });
-
-  it("falls back to the cloud when the run is switched to the cloud mid-flight", async () => {
-    const atHelper = helperRunBlockedUntilAbort();
-    const { view, setPairingError } = setup();
-
-    await act(async () => {
-      const running = view.result.current.runPageOcr();
-      await atHelper;
-      view.result.current.abortRunToCloud();
-      await running;
-    });
-
-    expect(enqueueTranscribePart).toHaveBeenCalledTimes(1);
-    expect(persistLocalTranscribe).not.toHaveBeenCalled();
-    expect(setPairingError).not.toHaveBeenCalledWith(expect.any(String));
-  });
-
-  it("does not run in the cloud when the user cancels the local job", async () => {
-    const { view, setPairingError } = setup({
-      trackLocalTask: async (_meta, run) => {
-        const controller = new AbortController();
-        controller.abort();
-        // Mirrors BackgroundJobsProvider: the UI-owned controller is aborted and
-        // the task rejects with the resulting AbortError.
-        await run(controller.signal).catch(() => undefined);
-        throw new DOMException("Local job cancelled", "AbortError");
-      },
-    });
-
-    await act(async () => {
-      await view.result.current.runPageOcr();
-    });
-
-    expect(enqueueTranscribePart).not.toHaveBeenCalled();
-    expect(setPairingError).not.toHaveBeenCalledWith(expect.any(String));
-  });
-
-  it("keeps a persisted local result when the reload that follows it fails", async () => {
-    runLocalInference.mockResolvedValue({
-      task: "transcribe",
-      output: {
-        lines: [
-          {
-            line_id: "line-1",
-            line_index: 0,
-            output: { text: "αβγ", confidence: 0.9, character_confidences: [] },
-          },
-        ],
-      },
-    });
-    persistLocalTranscribe.mockResolvedValue({
-      transcription_id: "transcription-1",
-      lines: [{ line_id: "line-1", text: "αβγ", confidence: 0.9 }],
-    });
-    // A blip on the cosmetic reload, after the transcription is already stored.
-    listPartLines.mockRejectedValue(new Error("network hiccup"));
-    listTranscriptions.mockRejectedValue(new Error("network hiccup"));
-    const { view, setPairingError } = setup();
-
-    await act(async () => {
-      await view.result.current.runPageOcr();
-    });
-
-    expect(persistLocalTranscribe).toHaveBeenCalledTimes(1);
-    // The work succeeded and was billed once; a stale view must never buy a
-    // second cloud transcription of the same page.
-    expect(enqueueTranscribePart).not.toHaveBeenCalled();
-    expect(setPairingError).toHaveBeenCalledWith("network hiccup");
+    expect(trackJobAndWait).toHaveBeenCalledTimes(1);
   });
 
   it("explains a refused submission instead of reporting a generic failure", async () => {
-    // The platform refuses when no **inference host** has capacity, and says so
-    // in the 409 body. That sentence is what the researcher has to act on.
-    runLocalInference.mockRejectedValue(new Error("helper crashed"));
-    enqueueTranscribePart.mockRejectedValue(
+    enqueueTranscribePart.mockRejectedValueOnce(
       new ApiError(platformNoCapacityMessage(), 409),
     );
     const { view, setPairingError, setSubmissionRefusal } = setup();
@@ -271,6 +116,32 @@ describe("usePairingState OCR fallback", () => {
     );
     expect(setPairingError).not.toHaveBeenCalledWith(
       platformNoCapacityMessage(),
+    );
+  });
+
+  it("stays quiet when the researcher cancels the job", async () => {
+    enqueueTranscribePart.mockRejectedValueOnce(
+      new DOMException("The operation was aborted.", "AbortError"),
+    );
+    const { view, setPairingError, setSubmissionRefusal } = setup();
+
+    await act(async () => {
+      await view.result.current.runPageOcr();
+    });
+
+    expect(setPairingError).not.toHaveBeenCalledWith(expect.any(String));
+    expect(setSubmissionRefusal).not.toHaveBeenCalledWith(expect.any(String));
+  });
+
+  it("does not name a host in the message it reports", async () => {
+    const { view } = setup();
+
+    await act(async () => {
+      await view.result.current.runPageOcr();
+    });
+
+    expect(view.result.current.ocrMessage).not.toMatch(
+      /\(local\)|locally|in the cloud/i,
     );
   });
 });

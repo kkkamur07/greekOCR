@@ -3,43 +3,30 @@
 Applies to the SPA at `app.nomicous.com`. The policy is served as a static
 header from [`nomicous/frontend/vercel.json`](../../nomicous/frontend/vercel.json).
 
-## `connect-src` is one loopback origin, not a port range
+## `connect-src` names no loopback origin at all
 
-The policy previously ended with:
+The policy grants exactly two origins:
 
 ```
-connect-src 'self' https://api.nomicous.com http://127.0.0.1:8001 http://127.0.0.1:* http://localhost:8001 http://localhost:*
+connect-src 'self' https://api.nomicous.com
 ```
 
-`http://127.0.0.1:*` and `http://localhost:*` let any script running on the app
-origin open a connection to **every** service listening on the visitor's own
-machine - development servers, database admin UIs, other desktop apps with an
-HTTP control port. That is a much larger grant than "talk to our helper", and an
-XSS or a malicious dependency on the app origin inherits it.
+It used to end with `http://127.0.0.1:8001`, and before that with
+`http://127.0.0.1:*` and `http://localhost:*` as well. The wildcards let any
+script on the app origin open a connection to **every** service listening on the
+visitor's own machine - development servers, database admin UIs, other desktop
+apps with an HTTP control port - and an XSS or a malicious dependency on the app
+origin inherited that grant. They were narrowed to the single helper port, and
+#60 removed the port with the transport (ADR 0002): the browser no longer calls
+an **inference agent** at all, so there is nothing for a loopback entry to
+permit.
 
-Nothing needed it. `nomicous/frontend/src/inference/constants.ts` builds exactly
-one helper URL:
-
-```ts
-const DEFAULT_HELPER_BASE_URL = "http://127.0.0.1:8001";
-export const HELPER_BASE_URL = configuredHelperBaseUrl || DEFAULT_HELPER_BASE_URL;
-```
-
-with a comment stating that discovery "deliberately does not walk a list of
-candidate URLs". Production sets `NEXT_PUBLIC_INFERENCE_HELPER_URL=http://127.0.0.1:8001`
-(see [`docs/deployment/production.md`](../deployment/production.md)), which is
-the default anyway. The wildcards and the `localhost` spellings are gone;
-`http://127.0.0.1:8001` stays.
-
-**Note for the helper redesign:** `http://127.0.0.1:8001` is still a live path -
-the browser calls it directly today. When the redesign removes the
-browser-to-loopback call, delete that entry too and `connect-src` becomes
-`'self' https://api.nomicous.com`. Do not delete it before then; the transcription
-flow breaks silently (a blocked `fetch` looks exactly like "helper not running").
-
-If someone needs a non-default helper port, the browser-visible consequence is a
-CSP violation rather than a working connection. That is deliberate: a per-user
-port would have to widen the policy for everyone.
+This is the end state the note in this section used to point forward to. Nothing
+should put a loopback origin back: an agent reaches the platform outbound, and a
+page that needed to reach one would be reintroducing the fragility the redesign
+deleted - a hosted HTTPS page calling `127.0.0.1` depends on a browser
+permission Chromium gates behind Private Network Access, that other browsers
+treat differently, and that any corporate proxy or VPN can break.
 
 ## `script-src` still needs `'unsafe-inline'` - evidence
 

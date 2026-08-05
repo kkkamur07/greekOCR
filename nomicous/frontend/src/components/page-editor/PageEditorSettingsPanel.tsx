@@ -2,7 +2,6 @@ import {
   HOST_PREFERENCE_HINT,
   HOST_PREFERENCE_LABEL,
 } from "../../inference/hostPreference";
-import type { HostEligibility } from "../../inference/types";
 import type { PageEditorCanvasSettings } from "./pageEditorSettings";
 
 type PageEditorSettingsPanelProps = {
@@ -12,8 +11,8 @@ type PageEditorSettingsPanelProps = {
   preferLocalInference: boolean;
   onPreferLocalInferenceChange: (preferLocal: boolean) => void;
   preferenceSaving: boolean;
-  helperAvailable: boolean;
-  selectedModelHostEligibility: HostEligibility | null;
+  /** **Capacity** for this account's own computer, as the platform reports it. */
+  hasLocalCapacity: boolean;
 };
 
 export function PageEditorSettingsPanel({
@@ -22,11 +21,8 @@ export function PageEditorSettingsPanel({
   preferLocalInference,
   onPreferLocalInferenceChange,
   preferenceSaving,
-  helperAvailable,
-  selectedModelHostEligibility,
+  hasLocalCapacity,
 }: PageEditorSettingsPanelProps) {
-  const remoteOnly = selectedModelHostEligibility === "remote";
-
   return (
     <div
       className="pe-dropdown pe-dropdown--settings"
@@ -51,13 +47,11 @@ export function PageEditorSettingsPanel({
         {HOST_PREFERENCE_LABEL}
       </label>
       <p className="pe-dd-model">
-        {remoteOnly
-          ? "The selected model runs on a hosted server only, whatever this setting says."
-          : `${HOST_PREFERENCE_HINT}${
-              !preferLocalInference || helperAvailable
-                ? ""
-                : " Nothing is running on this computer right now, so jobs go to the cloud."
-            }`}
+        {`${HOST_PREFERENCE_HINT}${
+          !preferLocalInference || hasLocalCapacity
+            ? ""
+            : " Nothing is running on this computer right now, so jobs go to the cloud."
+        }`}
       </p>
 
       <div className="pe-dd-section">Canvas overlays</div>
