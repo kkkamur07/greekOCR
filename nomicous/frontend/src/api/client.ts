@@ -55,6 +55,10 @@ export type LineTranscriptionResponse =
 export type CharacterConfidence = components["schemas"]["CharacterConfidence"];
 export type JobResponse = components["schemas"]["JobResponse"];
 export type JobStatus = components["schemas"]["JobStatus"];
+/** The **inference host** one job runs on. Fixed at submission (ADR 0002). */
+export type ExecutionTarget = components["schemas"]["ExecutionTarget"];
+export type ExecutionPreferenceResponse =
+  components["schemas"]["ExecutionPreferenceResponse"];
 export type EnqueueJobResponse = components["schemas"]["EnqueueJobResponse"];
 export type SegmentPartRequest = {
   use_otsu_refinement?: boolean;
@@ -397,6 +401,25 @@ export const api = {
     apiRequest<void>("/auth/logout", { method: "POST", skipAuth: true }),
 
   me: () => apiRequest<UserResponse>("/me"),
+
+  /**
+   * The account-level **host preference** - "use my computer when it is
+   * available" - plus what it resolves to right now.
+   *
+   * There is deliberately no per-job variant of either call: a researcher
+   * cannot know which host is faster for a given page, so the choice is made
+   * once for the account and announced on each job (ADR 0002).
+   */
+  getExecutionPreference: (options: { signal?: AbortSignal } = {}) =>
+    apiRequest<ExecutionPreferenceResponse>("/account/execution-target", {
+      signal: options.signal,
+    }),
+
+  setExecutionPreference: (preferLocalInference: boolean) =>
+    apiRequest<ExecutionPreferenceResponse>("/account/execution-target", {
+      method: "PUT",
+      body: { prefer_local_inference: preferLocalInference },
+    }),
 
   listProjectsPage: (options: ListPageOptions = {}) => {
     const query = cursorQuery(options);
