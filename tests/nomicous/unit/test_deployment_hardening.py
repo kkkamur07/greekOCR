@@ -64,8 +64,13 @@ def test_published_package_ships_the_torch_runtime_and_nothing_else() -> None:
         for dependency in group
         if isinstance(dependency, str)
     )
-    helper = _flatten_group(groups, "helper")
-    assert not any(dependency.startswith("onnxruntime") for dependency in helper)
+    # The `helper` group died with `inference/api` and `inference/helper` (#60).
+    # It named what the loopback HTTP surfaces needed on top of the runtime, and
+    # there is no longer anything under `inference/` that serves HTTP.
+    assert "helper" not in groups
+    assert not any(
+        dependency.startswith("onnxruntime") for dependency in _flatten_group(groups, "inference")
+    )
 
     # CUDA wheels must not be reachable: PyPI serves them on Linux and Windows.
     sources = pyproject["tool"]["uv"]["sources"]["torch"]
@@ -211,24 +216,24 @@ def test_platform_backend_ships_bundled_unicode_pdf_font() -> None:
     assert '"nomicous" / "backend"' in build_script
 
 
-def test_vercel_frontend_permits_only_the_one_helper_loopback_origin() -> None:
-    """`connect-src` names the single helper origin the app actually calls.
+def test_vercel_frontend_connect_src_permits_no_loopback_origin() -> None:
+    """`connect-src` reaches the app and the API, and nothing on the laptop.
 
-    A port wildcard let any page on the app origin reach every service listening
-    on the visitor's machine, which is a far larger grant than talking to the
-    helper. `nomicous/frontend/src/inference/constants.ts` builds exactly one
-    URL (`HELPER_BASE_URL`), defaulting to `http://127.0.0.1:8001`, so the
-    wildcards protected nothing that is reachable today.
+    ADR 0002 deleted the browser-to-loopback call (#60), so the entry that used
+    to permit `http://127.0.0.1:8001` permits nothing that exists. It is
+    asserted absent rather than merely narrowed: a hosted HTTPS page calling
+    `127.0.0.1` is the fragility the redesign removed, and a grant left behind
+    is the thing a future change would build on.
     """
     vercel = (REPO_ROOT / "nomicous" / "frontend" / "vercel.json").read_text(encoding="utf-8")
 
-    assert "http://127.0.0.1:8001" in vercel
-    assert "http://127.0.0.1:*" not in vercel
-    assert "http://localhost:8001" not in vercel
-    assert "http://localhost:*" not in vercel
-    assert "http://[::1]:8001" not in vercel
-    assert "http://[::1]:*" not in vercel
-    assert "connect-src" in vercel
+    assert "connect-src 'self' https://api.nomicous.com;" in vercel
+    for origin in (
+        "127.0.0.1",
+        "localhost",
+        "[::1]",
+    ):
+        assert origin not in vercel
 
 
 def test_vercel_frontend_csp_records_why_inline_scripts_are_still_allowed() -> None:

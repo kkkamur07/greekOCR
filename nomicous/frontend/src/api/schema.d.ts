@@ -131,6 +131,37 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/device/v1/agent/version": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Read Agent Version
+     * @description The version verdict on its own, with no page attached.
+     *
+     *     The whole endpoint is its dependency. An agent below the floor never reaches
+     *     this body - it gets the same 426 the claim path would have given it, from the
+     *     same comparison - and one that is served gets the same notice the claim
+     *     response would have carried.
+     *
+     *     This is what makes ADR 0002's launch check possible. An agent that had to
+     *     claim in order to learn it was stale would be holding a page at the exact
+     *     moment it decided to replace its own code, which is the thing that must never
+     *     happen: the launch moment is the only safe one because nothing is in flight
+     *     during it.
+     */
+    get: operations["read_agent_version_device_v1_agent_version_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/device/v1/jobs/claim": {
     parameters: {
       query?: never;
@@ -581,6 +612,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/media/signed/{image_key}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get Signed Object */
+    get: operations["get_signed_object_media_signed__image_key__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/projects": {
     parameters: {
       query?: never;
@@ -881,40 +929,6 @@ export interface paths {
     head?: never;
     /** Patch Part Line */
     patch: operations["patch_part_line_projects__project_id__documents__document_id__parts__part_id__lines__line_id__patch"];
-    trace?: never;
-  };
-  "/projects/{project_id}/documents/{document_id}/parts/{part_id}/local-inference/segment": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /** Persist Local Segment */
-    post: operations["persist_local_segment_projects__project_id__documents__document_id__parts__part_id__local_inference_segment_post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/projects/{project_id}/documents/{document_id}/parts/{part_id}/local-inference/transcribe": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /** Persist Local Transcribe */
-    post: operations["persist_local_transcribe_projects__project_id__documents__document_id__parts__part_id__local_inference_transcribe_post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
     trace?: never;
   };
   "/projects/{project_id}/documents/{document_id}/parts/{part_id}/model-bindings": {
@@ -1529,46 +1543,6 @@ export interface components {
       /** File */
       file: string;
     };
-    /**
-     * BoundedSegmentLine
-     * @description Segment line with the platform's geometry bound applied to untrusted browser output.
-     */
-    BoundedSegmentLine: {
-      /** Baseline */
-      baseline: {
-        [key: string]: unknown;
-      };
-      /** Block External Id */
-      block_external_id?: string | null;
-      /** External Id */
-      external_id: string;
-      /** @default polygon */
-      kind: components["schemas"]["SegmentGeometryKind"];
-      /** Kraken Ceiling */
-      kraken_ceiling?: number[][] | null;
-      /** Mask */
-      mask?: {
-        [key: string]: unknown;
-      } | null;
-      /** Order */
-      order: number;
-      /** Points */
-      points: number[][];
-      /** Source Metadata */
-      source_metadata?: {
-        [key: string]: unknown;
-      };
-    };
-    /**
-     * BoundedSegmentRunResponse
-     * @description Browser-supplied segmentation output, bounded before it reaches the merge service.
-     */
-    BoundedSegmentRunResponse: {
-      /** Blocks */
-      blocks?: components["schemas"]["SegmentBlock"][];
-      /** Lines */
-      lines?: components["schemas"]["BoundedSegmentLine"][];
-    };
     /** CharacterConfidence */
     CharacterConfidence: {
       /** Char */
@@ -1576,7 +1550,17 @@ export interface components {
       /** Confidence */
       confidence: number;
     };
-    /** ClaimedPageResponse */
+    /**
+     * ClaimedPageResponse
+     * @description One page of work, and the short-lived link to its image.
+     *
+     *     The link is not authenticated by anything the agent presents: the signature
+     *     in it *is* the authorization, and it reaches exactly one object (ADR 0002).
+     *     An authenticated ``GET /device/v1/jobs/{id}/image`` was rejected because the
+     *     production API is serverless - streaming manuscript scans through it costs
+     *     money for nothing - and because it would put a route on the device credential
+     *     that must independently re-derive job ownership.
+     */
     ClaimedPageResponse: {
       execution_target: components["schemas"]["ExecutionTarget"];
       /**
@@ -1590,6 +1574,17 @@ export interface components {
        * Format: date-time
        */
       lease_expires_at: string;
+      /**
+       * Page Image Expires At
+       * Format: date-time
+       * @description When the link above stops working - about a minute out, and deliberately not the lease. The agent fetches once, right after claiming.
+       */
+      page_image_expires_at: string;
+      /**
+       * Page Image Url
+       * @description Signed link to this page's image, and to nothing else. Carries its own authorization, so it is fetched with no device credential attached.
+       */
+      page_image_url: string;
       /**
        * Product Job Id
        * Format: uuid
@@ -2278,86 +2273,6 @@ export interface components {
     LinesReplaceRequest: {
       /** Lines */
       lines?: components["schemas"]["LineUpsertRequest"][];
-    };
-    /** LocalCharacterConfidenceRequest */
-    LocalCharacterConfidenceRequest: {
-      /** Char */
-      char: string;
-      /** Confidence */
-      confidence: number;
-    };
-    /** LocalSegmentPersistRequest */
-    LocalSegmentPersistRequest: {
-      output: components["schemas"]["BoundedSegmentRunResponse"];
-      /** Registry Model Id */
-      registry_model_id: string;
-      /**
-       * Registry Tag
-       * @default stable
-       */
-      registry_tag: string;
-    };
-    /** LocalSegmentPersistResponse */
-    LocalSegmentPersistResponse: {
-      /** Added Lines */
-      added_lines: number;
-      /** Blocks Count */
-      blocks_count: number;
-      /**
-       * Job Id
-       * Format: uuid
-       */
-      job_id: string;
-      /** Lines Count */
-      lines_count: number;
-      /** Preserved Manual Lines */
-      preserved_manual_lines: number;
-      /** Pruned Lines */
-      pruned_lines: number;
-    };
-    /** LocalTranscribeLinePersistRequest */
-    LocalTranscribeLinePersistRequest: {
-      /** Character Confidences */
-      character_confidences?:
-        components["schemas"]["LocalCharacterConfidenceRequest"][] | null;
-      /** Confidence */
-      confidence: number;
-      /**
-       * Line Id
-       * Format: uuid
-       */
-      line_id: string;
-      /** Text */
-      text: string;
-    };
-    /** LocalTranscribePersistRequest */
-    LocalTranscribePersistRequest: {
-      /** Lines */
-      lines: components["schemas"]["LocalTranscribeLinePersistRequest"][];
-      /** Registry Model Id */
-      registry_model_id: string;
-      /**
-       * Registry Tag
-       * @default stable
-       */
-      registry_tag: string;
-    };
-    /** LocalTranscribePersistResponse */
-    LocalTranscribePersistResponse: {
-      /**
-       * Job Id
-       * Format: uuid
-       */
-      job_id: string;
-      /** Lines */
-      lines: {
-        [key: string]: unknown;
-      }[];
-      /**
-       * Transcription Id
-       * Format: uuid
-       */
-      transcription_id: string;
     };
     /** LoginRequest */
     LoginRequest: {
@@ -3628,6 +3543,101 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
+  read_agent_version_device_v1_agent_version_get: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Agent version, MAJOR.MINOR.PATCH. Required: an agent that does not say what it is cannot claim. */
+        "X-Nomicous-Agent-Version"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentVersionNotice"];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description The agent is below the version floor, or did not say what version it is. It must upgrade before it claims; retrying the same build cannot succeed. */
+      426: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentVersionRefusalResponse"];
         };
       };
       /** @description Rate limit exceeded */
@@ -5438,6 +5448,99 @@ export interface operations {
         };
       };
       /** @description Part or image not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
+  get_signed_object_media_signed__image_key__get: {
+    parameters: {
+      query: {
+        /** @description Unix seconds after which the link is dead. */
+        expires: number;
+        /** @description HMAC over the object key and expiry. */
+        signature: string;
+      };
+      header?: never;
+      path: {
+        image_key: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Page image bytes */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/octet-stream": string;
+          "image/jpeg": string;
+          "image/png": string;
+          "image/webp": string;
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Missing, forged, or expired signature */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description No such object */
       404: {
         headers: {
           [name: string]: unknown;
@@ -8060,188 +8163,6 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["LineResponse"];
-        };
-      };
-      /** @description Not authenticated */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
-      };
-      /** @description Not authorized */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
-      };
-      /** @description Resource not found */
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
-      };
-      /** @description Conflict with current state */
-      409: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
-      };
-      /** @description Validation error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
-      };
-      /** @description Rate limit exceeded */
-      429: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
-      };
-      /** @description Internal server error */
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
-      };
-    };
-  };
-  persist_local_segment_projects__project_id__documents__document_id__parts__part_id__local_inference_segment_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        project_id: string;
-        document_id: string;
-        part_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["LocalSegmentPersistRequest"];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["LocalSegmentPersistResponse"];
-        };
-      };
-      /** @description Not authenticated */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
-      };
-      /** @description Not authorized */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
-      };
-      /** @description Resource not found */
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
-      };
-      /** @description Conflict with current state */
-      409: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
-      };
-      /** @description Validation error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
-      };
-      /** @description Rate limit exceeded */
-      429: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
-      };
-      /** @description Internal server error */
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
-      };
-    };
-  };
-  persist_local_transcribe_projects__project_id__documents__document_id__parts__part_id__local_inference_transcribe_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        project_id: string;
-        document_id: string;
-        part_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["LocalTranscribePersistRequest"];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["LocalTranscribePersistResponse"];
         };
       };
       /** @description Not authenticated */
