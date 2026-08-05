@@ -17,6 +17,7 @@ from sqlalchemy import Select, TextClause
 from sqlalchemy.dialects import postgresql
 
 from backend.core.exceptions import ConflictError
+from backend.core.settings.device import get_device_settings
 from backend.core.settings.job import JobSettings, get_job_settings
 from backend.jobs.infrastructure import job_repository
 from backend.jobs.infrastructure import stale_sweep as stale_sweep_module
@@ -758,16 +759,25 @@ def test_process_one_job_runs_every_stale_sweep(monkeypatch: pytest.MonkeyPatch)
 
     monkeypatch.setattr(worker_module, "reclaim_stale_running_jobs", _sweep("reclaim", 1))
     monkeypatch.setattr(worker_module, "fail_stale_waiting_jobs", _sweep("waiting", 2))
-    monkeypatch.setattr(worker_module, "clear_stale_callback_claims", _sweep("claims", 3))
+    # The device-lease sweep is the third of the four, and it has to be patched like
+    # the rest. Left real, process_one_job opens a live Postgres connection from a
+    # unit test - so this passed only when an integration test had already provisioned
+    # a database earlier in the session, and failed whenever this directory ran alone
+    # or CI ran the unit suite without one.
+    monkeypatch.setattr(worker_module, "release_expired_device_leases", _sweep("lease", 3))
+    monkeypatch.setattr(worker_module, "clear_stale_callback_claims", _sweep("claims", 4))
     monkeypatch.setattr(worker_module, "claim_next_pending_job", lambda **_kwargs: None)
 
     assert worker_module.process_one_job() is False
 
     settings = get_job_settings()
     # Waiting must be swept before claims are released: releasing rewrites the row.
-    assert [name for name, _ in calls] == ["reclaim", "waiting", "claims"]
+    # The lease sweep sits between them because it re-pends rather than fails, and it
+    # touches the same rows the claim release would otherwise stamp first.
+    assert [name for name, _ in calls] == ["reclaim", "waiting", "lease", "claims"]
     assert calls[1][1] == {"waiting_timeout_seconds": settings.job_worker_waiting_timeout_seconds}
-    assert calls[2][1] == {
+    assert calls[2][1] == {"lease_seconds": get_device_settings().device_lease_seconds}
+    assert calls[3][1] == {
         "claim_timeout_seconds": settings.job_worker_callback_claim_timeout_seconds
     }
 
