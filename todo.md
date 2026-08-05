@@ -123,9 +123,12 @@ reduction stage to `_ExportGroupNorm`.
 - The parity suite bypasses the resolver entirely.
 - The graph-shape guard inspects the committed blob rather than a freshly exported one.
 
-### 10. Pin the helper download URLs
+### 10. ~~Pin the helper download URLs~~ - dissolved by issue 061
 
-Currently unversioned. Pin to a specific release and verify against `SHA256SUMS`.
+There are no release assets and no `SHA256SUMS` manifest to verify against: the
+per-OS installers and their signing pipelines are deleted and the distribution
+is PyPI. The frontend constants that still build `releases/latest/download/…`
+URLs go with the loopback path in #60.
 
 ### 11. conftest environment pollution
 
@@ -163,9 +166,11 @@ Backend is complete and tested; the feature flag is off. Frontend is the remaini
 
 Stale after the device-pairing routers and the job-lifecycle schema changes.
 
-### 16. Docs: stale `/inference/v1/catalog` references
+### 16. ~~Docs: stale `/inference/v1/catalog` references~~ - done in issue 061
 
-That route was removed and folded into `/inference/v1/info`.
+Corrected to `/inference/v1/info` in the root README, the hosting guide, and the
+model checklist. `tests/inference/unit/test_helper_app.py` asserts the old route
+returns 404.
 
 ---
 
