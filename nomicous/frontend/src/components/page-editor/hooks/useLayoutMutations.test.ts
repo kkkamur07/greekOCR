@@ -2,6 +2,8 @@ import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useLocalInferenceRuns } from "../../../inference";
+import { ApiError } from "../../../api/errors";
+import { platformNoCapacityMessage } from "../../../inference/platformMessages";
 import { useLayoutMutations } from "./useLayoutMutations";
 
 const segmentPart = vi.fn();
@@ -40,11 +42,9 @@ type TrackLocalTask = <T>(
   run: (signal: AbortSignal) => Promise<T>,
 ) => Promise<T>;
 
-function setup(options?: {
-  trackLocalTask?: TrackLocalTask;
-  cloudInferenceEnabled?: boolean;
-}) {
+function setup(options?: { trackLocalTask?: TrackLocalTask }) {
   const setPairingError = vi.fn();
+  const setSubmissionRefusal = vi.fn();
   const trackJobAndWait = vi.fn().mockResolvedValue({ status: "done" });
 
   const defaultTrackLocalTask: TrackLocalTask = (_meta, run) =>
@@ -74,7 +74,7 @@ function setup(options?: {
       onDrawComplete: vi.fn(),
       partImageUrl: "http://localhost:8000/media/parts/part-1",
       shouldUseLocalPath: () => true,
-      cloudInferenceEnabled: options?.cloudInferenceEnabled ?? true,
+      setSubmissionRefusal,
       segmentRegistryModelId: "blla-segment",
       localInference,
       trackJobAndWait,
@@ -83,7 +83,7 @@ function setup(options?: {
     return { ...mutations, abortRunToCloud };
   });
 
-  return { view, setPairingError, trackJobAndWait };
+  return { view, setPairingError, setSubmissionRefusal, trackJobAndWait };
 }
 
 /** A local run that never finishes on its own - only an abort ends it. */
@@ -243,17 +243,22 @@ describe("useLayoutMutations auto segment fallback", () => {
     expect(setPairingError).not.toHaveBeenCalledWith(expect.any(String));
   });
 
-  it("reports an actionable error instead of using the cloud under local-only routing", async () => {
+  it("explains a refused submission instead of reporting a generic failure", async () => {
     runLocalInference.mockRejectedValueOnce(new Error("helper crashed"));
-    const { view, setPairingError } = setup({ cloudInferenceEnabled: false });
+    segmentPart.mockRejectedValueOnce(
+      new ApiError(platformNoCapacityMessage(), 409),
+    );
+    const { view, setPairingError, setSubmissionRefusal } = setup();
 
     await act(async () => {
       await view.result.current.runAutoSegment();
     });
 
-    expect(segmentPart).not.toHaveBeenCalled();
-    expect(setPairingError).toHaveBeenCalledWith(
-      expect.stringContaining("Local only"),
+    expect(setSubmissionRefusal).toHaveBeenCalledWith(
+      platformNoCapacityMessage(),
+    );
+    expect(setPairingError).not.toHaveBeenCalledWith(
+      platformNoCapacityMessage(),
     );
   });
 });

@@ -177,22 +177,20 @@ describe("helper model eligibility", () => {
 });
 
 describe("shouldRunOnLocalHelper", () => {
-  it("uses the helper under automatic and local-only routing", () => {
-    for (const routing of ["auto", "local-only"] as const) {
-      expect(
-        shouldRunOnLocalHelper(models, "blla-segment", {
-          helperAvailable: true,
-          routing,
-        }),
-      ).toBe(true);
-    }
-  });
-
-  it("never contacts the helper under cloud-only routing", () => {
+  it("uses the helper when the account asked for its own computer", () => {
     expect(
       shouldRunOnLocalHelper(models, "blla-segment", {
         helperAvailable: true,
-        routing: "cloud-only",
+        preferLocalInference: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("never contacts the helper when the account has not asked for it", () => {
+    expect(
+      shouldRunOnLocalHelper(models, "blla-segment", {
+        helperAvailable: true,
+        preferLocalInference: false,
       }),
     ).toBe(false);
   });
@@ -201,19 +199,19 @@ describe("shouldRunOnLocalHelper", () => {
     expect(
       shouldRunOnLocalHelper(models, "blla-segment", {
         helperAvailable: false,
-        routing: "auto",
+        preferLocalInference: true,
       }),
     ).toBe(false);
     expect(
       shouldRunOnLocalHelper(models, "future-cloud-model", {
         helperAvailable: true,
-        routing: "auto",
+        preferLocalInference: true,
       }),
     ).toBe(false);
     expect(
       shouldRunOnLocalHelper(models, "model-the-helper-never-listed", {
         helperAvailable: true,
-        routing: "local-only",
+        preferLocalInference: true,
       }),
     ).toBe(false);
   });

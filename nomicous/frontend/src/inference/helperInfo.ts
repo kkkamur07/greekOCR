@@ -4,7 +4,6 @@ import {
   HELPER_SERVICE_NAME,
 } from "./constants";
 import { fetchHelper } from "./helperClient";
-import type { InferenceRouting } from "./preference";
 import type { HostEligibility, InferenceTask } from "./types";
 
 export type HelperModelInfo = {
@@ -128,17 +127,17 @@ export function modelCacheState(
 /**
  * Decide whether a run should hit the local helper.
  *
- * Local-only catalog entries (`host_eligibility: "local"`, e.g. blla-segment)
- * always use the helper when it is up - a "cloud only" routing choice must not
- * enqueue a cloud job that can never claim them, so `cloud-only` instead means
- * "never call the helper at all".
+ * Two inputs only: the account-level **host preference**, and whether this
+ * machine can actually serve the model. There is no third mode - a researcher
+ * who has not asked for their own computer simply goes to the cloud, and one
+ * who has goes local whenever the model and the machine allow it.
  */
 export function shouldRunOnLocalHelper(
   models: HelperModelInfo[],
   registryModelId: string,
-  options: { helperAvailable: boolean; routing: InferenceRouting },
+  options: { helperAvailable: boolean; preferLocalInference: boolean },
 ): boolean {
-  if (options.routing === "cloud-only") return false;
+  if (!options.preferLocalInference) return false;
   if (!options.helperAvailable) return false;
   const entry = findModel(models, registryModelId);
   if (!entry) return false;

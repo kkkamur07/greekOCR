@@ -2,6 +2,12 @@ import { useEffect } from "react";
 import { toast } from "../ui/toast";
 
 type PageEditorStatusAlertsProps = {
+  /**
+   * "No inference host had capacity", as the platform explained it when it
+   * refused the submission. Deliberately not routed through a toast: it names
+   * something the researcher can fix, so it stays on screen until the next run.
+   */
+  submissionRefusal: string | null;
   saveMessage: string | null;
   transcriptionSaveMessage: string | null;
   ocrMessage: string | null;
@@ -30,6 +36,7 @@ function StatusItem({
 
 /** Success/completion feedback uses auto-dismiss toasts; only errors stay sticky. */
 export function PageEditorStatusAlerts({
+  submissionRefusal,
   saveMessage,
   transcriptionSaveMessage,
   ocrMessage,
@@ -64,11 +71,19 @@ export function PageEditorStatusAlerts({
     if (lineError) toast.error(`Segment API unavailable: ${lineError}`);
   }, [lineError]);
 
-  const showSticky = mutationError || pairingError || layoutError || lineError;
+  const showSticky =
+    submissionRefusal ||
+    mutationError ||
+    pairingError ||
+    layoutError ||
+    lineError;
   if (!showSticky) return null;
 
   return (
     <div className="pe-status-alerts">
+      {submissionRefusal && (
+        <StatusItem message={submissionRefusal} variant="warning" />
+      )}
       {mutationError && <StatusItem message={mutationError} variant="error" />}
       {pairingError && <StatusItem message={pairingError} variant="warning" />}
       {layoutError && (
@@ -91,6 +106,7 @@ export function hasPageEditorStatusAlerts(
   props: PageEditorStatusAlertsProps,
 ): boolean {
   return Boolean(
+    props.submissionRefusal ||
     props.mutationError ||
     props.pairingError ||
     props.layoutError ||

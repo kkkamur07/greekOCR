@@ -8,14 +8,12 @@ import {
   INFERENCE_HELPER_RELEASES_URL,
   INFERENCE_HELPER_WINDOWS_ZIP_URL,
 } from "../../inference/constants";
-import type { InferenceRouting } from "../../inference/preference";
 import { PageEditorInferenceBanner } from "./PageEditorInferenceBanner";
 
 type BannerProps = {
   helperAvailable: boolean;
   probing: boolean;
-  routing: InferenceRouting;
-  onRoutingChange: (routing: InferenceRouting) => void;
+  preferLocalInference: boolean;
   onRetry: () => void;
   onUseCloudInstead: () => void;
 };
@@ -24,8 +22,7 @@ function renderBanner(overrides: Partial<BannerProps> = {}) {
   const props: BannerProps = {
     helperAvailable: false,
     probing: false,
-    routing: "auto",
-    onRoutingChange: vi.fn(),
+    preferLocalInference: true,
     onRetry: vi.fn(),
     onUseCloudInstead: vi.fn(),
     ...overrides,
@@ -38,20 +35,15 @@ describe("PageEditorInferenceBanner", () => {
     vi.unstubAllGlobals();
   });
 
-  it("always offers the three routing choices in plain language", () => {
+  it("reports capacity and offers no host picker of its own", () => {
     renderBanner();
 
-    expect(screen.getByRole("radio", { name: "Automatic" })).toBeChecked();
-    expect(screen.getByRole("radio", { name: "Local only" })).toBeTruthy();
-    expect(screen.getByRole("radio", { name: "Cloud only" })).toBeTruthy();
-  });
-
-  it("reports the chosen routing", () => {
-    const { props } = renderBanner();
-
-    fireEvent.click(screen.getByRole("radio", { name: "Local only" }));
-
-    expect(props.onRoutingChange).toHaveBeenCalledWith("local-only");
+    // The one control that changes the account setting lives in editor
+    // settings. A second copy here would read as a per-run choice.
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.queryByRole("radio")).toBeNull();
+    expect(screen.queryByText(/local only/i)).toBeNull();
+    expect(screen.queryByText(/nothing is sent to the cloud/i)).toBeNull();
   });
 
   it("offers a retry instead of polling in the background", () => {
@@ -62,8 +54,8 @@ describe("PageEditorInferenceBanner", () => {
     expect(props.onRetry).toHaveBeenCalledTimes(1);
   });
 
-  it("hides helper controls once cloud-only is selected", () => {
-    renderBanner({ routing: "cloud-only" });
+  it("hides helper controls once the account prefers the cloud", () => {
+    renderBanner({ preferLocalInference: false });
 
     expect(screen.queryByRole("button", { name: /retry/i })).toBeNull();
     expect(
@@ -71,10 +63,11 @@ describe("PageEditorInferenceBanner", () => {
     ).toBeNull();
   });
 
-  it("warns that runs will fail under local-only without a helper", () => {
-    renderBanner({ routing: "local-only" });
+  it("says an absent agent sends jobs to the cloud rather than failing them", () => {
+    renderBanner({ preferLocalInference: true });
 
-    expect(screen.getByText(/runs will fail until you start it/i)).toBeTruthy();
+    expect(screen.getByText(/so jobs go to the cloud/i)).toBeTruthy();
+    expect(screen.queryByText(/runs will fail/i)).toBeNull();
   });
 
   it("shows the compact banner (not a blocking modal) when helper is unavailable", () => {
@@ -166,8 +159,7 @@ describe("PageEditorInferenceBanner", () => {
       <PageEditorInferenceBanner
         helperAvailable={true}
         probing={false}
-        routing="auto"
-        onRoutingChange={vi.fn()}
+        preferLocalInference={true}
         onRetry={vi.fn()}
         onUseCloudInstead={vi.fn()}
       />,
@@ -175,6 +167,8 @@ describe("PageEditorInferenceBanner", () => {
     expect(
       screen.queryByRole("button", { name: /install helper/i }),
     ).toBeNull();
-    expect(screen.getByText(/helper found on this computer/i)).toBeTruthy();
+    expect(
+      screen.getByText(/the agent is running on this computer/i),
+    ).toBeTruthy();
   });
 });

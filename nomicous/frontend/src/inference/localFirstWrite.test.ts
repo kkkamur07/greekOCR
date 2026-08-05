@@ -20,7 +20,7 @@ function liveRun() {
   };
 }
 
-const passThroughTracker = <R,>(run: (signal: AbortSignal) => Promise<R>) =>
+const passThroughTracker = <R>(run: (signal: AbortSignal) => Promise<R>) =>
   run(new AbortController().signal);
 
 describe("runLocalFirstWrite", () => {
@@ -28,7 +28,6 @@ describe("runLocalFirstWrite", () => {
     const runInCloud = vi.fn();
 
     const outcome = await runLocalFirstWrite({
-      cloudEnabled: true,
       trackLocalTask: passThroughTracker,
       runLocally: async () => "stored locally",
       runInCloud,
@@ -40,7 +39,6 @@ describe("runLocalFirstWrite", () => {
 
   it("falls back to the cloud when the local write fails for a non-abort reason", async () => {
     const outcome = await runLocalFirstWrite({
-      cloudEnabled: true,
       trackLocalTask: passThroughTracker,
       runLocally: async () => {
         throw new Error("WEIGHTS_UNAVAILABLE");
@@ -58,7 +56,6 @@ describe("runLocalFirstWrite", () => {
 
     await expect(
       runLocalFirstWrite({
-        cloudEnabled: true,
         trackLocalTask: async (run) => {
           await run(cancelled.signal).catch(() => undefined);
           throw new DOMException("Local job cancelled", "AbortError");
@@ -74,7 +71,6 @@ describe("runLocalFirstWrite", () => {
     const runInCloud = vi.fn();
 
     const failure = await runLocalFirstWrite({
-      cloudEnabled: true,
       trackLocalTask: passThroughTracker,
       runLocally: async ({ reportRun }) => {
         reportRun(abortedRun());
@@ -87,21 +83,21 @@ describe("runLocalFirstWrite", () => {
     expect(runInCloud).not.toHaveBeenCalled();
   });
 
-  it("reports an actionable error instead of using the cloud under local-only routing", async () => {
-    const runInCloud = vi.fn();
+  it("always falls through to the cloud, because no mode forbids it any more", async () => {
+    const runInCloud = vi.fn(async () => "written in the cloud");
 
-    await expect(
-      runLocalFirstWrite({
-        cloudEnabled: false,
-        trackLocalTask: passThroughTracker,
-        runLocally: async ({ reportRun }) => {
-          reportRun(liveRun());
-          throw new Error("helper crashed");
-        },
-        runInCloud,
-      }),
-    ).rejects.toThrow(/Local only/);
-    expect(runInCloud).not.toHaveBeenCalled();
+    const { source, result } = await runLocalFirstWrite({
+      trackLocalTask: passThroughTracker,
+      runLocally: async ({ reportRun }) => {
+        reportRun(liveRun());
+        throw new Error("helper crashed");
+      },
+      runInCloud,
+    });
+
+    expect(source).toBe("cloud");
+    expect(result).toBe("written in the cloud");
+    expect(runInCloud).toHaveBeenCalledTimes(1);
   });
 
   it("attempts each path at most once, so a failing cloud write is not retried", async () => {
@@ -114,7 +110,6 @@ describe("runLocalFirstWrite", () => {
 
     await expect(
       runLocalFirstWrite({
-        cloudEnabled: true,
         trackLocalTask: passThroughTracker,
         runLocally,
         runInCloud,

@@ -1,8 +1,4 @@
-import {
-  localOnlyRunFailedMessage,
-  RunSupersededError,
-  type LocalRun,
-} from "./localInferenceCallbacks";
+import { RunSupersededError, type LocalRun } from "./localInferenceCallbacks";
 
 export type LocalFirstWriteResult<T> = {
   /** Which path produced `result`, for the sentence the page reports. */
@@ -11,8 +7,6 @@ export type LocalFirstWriteResult<T> = {
 };
 
 export type LocalFirstWriteOptions<T> = {
-  /** False under "Local only" routing: no cloud job may ever be enqueued. */
-  cloudEnabled: boolean;
   /** The jobs-panel wrapper. Only an abort on the signal it owns is a user cancellation. */
   trackLocalTask: <R>(run: (signal: AbortSignal) => Promise<R>) => Promise<R>;
   /**
@@ -48,12 +42,13 @@ export type LocalFirstWriteOptions<T> = {
  * - the original `AbortError` when the *user* cancelled, so nothing continues
  *   silently in the cloud;
  * - `RunSupersededError` when a newer run for the same page took over, so this
- *   one is dropped outright rather than racing its successor;
- * - a "Local only" message when the local run failed and routing forbids the
- *   cloud retry that "Automatic" would have made.
+ *   one is dropped outright rather than racing its successor.
+ *
+ * Every other local failure falls through to the cloud. There is no mode in
+ * which it may not: `local_only` was retired by ADR 0002, and with it the only
+ * way a write could end with neither host having done the work.
  */
 export async function runLocalFirstWrite<T>({
-  cloudEnabled,
   trackLocalTask,
   runLocally,
   runInCloud,
@@ -83,9 +78,6 @@ export async function runLocalFirstWrite<T>({
     // A newer run for this page owns the outcome now. Drop this one outright -
     // no banner, and above all no cloud job to race with it.
     if (supersededSignal?.aborted) throw new RunSupersededError();
-    if (!cloudEnabled) {
-      throw new Error(localOnlyRunFailedMessage(error));
-    }
     // Any other local failure (weights missing, helper crash, 503, …) falls
     // through to the cloud.
   }

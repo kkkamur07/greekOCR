@@ -24,7 +24,7 @@ import {
   type LocalInferenceCallbacks,
   isAbortError,
   isRunSupersededError,
-  localOnlyUnavailableMessage,
+  submissionRefusalExplanation,
 } from "../../../inference";
 import { cleanPolygonPoints, offsetGeometry } from "../canvasGeometry";
 import {
@@ -75,8 +75,12 @@ type LayoutMutationsInput = {
   onDrawComplete: () => void;
   partImageUrl: string | null;
   shouldUseLocalPath: (registryModelId: string) => boolean;
-  /** False under "Local only" routing: no cloud job may ever be enqueued. */
-  cloudInferenceEnabled: boolean;
+  /**
+   * Where a refused submission is explained. It is a standing line rather than
+   * the error toast, because "no inference host had capacity" is something the
+   * researcher has to act on, and a toast is gone before they can.
+   */
+  setSubmissionRefusal: Dispatch<SetStateAction<string | null>>;
   segmentRegistryModelId?: string | null;
   localInference: LocalInferenceCallbacks;
   trackJobAndWait: (
@@ -108,7 +112,7 @@ export function useLayoutMutations({
   onDrawComplete,
   partImageUrl,
   shouldUseLocalPath,
-  cloudInferenceEnabled,
+  setSubmissionRefusal,
   segmentRegistryModelId,
   localInference,
   trackJobAndWait,
@@ -529,6 +533,7 @@ export function useLayoutMutations({
     setSegmentRunCount((count) => count + 1);
     setSegmentMessage(null);
     setPairingError(null);
+    setSubmissionRefusal(null);
 
     const jobMeta = {
       label: "Kraken line segmentation",
@@ -552,7 +557,6 @@ export function useLayoutMutations({
       let source: "local" | "cloud" = "cloud";
       if (shouldUseLocalPath(resolvedSegmentModelId)) {
         ({ source } = await runLocalFirstWrite<void>({
-          cloudEnabled: cloudInferenceEnabled,
           trackLocalTask: (run) => trackLocalTask(jobMeta, run),
           runInCloud: segmentInCloud,
           runLocally: async ({ signal, reportRun }) => {
@@ -599,9 +603,6 @@ export function useLayoutMutations({
           },
         }));
       } else {
-        if (!cloudInferenceEnabled) {
-          throw new Error(localOnlyUnavailableMessage());
-        }
         await segmentInCloud();
       }
 
@@ -616,6 +617,11 @@ export function useLayoutMutations({
       // The jobs panel already reports a user cancellation, and a superseded run
       // is replaced by its successor; neither deserves an error banner.
       if (isAbortError(err) || isRunSupersededError(err)) return;
+      const refusal = submissionRefusalExplanation(err);
+      if (refusal) {
+        setSubmissionRefusal(refusal);
+        return;
+      }
       setPairingError(
         err instanceof Error ? err.message : "Auto segment failed.",
       );

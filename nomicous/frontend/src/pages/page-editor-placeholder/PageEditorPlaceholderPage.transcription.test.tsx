@@ -287,7 +287,6 @@ describe("PageEditorPlaceholderPage transcription", () => {
   });
 
   it("re-runs OCR on the selected segment from the pairing strip", async () => {
-    localStorage.setItem("nomicous_inference_preference", "cloud");
     mockedApi.getDocument.mockResolvedValue(DOCUMENT);
     mockedApi.listInferenceModels.mockResolvedValue([
       {
