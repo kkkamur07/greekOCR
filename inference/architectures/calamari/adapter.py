@@ -153,9 +153,7 @@ def run_calamari_transcribe_many(
         label="Calamari checkpoint",
         allowed_suffixes=CALAMARI_ARTIFACT_SUFFIXES,
         unusable_error=CalamariUnavailableError,
-        unusable_message=(
-            f"Calamari runtime requires a native .pt checkpoint: {checkpoint_path}"
-        ),
+        unusable_message=(f"Calamari runtime requires a native .pt checkpoint: {checkpoint_path}"),
         artifact_sha256=artifact_sha256,
     )
     if not line_images:

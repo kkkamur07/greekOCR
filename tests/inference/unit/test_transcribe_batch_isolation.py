@@ -31,8 +31,7 @@ from inference.contracts.transcribe import (
 from inference.jobs.runner import run_model
 
 CALAMARI_CHECKPOINT = (
-    Path(__file__).resolve().parents[3]
-    / "src/hf/local/syriac/calamari/v1/stable/best.pt"
+    Path(__file__).resolve().parents[3] / "src/hf/local/syriac/calamari/v1/stable/best.pt"
 )
 
 

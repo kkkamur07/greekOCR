@@ -35,9 +35,7 @@ from inference.hub.artifacts import ArtifactIntegrityError
 from tests.fixtures.paths import REPO_ROOT, SEGMENT_PAGE, TRANSCRIBE_LINE
 
 CALAMARI_CHECKPOINT = REPO_ROOT / "src/hf/local/syriac/calamari/v1/stable/best.pt"
-BLLA_CHECKPOINT = (
-    REPO_ROOT / "src/hf/staging/models/segmentation/blla/v1/stable/blla.safetensors"
-)
+BLLA_CHECKPOINT = REPO_ROOT / "src/hf/staging/models/segmentation/blla/v1/stable/blla.safetensors"
 
 
 def _digest(path: Path) -> str:
@@ -250,9 +248,9 @@ def test_a_verified_but_pickled_checkpoint_is_still_refused(tmp_path: Path) -> N
 
 def test_torch_load_is_called_with_weights_only() -> None:
     """Pin the flag itself: it is one keyword between safe and arbitrary code."""
-    source = (
-        REPO_ROOT / "inference/architectures/calamari/checkpoint.py"
-    ).read_text(encoding="utf-8")
+    source = (REPO_ROOT / "inference/architectures/calamari/checkpoint.py").read_text(
+        encoding="utf-8"
+    )
 
     assert "weights_only=True" in source
     assert source.count("torch.load(") == 1
@@ -287,9 +285,7 @@ def test_the_registry_pins_the_digest_of_the_native_artifact() -> None:
     """The pinned digest must be the file the loader will actually open."""
     import yaml
 
-    registry = yaml.safe_load(
-        (REPO_ROOT / "inference/registry.yaml").read_text(encoding="utf-8")
-    )
+    registry = yaml.safe_load((REPO_ROOT / "inference/registry.yaml").read_text(encoding="utf-8"))
     calamari = registry["models"]["syriac-calamari-v1"]["versions"]["stable"]
 
     # The offline bundled weights are the same bytes as the published best.pt.
