@@ -44,6 +44,7 @@ from backend.document.api.documents import router as documents_router
 from backend.document.api.media import router as media_router
 from backend.document.api.public import router as public_router
 from backend.document.api.public_media import router as public_media_router
+from backend.document.api.signed_media import router as signed_media_router
 from backend.document.infrastructure.media_gc import media_gc_loop
 from backend.ml.api.device_pairing import router as device_pairing_router
 from backend.ml.api.device_self import router as device_self_router
@@ -345,6 +346,11 @@ def create_app() -> FastAPI:
     app.include_router(media_router)
     app.include_router(public_router)
     app.include_router(public_media_router)
+    # The signed page image link's landing site on the local storage backend. It
+    # carries no authentication dependency on purpose: the signature *is* the
+    # authorization (ADR 0002), and it refuses to answer at all unless
+    # STORAGE_BACKEND=local.
+    app.include_router(signed_media_router)
     app.include_router(ml_models_router)
     app.include_router(ml_registry_router)
     app.include_router(execution_preference_router)

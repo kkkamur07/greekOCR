@@ -1,5 +1,7 @@
 """Supabase Storage backend for document part page images."""
 
+from datetime import UTC, datetime
+from math import ceil
 from uuid import UUID
 
 from supabase import Client, create_client
@@ -42,6 +44,27 @@ class SupabaseMediaStore:
         filename_stem: str | None = None,
     ) -> str:
         return part_image_key(part_id, suffix=suffix, filename_stem=filename_stem)
+
+    def signed_object_url(self, image_key: str, *, expires_at: datetime) -> str:
+        """Storage's own signed link to this one object.
+
+        ``create_signed_url`` signs a single object path, so the link an agent
+        receives reaches that page image and nothing else - not the bucket, not
+        the ``parts/`` prefix, not the document's other pages. The bytes come
+        from Storage directly, which is the point of the whole decision: the
+        production API is serverless, and streaming manuscript scans through it
+        would cost money for nothing.
+        """
+        validate_image_key(image_key)
+        # Supabase takes a duration, not a deadline. Ceiling rather than floor so
+        # a link is never issued already dead; the minimum of one second is what
+        # a deliberately-expired deadline collapses to.
+        expires_in = max(1, ceil((expires_at - datetime.now(UTC)).total_seconds()))
+        signed = self._client.storage.from_(self._bucket).create_signed_url(image_key, expires_in)
+        url = signed.get("signedURL") or signed.get("signedUrl")
+        if not url:
+            raise RuntimeError(f"Supabase Storage returned no signed URL for {image_key}")
+        return url
 
     def write(self, image_key: str, data: bytes) -> None:
         validate_image_key(image_key)
