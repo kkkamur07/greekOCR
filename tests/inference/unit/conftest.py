@@ -9,13 +9,11 @@ from inference.api.app import create_app
 
 @pytest.fixture
 def inference_settings(monkeypatch: pytest.MonkeyPatch):
-    from inference.infrastructure.settings import InferenceSettings, get_inference_settings
+    from inference.settings import InferenceSettings, get_inference_settings
 
     settings = InferenceSettings()
     get_inference_settings.cache_clear()
-    monkeypatch.setattr(
-        "inference.infrastructure.settings.get_inference_settings", lambda: settings
-    )
+    monkeypatch.setattr("inference.settings.get_inference_settings", lambda: settings)
     return settings
 
 

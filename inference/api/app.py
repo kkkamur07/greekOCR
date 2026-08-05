@@ -6,9 +6,8 @@ from pydantic import BaseModel
 from inference.admission import CLIENT_INPUT_ERROR
 from inference.api.admission import RequestBodyLimitMiddleware, ServiceRateLimitMiddleware
 from inference.api.health import router as health_router
-from inference.api.jobs import router as jobs_router
 from inference.api.run import router as run_router
-from inference.infrastructure.settings import get_inference_settings
+from inference.settings import get_inference_settings
 
 router = APIRouter(tags=["root"])
 
@@ -46,6 +45,5 @@ def create_app() -> FastAPI:
 
     app.include_router(router)
     app.include_router(health_router)
-    app.include_router(jobs_router)
     app.include_router(run_router)
     return app

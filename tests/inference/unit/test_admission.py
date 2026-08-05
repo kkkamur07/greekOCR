@@ -12,7 +12,7 @@ from inference.admission import CLIENT_INPUT_ERROR, validate_image_bytes
 from inference.api.app import create_app
 from inference.contracts.common import InferenceTask
 from inference.contracts.jobs import JobSubmitRequest
-from inference.infrastructure.settings import InferenceSettings, get_inference_settings
+from inference.settings import InferenceSettings, get_inference_settings
 from PIL import Image
 from pydantic import ValidationError
 
@@ -54,10 +54,10 @@ def test_inference_service_routes_reject_missing_and_invalid_secrets(
     get_inference_settings.cache_clear()
     client = TestClient(create_app())
 
-    assert client.post("/inference/v1/jobs", json={}).status_code == 401
+    assert client.post("/inference/v1/run", json={}).status_code == 401
     assert (
         client.post(
-            "/inference/v1/jobs",
+            "/inference/v1/run",
             json={},
             headers={"X-Inference-Service-Secret": "wrong-secret"},
         ).status_code
@@ -75,13 +75,13 @@ def test_unauthenticated_requests_do_not_exhaust_service_rate_limit(
 
     assert (
         client.post(
-            "/inference/v1/jobs",
+            "/inference/v1/run",
             json={},
             headers={"X-Inference-Service-Secret": "admission-test-secret"},
         ).status_code
         == 422
     )
-    assert client.post("/inference/v1/jobs", json={}).status_code == 401
+    assert client.post("/inference/v1/run", json={}).status_code == 401
 
 
 def test_rejects_oversized_encoded_image_before_base64_decode(
@@ -222,14 +222,6 @@ def test_accepts_thousands_of_full_page_transcribe_lines() -> None:
     )
 
     assert len(request.params["lines"]) == 2_000
-
-
-def test_worker_concurrency_configuration_is_bounded() -> None:
-    assert InferenceSettings(INFERENCE_WORKER_CONCURRENCY=4).inference_worker_concurrency == 4
-    with pytest.raises(ValidationError, match="greater than or equal to 1"):
-        InferenceSettings(INFERENCE_WORKER_CONCURRENCY=0)
-    with pytest.raises(ValidationError, match="less than or equal to 4"):
-        InferenceSettings(INFERENCE_WORKER_CONCURRENCY=5)
 
 
 @pytest.mark.parametrize(

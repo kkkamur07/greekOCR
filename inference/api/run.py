@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends
 from inference.admission import validate_image_bytes
 from inference.api.dependencies import require_inference_service_secret
 from inference.contracts.run import InferenceRunRequest, InferenceRunResponse
-from inference.infrastructure.settings import get_inference_settings
+from inference.settings import get_inference_settings
 from inference.jobs.runner import run_model
 from inference.run_errors import http_exception_for_run_error
 

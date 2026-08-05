@@ -10,7 +10,7 @@ from inference.admission import validate_request_params
 from inference.contracts.common import ImageBytes, InferenceTask
 from inference.contracts.segment import SegmentRunResponse
 from inference.contracts.transcribe import TranscribeBatchRunResponse, TranscribeRunResponse
-from inference.infrastructure.settings import get_inference_settings
+from inference.settings import get_inference_settings
 
 
 class InferenceRunRequest(BaseModel):

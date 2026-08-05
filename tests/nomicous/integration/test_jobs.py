@@ -851,3 +851,34 @@ def test_execute_claimed_job_marks_unknown_handler_failed():
             "not supported" in (row.error or "").lower()
             or "no handler" in (row.error or "").lower()
         )
+
+
+# --- Transcribe preconditions ---
+# Tests transcribe is rejected without layout lines. Does not run inference.
+
+
+@pytest.mark.integration
+def test_transcribe_without_lines_fails(
+    client: TestClient,
+    owner_headers: dict[str, str],
+    owner_project: dict,
+):
+    base = documents_url(owner_project["id"])
+    create = client.post(base, headers=owner_headers, json={"name": "Empty layout codex"})
+    assert create.status_code == 201
+    document_id = create.json()["id"]
+    upload = client.post(
+        f"{base}/{document_id}/parts",
+        headers=owner_headers,
+        files={"file": ("page.png", MINIMAL_PNG, "image/png")},
+    )
+    assert upload.status_code == 201
+    part_id = upload.json()["id"]
+
+    response = client.post(
+        f"{base}/{document_id}/parts/{part_id}/transcribe",
+        headers=owner_headers,
+    )
+
+    assert response.status_code == 409
+    assert "without layout lines" in response.json()["error"]["message"]

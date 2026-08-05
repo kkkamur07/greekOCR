@@ -141,7 +141,7 @@ _Avoid_: org (when meaning the namespace generically)
 ### Current (interim)
 
 - Sync inference: `POST /inference/v1/run` via `inference/api/run.py` and `inference/jobs/runner.py`
-- Async jobs: `POST /inference/v1/jobs` plus `inference/jobs/worker.py` (Postgres queue, LISTEN/NOTIFY, callbacks)
+- Queued jobs: the platform owns the only queue (ADR 0003). `inference` holds no database, ORM, or claim loop of its own.
 - Architectures implemented: **Calamari** (`inference/architectures/calamari/`) and native **BLLA segment** (`inference/architectures/blla/`)
 - **Calamari runtime**: local PyTorch graph + local preprocessing; no TensorFlow or vendored `calamari_ocr` import at inference time.
 - Weight resolution: `file://`, `hf://`, and `package://` (`src/hf/` local/cache layout; see `inference/weights/__init__.py`)
