@@ -125,3 +125,52 @@ fall off the list during a merge.
 `feat/048-collapse-second-job-queue` is the only real merge are void. The rest of that
 document — particularly the `001_initial_schema.py` / `create_all()` migration invariant —
 still stands and is unaffected by anything here.
+
+---
+
+## 7. Merge procedure (owner's instruction, 2026-08-04)
+
+Sequence, to run **after** all implementation lands: compact context → merge every
+worktree → push to `main`.
+
+### Resolution rule: priority by file domain
+
+Each worktree owns a domain, and on conflict the owning worktree's version wins:
+
+| Domain | Owner |
+|---|---|
+| `inference/**`, `archive/onnx-runtime/**`, `src/model/inference_export/**`, inference tests | inference-redesign lanes (048, 049, 051, …) |
+| dead-code removal, generated types, type-checker config | `feat/deep-cleanup` |
+| `nomicous/frontend/**` libraries (TanStack Query, antd) | `feat/frontend-libraries` |
+
+### The rule has one dangerous edge — read §1
+
+`feat/deep-cleanup` and `feat/frontend-libraries` both modify files under
+`inference/architectures/**` that issue 049 **deletes**. Domain priority resolves this
+correctly *only if applied as stated* — inference files belong to the inference lane, so
+the deletion wins.
+
+The failure mode is a generic `-X ours` / `-X theirs` applied across the whole merge
+instead of per-domain. Git resolves modify/delete by **keeping the modification**, which
+silently restores the ONNX runtime. Nothing fails; the tree just builds in the architecture
+we decided against.
+
+### Gates that must pass before pushing to `main`
+
+Do not push on a green merge alone — these are the checks a merge can pass while being wrong:
+
+1. `grep -rn "onnxruntime" inference/` returns nothing outside `archive/`.
+2. No file matches `inference/architectures/**/onnx.py` in the live tree.
+3. `archive/onnx-runtime/` exists with its README.
+4. `inference/infrastructure/` does not exist; `psycopg2` and `sqlalchemy` are absent from
+   the `inference` dependency group.
+5. No test file constructs its own FastAPI app (ADR 0001 — see §4).
+6. Full suite green against **live** Postgres, not a substitute.
+7. `git log origin/main..HEAD` contains only intended work — a collaborator is pushing to
+   `main` independently, so re-fetch and re-check immediately before pushing.
+
+### Note on the push
+
+`main` is a **public** repository with an active second committer. Fetch and merge
+`origin/main` immediately before pushing rather than relying on an earlier merge; this
+branch has already gone stale against it once during this session.
