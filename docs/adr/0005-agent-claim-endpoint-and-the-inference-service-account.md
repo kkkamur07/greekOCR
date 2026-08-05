@@ -50,6 +50,13 @@ the *running* one, which fails a stale job instead of re-queueing it. Issue 054
 owns the lease and is where that is put right; it is recorded here because the
 choice is what put the page there.
 
+> **Resolved by issue 054.** ``waiting`` is now two populations, split on the
+> ``agent:`` prefix ``claimed_by`` already carried: rows the platform dispatched
+> keep the 240-second waiting timeout and still *fail*, and rows an agent holds
+> are governed only by the 600-second **lease** and *re-pend*, claim cleared, for
+> any agent to take. The split needed no new column, no new state, and no new
+> process - the same opportunistic sweep runs it.
+
 ### 3. The endpoint takes no request-scoped database session
 
 `Depends(get_db)` pins a pooled connection for the whole request. At
