@@ -90,10 +90,6 @@ class AdmissionSettings(BaseSettings):
         ge=1024,
         alias="INFERENCE_MAX_JOB_PAYLOAD_BYTES",
     )
-    inference_max_pending_jobs: int = Field(default=100, ge=1, alias="INFERENCE_MAX_PENDING_JOBS")
-    inference_worker_concurrency: int = Field(
-        default=1, ge=1, le=4, alias="INFERENCE_WORKER_CONCURRENCY"
-    )
     inference_rate_limit_per_minute: int = Field(
         default=60, ge=1, alias="INFERENCE_RATE_LIMIT_PER_MINUTE"
     )

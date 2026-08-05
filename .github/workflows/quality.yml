@@ -77,10 +77,8 @@ jobs:
       DATABASE_URL: postgresql+asyncpg://postgres:${{ github.run_id }}-${{ github.run_attempt }}@localhost:5432/kalamos
       SYNC_DATABASE_URL: postgresql://postgres:${{ github.run_id }}-${{ github.run_attempt }}@localhost:5432/kalamos
       MIGRATOR_DATABASE_URL: postgresql://postgres:${{ github.run_id }}-${{ github.run_attempt }}@localhost:5432/kalamos
-      INFERENCE_DATABASE_URL: postgresql://postgres:${{ github.run_id }}-${{ github.run_attempt }}@localhost:5432/kalamos
       JWT_SECRET: test-secret-not-for-production-at-least-32-bytes
       INFERENCE_WEBHOOK_SECRET: test-inference-webhook-secret
-      INFERENCE_SERVICE_SECRET: test-inference-webhook-secret
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
@@ -118,10 +116,8 @@ jobs:
       DATABASE_URL: postgresql+asyncpg://postgres:${{ github.run_id }}-${{ github.run_attempt }}@localhost:5432/kalamos
       SYNC_DATABASE_URL: postgresql://postgres:${{ github.run_id }}-${{ github.run_attempt }}@localhost:5432/kalamos
       MIGRATOR_DATABASE_URL: postgresql://postgres:${{ github.run_id }}-${{ github.run_attempt }}@localhost:5432/kalamos
-      INFERENCE_DATABASE_URL: postgresql://postgres:${{ github.run_id }}-${{ github.run_attempt }}@localhost:5432/kalamos
       JWT_SECRET: test-secret-not-for-production-at-least-32-bytes
       INFERENCE_WEBHOOK_SECRET: test-inference-webhook-secret
-      INFERENCE_SERVICE_SECRET: test-inference-webhook-secret
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
@@ -138,7 +134,6 @@ jobs:
     env:
       JWT_SECRET: test-secret-not-for-production-at-least-32-bytes
       INFERENCE_WEBHOOK_SECRET: test-inference-webhook-secret
-      INFERENCE_SERVICE_SECRET: test-inference-webhook-secret
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2

@@ -7,7 +7,7 @@ import secrets
 from fastapi import Header, HTTPException, status
 from inference.contracts.webhooks import INFERENCE_SERVICE_SECRET_HEADER
 
-from inference.infrastructure.settings import get_inference_settings
+from inference.settings import get_inference_settings
 
 __all__ = ["INFERENCE_SERVICE_SECRET_HEADER", "require_inference_service_secret"]
 

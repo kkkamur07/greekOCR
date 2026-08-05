@@ -23,7 +23,7 @@ from inference.architectures.blla.blla_preprocessing import (
 )
 from inference.helper.app import create_helper_app
 from inference.helper.settings import get_helper_settings
-from inference.infrastructure.settings import get_inference_settings
+from inference.settings import get_inference_settings
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SEGMENT_PAGE = REPO_ROOT / "tests" / "fixtures" / "manuscripts" / "greek" / "segment_page.jpeg"

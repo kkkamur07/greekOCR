@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 from inference.api.app import create_app
 from inference.helper.app import create_helper_app
 from inference.helper.settings import get_helper_settings
-from inference.infrastructure.settings import get_inference_settings
+from inference.settings import get_inference_settings
 from PIL import Image
 from src.hf.resolve.artifacts import ArtifactIntegrityError
 

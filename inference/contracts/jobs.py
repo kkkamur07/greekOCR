@@ -11,7 +11,7 @@ from inference.admission import validate_job_payload
 from inference.contracts.common import ImageBytes, InferenceJobStatus, InferenceTask
 from inference.contracts.segment import SegmentRunResponse
 from inference.contracts.transcribe import TranscribeBatchRunResponse
-from inference.infrastructure.settings import get_inference_settings
+from inference.settings import get_inference_settings
 
 SUPPORTED_JOB_TASKS = frozenset({InferenceTask.segment, InferenceTask.transcribe})
 

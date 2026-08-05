@@ -3,7 +3,7 @@
 #   docker buildx bake
 #   docker compose up
 #
-# Compose reuses the tagged images; bake builds all three targets at once.
+# Compose reuses the tagged images; bake builds both targets at once.
 
 variable "APP_VERSION" {
   default = "0.3.3"
@@ -14,7 +14,7 @@ variable "NEXT_PUBLIC_API_BASE_URL" {
 }
 
 group "default" {
-  targets = ["api", "inference", "frontend-dev"]
+  targets = ["api", "frontend-dev"]
 }
 
 target "api" {
@@ -27,15 +27,6 @@ target "api" {
   }
   cache-from = ["type=local,src=.docker-cache/api"]
   cache-to   = ["type=local,dest=.docker-cache/api,mode=max"]
-}
-
-target "inference" {
-  context    = "."
-  dockerfile = "inference/Dockerfile"
-  target     = "runtime"
-  tags       = ["nomicous-inference:latest"]
-  cache-from = ["type=local,src=.docker-cache/inference"]
-  cache-to   = ["type=local,dest=.docker-cache/inference,mode=max"]
 }
 
 target "frontend-dev" {

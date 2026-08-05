@@ -33,7 +33,7 @@ jobs:
       - run: test -f deploy/platform/nomicous/backend/core/app.py
       - run: test -f deploy/platform/inference/contracts/__init__.py
       - run: test -f deploy/platform/inference/admission.py
-      - run: test -f deploy/platform/inference/infrastructure/settings.py
+      - run: test -f deploy/platform/inference/settings.py
       - name: Verify platform contract import surface
         run: |
           PYTHONPATH=deploy/platform uv run --locked --group platform python -c \
@@ -42,44 +42,17 @@ jobs:
       # Build and tag the frontend `runner` stage (the image that actually ships)
       # rather than only `builder`, so the scan steps below have a real artifact.
       - run: docker build --target runner --tag nomicous-frontend:ci -f nomicous/frontend/Dockerfile nomicous
-      - run: docker build --target runtime --tag nomicous-inference:ci -f inference/Dockerfile .
       - name: Verify runtime users and import surfaces
         run: |
           test "$(docker run --rm --entrypoint id nomicous-api:ci -u)" != "0"
-          test "$(docker run --rm --entrypoint id nomicous-inference:ci -u)" != "0"
           docker run --rm \
             -e JWT_SECRET=test-secret-not-for-production-at-least-32-bytes \
             -e ENVIRONMENT=development \
             --entrypoint python nomicous-api:ci \
             -c "from backend.core.main import app; assert app.title"
-          docker run --rm --entrypoint python nomicous-inference:ci -c "from inference.api.main import app; assert app.title"
-      # Importing the FastAPI app proves nothing about the model runtime: every
-      # onnxruntime import in inference/architectures is lazy and is swallowed
-      # into a *Unavailable error at request time. Load the native ONNX Runtime
-      # and both architecture modules so a container missing onnxruntime (the
-      # `uv sync --only-group inference` failure mode) fails CI instead of every
-      # production inference request.
-      - name: Verify ONNX Runtime is present and usable in the inference image
-        run: |
-          docker run --rm --entrypoint python nomicous-inference:ci -c '
-          import onnxruntime
-          import inference.architectures.calamari.onnx  # noqa: F401
-          import inference.architectures.blla.onnx  # noqa: F401
-          providers = onnxruntime.get_available_providers()
-          assert "CPUExecutionProvider" in providers, providers
-          print("onnxruntime", onnxruntime.__version__, providers)
-          '
-      - name: Verify health checks and minimal Hub resolver image content
+      - name: Verify health checks
         run: |
           docker image inspect nomicous-api:ci --format '{{json .Config.Healthcheck}}' | jq -e '.Test | length > 0'
-          docker image inspect nomicous-inference:ci --format '{{json .Config.Healthcheck}}' | jq -e '.Test | length > 0'
-          docker run --rm --entrypoint sh nomicous-inference:ci -c '
-            test -f /app/src/hf/resolve/cache.py
-            test ! -e /app/src/hf/cache/syriac-calamari-v1/stable/best.pt
-            test ! -d /app/src/hf/local
-            test ! -d /app/src/hf/staging
-            test ! -d /app/src/hf/publish
-          '
       - name: Prepare SBOM output directory
         run: mkdir -p sbom
       - name: Generate API image SBOM
@@ -98,18 +71,10 @@ jobs:
           output-file: sbom/nomicous-frontend.spdx.json
           artifact-name: nomicous-frontend-sbom
           upload-artifact: false
-      - name: Generate inference image SBOM
-        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
-        with:
-          image: nomicous-inference:ci
-          format: spdx-json
-          output-file: sbom/nomicous-inference.spdx.json
-          artifact-name: nomicous-inference-sbom
-          upload-artifact: false
       # An SBOM pointed at the wrong path still produces a valid, empty document
       # and every downstream gate then passes vacuously. Require real content,
       # and require the runtime dependency we actually care about.
-      - name: Verify SBOMs are non-empty and record the ONNX runtime
+      - name: Verify SBOMs are non-empty
         run: |
           python - <<'PY'
           import json
@@ -121,7 +86,6 @@ jobs:
           expected = {
               "sbom/nomicous-api.spdx.json": {"fastapi", "sqlalchemy", "supabase"},
               "sbom/nomicous-frontend.spdx.json": {"next"},
-              "sbom/nomicous-inference.spdx.json": {"fastapi", "onnxruntime", "opencv-python-headless"},
           }
           failed = False
           for relative, markers in expected.items():
@@ -150,15 +114,6 @@ jobs:
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: nomicous-frontend:ci
-          format: table
-          exit-code: "1"
-          ignore-unfixed: true
-          vuln-type: os,library
-          severity: CRITICAL,HIGH
-      - name: Scan inference image vulnerabilities
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          image-ref: nomicous-inference:ci
           format: table
           exit-code: "1"
           ignore-unfixed: true

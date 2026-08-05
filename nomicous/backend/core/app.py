@@ -303,8 +303,6 @@ def create_app() -> FastAPI:
     ml_settings = get_ml_settings()
     if ml_settings.cloud_inference_enabled or job_settings.job_worker_enabled:
         ml_settings.require_callback_receiver_configuration()
-    if job_settings.job_worker_enabled:
-        ml_settings.require_job_dispatcher_configuration()
     get_storage_settings()
     # The interactive docs and the OpenAPI document enumerate every route, body
     # schema, and auth requirement. That is a development aid, not something an

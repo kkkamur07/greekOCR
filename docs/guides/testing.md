@@ -12,10 +12,10 @@ Pytest layout and commands for the platform, inference service, and Hugging Face
 | Integration | Postgres on `localhost:5433` (or env URLs from `.env`) |
 | ML | Postgres; Hub weights prefetch or network on first ML test |
 
-**Tip:** Stop the Docker API and inference-worker before integration tests if they contend for DB advisory locks:
+**Tip:** Stop the Docker API before integration tests if it contends for DB advisory locks:
 
 ```bash
-docker compose stop api inference-worker
+docker compose stop api
 ```
 
 ---
@@ -93,6 +93,6 @@ For Supabase-backed local testing, see [deployment/supabase.md](../deployment/su
 
 | Symptom | Fix |
 |---------|-----|
-| Tests hang on DB lock | Stop `api` / `inference-worker` containers; terminate stale Postgres sessions |
+| Tests hang on DB lock | Stop the `api` container; terminate stale Postgres sessions |
 | `DuplicatePreparedStatementError` with Supabase pooler | Handled in `nomicous/infrastructure/db.py` (`statement_cache_size=0`) |
 | ML tests skip or fail | Prefetch the default transcribe model: `PYTHONPATH=. python scripts/hf/fetch_model.py syriac-calamari-v1 --registry-tag stable` (see [`inference/README.md`](../../inference/README.md)) |

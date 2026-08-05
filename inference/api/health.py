@@ -6,7 +6,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from inference.infrastructure.settings import get_inference_settings
+from inference.settings import get_inference_settings
 
 router = APIRouter(tags=["health"])
 

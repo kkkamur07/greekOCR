@@ -63,15 +63,14 @@ helper = [
     "shapely>=2.1.0",
     "uvicorn>=0.32.0",
 ]
-# Inference service API (separate container; contracts importable from nomicous).
-# The hosted API is the helper runtime plus the job database and OpenCV.
+# Inference runtime (contracts importable from nomicous). No Postgres driver and
+# no ORM: since ADR 0003 the platform owns the only job queue, and nothing under
+# `inference/` touches a database.
 # NOTE: numpy / onnxruntime / opencv-python-headless live in [project].dependencies,
 # so this group must be installed with `--group inference`, never `--only-group`.
 inference = [
     { include-group = "helper" },
     "opencv-python-headless>=4.8,<4.13",
-    "psycopg2-binary>=2.9.10",
-    "sqlalchemy>=2.0.36",
     "uvicorn[standard]>=0.32.0",
 ]
 load-testing = [
@@ -130,15 +129,15 @@ explicit = true
 migrate = { shell = "cd ${NOMICOUS_APP_ROOT:-nomicous} && alembic -c infrastructure/alembic.ini upgrade head" }
 serve = { shell = "cd ${NOMICOUS_APP_ROOT:-nomicous} && uvicorn backend.core.main:app --host 0.0.0.0 --port 8000 --workers 1" }
 api = { sequence = ["migrate", "serve"] }
-inference-api = "uvicorn inference.api.main:app --host 0.0.0.0 --port 8001 --workers 1"
 inference-helper = "python -m inference.helper"
-inference-worker = "python -m inference.jobs.worker"
 # `--group test` is named explicitly on every task: the inference/export groups
 # carry no pytest, so omitting it silently falls back to whatever `pytest` is on
 # PATH (unpinned) or fails outright.
 test-fast = { shell = "uv run --group test --group platform --group inference pytest tests/nomicous/unit" }
 test-integration = { shell = "uv run --group test --group platform --group inference pytest tests/nomicous -m integration" }
-test-ml = { shell = "uv run --group test --group platform --group inference pytest tests/nomicous -m ml" }
+# The ml lane lives entirely under tests/inference now: the platform no longer
+# runs a model, it hands a page to an agent that does.
+test-ml = { shell = "uv run --group test --group platform --group inference --group export pytest tests/inference -m ml" }
 test-inference = { shell = "uv run --group test --group platform --group inference --group export pytest tests/inference" }
 test-hf = { shell = "uv run --group test --group inference --group export pytest tests/hf" }
 

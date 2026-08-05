@@ -26,12 +26,11 @@ Browser
   │     ├─ REST + JWT      → api.nomicous.com (Vercel serverless FastAPI)
   │     └─ local OCR       → 127.0.0.1:8001 Inference Helper (user machine)
   │
-  ├─ api.nomicous.com      → Supabase Postgres + Storage
-  └─ optional inference.nomicous.com → Supabase Postgres (inference_jobs table)
+  └─ api.nomicous.com      → Supabase Postgres + Storage
 
 Background (persistent compute, not serverless):
-  platform-worker   → claims platform jobs, submits to inference API
-  inference-worker  → runs OCR/segment models, callbacks to api
+  platform-worker   → runs the job types the platform executes itself
+  inference agent   → claims pages from api.nomicous.com, runs models, calls back
 ```
 
 ### Why local inference is the default
@@ -43,9 +42,10 @@ from the registry-pinned `segmentation-blla` repository as `blla.onnx`. Vercel s
 timeouts, so researchers run inference on their own machines through the
 loopback-only helper; the hosted platform persists only the result.
 
-Cloud inference remains optional. If it is enabled later, deploy the existing
-[`inference/Dockerfile`](../inference/Dockerfile) and the platform worker on a
-persistent host (see [`deploy/inference/README.md`](../../deploy/inference/README.md)).
+Cloud inference remains optional. When it is enabled, a hosted worker runs the
+same inference agent a laptop does and claims work from the platform with a
+service credential (ADR 0003). There is no separate inference service to
+deploy.
 
 Local inference via the **Inference Helper** (DMG installer) remains the primary path for researchers who want on-device OCR; cloud inference is optional.
 
@@ -160,26 +160,25 @@ Vercel-specific Python runtime, bundle-size, and dependency notes:
 
 ## 3. Optional cloud inference + platform worker (persistent host)
 
-Skip this section for the default local-helper deployment. If you later enable
-cloud jobs, see [`deploy/inference/README.md`](../../deploy/inference/README.md).
+Skip this section for the default local-helper deployment.
 
 Minimum services:
 
 | Service | Command | Port |
 |---------|---------|------|
-| `inference-api` | `uvicorn inference.api.main:app --host 0.0.0.0 --port 8001` | 8001 |
-| `inference-worker` | `python -m inference.jobs.worker` | - |
 | `platform-worker` | `python -m backend.jobs.worker_main` | - |
+| inference agent | one per host that should run models | - |
 
-Cloud inference is currently disabled. If it is enabled later, set
-`CLOUD_INFERENCE_ENABLED=true` and point `INFERENCE_URL` on the platform API to
-`https://inference.nomicous.com`. Do not set the platform API's production
-`INFERENCE_URL` to `localhost:8001`; that address belongs to the browser-side
-local helper and is configured with `NEXT_PUBLIC_INFERENCE_HELPER_URL`.
-Set `INFERENCE_CALLBACK_URL` on inference to `https://api.nomicous.com/internal/inference/job-complete`.
-Use the distinct API, platform-worker, and inference-worker database principals
-from [`database-roles.md`](database-roles.md); do not give these containers the
-Supabase operator/migration URI.
+Cloud inference is currently disabled. Enabling it means standing up a hosted
+inference agent, not a service: it claims pages from `api.nomicous.com` with a
+service credential and reports results to
+`https://api.nomicous.com/internal/inference/job-complete`, exactly as a paired
+laptop does. Set `CLOUD_INFERENCE_ENABLED=true` on the API so it fails closed
+without `INFERENCE_WEBHOOK_SECRET`.
+
+Use the distinct API and platform-worker database principals from
+[`database-roles.md`](database-roles.md); do not give these containers the
+Supabase operator/migration URI. The agent needs no database access at all.
 
 ---
 
@@ -234,7 +233,7 @@ If a secret scanner or Git-history review identifies a possible exposure:
 - [ ] OpenAPI/generated-client drift check passes
 - [ ] Dependency, secret, and container vulnerability scans pass
 - [ ] No production credentials exist in the working tree, Git history, or build artifacts
-- [ ] `JWT_SECRET`, `INFERENCE_WEBHOOK_SECRET`, and `INFERENCE_SERVICE_SECRET` are unique per environment
+- [ ] `JWT_SECRET` and `INFERENCE_WEBHOOK_SECRET` are unique per environment
 - [ ] Upload, inference, callback, authorization, and cross-user isolation tests pass
 - [ ] Model checkpoints use a safe loading path, pinned revision, and verified manifest/hash
 

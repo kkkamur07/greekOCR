@@ -19,7 +19,7 @@ from backend.jobs.infrastructure.job_repository import JobRepository
 from backend.jobs.infrastructure.orm_models import Job, JobType
 from backend.document.infrastructure.document_repository import DocumentRepository
 from backend.document.infrastructure.orm_models import Document, DocumentPart, Line
-from backend.ml.infrastructure.ml_client import InferenceClient
+from backend.ml.application.segment_mapping import to_canonical_segment
 from backend.project.infrastructure.orm_models import Project
 from backend.project.infrastructure.project_repository import ProjectRepository
 from backend.users.infrastructure.orm_models import User
@@ -150,7 +150,7 @@ class LocalInferenceService:
         project = await self._require_member(session, project_id, user)
         document = await self._load_document_in_project(session, project, document_id)
         await self._document_part_or_404(session, document, part_id)
-        canonical = InferenceClient.to_canonical_segment(output)
+        canonical = to_canonical_segment(output)
 
         # The job row has to exist before the merge, because its primary key is
         # the only durable identity this run has: it is what the caller gets back

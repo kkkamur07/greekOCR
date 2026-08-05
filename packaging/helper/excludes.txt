@@ -27,15 +27,10 @@ transformers
 accelerate
 datasets
 gradio
-# Postgres job queue + platform API (helper is sync /run only)
+# Postgres drivers and ORM (the helper is sync /run only, and since ADR 0003 no
+# part of `inference` talks to a database at all)
 psycopg2
 sqlalchemy
-inference.infrastructure.db
-inference.infrastructure.orm_models
-inference.infrastructure.job_repository
-inference.jobs.worker
-inference.jobs.callback
-inference.api.jobs
 inference.api.dependencies
 inference.api.main
 src.hf.publish

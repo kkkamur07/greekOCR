@@ -11,33 +11,22 @@ see the [root README](../README.md), [use and hosting guide](../docs/guides/usin
 
 | Piece | State |
 |-------|--------|
-| HTTP API (`inference/api/`) | Health, sync `/inference/v1/run`, and async `/inference/v1/jobs` submission |
+| HTTP API (`inference/api/`) | Health and sync `/inference/v1/run` |
 | Request/response contracts (`inference/contracts/`) | Defined for segment, transcribe, jobs, and callbacks |
 | Model registry (`inference/registry.yaml`) | Calamari transcribe + BLLA segmentation entries |
-| Worker (`inference/jobs/worker.py`) | Postgres-backed queue worker with LISTEN/NOTIFY wakeups |
-| Nomicous backend integration | Platform jobs delegate segment/transcribe work via `InferenceClient` |
+| Model runner (`inference/jobs/runner.py`) | Registry lookup, weight resolution, and model execution |
+| Local helper (`inference/helper/`) | Loopback sidecar serving the same sync run path |
 
-The root `docker-compose.yml` starts `inference-api` and `inference-worker` alongside the platform API.
+## One queue, owned by the platform
 
-## Docker Compose
+This package holds no job queue, no database, and no claim loop. A queued page is
+a row in the platform's `jobs` table; an inference agent claims it, runs it
+through the same `run_model()` the sync path uses, and reports the outcome
+through the platform's existing job callback contract. See
+[ADR 0003](../docs/adr/0003-single-job-queue-cloud-worker-claims-like-a-device.md).
 
-| Service | Port | Role |
-|---------|------|------|
-| `inference-api` | 8010 on the host (`8001` in the container) | Inference HTTP API |
-| `inference-worker` | - | Background job processor |
-
-## API vs worker
-
-`inference-api` is the HTTP-facing boundary. It owns health checks, synchronous `/inference/v1/run`, and async job submission (`POST /inference/v1/jobs`). It stays responsive even when model work is slow.
-
-`inference-worker` is the background executor for long-running CPU/GPU work: BLLA segmentation, Calamari transcription, model loading, retries, and posting job callbacks.
-
-Keeping them separate lets the API and workers scale, restart, and fail independently. Workers can later run on different resources (e.g. GPU nodes) without changing the HTTP contract.
-
-```bash
-docker compose up --build
-curl -s http://127.0.0.1:8010/health
-```
+There is consequently no `inference-api` container: the registry endpoint an
+agent syncs from is served by the platform on port 8000.
 
 ## Weights layout
 
@@ -49,7 +38,7 @@ Registry models resolve weights at runtime from:
 | Local bundled (offline) | `file://local/syriac/calamari/v1/stable/best.pt` | `src/hf/local/...` |
 | BLLA segmentation | `hf://kkkamur07/segmentation-blla@stable` | `blla.onnx` in the Hub cache |
 
-Docker Compose mounts `./src/hf` at `/app/src/hf` on `inference-api` and `inference-worker` and sets `HF_CACHE_ROOT=/app/src/hf/cache`. No local weight checkout is required for the default Hub models; they download from their public repos on first use.
+No local weight checkout is required for the default Hub models; they download from their public repos on first use into `HF_CACHE_ROOT`.
 
 ### Calamari (ONNX runtime)
 
@@ -157,18 +146,14 @@ Both the API and local helper enforce the same `INFERENCE_*` limits before
 base64 decoding or model loading. Defaults are: 160 MiB request body, 160 MiB encoded image,
 100 MiB decoded image, 128 MiB job payload, 200 million pixels, 64 MiB parameters, depth 8,
 8,000,000 parameter items, 10,000 transcription lines, 256 geometry points per line,
-100 queued/running jobs, one worker thread, and 60 POSTs per minute per process. Allowed image formats default
+and 60 POSTs per minute per process. Allowed image formats default
 to `JPEG,PNG,TIFF,WEBP`. Operators may lower or raise these with the corresponding
-`INFERENCE_MAX_*`, `INFERENCE_WORKER_CONCURRENCY`, and
-`INFERENCE_RATE_LIMIT_PER_MINUTE` environment variables; only trusted deployment
-configuration should do so.
+`INFERENCE_MAX_*` and `INFERENCE_RATE_LIMIT_PER_MINUTE` environment variables;
+only trusted deployment configuration should do so.
 
-The API applies request-size and rate controls per process. Queue admission uses a PostgreSQL
-transaction advisory lock, so the configured queue cap holds across API replicas. Worker
-concurrency is bounded per worker process. It deliberately does **not** attempt to cancel
-timed-out Python model threads: ML libraries cannot be safely killed in-process. Run workers
-under a host/container supervisor with an execution deadline and restart policy; the existing
-running-job timeout is a stale-lease recovery mechanism, not execution cancellation.
+These are per-process request controls only. Queue admission, rate limiting
+across replicas, and stale-lease recovery belong to the platform's queue, which
+is now the only one.
 
 The helper is unauthenticated by design, so the loopback bind is what keeps it off the
 network. `HELPER_HOST` must be a loopback address; any other value is rejected at startup,
@@ -188,7 +173,6 @@ only through the development-only `parity` group:
 uv run --group inference --group export --group parity pytest tests/inference/integration/test_blla_parity.py -q
 ```
 
-Stop the Compose `inference-worker` before local integration runs (`docker stop nomicous-inference-worker-1`).
 Full-suite layout, `DATABASE_URL` caveats, and failure analysis: [`docs/guides/testing.md`](../docs/guides/testing.md).
 
 ## Related docs

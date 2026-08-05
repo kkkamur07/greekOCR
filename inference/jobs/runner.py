@@ -1,11 +1,11 @@
-"""Inference runner shared by sync runs and queued inference jobs."""
+"""Model execution for the synchronous run path."""
 
 from __future__ import annotations
 
 import logging
 from io import BytesIO
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from inference.admission import validate_image_bytes, validate_request_params
 from inference.architectures.calamari import (
@@ -23,11 +23,9 @@ from inference.contracts.transcribe import (
     TranscribeLineRegion,
     TranscribeRunResponse,
 )
-from inference.infrastructure.settings import get_inference_settings
+from inference.settings import get_inference_settings
 from PIL import Image
 
-if TYPE_CHECKING:
-    from inference.infrastructure.orm_models import InferenceJob
 from inference.registry.resolve import resolve_registry_entry
 from inference.weights import resolve_weights_source
 
@@ -236,15 +234,3 @@ def run_model(
         raise ValueError(f"unsupported transcribe architecture: {entry.architecture.value}")
 
     raise ValueError(f"unsupported ML task for runner: {task.value}")
-
-
-def run_job(
-    job: InferenceJob,
-) -> SegmentRunResponse | TranscribeRunResponse | TranscribeBatchRunResponse:
-    return run_model(
-        task=InferenceTask(job.task),
-        registry_model_id=job.registry_model_id,
-        registry_tag=job.registry_tag,
-        image_bytes=job.image_bytes,
-        params=job.params,
-    )

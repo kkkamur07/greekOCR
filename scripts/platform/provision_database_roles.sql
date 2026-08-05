@@ -43,8 +43,10 @@ GRANT SELECT, UPDATE ON TABLE jobs TO nomicous_platform_worker;
 GRANT SELECT ON TABLE documents, document_parts, blocks, lines, model_bindings, inference_models
   TO nomicous_platform_worker;
 
-GRANT USAGE ON SCHEMA public TO nomicous_inference_worker;
-GRANT SELECT, UPDATE ON TABLE inference_jobs TO nomicous_inference_worker;
+-- nomicous_inference_worker is still created above so migration 002 finds all
+-- four groups and applies its grants, but it is granted nothing: the queue it
+-- read was deleted in 006 (ADR 0003). Drop the group once no LOGIN principal is
+-- a member of it.
 
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
   GRANT ALL PRIVILEGES ON TABLES TO nomicous_migrator;

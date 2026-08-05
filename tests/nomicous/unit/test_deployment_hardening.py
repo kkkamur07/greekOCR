@@ -19,18 +19,6 @@ def _flatten_group(groups: dict[str, list], name: str) -> list[str]:
     return resolved
 
 
-def test_inference_image_reincludes_only_required_hub_resolver_sources() -> None:
-    dockerignore = (REPO_ROOT / ".dockerignore").read_text(encoding="utf-8")
-    dockerfile = (REPO_ROOT / "inference" / "Dockerfile").read_text(encoding="utf-8")
-
-    assert "!src/" in dockerignore
-    assert "!src/hf/resolve/**" in dockerignore
-    assert ".docker-cache/" in dockerignore
-    assert "COPY src/hf/__init__.py src/hf/paths.py /app/src/hf/" in dockerfile
-    assert "COPY src/hf/resolve /app/src/hf/resolve" in dockerfile
-    assert "COPY src/hf /app/src/hf" not in dockerfile
-
-
 def test_helper_freeze_is_onnx_only() -> None:
     spec = (REPO_ROOT / "packaging" / "helper" / "pyinstaller.spec").read_text(encoding="utf-8")
     excludes = (REPO_ROOT / "packaging" / "helper" / "excludes.txt").read_text(encoding="utf-8")
@@ -129,16 +117,24 @@ def test_helper_installers_are_user_scoped_and_verify_startup() -> None:
 
 
 def test_runtime_images_are_non_root_and_have_import_and_health_checks() -> None:
-    platform_dockerfile = (REPO_ROOT / "nomicous" / "Dockerfile").read_text(encoding="utf-8")
-    inference_dockerfile = (REPO_ROOT / "inference" / "Dockerfile").read_text(encoding="utf-8")
+    dockerfile = (REPO_ROOT / "nomicous" / "Dockerfile").read_text(encoding="utf-8")
 
-    for dockerfile, import_surface in (
-        (platform_dockerfile, "from backend.core.main import app"),
-        (inference_dockerfile, "from inference.api.main import app"),
-    ):
-        assert "USER appuser" in dockerfile
-        assert "HEALTHCHECK" in dockerfile
-        assert import_surface in dockerfile
+    assert "USER appuser" in dockerfile
+    assert "HEALTHCHECK" in dockerfile
+    assert "from backend.core.main import app" in dockerfile
+
+
+def test_no_inference_service_image_is_built() -> None:
+    """ADR 0003 removed the inference-api container; 050 ships a package instead."""
+    assert not (REPO_ROOT / "inference" / "Dockerfile").exists()
+
+    compose = (REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    supabase = (REPO_ROOT / "docker-compose.supabase.yml").read_text(encoding="utf-8")
+    bake = (REPO_ROOT / "docker-bake.hcl").read_text(encoding="utf-8")
+
+    for text in (compose, supabase, bake):
+        assert "inference-api" not in text
+        assert "inference-worker" not in text
 
 
 def test_development_compose_ports_are_loopback_only_and_secrets_are_interpolated() -> None:
@@ -147,22 +143,21 @@ def test_development_compose_ports_are_loopback_only_and_secrets_are_interpolate
     for mapping in (
         '"127.0.0.1:5433:5432"',
         '"127.0.0.1:8000:8000"',
-        '"127.0.0.1:8010:8001"',
         '"127.0.0.1:5173:5173"',
     ):
         assert mapping in compose
     assert "POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?" in compose
     assert "postgres:dev@" not in compose
     assert 'CLOUD_INFERENCE_ENABLED: "true"' in compose
-    assert compose.count("\n      INFERENCE_WEBHOOK_SECRET:") == 2
-    assert compose.count("\n      INFERENCE_SERVICE_SECRET:") == 2
+    assert compose.count("\n      INFERENCE_WEBHOOK_SECRET:") == 1
+    assert "INFERENCE_SERVICE_SECRET" not in compose
 
 
 def test_platform_bundle_includes_contract_dependencies() -> None:
     build_script = (REPO_ROOT / "deploy" / "platform" / "build.sh").read_text(encoding="utf-8")
 
     assert '"inference" / "admission.py"' in build_script
-    assert '"inference" / "infrastructure" / "settings.py"' in build_script
+    assert '"inference" / "settings.py"' in build_script
 
 
 def test_platform_backend_ships_bundled_unicode_pdf_font() -> None:
@@ -233,9 +228,8 @@ def test_landing_csp_uses_json_ld_hash_instead_of_unsafe_inline() -> None:
 
 
 def test_runtime_images_uninstall_vulnerable_system_packaging_tools() -> None:
-    for relative in ("nomicous/Dockerfile", "inference/Dockerfile"):
-        dockerfile = (REPO_ROOT / relative).read_text(encoding="utf-8")
-        assert "pip uninstall -y pip setuptools wheel" in dockerfile
+    dockerfile = (REPO_ROOT / "nomicous" / "Dockerfile").read_text(encoding="utf-8")
+    assert "pip uninstall -y pip setuptools wheel" in dockerfile
 
 
 def test_role_migration_defines_service_boundaries_without_passwords() -> None:
@@ -252,8 +246,30 @@ def test_role_migration_defines_service_boundaries_without_passwords() -> None:
         assert role in migration
     assert "NOLOGIN" in migration
     assert "PASSWORD" not in migration
-    assert "GRANT SELECT, UPDATE ON TABLE inference_jobs TO nomicous_inference_worker" in migration
     assert "GRANT SELECT, UPDATE ON TABLE jobs TO nomicous_platform_worker" in migration
+
+
+def test_inference_worker_role_reaches_nothing_after_the_queue_collapse() -> None:
+    """ADR 0003 left the group with no table to read; 006 revokes what remains."""
+    drop = (
+        REPO_ROOT
+        / "nomicous"
+        / "infrastructure"
+        / "alembic"
+        / "versions"
+        / "006_drop_inference_jobs.py"
+    ).read_text(encoding="utf-8")
+    bootstrap = (REPO_ROOT / "scripts" / "platform" / "provision_database_roles.sql").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'op.drop_table("inference_jobs")' in drop
+    assert "REVOKE ALL ON SCHEMA public FROM nomicous_inference_worker" in drop
+    assert not [
+        line
+        for line in bootstrap.splitlines()
+        if "nomicous_inference_worker" in line and line.lstrip().startswith("GRANT")
+    ]
 
 
 def test_release_workflow_refuses_asset_replacement_and_generates_evidence() -> None:
@@ -278,29 +294,13 @@ def test_release_workflow_refuses_asset_replacement_and_generates_evidence() -> 
     assert "expected four installer assets" in workflow
 
 
-def test_inference_image_installs_the_onnx_runtime() -> None:
-    """`--only-group inference` drops [project].dependencies, i.e. onnxruntime.
-
-    Model imports are lazy, so an image built that way still starts, still serves
-    /health, and fails every real inference request. Assert both the install flag
-    and a build-time check that actually loads the native runtime.
-    """
+def test_inference_group_carries_no_postgres_driver_or_orm() -> None:
+    """ADR 0003: nothing under `inference/` talks to a database."""
     pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    dockerfile = (REPO_ROOT / "inference" / "Dockerfile").read_text(encoding="utf-8")
+    inference = _flatten_group(pyproject["dependency-groups"], "inference")
 
-    assert any(
-        dependency.startswith("onnxruntime") for dependency in pyproject["project"]["dependencies"]
-    )
-    assert "--only-group inference" not in dockerfile
-    assert "uv sync --frozen --no-default-groups --group inference" in dockerfile
-    assert "import onnxruntime" in dockerfile
-    assert "get_available_providers" in dockerfile
-
-    deployment = (REPO_ROOT / ".github" / "workflows" / "deployment.yml").read_text(
-        encoding="utf-8"
-    )
-    assert "import onnxruntime" in deployment
-    assert "inference.architectures.calamari.onnx" in deployment
+    forbidden = ("psycopg", "sqlalchemy", "asyncpg", "alembic")
+    assert not [dependency for dependency in inference if dependency.lower().startswith(forbidden)]
 
 
 def test_workflows_pin_every_action_to_a_commit_sha() -> None:

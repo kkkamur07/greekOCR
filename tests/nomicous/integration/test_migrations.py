@@ -43,10 +43,10 @@ _ALEMBIC_INI = os.path.join(
 )
 
 # Tables the chain creates that are deliberately absent from ``Base.metadata``.
-# ``inference_jobs`` belongs to the inference service, which owns its own mapper
-# and may run against a different database entirely; ``alembic_version`` is
-# alembic's own bookkeeping.
-_UNMANAGED_TABLES = frozenset({"alembic_version", "inference_jobs"})
+# ``alembic_version`` is alembic's own bookkeeping. ``inference_jobs`` used to be
+# listed here because the inference service owned its own mapper; 006 drops the
+# table, so the chain no longer ends with it and the exemption is gone.
+_UNMANAGED_TABLES = frozenset({"alembic_version"})
 
 
 def _with_database(url: str, database: str) -> str:
