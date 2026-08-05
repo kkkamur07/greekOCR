@@ -47,7 +47,8 @@ same inference agent a laptop does and claims work from the platform with a
 service credential (ADR 0003). There is no separate inference service to
 deploy.
 
-Local inference via the **Inference Helper** (DMG installer) remains the primary path for researchers who want on-device OCR; cloud inference is optional.
+Local inference remains the primary path for researchers who want on-device OCR;
+cloud inference is optional. It installs from PyPI, not from an installer.
 
 ---
 
@@ -194,14 +195,29 @@ Supabase operator/migration URI. The agent needs no database access at all.
 
 ---
 
-## 5. Inference Helper (local OCR)
+## 5. Local inference (researcher machines)
 
-Ship the architecture-specific macOS DMGs from GitHub Releases
-(`nomicous-inference-helper-macos.dmg` for Apple silicon and
-`nomicous-inference-helper-macos-intel.dmg`). The installer configures the
-loopback-only helper for `https://app.nomicous.com` at runtime; it does not
-embed a browser secret. The helper accepts browser requests only from
-`https://app.nomicous.com`.
+There is nothing to ship. The **published package** goes to PyPI and
+researchers install it themselves:
+
+```bash
+uv tool install nomicous-inference --torch-backend=cpu   # requires uv >= 0.10
+```
+
+Releasing is `.github/workflows/release.yml` — one wheel, one runner, Trusted
+Publishing, no signing secret. The per-OS DMG, zip, and tarball builds it
+replaced are gone along with their Developer ID and Authenticode pipelines; see
+[`inference/README.md`](../../inference/README.md#releasing-and-what-that-changed-about-security-patching).
+
+**Patching a CVE in the shipped closure** is a dependency bump plus a raise of
+`INFERENCE_AGENT_MIN_VERSION`, the platform's **version floor**. Agents below
+the floor are refused at the claim endpoint and told to upgrade, so a fix lands
+without anyone reinstalling anything — the property four-platform frozen
+installers could not offer at any price.
+
+The loopback helper still runs from the source tree until #60 removes it; it
+accepts browser requests only from `https://app.nomicous.com` and embeds no
+browser secret.
 
 ---
 

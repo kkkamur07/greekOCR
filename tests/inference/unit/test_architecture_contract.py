@@ -376,9 +376,9 @@ def test_no_onnx_runtime_remains_in_the_inference_import_graph() -> None:
 
     Checked against the real import graph in a fresh interpreter rather than by
     inspection. This is the inverse of the test it replaces, which imported the
-    same modules and asserted *Torch* was absent - the denylist that enforced
-    that (``packaging/helper/excludes.txt``) and its release-time verifier were
-    deleted along with the second runtime.
+    same modules and asserted *Torch* was absent - the frozen-installer denylist
+    that enforced it and its release-time bundle verifier were deleted along
+    with the second runtime.
     """
     program = (
         "import importlib, sys\n"

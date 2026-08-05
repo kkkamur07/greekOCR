@@ -118,12 +118,19 @@ Verify it:
 
 ```bash
 curl -s http://127.0.0.1:8001/health
-curl -s http://127.0.0.1:8001/inference/v1/catalog
+curl -s http://127.0.0.1:8001/inference/v1/info
 ```
 
-For hosted use, install a platform-specific package from the
-[latest GitHub release](https://github.com/kkkamur07/greekOCR/releases/latest).
-The released helper accepts browser requests from `https://app.nomicous.com`.
+For hosted use, install the published package from PyPI - there are no
+per-OS installers:
+
+```bash
+uv tool install nomicous-inference --torch-backend=cpu   # requires uv >= 0.10
+```
+
+See [`inference/README.md`](../../inference/README.md#install) for why the
+`--torch-backend` flag and the uv version floor are both load-bearing.
+The helper accepts browser requests from `https://app.nomicous.com`.
 Local frontend origins may require development-specific CORS configuration.
 Never expose the helper beyond loopback without secure mode, a strong helper
 secret, and TLS.

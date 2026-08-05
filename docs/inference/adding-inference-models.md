@@ -19,11 +19,11 @@ Train / export checkpoint
     → add entry to inference/registry.yaml
     → add InferenceModel row in Postgres
     → deploy platform API
-    → installed helpers pull registry on startup (no reinstall)
+    → running agents pull registry on startup (no reinstall)
     → first local /run downloads weights into ~/.nomicous/hf/cache/
 ```
 
-**Registry sync:** deployed API serves `GET /inference/v1/registry` (public YAML + `ETag`). The Inference Helper fetches it into `~/.nomicous/registry.yaml` on startup when `HELPER_REGISTRY_URL` is set. The bundled copy in the installer is an offline fallback only.
+**Registry sync:** deployed API serves `GET /inference/v1/registry` (public YAML + `ETag`). The Inference Helper fetches it into `~/.nomicous/registry.yaml` on startup when `HELPER_REGISTRY_URL` is set. The copy shipped in the package is an offline fallback only.
 
 **Weights:** resolved lazily from `weights_source` on first inference run - same path for cloud inference and the helper. See [`scripts/hf/README.md`](../../scripts/hf/README.md).
 
@@ -237,7 +237,9 @@ uv run --group platform --group inference pytest tests/nomicous/integration/test
 
 2. **Roll out to hosted agents** if remote inference should serve the model - they sync the same `registry.yaml` from the platform.
 
-3. **Inference Helper** - **no new installer required**. On next helper start (login / reboot), it fetches the registry when `HELPER_REGISTRY_URL` points at your API. Weights download on first local OCR/segment run.
+3. **Local inference** - **no reinstall required**. On next start the local agent
+   fetches the registry when `HELPER_REGISTRY_URL` points at your API. Weights
+   download on first local OCR/segment run.
 
    Verify locally:
 
@@ -245,19 +247,12 @@ uv run --group platform --group inference pytest tests/nomicous/integration/test
    HELPER_REGISTRY_URL=http://localhost:8000/inference/v1/registry \
      uv run --group inference python -m inference.helper
 
-   curl -s http://127.0.0.1:8001/inference/v1/catalog
+   curl -s http://127.0.0.1:8001/inference/v1/info
    ```
 
-4. **New helper releases** are only needed for **code** or **packaging** changes - not for new models.
-
-Set the production registry URL when building installers:
-
-```bash
-HELPER_REGISTRY_URL=https://api.example.com/inference/v1/registry \
-  bash packaging/helper/macos/build-dmg.sh
-```
-
-See [`packaging/helper/README.md`](../../packaging/helper/README.md).
+4. **A new package release** is only needed for **code** changes - not for new
+   models. It is a PyPI publish, not a per-OS installer build; see
+   [`inference/README.md`](../../inference/README.md#releasing-and-what-that-changed-about-security-patching).
 
 ---
 
@@ -265,7 +260,7 @@ See [`packaging/helper/README.md`](../../packaging/helper/README.md).
 
 - [ ] `curl …/inference/v1/registry` returns the new model id
 - [ ] Authenticated `GET /inference/models` lists the new **InferenceModel**
-- [ ] Helper `GET /inference/v1/catalog` shows correct `host_eligibility`
+- [ ] Helper `GET /inference/v1/info` shows correct `host_eligibility`
 - [ ] Cloud job: enqueue segment/transcribe → job completes with expected output
 - [ ] Local path: helper up, cloud toggle off → pairing assist / auto-segment works; weights appear under `~/.nomicous/hf/cache/<registry_model_id>/stable/`
 

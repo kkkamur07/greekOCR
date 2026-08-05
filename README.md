@@ -134,7 +134,7 @@ Then verify:
 
 ```bash
 curl -s http://127.0.0.1:8001/health
-curl -s http://127.0.0.1:8001/inference/v1/catalog
+curl -s http://127.0.0.1:8001/inference/v1/info
 ```
 
 ## Architecture in one picture
@@ -167,7 +167,6 @@ implementation.
 - [Models and datasets](docs/inference/models-and-datasets.md)
 - [Technical architecture](docs/architecture.md)
 - [Inference service reference](inference/README.md)
-- [Helper packaging](packaging/helper/README.md)
 - [Model publishing workflow](scripts/hf/README.md)
 - [Testing guide](docs/guides/testing.md)
 - [Production deployment](docs/deployment/production.md)

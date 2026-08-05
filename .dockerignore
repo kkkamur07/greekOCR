@@ -20,7 +20,6 @@ _support_repo
 
 # Large local-only trees (mounted as volumes in compose, not needed in images)
 data/
-packaging/
 
 # Tests and docs are not shipped in production images
 tests/
