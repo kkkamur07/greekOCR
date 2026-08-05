@@ -45,6 +45,10 @@ from backend.document.api.media import router as media_router
 from backend.document.api.public import router as public_router
 from backend.document.api.public_media import router as public_media_router
 from backend.document.infrastructure.media_gc import media_gc_loop
+from backend.ml.api.agent_version import (
+    AGENT_VERSION_REFUSED_STATUS,
+    AgentVersionRefusedError,
+)
 from backend.ml.api.device_pairing import router as device_pairing_router
 from backend.ml.api.device_self import router as device_self_router
 from backend.ml.api.execution_preference import router as execution_preference_router
@@ -205,6 +209,32 @@ def _register_exception_handlers(app: FastAPI) -> None:
             code="INTERNAL_SERVER_ERROR",
             message="Internal server error",
             exc=exc,
+        )
+
+    @app.exception_handler(AgentVersionRefusedError)
+    async def agent_version_refused_handler(
+        request: Request, exc: AgentVersionRefusedError
+    ) -> JSONResponse:
+        """The one error on this platform that keeps its detail.
+
+        Every other handler above substitutes a fixed public message, because a
+        browser client has a human behind it and a leaked internal string helps
+        nobody. This response has a *program* behind it: an agent that cannot
+        read which version it needs cannot upgrade itself, and ADR 0002 makes
+        self-upgrade the mechanism that keeps stale agents off the claim path.
+        Nothing here is secret - the floor is a published number, and the CLI
+        must be able to learn it.
+        """
+        logger.info(
+            "agent_version_refused reason=%s presented=%r minimum=%s path=%s",
+            exc.refusal.reason,
+            exc.refusal.agent_version,
+            exc.refusal.minimum_version,
+            request.url.path,
+        )
+        return JSONResponse(
+            status_code=AGENT_VERSION_REFUSED_STATUS,
+            content=jsonable_encoder({"error": exc.refusal.model_dump()}),
         )
 
     @app.exception_handler(HTTPException)

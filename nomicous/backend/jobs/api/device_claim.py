@@ -34,6 +34,11 @@ from backend.jobs.api.claim_schemas import (
 )
 from backend.jobs.application.job_claim_service import ClaimedPage, claim_one_page
 from backend.jobs.infrastructure.stale_sweep import sweep_stale_jobs_on_read
+from backend.ml.api.agent_version import (
+    AGENT_VERSION_REFUSED_STATUS,
+    AgentVersionRefusalResponse,
+    SupportedAgentVersion,
+)
 from backend.ml.api.device_dependencies import require_device_pairing_enabled
 from backend.ml.application.agent_credentials import (
     SERVICE_TOKEN_HEADER,
@@ -86,9 +91,22 @@ def _page_response(page: ClaimedPage) -> ClaimedPageResponse:
     )
 
 
-@router.post("/device/v1/jobs/claim", response_model=JobClaimResponse)
+@router.post(
+    "/device/v1/jobs/claim",
+    response_model=JobClaimResponse,
+    responses={
+        AGENT_VERSION_REFUSED_STATUS: {
+            "model": AgentVersionRefusalResponse,
+            "description": (
+                "The agent is below the version floor, or did not say what version it "
+                "is. It must upgrade; retrying the same build cannot succeed."
+            ),
+        }
+    },
+)
 async def claim_job(
     request: Request,
+    agent_version: SupportedAgentVersion,
     body: JobClaimRequest | None = None,
     x_nomicous_device_token: Annotated[str | None, Header(alias=DEVICE_TOKEN_HEADER)] = None,
     x_nomicous_service_token: Annotated[str | None, Header(alias=SERVICE_TOKEN_HEADER)] = None,
@@ -99,6 +117,12 @@ async def claim_job(
     The credential decides the **execution target**, and the caller cannot ask for
     a different one: a device token claims ``local`` work on its own account, a
     service credential claims ``cloud`` work for the platform.
+
+    ``agent_version`` is resolved before this body runs, so an agent below the
+    floor is refused without a session being opened and without its
+    ``last_seen_at`` being touched - it stops reporting **capacity**, and
+    submission announces "no host available" rather than creating pages it may
+    not claim.
     """
     settings = get_device_settings()
     agent = await _authenticate(
@@ -132,6 +156,7 @@ async def claim_job(
                 poll_after_seconds=0.0,
                 lease_seconds=settings.device_lease_seconds,
                 server_time=datetime.now(UTC),
+                agent=agent_version,
             )
         remaining = deadline - time.monotonic()
         if remaining <= 0 or await request.is_disconnected():
@@ -144,4 +169,5 @@ async def claim_job(
         poll_after_seconds=settings.device_claim_idle_poll_seconds,
         lease_seconds=settings.device_lease_seconds,
         server_time=datetime.now(UTC),
+        agent=agent_version,
     )
