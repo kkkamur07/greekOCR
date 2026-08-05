@@ -34,6 +34,28 @@ While here, correct the packaging documentation that still references a deleted 
 - [ ] Remaining packaging documentation describes install from PyPI and references no deleted routes
 - [ ] CI green with the packaging jobs removed
 
+## Notes from #50
+
+Found while publishing the package; left alone deliberately, because deleting
+them is this issue's job.
+
+- `packaging/helper/pyinstaller.spec` had `"src.hf.resolve"` in `hiddenimports`.
+  That module moved into the package as `inference.hub`, so the entry was
+  retargeted rather than left dangling — the spec still builds until it goes.
+- `release-helper.yml` builds its SBOM and Trivy input from
+  `uv export --no-default-groups --group helper --group packaging`. The `helper`
+  group was cut down to the loopback HTTP surface (the model runtime moved to
+  `[project].dependencies`), but that export resolves byte-identically to before,
+  so the scan inputs are unchanged. Both groups die with this issue and #60.
+- `packaging/helper/scripts/smoke-test.py` and the Windows installer assertion in
+  `tests/nomicous/unit/test_deployment_hardening.py:142` both pin `HF_CACHE_ROOT`.
+  The runtime default moved to `~/.nomicous/hf/cache`, which is what those two
+  were setting by hand; the env var still overrides.
+- The tray-icon exclusion assertion this issue keeps lives in the same file and
+  still passes.
+- `docs/codebase-review-2026-08-04.md` still refers to `src/hf/resolve/` and
+  `src/hf/cache/`. It is a dated review, left as a record rather than edited.
+
 ## Blocked by
 
 - #50
