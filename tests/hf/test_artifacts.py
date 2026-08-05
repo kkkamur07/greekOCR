@@ -10,7 +10,7 @@ import pytest
 from src.hf.resolve import artifacts
 from src.hf.resolve.artifacts import ArtifactIntegrityError, verify_artifact_sha256
 
-CONTENT = b"onnx graph bytes" * 64
+CONTENT = b"checkpoint bytes" * 64
 DIGEST = hashlib.sha256(CONTENT).hexdigest()
 
 
@@ -41,7 +41,7 @@ def _write(path: Path, data: bytes = CONTENT) -> Path:
 
 def test_repeat_verification_hashes_the_artifact_once(tmp_path: Path, hash_calls: list[Path]):
     """Three call sites per run must cost one read of the file, not three."""
-    artifact = _write(tmp_path / "model.onnx")
+    artifact = _write(tmp_path / "model.pt")
 
     for _ in range(3):
         verify_artifact_sha256(artifact, DIGEST)
@@ -50,7 +50,7 @@ def test_repeat_verification_hashes_the_artifact_once(tmp_path: Path, hash_calls
 
 
 def test_corrupted_artifact_raises(tmp_path: Path):
-    artifact = _write(tmp_path / "model.onnx", b"corrupted")
+    artifact = _write(tmp_path / "model.pt", b"corrupted")
 
     with pytest.raises(ArtifactIntegrityError, match="artifact SHA-256 mismatch"):
         verify_artifact_sha256(artifact, DIGEST)
@@ -60,7 +60,7 @@ def test_corruption_after_a_successful_verification_still_raises(
     tmp_path: Path, hash_calls: list[Path]
 ):
     """The memoized pass must not vouch for a file that changed afterwards."""
-    artifact = _write(tmp_path / "model.onnx")
+    artifact = _write(tmp_path / "model.pt")
     verify_artifact_sha256(artifact, DIGEST)
 
     artifact.write_bytes(b"corrupted")
@@ -71,7 +71,7 @@ def test_corruption_after_a_successful_verification_still_raises(
 
 def test_same_size_replacement_is_reverified(tmp_path: Path, hash_calls: list[Path]):
     """Size alone cannot be trusted: a swap of equal length must be re-hashed."""
-    artifact = _write(tmp_path / "model.onnx")
+    artifact = _write(tmp_path / "model.pt")
     verify_artifact_sha256(artifact, DIGEST)
     stat = artifact.stat()
 
@@ -88,7 +88,7 @@ def test_same_size_replacement_is_reverified(tmp_path: Path, hash_calls: list[Pa
 
 def test_rewritten_identical_content_is_reverified(tmp_path: Path, hash_calls: list[Path]):
     """A new mtime invalidates the memo even when the bytes are unchanged."""
-    artifact = _write(tmp_path / "model.onnx")
+    artifact = _write(tmp_path / "model.pt")
     verify_artifact_sha256(artifact, DIGEST)
     stat = artifact.stat()
     os.utime(artifact, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
@@ -98,8 +98,8 @@ def test_rewritten_identical_content_is_reverified(tmp_path: Path, hash_calls: l
 
 
 def test_distinct_artifacts_are_verified_separately(tmp_path: Path, hash_calls: list[Path]):
-    first = _write(tmp_path / "a.onnx")
-    second = _write(tmp_path / "b.onnx", b"other bytes")
+    first = _write(tmp_path / "a.pt")
+    second = _write(tmp_path / "b.pt", b"other bytes")
 
     verify_artifact_sha256(first, DIGEST)
     with pytest.raises(ArtifactIntegrityError):
@@ -108,7 +108,7 @@ def test_distinct_artifacts_are_verified_separately(tmp_path: Path, hash_calls: 
 
 
 def test_new_expected_digest_is_not_served_from_the_memo(tmp_path: Path):
-    artifact = _write(tmp_path / "model.onnx")
+    artifact = _write(tmp_path / "model.pt")
     verify_artifact_sha256(artifact, DIGEST)
 
     with pytest.raises(ArtifactIntegrityError):
@@ -117,11 +117,11 @@ def test_new_expected_digest_is_not_served_from_the_memo(tmp_path: Path):
 
 def test_missing_artifact_raises_file_not_found(tmp_path: Path):
     with pytest.raises(FileNotFoundError):
-        verify_artifact_sha256(tmp_path / "absent.onnx", DIGEST)
+        verify_artifact_sha256(tmp_path / "absent.pt", DIGEST)
 
 
 def test_memo_stays_bounded(tmp_path: Path):
     for index in range(artifacts._VERIFIED_DIGESTS_MAX + 5):
-        verify_artifact_sha256(_write(tmp_path / f"model-{index}.onnx"), DIGEST)
+        verify_artifact_sha256(_write(tmp_path / f"model-{index}.pt"), DIGEST)
 
     assert len(artifacts._VERIFIED_DIGESTS) <= artifacts._VERIFIED_DIGESTS_MAX

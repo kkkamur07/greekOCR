@@ -34,7 +34,7 @@ EXPECTED_STATUS_BY_ERROR = [
     (FileNotFoundError("weights missing"), 503),
     (ArtifactIntegrityError("artifact SHA-256 mismatch"), 503),
     (ValueError("bad request payload"), 422),
-    (RuntimeError("onnx session failed to load"), 503),
+    (RuntimeError("model artifact failed to load"), 503),
     (TypeError("unexpected runner failure"), 500),
 ]
 
