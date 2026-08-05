@@ -2,7 +2,7 @@
 id: "056"
 title: "cli-pair-and-version"
 type: AFK
-status: in_progress
+status: done
 tracker: "https://github.com/kkkamur07/greekOCR/issues/56"
 blocked_by:
   - "050-publish-inference-package.md"

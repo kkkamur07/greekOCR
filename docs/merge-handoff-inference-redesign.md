@@ -1,5 +1,10 @@
 # Merge handoff — inference redesign session (2026-08-04, later)
 
+> **Executed on 2026-08-05. This document is now history.**
+> Every branch below is merged into `feat/inference-cli-redesign`. To pick the work up,
+> read [`resume-inference-redesign.md`](./resume-inference-redesign.md) instead; come back
+> here only for *why* a particular conflict was resolved the way it was.
+
 **Read this alongside [`merge-handoff.md`](./merge-handoff.md), which it supersedes in part.**
 That document's branch table is now wrong in ways that matter: it directs a merge of
 `feat/048-collapse-second-job-queue`, a branch that **no longer exists**. See §2.

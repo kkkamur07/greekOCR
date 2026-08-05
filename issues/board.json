@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-05T00:00:00Z",
+  "generated_at": "2026-08-05T17:00:00Z",
   "parent_prd": "https://github.com/kkkamur07/greekOCR/issues/47",
   "limits": {
     "in_progress": 5,
@@ -7,22 +7,24 @@
     "parallel_lanes": 5
   },
   "counts": {
-    "in_progress": 1,
+    "in_progress": 0,
     "review": 0
   },
   "stats": {
     "total": 14,
-    "ready_afk": 0,
+    "ready_afk": 2,
     "ready_hitl": 0,
-    "blocked": 3,
-    "done": 10
+    "blocked": 1,
+    "done": 11
   },
   "dag": {
     "mermaid": "flowchart TD\n  048[\"048 \u00b7 collapse second job queue\"]\n  049[\"049 \u00b7 Torch runtime, archive ONNX\"]\n  050[\"050 \u00b7 publish inference package\"]\n  051[\"051 \u00b7 execution target + capacity\"]\n  052[\"052 \u00b7 device claim endpoint\"]\n  053[\"053 \u00b7 signed page-image link\"]\n  054[\"054 \u00b7 device lease stale sweep\"]\n  055[\"055 \u00b7 version floor\"]\n  056[\"056 \u00b7 CLI pair + version\"]\n  057[\"057 \u00b7 CLI run loop\"]\n  058[\"058 \u00b7 CLI self-upgrade\"]\n  059[\"059 \u00b7 frontend host preference\"]\n  060[\"060 \u00b7 delete loopback transport\"]\n  061[\"061 \u00b7 delete native packaging\"]\n\n  048 --> 050\n  049 --> 050\n  048 --> 051\n  048 --> 052\n  052 --> 053\n  052 --> 054\n  052 --> 055\n  050 --> 056\n  050 --> 061\n  053 --> 057\n  054 --> 057\n  056 --> 057\n  055 --> 058\n  056 --> 058\n  051 --> 059\n  057 --> 060\n  059 --> 060\n\n  classDef hitl stroke-dasharray: 5 5\n  classDef critical stroke-width:3px\n  class 048,052,053,057,060 critical",
     "parallel_lanes": [
       [
-        "048-collapse-second-job-queue.md",
-        "049-torch-runtime-archive-onnx.md"
+        "057-cli-run-loop.md"
+      ],
+      [
+        "058-cli-self-upgrade.md"
       ]
     ],
     "critical_path": [
@@ -38,7 +40,18 @@
       {
         "name": "Ready (AFK)",
         "over_limit": false,
-        "issues": []
+        "issues": [
+          {
+            "file": "057-cli-run-loop.md",
+            "title": "cli-run-loop",
+            "type": "AFK"
+          },
+          {
+            "file": "058-cli-self-upgrade.md",
+            "title": "cli-self-upgrade",
+            "type": "AFK"
+          }
+        ]
       },
       {
         "name": "Ready (HITL)",
@@ -48,13 +61,7 @@
       {
         "name": "In progress",
         "over_limit": false,
-        "issues": [
-          {
-            "file": "056-cli-pair-and-version.md",
-            "title": "cli-pair-and-version",
-            "type": "AFK"
-          }
-        ]
+        "issues": []
       },
       {
         "name": "Review",
@@ -114,6 +121,11 @@
             "file": "061-delete-native-packaging.md",
             "title": "delete-native-packaging",
             "type": "AFK"
+          },
+          {
+            "file": "056-cli-pair-and-version.md",
+            "title": "cli-pair-and-version",
+            "type": "AFK"
           }
         ]
       },
@@ -121,16 +133,6 @@
         "name": "Backlog",
         "over_limit": false,
         "issues": [
-          {
-            "file": "057-cli-run-loop.md",
-            "title": "cli-run-loop",
-            "type": "AFK"
-          },
-          {
-            "file": "058-cli-self-upgrade.md",
-            "title": "cli-self-upgrade",
-            "type": "AFK"
-          },
           {
             "file": "060-delete-loopback-transport.md",
             "title": "delete-loopback-transport",
@@ -230,7 +232,7 @@
       "id": "056",
       "title": "cli-pair-and-version",
       "type": "AFK",
-      "status": "in_progress",
+      "status": "done",
       "tracker": "https://github.com/kkkamur07/greekOCR/issues/56",
       "blocked_by": [
         "050-publish-inference-package.md"
@@ -241,7 +243,7 @@
       "id": "057",
       "title": "cli-run-loop",
       "type": "AFK",
-      "status": "backlog",
+      "status": "ready",
       "tracker": "https://github.com/kkkamur07/greekOCR/issues/57",
       "blocked_by": [
         "053-signed-page-image-link.md 054-device-lease-stale-sweep.md 056-cli-pair-and-version.md"
@@ -252,7 +254,7 @@
       "id": "058",
       "title": "cli-self-upgrade",
       "type": "AFK",
-      "status": "backlog",
+      "status": "ready",
       "tracker": "https://github.com/kkkamur07/greekOCR/issues/58",
       "blocked_by": [
         "055-version-floor.md 056-cli-pair-and-version.md"

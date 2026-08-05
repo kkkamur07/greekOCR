@@ -1,6 +1,6 @@
 # Issue DAG
 
-> Regenerated 2026-08-05 — inference redesign, parent PRD [#47](https://github.com/kkkamur07/greekOCR/issues/47)
+> Regenerated 2026-08-05 (post-merge) — inference redesign, parent PRD [#47](https://github.com/kkkamur07/greekOCR/issues/47)
 >
 > Governed by [ADR 0002](../docs/adr/0002-inference-cli-replaces-loopback-helper.md) and
 > [ADR 0003](../docs/adr/0003-single-job-queue-cloud-worker-claims-like-a-device.md).
@@ -11,10 +11,10 @@
 
 ## Parallel lanes (ready now)
 
-**Waves 1-3, 5 and 061 are merged.** What remains is the tail of the graph, and
-it is a chain rather than a fan: 057 and 058 both wait on 056, and 060 waits on
-057. The lane cap of 5 stopped being the constraint once wave 3 landed - the
-graph itself is now the limit, so one lane runs at a time to the end.
+**Waves 1-3, 5 and 061 are merged**, 056 included. What remains is the tail of
+the graph: 057 and 058 are both ready and independent of each other, and 060
+waits on 057. The lane cap of 5 stopped being the constraint once wave 3 landed
+- the graph itself is the limit, and it allows two lanes now and one after that.
 
 | Wave | Issues | Why they can run together |
 |------|--------|---------------------------|
@@ -42,7 +42,7 @@ replacement is demonstrably working.
 
 ## Stats
 
-- **Total:** 14 | **Done:** 10 | **In progress:** 1 (056) | **Blocked:** 3 (057, 058, 060)
+- **Total:** 14 | **Done:** 11 | **Ready:** 2 (057, 058) | **In progress:** 0 | **Blocked:** 1 (060)
 - Follow-up issues filed by the lanes themselves, outside the original 14:
   [#62](https://github.com/kkkamur07/greekOCR/issues/62) (segmentation peak memory),
   [#63](https://github.com/kkkamur07/greekOCR/issues/63) (device-pairing event-loop collision),
