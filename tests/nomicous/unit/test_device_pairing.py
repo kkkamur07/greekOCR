@@ -130,9 +130,25 @@ class _FakeDeviceRepository:
 
 
 def _settings(**overrides) -> DeviceSettings:
+    """Hermetic settings — every value these tests assert on is stated here.
+
+    ``DeviceSettings`` is a pydantic-settings model, so anything not passed
+    explicitly is read from the ambient environment. The integration conftest
+    exports ``DEVICE_PAIRING_POLL_INTERVAL_SECONDS=1`` (the routers capture the
+    cadence at import time, so it has to be set before the app is imported), and
+    when both suites run in one session these unit tests inherited it. A 200ms
+    second poll is inside a 5s interval but outside a 1s one, so
+    ``test_polling_faster_than_the_interval_returns_slow_down`` failed for a
+    reason that had nothing to do with what it tests.
+
+    Pinning the cadence to the production defaults makes these tests assert on
+    values they declare rather than on whatever ran before them.
+    """
     values = {
         "DEVICE_TOKEN_HMAC_SECRET": HMAC_KEY,
         "DEVICE_PAIRING_APP_ORIGIN": "https://app.nomicous.test",
+        "DEVICE_PAIRING_POLL_INTERVAL_SECONDS": 5,
+        "DEVICE_PAIRING_MAX_POLL_INTERVAL_SECONDS": 30,
     }
     values.update(overrides)
     return DeviceSettings(**values)

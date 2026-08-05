@@ -240,7 +240,17 @@ extend-exclude = [
     "data",
     "deploy/platform/inference",
     "deploy/platform/nomicous",
-    "src/experiments",
+    # The whole research tree, not `src/experiments` alone. It is vendored code
+    # nobody is maintaining to a lint standard, and it carried 555 findings that
+    # said nothing about the application. Excluding it here rather than listing
+    # per-directory ignores means a new subdirectory under `src/` is covered the
+    # day it appears - the previous list named `src/model` (singular) and silently
+    # missed `src/models` (plural) for exactly that reason.
+    #
+    # This is a suppression and only a suppression. The findings are real; they
+    # are recorded in docs/resume-inference-redesign.md. Everything outside `src/`
+    # is linted with no exemptions beyond the per-file-ignores below.
+    "src",
 ]
 
 [tool.ruff.lint]
@@ -273,34 +283,6 @@ select = ["F", "I", "UP", "B", "SIM"]
 "nomicous/backend/**" = ["B008", "B009", "I001", "SIM105", "UP037", "UP042"]
 "nomicous/infrastructure/**" = ["I001"]
 "scripts/**" = ["I001", "SIM112"]
-"src/hf/**" = ["I001"]
-"src/model/**" = [
-    "B007", "B010", "B023", "B905",
-    "F401", "F403", "F541", "F841", "F901",
-    "I001",
-    "SIM101", "SIM102", "SIM108", "SIM114", "SIM115", "SIM118", "SIM300", "SIM401",
-    "UP006", "UP007", "UP008", "UP010", "UP015", "UP018", "UP031", "UP032",
-    "UP035", "UP036", "UP045",
-]
-# src/models (plural) is a second research tree, restored by 516c3fc after the
-# ignore list above was written for src/model (singular). The names differ by one
-# character, so the ignores never matched it and it contributed 159 of the repo's
-# 164 lint errors while looking, in the config, like it was covered.
-#
-# These are suppressions, not fixes. The whole of src/ is audit-only here - it is
-# vendored research code, not application code, and rewriting it to satisfy a
-# linter would be churn against a tree nobody is maintaining. The findings are
-# recorded in docs/resume-inference-redesign.md rather than silently dropped.
-"src/models/**" = [
-    "B007", "B023", "B905",
-    "F401", "F841",
-    "I001",
-    "SIM102", "SIM108", "SIM211", "SIM300",
-    "UP004", "UP006", "UP007", "UP009", "UP030", "UP032", "UP035", "UP039", "UP045",
-]
-"src/train/**" = ["B905", "I001"]
-"src/inference/**" = ["UP035", "UP037"]
-"src/preprocessing_data/**" = ["B905", "F401", "I001", "SIM102", "UP015"]
 "tests/**" = ["B007", "B905", "F401", "I001", "SIM117"]
 
 [tool.ruff.format]

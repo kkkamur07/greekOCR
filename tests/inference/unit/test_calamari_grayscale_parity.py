@@ -124,11 +124,22 @@ def test_grayscale_helper_is_the_only_convention_under_src() -> None:
     # calamari_ocr/utils/image.py keeps the legacy branches so trainer params saved by
     # older runs still deserialize; center_normalizer's branch is unreachable at
     # channels=1 and measures geometry rather than producing model input.
+    # trocr/augmentation/weather.py builds a luminance term to blend a snow effect
+    # (`np.maximum(img, gray * 1.5 + 0.5)`) and hands back an RGB image. It is not
+    # the train/serve conversion this test guards, so it is allowed here.
+    #
+    # Audit note, not fixed because src/ is audit-only: that same function then
+    # does its actual grayscale with PIL's ImageOps.grayscale when isgray is set.
+    # PIL and OpenCV use different luma coefficients, so an augmented training
+    # image can be grayscaled by a different rule than the serving path uses -
+    # exactly the skew this module exists to prevent, reached by a route the
+    # marker list above cannot see.
     allowed = {
         "src/model/calamari/calamari_ocr/utils/image.py:COLOR_RGB2GRAY",
         "src/model/calamari/calamari_ocr/utils/image.py:COLOR_RGBA2GRAY",
         "src/model/calamari/calamari_ocr/ocr/dataset/imageprocessors/"
         "center_normalizer.py:COLOR_RGB2GRAY",
+        "src/models/trocr/augmentation/weather.py:COLOR_RGB2GRAY",
     }
     assert set(offenders) <= allowed, f"new OpenCV grayscale conversion under src/: {offenders}"
 
