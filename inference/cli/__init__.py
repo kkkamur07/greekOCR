@@ -2,9 +2,10 @@
 
 ADR 0002 replaced the loopback helper with a CLI installed from PyPI. This
 package is that CLI: `pair` authorises a machine against a researcher's account
-and stores the **device token** it gets back, and `version` reports the string
-this agent presents to the **version floor**. `run` - the **claim** loop - lands
-in #57 on top of the credential `pair` writes.
+and stores the **device token** it gets back, `version` reports the string this
+agent presents to the **version floor**, and `upgrade` is the launch check that
+brings this agent up to that floor before it claims anything. `run` - the
+**claim** loop - lands in #57 on top of the credential `pair` writes.
 
 Nothing here imports the model runtime. `nomicous version` on a laptop with no
 weights and nothing to run should not pay for Torch to answer.

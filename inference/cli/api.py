@@ -31,9 +31,15 @@ PLATFORM_URL_ENV = "NOMICOUS_API_URL"
 
 DEVICE_TOKEN_HEADER = "X-Nomicous-Device-Token"
 AGENT_VERSION_HEADER = "X-Nomicous-Agent-Version"
-"""Which build of the agent is calling. The **version floor** is enforced on the
-**claim** path only (`backend/ml/api/agent_version.py`); the constant lives here
-so the run loop in #57 states the same version this CLI reports."""
+"""Which build of the agent is calling. The **version floor** judges it on the
+**claim** path and on `GET /device/v1/agent/version`
+(`backend/ml/api/agent_version.py`); the constant lives here so the run loop in
+#57 states the same version this CLI reports."""
+
+AGENT_VERSION_REFUSED_STATUS = 426
+AGENT_VERSION_UNSUPPORTED = "AGENT_VERSION_UNSUPPORTED"
+"""The one error code the CLI matches on. Stable by contract - the platform's
+own module says changing it breaks every agent."""
 
 # The platform caps these on the way in (`PairingStartRequest`). Truncating here
 # rather than sending an over-long value keeps a long hostname from turning into
@@ -87,6 +93,38 @@ class PairingPoll:
 
 
 @dataclass(frozen=True)
+class AgentFloor:
+    """What the platform makes of this agent's version, asked at launch.
+
+    One shape for both answers. A refusal and a notice carry the same four facts
+    - what was presented, the floor, the latest, and the package to install - and
+    differ only in whether work would have been handed over, so collapsing them
+    into one record with two booleans keeps the caller from having to catch an
+    exception to learn something the platform stated plainly.
+    """
+
+    agent_version: str
+    minimum_version: str
+    latest_version: str
+    package: str
+    refused: bool
+    """Below the floor (or unstatable): the platform will not hand this agent a
+    **claim** until it upgrades."""
+    outdated: bool
+    """At or above the floor, behind the latest. Served, and told - a notice, not
+    a refusal."""
+    reason: str = ""
+    """`below_floor` / `missing` / `malformed` on a refusal; empty when served."""
+    message: str = ""
+    """The platform's own sentence about it. Printed rather than reworded, so a
+    researcher and the server logs say the same thing."""
+    upgrade_command: str = ""
+    """A hint for a human to read. Never executed: the platform names a package,
+    and handing a remote process a server-supplied string to run would be a worse
+    bargain than the one ADR 0002 already accepts."""
+
+
+@dataclass(frozen=True)
 class DeviceIdentity:
     """What `GET /device/v1/self` tells a paired machine about itself."""
 
@@ -128,7 +166,7 @@ def _parse_datetime(value: object) -> datetime | None:
 
 
 class PlatformClient:
-    """Three requests: start a pairing, poll for the token, confirm the token."""
+    """Start a pairing, poll for the token, confirm the token, ask the floor."""
 
     def __init__(self, base_url: str, *, timeout: float = REQUEST_TIMEOUT_SECONDS) -> None:
         self.base_url = base_url.rstrip("/")
@@ -261,6 +299,78 @@ class PlatformClient:
             account_email=str(body.get("account_email") or ""),
             token_expires_at=_parse_datetime(body.get("token_expires_at")),
         )
+
+    def read_agent_floor(self, *, agent_version: str) -> AgentFloor:
+        """Ask what this version is allowed to do, without asking for work.
+
+        The same comparison the **claim** path runs, on an endpoint that touches
+        no queue. That separation is the point: an agent learns it is below the
+        floor at its launch moment, when nothing is in flight and replacing its
+        own code is safe, rather than while holding a page it has already been
+        handed.
+
+        No credential is sent, and none is needed - the platform resolves the
+        version before it looks at one. So this answers on a machine that has
+        never paired, which is exactly the machine most likely to be stale.
+        """
+        status, body = self._request(
+            "GET", "/device/v1/agent/version", headers={AGENT_VERSION_HEADER: agent_version}
+        )
+        if status == 404:
+            raise PlatformError(
+                f"{self.base_url} is not serving the device layer, so it cannot "
+                "say which agent version it requires."
+            )
+        if status == AGENT_VERSION_REFUSED_STATUS:
+            return _refusal_floor(self.base_url, agent_version, body)
+        if status != 200 or not isinstance(body, dict):
+            raise PlatformError(_unexpected(status, body, "asking for the version floor"))
+        try:
+            return AgentFloor(
+                agent_version=str(body["agent_version"]),
+                minimum_version=str(body["minimum_version"]),
+                latest_version=str(body["latest_version"]),
+                package=str(body["package"]),
+                refused=False,
+                outdated=bool(body["outdated"]),
+                message="",
+                upgrade_command=str(body.get("upgrade_command") or ""),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise PlatformError(
+                f"{self.base_url} returned an unusable version-floor response"
+            ) from exc
+
+
+def _refusal_floor(base_url: str, agent_version: str, body: Any) -> AgentFloor:
+    """Read a 426 body into the same record a 200 produces.
+
+    A 426 that does not carry the contract is a bug on the platform, not a stale
+    agent, and it must not be reported as one - an agent told to upgrade with no
+    version to upgrade to would fail loudly for the wrong reason.
+    """
+    error = body.get("error") if isinstance(body, dict) else None
+    if not isinstance(error, dict) or error.get("code") != AGENT_VERSION_UNSUPPORTED:
+        raise PlatformError(
+            f"{base_url} refused this agent's version with {AGENT_VERSION_REFUSED_STATUS} "
+            "but did not say what it requires"
+        )
+    try:
+        return AgentFloor(
+            agent_version=str(error.get("agent_version") or agent_version),
+            minimum_version=str(error["minimum_version"]),
+            latest_version=str(error["latest_version"]),
+            package=str(error["package"]),
+            refused=True,
+            outdated=False,
+            reason=str(error.get("reason") or ""),
+            message=str(error.get("message") or ""),
+            upgrade_command=str(error.get("upgrade_command") or ""),
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise PlatformError(
+            f"{base_url} refused this agent's version but did not say what it requires"
+        ) from exc
 
 
 def _decode(raw: bytes) -> Any:
