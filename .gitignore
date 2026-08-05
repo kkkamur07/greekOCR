@@ -87,3 +87,6 @@ data/
 # this repo, so committing one would nest the tree inside itself and make
 # `ruff check .` lint every copy. Nothing here is authored by hand or shared.
 /.claude/
+
+# Local tool cache (graphify) — build artefact, never source.
+graphify-out/

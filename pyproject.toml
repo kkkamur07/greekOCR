@@ -282,6 +282,24 @@ select = ["F", "I", "UP", "B", "SIM"]
     "UP006", "UP007", "UP008", "UP010", "UP015", "UP018", "UP031", "UP032",
     "UP035", "UP036", "UP045",
 ]
+# src/models (plural) is a second research tree, restored by 516c3fc after the
+# ignore list above was written for src/model (singular). The names differ by one
+# character, so the ignores never matched it and it contributed 159 of the repo's
+# 164 lint errors while looking, in the config, like it was covered.
+#
+# These are suppressions, not fixes. The whole of src/ is audit-only here - it is
+# vendored research code, not application code, and rewriting it to satisfy a
+# linter would be churn against a tree nobody is maintaining. The findings are
+# recorded in docs/resume-inference-redesign.md rather than silently dropped.
+"src/models/**" = [
+    "B007", "B023", "B905",
+    "F401", "F841",
+    "I001",
+    "SIM102", "SIM108", "SIM211", "SIM300",
+    "UP004", "UP006", "UP007", "UP009", "UP030", "UP032", "UP035", "UP039", "UP045",
+]
+"src/train/**" = ["B905", "I001"]
+"src/inference/**" = ["UP035", "UP037"]
 "src/preprocessing_data/**" = ["B905", "F401", "I001", "SIM102", "UP015"]
 "tests/**" = ["B007", "B905", "F401", "I001", "SIM117"]
 

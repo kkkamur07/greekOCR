@@ -38,6 +38,19 @@ os.environ.setdefault(
     "INFERENCE_REGISTRY_PATH",
     os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../inference/registry.yaml")),
 )
+# The device routers construct their service at import time, so the pairing poll
+# cadence has to be collapsed before ``backend.core.app`` is imported below - the
+# real 5s interval makes every back-to-back poll in test_device_pairing.py return
+# ``slow_down``. It lives here rather than in that module because a test module is
+# imported *after* this conftest, which is too late to matter.
+#
+# Setting it here is also what lets that module use the session-scoped client
+# instead of assembling a second app. A second TestClient means a second event
+# loop, and the asyncpg pool is bound to the loop that created it - which is what
+# made four of these tests fail with "attached to a different loop" (issue #63).
+# The cadence itself is covered by unit tests with an explicit clock.
+os.environ.setdefault("DEVICE_PAIRING_POLL_INTERVAL_SECONDS", "1")
+os.environ.setdefault("DEVICE_PAIRING_APP_ORIGIN", "https://app.nomicous.test")
 
 import infrastructure.models  # noqa: F401 — register all mappers
 from backend.core.app import create_app

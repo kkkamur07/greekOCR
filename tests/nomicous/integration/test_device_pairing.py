@@ -1,57 +1,43 @@
 """End-to-end device pairing over real HTTP against Postgres.
 
-The device routers **are** mounted on ``create_app()``. This module still builds
-its own app, for one reason only: the routers construct their service at import
-time, so the poll cadence has to be collapsed before ``backend.core.app`` is
-imported, and the session-scoped client fixture imports it first.
+These tests run against the application the deployment builds, through the
+session-scoped ``client`` fixture. They used to assemble a local app instead,
+because the device routers construct their service at import time and the poll
+cadence had to be collapsed first; that env var now lives in the integration
+conftest, which is imported earlier still, so the local app is unnecessary.
 
-That local app is therefore not evidence that anything is reachable in the
-deployed application - it never was, which is how this whole phase shipped
-unmounted with a green suite. ``test_device_routes_are_served_by_the_real_app``
-below and ``test_device_routes_are_mounted_on_the_real_app`` in the unit suite
-are what actually hold that line.
+Removing it fixed four tests. A second ``TestClient`` runs its own event loop,
+and the asyncpg pool is bound to whichever loop created it, so every query from
+the second client failed with "attached to a different loop" (issue #63).
+
+It also removes a hazard worth naming: an app assembled by the test module is
+never evidence that anything is reachable in the deployed application. That is
+how this phase once shipped with its routers unmounted and a green suite.
+``test_device_routes_are_served_by_the_real_app`` below and
+``test_device_routes_are_mounted_on_the_real_app`` in the unit suite hold that
+line; now the rest of the module does too.
 
 Requires migration ``005_helper_devices``.
 """
 
 from __future__ import annotations
 
-import os
 import uuid
 
-# Collapse the pairing poll cadence before the routers capture their settings:
-# the real 5s interval would make every back-to-back poll in these tests return
-# ``slow_down``. The cadence itself is covered by unit tests with an explicit
-# clock, in tests/nomicous/unit/test_device_pairing.py.
-os.environ.setdefault("DEVICE_PAIRING_POLL_INTERVAL_SECONDS", "1")
-os.environ.setdefault("DEVICE_PAIRING_APP_ORIGIN", "https://app.nomicous.test")
-
 import pytest
-from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 
-from backend.core.app import _register_exception_handlers
-from backend.ml.api.device_pairing import router as device_pairing_router
-from backend.ml.api.device_self import router as device_self_router
-from backend.ml.api.devices import router as devices_router
 from backend.ml.application.device_auth import DEVICE_TOKEN_HEADER
-from backend.users.api.auth import router as auth_router
 from infrastructure.db import sync_engine
 
 pytestmark = pytest.mark.integration
 
 
-@pytest.fixture(scope="module")
-def device_client() -> TestClient:
-    app = FastAPI()
-    _register_exception_handlers(app)
-    app.include_router(auth_router)
-    app.include_router(device_pairing_router)
-    app.include_router(devices_router)
-    app.include_router(device_self_router)
-    with TestClient(app) as test_client:
-        yield test_client
+@pytest.fixture
+def device_client(client: TestClient) -> TestClient:
+    """The real application, on the one event loop its connection pool belongs to."""
+    return client
 
 
 def _register(client: TestClient) -> dict[str, str]:
@@ -376,7 +362,15 @@ def test_the_ip_scoped_recovery_list_is_gone(device_client: TestClient) -> None:
     """
     headers = _register(device_client)
     _start_pairing(device_client, "Recoverable laptop")
-    assert device_client.get("/devices/pairings", headers=headers).status_code == 404
+
+    response = device_client.get("/devices/pairings", headers=headers)
+
+    # 405 rather than 404, because on the real app the path falls through to
+    # DELETE /devices/{device_id} with device_id="pairings". Which status it is
+    # is an accident of routing; what this test holds is that no GET anywhere
+    # hands an authenticated user a list of pairings it does not own.
+    assert response.status_code in {404, 405}
+    assert "pairing_id" not in response.text
 
 
 def test_finished_pairings_are_deleted(device_client: TestClient) -> None:
@@ -412,12 +406,9 @@ def test_finished_pairings_are_deleted(device_client: TestClient) -> None:
     assert devices == 1
 
 
-def test_device_routes_are_served_by_the_real_app() -> None:
+def test_device_routes_are_served_by_the_real_app(client: TestClient) -> None:
     """The application the deployment builds, not one assembled by this module."""
-    from backend.core.app import create_app
-
-    app = create_app()
-    paths = set(app.openapi()["paths"])
+    paths = set(client.app.openapi()["paths"])
     assert {
         "/device/v1/pairings",
         "/device/v1/pairings/token",
@@ -427,9 +418,9 @@ def test_device_routes_are_served_by_the_real_app() -> None:
         "/device/v1/self",
     } <= paths
 
-    # Deliberately not entered as a context manager: the lifespan would start a
-    # second platform worker alongside the session-scoped client's.
-    response = TestClient(app).post(
+    # The session client, not a fresh TestClient over a fresh create_app(): a second
+    # client brings a second event loop, and the asyncpg pool belongs to the first.
+    response = client.post(
         "/device/v1/pairings",
         json={
             "device_name": "Mounted laptop",
