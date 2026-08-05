@@ -44,7 +44,7 @@ def _is_weights_cached(
 
     Only inspects local disk; never contacts the Hub. Non-hf sources (bundled,
     package, file) ship with the helper, but their presence is still verified.
-    Digest verification is memoized in ``src.hf.resolve.artifacts``, so this
+    Digest verification is memoized in ``inference.hub.artifacts``, so this
     reuses the hash a run of the same artifact already computed.
     """
     if not weights_source.startswith("hf://"):
@@ -63,9 +63,9 @@ def _is_weights_cached(
             return False
         return True
 
-    from src.hf.resolve.artifacts import find_hub_artifact, verify_artifact_sha256
-    from src.hf.resolve.cache import cache_dir_for
-    from src.hf.resolve.manifest import load_manifest, manifest_matches_expected
+    from inference.hub.artifacts import find_hub_artifact, verify_artifact_sha256
+    from inference.hub.cache import cache_dir_for
+    from inference.hub.manifest import load_manifest, manifest_matches_expected
 
     cache_dir = cache_dir_for(registry_model_id, registry_tag)
     manifest = load_manifest(cache_dir)

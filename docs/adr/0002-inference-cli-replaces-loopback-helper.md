@@ -96,6 +96,14 @@ living outside `inference/`.
 > construction — there is no forbidden dependency left to police. The reasoning
 > below was bundle-era: it inherited "keep Torch out" from the frozen installer
 > without rechecking whether PyPI distribution still required it. It did not.
+>
+> **As built (issue 050):** the wheel is `inference/` minus `inference/api` and
+> `inference/helper` — the loopback HTTP surfaces this record deletes — so the
+> published closure carries no web server. `hf` resolution moved in as
+> `inference/hub`, and the **Hub cache** moved with it, from beside the code to
+> `~/.nomicous/hf/cache`; inside a wheel, "beside the code" is site-packages.
+> The repository root is the project, because a build backend cannot reach
+> outside its own root and the package it publishes is `inference/`.
 
 ### Auto-update at launch, from the platform
 

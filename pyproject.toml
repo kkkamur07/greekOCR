@@ -1,19 +1,82 @@
+# The one published distribution (ADR 0002). It carries the inference library,
+# `hf://` weight resolution, and the `nomicous` console entry point; a hosted
+# worker installs the same wheel a researcher does, so there is no
+# version-compatibility matrix between components that always ship together.
+#
+# The repository root is the project because the package it publishes lives at
+# `inference/`, and a build backend cannot reach outside its own project root.
+# `tool.uv.package = false` below keeps development running from the tree: the
+# wheel is built explicitly (`uv build`), not installed into every dev venv.
 [project]
-name = "greekocr"
-version = "0.1.0"
-description = "OCR and processing for Greek documents"
+name = "nomicous-inference"
+version = "0.2.0"
+description = "Manuscript segmentation and transcription runtime for the nomicous platform"
+readme = "inference/README.md"
 requires-python = ">=3.11,<3.13"
+# [project].dependencies is the closure that reaches a researcher's laptop.
+# Anything added here is downloaded by every `uv tool install nomicous-inference`,
+# so it is the runtime imports of the shipped modules and nothing else. The
+# loopback HTTP surfaces (`inference/api`, `inference/helper`) are excluded from
+# the wheel, which is why FastAPI, uvicorn and httpx are absent; they stay in
+# the `helper` dependency-group for as long as those modules do (#60).
 dependencies = [
+    "huggingface-hub>=0.27.0",
     "numpy>=1.24.4,<2",
     "opencv-python-headless>=4.8,<4.13",
+    "pillow>=12.3.0",
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.6.0",
+    "pyyaml>=6.0.2",
     # ADR 0004: PyTorch is the inference runtime for both architectures. CPU
     # only - see [tool.uv.sources] below, which pins the CPU wheel index on the
     # platforms where PyPI would otherwise serve a CUDA build.
     "safetensors>=0.5.0",
+    "scikit-image>=0.25.0",
+    "scipy>=1.15.0",
+    "shapely>=2.1.0",
     "torch>=2.10.0",
 ]
 
-[project.optional-dependencies]
+[project.scripts]
+# ADR 0002: local inference is a CLI, not a loopback service. The subcommands
+# land in #56 (pair, version), #57 (run) and #58 (self-upgrade).
+nomicous = "inference.cli:main"
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["inference"]
+# `inference/api` is the synchronous HTTP inference service and
+# `inference/helper` the loopback sidecar. ADR 0002 deletes both (#60); until
+# it does, they stay in the repository and out of the wheel. Keeping them out
+# is what lets the published closure hold no web server.
+exclude = [
+    "/inference/api",
+    "/inference/helper",
+    "/inference/CONTEXT.md",
+    # Empty placeholder tree from the pre-Hub weights layout. Weights come from
+    # the Hub now and are cached under the researcher's home directory.
+    "**/.gitkeep",
+]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/inference",
+    "/pyproject.toml",
+]
+exclude = [
+    "/inference/api",
+    "/inference/helper",
+]
+
+[dependency-groups]
+# Training stack. A PEP 735 group rather than an optional-dependency extra: the
+# root project now publishes `nomicous-inference`, and an extra would make
+# `pip install nomicous-inference[train]` a supported way to pull transformers,
+# accelerate and torchvision onto a researcher's laptop. Nothing that trains a
+# model is part of what runs one. Use `uv run --group train`.
 train = [
     "accelerate>=1.13.0",
     "jiwer>=4.0.0",
@@ -22,8 +85,6 @@ train = [
     "torchvision>=0.25.0",
     "transformers>=5.11.0",
 ]
-
-[dependency-groups]
 dev = [
     "nbstripout>=0.8.1",
     "pip-audit>=2.10.1",
@@ -46,28 +107,26 @@ service-core = [
     "pydantic-settings>=2.6.0",
     "pyyaml>=6.0.2",
 ]
-# Inference runtime shipped inside the Inference Helper.
-# Deliberately minimal: anything added here also ships to researchers.
+# What the loopback HTTP surfaces (`inference/api`, `inference/helper`) need on
+# top of the published runtime. The model runtime itself is no longer listed
+# here - it moved to [project].dependencies, which is now the single statement
+# of what reaches a researcher. This group is what does *not* reach one, and it
+# disappears with those modules in #60.
 helper = [
     { include-group = "service-core" },
-    "huggingface-hub>=0.27.0",
-    "pillow>=12.3.0",
     # Floor clears CVE-2025-4565 / CVE-2026-0994.
     "protobuf>=5.29.6",
-    "scikit-image>=0.25.0",
-    "scipy>=1.15.0",
-    "shapely>=2.1.0",
     "uvicorn>=0.32.0",
 ]
 # Inference runtime (contracts importable from nomicous). No Postgres driver and
 # no ORM: since ADR 0003 the platform owns the only job queue, and nothing under
 # `inference/` touches a database.
-# NOTE: numpy / torch / safetensors / opencv-python-headless live in
+# NOTE: the model runtime itself (numpy / torch / pillow / scikit-image / scipy
+# / shapely / safetensors / opencv-python-headless / huggingface-hub) lives in
 # [project].dependencies, so this group must be installed with
 # `--group inference`, never `--only-group`.
 inference = [
     { include-group = "helper" },
-    "opencv-python-headless>=4.8,<4.13",
     "uvicorn[standard]>=0.32.0",
 ]
 load-testing = [
@@ -112,6 +171,23 @@ package = false
 # ADR 0004 requires the CPU-only Torch build: CUDA wheels dominate the download
 # and are useless on a researcher's laptop. PyPI's macOS wheels are already CPU
 # only, so the explicit index is pinned on the platforms where they are not.
+#
+# This pins *this repository's* lock. It does not travel with the published
+# wheel - `tool.uv.sources` is ignored when a package is consumed from a
+# registry, and no PEP 621 metadata can name an index. Measured against the
+# published dependency set on 2026-08-04: a plain resolve on either Linux
+# architecture drags 16 nvidia/triton wheels behind `torch`; on macOS arm64 and
+# Windows it drags none. So the CPU pin has to be re-stated at install time,
+# and the documented install command is
+#
+#     uv tool install nomicous-inference --torch-backend=cpu   # uv >= 0.10
+#
+# which resolves `torch==<v>+cpu` and zero CUDA wheels on every platform that
+# has a wheel at all. The version floor is load-bearing: `uv tool install`
+# grew the flag in 0.10, and 0.7.x accepts `UV_TORCH_BACKEND=cpu` from the
+# environment and then ignores it. `tests/inference/integration/
+# test_published_package.py` holds the resolution claim to a real per-platform
+# resolve; nothing can hold the *user's* install command to anything.
 [tool.uv.sources]
 torch = [
     { index = "pytorch-cpu", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },

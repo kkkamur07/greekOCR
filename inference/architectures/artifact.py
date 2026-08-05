@@ -34,7 +34,7 @@ from collections.abc import Collection
 from dataclasses import dataclass
 from pathlib import Path
 
-from src.hf.resolve.artifacts import verify_artifact_sha256
+from inference.hub.artifacts import verify_artifact_sha256
 
 
 @dataclass(frozen=True)

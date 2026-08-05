@@ -1,21 +1,63 @@
-# ML inference service
+# nomicous-inference
 
-Standalone FastAPI service for manuscript **segment** and **transcribe** inference. It lives at the repository root in `inference/`, separate from the Nomicous platform API in `nomicous/backend/`.
+The manuscript **segment** and **transcribe** runtime. It lives at the repository
+root in `inference/`, separate from the Nomicous platform API in
+`nomicous/backend/`, and it is the one distribution published to PyPI: a
+researcher's laptop and a hosted worker install the same wheel
+([ADR 0002](../docs/adr/0002-inference-cli-replaces-loopback-helper.md)).
 
 For the public product overview, setup, model availability, and architecture,
 see the [root README](../README.md), [use and hosting guide](../docs/guides/using-and-hosting.md),
 [models and datasets guide](../docs/inference/models-and-datasets.md), and
 [technical architecture](../docs/architecture.md).
 
+## Install
+
+```bash
+uv tool install nomicous-inference --torch-backend=cpu   # requires uv >= 0.10
+nomicous --version
+```
+
+`--torch-backend=cpu` is not optional on Linux, and **the uv version floor is
+part of the instruction, not a footnote**. PyTorch's default PyPI wheel on
+Linux pulls sixteen `nvidia-*`/`triton` packages behind it — measured at
+4801 MB installed against 969 MB with the flag — which are useless on a
+CPU-only laptop. No packaging metadata can express "resolve this dependency
+from that index", so the flag is the pin, and nothing in the package can
+enforce it.
+
+`uv tool install` only grew `--torch-backend` in uv 0.10. Older uv does not
+merely reject the flag: **0.7.x accepts `UV_TORCH_BACKEND=cpu` in the
+environment and silently ignores it**, installing the full CUDA tree. Check
+`uv --version` before trusting the install. `uv pip install --torch-backend=cpu`
+has worked since 0.7.
+
+On macOS arm64 and Windows the default wheel is already CPU-only and the flag
+changes nothing. Intel macOS has no PyTorch wheel at all from 2.10 onward and
+therefore cannot install this package.
+
 ## Status
 
 | Piece | State |
 |-------|--------|
-| HTTP API (`inference/api/`) | Health and sync `/inference/v1/run` |
+| Console entry point (`inference/cli/`) | `nomicous`, no subcommands yet (#56, #57, #58) |
+| Hub integration (`inference/hub/`) | `hf://` resolution, cache manifest, artifact SHA-256 |
 | Request/response contracts (`inference/contracts/`) | Defined for segment, transcribe, jobs, and callbacks |
 | Model registry (`inference/registry.yaml`) | Calamari transcribe + BLLA segmentation entries |
 | Model runner (`inference/jobs/runner.py`) | Registry lookup, weight resolution, and model execution |
-| Local helper (`inference/helper/`) | Loopback sidecar serving the same sync run path |
+| HTTP API (`inference/api/`) | Health and sync `/inference/v1/run`. Not in the wheel; deleted by #60 |
+| Local helper (`inference/helper/`) | Loopback sidecar. Not in the wheel; deleted by #60 |
+
+## Building the wheel
+
+```bash
+uv build            # -> dist/nomicous_inference-<version>-py3-none-any.whl
+```
+
+The repository root is the project, because a build backend cannot reach
+outside its own root and the package it publishes is `inference/`. Development
+still runs from the tree (`tool.uv.package = false`), so `uv sync` does not
+install the wheel into every dev environment.
 
 ## One queue, owned by the platform
 
@@ -34,7 +76,7 @@ Registry models resolve weights at runtime from:
 
 | Source | Example | Cache / path |
 |--------|---------|----------------|
-| Hub | `hf://kkkamur07/syriac-htr-calamari@stable` | `src/hf/cache/<registry_model_id>/<registry_tag>/` |
+| Hub | `hf://kkkamur07/syriac-htr-calamari@stable` | `~/.nomicous/hf/cache/<registry_model_id>/<registry_tag>/` |
 | Local bundled (offline) | `file://local/syriac/calamari/v1/stable/best.pt` | `src/hf/local/...` |
 | BLLA segmentation | `hf://kkkamur07/segmentation-blla@stable` | `blla.safetensors` in the Hub cache |
 
@@ -57,7 +99,7 @@ are in [`archive/onnx-runtime/`](../archive/onnx-runtime/README.md).
 
 Training and vendored TensorFlow Calamari: [`docs/guides/learnings.md`](../docs/guides/learnings.md#calamari-training).
 
-**Hub integration:** `hf://` weight sources, Hub cache, and prefetch tooling live under `src/hf/` and `scripts/hf/`. See `inference/CONTEXT.md` for domain terminology and [`scripts/hf/README.md`](../scripts/hf/README.md) for the Hub publish runbook.
+**Hub integration:** `hf://` weight-source resolution, Hub cache, and digest verification live *inside* this package at `inference/hub/` - they are on the runtime path, so they ship in the published wheel. Publish-side tooling (staging tree, model cards, collection sync) stays under `src/hf/` and `scripts/hf/`, which never ship. See `inference/CONTEXT.md` for domain terminology and [`scripts/hf/README.md`](../scripts/hf/README.md) for the Hub publish runbook.
 
 ## Run locally (without Compose)
 
@@ -73,7 +115,7 @@ Environment:
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `INFERENCE_REGISTRY_PATH` | `inference/registry.yaml` | Model catalog file |
-| `HF_CACHE_ROOT` | `src/hf/cache` | Hub weight download cache |
+| `HF_CACHE_ROOT` | `~/.nomicous/hf/cache` | Hub weight download cache |
 | `HF_TOKEN` | unset | Required only for **private** or gated Hub repos; all nomicous inference repos are public |
 
 Prefetch Hub weights without running inference:
@@ -101,7 +143,8 @@ Job callbacks use a tagged output union: `output.kind` is either `segment` or `t
 - `syriac-calamari-v1` - transcribe, Calamari architecture, pinned Hub revision and digest
 - `blla-segment` - segment, BLLA `safetensors` weights
 
-Weights are resolved at runtime from Hub cache (`src/hf/cache/`) or local bundled paths (`src/hf/local/`).
+Weights are resolved at runtime from the Hub cache (`~/.nomicous/hf/cache/`) or, in a source
+checkout only, local bundled paths (`src/hf/local/`).
 New `hf://` entries should include both `hub_revision` and `artifact_sha256`; see
 the migration note in [`docs/inference/adding-inference-models.md`](../docs/inference/adding-inference-models.md).
 

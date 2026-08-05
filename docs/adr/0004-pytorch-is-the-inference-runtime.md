@@ -141,6 +141,52 @@ laptop and is the sharpest edge of this decision. It is not a reason to reverse
 it; it is a reason to bound the input, and
 `blla_preprocessing.MAX_WIDTH_TO_HEIGHT_RATIO` is the existing lever.
 
+### Install size and cold-install time - measured on publication
+
+"Install size" above was one dependency's installed size on a development
+machine. What a researcher actually pays is the whole closure of the published
+package, and it was measured when that package first existed (issue 050), from
+an empty `uv` cache, on a fast connection. `nomicous-inference` and its twelve
+declared dependencies:
+
+| | installed | bytes fetched | cold install |
+|---|---|---|---|
+| Linux aarch64, `--torch-backend=cpu` | **969 MB** | 979 MB | 7-8 s |
+| Linux aarch64, no flag | 4801 MB | 4812 MB | 71 s |
+| macOS arm64 (PyPI wheel is CPU-only) | **811 MB** | 836 MB | 7 s |
+
+Measured with `uv pip install` into an empty virtual environment and confirmed
+end to end with `uv tool install --torch-backend=cpu`, which is the command a
+researcher runs.
+
+Torch is 475-597 MB of that; OpenCV, SciPy, NumPy, SymPy and scikit-image are
+most of the rest. Seconds is a property of the connection, not of the package -
+the number that transfers is the ~980 MB, which is roughly 22 minutes on a
+6 Mbit/s line. That is the first-run experience this record said should be
+measured rather than assumed.
+
+**The CPU-only pin cannot be expressed in package metadata.** No PEP 621 field
+names an index, and `tool.uv.sources` is ignored when a package is consumed
+from a registry - it pins this repository's lock and nothing downstream. A
+plain resolve on either Linux architecture therefore pulls sixteen
+`nvidia-*`/`triton` wheels behind `torch`: the 4801 MB row. The pin is restated
+at install time instead, and the documented command is
+`uv tool install nomicous-inference --torch-backend=cpu`.
+`tests/inference/integration/test_published_package.py` resolves the wheel's
+own metadata on all four target platforms and fails if any of them admits a
+CUDA wheel.
+
+Two residual risks, neither solved: a researcher who installs with plain `pip`
+gets the 4.8 GB tree and nothing stops them; and `uv tool install` only accepts
+`--torch-backend` from uv 0.10 onward, where uv 0.7.x reads
+`UV_TORCH_BACKEND=cpu` from the environment and silently installs the CUDA tree
+anyway. The failure mode of a stale uv is therefore a quiet 4.8 GB download
+rather than an error, which is the worst shape it could have taken.
+
+**Intel macOS drops off the supported set.** PyTorch publishes no
+`x86_64-apple-darwin` wheel from 2.10 onward, so the package cannot be
+installed there at all. Under ONNX Runtime it could have been.
+
 ### Output comparability
 
 Decoded output is **identical**, not merely close. On the same page and the same
@@ -160,8 +206,9 @@ runtime.
 ## Consequences
 
 - The published package carries a large dependency. Cold-install time on a poor
-  connection becomes a real part of the first-run experience, and should be
-  measured rather than assumed.
+  connection becomes a real part of the first-run experience; measured on
+  publication at ~980 MB fetched and 969 MB installed - see "Install size and
+  cold-install time" above.
 - The export tree stops being a build stage and becomes archived reference.
 - ADR 0002's "One published package, not two" section is amended: the Torch
   modules stay inside the published package rather than moving out, and the

@@ -9,7 +9,7 @@ from pathlib import Path
 from pathlib import PurePosixPath
 
 from src.hf.paths import DEFAULT_STAGING_ROOT
-from src.hf.resolve.artifacts import find_hub_artifact
+from inference.hub.artifacts import find_hub_artifact
 
 
 @dataclass(frozen=True, slots=True)
