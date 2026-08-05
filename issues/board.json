@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-04T00:00:00Z",
+  "generated_at": "2026-08-05T00:00:00Z",
   "parent_prd": "https://github.com/kkkamur07/greekOCR/issues/47",
   "limits": {
     "in_progress": 5,
@@ -7,14 +7,15 @@
     "parallel_lanes": 5
   },
   "counts": {
-    "in_progress": 0,
+    "in_progress": 1,
     "review": 0
   },
   "stats": {
     "total": 14,
-    "ready_afk": 2,
+    "ready_afk": 0,
     "ready_hitl": 0,
-    "blocked": 12
+    "blocked": 3,
+    "done": 10
   },
   "dag": {
     "mermaid": "flowchart TD\n  048[\"048 \u00b7 collapse second job queue\"]\n  049[\"049 \u00b7 Torch runtime, archive ONNX\"]\n  050[\"050 \u00b7 publish inference package\"]\n  051[\"051 \u00b7 execution target + capacity\"]\n  052[\"052 \u00b7 device claim endpoint\"]\n  053[\"053 \u00b7 signed page-image link\"]\n  054[\"054 \u00b7 device lease stale sweep\"]\n  055[\"055 \u00b7 version floor\"]\n  056[\"056 \u00b7 CLI pair + version\"]\n  057[\"057 \u00b7 CLI run loop\"]\n  058[\"058 \u00b7 CLI self-upgrade\"]\n  059[\"059 \u00b7 frontend host preference\"]\n  060[\"060 \u00b7 delete loopback transport\"]\n  061[\"061 \u00b7 delete native packaging\"]\n\n  048 --> 050\n  049 --> 050\n  048 --> 051\n  048 --> 052\n  052 --> 053\n  052 --> 054\n  052 --> 055\n  050 --> 056\n  050 --> 061\n  053 --> 057\n  054 --> 057\n  056 --> 057\n  055 --> 058\n  056 --> 058\n  051 --> 059\n  057 --> 060\n  059 --> 060\n\n  classDef hitl stroke-dasharray: 5 5\n  classDef critical stroke-width:3px\n  class 048,052,053,057,060 critical",
@@ -37,6 +38,32 @@
       {
         "name": "Ready (AFK)",
         "over_limit": false,
+        "issues": []
+      },
+      {
+        "name": "Ready (HITL)",
+        "over_limit": false,
+        "issues": []
+      },
+      {
+        "name": "In progress",
+        "over_limit": false,
+        "issues": [
+          {
+            "file": "056-cli-pair-and-version.md",
+            "title": "cli-pair-and-version",
+            "type": "AFK"
+          }
+        ]
+      },
+      {
+        "name": "Review",
+        "over_limit": false,
+        "issues": []
+      },
+      {
+        "name": "Done",
+        "over_limit": false,
         "issues": [
           {
             "file": "048-collapse-second-job-queue.md",
@@ -47,128 +74,67 @@
             "file": "049-torch-runtime-archive-onnx.md",
             "title": "torch-runtime-archive-onnx",
             "type": "AFK"
+          },
+          {
+            "file": "050-publish-inference-package.md",
+            "title": "publish-inference-package",
+            "type": "AFK"
+          },
+          {
+            "file": "051-execution-target-capacity-gating.md",
+            "title": "execution-target-capacity-gating",
+            "type": "AFK"
+          },
+          {
+            "file": "052-device-claim-endpoint.md",
+            "title": "device-claim-endpoint",
+            "type": "AFK"
+          },
+          {
+            "file": "053-signed-page-image-link.md",
+            "title": "signed-page-image-link",
+            "type": "AFK"
+          },
+          {
+            "file": "054-device-lease-stale-sweep.md",
+            "title": "device-lease-stale-sweep",
+            "type": "AFK"
+          },
+          {
+            "file": "055-version-floor.md",
+            "title": "version-floor",
+            "type": "AFK"
+          },
+          {
+            "file": "059-frontend-host-preference.md",
+            "title": "frontend-host-preference",
+            "type": "AFK"
+          },
+          {
+            "file": "061-delete-native-packaging.md",
+            "title": "delete-native-packaging",
+            "type": "AFK"
           }
         ]
-      },
-      {
-        "name": "Ready (HITL)",
-        "over_limit": false,
-        "issues": []
-      },
-      {
-        "name": "In progress",
-        "over_limit": false,
-        "issues": []
-      },
-      {
-        "name": "Review",
-        "over_limit": false,
-        "issues": []
-      },
-      {
-        "name": "Done",
-        "over_limit": false,
-        "issues": []
       },
       {
         "name": "Backlog",
         "over_limit": false,
         "issues": [
           {
-            "file": "050-publish-inference-package.md",
-            "title": "publish-inference-package",
-            "type": "AFK",
-            "blocked_by": [
-              "048-collapse-second-job-queue.md 049-torch-runtime-archive-onnx.md"
-            ]
-          },
-          {
-            "file": "051-execution-target-capacity-gating.md",
-            "title": "execution-target-capacity-gating",
-            "type": "AFK",
-            "blocked_by": [
-              "048-collapse-second-job-queue.md"
-            ]
-          },
-          {
-            "file": "052-device-claim-endpoint.md",
-            "title": "device-claim-endpoint",
-            "type": "AFK",
-            "blocked_by": [
-              "048-collapse-second-job-queue.md"
-            ]
-          },
-          {
-            "file": "053-signed-page-image-link.md",
-            "title": "signed-page-image-link",
-            "type": "AFK",
-            "blocked_by": [
-              "052-device-claim-endpoint.md"
-            ]
-          },
-          {
-            "file": "054-device-lease-stale-sweep.md",
-            "title": "device-lease-stale-sweep",
-            "type": "AFK",
-            "blocked_by": [
-              "052-device-claim-endpoint.md"
-            ]
-          },
-          {
-            "file": "055-version-floor.md",
-            "title": "version-floor",
-            "type": "AFK",
-            "blocked_by": [
-              "052-device-claim-endpoint.md"
-            ]
-          },
-          {
-            "file": "056-cli-pair-and-version.md",
-            "title": "cli-pair-and-version",
-            "type": "AFK",
-            "blocked_by": [
-              "050-publish-inference-package.md"
-            ]
-          },
-          {
             "file": "057-cli-run-loop.md",
             "title": "cli-run-loop",
-            "type": "AFK",
-            "blocked_by": [
-              "053-signed-page-image-link.md 054-device-lease-stale-sweep.md 056-cli-pair-and-version.md"
-            ]
+            "type": "AFK"
           },
           {
             "file": "058-cli-self-upgrade.md",
             "title": "cli-self-upgrade",
-            "type": "AFK",
-            "blocked_by": [
-              "055-version-floor.md 056-cli-pair-and-version.md"
-            ]
-          },
-          {
-            "file": "059-frontend-host-preference.md",
-            "title": "frontend-host-preference",
-            "type": "AFK",
-            "blocked_by": [
-              "051-execution-target-capacity-gating.md"
-            ]
+            "type": "AFK"
           },
           {
             "file": "060-delete-loopback-transport.md",
             "title": "delete-loopback-transport",
-            "type": "AFK",
-            "blocked_by": [
-              "057-cli-run-loop.md 059-frontend-host-preference.md"
-            ]
-          },
-          {
-            "file": "061-delete-native-packaging.md",
-            "title": "delete-native-packaging",
-            "type": "AFK",
-            "blocked_by": [
-              "050-publish-inference-package.md"
-            ]
+            "type": "AFK"
           }
         ]
       }
@@ -180,25 +146,25 @@
       "id": "048",
       "title": "collapse-second-job-queue",
       "type": "AFK",
-      "status": "ready",
+      "status": "done",
       "tracker": "https://github.com/kkkamur07/greekOCR/issues/48",
-      "blocked_by": []
+      "blocked_by": "[]"
     },
     {
       "file": "049-torch-runtime-archive-onnx.md",
       "id": "049",
       "title": "torch-runtime-archive-onnx",
       "type": "AFK",
-      "status": "ready",
+      "status": "done",
       "tracker": "https://github.com/kkkamur07/greekOCR/issues/49",
-      "blocked_by": []
+      "blocked_by": "[]"
     },
     {
       "file": "050-publish-inference-package.md",
       "id": "050",
       "title": "publish-inference-package",
       "type": "AFK",
-      "status": "backlog",
+      "status": "done",
       "tracker": "https://github.com/kkkamur07/greekOCR/issues/50",
       "blocked_by": [
         "048-collapse-second-job-queue.md 049-torch-runtime-archive-onnx.md"
@@ -209,7 +175,7 @@
       "id": "051",
       "title": "execution-target-capacity-gating",
       "type": "AFK",
-      "status": "backlog",
+      "status": "done",
       "tracker": "https://github.com/kkkamur07/greekOCR/issues/51",
       "blocked_by": [
         "048-collapse-second-job-queue.md"
@@ -220,7 +186,7 @@
       "id": "052",
       "title": "device-claim-endpoint",
       "type": "AFK",
-      "status": "backlog",
+      "status": "done",
       "tracker": "https://github.com/kkkamur07/greekOCR/issues/52",
       "blocked_by": [
         "048-collapse-second-job-queue.md"
@@ -231,7 +197,7 @@
       "id": "053",
       "title": "signed-page-image-link",
       "type": "AFK",
-      "status": "backlog",
+      "status": "done",
       "tracker": "https://github.com/kkkamur07/greekOCR/issues/53",
       "blocked_by": [
         "052-device-claim-endpoint.md"
@@ -242,7 +208,7 @@
       "id": "054",
       "title": "device-lease-stale-sweep",
       "type": "AFK",
-      "status": "backlog",
+      "status": "done",
       "tracker": "https://github.com/kkkamur07/greekOCR/issues/54",
       "blocked_by": [
         "052-device-claim-endpoint.md"
@@ -253,7 +219,7 @@
       "id": "055",
       "title": "version-floor",
       "type": "AFK",
-      "status": "backlog",
+      "status": "done",
       "tracker": "https://github.com/kkkamur07/greekOCR/issues/55",
       "blocked_by": [
         "052-device-claim-endpoint.md"
@@ -264,7 +230,7 @@
       "id": "056",
       "title": "cli-pair-and-version",
       "type": "AFK",
-      "status": "backlog",
+      "status": "in_progress",
       "tracker": "https://github.com/kkkamur07/greekOCR/issues/56",
       "blocked_by": [
         "050-publish-inference-package.md"
@@ -297,7 +263,7 @@
       "id": "059",
       "title": "frontend-host-preference",
       "type": "AFK",
-      "status": "backlog",
+      "status": "done",
       "tracker": "https://github.com/kkkamur07/greekOCR/issues/59",
       "blocked_by": [
         "051-execution-target-capacity-gating.md"
@@ -319,7 +285,7 @@
       "id": "061",
       "title": "delete-native-packaging",
       "type": "AFK",
-      "status": "backlog",
+      "status": "done",
       "tracker": "https://github.com/kkkamur07/greekOCR/issues/61",
       "blocked_by": [
         "050-publish-inference-package.md"

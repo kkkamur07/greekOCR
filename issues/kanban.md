@@ -16,12 +16,10 @@ _None._
 
 ## In progress
 
-4/5 — one worktree each, created at merged trunk and base-verified before launch.
+1/5 — the graph, not the cap, is the limit now: 057 and 058 both wait on 056,
+and 060 waits on 057. There is no second lane to open until 056 lands.
 
-- [ ] [050 · publish inference package](050-publish-inference-package.md) — `feat/050-publish-inference-package`
-- [ ] [053 · signed page-image link](053-signed-page-image-link.md) — `feat/053-signed-page-image-link`
-- [ ] [054 · device lease stale sweep](054-device-lease-stale-sweep.md) — `feat/054-device-lease-stale-sweep`
-- [ ] [055 · version floor](055-version-floor.md) — `feat/055-version-floor`
+- [ ] [056 · CLI pair + version](056-cli-pair-and-version.md) — `feat/056-cli-pair-and-version`
 
 ## Review
 
@@ -34,15 +32,18 @@ Merged into `feat/inference-cli-redesign`, gates verified, migration chain appli
 - [x] [048 · collapse second job queue](048-collapse-second-job-queue.md) — 82 files, +610/−2739
 - [x] [049 · Torch runtime, archive ONNX](049-torch-runtime-archive-onnx.md) — output byte-identical, PyTorch faster
 - [x] [051 · execution target + capacity](051-execution-target-capacity-gating.md) — migration re-chained to `007`
+- [x] [050 · publish inference package](050-publish-inference-package.md) — wheel is `inference/` minus the loopback surfaces
 - [x] [052 · device claim endpoint](052-device-claim-endpoint.md) — 25 live acceptance tests; ADR 0005
+- [x] [053 · signed page-image link](053-signed-page-image-link.md) — ~60s link, its own dial, not the lease
+- [x] [054 · device lease stale sweep](054-device-lease-stale-sweep.md) — expired leases re-pend; a closed lid is not a failure
+- [x] [055 · version floor](055-version-floor.md) — 426 before authentication, so a stale agent stops reporting capacity
 - [x] [059 · frontend host preference](059-frontend-host-preference.md) — 219 frontend tests
+- [x] [061 · delete native packaging](061-delete-native-packaging.md) — −1954 lines; 8 signing secrets to revoke
 
 ## Backlog
 
 | Issue | Blocked by |
 |-------|-----------|
-| [056 · CLI pair + version](056-cli-pair-and-version.md) | 050 |
-| [057 · CLI run loop](057-cli-run-loop.md) | 053, 054, 056 |
-| [058 · CLI self-upgrade](058-cli-self-upgrade.md) | 055, 056 |
-| [060 · delete loopback transport](060-delete-loopback-transport.md) | 057, 059 |
-| [061 · delete native packaging](061-delete-native-packaging.md) | 050 |
+| [057 · CLI run loop](057-cli-run-loop.md) | ~~053~~, ~~054~~, 056 |
+| [058 · CLI self-upgrade](058-cli-self-upgrade.md) | ~~055~~, 056 |
+| [060 · delete loopback transport](060-delete-loopback-transport.md) | 057, ~~059~~ |

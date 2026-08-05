@@ -2,7 +2,7 @@
 id: "061"
 title: "delete-native-packaging"
 type: AFK
-status: backlog
+status: done
 tracker: "https://github.com/kkkamur07/greekOCR/issues/61"
 blocked_by:
   - "050-publish-inference-package.md"

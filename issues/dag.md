@@ -1,6 +1,6 @@
 # Issue DAG
 
-> Regenerated 2026-08-04 — inference redesign, parent PRD [#47](https://github.com/kkkamur07/greekOCR/issues/47)
+> Regenerated 2026-08-05 — inference redesign, parent PRD [#47](https://github.com/kkkamur07/greekOCR/issues/47)
 >
 > Governed by [ADR 0002](../docs/adr/0002-inference-cli-replaces-loopback-helper.md) and
 > [ADR 0003](../docs/adr/0003-single-job-queue-cloud-worker-claims-like-a-device.md).
@@ -11,8 +11,10 @@
 
 ## Parallel lanes (ready now)
 
-Only wave 1 is unblocked at generation time. Later waves are listed so the lane
-plan is visible up front.
+**Waves 1-3, 5 and 061 are merged.** What remains is the tail of the graph, and
+it is a chain rather than a fan: 057 and 058 both wait on 056, and 060 waits on
+057. The lane cap of 5 stopped being the constraint once wave 3 landed - the
+graph itself is now the limit, so one lane runs at a time to the end.
 
 | Wave | Issues | Why they can run together |
 |------|--------|---------------------------|
@@ -40,7 +42,13 @@ replacement is demonstrably working.
 
 ## Stats
 
-- **Total:** 14 | **Ready (AFK):** 2 | **Ready (HITL):** 0 | **Blocked:** 12
+- **Total:** 14 | **Done:** 10 | **In progress:** 1 (056) | **Blocked:** 3 (057, 058, 060)
+- Follow-up issues filed by the lanes themselves, outside the original 14:
+  [#62](https://github.com/kkkamur07/greekOCR/issues/62) (segmentation peak memory),
+  [#63](https://github.com/kkkamur07/greekOCR/issues/63) (device-pairing event-loop collision),
+  [#64](https://github.com/kkkamur07/greekOCR/issues/64) (announce target at enqueue),
+  [#65](https://github.com/kkkamur07/greekOCR/issues/65) (CUDA pin),
+  [#66](https://github.com/kkkamur07/greekOCR/issues/66) (rename import package before PyPI).
 - All 14 slices are AFK. No HITL slice — every architectural decision was
   resolved into ADR 0002, ADR 0003, and ADR 0004 before decomposition.
 
