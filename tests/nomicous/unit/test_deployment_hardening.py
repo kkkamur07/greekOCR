@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 import tomllib
 
 import yaml
@@ -98,8 +99,19 @@ def test_no_native_packaging_survives() -> None:
     **version floor** bump, which the platform enforces on the claim path. If
     any of this grows back, that property is gone with it.
     """
-    assert not (REPO_ROOT / "packaging").exists()
-    assert not (REPO_ROOT / ".github" / "workflows" / "release-helper.yml").exists()
+    # Tracked content, not directory existence: a checkout that once ran the
+    # PyInstaller build still has `packaging/helper/{build,dist}` on disk, and
+    # those are gitignored leftovers of the mechanism rather than the mechanism.
+    # Testing `.exists()` fails on a developer's machine while passing in CI,
+    # which is the wrong way round for a guard.
+    tracked = subprocess.run(
+        ["git", "ls-files", "packaging", ".github/workflows/release-helper.yml"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()
+    assert tracked == []
 
     pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     assert "packaging" not in pyproject["dependency-groups"]
