@@ -10,6 +10,7 @@ import numpy as np
 from PIL import Image
 
 from inference.architectures.blla.blla_decoder import decode_blla_heatmaps
+from inference.architectures.isolation import reraise_if_none_survived
 from inference.contracts.segment import SegmentBlock, SegmentLine, SegmentRunResponse
 from inference.preprocessing.segment_geometry import simplify_blla_boundary
 from inference.preprocessing.segment_refinement import (
@@ -114,8 +115,10 @@ def build_blla_segment_response(
     )
 
     lines: list[SegmentLine] = []
+    # Holding the first failure is what distinguishes "every line failed" from
+    # "the decoder found nothing worth emitting"; a separate counter would say
+    # the same thing twice.
     first_failure: Exception | None = None
-    failed_lines = 0
     for order, decoded in enumerate(decoded_lines):
         baseline = decoded.baseline
         ceiling = decoded.polygon
@@ -155,7 +158,6 @@ def build_blla_segment_response(
             # trips OpenCV must cost its own line, not the other thirty-nine on
             # the page. The line is dropped exactly like the short-ceiling case
             # above; the failure is kept so an all-failed page can still raise.
-            failed_lines += 1
             first_failure = first_failure or error
             logger.warning(
                 "BLLA line refinement failed (raw_order=%s, ceiling_points=%s)",
@@ -185,9 +187,11 @@ def build_blla_segment_response(
                 )
             )
 
-    if failed_lines and not lines:
-        # Every candidate line blew up: an empty response would read as "this
-        # page has no text", which is a far worse lie than a 5xx.
-        raise first_failure  # type: ignore[misc]
+    # Every candidate line blew up: an empty response would read as "this page
+    # has no text", which is a far worse lie than a 5xx. The same verdict is
+    # reached from the Calamari batch loop, so the rule itself lives in
+    # ``architectures.isolation``; a page of pure *skips* (short ceilings, no
+    # failures) still returns empty, which is why ``first_failure`` gates it.
+    reraise_if_none_survived(survivors=len(lines), first_failure=first_failure)
 
     return SegmentRunResponse(blocks=[block] if lines else [], lines=lines)

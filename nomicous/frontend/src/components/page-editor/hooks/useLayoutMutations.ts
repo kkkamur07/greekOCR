@@ -19,10 +19,11 @@ import { ApiError } from "../../../api/errors";
 import {
   blobToBase64,
   DEFAULT_SEGMENT_REGISTRY_MODEL_ID,
+  runLocalFirstWrite,
   runLocalInference,
   type LocalInferenceCallbacks,
   isAbortError,
-  localOnlyRunFailedMessage,
+  isRunSupersededError,
   localOnlyUnavailableMessage,
 } from "../../../inference";
 import { cleanPolygonPoints, offsetGeometry } from "../canvasGeometry";
@@ -504,6 +505,17 @@ export function useLayoutMutations({
     return reloadedLines.length;
   }
 
+  /** The sentence a finished segmentation reports, which is all the two paths differ by. */
+  function segmentationMessage(
+    source: "local" | "cloud",
+    segmentCount: number,
+  ): string {
+    const where = source === "local" ? " locally" : "";
+    return useOtsuRefinement
+      ? `Kraken segmentation completed${where} with Otsu refinement (${otsuSphereRadius}px sphere, ${segmentCount} Segment(s)).`
+      : `Kraken segmentation completed${where} using raw Kraken boundaries (${segmentCount} Segment(s)).`;
+  }
+
   async function runAutoSegment() {
     if (!projectId || !documentId || !partId) return;
     if (
@@ -517,126 +529,93 @@ export function useLayoutMutations({
     setSegmentRunCount((count) => count + 1);
     setSegmentMessage(null);
     setPairingError(null);
-    // The signal the jobs panel owns. Only an abort on *this* signal is a user
-    // cancellation; the run's own signals say why else it stopped.
-    let userCancelSignal: AbortSignal | undefined;
-    // Owned by the page, so it stays readable after the run it belongs to has
-    // already unwound.
-    let supersededSignal: AbortSignal | undefined;
-    try {
-      const resolvedSegmentModelId =
-        segmentRegistryModelId ?? DEFAULT_SEGMENT_REGISTRY_MODEL_ID;
-      if (shouldUseLocalPath(resolvedSegmentModelId)) {
-        // Set once the server has stored the local segmentation. Only the work
-        // up to that point may send the page to the cloud; running it again
-        // afterwards would replace Segments that are already saved.
-        let persistedLocally = false;
-        try {
-          await trackLocalTask(
-            {
-              label: "Kraken line segmentation",
-              kind: "segmentation",
-            },
-            async (signal) => {
-              userCancelSignal = signal;
-              if (!partImageUrl) {
-                throw new Error(
-                  "Page image is not available for local segmentation.",
-                );
-              }
-              const run = localInference.startRun(resolvedSegmentModelId);
-              supersededSignal = run.supersededSignal;
-              try {
-                const combinedSignal = AbortSignal.any([
-                  signal,
-                  run.cloudSwitchSignal,
-                  run.supersededSignal,
-                ]);
-                const imageBytes = await blobToBase64(
-                  await fetchPartImage(partImageUrl),
-                );
-                combinedSignal.throwIfAborted();
-                const response = await runLocalInference({
-                  task: "segment",
-                  registry_model_id: resolvedSegmentModelId,
-                  image_bytes: imageBytes,
-                  signal: combinedSignal,
-                  params: {
-                    use_otsu_refinement: useOtsuRefinement,
-                    otsu_sphere_radius: otsuSphereRadius,
-                  },
-                });
-                combinedSignal.throwIfAborted();
-                if (response.task !== "segment") {
-                  throw new Error(
-                    "Local segment returned an unexpected response.",
-                  );
-                }
-                await api.persistLocalSegment(projectId, documentId, partId, {
-                  registry_model_id: resolvedSegmentModelId,
-                  output: response.output,
-                });
-              } finally {
-                run.end();
-              }
-            },
-          );
-          persistedLocally = true;
-        } catch (err) {
-          // A cancellation the user asked for must stop here, never continue
-          // silently in the cloud.
-          if (userCancelSignal?.aborted) throw err;
-          // A newer run for this page owns the outcome now. Drop this one
-          // outright - no banner, and above all no cloud job to race with it.
-          if (supersededSignal?.aborted) return;
-          if (!cloudInferenceEnabled) {
-            throw new Error(localOnlyRunFailedMessage(err));
-          }
-          // Any other local failure (weights missing, helper crash, 503, …)
-          // falls through to the cloud path below.
-        }
 
-        if (persistedLocally) {
-          // Only the reload is left. A failure here is a stale view of a
-          // segmentation that is already saved, so it surfaces as an error
-          // banner and stops - it is not a reason to segment again in the cloud.
-          const segmentCount = await reloadAfterSegmentation();
-          setSegmentMessage(
-            useOtsuRefinement
-              ? `Kraken segmentation completed locally with Otsu refinement (${otsuSphereRadius}px sphere, ${segmentCount} Segment(s)).`
-              : `Kraken segmentation completed locally using raw Kraken boundaries (${segmentCount} Segment(s)).`,
-          );
-          return;
-        }
-      }
+    const jobMeta = {
+      label: "Kraken line segmentation",
+      kind: "segmentation" as const,
+    };
 
-      if (!cloudInferenceEnabled) {
-        throw new Error(localOnlyUnavailableMessage());
-      }
-
+    const segmentInCloud = async () => {
       const enqueued = await api.segmentPart(projectId, documentId, partId, {
         use_otsu_refinement: useOtsuRefinement,
         otsu_sphere_radius: otsuSphereRadius,
       });
-      await trackJobAndWait(
-        enqueued.job_id,
-        {
-          label: "Kraken line segmentation",
-          kind: "segmentation",
-        },
-        { timeoutMs: SEGMENT_JOB_TIMEOUT_MS },
-      );
-      const segmentCount = await reloadAfterSegmentation();
+      await trackJobAndWait(enqueued.job_id, jobMeta, {
+        timeoutMs: SEGMENT_JOB_TIMEOUT_MS,
+      });
+    };
+
+    try {
+      const resolvedSegmentModelId =
+        segmentRegistryModelId ?? DEFAULT_SEGMENT_REGISTRY_MODEL_ID;
+
+      let source: "local" | "cloud" = "cloud";
+      if (shouldUseLocalPath(resolvedSegmentModelId)) {
+        ({ source } = await runLocalFirstWrite<void>({
+          cloudEnabled: cloudInferenceEnabled,
+          trackLocalTask: (run) => trackLocalTask(jobMeta, run),
+          runInCloud: segmentInCloud,
+          runLocally: async ({ signal, reportRun }) => {
+            if (!partImageUrl) {
+              throw new Error(
+                "Page image is not available for local segmentation.",
+              );
+            }
+            const run = localInference.startRun(resolvedSegmentModelId);
+            reportRun(run);
+            try {
+              const combinedSignal = AbortSignal.any([
+                signal,
+                run.cloudSwitchSignal,
+                run.supersededSignal,
+              ]);
+              const imageBytes = await blobToBase64(
+                await fetchPartImage(partImageUrl),
+              );
+              combinedSignal.throwIfAborted();
+              const response = await runLocalInference({
+                task: "segment",
+                registry_model_id: resolvedSegmentModelId,
+                image_bytes: imageBytes,
+                signal: combinedSignal,
+                params: {
+                  use_otsu_refinement: useOtsuRefinement,
+                  otsu_sphere_radius: otsuSphereRadius,
+                },
+              });
+              combinedSignal.throwIfAborted();
+              if (response.task !== "segment") {
+                throw new Error(
+                  "Local segment returned an unexpected response.",
+                );
+              }
+              await api.persistLocalSegment(projectId, documentId, partId, {
+                registry_model_id: resolvedSegmentModelId,
+                output: response.output,
+              });
+            } finally {
+              run.end();
+            }
+          },
+        }));
+      } else {
+        if (!cloudInferenceEnabled) {
+          throw new Error(localOnlyUnavailableMessage());
+        }
+        await segmentInCloud();
+      }
+
+      // Whichever path ran it, the segmentation is stored by now and only the
+      // reload is left. A failure here is a stale view of saved Segments, so it
+      // surfaces as an error banner and stops; the write is already finished, so
+      // there is no cloud fallback left for it to trigger.
       setSegmentMessage(
-        useOtsuRefinement
-          ? `Kraken segmentation completed with Otsu refinement (${otsuSphereRadius}px sphere, ${segmentCount} Segment(s)).`
-          : `Kraken segmentation completed using raw Kraken boundaries (${segmentCount} Segment(s)).`,
+        segmentationMessage(source, await reloadAfterSegmentation()),
       );
     } catch (err) {
-      // The jobs panel already reports a user cancellation; no error banner.
-      if (isAbortError(err) && userCancelSignal?.aborted) {
-        return;
-      }
+      // The jobs panel already reports a user cancellation, and a superseded run
+      // is replaced by its successor; neither deserves an error banner.
+      if (isAbortError(err) || isRunSupersededError(err)) return;
       setPairingError(
         err instanceof Error ? err.message : "Auto segment failed.",
       );

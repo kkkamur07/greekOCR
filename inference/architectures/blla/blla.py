@@ -10,12 +10,14 @@ from typing import Any
 
 import torch
 from PIL import Image
-from src.hf.resolve.artifacts import verify_artifact_sha256
 
+from inference.architectures.artifact import resolve_artifact
 from inference.architectures.blla.blla_model import BLLATorchModel
 from inference.architectures.blla.blla_preprocessing import preprocess_blla_image
 from inference.architectures.blla.blla_runtime import build_blla_segment_response
 from inference.contracts.segment import SegmentRunResponse
+
+BLLA_ARTIFACT_SUFFIXES = frozenset({".safetensors"})
 
 
 class BLLAUnavailableError(RuntimeError):
@@ -36,12 +38,6 @@ def _validate_checkpoint(checkpoint: object) -> Mapping[str, object]:
     ):
         raise BLLAUnavailableError("BLLA checkpoint has an invalid model state dictionary")
     return checkpoint
-
-
-def _file_fingerprint(path: Path) -> tuple[int, int]:
-    """Cache-key component so replaced artifact files are reloaded."""
-    stat = path.stat()
-    return stat.st_mtime_ns, stat.st_size
 
 
 @lru_cache(maxsize=4)
@@ -80,16 +76,16 @@ def run_blla_segment(
 ) -> SegmentRunResponse:
     """Run native BLLA and return the legacy-compatible segment contract."""
 
-    if not model_path.exists():
-        raise FileNotFoundError(f"BLLA model not found: {model_path}")
-    if model_path.suffix != ".safetensors":
-        raise BLLAUnavailableError(
-            f"native BLLA runtime requires a safetensors checkpoint: {model_path}"
-        )
-    if artifact_sha256:
-        verify_artifact_sha256(model_path, artifact_sha256)
+    handle = resolve_artifact(
+        model_path,
+        label="BLLA model",
+        allowed_suffixes=BLLA_ARTIFACT_SUFFIXES,
+        unusable_error=BLLAUnavailableError,
+        unusable_message=(f"native BLLA runtime requires a safetensors checkpoint: {model_path}"),
+        artifact_sha256=artifact_sha256,
+    )
 
-    model = _load_blla_model(str(model_path), _file_fingerprint(model_path))
+    model = _load_blla_model(handle.path, handle.fingerprint)
     with Image.open(BytesIO(image_bytes)) as image:
         image = image.convert("RGB")
         prepared = preprocess_blla_image(image)

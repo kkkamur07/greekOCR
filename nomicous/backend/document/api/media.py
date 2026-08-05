@@ -13,13 +13,13 @@ from backend.document.api.media_responses import (
     PRIVATE_MEDIA_CACHE_CONTROL,
     part_image_response,
 )
-from backend.document.application.document_service import DocumentService
+from backend.document.application.part_service import DocumentPartService
 from backend.users.api.dependencies import get_current_user
 from backend.users.infrastructure.orm_models import User
 from infrastructure.db import get_db
 
 router = APIRouter(prefix="/media", tags=["media"])
-_service = DocumentService()
+_service = DocumentPartService()
 
 
 @router.get(

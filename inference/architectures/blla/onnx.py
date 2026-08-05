@@ -9,28 +9,31 @@ from typing import Any
 
 import numpy as np
 from PIL import Image
-from src.hf.resolve.artifacts import verify_artifact_sha256
 
+from inference.architectures.artifact import ArtifactHandle, resolve_artifact
 from inference.architectures.blla.blla_preprocessing import preprocess_blla_image_numpy
 from inference.architectures.blla.blla_runtime import build_blla_segment_response
 from inference.contracts.segment import SegmentRunResponse
+
+BLLA_ONNX_ARTIFACT_SUFFIXES = frozenset({".onnx"})
 
 
 class BLLAOnnxUnavailableError(RuntimeError):
     """Raised when the ONNX BLLA runtime cannot be used."""
 
 
-def _validate_model_path(model_path: Path) -> None:
-    if not model_path.exists():
-        raise FileNotFoundError(f"BLLA ONNX model not found: {model_path}")
-    if model_path.suffix != ".onnx":
-        raise BLLAOnnxUnavailableError(f"ONNX BLLA runtime requires an .onnx model: {model_path}")
-
-
-def _file_fingerprint(path: Path) -> tuple[int, int]:
-    """Cache-key component so replaced artifact files are reloaded."""
-    stat = path.stat()
-    return stat.st_mtime_ns, stat.st_size
+def _resolve_blla_onnx_artifact(
+    model_path: Path,
+    artifact_sha256: str | None = None,
+) -> ArtifactHandle:
+    return resolve_artifact(
+        model_path,
+        label="BLLA ONNX model",
+        allowed_suffixes=BLLA_ONNX_ARTIFACT_SUFFIXES,
+        unusable_error=BLLAOnnxUnavailableError,
+        unusable_message=f"ONNX BLLA runtime requires an .onnx model: {model_path}",
+        artifact_sha256=artifact_sha256,
+    )
 
 
 @lru_cache(maxsize=4)
@@ -79,16 +82,14 @@ def run_blla_onnx_logits(
 ) -> np.ndarray:
     """Run the ONNX graph on one float32 NCHW NumPy input."""
 
-    _validate_model_path(model_path)
-    if artifact_sha256:
-        verify_artifact_sha256(model_path, artifact_sha256)
+    handle = _resolve_blla_onnx_artifact(model_path, artifact_sha256)
     values = np.asarray(inputs, dtype=np.float32)
     if values.ndim != 4 or values.shape[0] != 1:
         raise ValueError("BLLA ONNX input must have shape (1, 3, 1800, width)")
     if values.shape[1] != 3 or values.shape[2] != 1800 or values.shape[3] <= 0:
         raise ValueError("BLLA ONNX input must have shape (1, 3, 1800, width)")
 
-    session, input_name = _load_blla_onnx_session(str(model_path), _file_fingerprint(model_path))
+    session, input_name = _load_blla_onnx_session(handle.path, handle.fingerprint)
     outputs = session.run(None, {input_name: np.ascontiguousarray(values)})
     logits = np.asarray(outputs[0], dtype=np.float32)
     if logits.ndim != 4 or logits.shape[0] != 1 or logits.shape[1] != 4:
@@ -105,9 +106,7 @@ def run_blla_onnx_segment(
 ) -> SegmentRunResponse:
     """Run Torch-free BLLA and return the legacy-compatible segment contract."""
 
-    _validate_model_path(model_path)
-    if artifact_sha256:
-        verify_artifact_sha256(model_path, artifact_sha256)
+    _resolve_blla_onnx_artifact(model_path, artifact_sha256)
 
     with Image.open(BytesIO(image_bytes)) as image:
         image = image.convert("RGB")

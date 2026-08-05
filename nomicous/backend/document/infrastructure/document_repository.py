@@ -235,6 +235,71 @@ class DocumentRepository:
         result = await session.execute(stmt.limit(limit))
         return list(result.scalars().all())
 
+    async def list_part_blocks(self, session: AsyncSession, part_id: UUID) -> list[Block]:
+        result = await session.execute(
+            select(Block).where(Block.part_id == part_id).order_by(Block.order, Block.created_at)
+        )
+        return list(result.scalars().all())
+
+    async def get_block_in_part(
+        self, session: AsyncSession, part_id: UUID, block_id: UUID
+    ) -> Block | None:
+        result = await session.execute(
+            select(Block).where(Block.id == block_id, Block.part_id == part_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_line_in_part(
+        self, session: AsyncSession, part_id: UUID, line_id: UUID
+    ) -> Line | None:
+        result = await session.execute(
+            select(Line)
+            .where(Line.id == line_id, Line.part_id == part_id)
+            .options(
+                selectinload(Line.transcriptions).selectinload(LineTranscription.transcription)
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def get_line_in_document(
+        self, session: AsyncSession, document_id: UUID, line_id: UUID
+    ) -> Line | None:
+        result = await session.execute(
+            select(Line)
+            .join(DocumentPart, Line.part_id == DocumentPart.id)
+            .where(Line.id == line_id, DocumentPart.document_id == document_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_transcription_in_document(
+        self, session: AsyncSession, document_id: UUID, transcription_id: UUID
+    ) -> Transcription | None:
+        transcription = await session.get(Transcription, transcription_id)
+        if transcription is None or transcription.document_id != document_id:
+            return None
+        return transcription
+
+    async def count_part_lines(self, session: AsyncSession, part_id: UUID) -> int:
+        result = await session.execute(
+            select(func.count()).select_from(Line).where(Line.part_id == part_id)
+        )
+        return int(result.scalar_one())
+
+    async def count_paired_ground_truth_lines(self, session: AsyncSession, part_id: UUID) -> int:
+        """Lines carrying non-blank ground-truth text — the denominator of pairing progress."""
+        result = await session.execute(
+            select(func.count(func.distinct(Line.id)))
+            .select_from(Line)
+            .join(LineTranscription, LineTranscription.line_id == Line.id)
+            .join(Transcription, LineTranscription.transcription_id == Transcription.id)
+            .where(
+                Line.part_id == part_id,
+                Transcription.kind == TranscriptionKind.ground_truth,
+                func.length(func.trim(LineTranscription.text)) > 0,
+            )
+        )
+        return int(result.scalar_one())
+
     async def list_page_transcription_lines(
         self, session: AsyncSession, part_id: UUID
     ) -> list[PageTranscriptionLine]:
@@ -244,6 +309,17 @@ class DocumentRepository:
             .order_by(PageTranscriptionLine.order, PageTranscriptionLine.created_at)
         )
         return list(result.scalars().all())
+
+    async def get_page_transcription_line(
+        self, session: AsyncSession, part_id: UUID, order: int
+    ) -> PageTranscriptionLine | None:
+        result = await session.execute(
+            select(PageTranscriptionLine).where(
+                PageTranscriptionLine.part_id == part_id,
+                PageTranscriptionLine.order == order,
+            )
+        )
+        return result.scalar_one_or_none()
 
     async def next_part_order(self, session: AsyncSession, document_id: UUID) -> int:
         await session.execute(

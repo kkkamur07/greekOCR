@@ -1,17 +1,47 @@
-"""Enqueue ML jobs for document parts."""
+"""Enqueue cloud ML jobs for document parts.
+
+One responsibility — turning "segment this page" or "transcribe these lines" into a
+``pending`` row the platform worker will claim. It is the only module in this context that
+knows about the ML catalog, and the only one that writes ``jobs``.
+
+Model resolution is the substance behind the small interface: an explicit ``model_id``
+wins and contributes its defaults, otherwise the nearest binding (part, then document,
+then project) is consulted, and *no* binding is not an error — the job goes out with a
+null model and the worker's own default applies. That last part is why ``NotFoundError``
+from the resolver is swallowed here rather than propagated.
+"""
+
+from __future__ import annotations
 
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.exceptions import ConflictError, NotFoundError, ValidationError
-from backend.document.application.document_service_shared import DocumentServiceSharedMixin
+from backend.document.application.document_access import DocumentAccess
+from backend.document.infrastructure.document_repository import DocumentRepository
 from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
+from backend.ml.application.model_service import InferenceModelService
 from backend.ml.infrastructure.orm_models import InferenceTask
+from backend.project.infrastructure.project_repository import ProjectRepository
 from backend.users.infrastructure.orm_models import User
 
 
-class DocumentJobEnqueueMixin(DocumentServiceSharedMixin):
+class DocumentJobEnqueueService:
+    def __init__(
+        self,
+        documents: DocumentRepository | None = None,
+        projects: ProjectRepository | None = None,
+        access: DocumentAccess | None = None,
+        inference_models: InferenceModelService | None = None,
+    ) -> None:
+        self._documents = documents or DocumentRepository()
+        self._projects = projects or ProjectRepository()
+        self._access = access or DocumentAccess(
+            documents=self._documents, projects=self._projects
+        )
+        self._inference_models = inference_models or InferenceModelService()
+
     async def enqueue_transcribe_part(
         self,
         session: AsyncSession,
@@ -23,8 +53,10 @@ class DocumentJobEnqueueMixin(DocumentServiceSharedMixin):
         model_id: UUID | None = None,
         line_ids: list[UUID] | None = None,
     ) -> Job:
-        document = await self.get_document(session, user, project_id, document_id)
-        part = await self._document_part_or_404(session, document, part_id)
+        context = await self._access.require_part(
+            session, user, project_id, document_id, part_id
+        )
+        document, part = context.document, context.part
         lines = await self._documents.list_part_lines(session, part.id)
         if not lines:
             raise ConflictError("Cannot transcribe a document part without layout lines")
@@ -88,8 +120,10 @@ class DocumentJobEnqueueMixin(DocumentServiceSharedMixin):
         model_id: UUID | None = None,
         ml_params: dict | None = None,
     ) -> Job:
-        document = await self.get_document(session, user, project_id, document_id)
-        part = await self._document_part_or_404(session, document, part_id)
+        context = await self._access.require_part(
+            session, user, project_id, document_id, part_id
+        )
+        document, part = context.document, context.part
         binding_id: UUID | None = None
         selected_model_id = model_id
         effective_params: dict = dict(ml_params or {})

@@ -6,6 +6,7 @@ import {
   type AnchorHTMLAttributes,
   type ReactNode,
 } from "react";
+import { clearResourceCache } from "./src/api/resourceCache";
 
 const storage = new Map<string, string>();
 
@@ -103,5 +104,8 @@ vi.stubGlobal("ResizeObserver", ResizeObserverMock);
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  // Server-state reads are cached in a module-level map, so one test's data
+  // would otherwise still be current for the next one and its mocks never called.
+  clearResourceCache();
   window.history.replaceState({}, "", "/");
 });

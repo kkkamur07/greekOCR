@@ -11,7 +11,8 @@ import uuid
 import pytest
 
 from backend.document.api.schemas import LinesReplaceRequest
-from backend.document.application.document_service import DocumentService
+from backend.document.application.document_access import PartContext
+from backend.document.application.layout_service import LayoutService
 from backend.document.infrastructure.orm_models import (
     Document,
     DocumentPart,
@@ -60,7 +61,18 @@ class _Repository:
         return list(self.persisted)
 
 
-def _service(monkeypatch) -> tuple[DocumentService, _Session, Document, DocumentPart, _Repository]:
+class _StubAccess:
+    """The bulk replace is already authorized; what is under test is the payload defaults."""
+
+    def __init__(self, document: Document, part: DocumentPart) -> None:
+        self._document = document
+        self._part = part
+
+    async def require_part(self, *_args, **_kwargs) -> PartContext:
+        return PartContext(project=object(), document=self._document, part=self._part)
+
+
+def _service(monkeypatch) -> tuple[LayoutService, _Session, Document, DocumentPart, _Repository]:
     document = Document(id=uuid.uuid4(), project_id=uuid.uuid4(), name="codex")
     part = DocumentPart(id=uuid.uuid4(), document_id=document.id, order=0, image_key="page.webp")
     ground_truth = Transcription(
@@ -70,12 +82,7 @@ def _service(monkeypatch) -> tuple[DocumentService, _Session, Document, Document
         kind=TranscriptionKind.ground_truth,
     )
     repository = _Repository(part, ground_truth)
-    service = DocumentService(documents=repository)
-
-    async def get_document(*_args, **_kwargs):
-        return document
-
-    monkeypatch.setattr(service, "get_document", get_document)
+    service = LayoutService(documents=repository, access=_StubAccess(document, part))
     session = _Session()
 
     original_add = session.add

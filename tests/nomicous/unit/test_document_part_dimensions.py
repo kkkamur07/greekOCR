@@ -16,7 +16,8 @@ import pytest
 from PIL import Image
 
 from backend.core.exceptions import ValidationError
-from backend.document.application.document_service import DocumentService
+from backend.document.application.document_access import DocumentContext
+from backend.document.application.part_service import DocumentPartService
 from backend.document.infrastructure.media_store.encoding import (
     MAX_DECODE_PIXELS,
     bounded_image,
@@ -81,6 +82,16 @@ class _Repository:
         return 0
 
 
+class _StubAccess:
+    """Stands in for the authorization seam; these tests are about pixels, not permissions."""
+
+    def __init__(self, document: Document | None = None) -> None:
+        self._document = document
+
+    async def require_document(self, *_args, **_kwargs) -> DocumentContext:
+        return DocumentContext(project=object(), document=self._document)
+
+
 class _Store:
     def __init__(self, blobs: dict[str, bytes] | None = None) -> None:
         self.blobs = blobs or {}
@@ -104,14 +115,11 @@ class _Store:
 
 
 @pytest.mark.asyncio
-async def test_upload_part_persists_source_dimensions(monkeypatch) -> None:
-    service = DocumentService(documents=_Repository(), media=_Store())
+async def test_upload_part_persists_source_dimensions() -> None:
     document = Document(id=uuid.uuid4(), name="codex")
-
-    async def get_document(*_args, **_kwargs):
-        return document
-
-    monkeypatch.setattr(service, "get_document", get_document)
+    service = DocumentPartService(
+        documents=_Repository(), media=_Store(), access=_StubAccess(document)
+    )
     session = _RecordingSession()
 
     part = await service.upload_part(
@@ -134,7 +142,7 @@ async def test_backfill_recovers_dimensions_from_stored_image() -> None:
     store = _Store()
     part = DocumentPart(id=uuid.uuid4(), document_id=uuid.uuid4(), order=0, image_key="legacy.webp")
     store.blobs["legacy.webp"] = encode_part_image_with_size(_png_bytes(12, 9)).data
-    service = DocumentService(documents=_Repository(), media=store)
+    service = DocumentPartService(documents=_Repository(), media=store)
     session = _RecordingSession()
 
     await service.backfill_part_dimensions(session, [part])
@@ -154,7 +162,7 @@ async def test_backfill_skips_parts_that_already_have_dimensions() -> None:
         width=100,
         height=50,
     )
-    service = DocumentService(documents=_Repository(), media=store)
+    service = DocumentPartService(documents=_Repository(), media=store)
     session = _RecordingSession()
 
     await service.backfill_part_dimensions(session, [part])
@@ -166,7 +174,7 @@ async def test_backfill_skips_parts_that_already_have_dimensions() -> None:
 @pytest.mark.asyncio
 async def test_backfill_tolerates_missing_blob() -> None:
     part = DocumentPart(id=uuid.uuid4(), document_id=uuid.uuid4(), order=0, image_key="gone.webp")
-    service = DocumentService(documents=_Repository(), media=_Store())
+    service = DocumentPartService(documents=_Repository(), media=_Store())
     session = _RecordingSession()
 
     await service.backfill_part_dimensions(session, [part])

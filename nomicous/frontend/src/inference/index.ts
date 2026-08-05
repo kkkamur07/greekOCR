@@ -12,6 +12,11 @@ export {
   DEFAULT_SEGMENT_REGISTRY_MODEL_ID,
 } from "./constants";
 export { runLocalInference } from "./localClient";
+export { runLocalFirstWrite } from "./localFirstWrite";
+export type {
+  LocalFirstWriteOptions,
+  LocalFirstWriteResult,
+} from "./localFirstWrite";
 export { modelDisplayName } from "./modelDisplayName";
 export { blobToBase64, registrySelectionFromArtifactRef } from "./registry";
 export {

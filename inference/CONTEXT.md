@@ -83,7 +83,7 @@ The machine where model weights are cached and inference executes - either the r
 _Avoid_: Runtime (too generic), worker node (infra jargon)
 
 **Lite model tier**:
-A registry model id sized for CPU on a typical researcher laptop; eligible for **local inference** via **Inference helper**.
+A registry model id sized for CPU on a typical researcher laptop; eligible for **local inference**.
 _Avoid_: Small model (vague), edge model (mobile jargon)
 
 **Server model tier**:
@@ -95,8 +95,12 @@ Whether a registry model id may run on the researcher's machine (`local`), only 
 _Avoid_: device (already means cpu/cuda), tier alone (ambiguous)
 
 **Execution target**:
-The **inference host** a single job runs on - `local` or `cloud` - fixed when the job is submitted and never changed afterwards. Choosing `local` requires a present device; when none is present the researcher is told so and the job is submitted as `cloud` instead, before it exists. A job that fails reports which host it failed on.
+The **inference host** a single job runs on - `local` or `cloud` - fixed when the job is submitted and never changed afterwards. A target may only be chosen when it has **capacity**; the researcher is told which host will run the job, and a job that fails reports which host it failed on.
 _Avoid_: routing/preference (implies the platform may re-decide mid-flight), fallback (nothing changes target after submission)
+
+**Capacity**:
+Whether an **inference host** currently has a machine able to take work, answered by whether any device for that host was seen recently. The researcher's laptop and a hosted worker are the same kind of thing here, so cloud availability is not a separate concept.
+_Avoid_: helper available (loopback-era, meant a port answering), online (ambiguous with the researcher's own connectivity)
 
 **Hub namespace**:
 The Hugging Face account or org that owns **Hub model repos** and **Hub dataset repos**. Starts under a personal username; may later move to the `nomicous` org without changing repo slugs.

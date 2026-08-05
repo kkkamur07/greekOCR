@@ -91,6 +91,10 @@ platform-prod = [
     "psycopg2-binary>=2.9.10",
     "PyJWT>=2.10.0",
     "python-multipart>=0.0.18",
+    # Secret-strength estimation for JWT_SECRET. Dropbox's zxcvbn, the Python port
+    # the upstream authors point at. MIT, ~880 KB, and it runs once at settings
+    # load, so it costs the Vercel bundle size but no request latency.
+    "zxcvbn>=4.5.0",
     "sqlalchemy[asyncio]>=2.0.36",
     "pillow>=12.3.0",
     "reportlab>=5.0.0",

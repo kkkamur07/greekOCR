@@ -1,4 +1,14 @@
-"""Document CRUD and public read use cases."""
+"""The documents in a project: their existence, their names, and their workflow state.
+
+One responsibility — a document's life from creation to deletion, plus the reads that
+expose it. Page images, geometry and transcription text are three other modules; this one
+only ever touches the ``documents`` and ``transcriptions`` rows.
+
+The public (unauthenticated) reads live here rather than in a separate "public service"
+because they are the *same* lifecycle reads with a different audience, and the audience is
+already a parameter of :class:`DocumentAccess`. Splitting them apart would put the
+published-workflow rule in two places again.
+"""
 
 from __future__ import annotations
 
@@ -8,8 +18,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.api.pagination import PageCursor
 from backend.core.exceptions import AccessDeniedError, ValidationError
-from backend.document.domain.access import require_can_read
-from backend.project.domain.access import is_owner
+from backend.document.application.document_access import DocumentAccess
+from backend.document.application.patch_fields import (
+    DOCUMENT_UPDATE_FIELDS,
+    reject_unknown_fields,
+)
+from backend.document.infrastructure.document_repository import DocumentRepository
 from backend.document.infrastructure.orm_models import (
     Block,
     Document,
@@ -18,14 +32,24 @@ from backend.document.infrastructure.orm_models import (
     Line,
     Transcription,
 )
-from backend.document.application.document_service_shared import (
-    DOCUMENT_UPDATE_FIELDS,
-    DocumentServiceSharedMixin,
-)
+from backend.project.domain.access import is_owner
+from backend.project.infrastructure.project_repository import ProjectRepository
 from backend.users.infrastructure.orm_models import User
 
 
-class DocumentCrudMixin(DocumentServiceSharedMixin):
+class DocumentCatalog:
+    def __init__(
+        self,
+        documents: DocumentRepository | None = None,
+        projects: ProjectRepository | None = None,
+        access: DocumentAccess | None = None,
+    ) -> None:
+        self._documents = documents or DocumentRepository()
+        self._projects = projects or ProjectRepository()
+        self._access = access or DocumentAccess(
+            documents=self._documents, projects=self._projects
+        )
+
     async def list_documents(
         self,
         session: AsyncSession,
@@ -36,7 +60,7 @@ class DocumentCrudMixin(DocumentServiceSharedMixin):
         limit: int = 50,
         cursor=None,
     ) -> list[Document]:
-        await self._require_member(session, project_id, user.id)
+        await self._access.require_project(session, user, project_id)
         return await self._documents.list_for_project(
             session,
             project_id,
@@ -53,7 +77,7 @@ class DocumentCrudMixin(DocumentServiceSharedMixin):
         *,
         name: str,
     ) -> Document:
-        await self._require_member(session, project_id, user.id)
+        await self._access.require_project(session, user, project_id)
         return await self._documents.create(session, project_id=project_id, name=name)
 
     async def get_document(
@@ -63,9 +87,8 @@ class DocumentCrudMixin(DocumentServiceSharedMixin):
         project_id: UUID,
         document_id: UUID,
     ) -> Document:
-        project = await self._require_member(session, project_id, user.id)
-        document = await self._load_document_in_project(session, project, document_id)
-        return document
+        context = await self._access.require_document(session, user, project_id, document_id)
+        return context.document
 
     async def get_document_public(
         self,
@@ -73,10 +96,11 @@ class DocumentCrudMixin(DocumentServiceSharedMixin):
         project_id: UUID,
         document_id: UUID,
     ) -> Document:
-        project = await self._load_project(session, project_id)
-        document = await self._load_document_in_project(session, project, document_id)
-        require_can_read(document, project, None)
-        return document
+        # ``None`` is the whole difference: the public router has no authentication
+        # dependency, so there is no caller to check membership for, and the seam falls
+        # through to the published-workflow rule.
+        context = await self._access.require_document(session, None, project_id, document_id)
+        return context.document
 
     async def get_published_part(
         self,
@@ -85,8 +109,8 @@ class DocumentCrudMixin(DocumentServiceSharedMixin):
         document_id: UUID,
         part_id: UUID,
     ) -> DocumentPart:
-        document = await self.get_document_public(session, project_id, document_id)
-        return await self._document_part_or_404(session, document, part_id)
+        context = await self._access.require_part(session, None, project_id, document_id, part_id)
+        return context.part
 
     async def update_document(
         self,
@@ -96,9 +120,9 @@ class DocumentCrudMixin(DocumentServiceSharedMixin):
         document_id: UUID,
         **fields: object,
     ) -> Document:
-        self._reject_unknown_fields(fields, DOCUMENT_UPDATE_FIELDS, "document update")
-        project = await self._require_member(session, project_id, user.id)
-        document = await self._load_document_in_project(session, project, document_id)
+        reject_unknown_fields(fields, DOCUMENT_UPDATE_FIELDS, "document update")
+        context = await self._access.require_document(session, user, project_id, document_id)
+        project, document = context.project, context.document
         if "workflow" in fields and fields["workflow"] is not None:
             workflow = fields["workflow"]
             if not isinstance(workflow, DocumentWorkflow):
@@ -117,8 +141,8 @@ class DocumentCrudMixin(DocumentServiceSharedMixin):
         project_id: UUID,
         document_id: UUID,
     ) -> None:
-        project = await self._require_member(session, project_id, user.id)
-        document = await self._load_document_in_project(session, project, document_id)
+        context = await self._access.require_document(session, user, project_id, document_id)
+        document = context.document
         image_keys = [part.image_key for part in document.parts]
         await self._documents.delete_with_media_intents(session, document, image_keys)
 

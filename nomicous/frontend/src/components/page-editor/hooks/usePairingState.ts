@@ -17,15 +17,14 @@ import { fetchPartImage } from "../../../api/imageCache";
 import {
   blobToBase64,
   registrySelectionFromArtifactRef,
+  runLocalFirstWrite,
   runLocalInference,
   type LocalInferenceCallbacks,
   type LocalRun,
   type TranscribeBatchRunOutput,
   isAbortError,
   isRunSupersededError,
-  localOnlyRunFailedMessage,
   localOnlyUnavailableMessage,
-  RunSupersededError,
 } from "../../../inference";
 import type { PageEditorJobKind } from "../jobProgress";
 import {
@@ -319,12 +318,16 @@ export function usePairingState({
     return result;
   }
 
-  async function applyTranscribeJob(job: JobResponse) {
+  function transcribeJobResult(job: JobResponse): TranscribeJobResult {
     const result = job.result as TranscribeJobResult | null;
     if (!result?.transcription_id) {
       throw new Error("Transcribe job returned no result.");
     }
-    return applyTranscribeResult(result);
+    return result;
+  }
+
+  async function applyTranscribeJob(job: JobResponse) {
+    return applyTranscribeResult(transcribeJobResult(job));
   }
 
   function selectedTranscribeModel(): InferenceModelResponse | null {
@@ -349,8 +352,7 @@ export function usePairingState({
    *
    * Everything in here is part of "did the local run produce a saved result": a
    * failure means the cloud still has to do the work. The refresh that follows a
-   * success is deliberately left to the caller - see
-   * `runLocalTranscribeWithFallback`.
+   * success is deliberately left to the caller - see `runLocalFirstWrite`.
    */
   async function runLocalTranscribe(
     lineIds: string[],
@@ -444,55 +446,31 @@ export function usePairingState({
     lineIds: string[],
     jobMeta: { label: string; kind: PageEditorJobKind },
   ) {
-    // The signal the jobs panel owns. Only an abort on *this* signal is a user
-    // cancellation; the run's own signals say why else it stopped.
-    let userCancelSignal: AbortSignal | undefined;
-    // Owned by the page, so it stays readable after the run it belongs to has
-    // already unwound.
-    let supersededSignal: AbortSignal | undefined;
-    // Set once the server has stored the local result. Only the work up to this
-    // point may send the page to the cloud; anything after it would be paying
-    // twice for a transcription that already exists.
-    let persisted: TranscribeJobResult | null = null;
-    try {
-      persisted = await trackLocalTask(jobMeta, (signal) => {
-        userCancelSignal = signal;
-        return runLocalTranscribe(lineIds, signal, (run) => {
-          supersededSignal = run.supersededSignal;
-        });
-      });
-    } catch (err) {
-      // A cancellation the user asked for must stop here, never continue
-      // silently in the cloud.
-      if (userCancelSignal?.aborted) throw err;
-      // A newer run for this page owns the outcome now. Drop this one outright -
-      // no banner, and above all no cloud job to race with it.
-      if (supersededSignal?.aborted) throw new RunSupersededError();
-      if (!cloudInferenceEnabled) {
-        throw new Error(localOnlyRunFailedMessage(err));
-      }
-      // Any other local failure (weights missing, helper crash, 503, …) falls
-      // through to the cloud path below.
-    }
-
-    if (persisted) {
-      // Only the reload is left. A failure here is a stale view of a
-      // transcription that is already saved, so it surfaces as an error banner
-      // and stops - it is not a reason to run the page again in the cloud.
-      return applyTranscribeResult(persisted);
-    }
-
-    const enqueued = await api.enqueueTranscribePart(
-      projectId!,
-      documentId!,
-      partId!,
-      {
-        model_id: selectedTranscribeModelId!,
-        line_ids: lineIds.length === lines.length ? undefined : lineIds,
+    const { result } = await runLocalFirstWrite<TranscribeJobResult>({
+      cloudEnabled: cloudInferenceEnabled,
+      trackLocalTask: (run) => trackLocalTask(jobMeta, run),
+      runLocally: ({ signal, reportRun }) =>
+        runLocalTranscribe(lineIds, signal, reportRun),
+      runInCloud: async () => {
+        const enqueued = await api.enqueueTranscribePart(
+          projectId!,
+          documentId!,
+          partId!,
+          {
+            model_id: selectedTranscribeModelId!,
+            line_ids: lineIds.length === lines.length ? undefined : lineIds,
+          },
+        );
+        const job = await trackJobAndWait(enqueued.job_id, jobMeta);
+        return transcribeJobResult(job);
       },
-    );
-    const job = await trackJobAndWait(enqueued.job_id, jobMeta);
-    return applyTranscribeJob(job);
+    });
+
+    // Whichever path produced it, the transcription is stored by now and only
+    // the reload is left. A failure here is a stale view of saved work, so it
+    // surfaces as an error banner and stops; `runLocalFirstWrite` has already
+    // returned, so there is no cloud fallback left for it to trigger.
+    return applyTranscribeResult(result);
   }
 
   async function runSegmentOcr() {

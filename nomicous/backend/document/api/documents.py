@@ -58,8 +58,12 @@ from backend.document.api.schemas import (
     TranscribePartRequest,
     TranscriptionLayerResponse,
 )
-from backend.document.application.document_service import DocumentService
+from backend.document.application.document_catalog import DocumentCatalog
+from backend.document.application.document_job_enqueue import DocumentJobEnqueueService
+from backend.document.application.layout_service import LayoutService
 from backend.document.application.local_inference_service import LocalInferenceService
+from backend.document.application.part_service import DocumentPartService
+from backend.document.application.transcription_service import TranscriptionService
 from backend.document.infrastructure.document_repository import DocumentRepository
 from backend.document.infrastructure.orm_models import Block
 from backend.jobs.api.schemas import EnqueueJobResponse
@@ -68,7 +72,11 @@ from backend.users.infrastructure.orm_models import User
 from infrastructure.db import get_db
 
 router = APIRouter(prefix="/projects/{project_id}/documents", tags=["documents"])
-_service = DocumentService()
+_catalog = DocumentCatalog()
+_parts = DocumentPartService()
+_layout = LayoutService()
+_transcriptions = TranscriptionService()
+_enqueue = DocumentJobEnqueueService()
 _local_inference_service = LocalInferenceService()
 _document_repo = DocumentRepository()
 _export_service = AnnotationExportService()
@@ -146,7 +154,7 @@ async def list_documents(
     cursor: str | None = Query(default=None, max_length=MAX_CURSOR_LENGTH),
 ) -> DocumentPageResponse:
     page_cursor = decode_cursor(cursor) if cursor else None
-    documents = await _service.list_documents(
+    documents = await _catalog.list_documents(
         db,
         current_user,
         project_id,
@@ -179,7 +187,7 @@ async def create_document(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> DocumentResponse:
-    document = await _service.create_document(db, current_user, project_id, name=body.name)
+    document = await _catalog.create_document(db, current_user, project_id, name=body.name)
     return document_response(document, part_count=0)
 
 
@@ -190,8 +198,8 @@ async def get_document(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> DocumentWithPartsResponse:
-    document = await _service.get_document(db, current_user, project_id, document_id)
-    await _service.backfill_part_dimensions(db, document.parts)
+    document = await _catalog.get_document(db, current_user, project_id, document_id)
+    await _parts.backfill_part_dimensions(db, document.parts)
     return document_with_parts_response(document)
 
 
@@ -204,7 +212,7 @@ async def update_document(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> DocumentResponse:
     updates = body.model_dump(exclude_unset=True)
-    document = await _service.update_document(db, current_user, project_id, document_id, **updates)
+    document = await _catalog.update_document(db, current_user, project_id, document_id, **updates)
     part_counts = await _document_repo.count_parts_by_document_ids(db, [document.id])
     return document_response(document, part_count=part_counts.get(document.id, 0))
 
@@ -216,7 +224,7 @@ async def list_transcriptions(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> list[TranscriptionLayerResponse]:
-    transcriptions = await _service.list_transcriptions(db, current_user, project_id, document_id)
+    transcriptions = await _catalog.list_transcriptions(db, current_user, project_id, document_id)
     return [TranscriptionLayerResponse.model_validate(t) for t in transcriptions]
 
 
@@ -227,7 +235,7 @@ async def delete_document(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> None:
-    await _service.delete_document(db, current_user, project_id, document_id)
+    await _catalog.delete_document(db, current_user, project_id, document_id)
 
 
 @router.post(
@@ -249,7 +257,7 @@ async def upload_part(
         raise ValidationError("File exceeds the 100 MB upload limit")
     # Validation happens inside the single bounded decode the service performs to encode
     # the stored WebP; decoding here as well doubled the peak memory of every upload.
-    part = await _service.upload_part(
+    part = await _parts.upload_part(
         db,
         current_user,
         project_id,
@@ -268,7 +276,7 @@ async def reorder_parts(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> list[DocumentPartResponse]:
-    parts = await _service.reorder_parts(db, current_user, project_id, document_id, body.part_ids)
+    parts = await _parts.reorder_parts(db, current_user, project_id, document_id, body.part_ids)
     return [part_response(p) for p in parts]
 
 
@@ -281,7 +289,7 @@ async def update_part(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> DocumentPartResponse:
-    part = await _service.update_part_review_status(
+    part = await _parts.update_part_review_status(
         db,
         current_user,
         project_id,
@@ -300,7 +308,7 @@ async def list_part_layout(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> LayoutResponse:
-    blocks, lines = await _service.list_part_layout(
+    blocks, lines = await _layout.list_part_layout(
         db, current_user, project_id, document_id, part_id
     )
     return LayoutResponse(
@@ -322,7 +330,7 @@ async def create_part_block(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> BlockResponse:
-    block = await _service.create_part_block(
+    block = await _layout.create_part_block(
         db, current_user, project_id, document_id, part_id, order=body.order, box=body.box
     )
     return _block_response(block)
@@ -338,7 +346,7 @@ async def patch_part_block(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> BlockResponse:
-    block = await _service.patch_part_block(
+    block = await _layout.patch_part_block(
         db,
         current_user,
         project_id,
@@ -362,7 +370,7 @@ async def delete_part_block(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> None:
-    await _service.delete_part_block(db, current_user, project_id, document_id, part_id, block_id)
+    await _layout.delete_part_block(db, current_user, project_id, document_id, part_id, block_id)
 
 
 @router.get("/{document_id}/parts/{part_id}/lines", response_model=list[LineResponse])
@@ -373,7 +381,7 @@ async def list_part_lines(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> list[LineResponse]:
-    lines = await _service.list_part_lines(db, current_user, project_id, document_id, part_id)
+    lines = await _layout.list_part_lines(db, current_user, project_id, document_id, part_id)
     return [line_response(line) for line in lines]
 
 
@@ -390,7 +398,7 @@ async def create_part_line(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> LineResponse:
-    line = await _service.create_part_line(
+    line = await _layout.create_part_line(
         db,
         current_user,
         project_id,
@@ -416,7 +424,7 @@ async def patch_part_line(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> LineResponse:
-    line = await _service.patch_part_line(
+    line = await _layout.patch_part_line(
         db,
         current_user,
         project_id,
@@ -440,7 +448,7 @@ async def delete_part_line(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> None:
-    await _service.delete_part_line(db, current_user, project_id, document_id, part_id, line_id)
+    await _layout.delete_part_line(db, current_user, project_id, document_id, part_id, line_id)
 
 
 @router.put("/{document_id}/parts/{part_id}/lines", response_model=list[LineResponse])
@@ -452,7 +460,7 @@ async def replace_part_lines(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> list[LineResponse]:
-    lines = await _service.replace_part_lines(
+    lines = await _layout.replace_part_lines(
         db,
         current_user,
         project_id,
@@ -472,7 +480,7 @@ async def reset_part_layout(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> LayoutResponse:
-    blocks, lines = await _service.reset_part_layout(
+    blocks, lines = await _layout.reset_part_layout(
         db,
         current_user,
         project_id,
@@ -495,7 +503,7 @@ async def import_page_transcription(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PagePairingResponse:
-    text_lines, progress = await _service.import_page_transcription(
+    text_lines, progress = await _transcriptions.import_page_transcription(
         db, current_user, project_id, document_id, part_id, text=body.text
     )
     return _pairing_response(text_lines, progress)
@@ -509,7 +517,7 @@ async def get_page_pairing(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PagePairingResponse:
-    text_lines, progress = await _service.get_page_pairing(
+    text_lines, progress = await _transcriptions.get_page_pairing(
         db, current_user, project_id, document_id, part_id
     )
     return _pairing_response(text_lines, progress)
@@ -524,7 +532,7 @@ async def pair_page_text_line(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PagePairingResponse:
-    text_lines, progress = await _service.pair_page_text_line(
+    text_lines, progress = await _transcriptions.pair_page_text_line(
         db,
         current_user,
         project_id,
@@ -649,7 +657,7 @@ async def segment_part(
     body: SegmentPartRequest | None = None,
 ) -> EnqueueJobResponse:
     body = body or SegmentPartRequest()
-    job = await _service.enqueue_segment_part(
+    job = await _enqueue.enqueue_segment_part(
         db,
         current_user,
         project_id,
@@ -675,7 +683,7 @@ async def transcribe_part(
     body: TranscribePartRequest | None = None,
 ) -> EnqueueJobResponse:
     body = body or TranscribePartRequest()
-    job = await _service.enqueue_transcribe_part(
+    job = await _enqueue.enqueue_transcribe_part(
         db,
         current_user,
         project_id,
@@ -780,7 +788,7 @@ async def copy_to_ground_truth(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> CopyToGroundTruthResponse:
-    copied_line_ids = await _service.copy_to_ground_truth(
+    copied_line_ids = await _transcriptions.copy_to_ground_truth(
         db,
         current_user,
         project_id,
@@ -804,7 +812,7 @@ async def patch_ground_truth_line_text(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> LineTranscriptionResponse:
-    line_transcription = await _service.patch_ground_truth_line_text(
+    line_transcription = await _transcriptions.patch_ground_truth_line_text(
         db,
         current_user,
         project_id,
@@ -830,4 +838,4 @@ async def delete_part(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> None:
-    await _service.delete_part(db, current_user, project_id, document_id, part_id)
+    await _parts.delete_part(db, current_user, project_id, document_id, part_id)

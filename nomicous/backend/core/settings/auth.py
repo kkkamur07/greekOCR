@@ -1,12 +1,11 @@
 """JWT and browser-session authentication settings."""
 
-import math
-from collections import Counter
 from functools import lru_cache
 from typing import Literal
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings
+from zxcvbn import zxcvbn
 
 from backend.core.settings._env import env_settings_config
 
@@ -17,23 +16,20 @@ _PLACEHOLDER_SECRET_VALUES = {"change-me", "change-me-in-production", "replace-m
 #: bytes is the smallest key that cannot be brute-forced faster than the digest.
 MIN_JWT_SECRET_BYTES = 32
 
-#: Estimated entropy floor, in bits, for the whole secret.
+#: Floor on ``zxcvbn``'s log10 estimate of the guesses needed to reach the secret.
 #:
-#: The previous value, 128.0, came from the arithmetic that 32 hex characters
-#: span 32 * log2(16) = 128 bits. That is the *ceiling* for a 32-character hex
-#: string, reached only when all 16 symbols appear exactly twice - which a real
-#: draw never does. ``secrets.token_hex(16)`` carries a genuine 128 bits but
-#: scores ~115 on average, peaked at 126.5 over 200k samples and dipped to 89.
-#: So the gate rejected every correctly generated 32-character secret - 200k out
-#: of 200k - while waving through patterned ones such as ``"0123456789" * 4``,
-#: which scored 133.
+#: Measured rather than derived. Over 5000 draws each, the weakest generator worth
+#: admitting bottomed out at 27.45 (``secrets.token_hex(16)``); ``token_urlsafe(32)``
+#: at 40.49. The strongest *memorable* strings of the same length top out far below
+#: that - ``"correcthorsebatterystaple1234567"`` scores 16.9 and
+#: ``"change-me-in-production-abcdefgh"`` 16.8. 22 sits in the middle of that gap,
+#: with ~5 decades of margin before a legitimate secret is rejected, which matters:
+#: a false rejection here is a failed production boot.
 #:
-#: 80 bits sits ~9 below the worst draw observed for the weakest secret worth
-#: admitting, and far above any patterned string of the same length:
-#: ``"password" * 4`` scores 22, ``"secret" * 6`` scores 14, ``"a" * 32`` scores
-#: 0. It is also the conventional floor below which offline brute force stops
-#: being a thought experiment.
-MIN_JWT_SECRET_ENTROPY_BITS = 80.0
+#: Deliberately NOT zxcvbn's 0-4 ``score``. That saturates at 4 for anything past
+#: ~10^10 guesses, which both of the memorable strings above clear - it is tuned for
+#: "is this an acceptable human password", a much lower bar than a signing key.
+MIN_JWT_SECRET_GUESSES_LOG10 = 22.0
 
 
 def _is_placeholder_secret(value: str) -> bool:
@@ -45,48 +41,18 @@ def _is_placeholder_secret(value: str) -> bool:
     )
 
 
-def _shortest_period(value: str) -> int:
-    """Length of the shortest block ``value`` is a repetition of.
+def secret_guesses_log10(value: str) -> float:
+    """log10 of the guesses zxcvbn estimates an attacker needs to reach ``value``.
 
-    The longest-border table from Knuth-Morris-Pratt: ``"abcabcab"`` has border
-    ``"abcab"`` and therefore period 3. A value with no internal repetition has a
-    period equal to its own length, so this only ever shortens a string that
-    literally repeats itself.
-    """
-    length = len(value)
-    border = [0] * length
-    matched = 0
-    for index in range(1, length):
-        while matched and value[index] != value[matched]:
-            matched = border[matched - 1]
-        if value[index] == value[matched]:
-            matched += 1
-        border[index] = matched
-    return length - border[-1]
-
-
-def estimated_entropy_bits(value: str) -> float:
-    """Estimated entropy of ``value`` in bits.
-
-    Two factors, multiplied: how evenly the value spreads over its own alphabet
-    (Shannon entropy per character), and how much of it is not a repeat of what
-    came before (its shortest period). The second factor is what a
-    distribution-only estimate misses - character counts are blind to order, so
-    ``"0123456789abcdef" * 2`` scores a flawless 4 bits/char and would be graded
-    at 128 bits while carrying at most 64.
-
-    Still an upper bound on real entropy - it cannot see that a value came out of
-    a dictionary - but a hard ceiling for anything built from a small alphabet or
-    a repeated block, which is what the production gate exists to reject.
+    zxcvbn is a real estimator rather than a character-frequency proxy: it matches
+    against common passwords, names, dates, keyboard walks, l33t substitutions and
+    repeats, so it sees the structure that a distribution-only measure cannot. That
+    is the whole reason to use it here instead of counting characters - the failure
+    mode this gate exists to catch is a human-chosen secret that *looks* varied.
     """
     if not value:
         return 0.0
-    counts = Counter(value)
-    length = len(value)
-    per_character = -sum((count / length) * math.log2(count / length) for count in counts.values())
-    # A value that is `block * n` cannot carry more unpredictability than one
-    # block does, however uniform its character counts happen to look.
-    return per_character * _shortest_period(value)
+    return zxcvbn(value)["guesses_log10"]
 
 
 class AuthSettings(BaseSettings):
@@ -125,9 +91,9 @@ class AuthSettings(BaseSettings):
             raise ValueError(
                 f"JWT_SECRET must be at least {MIN_JWT_SECRET_BYTES} bytes in production"
             )
-        if estimated_entropy_bits(secret) < MIN_JWT_SECRET_ENTROPY_BITS:
+        if secret_guesses_log10(secret) < MIN_JWT_SECRET_GUESSES_LOG10:
             raise ValueError(
-                "JWT_SECRET is too low-entropy for production; generate it with "
+                "JWT_SECRET is too guessable for production; generate it with "
                 '`python -c "import secrets; print(secrets.token_urlsafe(32))"`'
             )
         return self

@@ -13,12 +13,12 @@ from backend.document.api.media_responses import (
     PublicThumbnailWidth,
     part_image_response,
 )
-from backend.document.application.document_service import DocumentService
+from backend.document.application.part_service import DocumentPartService
 from backend.users.api.rate_limit import attributable_client_ip, consume_rate_limit
 from infrastructure.db import get_db
 
 router = APIRouter(prefix="/public/media", tags=["public"])
-_service = DocumentService()
+_service = DocumentPartService()
 
 #: Generous enough for a reader opening a long document (each page is one request, and
 #: revalidations are not charged), tight enough that scripted enumeration of published

@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "../components/ui/toast";
 import {
   api,
   type DocumentResponse,
   type ProjectResponse,
+  type UserResponse,
 } from "../api/client";
 import { ApiError } from "../api/errors";
+import { resourceTags, invalidateAfter } from "../api/resources";
 import {
   hasAccessToken,
   isUnauthorized,
@@ -18,16 +20,18 @@ import { DocumentsTable } from "../components/projects/DocumentsTable";
 import { ProjectJobsPanel } from "../components/projects/ProjectJobsPanel";
 import { ProjectSettingsPanel } from "../components/sharing/ProjectSettingsPanel";
 import { FormModal } from "../components/ui/FormModal";
+import { useServerQuery } from "../hooks/useServerQuery";
+
+type ProjectDashboardData = {
+  me: UserResponse;
+  project: ProjectResponse;
+  documents: DocumentResponse[];
+};
 
 export function ProjectDashboardPage() {
   const router = useRouter();
   const { projectId } = useParams<{ projectId: string }>() ?? {};
-  const [project, setProject] = useState<ProjectResponse | null>(null);
-  const [documents, setDocuments] = useState<DocumentResponse[]>([]);
-  const [userId, setUserId] = useState<string | null>(null);
-  const [username, setUsername] = useState<string | null>(null);
   const [includeArchived, setIncludeArchived] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [titlePanelOpen, setTitlePanelOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -35,50 +39,58 @@ export function ProjectDashboardPage() {
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(
     null,
   );
-  const [error, setError] = useState<string | null>(null);
   const [newDocName, setNewDocName] = useState("");
 
-  const load = useCallback(async () => {
-    if (!projectId) return;
-    if (!hasAccessToken()) {
-      navigateToLogin(router);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      const [me, proj, docs] = await Promise.all([
+  const signedIn = hasAccessToken();
+  useEffect(() => {
+    if (projectId && !signedIn) navigateToLogin(router);
+  }, [projectId, signedIn, router]);
+
+  const {
+    data,
+    loading,
+    error,
+    refetch: reloadDashboard,
+    patch: patchDashboard,
+  } = useServerQuery<ProjectDashboardData>({
+    key:
+      projectId && signedIn
+        ? ["project-dashboard", projectId, includeArchived]
+        : null,
+    tags: [
+      resourceTags.currentUser,
+      resourceTags.project(projectId ?? ""),
+      resourceTags.documents(projectId ?? ""),
+    ],
+    read: async () => {
+      const [me, project, documents] = await Promise.all([
         api.me(),
-        api.getProject(projectId),
-        api.listDocuments(projectId, includeArchived),
+        api.getProject(projectId!),
+        api.listDocuments(projectId!, includeArchived),
       ]);
-      setUserId(me.id);
-      setUsername(me.username);
-      setProject(proj);
-      setDocuments(docs);
-    } catch (err) {
+      return { me, project, documents };
+    },
+    onError: (err) => {
       if (isUnauthorized(err)) {
         navigateToLogin(router);
-        return;
+        return null;
       }
       const msg =
         err instanceof ApiError ? err.message : "Failed to load project";
-      setProject(null);
-      setDocuments([]);
-      setError(
-        err instanceof ApiError && (err.status === 403 || err.status === 404)
-          ? "This project is not available to your account."
-          : msg,
-      );
       toast.error(msg);
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId, includeArchived, router]);
+      // 403 and 404 both mean "not yours to see", which reads better as the
+      // feature sentence than as the raw API message. Note the toast still
+      // carries the raw message.
+      return err instanceof ApiError && (err.status === 403 || err.status === 404)
+        ? "This project is not available to your account."
+        : msg;
+    },
+  });
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const project = data?.project ?? null;
+  const documents = data?.documents ?? [];
+  const userId = data?.me.id ?? null;
+  const username = data?.me.username ?? null;
 
   const isOwner = Boolean(project && userId && project.owner_id === userId);
 
@@ -93,6 +105,7 @@ export function ProjectDashboardPage() {
       toast.success("Document created");
       setCreateModalOpen(false);
       setNewDocName("");
+      invalidateAfter.documentCreated(projectId);
       router.push(`/projects/${projectId}/documents/${doc.id}`);
     } catch (err) {
       const msg =
@@ -114,6 +127,7 @@ export function ProjectDashboardPage() {
     try {
       await api.deleteProject(projectId);
       toast.success("Project deleted");
+      invalidateAfter.projectDeleted(projectId);
       router.push("/projects");
     } catch (err) {
       const msg =
@@ -137,7 +151,8 @@ export function ProjectDashboardPage() {
     try {
       await api.deleteDocument(projectId, documentId);
       toast.success("Document deleted");
-      await load();
+      invalidateAfter.documentDeleted(projectId, documentId);
+      await reloadDashboard();
     } catch (err) {
       const msg =
         err instanceof ApiError ? err.message : "Failed to delete document";
@@ -169,16 +184,18 @@ export function ProjectDashboardPage() {
             projectId={projectId}
             name={project.name}
             guidelines={project.guidelines ?? null}
-            onUpdated={(patch) => {
-              setProject((current) =>
-                current
-                  ? {
-                      ...current,
-                      name: patch.name,
-                      guidelines: patch.guidelines,
-                    }
-                  : current,
-              );
+            onUpdated={(updated) => {
+              patchDashboard((current) => ({
+                ...current,
+                project: {
+                  ...current.project,
+                  name: updated.name,
+                  guidelines: updated.guidelines,
+                },
+              }));
+              // The project list carries this name too, and is not what the
+              // panel just wrote to.
+              invalidateAfter.projectUpdatedInPlace();
             }}
           />
         ) : null

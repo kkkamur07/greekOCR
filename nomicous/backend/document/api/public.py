@@ -22,11 +22,13 @@ from backend.document.api.schemas import (
     PublicLineResponse,
     PublicTranscriptionLayerResponse,
 )
-from backend.document.application.document_service import DocumentService
+from backend.document.application.document_catalog import DocumentCatalog
+from backend.document.application.part_service import DocumentPartService
 from infrastructure.db import get_db
 
 router = APIRouter(prefix="/public", tags=["public"])
-_service = DocumentService()
+_service = DocumentCatalog()
+_parts = DocumentPartService()
 _transcription_pdf_service = TranscriptionPdfService()
 _page_xml_export_service = PageXmlExportService()
 
@@ -75,7 +77,7 @@ async def get_published_document(
     document = await _service.get_document_public(db, project_id, document_id)
     # Parts uploaded before dimensions were persisted are filled here; without width and
     # height the published page canvas has no coordinate space to render into.
-    await _service.backfill_part_dimensions(db, document.parts)
+    await _parts.backfill_part_dimensions(db, document.parts)
     return document_with_parts_response(document, public=True)
 
 

@@ -31,8 +31,8 @@ from backend.core.settings import (
 )
 from backend.core.settings.auth import (
     MIN_JWT_SECRET_BYTES,
-    MIN_JWT_SECRET_ENTROPY_BITS,
-    estimated_entropy_bits,
+    MIN_JWT_SECRET_GUESSES_LOG10,
+    secret_guesses_log10,
 )
 from backend.core.settings.device import get_device_settings
 from backend.users.api.dependencies import get_current_user
@@ -97,7 +97,7 @@ def test_production_rejects_low_entropy_jwt_secret_that_clears_the_length_floor(
     secret: str,
 ) -> None:
     assert len(secret.encode()) >= MIN_JWT_SECRET_BYTES
-    with pytest.raises(ValidationError, match="low-entropy"):
+    with pytest.raises(ValidationError, match="too guessable"):
         AuthSettings(ENVIRONMENT="production", JWT_SECRET=secret, _env_file=None)
 
 
@@ -105,7 +105,7 @@ def test_production_accepts_a_generated_secret() -> None:
     settings = AuthSettings(ENVIRONMENT="production", JWT_SECRET=STRONG_SECRET, _env_file=None)
 
     assert settings.jwt_secret == STRONG_SECRET
-    assert estimated_entropy_bits(STRONG_SECRET) >= MIN_JWT_SECRET_ENTROPY_BITS
+    assert secret_guesses_log10(STRONG_SECRET) >= MIN_JWT_SECRET_GUESSES_LOG10
 
 
 def test_development_keeps_short_secrets_workable() -> None:
@@ -141,10 +141,15 @@ def test_shipped_example_secrets_still_fail_validation() -> None:
             AuthSettings(ENVIRONMENT="production", JWT_SECRET=secret, _env_file=None)
 
 
-def test_entropy_estimate_separates_random_from_repeated() -> None:
-    assert estimated_entropy_bits("") == 0.0
-    assert estimated_entropy_bits("a" * 32) == 0.0
-    assert estimated_entropy_bits("0123456789abcdefghij" * 2) > MIN_JWT_SECRET_ENTROPY_BITS
+def test_the_estimate_separates_generated_secrets_from_memorable_ones() -> None:
+    """The gap the threshold sits in, asserted so a zxcvbn upgrade cannot close it."""
+    assert secret_guesses_log10("") == 0.0
+    assert secret_guesses_log10("a" * 32) < MIN_JWT_SECRET_GUESSES_LOG10
+    # Strong as a human password - zxcvbn scores both a perfect 4/4 - and nowhere
+    # near strong enough to sign tokens with. This is why the gate reads
+    # `guesses_log10` and not `score`.
+    assert secret_guesses_log10("correcthorsebatterystaple1234567") < MIN_JWT_SECRET_GUESSES_LOG10
+    assert secret_guesses_log10(secrets.token_hex(16)) > MIN_JWT_SECRET_GUESSES_LOG10
 
 
 @pytest.mark.parametrize(
@@ -157,12 +162,11 @@ def test_entropy_estimate_separates_random_from_repeated() -> None:
     ],
 )
 def test_production_accepts_every_recommended_way_of_generating_a_secret(generate) -> None:
-    """The old 128-bit floor rejected `token_hex(16)` on 2000 draws out of 2000.
+    """Refusing a correctly generated secret is not a strict gate, it is an outage.
 
-    A 32-character hex string spans 128 bits only when all 16 symbols appear
-    exactly twice; a real draw scores ~115. Refusing a correctly generated secret
-    is not a strict gate, it is an outage that teaches operators to weaken the
-    thing the gate protects.
+    A hand-rolled character-frequency estimate used to reject `token_hex(16)` on
+    2000 draws out of 2000. zxcvbn's worst observed draw over 5000 was 27.45,
+    comfortably clear of the 22.0 floor.
     """
     for _ in range(200):
         secret = generate()
@@ -177,15 +181,16 @@ def test_production_accepts_every_recommended_way_of_generating_a_secret(generat
     [
         "a" * 32,
         ("abc" * 11)[:32],
-        ("abc" * 22)[:64],  # long enough that a length-scaled estimate scores it 101
-        "password" * 4,  # 88 under a distribution-only estimate; 22 under this one
-        "0123456789" * 4,  # 133 under a distribution-only estimate - it used to pass
+        ("abc" * 22)[:64],
+        "password" * 4,
+        "0123456789" * 4,  # a distribution-only estimate scored this 133 and passed it
         "0123456789abcdef" * 2,  # a perfectly uniform alphabet, and still a repeat
+        "correcthorsebatterystaple1234567",  # zxcvbn score 4/4, still not a signing key
     ],
 )
 def test_patterned_secrets_of_the_same_length_are_still_rejected(secret: str) -> None:
     assert len(secret) >= 32
-    assert estimated_entropy_bits(secret) < MIN_JWT_SECRET_ENTROPY_BITS
+    assert secret_guesses_log10(secret) < MIN_JWT_SECRET_GUESSES_LOG10
 
 
 # --- Credentialed CORS allowlist ---
@@ -709,7 +714,7 @@ class _StubDocumentRepository:
 
 
 def _publish_fixture(*, owner_id, collaborator_ids=()):
-    from backend.document.application.document_crud import DocumentCrudMixin
+    from backend.document.application.document_catalog import DocumentCatalog
     from backend.document.infrastructure.orm_models import DocumentWorkflow
 
     class _Project:
@@ -725,14 +730,13 @@ def _publish_fixture(*, owner_id, collaborator_ids=()):
             self.workflow = DocumentWorkflow.draft
             self.name = "Codex"
 
-    class _Service(DocumentCrudMixin):
-        def __init__(self, project, document):
-            self._projects = _StubProjectRepository(project)
-            self._documents = _StubDocumentRepository(document)
-
     project = _Project()
     document = _Document(project.id)
-    return _Service(project, document), project, document
+    documents = _StubDocumentRepository(document)
+    service = DocumentCatalog(
+        documents=documents, projects=_StubProjectRepository(project)
+    )
+    return service, project, document
 
 
 async def test_collaborator_cannot_publish_a_document() -> None:

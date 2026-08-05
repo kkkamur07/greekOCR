@@ -6,7 +6,8 @@ import uuid
 
 import pytest
 
-from backend.document.application.document_service import DocumentService
+from backend.document.application.document_access import DocumentContext
+from backend.document.application.part_service import DocumentPartService
 from backend.document.infrastructure.media_store.encoding import DecodedPartImage
 from backend.document.infrastructure.orm_models import Document
 
@@ -55,17 +56,23 @@ class _DeleteFailingStore:
         raise RuntimeError("object storage unavailable")
 
 
+class _StubAccess:
+    """The upload is already authorized by the time compensation matters."""
+
+    def __init__(self, document: Document) -> None:
+        self._document = document
+
+    async def require_document(self, *_args, **_kwargs) -> DocumentContext:
+        return DocumentContext(project=object(), document=self._document)
+
+
 @pytest.mark.asyncio
 async def test_failed_upload_commit_records_compensating_delete_intent(monkeypatch) -> None:
     repo = _CompensatingRepository()
     store = _DeleteFailingStore()
-    service = DocumentService(documents=repo, media=store)
     document = Document(id=uuid.uuid4(), name="test")
+    service = DocumentPartService(documents=repo, media=store, access=_StubAccess(document))
 
-    async def get_document(*_args, **_kwargs):
-        return document
-
-    monkeypatch.setattr(service, "get_document", get_document)
     monkeypatch.setattr(
         "backend.document.application.part_service.encode_part_image_with_size",
         lambda _data: DecodedPartImage(data=b"encoded", width=4, height=6),

@@ -7,7 +7,7 @@ from hashlib import sha256
 from fastapi.responses import Response
 
 from backend.core.schemas.errors import ApiErrorResponse
-from backend.document.application.document_service import DocumentService
+from backend.document.application.part_service import DocumentPartService
 from backend.document.infrastructure.orm_models import DocumentPart
 
 IMAGE_MEDIA_RESPONSES: dict = {
@@ -76,7 +76,7 @@ def etag_matches(if_none_match: str | None, etag: str) -> bool:
 
 
 async def part_image_response(
-    service: DocumentService,
+    service: DocumentPartService,
     part: DocumentPart,
     *,
     width: int | None,

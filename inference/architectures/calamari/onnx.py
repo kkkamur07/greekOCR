@@ -11,6 +11,7 @@ from pathlib import Path
 
 import numpy as np
 
+from inference.architectures.artifact import artifact_fingerprint
 from inference.architectures.calamari.preprocessing import (
     preprocess_line_image_bytes_to_calamari_tensor,
 )
@@ -35,12 +36,6 @@ class TranscribeLineFailure:
 
     index: int
     error: Exception
-
-
-def _file_fingerprint(path: Path) -> tuple[int, int]:
-    """Cache-key component so replaced artifact files are reloaded."""
-    stat = path.stat()
-    return stat.st_mtime_ns, stat.st_size
 
 
 @lru_cache(maxsize=4)
@@ -169,7 +164,7 @@ def run_calamari_onnx_transcribe_many(
     """
 
     session, charset, line_height = _load_onnx_session(
-        str(checkpoint_path), _file_fingerprint(checkpoint_path)
+        str(checkpoint_path), artifact_fingerprint(checkpoint_path)
     )
     responses: list[TranscribeRunResponse | TranscribeLineFailure] = []
     for index, image_bytes in enumerate(line_images):

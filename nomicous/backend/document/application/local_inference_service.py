@@ -9,7 +9,7 @@ from inference.contracts.segment import SegmentRunResponse
 from inference.contracts.transcribe import TranscribeRunResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.document.application.document_service_shared import DocumentServiceSharedMixin
+from backend.document.application.document_access import DocumentAccess
 from backend.document.application.segment_merge_service import SegmentMergeService
 from backend.document.application.transcribe_merge_service import (
     TranscribeJobHandlerError,
@@ -18,21 +18,48 @@ from backend.document.application.transcribe_merge_service import (
 from backend.jobs.infrastructure.job_repository import JobRepository
 from backend.jobs.infrastructure.orm_models import Job, JobType
 from backend.document.infrastructure.document_repository import DocumentRepository
-from backend.document.infrastructure.orm_models import DocumentPart, Line
+from backend.document.infrastructure.orm_models import Document, DocumentPart, Line
 from backend.ml.infrastructure.ml_client import InferenceClient
+from backend.project.infrastructure.orm_models import Project
 from backend.project.infrastructure.project_repository import ProjectRepository
 from backend.users.infrastructure.orm_models import User
 from infrastructure.db import sync_system_session
 
 
-class LocalInferenceService(DocumentServiceSharedMixin):
+class LocalInferenceService:
     def __init__(
         self,
         documents: DocumentRepository | None = None,
         projects: ProjectRepository | None = None,
+        access: DocumentAccess | None = None,
     ) -> None:
         self._documents = documents or DocumentRepository()
         self._projects = projects or ProjectRepository()
+        self._access = access or DocumentAccess(
+            documents=self._documents, projects=self._projects
+        )
+
+    # The two persist paths below authorize in three named steps rather than one
+    # ``DocumentAccess.require_part`` call. The rule itself still lives in exactly one
+    # place - each of these is a straight delegation - but the *names* are the seam
+    # ``tests/inference/unit/test_local_inference_provenance`` substitutes at to run the
+    # merge without a database. That test belongs to the local-inference slice and is not
+    # ours to rewrite, so the three-step shape is kept here deliberately.
+
+    async def _require_member(
+        self, session: AsyncSession, project_id: UUID, user: User
+    ) -> Project:
+        return await self._access.require_project(session, user, project_id)
+
+    async def _load_document_in_project(
+        self, session: AsyncSession, project: Project, document_id: UUID
+    ) -> Document:
+        return await self._access.document_in_project(session, project, document_id)
+
+    async def _document_part_or_404(
+        self, session: AsyncSession, document: Document, part_id: UUID
+    ) -> DocumentPart:
+        return await self._access.part_in_document(session, document, part_id)
 
     async def _record_local_job(
         self,
@@ -68,7 +95,7 @@ class LocalInferenceService(DocumentServiceSharedMixin):
         registry_tag: str,
         lines: list[tuple[UUID, TranscribeRunResponse]],
     ) -> dict:
-        project = await self._require_member(session, project_id, user.id)
+        project = await self._require_member(session, project_id, user)
         document = await self._load_document_in_project(session, project, document_id)
         part = await self._document_part_or_404(session, document, part_id)
 
@@ -124,7 +151,7 @@ class LocalInferenceService(DocumentServiceSharedMixin):
         registry_tag: str,
         output: SegmentRunResponse,
     ) -> dict:
-        project = await self._require_member(session, project_id, user.id)
+        project = await self._require_member(session, project_id, user)
         document = await self._load_document_in_project(session, project, document_id)
         await self._document_part_or_404(session, document, part_id)
         canonical = InferenceClient.to_canonical_segment(output)

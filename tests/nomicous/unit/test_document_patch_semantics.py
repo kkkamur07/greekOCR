@@ -14,7 +14,8 @@ import pytest
 from pydantic import ValidationError as PydanticValidationError
 
 from backend.document.api.schemas import BlockPatchRequest, LinePatchRequest
-from backend.document.application.document_service import DocumentService
+from backend.document.application.document_access import PartContext
+from backend.document.application.layout_service import LayoutService
 from backend.document.infrastructure.orm_models import Block, Document, DocumentPart, Line
 
 
@@ -29,26 +30,35 @@ class _Session:
         pass
 
 
+class _StubAccess:
+    def __init__(self, document: Document, part: DocumentPart) -> None:
+        self._document = document
+        self._part = part
+
+    async def require_part(self, *_args, **_kwargs) -> PartContext:
+        return PartContext(project=object(), document=self._document, part=self._part)
+
+
+class _StubRepository:
+    """Only the two row lookups ``patch_part_line`` performs."""
+
+    def __init__(self, line: Line | None, block: Block | None) -> None:
+        self._line = line
+        self._block = block
+
+    async def get_line_in_part(self, _session, _part_id, _line_id):
+        return self._line
+
+    async def get_block_in_part(self, _session, _part_id, _block_id):
+        return self._block
+
+
 def _service_with(monkeypatch, *, part: DocumentPart, line: Line | None, block: Block | None):
-    service = DocumentService()
     document = Document(id=part.document_id, name="codex")
-
-    async def get_document(*_args, **_kwargs):
-        return document
-
-    async def part_or_404(*_args, **_kwargs):
-        return part
-
-    async def line_or_404(*_args, **_kwargs):
-        return line
-
-    async def block_or_404(*_args, **_kwargs):
-        return block
-
-    monkeypatch.setattr(service, "get_document", get_document)
-    monkeypatch.setattr(service, "_document_part_or_404", part_or_404)
-    monkeypatch.setattr(service, "_line_or_404", line_or_404)
-    monkeypatch.setattr(service, "_block_or_404", block_or_404)
+    service = LayoutService(
+        documents=_StubRepository(line, block),
+        access=_StubAccess(document, part),
+    )
     return service, document
 
 

@@ -6,8 +6,8 @@ from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
-from src.hf.resolve.artifacts import verify_artifact_sha256
 
+from inference.architectures.artifact import ArtifactHandle, resolve_artifact
 from inference.architectures.calamari.onnx import (
     CalamariUnavailableError,
     TranscribeLineFailure,
@@ -18,13 +18,10 @@ from inference.architectures.calamari.onnx import (
 from inference.architectures.calamari.preprocessing import (
     preprocess_line_image_bytes_to_calamari_tensor,
 )
+from inference.architectures.isolation import reraise_if_none_survived
 from inference.contracts.transcribe import TranscribeRunResponse
 
-
-def _file_fingerprint(path: Path) -> tuple[int, int]:
-    """Cache-key component so replaced artifact files are reloaded."""
-    stat = path.stat()
-    return stat.st_mtime_ns, stat.st_size
+CALAMARI_ARTIFACT_SUFFIXES = frozenset({".pt", ".onnx"})
 
 
 @lru_cache(maxsize=4)
@@ -61,10 +58,15 @@ def _reject_fully_failed_batch(
     re-raising the first line's original exception keeps its HTTP mapping (503
     for an unusable runtime, 422 for an unusable request) instead of handing the
     caller a page of identical per-line errors that looks like a successful run.
+
+    The rule itself lives in ``architectures.isolation`` because BLLA has to
+    reach the same verdict from a differently shaped loop.
     """
     failures = [result for result in results if isinstance(result, TranscribeLineFailure)]
-    if failures and len(failures) == len(results):
-        raise failures[0].error
+    reraise_if_none_survived(
+        survivors=len(results) - len(failures),
+        first_failure=failures[0].error if failures else None,
+    )
     return results
 
 
@@ -74,14 +76,16 @@ def run_calamari_transcribe_many(
     checkpoint_path: Path,
     artifact_sha256: str | None = None,
 ) -> list[TranscribeRunResponse | TranscribeLineFailure]:
-    if not checkpoint_path.exists():
-        raise FileNotFoundError(f"Calamari checkpoint not found: {checkpoint_path}")
-    if checkpoint_path.suffix not in {".pt", ".onnx"}:
-        raise CalamariUnavailableError(
+    handle = resolve_artifact(
+        checkpoint_path,
+        label="Calamari checkpoint",
+        allowed_suffixes=CALAMARI_ARTIFACT_SUFFIXES,
+        unusable_error=CalamariUnavailableError,
+        unusable_message=(
             f"Calamari runtime requires a self-contained .onnx artifact: {checkpoint_path}"
-        )
-    if artifact_sha256:
-        verify_artifact_sha256(checkpoint_path, artifact_sha256)
+        ),
+        artifact_sha256=artifact_sha256,
+    )
     if not line_images:
         raise ValueError("at least one line image is required")
 
@@ -96,7 +100,7 @@ def run_calamari_transcribe_many(
     return _reject_fully_failed_batch(
         _run_legacy_pytorch_transcribe_many(
             line_images,
-            checkpoint_path=checkpoint_path,
+            handle=handle,
         )
     )
 
@@ -104,17 +108,13 @@ def run_calamari_transcribe_many(
 def _run_legacy_pytorch_transcribe_many(
     line_images: list[bytes],
     *,
-    checkpoint_path: Path,
+    handle: ArtifactHandle,
 ) -> list[TranscribeRunResponse | TranscribeLineFailure]:
     import torch
 
-    model, charset, line_height = _load_checkpoint(
-        str(checkpoint_path), _file_fingerprint(checkpoint_path)
-    )
+    model, charset, line_height = _load_checkpoint(handle.path, handle.fingerprint)
     if not charset:
-        raise CalamariUnavailableError(
-            f"Calamari checkpoint has no codec metadata: {checkpoint_path}"
-        )
+        raise CalamariUnavailableError(f"Calamari checkpoint has no codec metadata: {handle.path}")
 
     responses: list[TranscribeRunResponse | TranscribeLineFailure] = []
     with torch.inference_mode():

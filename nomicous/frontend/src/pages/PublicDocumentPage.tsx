@@ -8,6 +8,7 @@ import {
   type PublicLayoutResponse,
 } from "../api/client";
 import { ApiError } from "../api/errors";
+import { resourceTags } from "../api/resources";
 import { getAccessToken } from "../auth/storage";
 import { ContentRegionLoading } from "../components/layout/ContentRegionLoading";
 import { PublicCanvasPdfView } from "../components/public/PublicCanvasPdfView";
@@ -16,18 +17,26 @@ import { PublicPageCanvas } from "../components/public/PublicPageCanvas";
 import { PublicPartTabs } from "../components/public/PublicPartTabs";
 import { PublicTranscriptPanel } from "../components/public/PublicTranscriptPanel";
 import { WorkflowBadge } from "../components/WorkflowBadge";
+import { useServerQuery } from "../hooks/useServerQuery";
 import { linesForPart, publicLinesToRegions } from "../utils/publicLayout";
+
+type PublicDocumentData = {
+  document: DocumentWithPartsResponse;
+  layout: PublicLayoutResponse;
+};
+
+/**
+ * A 404 here is not a failure to report but a state of the document - it is not
+ * published, or never existed - and gets its own copy, so the two are kept apart
+ * rather than collapsed into one message.
+ */
+type PublicDocumentFailure =
+  | { kind: "not-found" }
+  | { kind: "message"; text: string };
 
 export function PublicDocumentPage() {
   const { projectId, documentId } =
     useParams<{ projectId: string; documentId: string }>() ?? {};
-  const [document, setDocument] = useState<DocumentWithPartsResponse | null>(
-    null,
-  );
-  const [layout, setLayout] = useState<PublicLayoutResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [notFound, setNotFound] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [activePartId, setActivePartId] = useState<string | null>(null);
   const [selectedLineIndex, setSelectedLineIndex] = useState<number | null>(
     null,
@@ -36,48 +45,36 @@ export function PublicDocumentPage() {
 
   const isLoggedIn = !!getAccessToken();
 
-  useEffect(() => {
-    if (!projectId || !documentId) return;
+  const { data, loading, error } = useServerQuery<
+    PublicDocumentData,
+    PublicDocumentFailure
+  >({
+    key:
+      projectId && documentId
+        ? ["public-document", projectId, documentId]
+        : null,
+    tags: [resourceTags.publicDocument(projectId ?? "", documentId ?? "")],
+    read: async () => {
+      const [document, layout] = await Promise.all([
+        api.getPublicDocument(projectId!, documentId!),
+        api.getPublicLayout(projectId!, documentId!),
+      ]);
+      return { document, layout };
+    },
+    onError: (err) =>
+      err instanceof ApiError && err.status === 404
+        ? { kind: "not-found" }
+        : {
+            kind: "message",
+            text:
+              err instanceof ApiError ? err.message : "Failed to load document",
+          },
+  });
 
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      setNotFound(false);
-      setErrorMessage(null);
-      setDocument(null);
-      setLayout(null);
-      setActivePartId(null);
-      try {
-        const [doc, layoutRes] = await Promise.all([
-          api.getPublicDocument(projectId, documentId),
-          api.getPublicLayout(projectId, documentId),
-        ]);
-        if (cancelled) return;
-        setDocument(doc);
-        setLayout(layoutRes);
-        const sorted = [...(doc.parts ?? [])].sort((a, b) => a.order - b.order);
-        setActivePartId(sorted[0]?.id ?? null);
-      } catch (err) {
-        if (cancelled) return;
-        setDocument(null);
-        setLayout(null);
-        setActivePartId(null);
-        if (err instanceof ApiError && err.status === 404) {
-          setNotFound(true);
-          return;
-        }
-        setErrorMessage(
-          err instanceof ApiError ? err.message : "Failed to load document",
-        );
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId, documentId]);
+  const document = data?.document ?? null;
+  const layout = data?.layout ?? null;
+  const notFound = error?.kind === "not-found";
+  const errorMessage = error?.kind === "message" ? error.text : null;
 
   const parts = useMemo(
     () => [...(document?.parts ?? [])].sort((a, b) => a.order - b.order),
@@ -86,6 +83,15 @@ export function PublicDocumentPage() {
 
   const activePart =
     parts.find((part) => part.id === activePartId) ?? parts[0] ?? null;
+
+  // Settled during render rather than in an effect: `PublicPartTabs` echoes the
+  // id it is given back through `onChange`, so if the page were still holding
+  // null one commit after the document arrived, that echo would read as the
+  // reader switching pages and would clear their line selection.
+  if (activePart && activePart.id !== activePartId) {
+    setActivePartId(activePart.id);
+  }
+
   const activePartIndex = activePart
     ? parts.findIndex((part) => part.id === activePart.id) + 1
     : 1;

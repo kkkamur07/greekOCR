@@ -9,6 +9,8 @@ import {
   type TranscriptionLayerResponse,
 } from "../../../api/client";
 import { ApiError } from "../../../api/errors";
+import { readResource } from "../../../api/resourceCache";
+import { resourceTags } from "../../../api/resources";
 import {
   hasAccessToken,
   isUnauthorized,
@@ -178,9 +180,16 @@ export function usePageEditorData(
 
     void (async () => {
       try {
+        // Paging through a document re-runs this effect for every part, and the
+        // document itself does not change between them; the cache is what stops
+        // each page turn from refetching it.
         const doc = canReuseDocument(initialDocument, projectId, documentId)
           ? initialDocument
-          : await api.getDocument(projectId, documentId);
+          : await readResource(
+              ["document", projectId, documentId],
+              [resourceTags.document(projectId, documentId)],
+              () => api.getDocument(projectId, documentId),
+            );
         if (cancelled) return;
 
         const selectedPart = resolvePart(doc, partId);
