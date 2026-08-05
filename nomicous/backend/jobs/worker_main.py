@@ -1,7 +1,9 @@
 """Standalone platform job worker for production (Railway, Fly, etc.).
 
-Dispatches segment/transcribe jobs to the inference API. Disable the in-process
-worker on serverless API hosts with JOB_WORKER_ENABLED=false.
+Runs the job types the platform executes itself. Segment and transcribe are not
+among them: an inference agent claims those from the platform over HTTP
+(ADR 0003). Disable the in-process worker on serverless API hosts with
+JOB_WORKER_ENABLED=false.
 """
 
 from __future__ import annotations
@@ -14,7 +16,6 @@ import signal
 from backend.core.settings import (
     get_infrastructure_settings,
     get_job_settings,
-    get_ml_settings,
 )
 from backend.jobs.infrastructure.worker import worker_loop
 
@@ -25,7 +26,6 @@ def validate_worker_settings() -> None:
     """Resolve worker dependencies before connecting to the database."""
     get_infrastructure_settings()
     get_job_settings()
-    get_ml_settings().require_job_dispatcher_configuration()
 
 
 async def _run() -> None:

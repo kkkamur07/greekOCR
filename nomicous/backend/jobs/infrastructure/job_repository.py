@@ -134,8 +134,19 @@ class JobRepository:
         return result.rowcount or 0
 
 
+# Job types an inference agent claims for itself over HTTP. The platform worker
+# leaves them alone: with the second queue gone (ADR 0003) it has no way to run
+# them, and claiming one would only fail a job that an agent could have run.
+AGENT_CLAIMED_JOB_TYPES = (JobType.segment, JobType.transcribe)
+
+
 def _pending_job_query(*, test_only: bool | None = None):
-    query = select(Job).where(Job.status == JobStatus.pending).order_by(Job.created_at, Job.id)
+    query = (
+        select(Job)
+        .where(Job.status == JobStatus.pending)
+        .where(Job.type.not_in(AGENT_CLAIMED_JOB_TYPES))
+        .order_by(Job.created_at, Job.id)
+    )
     if test_only is True:
         query = query.where(Job.payload.contains({"test": True}))
     elif test_only is False:

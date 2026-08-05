@@ -1,8 +1,4 @@
-"""Shared pytest fixtures — light integration tests (Postgres + TestClient only).
-
-ML-heavy tests under ``tests/nomicous/integration/ml/`` use a separate conftest that
-boots the platform and inference services over real HTTP.
-"""
+"""Shared pytest fixtures — integration tests against live Postgres and the real app."""
 
 import os
 import time
@@ -14,7 +10,6 @@ from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 
 os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production-at-least-32-bytes")
-os.environ.setdefault("INFERENCE_URL", "http://localhost:8001")
 os.environ.setdefault(
     "DATABASE_URL",
     "postgresql+asyncpg://postgres:dev@localhost:5433/kalamos",
@@ -23,15 +18,10 @@ os.environ.setdefault(
     "SYNC_DATABASE_URL",
     "postgresql://postgres:dev@localhost:5433/kalamos",
 )
-os.environ.setdefault(
-    "INFERENCE_DATABASE_URL",
-    "postgresql://postgres:dev@localhost:5433/kalamos",
-)
 os.environ.setdefault("AUTH_RATE_LIMIT_REQUESTS", "1000")
 os.environ.setdefault("ENABLE_TEST_JOB_ROUTES", "true")
 os.environ.setdefault("JOB_WORKER_ENABLED", "true")
 os.environ.setdefault("INFERENCE_WEBHOOK_SECRET", "test-inference-webhook-secret")
-os.environ.setdefault("INFERENCE_SERVICE_SECRET", "test-inference-webhook-secret")
 os.environ.setdefault(
     "MIGRATOR_DATABASE_URL",
     os.environ.get(
@@ -84,7 +74,6 @@ def _truncate_database() -> None:
                     connection.execute(
                         text(f"TRUNCATE TABLE {', '.join(table_names)} RESTART IDENTITY CASCADE")
                     )
-                connection.execute(text("TRUNCATE TABLE inference_jobs RESTART IDENTITY CASCADE"))
             return
         except OperationalError as exc:
             if "deadlock" not in str(exc).lower() or attempt == 7:
@@ -102,20 +91,16 @@ def client() -> TestClient:
 
 @pytest.fixture(autouse=True)
 def isolated_platform_state(client: TestClient):
-    from backend.jobs.infrastructure import worker as worker_module
-
     # Every settings accessor at once. The hand-written list this replaces omitted
     # the storage and device accessors, so a test that repointed STORAGE_BACKEND or
     # any DEVICE_* value leaked it into whichever test ran next.
     reset_settings_caches()
     clear_auth_rate_limit_state()
 
-    worker_module._inference_client = None
     _truncate_database()
 
     yield
     clear_auth_rate_limit_state()
-    worker_module._inference_client = None
 
 
 @pytest.fixture

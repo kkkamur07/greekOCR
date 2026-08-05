@@ -11,10 +11,10 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
-from inference.contracts.jobs import JobSubmitRequest, JobSubmitResponse
 
 from sqlalchemy import update
 
+from backend.jobs.application.inference_dispatcher import build_inference_submit_request
 from backend.jobs.infrastructure.job_repository import (
     WAITING_TIMEOUT_ERROR,
     claim_next_pending_job,
@@ -93,16 +93,6 @@ def _create_document_part_with_lines(
     )
     assert replace.status_code == 200
     return document_id, part_id, replace.json()
-
-
-class _CapturingInferenceClient:
-    def __init__(self) -> None:
-        self.requests: list[JobSubmitRequest] = []
-        self.inference_job_id = uuid.uuid4()
-
-    def submit_job(self, request: JobSubmitRequest) -> JobSubmitResponse:
-        self.requests.append(request)
-        return JobSubmitResponse(inference_job_id=self.inference_job_id)
 
 
 # --- Jobs API auth ---
@@ -369,25 +359,58 @@ def test_worker_processes_pending_job_via_lifespan(
     assert body["result"] == {"ok": True}
 
 
-# --- Transcribe enqueue (stubbed inference client) ---
-# Tests batched line payload sent to inference. Does not run Kraken or Calamari.
+# --- Transcribe enqueue ---
+# Tests the enqueued job waits for an inference agent and carries one batched
+# line payload. Does not run Kraken or Calamari.
 
 
-def test_transcribe_job_submits_one_batched_inference_job(
+def test_transcribe_job_is_left_pending_for_an_inference_agent(
     client: TestClient,
     owner_headers: dict[str, str],
     owner_project: dict,
-    monkeypatch: pytest.MonkeyPatch,
 ):
-    from backend.jobs.infrastructure import worker as worker_module
+    """ADR 0003: the platform worker has no inference queue to hand this to.
 
+    It therefore must not claim the job. Segment and transcribe rows stay
+    ``pending`` until an agent claims them over HTTP.
+    """
+    document_id, part_id, _lines = _create_document_part_with_lines(
+        client,
+        owner_headers,
+        owner_project,
+    )
+
+    base = documents_url(owner_project["id"])
+    response = client.post(
+        f"{base}/{document_id}/parts/{part_id}/transcribe",
+        headers=owner_headers,
+    )
+    assert response.status_code == 202
+    job_id = uuid.UUID(response.json()["job_id"])
+
+    # The lifespan worker polls every 250ms; give it several chances to claim.
+    time.sleep(1.5)
+
+    assert claim_next_pending_job() is None
+    with sync_system_session() as session:
+        job = session.get(Job, job_id)
+        assert job is not None
+        assert job.status == JobStatus.pending
+        assert job.claimed_by is None
+        assert job.inference_job_id is None
+
+
+def test_transcribe_job_payload_batches_every_selected_line(
+    client: TestClient,
+    owner_headers: dict[str, str],
+    owner_project: dict,
+):
+    """The claim payload an agent will be handed, built from the real job row."""
     document_id, part_id, lines = _create_document_part_with_lines(
         client,
         owner_headers,
         owner_project,
     )
-    stub_client = _CapturingInferenceClient()
-    monkeypatch.setattr(worker_module, "_get_inference_client", lambda: stub_client)
 
     base = documents_url(owner_project["id"])
     response = client.post(
@@ -396,19 +419,11 @@ def test_transcribe_job_submits_one_batched_inference_job(
     )
     assert response.status_code == 202
 
-    body = poll_job(
-        client,
-        response.json()["job_id"],
-        expect_status="waiting",
-        headers=owner_headers,
-        timeout=8.0,
-    )
     with sync_system_session() as session:
-        job = session.get(Job, uuid.UUID(body["id"]))
+        job = session.get(Job, uuid.UUID(response.json()["job_id"]))
         assert job is not None
-        assert job.inference_job_id == stub_client.inference_job_id
-    assert len(stub_client.requests) == 1
-    request = stub_client.requests[0]
+        request = build_inference_submit_request(job)
+
     assert request.task.value == "transcribe"
     assert [line["line_id"] for line in request.params["lines"]] == [line["id"] for line in lines]
     assert [line["line_index"] for line in request.params["lines"]] == [0, 1]

@@ -11,13 +11,7 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING
 
-from inference.contracts.jobs import JobSubmitRequest, JobSubmitResponse
-
 from backend.core.settings.job import JobSettings, get_job_settings
-from backend.document.application.transcribe_merge_service import (
-    TranscribeJobHandlerError,
-)
-from backend.jobs.application.inference_dispatcher import build_inference_submit_request
 from backend.jobs.infrastructure.handlers import TestJobHandlerError, run_test_handler
 from backend.jobs.infrastructure.job_repository import (
     claim_next_pending_job,
@@ -25,63 +19,35 @@ from backend.jobs.infrastructure.job_repository import (
     fail_stale_waiting_jobs,
     mark_job_done,
     mark_job_failed,
-    mark_job_waiting,
     reclaim_stale_running_jobs,
     seconds_until_next_stale_waiting_job,
 )
-from backend.jobs.infrastructure.orm_models import Job, JobType
-from backend.ml.infrastructure.ml_client import InferenceClient
+from backend.jobs.infrastructure.orm_models import Job
 
 if TYPE_CHECKING:
     from asyncio import Event
 
 logger = logging.getLogger(__name__)
 
-_inference_client: InferenceClient | None = None
-
-
-def _get_inference_client() -> InferenceClient:
-    global _inference_client
-    if _inference_client is None:
-        _inference_client = InferenceClient()
-    return _inference_client
-
-
-def _submit_inference_job(request: JobSubmitRequest) -> JobSubmitResponse:
-    return _get_inference_client().submit_job(request)
-
 
 def _public_job_error(exc: BaseException, *, fallback: str = "Job failed") -> str:
     """Return allowlisted job output; exception text stays server-side only."""
-    if isinstance(exc, TranscribeJobHandlerError):
-        return "Inference request could not be prepared"
     if isinstance(exc, TestJobHandlerError):
         return "Test job failed"
     return fallback
 
 
 def execute_claimed_job(job: Job) -> None:
-    """Run handler for a job already in ``running`` status."""
+    """Run handler for a job already in ``running`` status.
+
+    Inference job types never reach here: ``claim_next_pending_job`` leaves them
+    for an inference agent to claim over HTTP (ADR 0003). A job of one of those
+    types that somehow arrives has no handler and fails like any other.
+    """
     # Terminal writes below are scoped to the claim this worker still holds, so a
     # job reclaimed mid-run cannot be finished twice. The inference callback path
     # completes ``waiting`` jobs from another process and does not go through here.
     owner = job.claimed_by
-
-    if job.type in (JobType.segment, JobType.transcribe):
-        try:
-            request = build_inference_submit_request(job)
-            submit_response = _submit_inference_job(request)
-            mark_job_waiting(
-                job.id,
-                inference_job_id=submit_response.inference_job_id,
-            )
-        except TranscribeJobHandlerError as exc:
-            logger.warning("Transcribe job %s failed: %s", job.id, exc)
-            mark_job_failed(job.id, _public_job_error(exc), claimed_by=owner)
-        except Exception as exc:
-            logger.exception("%s job %s failed", job.type.value.title(), job.id, exc_info=exc)
-            mark_job_failed(job.id, _public_job_error(exc), claimed_by=owner)
-        return
 
     if (job.payload or {}).get("test"):
         try:

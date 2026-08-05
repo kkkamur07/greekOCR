@@ -25,7 +25,7 @@ from backend.document.application.transcribe_merge_service import (
 from backend.document.infrastructure.orm_models import Line
 from backend.jobs.infrastructure.notifications import notify_platform_job_status_changed
 from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
-from backend.ml.infrastructure.ml_client import InferenceClient
+from backend.ml.application.segment_mapping import to_canonical_segment
 from infrastructure.db import sync_system_session
 
 logger = logging.getLogger(__name__)
@@ -102,7 +102,7 @@ def _merge_context(job: Job, callback: JobCallbackRequest) -> _MergeContext:
 def _apply_segment_merge(session, context: _MergeContext, callback: JobCallbackRequest) -> dict:
     if context.document_part_id is None:
         raise ValueError("Segment job is missing its target document part")
-    canonical = InferenceClient.to_canonical_segment(_segment_output(callback))
+    canonical = to_canonical_segment(_segment_output(callback))
     summary = SegmentMergeService().apply_sync(
         session,
         part_id=context.document_part_id,

@@ -365,9 +365,7 @@ def _production_env(monkeypatch) -> None:
     monkeypatch.setenv("CORS_ORIGINS", "https://app.nomicous.com")
     monkeypatch.setenv("CLOUD_INFERENCE_ENABLED", "false")
     monkeypatch.setenv("JOB_WORKER_ENABLED", "false")
-    monkeypatch.setenv("INFERENCE_URL", "https://inference.example.com")
     monkeypatch.setenv("INFERENCE_WEBHOOK_SECRET", "unit-test-webhook-secret")
-    monkeypatch.setenv("INFERENCE_SERVICE_SECRET", "unit-test-service-secret")
     _clear_platform_settings()
 
 
