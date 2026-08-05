@@ -31,7 +31,9 @@ from infrastructure.db import sync_system_session
 from tests.nomicous.integration.helpers import (
     MINIMAL_PNG,
     documents_url,
+    pair_inference_device,
     poll_job,
+    user_id_for_email,
 )
 
 
@@ -367,6 +369,7 @@ def test_worker_processes_pending_job_via_lifespan(
 @pytest.mark.integration
 def test_transcribe_job_is_left_pending_for_an_inference_agent(
     client: TestClient,
+    owner_user: dict[str, str],
     owner_headers: dict[str, str],
     owner_project: dict,
 ):
@@ -375,6 +378,10 @@ def test_transcribe_job_is_left_pending_for_an_inference_agent(
     It therefore must not claim the job. Segment and transcribe rows stay
     ``pending`` until an agent claims them over HTTP.
     """
+    # Submission is gated on **capacity** (051): a job may only be created for a
+    # host that has a machine able to take it, so a cloud worker must be up.
+    pair_inference_device(user_id=user_id_for_email(owner_user["email"]), host="cloud")
+
     document_id, part_id, _lines = _create_document_part_with_lines(
         client,
         owner_headers,
@@ -408,6 +415,9 @@ def test_transcribe_job_payload_batches_every_selected_line(
     owner_project: dict,
 ):
     """The claim payload an agent will be handed, built from the real job row."""
+    # Submission is gated on **capacity** (051): a job may only be created for a
+    # host that has a machine able to take it, so a cloud worker must be up.
+    pair_inference_device(user_id=user_id_for_email(owner_user["email"]), host="cloud")
     document_id, part_id, lines = _create_document_part_with_lines(
         client,
         owner_headers,

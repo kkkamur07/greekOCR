@@ -44,6 +44,10 @@ class UserResponse(BaseModel):
     id: UUID
     email: str
     username: str
+    # "Use my computer when it is available." Read here so a client that has the
+    # account already does not need a second round trip to render the setting;
+    # written through ``PUT /account/execution-target``.
+    prefer_local_inference: bool = False
     created_at: datetime
 
     model_config = {"from_attributes": True}

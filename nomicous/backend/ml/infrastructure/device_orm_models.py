@@ -20,10 +20,11 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, SmallInteger, String, func
+from sqlalchemy import DateTime, Enum, ForeignKey, Index, SmallInteger, String, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from backend.ml.domain.execution import ExecutionTarget
 from backend.users.infrastructure.orm_models import User
 from infrastructure.db import Base
 
@@ -56,6 +57,17 @@ class HelperDevice(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     name: Mapped[str] = mapped_column(String(MAX_DEVICE_NAME_LENGTH), nullable=False)
+    # Which **inference host** this device *is*. A hosted worker is a device like
+    # any other (ADR 0003), so **capacity** is one query over one table rather
+    # than a device check plus a separate notion of "is cloud up". Everything
+    # paired through the browser is a researcher's own computer; ``cloud`` rows
+    # are provisioned for hosted workers.
+    inference_host: Mapped[ExecutionTarget] = mapped_column(
+        Enum(ExecutionTarget, name="execution_target"),
+        nullable=False,
+        server_default=ExecutionTarget.local.value,
+        default=ExecutionTarget.local,
+    )
     platform: Mapped[str] = mapped_column(String(MAX_PLATFORM_LENGTH), nullable=False)
     helper_version: Mapped[str] = mapped_column(String(MAX_HELPER_VERSION_LENGTH), nullable=False)
     capabilities: Mapped[dict] = mapped_column(

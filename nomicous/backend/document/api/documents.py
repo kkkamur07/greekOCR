@@ -67,6 +67,7 @@ from backend.document.application.transcription_service import TranscriptionServ
 from backend.document.infrastructure.document_repository import DocumentRepository
 from backend.document.infrastructure.orm_models import Block
 from backend.jobs.api.schemas import EnqueueJobResponse
+from backend.ml.application.capacity_service import InferenceCapacityService
 from backend.users.api.dependencies import get_current_user
 from backend.users.infrastructure.orm_models import User
 from infrastructure.db import get_db
@@ -77,6 +78,7 @@ _parts = DocumentPartService()
 _layout = LayoutService()
 _transcriptions = TranscriptionService()
 _enqueue = DocumentJobEnqueueService()
+_capacity = InferenceCapacityService()
 _local_inference_service = LocalInferenceService()
 _document_repo = DocumentRepository()
 _export_service = AnnotationExportService()
@@ -663,6 +665,7 @@ async def segment_part(
         project_id,
         document_id,
         part_id,
+        execution=await _capacity.execution_request(db, current_user),
         model_id=body.model_id,
         ml_params=body.model_dump(exclude={"model_id"}),
     )
@@ -689,6 +692,7 @@ async def transcribe_part(
         project_id,
         document_id,
         part_id,
+        execution=await _capacity.execution_request(db, current_user),
         model_id=body.model_id,
         line_ids=body.line_ids,
     )

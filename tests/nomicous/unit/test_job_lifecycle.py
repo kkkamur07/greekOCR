@@ -34,6 +34,7 @@ from backend.jobs.infrastructure.job_repository import (
     worker_identity,
 )
 from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
+from backend.ml.domain.execution import ExecutionTarget
 
 
 class _FakeResult:
@@ -394,6 +395,10 @@ def _readable_job(**overrides) -> Job:
         "updated_at": now,
         "started_at": None,
         "completed_at": None,
+        # Not defaulted by the ORM until the row is flushed, and the DTO
+        # names the inference host on every job, so it has to be set here.
+        "execution_target": ExecutionTarget.cloud,
+        "preferred_execution_target": ExecutionTarget.cloud,
     }
     fields.update(overrides)
     return Job(**fields)

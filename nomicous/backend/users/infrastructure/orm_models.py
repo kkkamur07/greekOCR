@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, String, func
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -22,6 +22,14 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     username: Mapped[str] = mapped_column(String(150), unique=True, index=True)
     hashed_password: Mapped[str] = mapped_column(String(255))
+    # "Use my computer when it is available." The whole of **execution target**
+    # selection, chosen once at the account level. There is deliberately no
+    # per-job toggle: a researcher cannot know which host is faster for a given
+    # page, so asking at every action is a decision without a basis - and it is
+    # what regrows the three-mode complexity ADR 0002 deletes.
+    prefer_local_inference: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false", default=False
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     owned_projects: Mapped[list[Project]] = relationship("Project", back_populates="owner")

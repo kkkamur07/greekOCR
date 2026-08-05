@@ -18,6 +18,7 @@ from backend.core.exceptions import ConflictError
 from backend.document.infrastructure.orm_models import Document
 from backend.jobs.infrastructure.notifications import notify_platform_job_status_changed
 from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
+from backend.ml.domain.execution import ExecutionTarget
 
 _TERMINAL_STATUSES = (JobStatus.done, JobStatus.failed, JobStatus.cancelled)
 _NON_TERMINAL_STATUSES = (JobStatus.pending, JobStatus.running, JobStatus.waiting)
@@ -82,6 +83,8 @@ class JobRepository:
             user_id=user_id,
             document_id=document_id,
             document_part_id=document_part_id,
+            execution_target=ExecutionTarget.local,
+            preferred_execution_target=ExecutionTarget.local,
             payload={
                 "execution": "local",
                 "registry_model_id": registry_model_id,

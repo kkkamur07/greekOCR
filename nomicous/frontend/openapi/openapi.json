@@ -891,6 +891,48 @@
         "title": "EnqueueTestJobResponse",
         "type": "object"
       },
+      "ExecutionPreferenceRequest": {
+        "properties": {
+          "prefer_local_inference": {
+            "title": "Prefer Local Inference",
+            "type": "boolean"
+          }
+        },
+        "required": ["prefer_local_inference"],
+        "title": "ExecutionPreferenceRequest",
+        "type": "object"
+      },
+      "ExecutionPreferenceResponse": {
+        "properties": {
+          "available_targets": {
+            "items": {
+              "$ref": "#/components/schemas/ExecutionTarget"
+            },
+            "title": "Available Targets",
+            "type": "array"
+          },
+          "prefer_local_inference": {
+            "title": "Prefer Local Inference",
+            "type": "boolean"
+          },
+          "preferred_execution_target": {
+            "$ref": "#/components/schemas/ExecutionTarget"
+          }
+        },
+        "required": [
+          "prefer_local_inference",
+          "preferred_execution_target",
+          "available_targets"
+        ],
+        "title": "ExecutionPreferenceResponse",
+        "type": "object"
+      },
+      "ExecutionTarget": {
+        "description": "The **inference host** a single job runs on.\n\nAlso the discriminator on a paired device, because a hosted worker is a\ndevice like any other (ADR 0003) - a device *is* one of these two hosts.",
+        "enum": ["local", "cloud"],
+        "title": "ExecutionTarget",
+        "type": "string"
+      },
       "ExportArtifactResponse": {
         "properties": {
           "image_base64": {
@@ -1200,6 +1242,14 @@
             ],
             "title": "Execution"
           },
+          "execution_target": {
+            "$ref": "#/components/schemas/ExecutionTarget"
+          },
+          "execution_target_substituted": {
+            "default": false,
+            "title": "Execution Target Substituted",
+            "type": "boolean"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -1209,6 +1259,9 @@
             "additionalProperties": true,
             "title": "Payload",
             "type": "object"
+          },
+          "preferred_execution_target": {
+            "$ref": "#/components/schemas/ExecutionTarget"
           },
           "result": {
             "anyOf": [
@@ -1271,7 +1324,9 @@
           "created_at",
           "updated_at",
           "started_at",
-          "completed_at"
+          "completed_at",
+          "execution_target",
+          "preferred_execution_target"
         ],
         "title": "JobResponse",
         "type": "object"
@@ -3188,6 +3243,11 @@
             "title": "Id",
             "type": "string"
           },
+          "prefer_local_inference": {
+            "default": false,
+            "title": "Prefer Local Inference",
+            "type": "boolean"
+          },
           "username": {
             "title": "Username",
             "type": "string"
@@ -3333,6 +3393,203 @@
         },
         "summary": "Welcome",
         "tags": ["root"]
+      }
+    },
+    "/account/execution-target": {
+      "get": {
+        "operationId": "read_execution_preference_account_execution_target_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecutionPreferenceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict with current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read Execution Preference",
+        "tags": ["ml"]
+      },
+      "put": {
+        "description": "Change the preference. Jobs already submitted keep the host they were given.\n\nThe setting selects the *next* job's preferred host and nothing else - an\n**execution target** is fixed at submission, so changing this can never move\nwork that is already queued.",
+        "operationId": "set_execution_preference_account_execution_target_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecutionPreferenceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecutionPreferenceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict with current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set Execution Preference",
+        "tags": ["ml"]
       }
     },
     "/auth/login": {

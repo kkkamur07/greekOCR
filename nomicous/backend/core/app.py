@@ -46,6 +46,7 @@ from backend.document.api.public_media import router as public_media_router
 from backend.document.infrastructure.media_gc import media_gc_loop
 from backend.ml.api.device_pairing import router as device_pairing_router
 from backend.ml.api.device_self import router as device_self_router
+from backend.ml.api.execution_preference import router as execution_preference_router
 from backend.ml.api.devices import router as devices_router
 from backend.ml.api.models import router as ml_models_router
 from backend.ml.api.registry import router as ml_registry_router
@@ -345,6 +346,7 @@ def create_app() -> FastAPI:
     app.include_router(public_media_router)
     app.include_router(ml_models_router)
     app.include_router(ml_registry_router)
+    app.include_router(execution_preference_router)
     # Always mounted; each device router carries require_device_pairing_enabled,
     # so DEVICE_PAIRING_ENABLED turns the surface off per request rather than at
     # boot. Off by default in production until the /pair consent page exists.

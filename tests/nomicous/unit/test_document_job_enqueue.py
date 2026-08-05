@@ -43,9 +43,21 @@ from backend.document.application.document_job_enqueue import DocumentJobEnqueue
 from backend.document.infrastructure.orm_models import Document, DocumentPart, Line
 from backend.jobs.infrastructure.orm_models import JobStatus, JobType
 from backend.ml.application.model_service import ResolvedModelBinding
+from backend.ml.domain.execution import ExecutionRequest, ExecutionTarget
 from backend.ml.infrastructure.orm_models import InferenceModel, InferenceTask, ModelBinding
 from backend.project.infrastructure.orm_models import Project
 from backend.users.infrastructure.orm_models import User
+
+
+# Capacity is an input to submission, not a collaborator of it: the route reads it
+# once and hands it down as data. These tests are about model resolution and the
+# composed row, so they pass the one reading that keeps every case on the cloud -
+# preferred cloud, cloud available. The gating itself is exercised end to end in
+# tests/nomicous/integration/test_execution_target.py, against real device rows.
+CLOUD_AVAILABLE = ExecutionRequest(
+    preferred=ExecutionTarget.cloud,
+    available=frozenset({ExecutionTarget.cloud}),
+)
 
 
 class _Session:
@@ -191,7 +203,9 @@ async def test_a_non_member_cannot_enqueue_and_nothing_is_staged(method: str) ->
     session = _Session()
 
     with pytest.raises(AccessDeniedError):
-        await getattr(service, method)(session, _user(), project.id, document.id, part.id)
+        await getattr(service, method)(
+            session, _user(), project.id, document.id, part.id, execution=CLOUD_AVAILABLE
+        )
 
     assert session.added == []
     assert session.commits == 0
@@ -207,7 +221,9 @@ async def test_a_part_filed_under_another_document_is_not_found(method: str) -> 
     session = _Session()
 
     with pytest.raises(NotFoundError, match="Part not found"):
-        await getattr(service, method)(session, _user(owner_id), project.id, document.id, part.id)
+        await getattr(service, method)(
+            session, _user(owner_id), project.id, document.id, part.id, execution=CLOUD_AVAILABLE
+        )
     assert session.added == []
 
 
@@ -225,7 +241,12 @@ async def test_a_part_with_no_lines_cannot_be_transcribed() -> None:
 
     with pytest.raises(ConflictError):
         await service.enqueue_transcribe_part(
-            session, _user(owner_id), project.id, document.id, part.id
+            session,
+            _user(owner_id),
+            project.id,
+            document.id,
+            part.id,
+            execution=CLOUD_AVAILABLE,
         )
     assert session.added == []
     assert session.commits == 0
@@ -244,6 +265,7 @@ async def test_a_line_id_from_another_page_is_not_found() -> None:
             document.id,
             part.id,
             line_ids=[lines[0].id, uuid.uuid4()],
+            execution=CLOUD_AVAILABLE,
         )
     assert session.added == []
 
@@ -260,7 +282,13 @@ async def test_an_explicitly_empty_selection_is_invalid_rather_than_a_whole_page
 
     with pytest.raises(ValidationError):
         await service.enqueue_transcribe_part(
-            session, _user(owner_id), project.id, document.id, part.id, line_ids=[]
+            session,
+            _user(owner_id),
+            project.id,
+            document.id,
+            part.id,
+            line_ids=[],
+            execution=CLOUD_AVAILABLE,
         )
     assert session.added == []
 
@@ -276,7 +304,9 @@ async def test_transcribe_stages_a_pending_cloud_job_bound_to_the_caller_and_pag
     service, project, document, part, _lines, _inference = _fixture(owner_id=owner_id, line_count=2)
     session = _Session()
 
-    job = await service.enqueue_transcribe_part(session, user, project.id, document.id, part.id)
+    job = await service.enqueue_transcribe_part(
+        session, user, project.id, document.id, part.id, execution=CLOUD_AVAILABLE
+    )
 
     assert (job.type, job.status) == (JobType.transcribe, JobStatus.pending)
     assert (job.user_id, job.document_id, job.document_part_id) == (user.id, document.id, part.id)
@@ -294,7 +324,12 @@ async def test_a_whole_page_transcribe_carries_no_line_selection() -> None:
     service, project, document, part, _lines, _inference = _fixture(owner_id=owner_id, line_count=2)
 
     job = await service.enqueue_transcribe_part(
-        _Session(), _user(owner_id), project.id, document.id, part.id
+        _Session(),
+        _user(owner_id),
+        project.id,
+        document.id,
+        part.id,
+        execution=CLOUD_AVAILABLE,
     )
 
     assert "line_ids" not in job.payload
@@ -312,6 +347,7 @@ async def test_a_selective_transcribe_carries_the_ids_as_strings_in_caller_order
         document.id,
         part.id,
         line_ids=selection,
+        execution=CLOUD_AVAILABLE,
     )
 
     # JSONB cannot hold UUID objects, so the payload has to be serialisable as written.
@@ -325,7 +361,9 @@ async def test_segment_stages_a_pending_cloud_job_without_needing_lines() -> Non
     service, project, document, part, _lines, _inference = _fixture(owner_id=owner_id, line_count=0)
     session = _Session()
 
-    job = await service.enqueue_segment_part(session, user, project.id, document.id, part.id)
+    job = await service.enqueue_segment_part(
+        session, user, project.id, document.id, part.id, execution=CLOUD_AVAILABLE
+    )
 
     assert (job.type, job.status) == (JobType.segment, JobStatus.pending)
     assert (job.user_id, job.document_id, job.document_part_id) == (user.id, document.id, part.id)
@@ -346,7 +384,13 @@ async def test_an_explicit_model_contributes_its_defaults_and_no_binding() -> No
     )
 
     job = await service.enqueue_transcribe_part(
-        _Session(), _user(owner_id), project.id, document.id, part.id, model_id=model.id
+        _Session(),
+        _user(owner_id),
+        project.id,
+        document.id,
+        part.id,
+        model_id=model.id,
+        execution=CLOUD_AVAILABLE,
     )
 
     assert job.model_id == model.id
@@ -370,7 +414,13 @@ async def test_an_explicit_model_is_checked_against_the_task_it_was_asked_for() 
 
     with pytest.raises(ValidationError):
         await service.enqueue_transcribe_part(
-            session, _user(owner_id), project.id, document.id, part.id, model_id=segmenter.id
+            session,
+            _user(owner_id),
+            project.id,
+            document.id,
+            part.id,
+            model_id=segmenter.id,
+            execution=CLOUD_AVAILABLE,
         )
     assert session.added == []
 
@@ -384,7 +434,13 @@ async def test_an_unknown_model_id_is_not_found() -> None:
 
     with pytest.raises(NotFoundError):
         await service.enqueue_segment_part(
-            session, _user(owner_id), project.id, document.id, part.id, model_id=uuid.uuid4()
+            session,
+            _user(owner_id),
+            project.id,
+            document.id,
+            part.id,
+            model_id=uuid.uuid4(),
+            execution=CLOUD_AVAILABLE,
         )
     assert session.added == []
 
@@ -407,7 +463,12 @@ async def test_the_nearest_binding_supplies_the_model_and_its_effective_params(
     )
 
     job = await getattr(service, method)(
-        _Session(), _user(owner_id), project.id, document.id, part.id
+        _Session(),
+        _user(owner_id),
+        project.id,
+        document.id,
+        part.id,
+        execution=CLOUD_AVAILABLE,
     )
 
     assert job.model_id == model.id
@@ -427,7 +488,9 @@ async def test_no_binding_anywhere_still_enqueues_with_a_null_model(method: str)
     service, project, document, part, _lines, _inference = _fixture(owner_id=owner_id, line_count=1)
     session = _Session()
 
-    job = await getattr(service, method)(session, _user(owner_id), project.id, document.id, part.id)
+    job = await getattr(service, method)(
+        session, _user(owner_id), project.id, document.id, part.id, execution=CLOUD_AVAILABLE
+    )
 
     assert job.model_id is None
     assert job.binding_id is None
@@ -452,6 +515,7 @@ async def test_request_params_override_an_explicit_models_defaults() -> None:
         part.id,
         model_id=model.id,
         ml_params={"min_iou": 0.5},
+        execution=CLOUD_AVAILABLE,
     )
 
     assert job.payload["ml_params"] == {"min_iou": 0.5, "split_large_lines": True}
@@ -472,6 +536,7 @@ async def test_request_params_override_a_bindings_effective_params() -> None:
         document.id,
         part.id,
         ml_params={"min_iou": 0.5},
+        execution=CLOUD_AVAILABLE,
     )
 
     assert job.payload["ml_params"] == {"min_iou": 0.5, "target_max_points": 80}
@@ -488,6 +553,7 @@ async def test_request_params_survive_when_nothing_is_bound() -> None:
         document.id,
         part.id,
         ml_params={"use_otsu_refinement": True},
+        execution=CLOUD_AVAILABLE,
     )
 
     assert job.payload["ml_params"] == {"use_otsu_refinement": True}
@@ -500,7 +566,13 @@ async def test_the_payload_params_are_a_copy_of_the_catalog_row() -> None:
     service, project, document, part, _lines, _inference = _fixture(owner_id=owner_id, model=model)
 
     job = await service.enqueue_segment_part(
-        _Session(), _user(owner_id), project.id, document.id, part.id, model_id=model.id
+        _Session(),
+        _user(owner_id),
+        project.id,
+        document.id,
+        part.id,
+        model_id=model.id,
+        execution=CLOUD_AVAILABLE,
     )
     job.payload["ml_params"]["min_iou"] = 0.1
 
@@ -518,7 +590,12 @@ async def test_a_binding_supplied_transcribe_job_takes_no_caller_params() -> Non
     )
 
     job = await service.enqueue_transcribe_part(
-        _Session(), _user(owner_id), project.id, document.id, part.id
+        _Session(),
+        _user(owner_id),
+        project.id,
+        document.id,
+        part.id,
+        execution=CLOUD_AVAILABLE,
     )
 
     assert job.payload["ml_params"] == {"beam": 8}
