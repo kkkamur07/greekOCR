@@ -79,7 +79,9 @@ App: http://localhost:5173 - see [`nomicous/frontend/README.md`](../../nomicous/
 uv run --group inference python -m inference.helper
 ```
 
-Probes `http://127.0.0.1:8001`. Packaging and DMG install: [`packaging/helper/README.md`](../../packaging/helper/README.md).
+Probes `http://127.0.0.1:8001`. There is no installer: the published package
+installs from PyPI with `uv tool install nomicous-inference --torch-backend=cpu`
+([`inference/README.md`](../../inference/README.md#install)).
 
 ---
 

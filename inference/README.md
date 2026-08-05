@@ -59,6 +59,43 @@ outside its own root and the package it publishes is `inference/`. Development
 still runs from the tree (`tool.uv.package = false`), so `uv sync` does not
 install the wheel into every dev environment.
 
+## Releasing, and what that changed about security patching
+
+A release is a PyPI publish. Tag `v<version>` matching `[project].version`,
+publish the GitHub release, and `.github/workflows/release.yml` builds the
+wheel and sdist on one runner, exports the published dependency closure
+(`uv export --no-default-groups`), gates it on a CRITICAL/HIGH Trivy scan,
+attests build provenance, and uploads to PyPI through Trusted Publishing. There
+is no signing secret: the upload token is minted per run from the workflow's
+OIDC identity.
+
+Until 0.1.6 a release was instead four per-OS PyInstaller builds, a Developer ID
+notarization pass, an Authenticode signing pass, and a GPG-signed checksum
+manifest - roughly 1,137 lines of packaging around 516 lines of program. Its
+real cost was not the line count. **A frozen installer made this project the
+distributor of a vendored dependency tree with no update channel.** Every CVE in
+`protobuf`, `Pillow`, or `scipy` meant rebuilding on four runners, re-signing,
+re-notarizing, and then having no way to make anyone install the result: the
+installed base decided when, or whether, to be patched.
+
+Patching is now two moves:
+
+1. Bump the dependency floor here and re-lock.
+2. Raise the platform's **version floor** (`INFERENCE_AGENT_MIN_VERSION`).
+
+The second is what makes the first land. An **inference agent** below the floor
+is refused at the claim endpoint and told to upgrade
+([ADR 0002](../docs/adr/0002-inference-cli-replaces-loopback-helper.md), #55),
+so a vulnerable agent stops taking work whether or not its operator noticed.
+The floor is served by the platform rather than read from PyPI, which means it
+turns without a release.
+
+To upgrade an installed agent by hand:
+
+```bash
+uv tool upgrade nomicous-inference
+```
+
 ## One queue, owned by the platform
 
 This package holds no job queue, no database, and no claim loop. A queued page is
@@ -161,7 +198,7 @@ curl -s http://127.0.0.1:8001/health
 curl -s http://127.0.0.1:8001/inference/v1/info
 ```
 
-The helper serves three routes: `GET /health` (liveness, used by the installers),
+The helper serves three routes: `GET /health` (liveness),
 `GET /inference/v1/info`, and `POST /inference/v1/run`.
 
 `GET /inference/v1/info` is the single capability document and the only supported
@@ -182,14 +219,16 @@ may own port 8001, and a manuscript image should never be POSTed to it.
 `cached` is a local-disk answer only: it means the pinned weights are present and
 match their `artifact_sha256`, checked without contacting the Hub.
 
-On startup the helper fetches `registry.yaml` from the hosted platform (`GET /inference/v1/registry`, public, ETag-aware) into `~/.nomicous/registry.yaml`. The bundled copy in the installer is only a fallback when offline. Model weights download lazily when the first `/run` needs them.
+On startup the helper fetches `registry.yaml` from the hosted platform (`GET /inference/v1/registry`, public, ETag-aware) into `~/.nomicous/registry.yaml`. The copy shipped in the package is only a fallback when offline. Model weights download lazily when the first `/run` needs them.
 
 The browser calls `/inference/v1/run` through the configured helper URL, then falls back
 to `127.0.0.1:8001` and `localhost:8001`. The production Vercel CSP permits
 these loopback URLs. The helper accepts browser requests only from
 `https://app.nomicous.com`.
 
-Packaging for `.dmg` / `.msi` / Linux installers: [`packaging/helper/README.md`](../packaging/helper/README.md) - PyInstaller spec excludes training stacks and the platform API so installers ship only the Calamari + BLLA PyTorch CPU runtimes.
+There are no native installers. The helper runs from the source tree until #60
+deletes it; the supported distribution is `uv tool install nomicous-inference`
+(see [Install](#install) and [Releasing](#releasing-and-what-that-changed-about-security-patching)).
 
 ## Admission control and helper exposure
 
