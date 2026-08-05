@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from inference.cli import console as ui
 from inference.cli import pair as pair_command
 from inference.cli import run as run_command
+from inference.cli import upgrade as upgrade_command
 from inference.cli import version as version_command
 from inference.cli.version import DISTRIBUTION_NAME, SOURCE_CHECKOUT_VERSION, installed_version
 
@@ -26,12 +27,31 @@ _COMMANDS = {
         run_command.add_arguments,
         run_command.run,
     ),
+    "upgrade": (
+        "check this agent against the platform's version floor and upgrade if it is below it",
+        upgrade_command.add_arguments,
+        upgrade_command.run,
+    ),
     "version": (
         "report the version this agent presents to the platform",
         version_command.add_arguments,
         version_command.run,
     ),
 }
+
+_CLAIMS_WORK = frozenset({"run"})
+"""Commands that take work from the platform, and therefore the only ones the
+launch check runs before.
+
+ADR 0002: the launch moment is the one point at which the agent may replace its
+own code, because it is the only point at which nothing is in flight. Putting
+the check here rather than inside the claim loop is what makes that structural -
+there is no call site left from which an upgrade could start mid-batch.
+
+`pair` and `version` are deliberately absent. Pairing happens on a machine that
+may not be able to claim yet and must not be blocked by a floor it is not about
+to test, and `version` reports what this build is without asking the platform
+anything at all."""
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -59,6 +79,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     handler = _COMMANDS[args.command][2]
     try:
+        if args.command in _CLAIMS_WORK:
+            # Once. Before the command runs, and never again from inside it.
+            refused = upgrade_command.check_before_claiming(args)
+            if refused != ui.EXIT_OK:
+                return refused
         return handler(args)
     except KeyboardInterrupt:
         # A backstop, not the handler that matters. `pair` writes its credential
