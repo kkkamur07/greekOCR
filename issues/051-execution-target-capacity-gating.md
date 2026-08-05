@@ -2,7 +2,7 @@
 id: "051"
 title: "execution-target-capacity-gating"
 type: AFK
-status: in_progress
+status: done
 tracker: "https://github.com/kkkamur07/greekOCR/issues/51"
 blocked_by:
   - "048-collapse-second-job-queue.md"

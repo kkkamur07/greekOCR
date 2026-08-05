@@ -2,7 +2,7 @@
 id: "049"
 title: "torch-runtime-archive-onnx"
 type: AFK
-status: in_progress
+status: done
 tracker: "https://github.com/kkkamur07/greekOCR/issues/49"
 blocked_by: []
 parent_prd: "https://github.com/kkkamur07/greekOCR/issues/47"

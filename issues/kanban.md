@@ -2,27 +2,24 @@
 
 > Regenerated 2026-08-04 — inference redesign ([PRD #47](https://github.com/kkkamur07/greekOCR/issues/47))
 >
-> Limits: in progress **5**, review **8**, parallel lanes **5** (raised from defaults on owner instruction).
+> Limits: in progress **5**, review **8**, parallel lanes **5**.
 
 ## Ready (AFK)
 
-_Empty — everything unblocked is in progress._
+- [ ] [062 · bound segmentation peak memory](https://github.com/kkkamur07/greekOCR/issues/62) — found by 049; 7 GB/page will not fit an 8 GB laptop
+- [ ] [063 · device pairing event-loop collision](https://github.com/kkkamur07/greekOCR/issues/63) — disables the ADR 0001 route-mounting guard
 
 ## Ready (HITL)
 
-_None. Every architectural decision was resolved into ADR 0002 / ADR 0003 / ADR 0004 before decomposition._
+_None._
 
 ## In progress
 
-3/5 — one worktree each, created at trunk and base-verified before launch.
+3/5 — one worktree each, created at merged trunk and base-verified before launch.
 
-- [ ] [048 · collapse second job queue](048-collapse-second-job-queue.md) — `feat/048-queue-collapse`
-- [ ] [049 · Torch runtime, archive ONNX](049-torch-runtime-archive-onnx.md) — `feat/049-torch-runtime-archive-onnx`
-- [ ] [051 · execution target + capacity](051-execution-target-capacity-gating.md) — `feat/051-execution-target`
-
-> 051 was pulled forward off its DAG blocker. Its dependency on 048 was surface-shrinking,
-> not structural; both touch job submission, so both were told to keep changes there
-> surgical. It unblocks 052 and 059, the widest part of the graph.
+- [ ] [050 · publish inference package](050-publish-inference-package.md) — `feat/050-publish-inference-package`
+- [ ] [052 · device claim endpoint](052-device-claim-endpoint.md) — `feat/052-device-claim-endpoint`
+- [ ] [059 · frontend host preference](059-frontend-host-preference.md) — `feat/059-frontend-host-preference`
 
 ## Review
 
@@ -30,22 +27,21 @@ _Empty — 0/8._
 
 ## Done
 
-_Empty._
+Merged into `feat/inference-cli-redesign`, gates verified, migration chain applies from scratch.
+
+- [x] [048 · collapse second job queue](048-collapse-second-job-queue.md) — 82 files, +610/−2739
+- [x] [049 · Torch runtime, archive ONNX](049-torch-runtime-archive-onnx.md) — output byte-identical, PyTorch faster
+- [x] [051 · execution target + capacity](051-execution-target-capacity-gating.md) — migration re-chained to `007`
 
 ## Backlog
 
-Blocked on the DAG; promoted automatically as blockers land.
-
 | Issue | Blocked by |
 |-------|-----------|
-| [050 · publish inference package](050-publish-inference-package.md) | 048, 049 |
-| [052 · device claim endpoint](052-device-claim-endpoint.md) | 048 |
 | [053 · signed page-image link](053-signed-page-image-link.md) | 052 |
 | [054 · device lease stale sweep](054-device-lease-stale-sweep.md) | 052 |
 | [055 · version floor](055-version-floor.md) | 052 |
 | [056 · CLI pair + version](056-cli-pair-and-version.md) | 050 |
 | [057 · CLI run loop](057-cli-run-loop.md) | 053, 054, 056 |
 | [058 · CLI self-upgrade](058-cli-self-upgrade.md) | 055, 056 |
-| [059 · frontend host preference](059-frontend-host-preference.md) | 051 |
 | [060 · delete loopback transport](060-delete-loopback-transport.md) | 057, 059 |
 | [061 · delete native packaging](061-delete-native-packaging.md) | 050 |

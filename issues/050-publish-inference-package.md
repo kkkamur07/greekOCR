@@ -2,7 +2,7 @@
 id: "050"
 title: "publish-inference-package"
 type: AFK
-status: backlog
+status: in_progress
 tracker: "https://github.com/kkkamur07/greekOCR/issues/50"
 blocked_by:
   - "048-collapse-second-job-queue.md 049-torch-runtime-archive-onnx.md"
