@@ -49,6 +49,56 @@ class DeviceSettings(BaseSettings):
     )
     device_idle_window_seconds: int = Field(default=900, alias="DEVICE_IDLE_WINDOW_SECONDS", ge=10)
 
+    # ------------------------------------------------------------------
+    # Claim protocol (ADR 0003). One page per claim, no heartbeat.
+    # ------------------------------------------------------------------
+    device_lease_seconds: int = Field(
+        default=600,
+        alias="DEVICE_LEASE_SECONDS",
+        ge=30,
+        le=3600,
+        description=(
+            "How long one claimed page stays with the agent that took it. Work is "
+            "seconds-to-minutes, so this covers it with margin and no heartbeat "
+            "endpoint is needed; a slept laptop loses one page, not a document."
+        ),
+    )
+    device_claim_max_wait_seconds: int = Field(
+        default=25,
+        alias="DEVICE_CLAIM_MAX_WAIT_SECONDS",
+        ge=0,
+        le=120,
+        description=(
+            "Ceiling on how long one claim request waits for work. A laptop long-polls "
+            "up to this; a hosted worker sends 0 and short-polls, because it is never "
+            "idle for long and does not need the latency."
+        ),
+    )
+    device_claim_poll_interval_seconds: float = Field(
+        default=1.0,
+        alias="DEVICE_CLAIM_POLL_INTERVAL_SECONDS",
+        gt=0,
+        le=30,
+        description="Server-side re-check cadence inside one long poll. No connection is held between checks.",
+    )
+    device_claim_idle_poll_seconds: float = Field(
+        default=5.0,
+        alias="DEVICE_CLAIM_IDLE_POLL_SECONDS",
+        gt=0,
+        le=300,
+        description="What an empty claim response tells the agent to wait before asking again.",
+    )
+    inference_worker_service_token: str | None = Field(
+        default=None,
+        alias="INFERENCE_WORKER_SERVICE_TOKEN",
+        description=(
+            "The hosted worker's credential for the claim endpoint. A service credential "
+            "rather than a device token (ADR 0003): it claims cloud work, and cloud work "
+            "belongs to the platform rather than to one researcher. Unset means no hosted "
+            "worker can claim."
+        ),
+    )
+
     device_pairing_ttl_seconds: int = Field(
         default=300,
         alias="DEVICE_PAIRING_TTL_SECONDS",
@@ -113,6 +163,27 @@ class DeviceSettings(BaseSettings):
         ):
             raise ValueError(
                 "DEVICE_TOKEN_HMAC_SECRET must be at least 32 non-placeholder characters"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_service_token(self) -> "DeviceSettings":
+        """A weak service credential claims *every* account's cloud work.
+
+        A device token is bounded by one ``helper_devices.user_id``; this one is
+        not bounded by anything, because cloud work is platform work. So it is
+        held to the same floor as the HMAC key rather than to none.
+        """
+        if self.inference_worker_service_token is None:
+            return self
+        normalized = self.inference_worker_service_token.strip()
+        if (
+            len(normalized) < 32
+            or normalized.casefold() in _PLACEHOLDER_SECRETS
+            or normalized.casefold().startswith("replace-with-")
+        ):
+            raise ValueError(
+                "INFERENCE_WORKER_SERVICE_TOKEN must be at least 32 non-placeholder characters"
             )
         return self
 

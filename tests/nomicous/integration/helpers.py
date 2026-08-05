@@ -16,11 +16,60 @@ __all__ = [
     "MINIMAL_PNG",
     "assert_api_error",
     "documents_url",
+    "pair_device_over_http",
     "pair_inference_device",
     "poll_job",
     "stored_minimal_page_bytes",
     "user_id_for_email",
 ]
+
+
+def pair_device_over_http(
+    client: TestClient,
+    headers: dict[str, str],
+    *,
+    name: str = "Researcher laptop",
+) -> dict[str, str]:
+    """Run the whole pairing protocol against the real app and return the token.
+
+    A real device credential, minted the way production mints one: helper starts
+    a pairing, the browser consents, the helper collects. Nothing is written to
+    ``helper_devices`` by hand, so a change that breaks pairing breaks the tests
+    that build on it too.
+
+    The helper deliberately does **not** poll before consent. A compliant poll
+    cadence is enforced on the pairing row itself, and a second poll inside the
+    default 5s interval would legitimately answer ``slow_down``; there is nothing
+    to learn from that here, and it is covered where it belongs.
+    """
+    started = client.post(
+        "/device/v1/pairings",
+        json={
+            "device_name": name,
+            "platform": "darwin-arm64",
+            "helper_version": "0.2.0",
+            "capabilities": {"runtime": "torch"},
+        },
+    )
+    assert started.status_code == 201, started.text
+    pairing = started.json()
+    verification_token = pairing["verification_url"].split("#", 1)[1]
+
+    approved = client.post(
+        f"/devices/pairings/{pairing['pairing_id']}/approve",
+        headers=headers,
+        json={"verification_token": verification_token},
+    )
+    assert approved.status_code == 200, approved.text
+
+    collected = client.post(
+        "/device/v1/pairings/token",
+        json={"pairing_id": pairing["pairing_id"], "device_code": pairing["device_code"]},
+    )
+    assert collected.status_code == 200, collected.text
+    body = collected.json()
+    assert body["status"] == "approved", body
+    return {"device_id": body["device_id"], "device_token": body["device_token"]}
 
 
 def user_id_for_email(email: str) -> uuid.UUID:

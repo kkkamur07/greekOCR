@@ -22,6 +22,11 @@ os.environ.setdefault("AUTH_RATE_LIMIT_REQUESTS", "1000")
 os.environ.setdefault("ENABLE_TEST_JOB_ROUTES", "true")
 os.environ.setdefault("JOB_WORKER_ENABLED", "true")
 os.environ.setdefault("INFERENCE_WEBHOOK_SECRET", "test-inference-webhook-secret")
+# The hosted worker's claim credential. Held to the same 32-character floor as the
+# device HMAC key, because unlike a device token it is scoped to no account.
+os.environ.setdefault(
+    "INFERENCE_WORKER_SERVICE_TOKEN", "test-inference-worker-service-token-not-for-production"
+)
 os.environ.setdefault(
     "MIGRATOR_DATABASE_URL",
     os.environ.get(

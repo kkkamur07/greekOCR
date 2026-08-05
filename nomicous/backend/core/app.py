@@ -35,6 +35,7 @@ from backend.core.settings import (
 from backend.core.settings.device import get_device_settings
 from backend.core.settings.job import get_job_settings
 from backend.core.version import get_version
+from backend.jobs.api.device_claim import router as device_claim_router
 from backend.jobs.api.internal_inference import router as internal_inference_router
 from backend.jobs.api.jobs import router as jobs_router
 from backend.jobs.infrastructure.notifications import platform_job_notification_loop
@@ -353,6 +354,10 @@ def create_app() -> FastAPI:
     app.include_router(device_pairing_router)
     app.include_router(devices_router)
     app.include_router(device_self_router)
+    # The claim endpoint. It is a device route by credential and a job route by
+    # subject, and it carries the same DEVICE_PAIRING_ENABLED gate as the rest of
+    # the device surface - one switch turns the whole outbound agent layer on.
+    app.include_router(device_claim_router)
     app.include_router(jobs_router)
     app.include_router(internal_inference_router)
     return app
