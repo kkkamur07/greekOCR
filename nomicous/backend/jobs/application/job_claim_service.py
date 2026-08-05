@@ -1,0 +1,179 @@
+"""Hand exactly one page of work to one inference agent.
+
+This is the single new endpoint's worth of behaviour that ADR 0003 costs. It is
+deliberately small, because everything around it already exists: the queue is the
+platform's ``jobs`` table, completion and failure are ``JobCallbackRequest``,
+abandonment is the stale sweep, and status delivery is the existing SSE path.
+
+One page per claim
+------------------
+A batch is N claims, not one claim of N pages. Work is seconds-to-minutes, so a
+page in flight is a small thing to lose: a slept laptop drops one page rather
+than a document, and progress is free because each page completes as it goes.
+That is also why there is no heartbeat endpoint - the lease covers the work with
+margin, and a heartbeat would be a second liveness mechanism for a window nothing
+runs past.
+
+Why a claimed page becomes ``waiting`` and not ``running``
+----------------------------------------------------------
+``waiting`` already means exactly this: an inference host holds the job and the
+platform is waiting for its callback. Claiming *is* the dispatch now - there is
+no second queue to POST into - so the claim writes the state the old dispatch
+wrote, mints the ``inference_job_id`` the callback contract matches on, and the
+whole of ``JobCallbackService`` keeps working with no change at all. ``running``
+is the platform worker's own status, for jobs it executes in-process.
+
+Two agents never receive the same page
+--------------------------------------
+``FOR UPDATE SKIP LOCKED`` on one row, the same primitive
+``claim_next_pending_job`` uses. The second claimer skips the locked row and
+takes the next one, or finds nothing; it never waits on the first and never sees
+the same id.
+"""
+
+from __future__ import annotations
+
+import logging
+import uuid
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+
+from inference.contracts.jobs import JobSubmitRequest
+from sqlalchemy import select
+
+from backend.jobs.application.inference_dispatcher import build_inference_submit_request
+from backend.jobs.infrastructure.job_repository import AGENT_CLAIMED_JOB_TYPES
+from backend.jobs.infrastructure.notifications import notify_platform_job_status_changed
+from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
+from backend.ml.application.agent_credentials import InferenceAgent
+from backend.ml.domain.execution import ExecutionTarget
+from infrastructure.db import sync_system_session
+
+logger = logging.getLogger(__name__)
+
+_CLAIMED_BY_PREFIX = "agent:"
+
+UNBUILDABLE_PAYLOAD_ERROR = "This page could not be prepared for inference"
+
+
+def agent_claim_owner(device_id: uuid.UUID) -> str:
+    """The value written to ``jobs.claimed_by`` for an agent-held page.
+
+    Prefixed so it can never collide with ``worker_identity()``'s ``host:pid``,
+    and so "which agent holds this page" is answerable from the row alone - which
+    is what lets the callback authorise a device without a second table.
+    """
+    return f"{_CLAIMED_BY_PREFIX}{device_id}"
+
+
+@dataclass(frozen=True)
+class ClaimedPage:
+    """One page of work, and everything the agent needs to run and report it."""
+
+    product_job_id: uuid.UUID
+    inference_job_id: uuid.UUID
+    job_type: JobType
+    execution_target: ExecutionTarget
+    lease_expires_at: datetime
+    request: JobSubmitRequest
+
+
+def _claimable_job_query(agent: InferenceAgent):
+    query = (
+        select(Job)
+        .where(Job.status == JobStatus.pending)
+        # The job types the platform worker deliberately leaves alone: with the
+        # second queue gone it has no way to run them, so they sit pending for an
+        # agent. The two predicates are complements, by construction.
+        .where(Job.type.in_(AGENT_CLAIMED_JOB_TYPES))
+        # **Execution target** is fixed at submission and is not a preference: a
+        # ``cloud`` job is never handed to a laptop, and a ``local`` job is never
+        # handed to a hosted worker, whatever either one asks for.
+        .where(Job.execution_target == agent.execution_target)
+        .order_by(Job.created_at, Job.id)
+    )
+    if agent.claims_own_account_only:
+        # The entire authorization scope of a device credential, applied to the
+        # queue: one researcher's laptop sees one researcher's pages.
+        query = query.where(Job.user_id == agent.user_id)
+    return query.with_for_update(skip_locked=True).limit(1)
+
+
+def claim_one_page(agent: InferenceAgent, *, lease_seconds: int) -> ClaimedPage | None:
+    """Take at most one pending page for *agent*, or return ``None``.
+
+    Synchronous on purpose. It is called through ``asyncio.to_thread`` from a
+    route that holds no request-scoped session, so the connection is checked out
+    for the length of one short transaction and returned before the caller waits
+    again. A long poll is a sequence of these, not one held connection.
+    """
+    now = datetime.now(UTC)
+    inference_job_id = uuid.uuid4()
+    with sync_system_session() as session:
+        job = session.execute(_claimable_job_query(agent)).scalar_one_or_none()
+        if job is None:
+            return None
+        job.status = JobStatus.waiting
+        job.inference_job_id = inference_job_id
+        job.claimed_by = agent_claim_owner(agent.device_id)
+        job.started_at = now
+        job.heartbeat_at = now
+        job.callback_claimed_at = None
+        job.updated_at = now
+        session.commit()
+        job_id = job.id
+        job_type = job.type
+        execution_target = job.execution_target
+        # Detached but usable: ``expire_on_commit=False``, and the payload build
+        # below deliberately runs outside this transaction so a large image read
+        # never happens while a queue row is locked.
+        detached_job = job
+
+    notify_platform_job_status_changed(job_id, JobStatus.waiting)
+
+    try:
+        request = build_inference_submit_request(detached_job)
+    except Exception:
+        # The page is already claimed, so leaving it would park a job on an agent
+        # that was never given anything to run, until the sweep failed it minutes
+        # later. Fail it now, with the same allowlisted text rule as everywhere
+        # else - the exception detail is logged, never stored.
+        logger.exception("could not build the claim payload for job %s", job_id)
+        _fail_unbuildable_page(job_id, agent)
+        raise
+
+    logger.info(
+        "job_claimed job_id=%s device_id=%s target=%s service_worker=%s inference_job_id=%s",
+        job_id,
+        agent.device_id,
+        execution_target.value,
+        agent.is_service_worker,
+        inference_job_id,
+    )
+    return ClaimedPage(
+        product_job_id=job_id,
+        inference_job_id=inference_job_id,
+        job_type=job_type,
+        execution_target=execution_target,
+        lease_expires_at=now + timedelta(seconds=lease_seconds),
+        request=request,
+    )
+
+
+def _fail_unbuildable_page(job_id: uuid.UUID, agent: InferenceAgent) -> None:
+    from backend.jobs.infrastructure.job_repository import mark_job_failed
+
+    mark_job_failed(
+        job_id, UNBUILDABLE_PAYLOAD_ERROR, claimed_by=agent_claim_owner(agent.device_id)
+    )
+
+
+def job_is_held_by(job: Job, agent: InferenceAgent) -> bool:
+    """Whether *agent* is the one holding this page right now.
+
+    Used by the callback path. It is a comparison against ``claimed_by`` rather
+    than a re-derivation of ownership, because the claim is what the agent was
+    given and the claim is what it may report on - a device that merely *could*
+    have claimed a page has no business completing it.
+    """
+    return job.claimed_by == agent_claim_owner(agent.device_id)
