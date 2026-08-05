@@ -15,6 +15,7 @@ from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from backend.ml.domain.execution import ExecutionTarget
 from backend.ml.infrastructure.device_orm_models import HelperDevice, HelperPairing
 
 
@@ -63,6 +64,37 @@ class HelperDeviceRepository:
     def add_device(self, session: AsyncSession, device: HelperDevice) -> HelperDevice:
         session.add(device)
         return device
+
+    async def hosts_with_recent_devices(
+        self, session: AsyncSession, *, user_id: UUID, seen_after: datetime
+    ) -> frozenset[ExecutionTarget]:
+        """Which **inference host**s currently have **capacity**.
+
+        One query, because a researcher's laptop and a hosted worker are the same
+        kind of thing: both are rows here, both report liveness through
+        ``last_seen_at``, and capacity is "was one of them seen recently".
+
+        The scoping differs and that is the whole asymmetry. A ``local`` device
+        is one researcher's own computer, so it only answers for its owner; a
+        ``cloud`` worker is platform infrastructure and answers for everyone.
+
+        Reads ``ix_helper_devices_last_seen_at`` - the index the device layer
+        already carries - rather than introducing a second liveness mechanism.
+        """
+        result = await session.execute(
+            select(HelperDevice.inference_host)
+            .where(
+                HelperDevice.revoked_at.is_(None),
+                HelperDevice.last_seen_at.is_not(None),
+                HelperDevice.last_seen_at >= seen_after,
+                or_(
+                    HelperDevice.inference_host == ExecutionTarget.cloud,
+                    HelperDevice.user_id == user_id,
+                ),
+            )
+            .distinct()
+        )
+        return frozenset(result.scalars().all())
 
     async def get_pairing(self, session: AsyncSession, pairing_id: UUID) -> HelperPairing | None:
         result = await session.execute(select(HelperPairing).where(HelperPairing.id == pairing_id))
