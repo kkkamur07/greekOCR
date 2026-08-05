@@ -27,14 +27,14 @@ Pairing an already-paired machine says so rather than silently creating a second
 
 ## Acceptance criteria
 
-- [ ] The pairing URL is printed before any browser is opened
-- [ ] Pairing completes over SSH with no browser available
-- [ ] The confirmation code shown in the terminal matches the one on the web page
-- [ ] The credential is written with owner-only permissions
-- [ ] Pairing an already-paired machine reports that instead of creating a duplicate device
-- [ ] A revoked device reports the revocation and exits non-zero rather than spinning
-- [ ] The version subcommand reports the installed package version
-- [ ] Tested by running the real CLI against a real running platform with live Postgres
+- [x] The pairing URL is printed before any browser is opened
+- [x] Pairing completes over SSH with no browser available
+- [x] The confirmation code shown in the terminal matches the one on the web page
+- [x] The credential is written with owner-only permissions
+- [x] Pairing an already-paired machine reports that instead of creating a duplicate device
+- [x] A revoked device reports the revocation and exits non-zero rather than spinning
+- [x] The version subcommand reports the installed package version
+- [x] Tested by running the real CLI against a real running platform with live Postgres
 
 ## Blocked by
 

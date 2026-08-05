@@ -27,6 +27,13 @@ dependencies = [
     "pydantic>=2.10.0",
     "pydantic-settings>=2.6.0",
     "pyyaml>=6.0.2",
+    # The CLI's terminal output (#56). Pure Python, two small dependencies
+    # (markdown-it-py, pygments), no compiled extension - it costs a researcher
+    # a rounding error next to Torch. It earns its place on the pairing screen:
+    # the URL must survive being printed at any width, and the **confirmation
+    # code** has to be the most prominent thing on it or ADR 0001's
+    # anti-phishing mitigation is decoration again.
+    "rich>=13.9.0",
     # ADR 0004: PyTorch is the inference runtime for both architectures. CPU
     # only - see [tool.uv.sources] below, which pins the CPU wheel index on the
     # platforms where PyPI would otherwise serve a CUDA build.
@@ -38,8 +45,8 @@ dependencies = [
 ]
 
 [project.scripts]
-# ADR 0002: local inference is a CLI, not a loopback service. The subcommands
-# land in #56 (pair, version), #57 (run) and #58 (self-upgrade).
+# ADR 0002: local inference is a CLI, not a loopback service. `pair` and
+# `version` shipped in #56; `run` lands in #57 and self-upgrade in #58.
 nomicous = "inference.cli:main"
 
 [build-system]

@@ -4,35 +4,32 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Sequence
-from importlib.metadata import PackageNotFoundError, version
+
+from inference.cli import console as ui
+from inference.cli import pair as pair_command
+from inference.cli import version as version_command
+from inference.cli.version import DISTRIBUTION_NAME, SOURCE_CHECKOUT_VERSION, installed_version
 
 PROGRAM_NAME = "nomicous"
-DISTRIBUTION_NAME = "nomicous-inference"
-SOURCE_CHECKOUT_VERSION = "0+unknown"
 
 _DESCRIPTION = "Run nomicous manuscript segmentation and transcription on this machine."
 
-# Named here rather than left to a bare "no subcommands" message: a researcher
-# who installs the package before the run loop exists should be told what the
-# command is going to do, not that it does nothing.
-_PENDING_SUBCOMMANDS = (
-    ("pair", "authorise this machine against your nomicous account"),
-    ("run", "claim pages from the platform and run them here"),
-    ("version", "report the installed version and the platform's version floor"),
-)
+# Listed but not built: `run` lands in #57. A researcher who pairs a machine
+# today should be able to see from `--help` what the pairing was for.
+_PENDING_SUBCOMMANDS = (("run", "claim pages from the platform and run them here"),)
 
-
-def installed_version() -> str:
-    """The version of the installed distribution.
-
-    Read from installed metadata rather than a hardcoded string, so the number
-    the CLI reports is the one the resolver actually put on disk. A source
-    checkout has no metadata; it says so instead of inventing a version.
-    """
-    try:
-        return version(DISTRIBUTION_NAME)
-    except PackageNotFoundError:
-        return SOURCE_CHECKOUT_VERSION
+_COMMANDS = {
+    "pair": (
+        "authorise this machine against your nomicous account",
+        pair_command.add_arguments,
+        pair_command.run,
+    ),
+    "version": (
+        "report the version this agent presents to the platform",
+        version_command.add_arguments,
+        version_command.run,
+    ),
+}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -42,17 +39,42 @@ def build_parser() -> argparse.ArgumentParser:
         action="version",
         version=f"{PROGRAM_NAME} {installed_version()}",
     )
+    subparsers = parser.add_subparsers(dest="command", metavar="COMMAND")
+    for name, (summary, add_arguments, _) in _COMMANDS.items():
+        subparser = subparsers.add_parser(name, help=summary, description=summary)
+        add_arguments(subparser)
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Console entry point. Returns the process exit status."""
     parser = build_parser()
-    parser.parse_args(argv)
+    args = parser.parse_args(argv)
 
-    print(f"{PROGRAM_NAME} {installed_version()}")
-    print()
-    print("No subcommands are available yet. Planned:")
-    for name, summary in _PENDING_SUBCOMMANDS:
-        print(f"  {name:<8} {summary}")
-    return 0
+    if args.command is None:
+        parser.print_help()
+        console = ui.out()
+        console.print()
+        console.print("Not built yet:")
+        for name, summary in _PENDING_SUBCOMMANDS:
+            console.print(f"  {name:<8} {summary}")
+        return ui.EXIT_OK
+
+    handler = _COMMANDS[args.command][2]
+    try:
+        return handler(args)
+    except KeyboardInterrupt:
+        # Nothing partial survives a Ctrl-C: the credential is written once, at
+        # the end, through a rename.
+        ui.err().print("\nInterrupted. Nothing was changed on this machine.")
+        return ui.EXIT_INTERRUPTED
+
+
+__all__ = [
+    "DISTRIBUTION_NAME",
+    "PROGRAM_NAME",
+    "SOURCE_CHECKOUT_VERSION",
+    "build_parser",
+    "installed_version",
+    "main",
+]
