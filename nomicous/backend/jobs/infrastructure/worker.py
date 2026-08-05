@@ -11,6 +11,7 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING
 
+from backend.core.settings.device import get_device_settings
 from backend.core.settings.job import JobSettings, get_job_settings
 from backend.jobs.infrastructure.handlers import TestJobHandlerError, run_test_handler
 from backend.jobs.infrastructure.job_repository import (
@@ -20,6 +21,7 @@ from backend.jobs.infrastructure.job_repository import (
     mark_job_done,
     mark_job_failed,
     reclaim_stale_running_jobs,
+    release_expired_device_leases,
     seconds_until_next_stale_waiting_job,
 )
 from backend.jobs.infrastructure.orm_models import Job
@@ -82,6 +84,15 @@ def process_one_job() -> bool:
     )
     if timed_out:
         logger.warning("failed %s platform job(s) waiting past the inference timeout", timed_out)
+    # Agent-held pages are the other half of ``waiting``, and they re-pend rather
+    # than fail. The worker runs the identical sweep the read paths run, so a
+    # deployment with a worker and one without recover a stopped agent the same
+    # way - one lease, one behaviour, not two that drift.
+    re_pended = release_expired_device_leases(
+        lease_seconds=get_device_settings().device_lease_seconds
+    )
+    if re_pended:
+        logger.warning("re-pended %s page(s) whose device lease expired", re_pended)
     released = clear_stale_callback_claims(
         claim_timeout_seconds=settings.job_worker_callback_claim_timeout_seconds
     )
