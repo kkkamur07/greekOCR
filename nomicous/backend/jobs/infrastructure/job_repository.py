@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 
 import infrastructure.models  # noqa: F401 - register all ORM mappers
 from infrastructure.db import sync_system_session
-from sqlalchemy import delete, func, select, tuple_, update
+from sqlalchemy import delete, func, or_, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.api.pagination import PageCursor
@@ -142,6 +142,27 @@ class JobRepository:
 # them, and claiming one would only fail a job that an agent could have run.
 AGENT_CLAIMED_JOB_TYPES = (JobType.segment, JobType.transcribe)
 
+# The prefix ``jobs.claimed_by`` carries while an **inference agent** holds a page,
+# written by ``job_claim_service.agent_claim_owner``. It lives down here, next to
+# the sweeps that read it, because "which timeout governs this row" is answered
+# from the column alone and the sweeps must not import the application layer.
+AGENT_CLAIM_PREFIX = "agent:"
+
+
+def _held_by_agent():
+    """SQL for "an inference agent holds this page"."""
+    return Job.claimed_by.startswith(AGENT_CLAIM_PREFIX)
+
+
+def _not_held_by_agent():
+    """SQL for the complement, NULL included.
+
+    ``NOT LIKE`` alone evaluates to NULL for an unclaimed row and would silently
+    exempt every job the platform itself dispatched - which is the whole
+    population the waiting timeout exists for.
+    """
+    return or_(Job.claimed_by.is_(None), ~Job.claimed_by.startswith(AGENT_CLAIM_PREFIX))
+
 
 def _pending_job_query(*, test_only: bool | None = None):
     query = (
@@ -219,6 +240,14 @@ def fail_stale_waiting_jobs(*, waiting_timeout_seconds: float) -> int:
     Unlike a crashed *running* job there is nothing to retry: the dispatch
     already happened and the inference service went silent, so re-pending would
     duplicate work. Fail instead, with an error the user can act on.
+
+    **Agent-held pages are deliberately not in this population.** ADR 0005 makes a
+    claimed page ``waiting`` so ``JobCallbackService`` needs no change, which put
+    a researcher's laptop under this timeout by accident. The reasoning above does
+    not hold for one: nothing was dispatched anywhere, the page never left the
+    queue, and a closed lid is not a silent inference service. Those rows are
+    governed by ``release_expired_device_leases``, which re-pends instead of
+    failing - see ``AGENT_CLAIM_PREFIX``.
     """
     now = datetime.now(UTC)
     stale_before = now - timedelta(seconds=waiting_timeout_seconds)
@@ -227,6 +256,7 @@ def fail_stale_waiting_jobs(*, waiting_timeout_seconds: float) -> int:
             session.execute(
                 select(Job.id)
                 .where(Job.status == JobStatus.waiting)
+                .where(_not_held_by_agent())
                 .where(Job.updated_at <= stale_before)
                 .with_for_update(skip_locked=True)
             ).scalars()
@@ -237,6 +267,7 @@ def fail_stale_waiting_jobs(*, waiting_timeout_seconds: float) -> int:
             update(Job)
             .where(Job.id.in_(stale_ids))
             .where(Job.status == JobStatus.waiting)
+            .where(_not_held_by_agent())
             .values(
                 status=JobStatus.failed,
                 error=waiting_timeout_error(waiting_timeout_seconds),
@@ -250,6 +281,71 @@ def fail_stale_waiting_jobs(*, waiting_timeout_seconds: float) -> int:
         # waiting on a job that just died. Notify each id after the commit.
         for job_id in stale_ids:
             notify_platform_job_status_changed(job_id, JobStatus.failed)
+        return result.rowcount or 0
+
+
+def release_expired_device_leases(*, lease_seconds: float) -> int:
+    """Return pages whose **lease** expired to the queue, so another agent can take them.
+
+    A crash, a killed process, or a closed laptop lid leaves a page held by an
+    agent that will never report on it. There is no heartbeat to notice - work is
+    seconds-to-minutes, so the lease covers it with margin (ADR 0002) - and there
+    is no release endpoint, because a process that was killed cannot call one.
+    This sweep is the whole recovery mechanism.
+
+    **It re-pends; it does not fail.** That is the difference from
+    ``fail_stale_waiting_jobs``, and it is the point of the lease. A researcher
+    who closes their lid mid-page should have that page picked up by the next
+    agent, not see it permanently failed and have to resubmit. Nothing was
+    dispatched to a third party, so there is no duplicate work to fear: the page
+    is still exactly where it started, in the platform's own queue.
+
+    The claim is cleared with it - ``claimed_by``, ``inference_job_id``,
+    ``started_at``, ``heartbeat_at`` - so that *any* agent may take the page next,
+    and so a woken zombie cannot report on it: the callback route matches
+    ``claimed_by``, and ``JobCallbackService`` matches ``inference_job_id``.
+    Neither matches once this has run.
+
+    Concurrency is the same primitive the other sweeps use. ``FOR UPDATE SKIP
+    LOCKED`` in the same transaction as the update means a second sweeper skips
+    rows already being released rather than releasing them twice, and the
+    ``status``/``claimed_by`` predicates are repeated on the update so a row that
+    changed hands between the two statements is left alone.
+    """
+    now = datetime.now(UTC)
+    stale_before = now - timedelta(seconds=lease_seconds)
+    with sync_system_session() as session:
+        expired_ids = list(
+            session.execute(
+                select(Job.id)
+                .where(Job.status == JobStatus.waiting)
+                .where(_held_by_agent())
+                .where(Job.updated_at <= stale_before)
+                .with_for_update(skip_locked=True)
+            ).scalars()
+        )
+        if not expired_ids:
+            return 0
+        result = session.execute(
+            update(Job)
+            .where(Job.id.in_(expired_ids))
+            .where(Job.status == JobStatus.waiting)
+            .where(_held_by_agent())
+            .values(
+                status=JobStatus.pending,
+                claimed_by=None,
+                inference_job_id=None,
+                started_at=None,
+                heartbeat_at=None,
+                callback_claimed_at=None,
+                updated_at=now,
+            )
+        )
+        session.commit()
+        # A bulk update emits no per-job NOTIFY, so a browser watching the job
+        # would sit on "waiting" until something else touched the row.
+        for job_id in expired_ids:
+            notify_platform_job_status_changed(job_id, JobStatus.pending)
         return result.rowcount or 0
 
 

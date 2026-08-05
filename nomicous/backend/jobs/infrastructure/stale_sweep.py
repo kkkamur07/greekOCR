@@ -7,7 +7,13 @@ production API deployment sets ``JOB_WORKER_ENABLED=false`` because it is
 request/response only, so the inference timeout was inert exactly where jobs
 were reported stuck.
 
-This module runs the same two sweeps from ordinary job read paths instead:
+``release_expired_device_leases`` joins them here rather than anywhere else for
+the same reason, and it is the reason the **lease** needs no machinery of its
+own: ADR 0005 promises abandonment is "the existing stale sweep", and this is it.
+A background lease reaper would be a process the serverless deployment cannot
+run, which is exactly the trap this module already exists to avoid.
+
+This module runs the same sweeps from ordinary job read paths instead:
 
 * throttled to at most one sweep per process per
   ``job_stale_sweep_min_interval_seconds`` so a hot endpoint cannot turn into a
@@ -28,10 +34,12 @@ import time
 from infrastructure.db import sync_system_session
 from sqlalchemy import text
 
+from backend.core.settings.device import get_device_settings
 from backend.core.settings.job import get_job_settings
 from backend.jobs.infrastructure.job_repository import (
     clear_stale_callback_claims,
     fail_stale_waiting_jobs,
+    release_expired_device_leases,
 )
 
 logger = logging.getLogger(__name__)
@@ -64,12 +72,13 @@ def _claim_throttle_window(now: float, min_interval_seconds: float) -> bool:
 
 
 def run_stale_job_sweep() -> int:
-    """Fail timed-out waiting jobs and release abandoned callback claims.
+    """Fail timed-out waiting jobs, re-pend expired leases, release stale claims.
 
     Blocking; call it in a thread. Returns the number of rows touched, or 0 when
     another replica already holds the sweep lock.
     """
     settings = get_job_settings()
+    device_settings = get_device_settings()
     with sync_system_session() as session:
         # Transaction-scoped: the lock is released when this session's connection
         # is returned to the pool, even if the process dies mid-sweep. A
@@ -94,12 +103,22 @@ def run_stale_job_sweep() -> int:
                 "on-read sweep failed %s platform job(s) waiting past the inference timeout",
                 timed_out,
             )
+        # The other half of the waiting population: pages an **inference agent**
+        # holds. These go back to the queue rather than failing, because a closed
+        # laptop lid is not a failed job - see release_expired_device_leases.
+        re_pended = release_expired_device_leases(
+            lease_seconds=device_settings.device_lease_seconds
+        )
+        if re_pended:
+            logger.warning(
+                "on-read sweep re-pended %s page(s) whose device lease expired", re_pended
+            )
         released = clear_stale_callback_claims(
             claim_timeout_seconds=settings.job_worker_callback_claim_timeout_seconds
         )
         if released:
             logger.warning("on-read sweep released %s stale inference callback claim(s)", released)
-        return timed_out + released
+        return timed_out + re_pended + released
 
 
 async def sweep_stale_jobs_on_read() -> None:

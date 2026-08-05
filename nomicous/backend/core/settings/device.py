@@ -60,7 +60,11 @@ class DeviceSettings(BaseSettings):
         description=(
             "How long one claimed page stays with the agent that took it. Work is "
             "seconds-to-minutes, so this covers it with margin and no heartbeat "
-            "endpoint is needed; a slept laptop loses one page, not a document."
+            "endpoint is needed; a slept laptop loses one page, not a document. "
+            "Deliberately shorter than JOB_WORKER_RUNNING_TIMEOUT_SECONDS (1800): "
+            "that one is sized for a server that does not sleep, and a closed lid "
+            "must not hold a page for half an hour. When it expires the page goes "
+            "back to pending, not to failed - see release_expired_device_leases."
         ),
     )
     device_page_image_url_ttl_seconds: int = Field(

@@ -119,7 +119,7 @@ The short-lived URL a **claim** carries to the one page image it hands over. It 
 _Avoid_: image endpoint (an authenticated `GET /device/v1/jobs/{id}/image` was rejected), download token, presigned upload (nothing uploads here)
 
 **Lease**:
-How long a claimed page stays with the **inference agent** that took it before the platform may give it to another. There is no heartbeat: work is seconds-to-minutes, so the lease covers it with margin, and a stopped agent loses one page rather than a document.
+How long a claimed page stays with the **inference agent** that took it before the platform may give it to another - 600 seconds, deliberately shorter than the platform's 1800-second job timeout, which is sized for a server that does not sleep. There is no heartbeat: work is seconds-to-minutes, so the lease covers it with margin, and a stopped agent loses one page rather than a document. When it expires the page returns to the queue and the claim is cleared, so any agent may take it next; it is never failed, because a closed lid is not a failed job. A hosted worker inherits the same lease - it is now the one timeout rather than one of two.
 _Avoid_: timeout (ambiguous with the platform-wide job timeout), lock (nothing is held in the database between requests)
 
 **Service credential**:
@@ -159,7 +159,7 @@ _Avoid_: org (when meaning the namespace generically)
 - **Host eligibility** constrains which **execution target**s a job may choose; **host preference** and **capacity** choose one from what is left
 - **Capacity** for one **inference host** = any device recorded as that host was seen recently; a hosted worker is such a device, not a separate concept
 - One **claim** = one page; the presented credential fixes the **execution target** it may take (device token -> `local`, own account only; **service credential** -> `cloud`, any account)
-- A **claim** starts a **lease**; the page returns to the queue when the lease expires, and completion or failure ends it through the platform's existing job callback contract
+- A **claim** starts a **lease**; the page returns to the queue as `pending` when the lease expires - recovered opportunistically by the platform's existing stale sweep on read paths, never by a background worker - and completion or failure ends it through the platform's existing job callback contract
 - One **claim** carries one **signed page image link**, to one object; the two lifetimes are separate dials (`DEVICE_PAGE_IMAGE_URL_TTL_SECONDS` ~60s, `DEVICE_LEASE_SECONDS` 600s) because the fetch happens once at the start of the run
 - Every **claim** states which agent version is calling; below the **version floor** it is refused before it is authenticated, so a refused agent also stops reporting **capacity** and submission announces no host rather than creating pages nobody may claim
 - A **Hub collection** (`nomos`) links to many **Hub model repos** and **Hub dataset repos**; defined in `src/hf/publish/collection.yaml`
