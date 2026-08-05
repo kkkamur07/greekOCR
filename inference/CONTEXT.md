@@ -118,6 +118,14 @@ _Avoid_: timeout (ambiguous with the platform-wide job timeout), lock (nothing i
 The credential a hosted **inference agent** presents instead of a device token. It claims `cloud` work for the whole platform, which is why it is not a device token: a device token's entire authorization scope is the one account on its device row, and `cloud` work has no such owner. Its **capacity** row is owned by a service account no person can log into.
 _Avoid_: device token for cloud, webhook secret (that authenticates the platform's own callback receiver), API key
 
+**Version floor**:
+The oldest **inference agent** the platform will hand a **claim** to, served by the platform rather than read from PyPI so it can be turned without a release. An agent below it is refused outright and told to upgrade; an agent that states no version, or one that cannot be compared, is refused on the same terms rather than assumed current. Distinct from **outdated**, which is a notice delivered *with* the work.
+_Avoid_: minimum supported version (fine in prose, but this is a runtime dial not a support policy), pinned version, auto-update setting
+
+**Outdated**:
+An **inference agent** at or above the **version floor** but behind the newest published release. It is served normally and told, on every claim response, page or no page. Deliberately not the same state as being below the floor: most upgrades are not urgent, and refusing them would make every release an outage for anyone who had not restarted.
+_Avoid_: stale (that is what being below the **version floor** means), deprecated, unsupported
+
 **Host preference**:
 The account-level setting "use my computer when it is available", the only researcher input to **execution target** selection. Combined with **host eligibility** and **capacity** it fixes one target at submission; there is no per-job toggle, because a researcher cannot know which host is faster for a given page.
 _Avoid_: per-job execution mode, `local_only` (retired by ADR 0002), routing rule
@@ -144,6 +152,7 @@ _Avoid_: org (when meaning the namespace generically)
 - **Capacity** for one **inference host** = any device recorded as that host was seen recently; a hosted worker is such a device, not a separate concept
 - One **claim** = one page; the presented credential fixes the **execution target** it may take (device token -> `local`, own account only; **service credential** -> `cloud`, any account)
 - A **claim** starts a **lease**; the page returns to the queue when the lease expires, and completion or failure ends it through the platform's existing job callback contract
+- Every **claim** states which agent version is calling; below the **version floor** it is refused before it is authenticated, so a refused agent also stops reporting **capacity** and submission announces no host rather than creating pages nobody may claim
 - A **Hub collection** (`nomos`) links to many **Hub model repos** and **Hub dataset repos**; defined in `src/hf/publish/collection.yaml`
 
 ## Example dialogue
@@ -167,6 +176,7 @@ _Avoid_: org (when meaning the namespace generically)
 - Sync inference: `POST /inference/v1/run` via `inference/api/run.py` and `inference/jobs/runner.py`
 - Queued jobs: the platform owns the only queue (ADR 0003). `inference` holds no database, ORM, or claim loop of its own.
 - **Claim**: `POST /device/v1/jobs/claim` on the platform - the one endpoint this layer adds (ADR 0005). Completion and failure are the existing `POST /internal/inference/job-complete` with a `JobCallbackRequest`; abandonment is the existing stale sweep. There is no heartbeat and no release endpoint.
+- **Version floor**: every claim sends `X-Nomicous-Agent-Version`. Below the floor the platform answers `426` with `error.code = AGENT_VERSION_UNSUPPORTED`, `reason` (`below_floor` / `missing` / `malformed`), `minimum_version`, `latest_version`, `package`, and `retryable: false`. At or above it, the 200 response carries an `agent` notice with `outdated`. Configured by `INFERENCE_AGENT_MIN_VERSION` / `INFERENCE_AGENT_LATEST_VERSION` on the platform (`backend/ml/domain/agent_version.py`, `backend/ml/api/agent_version.py`).
 - Architectures implemented: **Calamari** (`inference/architectures/calamari/`) and native **BLLA segment** (`inference/architectures/blla/`)
 - **Calamari runtime**: local PyTorch graph + local preprocessing; no TensorFlow or vendored `calamari_ocr` import at inference time.
 - Weight resolution: `file://`, `hf://`, and `package://` (`src/hf/` local/cache layout; see `inference/weights/__init__.py`)
