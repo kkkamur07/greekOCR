@@ -59,7 +59,7 @@ The required 64-character SHA-256 digest for the architecture-native **Hub artif
 _Avoid_: directory hash alone, unverified download
 
 **Local bundled weights**:
-Checkpoint files under `src/hf/local/` used for offline dev and Docker without Hub access. Referenced by `file://` **weights source** URIs relative to `src/hf/`.
+Checkpoint files under `src/hf/local/` used for offline dev and Docker without Hub access. Referenced by `file://local/...` **weights source** URIs relative to `src/hf/`. A source-checkout affordance only: they are not shipped in the published package, which resolves weights by `hf://`. Override the root with `NOMICOUS_LOCAL_WEIGHTS_ROOT`.
 _Avoid_: dev weights, inference/weights
 
 **Hub staging tree**:
@@ -67,16 +67,20 @@ Publish-ready **Hub artifact**s under `src/hf/staging/` (models and datasets) be
 _Avoid_: hf repo (ambiguous with Hub remote repo)
 
 **Hub cache**:
-Downloaded **Hub artifact**s at runtime under `src/hf/cache/<registry_model_id>/<registry_tag>/`. Reused only when required files exist and a manifest matches the immutable **Hub revision** and **artifact SHA-256**.
-_Avoid_: runtime weight cache, inference/weights/cache
+Downloaded **Hub artifact**s at runtime under `~/.nomicous/hf/cache/<registry_model_id>/<registry_tag>/` (override: `HF_CACHE_ROOT`). It lives in the researcher's home directory, not beside the code, because **Hub integration** ships inside the installed package. Reused only when required files exist and a manifest matches the immutable **Hub revision** and **artifact SHA-256**.
+_Avoid_: runtime weight cache, inference/weights/cache, src/hf/cache (pre-package layout)
 
 **Hub cache manifest**:
 An integrity record (e.g. `.hub-manifest.json`) stored alongside cached **Hub artifact**s. It records the Hub repo, immutable **Hub revision**, artifact path, and **artifact SHA-256**; all must match before cache reuse.
 _Avoid_: revision file alone (insufficient when artifact bytes change)
 
 **Hub integration**:
-Python code under `src/hf/` that resolves `hf://` URIs, checks **Hub cache**, and downloads missing artifacts. Used by `inference` at inference time and by `scripts/hf/`.
-_Avoid_: huggingface module (too generic)
+Python code at `inference/hub/` that resolves `hf://` URIs, checks **Hub cache**, verifies **artifact SHA-256**, and downloads missing artifacts. It lives inside the published package because it is on the runtime path (ADR 0002). Publish-side code under `src/hf/` reuses it; the reverse dependency does not exist.
+_Avoid_: huggingface module (too generic), src/hf/resolve (pre-package location)
+
+**Published package**:
+The one distribution, `nomicous-inference`, carrying the inference library, **Hub integration**, and the `nomicous` console entry point. A researcher's laptop and a hosted worker install the same package (ADR 0002), so there is no version-compatibility matrix between components that always ship together. Built from the repository root; the wheel contains `inference/` minus the loopback HTTP surfaces.
+_Avoid_: helper bundle (frozen-installer era), library package vs CLI package (there is one)
 
 **Inference host**:
 The machine where model weights are cached and inference executes - either the researcher's machine (**local inference**) or a hosted server (**remote inference**).
@@ -116,9 +120,9 @@ _Avoid_: org (when meaning the namespace generically)
 - One **Hub model repo** corresponds to one task/architecture pair; HTR uses `{script}-htr-{architecture}` and BLLA segmentation uses `segmentation-blla`
 - **Registry model id** = `{script}-{architecture}-{model_version}`; maps to one **Hub repo slug** + **model version**
 - Local **Hub staging tree**: `src/hf/staging/models/{script}/{architecture}/{model_version}/{registry_tag}/`
-- **Hub cache**: `src/hf/cache/{registry_model_id}/{registry_tag}/`
+- **Hub cache**: `~/.nomicous/hf/cache/{registry_model_id}/{registry_tag}/`
 - **Local bundled weights**: `src/hf/local/{script}/{architecture}/{model_version}/{registry_tag}/`
-- All three live under `src/hf/` alongside **Hub integration** code
+- The **Hub staging tree** and **Local bundled weights** live under `src/hf/`; the **Hub cache** is in the researcher's home directory and **Hub integration** code is in the package
 - **Hub cache** reuse requires matching **Hub cache manifest** hash, not just present files
 - **Hub integration** lazy-fetches at inference; `scripts/hf/fetch_model.py` for explicit prefetch
 - One **registry tag** records one immutable **Hub revision** on that repo
@@ -150,17 +154,17 @@ _Avoid_: org (when meaning the namespace generically)
 - Queued jobs: the platform owns the only queue (ADR 0003). `inference` holds no database, ORM, or claim loop of its own.
 - Architectures implemented: **Calamari** (`inference/architectures/calamari/`) and native **BLLA segment** (`inference/architectures/blla/`)
 - **Calamari runtime**: local PyTorch graph + local preprocessing; no TensorFlow or vendored `calamari_ocr` import at inference time.
-- Weight resolution: `file://`, `hf://`, and `package://` (`src/hf/` local/cache layout; see `inference/weights/__init__.py`)
-- Runtime cache: `src/hf/cache/<registry_model_id>/<registry_tag>/`
+- Weight resolution: `file://`, `hf://`, and `package://` (see `inference/weights/__init__.py` and `inference/hub/`)
+- Runtime cache: `~/.nomicous/hf/cache/<registry_model_id>/<registry_tag>/`
 
 ### Hub layout (`src/hf/`)
 
 | Piece | Location |
 |-------|----------|
-| `hf://` resolution, download, cache manifest | `src/hf/resolve/` |
+| `hf://` resolution, download, cache manifest | `inference/hub/` (published package) |
 | Publish staging validation, model cards, collection sync | `src/hf/publish/` |
 | Local bundled weights for offline dev | `src/hf/local/` |
 | Publish-ready staging tree | `src/hf/staging/` |
-| Hub runtime cache | `src/hf/cache/` |
+| Hub runtime cache | `~/.nomicous/hf/cache/` |
 | Collection metadata | `src/hf/publish/collection.yaml` |
 | CLI entrypoints | `scripts/hf/` |

@@ -13,7 +13,7 @@ from inference.helper.app import create_helper_app
 from inference.helper.settings import get_helper_settings
 from inference.settings import get_inference_settings
 from PIL import Image
-from src.hf.resolve.artifacts import ArtifactIntegrityError
+from inference.hub.artifacts import ArtifactIntegrityError
 
 REPO_REGISTRY = Path(__file__).resolve().parents[3] / "inference" / "registry.yaml"
 

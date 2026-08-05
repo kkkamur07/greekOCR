@@ -2,15 +2,39 @@
 
 from __future__ import annotations
 
+import os
 from importlib import resources
 from pathlib import Path
-
-from src.hf.paths import HF_ROOT
 
 INFERENCE_ROOT = Path(__file__).resolve().parents[1]
 
 DEFAULT_WEIGHTS_ROOT = INFERENCE_ROOT / "weights"
 LOCAL_BUNDLED_PREFIX = "local/"
+LOCAL_BUNDLED_ROOT_ENV = "NOMICOUS_LOCAL_WEIGHTS_ROOT"
+
+
+def local_bundled_root() -> Path:
+    """Root that ``file://local/...`` **weights source**s resolve against.
+
+    **Local bundled weights** are a source-checkout affordance: they exist for
+    offline development and for Docker images that copy `src/hf/` in. They are
+    deliberately not shipped inside the published wheel - checkpoints are
+    published to the Hub and fetched by `hf://`, digest-verified - so the
+    installed package has no `src/hf/` to point at and says so instead of
+    resolving to a path that happens to exist inside site-packages.
+    """
+    override = os.environ.get(LOCAL_BUNDLED_ROOT_ENV)
+    if override:
+        return Path(override).expanduser()
+
+    checkout_root = INFERENCE_ROOT.parent / "src" / "hf"
+    if checkout_root.is_dir():
+        return checkout_root
+
+    raise FileNotFoundError(
+        "local bundled weights are only available in a source checkout; "
+        f"use an hf:// weights source or set {LOCAL_BUNDLED_ROOT_ENV}"
+    )
 
 
 def resolve_weights_source(
@@ -26,7 +50,7 @@ def resolve_weights_source(
     if uri.startswith("hf://"):
         if not registry_model_id or not registry_tag:
             raise ValueError("hf weights source requires registry_model_id and registry_tag")
-        from src.hf.resolve import resolve_hf_weights_source
+        from inference.hub import resolve_hf_weights_source
 
         return resolve_hf_weights_source(
             uri,
@@ -47,7 +71,7 @@ def resolve_weights_source(
             raise FileNotFoundError(f"package weights source not found: {uri}")
         resolved_path = Path(str(resource))
         if artifact_sha256:
-            from src.hf.resolve.artifacts import verify_artifact_sha256
+            from inference.hub.artifacts import verify_artifact_sha256
 
             verify_artifact_sha256(resolved_path, artifact_sha256)
         return resolved_path
@@ -61,9 +85,9 @@ def resolve_weights_source(
         raise ValueError("file weights source must be relative to INFERENCE_ROOT or src/hf/")
 
     if relative.startswith(LOCAL_BUNDLED_PREFIX):
-        resolved_root = HF_ROOT.resolve()
+        resolved_root = local_bundled_root().resolve()
         resolved_path = (resolved_root / source_path).resolve()
-        root_label = "src/hf/"
+        root_label = "the local bundled weights root"
     else:
         resolved_root = inference_root.resolve()
         resolved_path = (resolved_root / source_path).resolve()
@@ -75,7 +99,7 @@ def resolve_weights_source(
         raise ValueError(f"file weights source must stay within {root_label}") from exc
 
     if artifact_sha256:
-        from src.hf.resolve.artifacts import verify_artifact_sha256
+        from inference.hub.artifacts import verify_artifact_sha256
 
         verify_artifact_sha256(resolved_path, artifact_sha256)
     return resolved_path

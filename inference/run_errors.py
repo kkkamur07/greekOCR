@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import HTTPException, status
 
 from inference.admission import CLIENT_INPUT_ERROR
-from src.hf.resolve.artifacts import ArtifactIntegrityError
+from inference.hub.artifacts import ArtifactIntegrityError
 
 UNKNOWN_MODEL_ERROR = "Unknown registry model or tag"
 WEIGHTS_UNAVAILABLE_ERROR = "Model weights are not available"

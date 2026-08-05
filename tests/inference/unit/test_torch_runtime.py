@@ -31,7 +31,7 @@ from inference.architectures.calamari.adapter import (
     run_calamari_transcribe,
 )
 from inference.architectures.calamari.checkpoint import load_calamari_checkpoint
-from src.hf.resolve.artifacts import ArtifactIntegrityError
+from inference.hub.artifacts import ArtifactIntegrityError
 from tests.fixtures.paths import REPO_ROOT, SEGMENT_PAGE, TRANSCRIBE_LINE
 
 CALAMARI_CHECKPOINT = REPO_ROOT / "src/hf/local/syriac/calamari/v1/stable/best.pt"

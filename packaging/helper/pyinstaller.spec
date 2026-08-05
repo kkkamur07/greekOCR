@@ -59,7 +59,7 @@ hiddenimports = [
     "safetensors",
     "safetensors.torch",
     "torch",
-    "src.hf.resolve",
+    "inference.hub",
     "uvicorn.logging",
     "uvicorn.loops.auto",
     "uvicorn.protocols.http.auto",

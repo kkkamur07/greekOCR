@@ -7,8 +7,8 @@ import os
 from pathlib import Path
 
 import pytest
-from src.hf.resolve import artifacts
-from src.hf.resolve.artifacts import ArtifactIntegrityError, verify_artifact_sha256
+from inference.hub import artifacts
+from inference.hub.artifacts import ArtifactIntegrityError, verify_artifact_sha256
 
 CONTENT = b"checkpoint bytes" * 64
 DIGEST = hashlib.sha256(CONTENT).hexdigest()

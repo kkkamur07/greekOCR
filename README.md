@@ -101,7 +101,7 @@ Open [http://localhost:5173](http://localhost:5173). Development seed credential
 | Compose inference API | [http://localhost:8010](http://localhost:8010)           |
 | Postgres              | `127.0.0.1:5433`                                         |
 
-The first inference request downloads public weights into `src/hf/cache`.
+The first inference request downloads public weights into `~/.nomicous/hf/cache`.
 Host port `8001` is reserved for the optional local inference helper; the
 Compose inference container listens on `8001` internally and is exposed as
 `8010` on the host.

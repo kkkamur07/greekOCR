@@ -147,7 +147,7 @@ def test_corrupt_artifact_is_a_service_error_not_a_client_error(
     tmp_path: Path,
 ) -> None:
     """``ArtifactIntegrityError`` subclasses ``ValueError`` and must stay a 503."""
-    from src.hf.resolve.artifacts import ArtifactIntegrityError
+    from inference.hub.artifacts import ArtifactIntegrityError
 
     artifact = tmp_path / f"model{path.native_suffix}"
     artifact.write_bytes(b"content that does not match the pinned digest")

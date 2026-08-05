@@ -5,7 +5,7 @@ Ship a **minimal** native install (`.dmg`, Windows zip + installer script, Linux
 - `inference/helper` slim FastAPI app (`health`, `catalog`, `/inference/v1/run`)
 - Calamari transcribe (PyTorch **CPU**, `best.pt`)
 - BLLA page segmentation (`hf://kkkamur07/segmentation-blla@stable`, `blla.safetensors`)
-- `src/hf/resolve` for `hf://` weight download into `~/.nomicous/hf/cache/`
+- `inference.hub` for `hf://` weight download into `~/.nomicous/hf/cache/`
 - Bundled `inference/registry.yaml`
 
 ## Explicitly excluded from installers

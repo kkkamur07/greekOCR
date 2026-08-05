@@ -34,7 +34,7 @@ Registry models resolve weights at runtime from:
 
 | Source | Example | Cache / path |
 |--------|---------|----------------|
-| Hub | `hf://kkkamur07/syriac-htr-calamari@stable` | `src/hf/cache/<registry_model_id>/<registry_tag>/` |
+| Hub | `hf://kkkamur07/syriac-htr-calamari@stable` | `~/.nomicous/hf/cache/<registry_model_id>/<registry_tag>/` |
 | Local bundled (offline) | `file://local/syriac/calamari/v1/stable/best.pt` | `src/hf/local/...` |
 | BLLA segmentation | `hf://kkkamur07/segmentation-blla@stable` | `blla.safetensors` in the Hub cache |
 
@@ -57,7 +57,7 @@ are in [`archive/onnx-runtime/`](../archive/onnx-runtime/README.md).
 
 Training and vendored TensorFlow Calamari: [`docs/guides/learnings.md`](../docs/guides/learnings.md#calamari-training).
 
-**Hub integration:** `hf://` weight sources, Hub cache, and prefetch tooling live under `src/hf/` and `scripts/hf/`. See `inference/CONTEXT.md` for domain terminology and [`scripts/hf/README.md`](../scripts/hf/README.md) for the Hub publish runbook.
+**Hub integration:** `hf://` weight-source resolution, Hub cache, and digest verification live *inside* this package at `inference/hub/` - they are on the runtime path, so they ship in the published wheel. Publish-side tooling (staging tree, model cards, collection sync) stays under `src/hf/` and `scripts/hf/`, which never ship. See `inference/CONTEXT.md` for domain terminology and [`scripts/hf/README.md`](../scripts/hf/README.md) for the Hub publish runbook.
 
 ## Run locally (without Compose)
 
@@ -73,7 +73,7 @@ Environment:
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `INFERENCE_REGISTRY_PATH` | `inference/registry.yaml` | Model catalog file |
-| `HF_CACHE_ROOT` | `src/hf/cache` | Hub weight download cache |
+| `HF_CACHE_ROOT` | `~/.nomicous/hf/cache` | Hub weight download cache |
 | `HF_TOKEN` | unset | Required only for **private** or gated Hub repos; all nomicous inference repos are public |
 
 Prefetch Hub weights without running inference:
@@ -101,7 +101,8 @@ Job callbacks use a tagged output union: `output.kind` is either `segment` or `t
 - `syriac-calamari-v1` - transcribe, Calamari architecture, pinned Hub revision and digest
 - `blla-segment` - segment, BLLA `safetensors` weights
 
-Weights are resolved at runtime from Hub cache (`src/hf/cache/`) or local bundled paths (`src/hf/local/`).
+Weights are resolved at runtime from the Hub cache (`~/.nomicous/hf/cache/`) or, in a source
+checkout only, local bundled paths (`src/hf/local/`).
 New `hf://` entries should include both `hub_revision` and `artifact_sha256`; see
 the migration note in [`docs/inference/adding-inference-models.md`](../docs/inference/adding-inference-models.md).
 
