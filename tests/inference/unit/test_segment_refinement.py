@@ -179,6 +179,18 @@ def test_refine_segment_falls_back_to_clean_ceiling_without_ink() -> None:
 
 
 class _FakeBLLAModel:
+    """A model-shaped stand-in whose output is *not* what these tests assert on.
+
+    These cases exercise refinement geometry, so the decoded lines are injected
+    directly and the graph only has to produce a correctly shaped tensor.
+    ``eval()`` is here because the adapter calls it on every run - see ADR 0004
+    - and a stand-in that could not be put in eval mode would let that call
+    regress unnoticed.
+    """
+
+    def eval(self):
+        return self
+
     def __call__(self, tensor):
         width = max(1, tensor.shape[-1] // 4)
         return blla.torch.zeros((1, 4, 450, width))

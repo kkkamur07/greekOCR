@@ -5,9 +5,9 @@ set -euo pipefail
 HELPER_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 cd "$HELPER_DIR"
-# Build in an isolated environment containing only the ONNX helper runtime and
-# PyInstaller. This prevents an existing development venv from leaking Torch
-# or native model modules into Analysis.
+# Build in an isolated environment containing only the helper runtime and
+# PyInstaller, so an existing development venv cannot leak the training stack
+# or the platform API into Analysis.
 uv run --isolated --no-dev --group helper --group packaging \
   pyinstaller --noconfirm --clean pyinstaller.spec
 
@@ -18,4 +18,4 @@ if [ "$(uname -s)" = "Darwin" ]; then
   EXECUTABLE="$BUNDLE_ROOT/Contents/MacOS/nomicous-inference-helper"
 fi
 
-python "$HELPER_DIR/scripts/verify-bundle.py" "$BUNDLE_ROOT" "$EXECUTABLE"
+python "$HELPER_DIR/scripts/smoke-test.py" "$BUNDLE_ROOT" "$EXECUTABLE"

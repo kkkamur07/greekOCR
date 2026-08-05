@@ -1,25 +1,37 @@
-"""Export the reference Calamari graph as a self-contained ONNX artifact."""
+"""Load a tensor-only Calamari checkpoint into the runtime Torch graph.
+
+Loading a pickled checkpoint executes code, so this module never unpickles:
+``torch.load`` runs with ``weights_only=True``, and the caller has already
+verified the **artifact SHA-256** through ``architectures.artifact`` before the
+path reaches here.
+
+This file was the loader half of the retired ONNX exporter
+(``src/model/inference_export/calamari/export.py``). Under ADR 0004 the Torch
+graph *is* the runtime, so the loader moved into the inference package and the
+exporter moved to ``archive/onnx-runtime/``.
+"""
 
 from __future__ import annotations
 
-import json
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
 import torch
-from torch import Tensor, nn
+from torch import Tensor
 
-from src.model.inference_export.calamari.config import (
+from inference.architectures.calamari.config import (
     CalamariTorchConfig,
     CalamariTorchLayerConfig,
 )
-from src.model.inference_export.calamari.model import CalamariTorchModel
+from inference.architectures.calamari.model import CalamariTorchModel
 
 
 @dataclass(frozen=True)
-class CalamariExportMetadata:
+class CalamariCheckpointMetadata:
+    """Everything the decoder needs from a checkpoint that is not a weight."""
+
     classes: int
     line_height: int
     charset: tuple[str, ...]
@@ -29,8 +41,8 @@ class CalamariExportMetadata:
 
 def load_calamari_checkpoint(
     checkpoint_path: Path,
-) -> tuple[CalamariTorchModel, CalamariExportMetadata]:
-    """Load and materialize a tensor-only Calamari checkpoint for export."""
+) -> tuple[CalamariTorchModel, CalamariCheckpointMetadata]:
+    """Load and materialize a tensor-only Calamari checkpoint."""
     try:
         checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
     except Exception as error:
@@ -72,7 +84,7 @@ def load_calamari_checkpoint(
     if not isinstance(blank_index, int) or isinstance(blank_index, bool) or blank_index != 0:
         raise ValueError("only blank-index zero is supported by the Calamari runtime")
 
-    metadata = CalamariExportMetadata(
+    metadata = CalamariCheckpointMetadata(
         classes=classes,
         line_height=line_height,
         charset=tuple(charset),
@@ -81,10 +93,10 @@ def load_calamari_checkpoint(
     )
     model = CalamariTorchModel(_default_config(metadata))
     model.eval()
-    # Materialize LazyBiLSTM and LazyLinear before loading or exporting.  The
+    # Materialize LazyBiLSTM and LazyLinear before loading the state dict.  The
     # time width is deliberately arbitrary; weights do not depend on it.
     dummy = torch.zeros((1, 8, line_height, 1), dtype=torch.float32)
-    # ``inference_mode`` would create inference tensors for Lazy* parameters,
+    # ``inference_mode`` would create inference tensors for the Lazy* parameters,
     # which cannot later receive a state-dict copy on recent Torch versions.
     with torch.no_grad():
         model(dummy, image_lengths=torch.tensor([8]))
@@ -92,73 +104,13 @@ def load_calamari_checkpoint(
         model.load_state_dict(state_dict, strict=True)
     except (RuntimeError, TypeError, ValueError) as error:
         raise ValueError("Calamari checkpoint state dictionary is incompatible") from error
+    # Second ``eval()``: materializing the lazy modules above ran a forward
+    # pass, and dropout must be off for every inference call that follows.
     model.eval()
     return model, metadata
 
 
-def export_calamari_onnx(
-    checkpoint_path: Path,
-    destination: Path,
-    *,
-    opset_version: int = 17,
-) -> CalamariExportMetadata:
-    """Export a converted Calamari checkpoint and return embedded metadata."""
-    model, metadata = load_calamari_checkpoint(checkpoint_path)
-    wrapper = _CalamariONNXWrapper(model).eval()
-    dummy_image = torch.zeros(
-        (1, 8, metadata.line_height, 1),
-        dtype=torch.float32,
-    )
-    dummy_lengths = torch.tensor([8], dtype=torch.long)
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        torch.onnx.export(
-            wrapper,
-            (dummy_image, dummy_lengths),
-            destination,
-            input_names=["image", "image_lengths"],
-            output_names=["logits", "out_len"],
-            dynamic_axes={
-                # The runtime submits one line at a time.  Keeping batch
-                # static avoids the unsupported variable-batch LSTM state
-                # warning while preserving arbitrary temporal widths.
-                "image": {1: "time"},
-                "logits": {1: "time"},
-            },
-            opset_version=opset_version,
-            dynamo=False,
-            do_constant_folding=True,
-        )
-    except Exception as error:
-        raise RuntimeError(f"unable to export Calamari ONNX artifact: {destination}") from error
-
-    try:
-        import onnx
-
-        onnx_model = onnx.load(destination)
-        del onnx_model.metadata_props[:]
-        for key, value in _metadata_values(metadata).items():
-            prop = onnx_model.metadata_props.add()
-            prop.key = key
-            prop.value = value
-        onnx.checker.check_model(onnx_model)
-        onnx.save(onnx_model, destination)
-    except Exception as error:
-        raise RuntimeError(f"unable to embed Calamari ONNX metadata: {destination}") from error
-    return metadata
-
-
-class _CalamariONNXWrapper(nn.Module):
-    def __init__(self, model: CalamariTorchModel) -> None:
-        super().__init__()
-        self.model = model
-
-    def forward(self, image: Tensor, image_lengths: Tensor) -> tuple[Tensor, Tensor]:
-        outputs = self.model(image, image_lengths=image_lengths)
-        return outputs["logits"], outputs["out_len"]
-
-
-def _default_config(metadata: CalamariExportMetadata) -> CalamariTorchConfig:
+def _default_config(metadata: CalamariCheckpointMetadata) -> CalamariTorchConfig:
     return CalamariTorchConfig(
         layers=(
             CalamariTorchLayerConfig(
@@ -210,17 +162,7 @@ def _default_config(metadata: CalamariExportMetadata) -> CalamariTorchConfig:
     )
 
 
-def _metadata_values(metadata: CalamariExportMetadata) -> dict[str, str]:
-    return {
-        "format": "calamari-onnx-v1",
-        "architecture": "calamari",
-        "input_layout": "NHWC",
-        "input_name": "image",
-        "output_names": json.dumps(["logits", "out_len"]),
-        "classes": str(metadata.classes),
-        "line_height": str(metadata.line_height),
-        "charset": json.dumps(list(metadata.charset), ensure_ascii=False),
-        "blank_index": str(metadata.blank_index),
-        "temperature": repr(metadata.temperature),
-        "preprocessing": "existing Calamari NumPy preprocessing; model input is uint8-valued float32",
-    }
+__all__ = [
+    "CalamariCheckpointMetadata",
+    "load_calamari_checkpoint",
+]

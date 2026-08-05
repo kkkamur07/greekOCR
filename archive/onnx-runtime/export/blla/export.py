@@ -1,4 +1,9 @@
-"""Development-only export of the inference-owned BLLA graph."""
+"""Development-only export of the inference-owned BLLA graph.
+
+RETIRED. See ``archive/onnx-runtime/README.md`` and ADR 0004. Originally
+``src/model/inference_export/blla/export.py``. ``_ExportGroupNorm`` below is
+the reason this file is worth keeping.
+"""
 
 from __future__ import annotations
 

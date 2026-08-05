@@ -192,7 +192,7 @@ async def _pair(
         device_name=device_name,
         platform="darwin-arm64",
         helper_version="0.2.0",
-        capabilities={"onnx": True},
+        capabilities={"runtime": "torch"},
         request_ip=request_ip,
         now=now,
     )

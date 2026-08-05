@@ -40,7 +40,7 @@ jobs:
       # protobuf CVE-2025-4565 / CVE-2026-0994 are fixed via protobuf>=5.29.6
       # in the inference group (no ignore).
       - run: >-
-          uv run --locked --group dev --group platform --group inference --group export pip-audit
+          uv run --locked --group dev --group platform --group inference pip-audit
           --ignore-vuln PYSEC-2026-139
           --ignore-vuln CVE-2025-3000
           --ignore-vuln PYSEC-2026-2132

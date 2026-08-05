@@ -318,7 +318,7 @@ jobs:
               raise SystemExit(
                   f"release SBOM has {len(packages)} packages; it is not describing the real installer"
               )
-          for required in ("onnxruntime", "fastapi", "uvicorn"):
+          for required in ("torch", "fastapi", "uvicorn"):
               if required not in names:
                   raise SystemExit(f"release SBOM does not mention {required}")
           PY

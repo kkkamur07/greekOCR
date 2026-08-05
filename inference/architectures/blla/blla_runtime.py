@@ -1,4 +1,4 @@
-"""Torch-free BLLA decoding and segment-contract conversion."""
+"""BLLA decoding and segment-contract conversion."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from inference.preprocessing.segment_refinement import (
     SegmentRefinementResult,
     refine_segment_candidates,
 )
-from inference.architectures.blla.blla_preprocessing import BLLAInput, BLLANumpyInput
+from inference.architectures.blla.blla_preprocessing import BLLAInput
 
 logger = logging.getLogger(__name__)
 
@@ -64,10 +64,9 @@ def _positive_int_param(params: Mapping[str, Any], key: str, default: int) -> in
 def build_blla_segment_response(
     image: Image.Image,
     logits: np.ndarray,
-    prepared: BLLAInput | BLLANumpyInput,
+    prepared: BLLAInput,
     *,
     params: Mapping[str, Any] | None = None,
-    torch_free: bool = False,
 ) -> SegmentRunResponse:
     """Decode logits and preserve the native BLLA response contract."""
 
@@ -97,7 +96,6 @@ def build_blla_segment_response(
         threshold=threshold,
         raw_logits=True,
         scaled_gray=prepared.scaled_gray,
-        torch_free=torch_free,
     )
     refinement_image = image.copy()
 

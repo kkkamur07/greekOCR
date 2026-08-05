@@ -1,4 +1,9 @@
-"""Focused Calamari ONNX export and runtime parity tests."""
+"""Focused Calamari ONNX export and runtime parity tests.
+
+RETIRED. See ``archive/onnx-runtime/README.md`` and ADR 0004. Originally
+``tests/inference/unit/test_calamari_onnx.py``; not collected, since
+``archive/`` is outside ``testpaths``.
+"""
 
 from __future__ import annotations
 

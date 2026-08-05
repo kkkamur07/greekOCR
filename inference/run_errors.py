@@ -41,9 +41,9 @@ def http_exception_for_run_error(exc: Exception) -> HTTPException:
             detail=CLIENT_INPUT_ERROR,
         )
     if isinstance(exc, RuntimeError):
-        # BLLAUnavailableError, CalamariUnavailableError, and ONNX runtime
-        # errors all subclass RuntimeError: the artifact or runtime is broken,
-        # not the client request.
+        # BLLAUnavailableError and CalamariUnavailableError both subclass
+        # RuntimeError: the artifact or runtime is broken, not the client
+        # request.
         return HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=RUNTIME_UNAVAILABLE_ERROR,

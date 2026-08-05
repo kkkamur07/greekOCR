@@ -1,4 +1,8 @@
-"""Export the inference-owned BLLA safetensors graph to ONNX."""
+"""Export the inference-owned BLLA safetensors graph to ONNX.
+
+RETIRED. See ``archive/onnx-runtime/README.md`` and ADR 0004. Originally
+``scripts/hf/export_blla_onnx.py``.
+"""
 
 from __future__ import annotations
 

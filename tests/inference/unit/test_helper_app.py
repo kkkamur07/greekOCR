@@ -93,10 +93,16 @@ def test_helper_run_requires_no_service_secret_for_unknown_model(helper_client: 
     assert response.status_code == 404
 
 
-def test_helper_always_dispatches_onnx_only(
+def test_helper_dispatches_the_same_runner_as_the_hosted_service(
     helper_client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ):
+    """The helper used to pass ``onnx_only=True`` and reject native artifacts.
+
+    ADR 0004 removed that split: there is one runtime, so the helper hands
+    ``run_model`` exactly the request fields and nothing that would make it
+    behave differently from the hosted worker on the same weights.
+    """
     received: dict[str, object] = {}
 
     def fake_run_model(**kwargs: object) -> TranscribeRunResponse:
@@ -115,7 +121,13 @@ def test_helper_always_dispatches_onnx_only(
     )
 
     assert response.status_code == 200
-    assert received["onnx_only"] is True
+    assert set(received) == {
+        "task",
+        "registry_model_id",
+        "registry_tag",
+        "image_bytes",
+        "params",
+    }
 
 
 def test_helper_allows_only_configured_browser_origin(helper_client: TestClient):

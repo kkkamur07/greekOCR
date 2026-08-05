@@ -75,7 +75,7 @@ def _start_pairing(client: TestClient, name: str = "Researcher laptop") -> tuple
             "device_name": name,
             "platform": "darwin-arm64",
             "helper_version": "0.2.0",
-            "capabilities": {"onnx": True},
+            "capabilities": {"runtime": "torch"},
         },
     )
     assert response.status_code == 201, response.text

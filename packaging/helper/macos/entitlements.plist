@@ -3,7 +3,7 @@
 <!--
   Hardened-runtime entitlements for the notarized Inference Helper.
   PyInstaller bundles a private CPython plus third-party native libraries
-  (ONNX Runtime, numpy, scipy, opencv). Keep the existing hardened-runtime
+  (Torch, numpy, scipy, opencv). Keep the existing hardened-runtime
   allowances until signed/notarized release builds have verified that each
   library loads without them.
 -->

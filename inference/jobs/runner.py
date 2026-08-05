@@ -13,7 +13,7 @@ from inference.architectures.calamari import (
     run_calamari_transcribe,
     run_calamari_transcribe_many,
 )
-from inference.architectures.blla import run_blla_onnx_segment, run_blla_segment
+from inference.architectures.blla import run_blla_segment
 from inference.contracts.common import InferenceTask, RegistryArchitecture
 from inference.contracts.segment import SegmentRunResponse
 from inference.contracts.transcribe import (
@@ -54,27 +54,6 @@ def _crop_line_image(image_bytes: bytes, points: list[list[float]] | None) -> by
         output = BytesIO()
         cropped.save(output, format=image.format or "PNG")
         return output.getvalue()
-
-
-def _reject_native_artifact_on_onnx_only_runtime(
-    weights_path: Path,
-    *,
-    onnx_only: bool,
-    architecture_label: str,
-) -> None:
-    """Keep the frozen, Torch-free helper away from native artifacts.
-
-    Every architecture branch needs this and each used to spell it out again;
-    a branch that forgot would import Torch inside a bundle that does not ship
-    it, and fail as an unhandled ``ModuleNotFoundError`` rather than a 503. It
-    stays inside the branches rather than hoisted above the task dispatch so a
-    task/architecture mismatch keeps raising its existing ``ValueError`` (422)
-    instead of turning into a runtime error (503).
-    """
-    if onnx_only and weights_path.suffix != ".onnx":
-        raise RuntimeError(
-            f"ONNX-only runtime cannot load {architecture_label} artifact: {weights_path.name}"
-        )
 
 
 def _line_regions_from_params(params: dict[str, Any] | None) -> list[TranscribeLineRegion]:
@@ -168,7 +147,6 @@ def run_model(
     registry_tag: str,
     image_bytes: bytes,
     params: dict[str, Any] | None = None,
-    onnx_only: bool = False,
 ) -> SegmentRunResponse | TranscribeRunResponse | TranscribeBatchRunResponse:
     settings = get_inference_settings()
     validate_image_bytes(image_bytes, settings)
@@ -195,15 +173,7 @@ def run_model(
             RegistryArchitecture.blla,
             RegistryArchitecture.blla_segment,
         }:
-            _reject_native_artifact_on_onnx_only_runtime(
-                weights_path,
-                onnx_only=onnx_only,
-                architecture_label="BLLA",
-            )
-            run_segment = (
-                run_blla_onnx_segment if weights_path.suffix == ".onnx" else run_blla_segment
-            )
-            return run_segment(
+            return run_blla_segment(
                 image_bytes,
                 model_path=weights_path,
                 artifact_sha256=version.artifact_sha256,
@@ -213,11 +183,6 @@ def run_model(
 
     if task == InferenceTask.transcribe:
         if entry.architecture == RegistryArchitecture.calamari:
-            _reject_native_artifact_on_onnx_only_runtime(
-                weights_path,
-                onnx_only=onnx_only,
-                architecture_label="Calamari",
-            )
             line_regions = _line_regions_from_params(params)
             if line_regions:
                 return _transcribe_batch(

@@ -36,16 +36,24 @@ Registry models resolve weights at runtime from:
 |--------|---------|----------------|
 | Hub | `hf://kkkamur07/syriac-htr-calamari@stable` | `src/hf/cache/<registry_model_id>/<registry_tag>/` |
 | Local bundled (offline) | `file://local/syriac/calamari/v1/stable/best.pt` | `src/hf/local/...` |
-| BLLA segmentation | `hf://kkkamur07/segmentation-blla@stable` | `blla.onnx` in the Hub cache |
+| BLLA segmentation | `hf://kkkamur07/segmentation-blla@stable` | `blla.safetensors` in the Hub cache |
 
 No local weight checkout is required for the default Hub models; they download from their public repos on first use into `HF_CACHE_ROOT`.
 
-### Calamari (ONNX runtime)
+### Runtime
 
-Transcribe uses the ONNX Runtime Calamari adapter under
-`inference/architectures/calamari/`. Runtime artifacts are self-contained
-`.onnx` files; the native PyTorch graph remains in `src/model/inference_export/`
-for conversion and parity tests.
+Both architectures run on PyTorch, CPU only ([ADR 0004](../docs/adr/0004-pytorch-is-the-inference-runtime.md)).
+Transcribe loads a native `.pt` checkpoint through
+`inference/architectures/calamari/`, and segment loads `blla.safetensors`
+through `inference/architectures/blla/`. Every inference path calls
+`model.eval()` and runs under `torch.inference_mode()`.
+
+The **artifact SHA-256** is verified in `architectures/artifact.py` *before* the
+architecture loader opens the file, which is what keeps `torch.load` (itself
+called with `weights_only=True`) off an unverified checkpoint.
+
+The retired ONNX Runtime path, its conversion scripts, and the parity harness
+are in [`archive/onnx-runtime/`](../archive/onnx-runtime/README.md).
 
 Training and vendored TensorFlow Calamari: [`docs/guides/learnings.md`](../docs/guides/learnings.md#calamari-training).
 
@@ -91,7 +99,7 @@ Job callbacks use a tagged output union: `output.kind` is either `segment` or `t
 `inference/registry.yaml` lists available models and weight locations. Example entries:
 
 - `syriac-calamari-v1` - transcribe, Calamari architecture, pinned Hub revision and digest
-- `blla-segment` - segment, BLLA ONNX weights
+- `blla-segment` - segment, BLLA `safetensors` weights
 
 Weights are resolved at runtime from Hub cache (`src/hf/cache/`) or local bundled paths (`src/hf/local/`).
 New `hf://` entries should include both `hub_revision` and `artifact_sha256`; see
@@ -138,7 +146,7 @@ to `127.0.0.1:8001` and `localhost:8001`. The production Vercel CSP permits
 these loopback URLs. The helper accepts browser requests only from
 `https://app.nomicous.com`.
 
-Packaging for `.dmg` / `.msi` / Linux installers: [`packaging/helper/README.md`](../packaging/helper/README.md) - PyInstaller spec excludes training stacks, platform API, and unused torch backends so installers ship the Calamari + BLLA ONNX runtimes.
+Packaging for `.dmg` / `.msi` / Linux installers: [`packaging/helper/README.md`](../packaging/helper/README.md) - PyInstaller spec excludes training stacks and the platform API so installers ship only the Calamari + BLLA PyTorch CPU runtimes.
 
 ## Admission control and helper exposure
 

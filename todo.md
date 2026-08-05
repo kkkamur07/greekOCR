@@ -11,28 +11,20 @@ run — the whole pass is still in the working tree.
 
 ## P0 — Blocks shipping
 
-### 1. Bump the pinned `blla.onnx` digest (**one failing test depends on this**)
+### 1. ~~Bump the pinned `blla.onnx` digest~~ - dissolved by ADR 0004 / issue 049
 
-The GroupNorm export fix changed the ONNX graph, so the artifact hash moved. The registry
-still pins the old one, and the resolver correctly refuses to load the new file.
+This was a four-step ordered dance: upload the re-exported `blla.onnx` to the Hub
+*first* (because `src/hf/resolve/cache.py` rmtree's the cache on manifest mismatch
+and `src/hf/cache/` is untracked), then bump `hub_revision` and `artifact_sha256`,
+then the hardcoded copies in `test_registry.py`, then the local cache copy. It was
+caused by the GroupNorm export fix changing the ONNX graph, so the artifact hash
+moved away from what the registry pinned.
 
-- old: `5871e3755d414c00380794bafd570c1bb3d6a3255cdfb11b1bbe99dcec084d5e` (5,077,600 B)
-- new: `d3e9c086541157a2f55209bc4802206478231e7637c12ee4884504f94d6c4ed3` (5,102,555 B)
-
-Four things change together, and **the order matters**:
-
-1. **Upload to `hf://kkkamur07/segmentation-blla@stable` FIRST.**
-   `src/hf/resolve/cache.py` runs `shutil.rmtree(cache_dir)` on manifest mismatch — and again
-   in its `except` handler. `src/hf/cache/` is untracked, so git cannot recover the weights.
-   Bumping the pin before the Hub serves the new blob destroys the local cache with no undo.
-2. `inference/registry.yaml:35-36` — `hub_revision` **and** `artifact_sha256`.
-3. `tests/inference/unit/test_registry.py:38,40` — both values are hardcoded there too.
-4. `src/hf/cache/blla-segment/stable/blla.onnx` + `.hub-manifest.json` — refresh the copy.
-
-Failing test that goes green afterwards:
-`tests/inference/unit/test_blla.py::test_standalone_helper_returns_onnx_blla_response_for_real_image`
-(currently 503). It was left red on purpose — making it pass locally would hide an incomplete
-shipping step.
+Retiring the ONNX runtime removed the problem rather than solving it. The registry
+now pins `blla.safetensors` (`8b5b6ec2...`) and `best.pt` (`ea711b91...`) at the
+same already-published **Hub revision**, both verified against the live Hub. There
+is no re-export step, so there is no artifact that can drift from the checkpoint it
+came from.
 
 ### 2. Set `DEVICE_TOKEN_HMAC_SECRET` before rotating `JWT_SECRET`
 

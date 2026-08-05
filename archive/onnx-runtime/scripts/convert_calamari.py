@@ -1,8 +1,12 @@
 """Export a converted Calamari checkpoint to a self-contained ONNX artifact.
 
-This is development/publishing tooling.  The production inference package
-loads the resulting ONNX artifact through ONNX Runtime and does not need this
-Torch graph.
+RETIRED. See ``archive/onnx-runtime/README.md`` and ADR 0004. Originally
+``scripts/hf/convert_calamari.py``.
+
+This was development/publishing tooling.  The production inference package
+loaded the resulting ONNX artifact through ONNX Runtime and did not need the
+Torch graph; under ADR 0004 that is inverted and the Torch graph is all there
+is.
 """
 
 from __future__ import annotations
