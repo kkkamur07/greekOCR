@@ -15,6 +15,7 @@ streaming, no connection reuse, and no authentication scheme to negotiate. The
 from __future__ import annotations
 
 import json
+import os
 import platform as platform_module
 import socket
 import urllib.error
@@ -96,8 +97,6 @@ class DeviceIdentity:
 
 
 def default_platform_url(environ: dict[str, str] | None = None) -> str:
-    import os
-
     source = environ if environ is not None else os.environ
     return (source.get(PLATFORM_URL_ENV) or DEFAULT_PLATFORM_URL).rstrip("/")
 

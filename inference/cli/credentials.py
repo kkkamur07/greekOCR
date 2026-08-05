@@ -177,21 +177,6 @@ def save_credential(credential: DeviceCredential, path: Path | None = None) -> P
     return target
 
 
-def delete_credential(path: Path | None = None) -> bool:
-    """Forget this machine's credential locally. Returns whether one was there.
-
-    Deliberately local-only: removing the file cannot revoke the device, because
-    revocation is a browser action on the researcher's account (ADR 0001,
-    decision 11). Callers say so rather than implying the device is gone.
-    """
-    target = path or credential_path()
-    try:
-        target.unlink()
-    except FileNotFoundError:
-        return False
-    return True
-
-
 def file_mode(path: Path) -> int:
     """Permission bits of `path`, for reporting and for tests to assert on."""
     return stat.S_IMODE(path.stat().st_mode)

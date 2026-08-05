@@ -208,7 +208,7 @@ def _pair(console, errors, client: PlatformClient, args: argparse.Namespace) -> 
     _announce(console, started, device_name, client.base_url)
     _maybe_open_browser(console, started, no_browser=args.no_browser)
 
-    poll = _wait_for_approval(console, client, started)
+    poll = _wait_for_approval(console, errors, client, started)
     if poll is None:
         return ui.EXIT_FAILED
 
@@ -287,7 +287,7 @@ def _looks_like_ssh() -> bool:
     return bool(os.environ.get("SSH_CONNECTION") or os.environ.get("SSH_TTY"))
 
 
-def _wait_for_approval(console, client: PlatformClient, started: StartedPairing):
+def _wait_for_approval(console, errors, client: PlatformClient, started: StartedPairing):
     """Poll until the browser decides, the request dies, or its lifetime runs out.
 
     The cadence comes from the platform on every response, not from a constant
@@ -295,7 +295,6 @@ def _wait_for_approval(console, client: PlatformClient, started: StartedPairing)
     `slow_down` returns a doubled interval that this must honour or the pairing
     row starts burning attempts.
     """
-    errors = ui.err()
     interval = max(started.interval_seconds, _MINIMUM_POLL_SECONDS)
     deadline = time.monotonic() + started.expires_in + _POLL_MARGIN_SECONDS
 
