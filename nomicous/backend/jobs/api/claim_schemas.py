@@ -40,12 +40,34 @@ class JobClaimRequest(BaseModel):
 
 
 class ClaimedPageResponse(BaseModel):
+    """One page of work, and the short-lived link to its image.
+
+    The link is not authenticated by anything the agent presents: the signature
+    in it *is* the authorization, and it reaches exactly one object (ADR 0002).
+    An authenticated ``GET /device/v1/jobs/{id}/image`` was rejected because the
+    production API is serverless - streaming manuscript scans through it costs
+    money for nothing - and because it would put a route on the device credential
+    that must independently re-derive job ownership.
+    """
+
     product_job_id: UUID
     inference_job_id: UUID
     job_type: JobType
     execution_target: ExecutionTarget
     lease_expires_at: datetime
     request: JobSubmitRequest
+    page_image_url: str = Field(
+        description=(
+            "Signed link to this page's image, and to nothing else. Carries its own "
+            "authorization, so it is fetched with no device credential attached."
+        )
+    )
+    page_image_expires_at: datetime = Field(
+        description=(
+            "When the link above stops working - about a minute out, and deliberately "
+            "not the lease. The agent fetches once, right after claiming."
+        )
+    )
 
 
 class JobClaimResponse(BaseModel):

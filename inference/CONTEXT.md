@@ -110,6 +110,10 @@ _Avoid_: helper (loopback-era, meant a process listening on a port), worker (amb
 One **inference agent** taking exactly one page of work from the platform's queue, over HTTP, authenticated as itself. A batch is N claims. The claim fixes nothing new: it hands over a job whose **execution target** was already decided at submission, and it may only hand over work for the target the presented credential is allowed to run.
 _Avoid_: dispatch (implies the platform pushes), assignment (implies the platform chooses an agent), reservation
 
+**Signed page image link**:
+The short-lived URL a **claim** carries to the one page image it hands over. It reaches exactly one stored object, expires in about a minute, and is fetched with no device credential attached - the signature *is* the authorization. Its lifetime is deliberately **not** the **lease**'s: the agent downloads once, immediately after claiming. Accepted risk (ADR 0002): a bearer token in a URL leaks through logs and crash dumps, bounded to one object and one minute.
+_Avoid_: image endpoint (an authenticated `GET /device/v1/jobs/{id}/image` was rejected), download token, presigned upload (nothing uploads here)
+
 **Lease**:
 How long a claimed page stays with the **inference agent** that took it before the platform may give it to another. There is no heartbeat: work is seconds-to-minutes, so the lease covers it with margin, and a stopped agent loses one page rather than a document.
 _Avoid_: timeout (ambiguous with the platform-wide job timeout), lock (nothing is held in the database between requests)
@@ -144,6 +148,7 @@ _Avoid_: org (when meaning the namespace generically)
 - **Capacity** for one **inference host** = any device recorded as that host was seen recently; a hosted worker is such a device, not a separate concept
 - One **claim** = one page; the presented credential fixes the **execution target** it may take (device token -> `local`, own account only; **service credential** -> `cloud`, any account)
 - A **claim** starts a **lease**; the page returns to the queue when the lease expires, and completion or failure ends it through the platform's existing job callback contract
+- One **claim** carries one **signed page image link**, to one object; the two lifetimes are separate dials (`DEVICE_PAGE_IMAGE_URL_TTL_SECONDS` ~60s, `DEVICE_LEASE_SECONDS` 600s) because the fetch happens once at the start of the run
 - A **Hub collection** (`nomos`) links to many **Hub model repos** and **Hub dataset repos**; defined in `src/hf/publish/collection.yaml`
 
 ## Example dialogue
@@ -167,6 +172,7 @@ _Avoid_: org (when meaning the namespace generically)
 - Sync inference: `POST /inference/v1/run` via `inference/api/run.py` and `inference/jobs/runner.py`
 - Queued jobs: the platform owns the only queue (ADR 0003). `inference` holds no database, ORM, or claim loop of its own.
 - **Claim**: `POST /device/v1/jobs/claim` on the platform - the one endpoint this layer adds (ADR 0005). Completion and failure are the existing `POST /internal/inference/job-complete` with a `JobCallbackRequest`; abandonment is the existing stale sweep. There is no heartbeat and no release endpoint.
+- **Signed page image link**: `page_image_url` / `page_image_expires_at` on the claimed page. Minted by the media store, so Supabase signs a Storage URL and the local filesystem backend signs a path the platform serves at `/media/signed/{image_key}` - a route with no credential dependency, which refuses to answer unless `STORAGE_BACKEND=local`.
 - Architectures implemented: **Calamari** (`inference/architectures/calamari/`) and native **BLLA segment** (`inference/architectures/blla/`)
 - **Calamari runtime**: local PyTorch graph + local preprocessing; no TensorFlow or vendored `calamari_ocr` import at inference time.
 - Weight resolution: `file://`, `hf://`, and `package://` (`src/hf/` local/cache layout; see `inference/weights/__init__.py`)

@@ -133,6 +133,23 @@ def _build_transcribe_request(job: Job) -> JobSubmitRequest:
         )
 
 
+def page_image_key_for_job(job: Job) -> str:
+    """The single stored object a claimed page's signed link may reach.
+
+    One key, resolved from the job's own ``document_part_id`` - not a prefix and
+    not the document. Whoever signs it can therefore only ever sign a link to
+    this page, which is the property that makes a link safe to hand out with no
+    credential behind it.
+    """
+    if job.document_part_id is None:
+        raise ValueError("Job is missing its target document part")
+    with sync_system_session() as session:
+        part = session.get(DocumentPart, job.document_part_id)
+        if part is None:
+            raise ValueError("Document part not found")
+        return part.image_key
+
+
 def build_inference_submit_request(job: Job) -> JobSubmitRequest:
     if job.type == JobType.segment:
         return _build_segment_request(job)

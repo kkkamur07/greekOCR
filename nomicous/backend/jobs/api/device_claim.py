@@ -83,6 +83,8 @@ def _page_response(page: ClaimedPage) -> ClaimedPageResponse:
         execution_target=page.execution_target,
         lease_expires_at=page.lease_expires_at,
         request=page.request,
+        page_image_url=page.page_image_url,
+        page_image_expires_at=page.page_image_expires_at,
     )
 
 
@@ -124,7 +126,14 @@ async def claim_job(
 
     while True:
         page = await asyncio.to_thread(
-            claim_one_page, agent, lease_seconds=settings.device_lease_seconds
+            claim_one_page,
+            agent,
+            lease_seconds=settings.device_lease_seconds,
+            # Two lifetimes, not one. The link only has to cover a single
+            # download immediately after claiming; the lease covers the whole
+            # run. See ADR 0002.
+            page_image_ttl_seconds=settings.device_page_image_url_ttl_seconds,
+            base_url=str(request.base_url),
         )
         if page is not None:
             return JobClaimResponse(
