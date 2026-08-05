@@ -1091,8 +1091,10 @@
 }
 
 /* Per-character OCR confidence (high >90%, mid 51-90%, low ≤50%) */
-.pe-confidence-text,
-.pe-model-preview {
+/* `.pe-confidence-text` is the inline <span> wrapper around the per-character
+   markup. Its container `.pe-model-preview` is a block-level flex child and is
+   laid out further down; do not add it here. */
+.pe-confidence-text {
   display: inline;
 }
 

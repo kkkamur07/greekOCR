@@ -1,5 +1,7 @@
+import type { LayoutPoint } from "../api/client";
+
 /** Shared types for the public document canvas overlay. */
-export type PointTuple = [number, number];
+export type PointTuple = LayoutPoint;
 
 export interface Region {
   id: number;

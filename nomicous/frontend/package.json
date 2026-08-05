@@ -18,9 +18,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@ant-design/icons": "^6.1.0",
     "antd": "^6.1.4",
-    "eslint-config-next": "^16.2.10",
     "next": "^16.2.10",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
@@ -35,11 +33,9 @@
     "@types/react-dom": "^19.2.3",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
-    "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
     "jsdom": "^29.1.1",
     "openapi-typescript": "^7.10.1",
-    "playwright": "^1.61.1",
     "prettier": "^3.9.5",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",

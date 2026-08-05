@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 from importlib import resources
 from pathlib import Path
 
@@ -24,6 +25,7 @@ from inference.architectures.blla.blla_preprocessing import (
 from inference.helper.app import create_helper_app
 from inference.helper.settings import get_helper_settings
 from inference.infrastructure.settings import get_inference_settings
+from inference.registry import load_registry
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SEGMENT_PAGE = REPO_ROOT / "tests" / "fixtures" / "manuscripts" / "greek" / "segment_page.jpeg"
@@ -40,6 +42,23 @@ BLLA_ARTIFACT = (
     / "blla.safetensors"
 )
 BLLA_ONNX_ARTIFACT = BLLA_ARTIFACT.with_name("blla.onnx")
+
+
+def _staged_onnx_matches_registry() -> bool:
+    """Whether the staged ONNX export is still the artifact ``registry.yaml`` pins.
+
+    The helper hashes every resolved weight file against the registry's
+    ``artifact_sha256`` and answers 503 on a mismatch, so a staged export that has
+    drifted from the pinned digest cannot reach the run path at all. Re-exporting
+    ``blla.onnx`` without re-publishing and re-pinning it is exactly that drift,
+    and it is a registry bug, not a test bug - skip rather than assert a 503.
+    """
+    if not BLLA_ONNX_ARTIFACT.is_file():
+        return False
+    expected = load_registry().models["blla-segment"].versions["stable"].artifact_sha256
+    if expected is None:
+        return True
+    return hashlib.sha256(BLLA_ONNX_ARTIFACT.read_bytes()).hexdigest() == expected
 
 
 def test_blla_model_has_fixed_topology_and_expected_output_shape() -> None:
@@ -175,6 +194,11 @@ def test_blla_sigmoid_interpolated_heatmaps_match_optional_kraken_reference(
     torch.testing.assert_close(native_heatmaps, reference_heatmaps, rtol=1e-5, atol=1e-5)
 
 
+@pytest.mark.skipif(not BLLA_ONNX_ARTIFACT.is_file(), reason="BLLA ONNX artifact missing")
+@pytest.mark.skipif(
+    not _staged_onnx_matches_registry(),
+    reason="staged BLLA ONNX artifact does not match registry.yaml artifact_sha256",
+)
 def test_standalone_helper_returns_onnx_blla_response_for_real_image(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

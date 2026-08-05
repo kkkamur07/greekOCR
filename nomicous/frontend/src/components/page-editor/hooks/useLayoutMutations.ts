@@ -33,6 +33,7 @@ import {
   type CanvasEdit,
 } from "../editUndo";
 import { SEGMENT_JOB_TIMEOUT_MS, type PageEditorJobKind } from "../jobProgress";
+import { nextSegmentOrder } from "../segmentNumbering";
 import {
   applyLayoutLineGeometryToSegments,
   mergeSavedLine,
@@ -158,8 +159,6 @@ export function useLayoutMutations({
     [setLines, setLayout],
   );
 
-  const sortedLines = [...lines].sort((a, b) => a.order - b.order);
-
   function moveSelectedBaseline(deltaY: number) {
     if (!selectedLineId) return;
     setSaveMessage(null);
@@ -278,8 +277,10 @@ export function useLayoutMutations({
   ) {
     if (!projectId || !documentId || !partId) return;
     try {
+      // Past every Segment on the Page as it stands now. The count would collide
+      // with a survivor of a delete: the backend leaves the freed order behind.
       const saved = await api.createPartLine(projectId, documentId, partId, {
-        order: sortedLines.length,
+        order: nextSegmentOrder(linesRef.current),
         kind,
         points,
       });

@@ -54,6 +54,14 @@ jobs:
       # (vendored Calamari fork - reformatting it would fork it from upstream).
       # If the two ever disagree, CI rejects what the hook just produced.
       - run: uv run --locked --group dev ruff format --check nomicous/backend inference scripts/platform tests/nomicous tests/inference tests/hf
+      # Types. Non-blocking on purpose - mypy was introduced against an untyped
+      # codebase, so this reports the error count on every pull request without
+      # gating merges. The runtime groups are installed so the check runs against
+      # real pydantic/SQLAlchemy/FastAPI types rather than `Any`. Drop
+      # `continue-on-error` once the count reaches zero; see [tool.mypy] in
+      # pyproject.toml for the order the strictness knobs get turned on.
+      - run: uv run --locked --group dev --group platform --group inference mypy nomicous/backend inference
+        continue-on-error: true
       - run: uv run --locked --group test --group platform --group inference --group export pytest tests/nomicous/unit tests/inference/unit tests/hf
 
   postgres-integration:

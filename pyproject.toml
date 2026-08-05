@@ -23,6 +23,7 @@ train = [
 
 [dependency-groups]
 dev = [
+    "mypy>=2.3.0",
     "nbstripout>=0.8.1",
     "pip-audit>=2.10.1",
     "poethepoet>=0.48.0",
@@ -181,8 +182,12 @@ select = ["F", "I", "UP", "B", "SIM"]
 # per rule so the new rules are enforced on all new and already-clean code
 # instead of the whole ruleset being held back by legacy trees.
 #
-# This block is debt, not policy: each entry should be fixed and deleted. Do not
-# add rules to it to make a new violation pass. Counts at time of writing:
+# This block is debt, not policy: each entry should be fixed and deleted -- with
+# one exception. Roughly 385 of the ~533 suppressed violations are in
+# `src/model/calamari/`, a VENDORED copy of an upstream package. That debt is
+# upstream's, not this project's: fixing it forks us from upstream for no gain.
+# Only the remaining ~148 are worth paying down. Do not add rules to this block
+# to make a new violation pass. Counts at time of writing:
 #   src/model                  385   (also never linted before: F401/F403/F541/F841/F901)
 #   nomicous/backend            54
 #   tests                       41
@@ -198,7 +203,7 @@ select = ["F", "I", "UP", "B", "SIM"]
 "nomicous/backend/**" = ["B008", "B009", "I001", "SIM105", "UP037", "UP042"]
 "nomicous/infrastructure/**" = ["I001"]
 "packaging/helper/**" = ["I001"]
-"scripts/**" = ["I001", "SIM112"]
+"scripts/**" = ["I001"]
 "src/hf/**" = ["I001"]
 "src/model/**" = [
     "B007", "B010", "B023", "B905",
@@ -213,3 +218,57 @@ select = ["F", "I", "UP", "B", "SIM"]
 
 [tool.ruff.format]
 quote-style = "double"
+
+# ---------------------------------------------------------------------------
+# Type checking. The frontend has run `tsc --noEmit` in CI since day one; the
+# Python side had nothing, which meant the `# type: ignore` comments scattered
+# through the backend were verified by exactly nothing.
+#
+# This is deliberately NOT `strict = true`, and the CI step deliberately runs
+# with `continue-on-error: true`. A checker that turns the build red on day one
+# against an untyped codebase gets switched off within a week; one that prints a
+# shrinking number every build gets adopted. Tighten the knobs below (and drop
+# the continue-on-error) as the count comes down, not before.
+#
+# Scope is `nomicous/backend` and `inference` only: the service code that ships.
+# `src/` (research + vendored Calamari), `scripts/`, and `tests/` are out.
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.11"
+# Bare `mypy` checks the same tree CI does. CI still names the paths explicitly.
+files = ["nomicous/backend", "inference"]
+# Runtime resolves `backend.*` with `nomicous` on sys.path (see
+# tool.pytest.ini_options.pythonpath); mypy needs the same two roots or every
+# first-party import inside nomicous/backend reads as missing.
+mypy_path = ["nomicous", "."]
+namespace_packages = true
+explicit_package_bases = true
+# Imported-but-unchecked modules are analysed for their types but never report
+# errors of their own. This is what keeps the scope above honest: importing the
+# vendored tree cannot dump its errors into this build.
+follow_imports = "silent"
+# Blunt, and intentionally so for the first pass: most runtime deps here ship no
+# stubs, and several hundred `import-untyped` lines would bury the real signal.
+# Replace with per-module overrides once the baseline is down.
+ignore_missing_imports = true
+# The one non-default that earns its noise: without it, mypy skips the body of
+# every unannotated function, which is most of them, and reports almost nothing.
+check_untyped_defs = true
+warn_redundant_casts = true
+# The point of the exercise: prove the existing `# type: ignore` comments still
+# suppress something real.
+warn_unused_ignores = true
+no_implicit_optional = true
+strict_equality = true
+# Off for now. These are the next knobs to turn on, roughly in this order.
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+warn_return_any = false
+# Vendored upstream Calamari fork. Excluded explicitly so a future widening of
+# `files` cannot pull it in.
+exclude = ["^src/model/", "^packaging/helper/build/"]
+
+[[tool.mypy.overrides]]
+module = ["src.model.*"]
+follow_imports = "skip"
+ignore_errors = true

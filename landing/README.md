@@ -24,11 +24,11 @@ Re-encode after replacing a source capture (save as `*-source.png`, then):
 
 ```bash
 cd landing/assets/screenshots
-for f in editor projects home; do
+for f in editor live-view; do
   for w in 640 960 1280; do
     cwebp -q 82 -resize "$w" 0 "${f}-source.png" -o "${f}-${w}.webp"
   done
 done
 ```
 
-Layout is mobile-first: single-column screenshots below 768px, two columns from tablet up. Nav links stay visible at all widths (44px touch targets).
+Layout is mobile-first: the hero splits into copy plus screenshot from 56rem up, and the live-view shot spans the full `--wide` column. Nav links stay visible at all widths (44px touch targets).

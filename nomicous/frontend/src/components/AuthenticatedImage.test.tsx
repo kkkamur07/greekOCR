@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../api/client", () => ({
   API_BASE_URL: "https://api.nomicous.com",
-  API_ORIGIN: "https://api.nomicous.com",
   fetchBinaryApi: vi.fn(),
 }));
 
