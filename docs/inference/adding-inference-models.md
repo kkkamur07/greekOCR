@@ -19,13 +19,22 @@ Train / export checkpoint
     → add entry to inference/registry.yaml
     → add InferenceModel row in Postgres
     → deploy platform API
-    → running agents pull registry on startup (no reinstall)
-    → first local /run downloads weights into ~/.nomicous/hf/cache/
+    → release the published package so agents carry the new entry
+    → first run downloads weights into ~/.nomicous/hf/cache/
 ```
 
-**Registry sync:** deployed API serves `GET /inference/v1/registry` (public YAML + `ETag`). The Inference Helper fetches it into `~/.nomicous/registry.yaml` on startup when `HELPER_REGISTRY_URL` is set. The copy shipped in the package is an offline fallback only.
+**Where the Registry lives at runtime:** an **inference agent** reads the
+`registry.yaml` that ships inside its own **published package**
+(`INFERENCE_REGISTRY_PATH` overrides it, which is how a source checkout runs an
+unreleased entry). It does not sync one from the platform - the claim it
+receives names a **registry model id** and **registry tag**, and the agent
+resolves both locally. The deployed API still serves the file at
+`GET /inference/v1/registry` (public YAML + `ETag`), which is a convenient way
+to confirm a deploy shipped the entry you expect.
 
-**Weights:** resolved lazily from `weights_source` on first inference run - same path for cloud inference and the helper. See [`scripts/hf/README.md`](../../scripts/hf/README.md).
+**Weights:** resolved lazily from `weights_source` on the first run that needs
+them - the same path on a researcher's laptop and on a hosted worker, because
+both run the same package. See [`scripts/hf/README.md`](../../scripts/hf/README.md).
 
 ---
 
@@ -167,9 +176,9 @@ Kraken loads it.
 
 | Value | Behaviour |
 |-------|-----------|
-| `local` | May run on the Inference Helper when installed |
-| `remote` | Cloud inference only (GPU / large models) |
-| `any` | Helper or cloud, user preference decides |
+| `local` | May run on an **inference agent** on the researcher's machine |
+| `remote` | Hosted worker only (GPU / large models) |
+| `any` | Either host; **host preference** and **capacity** fix one at submission |
 
 Run unit tests:
 
@@ -215,7 +224,6 @@ Update or add coverage as needed:
 |------|-------|
 | Registry parsing | `tests/inference/unit/test_registry.py` |
 | Hosted registry endpoint | `tests/nomicous/integration/test_inference_registry.py` |
-| Helper sync | `tests/inference/unit/test_registry_sync.py` |
 | Hub resolve / prefetch | `tests/hf/` |
 | Platform catalog | `tests/nomicous/integration/test_inference_catalog.py` |
 | ML integration (optional) | `tests/nomicous/integration/ml/` |
@@ -235,24 +243,27 @@ uv run --group platform --group inference pytest tests/nomicous/integration/test
    curl -s https://api.example.com/inference/v1/registry
    ```
 
-2. **Roll out to hosted agents** if remote inference should serve the model - they sync the same `registry.yaml` from the platform.
+2. **Publish the package.** A registry entry only reaches an **inference agent**
+   inside the wheel it ships in, so a new model is a PyPI release - one wheel,
+   one runner, no per-OS installer build. See
+   [`inference/README.md`](../../inference/README.md#releasing-and-what-that-changed-about-security-patching).
 
-3. **Local inference** - **no reinstall required**. On next start the local agent
-   fetches the registry when `HELPER_REGISTRY_URL` points at your API. Weights
-   download on first local OCR/segment run.
+3. **Roll out the hosted agent**, if cloud inference should serve the model, by
+   upgrading the package on its host. It runs the same wheel a laptop does.
 
-   Verify locally:
+4. **Local inference** - researchers pick the model up with
+   `uv tool upgrade nomicous-inference`, or automatically at the next **launch
+   check** if you raise the platform's **version floor**
+   (`INFERENCE_AGENT_MIN_VERSION`) past the last release without it. Weights
+   download on the first run that needs them.
+
+   Verify from a source checkout before releasing, with the registry read from
+   the tree rather than from an installed wheel:
 
    ```bash
-   HELPER_REGISTRY_URL=http://localhost:8000/inference/v1/registry \
-     uv run --group inference python -m inference.helper
-
-   curl -s http://127.0.0.1:8001/inference/v1/info
+   NOMICOUS_API_URL=http://localhost:8000 \
+     uv run --group inference python -m inference.cli run --exit-when-empty
    ```
-
-4. **A new package release** is only needed for **code** changes - not for new
-   models. It is a PyPI publish, not a per-OS installer build; see
-   [`inference/README.md`](../../inference/README.md#releasing-and-what-that-changed-about-security-patching).
 
 ---
 
@@ -260,9 +271,9 @@ uv run --group platform --group inference pytest tests/nomicous/integration/test
 
 - [ ] `curl …/inference/v1/registry` returns the new model id
 - [ ] Authenticated `GET /inference/models` lists the new **InferenceModel**
-- [ ] Helper `GET /inference/v1/info` shows correct `host_eligibility`
-- [ ] Cloud job: enqueue segment/transcribe → job completes with expected output
-- [ ] Local path: helper up, cloud toggle off → pairing assist / auto-segment works; weights appear under `~/.nomicous/hf/cache/<registry_model_id>/stable/`
+- [ ] `host_eligibility` in the shipped `registry.yaml` matches what the model can actually run on
+- [ ] Cloud job: hosted agent claims a segment/transcribe page → job completes with expected output
+- [ ] Local path: with **host preference** on and a paired machine running `nomicous run`, the job announces the local host, completes, and leaves weights under `~/.nomicous/hf/cache/<registry_model_id>/stable/`
 
 ---
 
@@ -272,12 +283,12 @@ uv run --group platform --group inference pytest tests/nomicous/integration/test
 2. `publish_model.py … --upload`
 3. Add block to `inference/registry.yaml` with `hf://…` **weights_source**
 4. Upsert `InferenceModel` with `artifact_ref: registry://{id}?tag=stable`
-5. Run tests → deploy API (+ inference workers for cloud path)
-6. Helpers pick up registry automatically; weights on first use
+5. Run tests → deploy API → publish the package
+6. Agents carry the entry once upgraded; weights download on first use
 
 ## Related docs
 
-- [`inference/README.md`](../../inference/README.md) - inference service and helper
+- [`inference/README.md`](../../inference/README.md) - published package, CLI, and registry
 - [`scripts/hf/README.md`](../../scripts/hf/README.md) - Hub publish and prefetch
-- [`README.md`](../../README.md#local-inference-helper) - local vs remote inference architecture
+- [`README.md`](../../README.md#self-hosting-and-local-inference) - local vs cloud inference architecture
 - Issue **036** - registry id naming migration (historical; see git history on branches with `issues/done/`)

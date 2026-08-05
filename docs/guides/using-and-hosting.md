@@ -43,17 +43,17 @@ docker compose up --build
 Open <http://localhost:5173>. Development seed credentials are
 `dev@example.com` / `dev-pass-123`.
 
-| Service               | Address                      |
-| --------------------- | ---------------------------- |
-| Editor                | <http://localhost:5173>      |
-| Platform API          | <http://localhost:8000>      |
-| API documentation     | <http://localhost:8000/docs> |
-| Compose inference API | <http://localhost:8010>      |
-| Postgres              | `127.0.0.1:5433`             |
+| Service           | Address                      |
+| ----------------- | ---------------------------- |
+| Editor            | <http://localhost:5173>      |
+| Platform API      | <http://localhost:8000>      |
+| API documentation | <http://localhost:8000/docs> |
+| Postgres          | `127.0.0.1:5433`             |
 
-The first inference request downloads public weights into `~/.nomicous/hf/cache`.
-Host port `8010` maps to the inference container’s port `8001`; host port
-`8001` is reserved for the optional local helper.
+Compose runs no inference service. Models run in an **inference agent** you
+start yourself (below), which reaches the platform outbound and needs no
+published port. The first inference run downloads public weights into
+`~/.nomicous/hf/cache`.
 
 ```bash
 docker compose ps
@@ -71,13 +71,6 @@ Docker for Postgres:
 uv sync --group platform --group inference
 cp nomicous/backend/core/.env.example nomicous/backend/core/.env
 docker compose up db -d
-```
-
-Start the inference API:
-
-```bash
-PYTHONPATH=. uv run --group inference \
-  uvicorn inference.api.main:app --host 0.0.0.0 --port 8001 --reload
 ```
 
 Start the platform API:
@@ -99,41 +92,48 @@ cp .env.local.example .env.local
 npm run dev
 ```
 
-This path does not start the asynchronous workers. Start the platform and
-inference workers too when testing remote jobs.
+This path does not start the asynchronous job worker. Start the platform worker
+too, and an **inference agent**, when testing queued jobs.
 
-## Local inference helper
+## Local inference agent
 
-The helper runs models on the researcher’s machine and caches them at
-`~/.nomicous/hf/cache`. It has no platform database, project authorization, or
-job queue.
-
-```bash
-HELPER_REGISTRY_URL=http://localhost:8000/inference/v1/registry \
-HF_CACHE_ROOT=~/.nomicous/hf/cache \
-uv run --group inference python -m inference.helper
-```
-
-Verify it:
-
-```bash
-curl -s http://127.0.0.1:8001/health
-curl -s http://127.0.0.1:8001/inference/v1/info
-```
-
-For hosted use, install the published package from PyPI - there are no
-per-OS installers:
+Models run in the **inference agent**: one command-line program, distributed as
+the **published package** `nomicous-inference`, that a researcher starts in a
+terminal. A hosted worker runs the same package (ADR 0002), so there is no
+separate local build and no per-OS installer.
 
 ```bash
 uv tool install nomicous-inference --torch-backend=cpu   # requires uv >= 0.10
+nomicous pair          # links this machine to your account
+nomicous run           # takes pages from the queue until you stop it
 ```
 
 See [`inference/README.md`](../../inference/README.md#install) for why the
 `--torch-backend` flag and the uv version floor are both load-bearing.
-The helper accepts browser requests from `https://app.nomicous.com`.
-Local frontend origins may require development-specific CORS configuration.
-Never expose the helper beyond loopback without secure mode, a strong helper
-secret, and TLS.
+
+The agent opens no port and accepts no connection. It asks the platform for a
+page, downloads that one page image through a short-lived signed link, runs the
+model, and reports the result through the platform's job callback - all
+outbound, so nothing on the researcher's machine has to be reachable from a
+browser, a proxy, or a VPN. Weights are cached under `~/.nomicous/hf/cache`;
+the device credential lives at `~/.nomicous/device.json`.
+
+Point it at a platform other than the hosted one with `NOMICOUS_API_URL` or
+`--api-url`:
+
+```bash
+NOMICOUS_API_URL=http://localhost:8000 nomicous pair
+NOMICOUS_API_URL=http://localhost:8000 nomicous run
+```
+
+From a source checkout, `uv run --group inference python -m inference.cli run`
+is the same entry point without installing the package first.
+
+Where a job runs is decided once, at submission, from the account-level **host
+preference** ("use my computer when it is available") and whether that host has
+**capacity** - whether an agent for it was seen recently. There is no per-job
+toggle, and an agent that is not running is an announced state rather than a
+failure: the job goes to the cloud and says so.
 
 ## Supabase-backed development
 
@@ -166,20 +166,24 @@ The current production topology is manual:
 
 - Vercel: landing page, Next.js editor, and request/response FastAPI API;
 - Supabase: Postgres and private `document-media` Storage;
-- persistent Docker host: optional cloud inference, platform worker, and
-  inference worker.
+- persistent Docker host: platform worker, and a hosted inference agent if
+  cloud inference is enabled.
 
 There is no complete one-click hosting template. Operators must configure DNS,
 secrets, roles, migrations, TLS, backups, monitoring, and worker supervision.
 
-The documented default is local inference through the user-installed helper.
-Vercel cannot run a long-lived model process. If remote inference is enabled,
-these persistent processes are required:
+The documented default is local inference through the researcher-installed
+agent. Vercel cannot run a long-lived model process. If cloud inference is
+enabled, these persistent processes are required:
 
 ```text
 platform-worker   -> runs the job types the platform executes itself
 inference agent   -> claims pages from the platform, runs models, calls back
 ```
+
+The hosted agent is the same package a laptop runs, with a **service
+credential** in `NOMICOUS_SERVICE_TOKEN` instead of a device token. It needs no
+inbound address and no database access.
 
 Cloud inference is disabled in the documented Vercel defaults. Enable it only
 after deploying and verifying the complete claim and callback path.
@@ -188,4 +192,4 @@ See the detailed operator runbooks:
 
 - [`../deployment/production.md`](../deployment/production.md)
 - [`../deployment/supabase.md`](../deployment/supabase.md)
-- [`../../deploy/inference/README.md`](../../deploy/inference/README.md)
+- [`../../inference/README.md`](../../inference/README.md)

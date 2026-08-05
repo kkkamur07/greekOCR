@@ -13,26 +13,29 @@ flowchart LR
     API --> DB[("Postgres")]
     API --> Storage[("Private page storage")]
     API --> Jobs["Durable platform jobs"]
-    Jobs --> PlatformWorker["Platform worker"]
-    PlatformWorker --> InferenceAPI["Inference API"]
-    InferenceAPI --> InferenceJobs[("Inference job queue")]
-    InferenceJobs --> InferenceWorker["Inference worker"]
-    InferenceWorker --> Models["BLLA + Calamari (PyTorch CPU)"]
-    InferenceWorker -->|"signed callback"| API
-    Browser -->|"loopback HTTP"| Helper["Local inference helper"]
-    Helper --> LocalModels["Local CPU model cache"]
-    Browser -->|"persist local result"| API
+    LocalAgent["nomicous agent (researcher's machine)"] -->|"claim"| Jobs
+    HostedAgent["nomicous agent (hosted worker)"] -->|"claim"| Jobs
+    LocalAgent --> Models["BLLA + Calamari (PyTorch CPU)"]
+    HostedAgent --> Models
+    LocalAgent -->|"job callback"| API
+    HostedAgent -->|"job callback"| API
     API -.-> Vercel["Vercel"]
     DB -.-> Supabase["Supabase Postgres"]
     Storage -.-> SupabaseStorage["Supabase Storage"]
-    InferenceAPI -.-> Docker["Persistent Docker host"]
+    HostedAgent -.-> Docker["Persistent Docker host"]
 ```
 
-Local inference runs on the researcher’s machine through `127.0.0.1:8001`.
-Remote inference creates a durable platform job, dispatches it through
-persistent workers, and merges the signed callback into the platform state.
-Local inference avoids a separate cloud ML service; the page still resides in
-the configured platform storage.
+Every arrow into the platform is outbound, and the browser is on none of them.
+There is one queue (ADR 0003) and one **inference agent** (ADR 0002): the same
+package runs on a researcher's laptop and on a hosted worker, differing only by
+the credential it presents. Each agent takes one page at a time, downloads that
+page through a short-lived signed link, runs the model in its own process, and
+reports through the platform's existing job callback.
+
+Which host a job runs on is fixed once, at submission, from the account-level
+**host preference** and whether that host has **capacity** - and the job then
+says which host ran it. An agent that is not running is an announced state, not
+a failure: the work goes to the cloud and the researcher is told so.
 
 ## Stack choices
 
@@ -129,31 +132,33 @@ If SSE is unavailable or idle, the frontend polls `GET /jobs/{id}`. Vercel
 production disables long-lived listeners, so polling is the expected hosted
 fallback.
 
-## Local helper
+## The inference agent
 
-The helper is a small FastAPI sidecar with no database, platform queue,
-project authorization, or storage credentials:
+The agent is a command-line program with no database, no platform queue, no
+project authorization, no storage credentials - and no listening socket:
 
 ```mermaid
 sequenceDiagram
-    participant B as Browser
+    participant A as NomicousAgent
     participant API as PlatformAPI
-    participant H as LocalHelper
     participant M as LocalModels
 
-    B->>API: Fetch authorized page image
-    API-->>B: Image bytes
-    B->>H: POST /inference/v1/run
-    H->>M: Load cached model
-    M-->>H: Segments or transcription
-    H-->>B: Inference result
-    B->>API: Persist authenticated result
-    API-->>B: Updated page and job
+    A->>API: POST /device/v1/jobs/claim (device token, agent version)
+    API-->>A: One page + signed page image link
+    A->>API: GET signed link
+    API-->>A: Image bytes
+    A->>M: Load cached model
+    M-->>A: Segments or transcription
+    A->>API: POST /internal/inference/job-complete
+    API-->>A: Next claim, or nothing left
 ```
 
-It synchronizes the public registry with ETags, downloads weights lazily,
-defaults to loopback, and caches weights at `~/.nomicous/hf/cache`. Exposing it
-outside loopback requires secure mode, a strong helper secret, and TLS.
+It reads the registry, downloads weights lazily, and caches them at
+`~/.nomicous/hf/cache`. Nothing is exposed: there is no port to secure, no CORS
+allowlist to maintain, and no browser permission to depend on. Before its first
+claim it performs the **launch check** - asking the platform for the **version
+floor** and replacing itself if it is below it - and never again while work is
+in flight.
 
 ## Security boundaries
 
