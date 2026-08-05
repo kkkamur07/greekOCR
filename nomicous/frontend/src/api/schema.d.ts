@@ -131,6 +131,30 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/device/v1/jobs/claim": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Claim Job
+     * @description Claim at most one page of work.
+     *
+     *     The credential decides the **execution target**, and the caller cannot ask for
+     *     a different one: a device token claims ``local`` work on its own account, a
+     *     service credential claims ``cloud`` work for the platform.
+     */
+    post: operations["claim_job_device_v1_jobs_claim_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/device/v1/pairings": {
     parameters: {
       query?: never;
@@ -1459,6 +1483,27 @@ export interface components {
       /** Confidence */
       confidence: number;
     };
+    /** ClaimedPageResponse */
+    ClaimedPageResponse: {
+      execution_target: components["schemas"]["ExecutionTarget"];
+      /**
+       * Inference Job Id
+       * Format: uuid
+       */
+      inference_job_id: string;
+      job_type: components["schemas"]["JobType"];
+      /**
+       * Lease Expires At
+       * Format: date-time
+       */
+      lease_expires_at: string;
+      /**
+       * Product Job Id
+       * Format: uuid
+       */
+      product_job_id: string;
+      request: components["schemas"]["JobSubmitRequest"];
+    };
     /** ClearJobHistoryResponse */
     ClearJobHistoryResponse: {
       /** Deleted */
@@ -1837,6 +1882,52 @@ export interface components {
       status: components["schemas"]["InferenceJobStatus"];
       task: components["schemas"]["InferenceTask"];
     };
+    /**
+     * JobClaimRequest
+     * @description How long the agent is willing to wait for work.
+     *
+     *     A laptop long-polls, because an idle researcher's page should start within a
+     *     second of being submitted. A hosted worker sends ``0`` and short-polls: it is
+     *     never idle for long, it does not need the latency, and every second it waits
+     *     is a request-handler slot it is holding on a serverless host.
+     *
+     *     There is deliberately no "how many pages" field. One claim is one page.
+     */
+    JobClaimRequest: {
+      /**
+       * Wait Seconds
+       * @description Seconds to wait for a page before returning empty. Clamped server-side to DEVICE_CLAIM_MAX_WAIT_SECONDS. 0 is a short poll.
+       * @default 0
+       */
+      wait_seconds: number;
+    };
+    /**
+     * JobClaimResponse
+     * @description Always 200, with or without a page.
+     *
+     *     An empty queue is the normal state of a healthy platform, not an error. A 404
+     *     or a 204 here would make an agent's logs unreadable and would tempt a client
+     *     into treating "nothing to do" as a failure to back off from.
+     */
+    JobClaimResponse: {
+      /**
+       * Lease Seconds
+       * @description How long a claimed page stays with the agent. Read from the platform, not compiled in.
+       */
+      lease_seconds: number;
+      page?: components["schemas"]["ClaimedPageResponse"] | null;
+      /**
+       * Poll After Seconds
+       * @description What the agent should wait before asking again. 0 when a page was handed over.
+       */
+      poll_after_seconds: number;
+      /**
+       * Server Time
+       * Format: date-time
+       * @description So an agent with a wrong clock can still reason about its lease.
+       */
+      server_time: string;
+    };
     /** JobPageResponse */
     JobPageResponse: {
       /** Items */
@@ -1899,6 +1990,28 @@ export interface components {
      */
     JobStatus:
       "pending" | "waiting" | "running" | "done" | "failed" | "cancelled";
+    /** JobSubmitRequest */
+    JobSubmitRequest: {
+      /** Image Bytes */
+      image_bytes: string;
+      /** Params */
+      params?: {
+        [key: string]: unknown;
+      };
+      /**
+       * Product Job Id
+       * Format: uuid
+       */
+      product_job_id: string;
+      /** Registry Model Id */
+      registry_model_id: string;
+      /**
+       * Registry Tag
+       * @default stable
+       */
+      registry_tag: string;
+      task: components["schemas"]["InferenceTask"];
+    };
     /**
      * JobType
      * @enum {string}
@@ -3442,6 +3555,97 @@ export interface operations {
       };
     };
   };
+  claim_job_device_v1_jobs_claim_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        "X-Nomicous-Device-Token"?: string | null;
+        "X-Nomicous-Service-Token"?: string | null;
+        "X-Nomicous-Worker-Name"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": components["schemas"]["JobClaimRequest"] | null;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["JobClaimResponse"];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
   start_device_pairing_device_v1_pairings_post: {
     parameters: {
       query?: never;
@@ -4480,6 +4684,9 @@ export interface operations {
       query?: never;
       header?: {
         "X-Inference-Webhook-Secret"?: string | null;
+        "X-Nomicous-Device-Token"?: string | null;
+        "X-Nomicous-Service-Token"?: string | null;
+        "X-Nomicous-Worker-Name"?: string | null;
       };
       path?: never;
       cookie?: never;
