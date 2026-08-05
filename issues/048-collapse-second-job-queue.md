@@ -2,7 +2,7 @@
 id: "048"
 title: "collapse-second-job-queue"
 type: AFK
-status: ready
+status: in_progress
 tracker: "https://github.com/kkkamur07/greekOCR/issues/48"
 blocked_by: []
 parent_prd: "https://github.com/kkkamur07/greekOCR/issues/47"

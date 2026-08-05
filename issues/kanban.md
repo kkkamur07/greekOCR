@@ -6,8 +6,7 @@
 
 ## Ready (AFK)
 
-- [ ] [048 · collapse second job queue](048-collapse-second-job-queue.md)
-- [ ] [049 · Torch runtime, archive ONNX](049-torch-runtime-archive-onnx.md)
+_Empty — everything unblocked is in progress._
 
 ## Ready (HITL)
 
@@ -15,7 +14,15 @@ _None. Every architectural decision was resolved into ADR 0002 / ADR 0003 / ADR 
 
 ## In progress
 
-_Empty — 0/5._
+3/5 — one worktree each, created at trunk and base-verified before launch.
+
+- [ ] [048 · collapse second job queue](048-collapse-second-job-queue.md) — `feat/048-queue-collapse`
+- [ ] [049 · Torch runtime, archive ONNX](049-torch-runtime-archive-onnx.md) — `feat/049-torch-runtime-archive-onnx`
+- [ ] [051 · execution target + capacity](051-execution-target-capacity-gating.md) — `feat/051-execution-target`
+
+> 051 was pulled forward off its DAG blocker. Its dependency on 048 was surface-shrinking,
+> not structural; both touch job submission, so both were told to keep changes there
+> surgical. It unblocks 052 and 059, the widest part of the graph.
 
 ## Review
 
@@ -32,7 +39,6 @@ Blocked on the DAG; promoted automatically as blockers land.
 | Issue | Blocked by |
 |-------|-----------|
 | [050 · publish inference package](050-publish-inference-package.md) | 048, 049 |
-| [051 · execution target + capacity](051-execution-target-capacity-gating.md) | 048 |
 | [052 · device claim endpoint](052-device-claim-endpoint.md) | 048 |
 | [053 · signed page-image link](053-signed-page-image-link.md) | 052 |
 | [054 · device lease stale sweep](054-device-lease-stale-sweep.md) | 052 |
