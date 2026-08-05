@@ -29,6 +29,20 @@ Two agents never receive the same page
 ``claim_next_pending_job`` uses. The second claimer skips the locked row and
 takes the next one, or finds nothing; it never waits on the first and never sees
 the same id.
+
+The page image arrives by signed link, not by an authenticated route
+-------------------------------------------------------------------
+The claim carries a link to the one page image, good for about a minute. An
+authenticated ``GET /device/v1/jobs/{id}/image`` was rejected (ADR 0002): the
+production API is serverless, so streaming manuscript scans through it costs
+money for nothing, and it would put a route on the device credential that has to
+independently re-derive job ownership. The signature *is* the authorization, and
+it covers exactly one object key.
+
+Its lifetime is not the lease's. The agent fetches once, immediately after
+claiming, so the link only has to outlive one download on a bad connection;
+tying it to the 600 second lease would keep a bearer token in a URL alive ten
+times longer to buy nothing.
 """
 
 from __future__ import annotations
@@ -37,11 +51,16 @@ import logging
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from urllib.parse import urljoin
 
 from inference.contracts.jobs import JobSubmitRequest
 from sqlalchemy import select
 
-from backend.jobs.application.inference_dispatcher import build_inference_submit_request
+from backend.document.infrastructure.media_store import get_media_store
+from backend.jobs.application.inference_dispatcher import (
+    build_inference_submit_request,
+    page_image_key_for_job,
+)
 from backend.jobs.infrastructure.job_repository import AGENT_CLAIMED_JOB_TYPES
 from backend.jobs.infrastructure.notifications import notify_platform_job_status_changed
 from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
@@ -76,6 +95,11 @@ class ClaimedPage:
     execution_target: ExecutionTarget
     lease_expires_at: datetime
     request: JobSubmitRequest
+    #: Signed link to the one page image, and the moment it stops working. Two
+    #: separate fields rather than one, because an agent has to be able to tell
+    #: whether its link is still worth using without parsing a URL.
+    page_image_url: str
+    page_image_expires_at: datetime
 
 
 def _claimable_job_query(agent: InferenceAgent):
@@ -99,13 +123,22 @@ def _claimable_job_query(agent: InferenceAgent):
     return query.with_for_update(skip_locked=True).limit(1)
 
 
-def claim_one_page(agent: InferenceAgent, *, lease_seconds: int) -> ClaimedPage | None:
+def claim_one_page(
+    agent: InferenceAgent,
+    *,
+    lease_seconds: int,
+    page_image_ttl_seconds: int,
+    base_url: str,
+) -> ClaimedPage | None:
     """Take at most one pending page for *agent*, or return ``None``.
 
     Synchronous on purpose. It is called through ``asyncio.to_thread`` from a
     route that holds no request-scoped session, so the connection is checked out
     for the length of one short transaction and returned before the caller waits
     again. A long poll is a sequence of these, not one held connection.
+
+    *base_url* only resolves a relative link the local storage backend produces;
+    a Supabase link is already absolute and passes through untouched.
     """
     now = datetime.now(UTC)
     inference_job_id = uuid.uuid4()
@@ -131,8 +164,15 @@ def claim_one_page(agent: InferenceAgent, *, lease_seconds: int) -> ClaimedPage 
 
     notify_platform_job_status_changed(job_id, JobStatus.waiting)
 
+    page_image_expires_at = now + timedelta(seconds=page_image_ttl_seconds)
     try:
         request = build_inference_submit_request(detached_job)
+        page_image_url = urljoin(
+            base_url,
+            get_media_store().signed_object_url(
+                page_image_key_for_job(detached_job), expires_at=page_image_expires_at
+            ),
+        )
     except Exception:
         # The page is already claimed, so leaving it would park a job on an agent
         # that was never given anything to run, until the sweep failed it minutes
@@ -157,6 +197,8 @@ def claim_one_page(agent: InferenceAgent, *, lease_seconds: int) -> ClaimedPage 
         execution_target=execution_target,
         lease_expires_at=now + timedelta(seconds=lease_seconds),
         request=request,
+        page_image_url=page_image_url,
+        page_image_expires_at=page_image_expires_at,
     )
 
 

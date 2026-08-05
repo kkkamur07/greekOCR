@@ -63,6 +63,20 @@ class DeviceSettings(BaseSettings):
             "endpoint is needed; a slept laptop loses one page, not a document."
         ),
     )
+    device_page_image_url_ttl_seconds: int = Field(
+        default=60,
+        alias="DEVICE_PAGE_IMAGE_URL_TTL_SECONDS",
+        ge=10,
+        le=600,
+        description=(
+            "How long the signed page image link in a claim response stays usable. "
+            "Deliberately independent of DEVICE_LEASE_SECONDS: the agent fetches the "
+            "image once, immediately after claiming, so this only has to cover "
+            "downloading a large scan on a bad connection - not the whole run. Tying it "
+            "to the lease would leave a bearer token in a URL alive for ten minutes to "
+            "buy nothing."
+        ),
+    )
     device_claim_max_wait_seconds: int = Field(
         default=25,
         alias="DEVICE_CLAIM_MAX_WAIT_SECONDS",
