@@ -1,6 +1,6 @@
 import { invalidateAuthGetCache } from "../api/getCache";
 import { clearImageCache } from "../api/imageCache";
-import { clearResourceCache } from "../api/resourceCache";
+import { queryClient } from "../api/queryClient";
 
 let accessToken: string | null = null;
 
@@ -13,12 +13,12 @@ export function setAccessToken(token: string): void {
   // Retained reads belong to whoever was signed in when they were made, so a new
   // session must not be able to see them.
   invalidateAuthGetCache();
-  clearResourceCache();
+  queryClient.clear();
 }
 
 export function clearAccessToken(): void {
   accessToken = null;
   invalidateAuthGetCache();
-  clearResourceCache();
+  queryClient.clear();
   clearImageCache();
 }

@@ -52,8 +52,12 @@ describe("ProjectsPage", () => {
     render(<ProjectsPage />);
 
     await screen.findByRole("heading", { name: "Projects" });
+    // The row itself has to be awaited: it appears only once the project list
+    // read settles, which is a flush later than the static heading.
     fireEvent.click(
-      screen.getByRole("button", { name: /delete project syriac pentateuch/i }),
+      await screen.findByRole("button", {
+        name: /delete project syriac pentateuch/i,
+      }),
     );
 
     await waitFor(() => {

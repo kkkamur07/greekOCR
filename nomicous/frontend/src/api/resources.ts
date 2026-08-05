@@ -12,7 +12,9 @@
  * declare its tags. The old failure mode, where a mutation quietly forgot to
  * refresh a list and the UI showed stale data, has nowhere left to live.
  */
-import { invalidateTags, type ResourceTag } from "./resourceCache";
+import { invalidateResourceTags as invalidateTags, type ResourceTag } from "./queryClient";
+
+export type { ResourceTag };
 
 export const resourceTags = {
   currentUser: "current-user",

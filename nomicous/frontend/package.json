@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@ant-design/icons": "^6.1.0",
+    "@tanstack/react-query": "^5.101.4",
     "antd": "^6.1.4",
     "eslint-config-next": "^16.2.10",
     "next": "^16.2.10",
