@@ -411,6 +411,7 @@ def test_transcribe_job_is_left_pending_for_an_inference_agent(
 @pytest.mark.integration
 def test_transcribe_job_payload_batches_every_selected_line(
     client: TestClient,
+    owner_user: dict[str, str],
     owner_headers: dict[str, str],
     owner_project: dict,
 ):
