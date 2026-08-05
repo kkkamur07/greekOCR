@@ -1,21 +1,56 @@
-# ML inference service
+# nomicous-inference
 
-Standalone FastAPI service for manuscript **segment** and **transcribe** inference. It lives at the repository root in `inference/`, separate from the Nomicous platform API in `nomicous/backend/`.
+The manuscript **segment** and **transcribe** runtime. It lives at the repository
+root in `inference/`, separate from the Nomicous platform API in
+`nomicous/backend/`, and it is the one distribution published to PyPI: a
+researcher's laptop and a hosted worker install the same wheel
+([ADR 0002](../docs/adr/0002-inference-cli-replaces-loopback-helper.md)).
 
 For the public product overview, setup, model availability, and architecture,
 see the [root README](../README.md), [use and hosting guide](../docs/guides/using-and-hosting.md),
 [models and datasets guide](../docs/inference/models-and-datasets.md), and
 [technical architecture](../docs/architecture.md).
 
+## Install
+
+```bash
+uv tool install nomicous-inference --torch-backend=cpu
+nomicous --version
+```
+
+`--torch-backend=cpu` is not optional on Linux. PyTorch's default PyPI wheel
+there pulls sixteen `nvidia-*`/`triton` packages behind it, which are several
+gigabytes and useless on a CPU-only laptop; ADR 0004 accepted Torch's size on
+the understanding that the CPU build is what ships. No packaging metadata can
+express "resolve this dependency from that index", so the flag is the pin. On
+macOS arm64 and Windows the default wheel is already CPU-only and the flag is
+harmless.
+
+Intel macOS has no PyTorch wheel at all from 2.10 onward and therefore cannot
+install this package.
+
 ## Status
 
 | Piece | State |
 |-------|--------|
-| HTTP API (`inference/api/`) | Health and sync `/inference/v1/run` |
+| Console entry point (`inference/cli/`) | `nomicous`, no subcommands yet (#56, #57, #58) |
+| Hub integration (`inference/hub/`) | `hf://` resolution, cache manifest, artifact SHA-256 |
 | Request/response contracts (`inference/contracts/`) | Defined for segment, transcribe, jobs, and callbacks |
 | Model registry (`inference/registry.yaml`) | Calamari transcribe + BLLA segmentation entries |
 | Model runner (`inference/jobs/runner.py`) | Registry lookup, weight resolution, and model execution |
-| Local helper (`inference/helper/`) | Loopback sidecar serving the same sync run path |
+| HTTP API (`inference/api/`) | Health and sync `/inference/v1/run`. Not in the wheel; deleted by #60 |
+| Local helper (`inference/helper/`) | Loopback sidecar. Not in the wheel; deleted by #60 |
+
+## Building the wheel
+
+```bash
+uv build            # -> dist/nomicous_inference-<version>-py3-none-any.whl
+```
+
+The repository root is the project, because a build backend cannot reach
+outside its own root and the package it publishes is `inference/`. Development
+still runs from the tree (`tool.uv.package = false`), so `uv sync` does not
+install the wheel into every dev environment.
 
 ## One queue, owned by the platform
 
