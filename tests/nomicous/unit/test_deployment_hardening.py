@@ -5,7 +5,22 @@ from __future__ import annotations
 import re
 import tomllib
 
+import yaml
+
 from tests.fixtures.paths import REPO_ROOT
+
+
+def _workflow_body(name: str) -> str:
+    """Parse a workflow and render it back without comments.
+
+    Asserting on raw workflow text makes a comment *about* a deleted mechanism
+    indistinguishable from the mechanism itself. Round-tripping through the YAML
+    parser drops comments, and failing to parse is itself the assertion: a
+    workflow that does not load is a broken CI run nobody sees until release day.
+    """
+    document = yaml.safe_load((REPO_ROOT / ".github" / "workflows" / name).read_text("utf-8"))
+    assert isinstance(document, dict), f"{name} did not parse as a workflow document"
+    return yaml.safe_dump(document, default_flow_style=False)
 
 
 def _flatten_group(groups: dict[str, list], name: str) -> list[str]:
@@ -19,43 +34,25 @@ def _flatten_group(groups: dict[str, list], name: str) -> list[str]:
     return resolved
 
 
-def test_helper_freeze_ships_the_torch_runtime_and_nothing_else() -> None:
-    """ADR 0004: one runtime, CPU only, and no training stack in the installer.
+def test_published_package_ships_the_torch_runtime_and_nothing_else() -> None:
+    """ADR 0004: one runtime, CPU only, and no training stack in the wheel.
 
-    The inverse of this test used to enforce a Torch denylist through
-    `excludes.txt` and a release-time bundle verifier. Both were deleted with
-    the second runtime; what still has to hold is that the frozen helper can
-    actually load the models and does not drag Kraken or the training stack in
-    with them.
+    This used to read `packaging/helper/pyinstaller.spec` and check its hidden
+    imports and excludes, because the frozen installer decided by hand what
+    reached a laptop. The **published package** decides it by construction:
+    `[project].dependencies` *is* the closure that reaches a researcher, so
+    that is what this holds.
     """
-    spec = (REPO_ROOT / "packaging" / "helper" / "pyinstaller.spec").read_text(encoding="utf-8")
-
-    assert not (REPO_ROOT / "packaging" / "helper" / "excludes.txt").exists()
-    assert not (REPO_ROOT / "packaging" / "helper" / "scripts" / "verify-bundle.py").exists()
-
-    assert 'collect_submodules("kraken")' not in spec
-    assert '"kraken.blla"' not in spec
-    assert '"kraken.lib.vgsl"' not in spec
-    # The frozen helper runs the same modules as the hosted service.
-    for module in (
-        '"inference.architectures.blla.blla"',
-        '"inference.architectures.blla.blla_model"',
-        '"inference.architectures.blla.blla_decoder"',
-        '"inference.architectures.calamari.checkpoint"',
-        '"inference.architectures.calamari.model"',
-        '"safetensors.torch"',
-        '"torch"',
-    ):
-        assert module in spec
-    # Excludes are size pruning now, not a runtime denylist.
-    for excluded in ('"kraken"', '"transformers"', '"nomicous"', '"sqlalchemy"'):
-        assert excluded in spec
-
     pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     project_dependencies = pyproject["project"]["dependencies"]
     assert any(dependency.startswith("torch") for dependency in project_dependencies)
     assert any(dependency.startswith("safetensors") for dependency in project_dependencies)
     assert not any(dependency.startswith("onnxruntime") for dependency in project_dependencies)
+    # Nothing that trains a model is part of what runs one.
+    for forbidden in ("transformers", "accelerate", "torchvision", "kraken"):
+        assert not any(dependency.startswith(forbidden) for dependency in project_dependencies), (
+            f"{forbidden} reaches every researcher who installs the package"
+        )
 
     groups = pyproject["dependency-groups"]
     assert "parity" not in groups, "the kraken parity group outlived its second runtime"
@@ -66,8 +63,6 @@ def test_helper_freeze_ships_the_torch_runtime_and_nothing_else() -> None:
         for dependency in group
         if isinstance(dependency, str)
     )
-    # The helper group is what the frozen installer installs; it must resolve to
-    # a runtime that can actually open both artifacts.
     helper = _flatten_group(groups, "helper")
     assert not any(dependency.startswith("onnxruntime") for dependency in helper)
 
@@ -77,79 +72,71 @@ def test_helper_freeze_ships_the_torch_runtime_and_nothing_else() -> None:
     assert markers == {"sys_platform == 'linux' or sys_platform == 'win32'"}
 
 
-def test_helper_packaging_uses_one_foreground_server() -> None:
-    launcher = (REPO_ROOT / "packaging" / "helper" / "tray_launcher.py").read_text(encoding="utf-8")
+def test_no_tray_icon_library_is_reachable() -> None:
+    """A CLI has no business growing a tray icon.
+
+    ADR 0001 decision 5 justified this with "zero terminal use is the product
+    constraint"; ADR 0002 retired that constraint and kept the assertion
+    anyway. The **inference agent** is a foreground process a researcher starts
+    and stops - there is no window, no menu bar item, and no daemon to
+    represent in one.
+    """
     pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    windows_build = (
-        REPO_ROOT / "packaging" / "helper" / "windows" / "build-installer.ps1"
-    ).read_text(encoding="utf-8")
-    shared_build = (
-        REPO_ROOT / "packaging" / "helper" / "scripts" / "build-pyinstaller.sh"
-    ).read_text(encoding="utf-8")
-    smoke_test = (
-        REPO_ROOT / "packaging" / "helper" / "scripts" / "smoke-test.py"
-    ).read_text(encoding="utf-8")
+    lockfile = (REPO_ROOT / "uv.lock").read_text(encoding="utf-8")
 
-    assert "multiprocessing" not in launcher
     assert "pystray" not in pyproject
-    for build in (shared_build, windows_build):
-        assert "--isolated --no-dev --group helper --group packaging" in build
-        assert "--group inference" not in build
-        assert "smoke-test.py" in build
-    assert "& bash" not in windows_build
-    # The freeze is still proven to serve, even though it is no longer proven
-    # to be Torch-free.
-    assert "/health" in smoke_test
-    assert "/inference/v1/info" in smoke_test
+    assert "pystray" not in lockfile
 
 
-def test_helper_installers_are_user_scoped_and_verify_startup() -> None:
-    linux_install = (REPO_ROOT / "packaging" / "helper" / "linux" / "install-helper.sh").read_text(
-        encoding="utf-8"
-    )
-    mac_install = (REPO_ROOT / "packaging" / "helper" / "macos" / "install-helper.sh").read_text(
-        encoding="utf-8"
-    )
-    windows_install = (
-        REPO_ROOT / "packaging" / "helper" / "windows" / "install-helper.ps1"
-    ).read_text(encoding="utf-8")
-    workflow = (REPO_ROOT / ".github" / "workflows" / "release-helper.yml").read_text(
-        encoding="utf-8"
+def test_no_native_packaging_survives() -> None:
+    """A release is a PyPI publish; no per-OS artifact is built anywhere.
+
+    Frozen installers made this project the distributor of a vendored
+    dependency tree with no update channel: a CVE in `protobuf`, `Pillow`, or
+    `scipy` meant a four-platform rebuild, re-sign, and re-notarize, with no way
+    to make anyone install the result. Patching is now a dependency bump plus a
+    **version floor** bump, which the platform enforces on the claim path. If
+    any of this grows back, that property is gone with it.
+    """
+    assert not (REPO_ROOT / "packaging").exists()
+    assert not (REPO_ROOT / ".github" / "workflows" / "release-helper.yml").exists()
+
+    pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    assert "packaging" not in pyproject["dependency-groups"]
+    assert not any(
+        dependency.lower().startswith("pyinstaller")
+        for group in pyproject["dependency-groups"].values()
+        for dependency in group
+        if isinstance(dependency, str)
     )
 
-    # HELPER_REGISTRY_URL is templated into sed/heredoc content, so both shell
-    # installers must reject values that could escape those templates.
-    for installer in (linux_install, mac_install):
-        assert "HELPER_REGISTRY_URL must be https://" in installer
-        assert "tr -d 'A-Za-z0-9._~:/?#@%=+[]-'" in installer
-    assert "HELPER_CORS_ORIGINS" not in linux_install
-    assert "AUTOSTART_FILE" in linux_install
-    assert "RUNNER=" in linux_install
-    assert "STAGE_ROOT=" in linux_install
-    assert "BACKUP_ROOT=" in linux_install
-    assert "restore_previous_install" in linux_install
-    assert "curl --fail --silent --max-time 2 http://127.0.0.1:8001/health" in linux_install
-    assert 'APP_DST="$HOME/Applications/' in mac_install
-    assert 'cp -R "$APP_SRC" /Applications/' not in mac_install
-    assert "APP_STAGE=" in mac_install
-    assert "APP_BACKUP=" in mac_install
-    assert "restore_previous_install" in mac_install
-    assert "s|__INSTALL_DIR__|$INSTALL_DIR|g" in mac_install
-    assert "s|__INSTALL_DIR__|$INSTALL_DIR/nomicous-inference-helper|g" not in mac_install
-    assert 'launchctl bootstrap "gui/$(id -u)"' in mac_install
-    assert "Invoke-WebRequest" in windows_install
-    assert "Stop-ScheduledTask" in windows_install
-    assert '"HF_CACHE_ROOT" = $CacheDir' in windows_install
-    assert "$StageRoot" in windows_install
-    assert "$BackupRoot" in windows_install
-    assert "$PreviousTaskExisted" in windows_install
-    assert "$PreviousUserEnvironment" in windows_install
-    assert "Stop-HelperTaskAndWait" in windows_install
-    assert "Wait-InstallUnlocked" in windows_install
-    assert windows_install.index("Stop-ScheduledTask") < windows_install.index(
-        "Move-Item -LiteralPath $InstallRoot"
+    # No workflow may build, sign, or notarize a per-OS bundle again. Nor may
+    # one name a signing secret: they are being revoked, so a reference is a
+    # release that fails at the point of publishing.
+    forbidden = (
+        "pyinstaller",
+        "build-dmg",
+        "build-tarball",
+        "build-installer",
+        "codesign",
+        "notarytool",
+        "signtool",
+        "Get-AuthenticodeSignature",
+        "MACOS_CERTIFICATE_P12",
+        "MACOS_CERTIFICATE_PASSWORD",
+        "MACOS_CODESIGN_IDENTITY",
+        "MACOS_NOTARY_PROFILE",
+        "WINDOWS_SIGNING_CERT_BASE64",
+        "WINDOWS_SIGNING_CERT_PASSWORD",
+        "RELEASE_SIGNING_GPG_KEY",
+        "RELEASE_SIGNING_GPG_PASSPHRASE",
     )
-    assert "ubuntu-22.04" in workflow
+    workflows = sorted((REPO_ROOT / ".github" / "workflows").glob("*.yml"))
+    assert workflows
+    for workflow in workflows:
+        body = _workflow_body(workflow.name)
+        for token in forbidden:
+            assert token not in body, f"{workflow.name} still references {token}"
 
 
 def test_runtime_images_are_non_root_and_have_import_and_health_checks() -> None:
@@ -309,25 +296,26 @@ def test_inference_worker_role_reaches_nothing_after_the_queue_collapse() -> Non
 
 
 def test_release_workflow_refuses_asset_replacement_and_generates_evidence() -> None:
-    workflow = (REPO_ROOT / ".github" / "workflows" / "release-helper.yml").read_text(
-        encoding="utf-8"
+    document = yaml.safe_load(
+        (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
     )
+    body = _workflow_body("release.yml")
 
-    assert "--clobber" not in workflow
-    assert "SHA256SUMS" in workflow
-    assert "actions/attest-build-provenance@" in workflow
-    assert "anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610" in workflow
+    assert "--clobber" not in body
+    assert "actions/attest-build-provenance@" in body
+    assert "anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610" in body
     # 57a97c7e... was pinned with a `# v0.36.0` comment but is in fact the v0.35.0
     # commit; ed142fd0... is the real v0.36.0.
-    assert "aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25" in workflow
-    assert "overwrite: false" in workflow
-    assert "types: [published]" in workflow
-    assert 'gh release view "$RELEASE_TAG"' in workflow
-    assert "macos-15" in workflow
-    assert "macos-15-intel" in workflow
-    assert "nomicous-inference-helper-macos.dmg" in workflow
-    assert "nomicous-inference-helper-macos-intel.dmg" in workflow
-    assert "expected four installer assets" in workflow
+    assert "aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25" in body
+    assert document[True]["release"]["types"] == ["published"]
+    assert 'gh release view "$RELEASE_TAG"' in body
+
+    # One build, on one runner. There is no per-OS matrix: the wheel is
+    # pure-Python and the platform-specific bytes are PyPI's problem now.
+    jobs = document["jobs"]
+    assert list(jobs) == ["publish"]
+    assert jobs["publish"]["runs-on"] == "ubuntu-latest"
+    assert "strategy" not in jobs["publish"]
 
 
 def test_inference_group_carries_no_postgres_driver_or_orm() -> None:
@@ -360,23 +348,27 @@ def test_workflows_pin_every_action_to_a_commit_sha() -> None:
     assert not floating, f"unpinned action references: {floating}"
 
 
-def test_release_signing_is_mandatory_not_best_effort() -> None:
-    workflow = (REPO_ROOT / ".github" / "workflows" / "release-helper.yml").read_text(
-        encoding="utf-8"
-    )
+def test_release_publishes_with_no_long_lived_credential() -> None:
+    """Publishing must not reintroduce a secret that has to be rotated.
+
+    The signing pipelines this replaced held five repository secrets between
+    them plus a GPG manifest key, all long-lived, all revocable only by hand.
+    Trusted Publishing mints a token per run from the workflow's OIDC identity,
+    so there is nothing in repository settings to leak.
+    """
+    body = _workflow_body("release.yml")
+
+    assert "--trusted-publishing always" in body
+    assert "id-token: write" in body
+    assert "secrets." not in body, "the release path grew a long-lived credential again"
 
     # Provenance attestation must not be skippable by flipping repo visibility.
-    assert "!github.event.repository.private" not in workflow
-    assert "Require code-signing credentials" in workflow
-    assert "Require release manifest signing key" in workflow
-    assert "Refusing to publish unsigned installers" in workflow
-    assert "SHA256SUMS.asc" in workflow
-    # The scan inputs must be the shipped bytes, not the build-script directory.
-    assert "scan-ref: release-scan" in workflow
-    assert "scan-ref: packaging/helper" not in workflow
-    # The sbom-action `path:` input (not `subject-path:`) must not be the
-    # build-script directory.
-    assert re.search(r"^\s+path: packaging/helper\s*$", workflow, re.M) is None
+    assert "!github.event.repository.private" not in body
+
+    # The scan input must be the closure that actually reaches a researcher.
+    assert "scan-ref: release-scan" in body
+    assert "uv export --locked --no-default-groups --no-hashes" in body
+    assert re.search(r"^\s+path: release-scan\s*$", body, re.M) is not None
 
 
 def test_platform_requirements_are_gated_against_the_lockfile() -> None:

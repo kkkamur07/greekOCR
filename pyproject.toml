@@ -132,11 +132,6 @@ inference = [
 load-testing = [
     "locust>=2.45.0",
 ]
-# Inference Helper native packaging (PyInstaller freeze)
-packaging = [
-    "pyinstaller>=6.21.0",
-    "pillow>=12.3.0",
-]
 # Production platform image / Vercel bundle (no test runner, no server, no OpenCV)
 platform-prod = [
     { include-group = "service-core" },
@@ -245,7 +240,6 @@ extend-exclude = [
     "data",
     "deploy/platform/inference",
     "deploy/platform/nomicous",
-    "packaging/helper/build",
     "src/experiments",
 ]
 
@@ -269,13 +263,11 @@ select = ["F", "I", "UP", "B", "SIM"]
 #   src/preprocessing_data       8
 #   nomicous/infrastructure      4
 #   src/hf                       4
-#   packaging/helper             2
 # ---------------------------------------------------------------------------
 [tool.ruff.lint.per-file-ignores]
 "inference/**" = ["B905", "I001", "SIM109", "SIM114", "UP037"]
 "nomicous/backend/**" = ["B008", "B009", "I001", "SIM105", "UP037", "UP042"]
 "nomicous/infrastructure/**" = ["I001"]
-"packaging/helper/**" = ["I001"]
 "scripts/**" = ["I001", "SIM112"]
 "src/hf/**" = ["I001"]
 "src/model/**" = [
