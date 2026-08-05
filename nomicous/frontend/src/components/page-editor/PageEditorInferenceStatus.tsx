@@ -1,9 +1,8 @@
-import type { InferenceRouting } from "../../inference/preference";
-
 type PageEditorInferenceStatusProps = {
   probing: boolean;
   helperAvailable: boolean;
-  routing: InferenceRouting;
+  /** The account-level **host preference**: "use my computer when available". */
+  preferLocalInference: boolean;
 };
 
 type StatusVariant = "checking" | "connected" | "cloud" | "unavailable";
@@ -11,9 +10,9 @@ type StatusVariant = "checking" | "connected" | "cloud" | "unavailable";
 function resolveVariant({
   probing,
   helperAvailable,
-  routing,
+  preferLocalInference,
 }: PageEditorInferenceStatusProps): StatusVariant {
-  if (routing === "cloud-only") return "cloud";
+  if (!preferLocalInference) return "cloud";
   if (probing) return "checking";
   if (helperAvailable) return "connected";
   return "unavailable";
@@ -21,18 +20,24 @@ function resolveVariant({
 
 const LABELS: Record<StatusVariant, string> = {
   checking: "checking…",
-  connected: "connected",
+  connected: "ready",
   cloud: "using cloud",
-  unavailable: "not installed",
+  unavailable: "not running",
 };
 
+/**
+ * These read as **capacity**, not as a promise. Nothing here claims where a
+ * given job ran - the job says that itself, which is the whole point of the
+ * announcement line.
+ */
 const TITLES: Record<StatusVariant, string> = {
-  checking: "Looking for the Nomicous Inference Helper on this machine…",
+  checking: "Looking for the nomicous agent on this computer…",
   connected:
-    "Local inference helper is running on 127.0.0.1:8001. OCR and segmentation run on your CPU.",
-  cloud: "Cloud inference is selected. Jobs run on the server.",
+    "The nomicous agent is running on this computer, so jobs can run here.",
+  cloud:
+    "This account has not asked for its own computer, so jobs run in the cloud.",
   unavailable:
-    "No local helper detected. Install it to run OCR and segmentation on your CPU.",
+    "The nomicous agent is not running on this computer, so jobs go to the cloud.",
 };
 
 export function PageEditorInferenceStatus(

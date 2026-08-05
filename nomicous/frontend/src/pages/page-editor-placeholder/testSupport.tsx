@@ -4,6 +4,7 @@ import { vi } from "vitest";
 import {
   api,
   type DocumentWithPartsResponse,
+  type ExecutionPreferenceResponse,
   type JobResponse,
 } from "../../api/client";
 import { BackgroundJobsProvider } from "../../context/BackgroundJobsContext";
@@ -48,6 +49,9 @@ vi.mock("../../api/client", async (importOriginal) => {
     listInferenceModels: vi.fn(),
     resolvePartModelBinding: vi.fn(),
     enqueueTranscribePart: vi.fn(),
+    segmentPart: vi.fn(),
+    getExecutionPreference: vi.fn(),
+    setExecutionPreference: vi.fn(),
     getJob: vi.fn(),
   };
 
@@ -106,6 +110,9 @@ export type MockedEditorApi = {
   listInferenceModels: ReturnType<typeof vi.fn>;
   resolvePartModelBinding: ReturnType<typeof vi.fn>;
   enqueueTranscribePart: ReturnType<typeof vi.fn>;
+  segmentPart: ReturnType<typeof vi.fn>;
+  getExecutionPreference: ReturnType<typeof vi.fn>;
+  setExecutionPreference: ReturnType<typeof vi.fn>;
   getJob: ReturnType<typeof vi.fn>;
 };
 
@@ -165,8 +172,30 @@ export async function flushPageEditorEffects() {
   });
 }
 
+/**
+ * The account-level **host preference**, stored the way the platform stores it:
+ * a PUT changes it and every later GET reflects the change. Canned responses
+ * would let a "setting" that never persisted still pass its own test.
+ */
+export function seedExecutionPreference(preferLocalInference = false): void {
+  let stored = preferLocalInference;
+  const current = (): ExecutionPreferenceResponse => ({
+    prefer_local_inference: stored,
+    preferred_execution_target: stored ? "local" : "cloud",
+    available_targets: ["cloud"],
+  });
+  mockedApi.getExecutionPreference.mockImplementation(async () => current());
+  mockedApi.setExecutionPreference.mockImplementation(
+    async (preferLocal: boolean) => {
+      stored = preferLocal;
+      return current();
+    },
+  );
+}
+
 export function resetPageEditorApiMocks() {
   vi.clearAllMocks();
+  seedExecutionPreference();
   mockedApi.getPartLayout.mockResolvedValue({ blocks: [], lines: [] });
   mockedApi.listPartLines.mockReset();
   mockedApi.listPartLines.mockResolvedValue([]);

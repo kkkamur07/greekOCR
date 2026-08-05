@@ -1,5 +1,4 @@
-import { useEffect, useId, useMemo, useState } from "react";
-import { Segmented } from "antd";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   INFERENCE_HELPER_LINUX_TARBALL_URL,
@@ -8,11 +7,7 @@ import {
   INFERENCE_HELPER_RELEASES_URL,
   INFERENCE_HELPER_WINDOWS_ZIP_URL,
 } from "../../inference/constants";
-import {
-  INFERENCE_ROUTING_HINTS,
-  INFERENCE_ROUTING_LABELS,
-  type InferenceRouting,
-} from "../../inference/preference";
+import { HOST_PREFERENCE_HINT } from "../../inference/hostPreference";
 
 type HelperPlatform = "macos" | "windows" | "linux";
 
@@ -68,31 +63,33 @@ function detectPlatform(): HelperPlatform | null {
   return null;
 }
 
-const ROUTING_OPTIONS: InferenceRouting[] = [
-  "auto",
-  "local-only",
-  "cloud-only",
-];
-
+/**
+ * What this computer can currently take, and nothing about where a job went.
+ *
+ * Nothing here can fail a run any more: with `local_only` retired there is no
+ * setting under which an absent agent means "your work does not happen", so
+ * absence reads as an ordinary announced state (ADR 0002).
+ */
 function helperStatusText(
-  routing: InferenceRouting,
+  preferLocalInference: boolean,
   probing: boolean,
   helperAvailable: boolean,
 ): string {
-  if (routing === "cloud-only") return INFERENCE_ROUTING_HINTS[routing];
-  if (probing) return "Looking for the helper on this computer…";
-  if (helperAvailable) return "Helper found on this computer.";
-  if (routing === "local-only") {
-    return "No helper found on this computer. Runs will fail until you start it.";
-  }
-  return "No helper found on this computer, so runs go to the cloud.";
+  if (!preferLocalInference) return HOST_PREFERENCE_HINT;
+  if (probing) return "Looking for the nomicous agent on this computer…";
+  if (helperAvailable) return "The agent is running on this computer.";
+  return "The agent is not running on this computer, so jobs go to the cloud.";
 }
 
 type PageEditorInferenceBannerProps = {
   helperAvailable: boolean;
   probing: boolean;
-  routing: InferenceRouting;
-  onRoutingChange: (routing: InferenceRouting) => void;
+  /**
+   * The account-level **host preference**, read only. The one control that
+   * changes it lives in editor settings; a second copy here would read as a
+   * per-run choice, which is exactly what ADR 0002 refuses to have.
+   */
+  preferLocalInference: boolean;
   onRetry: () => void;
   onUseCloudInstead: () => void;
 };
@@ -100,13 +97,11 @@ type PageEditorInferenceBannerProps = {
 export function PageEditorInferenceBanner({
   helperAvailable,
   probing,
-  routing,
-  onRoutingChange,
+  preferLocalInference,
   onRetry,
   onUseCloudInstead,
 }: PageEditorInferenceBannerProps) {
-  const titleId = useId();
-  const routingLabelId = useId();
+  const titleId = "pe-helper-install-title";
   const [modalOpen, setModalOpen] = useState(false);
   const [showOtherPlatforms, setShowOtherPlatforms] = useState(false);
 
@@ -130,7 +125,7 @@ export function PageEditorInferenceBanner({
     };
   }, [detected]);
 
-  const shouldPrompt = !probing && !helperAvailable && routing !== "cloud-only";
+  const shouldPrompt = !probing && !helperAvailable && preferLocalInference;
 
   useEffect(() => {
     if (!shouldPrompt) {
@@ -178,8 +173,9 @@ export function PageEditorInferenceBanner({
           >
             <h2 id={titleId}>Install Inference Helper</h2>
             <p className="pe-helper-install-modal__lead">
-              Run OCR and segmentation on your computer&apos;s CPU - faster and
-              private. The helper runs in the background after you install it.
+              Run OCR and segmentation on your own computer&apos;s CPU instead
+              of waiting for a hosted worker. Page images are stored in nomicous
+              either way, and your browser downloads them from there.
             </p>
             <ol className="pe-helper-install-modal__steps">
               <li>
@@ -278,23 +274,9 @@ export function PageEditorInferenceBanner({
         role="group"
         aria-label="Where inference runs"
       >
-        <span className="pe-inference-banner__routing">
-          <span id={routingLabelId}>Run OCR and segmentation:</span>{" "}
-          <Segmented
-            size="small"
-            value={routing}
-            aria-labelledby={routingLabelId}
-            onChange={(value) => onRoutingChange(value as InferenceRouting)}
-            options={ROUTING_OPTIONS.map((option) => ({
-              label: INFERENCE_ROUTING_LABELS[option],
-              value: option,
-              title: INFERENCE_ROUTING_HINTS[option],
-            }))}
-          />
-        </span>
         <span className="pe-inference-banner__status" role="status">
-          {helperStatusText(routing, probing, helperAvailable)}{" "}
-          {routing !== "cloud-only" ? (
+          {helperStatusText(preferLocalInference, probing, helperAvailable)}{" "}
+          {preferLocalInference ? (
             <button
               type="button"
               className="pe-inference-banner__action"

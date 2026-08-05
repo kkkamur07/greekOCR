@@ -24,7 +24,7 @@ import {
   type TranscribeBatchRunOutput,
   isAbortError,
   isRunSupersededError,
-  localOnlyUnavailableMessage,
+  submissionRefusalExplanation,
 } from "../../../inference";
 import type { PageEditorJobKind } from "../jobProgress";
 import {
@@ -63,8 +63,12 @@ type PairingStateInput = {
   transcribeModels: InferenceModelResponse[];
   partImageUrl: string | null;
   shouldUseLocalPath: (registryModelId: string) => boolean;
-  /** False under "Local only" routing: no cloud job may ever be enqueued. */
-  cloudInferenceEnabled: boolean;
+  /**
+   * Where a refused submission is explained. It is a standing line rather than
+   * the error toast, because "no inference host had capacity" is something the
+   * researcher has to act on, and a toast is gone before they can.
+   */
+  setSubmissionRefusal: Dispatch<SetStateAction<string | null>>;
   localInference: LocalInferenceCallbacks;
   trackJobAndWait: (
     jobId: string,
@@ -94,7 +98,7 @@ export function usePairingState({
   transcribeModels,
   partImageUrl,
   shouldUseLocalPath,
-  cloudInferenceEnabled,
+  setSubmissionRefusal,
   localInference,
   trackJobAndWait,
   trackLocalTask,
@@ -416,7 +420,8 @@ export function usePairingState({
         entry.output
           ? [
               {
-                line_id: entry.line_id ?? targetLines[entry.line_index]?.id ?? "",
+                line_id:
+                  entry.line_id ?? targetLines[entry.line_index]?.id ?? "",
                 text: entry.output.text,
                 confidence: entry.output.confidence,
                 character_confidences: entry.output.character_confidences,
@@ -447,7 +452,6 @@ export function usePairingState({
     jobMeta: { label: string; kind: PageEditorJobKind },
   ) {
     const { result } = await runLocalFirstWrite<TranscribeJobResult>({
-      cloudEnabled: cloudInferenceEnabled,
       trackLocalTask: (run) => trackLocalTask(jobMeta, run),
       runLocally: ({ signal, reportRun }) =>
         runLocalTranscribe(lineIds, signal, reportRun),
@@ -490,6 +494,7 @@ export function usePairingState({
     setOcrScope("segment");
     setOcrMessage(null);
     setPairingError(null);
+    setSubmissionRefusal(null);
     try {
       const model = selectedTranscribeModel();
       const registryModelId = model
@@ -512,10 +517,6 @@ export function usePairingState({
             : "OCR finished with no text for this segment.",
         );
         return;
-      }
-
-      if (!cloudInferenceEnabled) {
-        throw new Error(localOnlyUnavailableMessage());
       }
 
       const enqueued = await api.enqueueTranscribePart(
@@ -544,6 +545,11 @@ export function usePairingState({
       // The jobs panel already reports a user cancellation, and a superseded run
       // is replaced by its successor; neither deserves an error banner.
       if (isAbortError(err) || isRunSupersededError(err)) return;
+      const refusal = submissionRefusalExplanation(err);
+      if (refusal) {
+        setSubmissionRefusal(refusal);
+        return;
+      }
       setPairingError(
         err instanceof Error ? err.message : "Segment OCR failed.",
       );
@@ -566,6 +572,7 @@ export function usePairingState({
     setOcrScope("page");
     setOcrMessage(null);
     setPairingError(null);
+    setSubmissionRefusal(null);
     try {
       const model = selectedTranscribeModel();
       const registryModelId = model
@@ -588,10 +595,6 @@ export function usePairingState({
             : "OCR finished with no text for the selected segments.",
         );
         return;
-      }
-
-      if (!cloudInferenceEnabled) {
-        throw new Error(localOnlyUnavailableMessage());
       }
 
       const enqueued = await api.enqueueTranscribePart(
@@ -617,6 +620,11 @@ export function usePairingState({
       // The jobs panel already reports a user cancellation, and a superseded run
       // is replaced by its successor; neither deserves an error banner.
       if (isAbortError(err) || isRunSupersededError(err)) return;
+      const refusal = submissionRefusalExplanation(err);
+      if (refusal) {
+        setSubmissionRefusal(refusal);
+        return;
+      }
       setPairingError(err instanceof Error ? err.message : "Page OCR failed.");
     } finally {
       setOcrRunning(false);

@@ -1,23 +1,17 @@
 import {
-  INFERENCE_ROUTING_HINTS,
-  INFERENCE_ROUTING_LABELS,
-  normalizeInferenceRouting,
-  type InferenceRouting,
-} from "../../inference/preference";
+  HOST_PREFERENCE_HINT,
+  HOST_PREFERENCE_LABEL,
+} from "../../inference/hostPreference";
 import type { HostEligibility } from "../../inference/types";
 import type { PageEditorCanvasSettings } from "./pageEditorSettings";
-
-const ROUTING_OPTIONS: InferenceRouting[] = [
-  "auto",
-  "local-only",
-  "cloud-only",
-];
 
 type PageEditorSettingsPanelProps = {
   settings: PageEditorCanvasSettings;
   onSettingsChange: (settings: PageEditorCanvasSettings) => void;
-  routing: InferenceRouting;
-  onRoutingChange: (routing: InferenceRouting) => void;
+  /** The account-level **host preference**, not a per-job choice. */
+  preferLocalInference: boolean;
+  onPreferLocalInferenceChange: (preferLocal: boolean) => void;
+  preferenceSaving: boolean;
   helperAvailable: boolean;
   selectedModelHostEligibility: HostEligibility | null;
 };
@@ -25,15 +19,13 @@ type PageEditorSettingsPanelProps = {
 export function PageEditorSettingsPanel({
   settings,
   onSettingsChange,
-  routing,
-  onRoutingChange,
+  preferLocalInference,
+  onPreferLocalInferenceChange,
+  preferenceSaving,
   helperAvailable,
   selectedModelHostEligibility,
 }: PageEditorSettingsPanelProps) {
   const remoteOnly = selectedModelHostEligibility === "remote";
-  const effectiveRouting: InferenceRouting = remoteOnly
-    ? "cloud-only"
-    : routing;
 
   return (
     <div
@@ -42,31 +34,29 @@ export function PageEditorSettingsPanel({
       aria-label="Editor settings"
     >
       <div className="pe-dd-section">Inference</div>
-      <div className="pe-dd-field pe-dd-field--stack">
-        <label htmlFor="pe-inference-routing">Run OCR and segmentation</label>
-        <select
-          id="pe-inference-routing"
-          value={effectiveRouting}
-          disabled={remoteOnly}
+      {/* One account-level setting, and no per-job toggle: a researcher cannot
+          know which host is faster for a given page, so the choice is made once
+          and each job then says which host ran it (ADR 0002). */}
+      <label className="pe-dd-check">
+        <input
+          id="pe-prefer-local-inference"
+          type="checkbox"
+          checked={preferLocalInference}
+          disabled={preferenceSaving}
           onChange={(event) =>
-            onRoutingChange(normalizeInferenceRouting(event.target.value))
+            onPreferLocalInferenceChange(event.target.checked)
           }
           onClick={(event) => event.stopPropagation()}
-        >
-          {ROUTING_OPTIONS.map((option) => (
-            <option key={option} value={option}>
-              {INFERENCE_ROUTING_LABELS[option]}
-            </option>
-          ))}
-        </select>
-      </div>
+        />
+        {HOST_PREFERENCE_LABEL}
+      </label>
       <p className="pe-dd-model">
         {remoteOnly
-          ? "The selected model runs on the server only."
-          : `${INFERENCE_ROUTING_HINTS[routing]}${
-              routing === "cloud-only" || helperAvailable
+          ? "The selected model runs on a hosted server only, whatever this setting says."
+          : `${HOST_PREFERENCE_HINT}${
+              !preferLocalInference || helperAvailable
                 ? ""
-                : " No helper is running on this computer right now."
+                : " Nothing is running on this computer right now, so jobs go to the cloud."
             }`}
       </p>
 

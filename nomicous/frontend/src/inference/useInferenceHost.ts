@@ -7,23 +7,25 @@ import {
   NO_HELPER_MODELS,
   type HelperModelInfo,
 } from "./helperInfo";
-import {
-  cloudInferenceEnabled,
-  loadInferenceRouting,
-  saveInferenceRouting,
-  type InferenceRouting,
-} from "./preference";
+import { useHostPreference } from "./hostPreference";
 
+/**
+ * What this browser can see of the **inference host**s, joined to the account's
+ * **host preference**.
+ *
+ * The loopback probe below is the pre-ADR-0002 transport and is issue 060's to
+ * delete. What changed here is only its input: it is driven by the account
+ * setting rather than by a three-way per-browser routing mode.
+ */
 export function useInferenceHost() {
   const [helperAvailable, setHelperAvailable] = useState(false);
   const [helperVersion, setHelperVersion] = useState<string | null>(null);
   const [models, setModels] = useState<HelperModelInfo[]>(NO_HELPER_MODELS);
-  const [routing, setRouting] =
-    useState<InferenceRouting>(loadInferenceRouting);
+  const hostPreference = useHostPreference();
   const [probing, setProbing] = useState(true);
   const probingRef = useRef(false);
-  const routingRef = useRef(routing);
-  routingRef.current = routing;
+  const preferLocalRef = useRef(hostPreference.preferLocalInference);
+  preferLocalRef.current = hostPreference.preferLocalInference;
 
   const refresh = useCallback(async (options?: { quiet?: boolean }) => {
     if (probingRef.current) return;
@@ -32,9 +34,9 @@ export function useInferenceHost() {
       setProbing(true);
     }
     try {
-      // "Cloud only" must not touch the loopback port at all.
-      const info =
-        routingRef.current === "cloud-only" ? null : await fetchHelperInfo();
+      // An account that has not asked for its own computer must not touch the
+      // loopback port at all.
+      const info = preferLocalRef.current ? await fetchHelperInfo() : null;
       setHelperAvailable(info !== null);
       setHelperVersion(info?.version ?? null);
       const nextModels = info?.models ?? NO_HELPER_MODELS;
@@ -53,11 +55,11 @@ export function useInferenceHost() {
 
   useEffect(() => {
     void refresh();
-  }, [refresh, routing]);
+  }, [refresh, hostPreference.preferLocalInference]);
 
   useEffect(() => {
     // Re-check when the user returns to the tab - they may have just started the
-    // helper. Everything in between is covered by the explicit Retry control,
+    // agent. Everything in between is covered by the explicit Retry control,
     // not by a background timer.
     function onFocus() {
       void refresh({ quiet: true });
@@ -75,15 +77,10 @@ export function useInferenceHost() {
     };
   }, [refresh]);
 
-  const setInferenceRouting = useCallback((next: InferenceRouting) => {
-    setRouting(next);
-    saveInferenceRouting(next);
-  }, []);
-
   function shouldUseLocalPath(registryModelId: string): boolean {
     return shouldRunOnLocalHelper(models, registryModelId, {
       helperAvailable,
-      routing,
+      preferLocalInference: hostPreference.preferLocalInference,
     });
   }
 
@@ -96,11 +93,14 @@ export function useInferenceHost() {
     helperAvailable,
     helperVersion,
     models,
-    routing,
-    cloudEnabled: cloudInferenceEnabled(routing),
+    preferLocalInference: hostPreference.preferLocalInference,
+    availableTargets: hostPreference.preference?.available_targets ?? [],
+    preferenceLoading: hostPreference.loading,
+    preferenceSaving: hostPreference.saving,
+    preferenceError: hostPreference.error,
+    setPreferLocalInference: hostPreference.setPreferLocalInference,
     probing,
     refresh,
-    setInferenceRouting,
     shouldUseLocalPath,
     isModelCached,
   };

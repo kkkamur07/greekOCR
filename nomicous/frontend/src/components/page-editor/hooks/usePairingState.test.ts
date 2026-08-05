@@ -2,6 +2,8 @@ import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useLocalInferenceRuns } from "../../../inference";
+import { ApiError } from "../../../api/errors";
+import { platformNoCapacityMessage } from "../../../inference/platformMessages";
 import { usePairingState } from "./usePairingState";
 
 const enqueueTranscribePart = vi.fn();
@@ -61,11 +63,9 @@ type TrackLocalTask = <T>(
   run: (signal: AbortSignal) => Promise<T>,
 ) => Promise<T>;
 
-function setup(options?: {
-  cloudInferenceEnabled?: boolean;
-  trackLocalTask?: TrackLocalTask;
-}) {
+function setup(options?: { trackLocalTask?: TrackLocalTask }) {
   const setPairingError = vi.fn();
+  const setSubmissionRefusal = vi.fn();
   const trackJobAndWait = vi.fn().mockResolvedValue({
     status: "done",
     result: {
@@ -98,7 +98,7 @@ function setup(options?: {
       transcribeModels: [MODEL],
       partImageUrl: "http://localhost:8000/media/parts/part-1",
       shouldUseLocalPath: () => true,
-      cloudInferenceEnabled: options?.cloudInferenceEnabled ?? true,
+      setSubmissionRefusal,
       localInference,
       trackJobAndWait,
       trackLocalTask:
@@ -108,7 +108,7 @@ function setup(options?: {
     return { ...pairing, abortRunToCloud };
   });
 
-  return { view, setPairingError, trackJobAndWait };
+  return { view, setPairingError, setSubmissionRefusal, trackJobAndWait };
 }
 
 /** A local run that never finishes on its own - only an abort ends it. */
@@ -253,17 +253,24 @@ describe("usePairingState OCR fallback", () => {
     expect(setPairingError).toHaveBeenCalledWith("network hiccup");
   });
 
-  it("reports an actionable error instead of using the cloud under local-only routing", async () => {
+  it("explains a refused submission instead of reporting a generic failure", async () => {
+    // The platform refuses when no **inference host** has capacity, and says so
+    // in the 409 body. That sentence is what the researcher has to act on.
     runLocalInference.mockRejectedValue(new Error("helper crashed"));
-    const { view, setPairingError } = setup({ cloudInferenceEnabled: false });
+    enqueueTranscribePart.mockRejectedValue(
+      new ApiError(platformNoCapacityMessage(), 409),
+    );
+    const { view, setPairingError, setSubmissionRefusal } = setup();
 
     await act(async () => {
       await view.result.current.runPageOcr();
     });
 
-    expect(enqueueTranscribePart).not.toHaveBeenCalled();
-    expect(setPairingError).toHaveBeenCalledWith(
-      expect.stringContaining("Local only"),
+    expect(setSubmissionRefusal).toHaveBeenCalledWith(
+      platformNoCapacityMessage(),
+    );
+    expect(setPairingError).not.toHaveBeenCalledWith(
+      platformNoCapacityMessage(),
     );
   });
 });

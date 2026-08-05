@@ -7,7 +7,6 @@ import {
   registrySelectionFromArtifactRef,
   useInferenceHost,
   useLocalInferenceRuns,
-  type InferenceRouting,
 } from "../inference";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import { PageEditorCanvas } from "../components/page-editor/PageEditorCanvas";
@@ -68,6 +67,11 @@ export function PageEditorPlaceholderPage() {
     null,
   );
   const [vertexCommitSignal, setVertexCommitSignal] = useState(0);
+  // The platform refused a submission because no **inference host** had
+  // capacity. Held on the page, not in a toast: it is an explanation to act on.
+  const [submissionRefusal, setSubmissionRefusal] = useState<string | null>(
+    null,
+  );
 
   const editorData = usePageEditorData(projectId, documentId, partId, () => {
     setEditorMode("layout");
@@ -116,18 +120,18 @@ export function PageEditorPlaceholderPage() {
     downloadingModelId: localInferenceModelId,
   } = useLocalInferenceRuns(inferenceHost.isModelCached);
 
-  /** Persist cloud as the default host (install banner / settings intent). */
+  /** Turn the account setting off, from the install prompt's escape hatch. */
   function preferCloudInferencePermanently() {
     abortRunToCloud();
-    inferenceHost.setInferenceRouting("cloud-only");
+    void inferenceHost.setPreferLocalInference(false);
   }
 
-  function changeInferenceRouting(next: InferenceRouting) {
-    if (next === "cloud-only") {
+  function changeHostPreference(preferLocal: boolean) {
+    if (!preferLocal) {
       // Leaving the local host mid-run must not strand the in-flight job.
       abortRunToCloud();
     }
-    inferenceHost.setInferenceRouting(next);
+    void inferenceHost.setPreferLocalInference(preferLocal);
   }
 
   useEffect(() => {
@@ -201,7 +205,7 @@ export function PageEditorPlaceholderPage() {
     transcribeModels,
     partImageUrl,
     shouldUseLocalPath,
-    cloudInferenceEnabled: inferenceHost.cloudEnabled,
+    setSubmissionRefusal,
     localInference,
     trackJobAndWait: jobQueue.trackAndWait,
     trackLocalTask: jobQueue.trackLocalTask,
@@ -225,7 +229,7 @@ export function PageEditorPlaceholderPage() {
     onDrawComplete: () => setDrawMode("none"),
     partImageUrl,
     shouldUseLocalPath,
-    cloudInferenceEnabled: inferenceHost.cloudEnabled,
+    setSubmissionRefusal,
     segmentRegistryModelId,
     localInference,
     trackJobAndWait: jobQueue.trackAndWait,
@@ -388,6 +392,7 @@ export function PageEditorPlaceholderPage() {
   }
 
   const statusAlertProps = {
+    submissionRefusal,
     saveMessage,
     transcriptionSaveMessage,
     ocrMessage,
@@ -418,14 +423,12 @@ export function PageEditorPlaceholderPage() {
         <>
           <PageEditorLocalInferenceBanner
             registryModelId={localInferenceModelId}
-            cloudInferenceEnabled={inferenceHost.cloudEnabled}
             onUseCloudInstead={abortRunToCloud}
           />
           <PageEditorInferenceBanner
             helperAvailable={inferenceHost.helperAvailable}
             probing={inferenceHost.probing}
-            routing={inferenceHost.routing}
-            onRoutingChange={changeInferenceRouting}
+            preferLocalInference={inferenceHost.preferLocalInference}
             onRetry={() => void inferenceHost.refresh()}
             onUseCloudInstead={preferCloudInferencePermanently}
           />
@@ -483,8 +486,9 @@ export function PageEditorPlaceholderPage() {
             onSettingsOpenChange={setSettingsOpen}
             canvasSettings={canvasSettings}
             onCanvasSettingsChange={handleCanvasSettingsChange}
-            inferenceRouting={inferenceHost.routing}
-            onInferenceRoutingChange={changeInferenceRouting}
+            preferLocalInference={inferenceHost.preferLocalInference}
+            onPreferLocalInferenceChange={changeHostPreference}
+            preferenceSaving={inferenceHost.preferenceSaving}
             helperAvailable={inferenceHost.helperAvailable}
             helperProbing={inferenceHost.probing}
             selectedModelHostEligibility={selectedModelHostEligibility}

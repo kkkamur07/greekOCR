@@ -13,7 +13,6 @@ import { SettingsIcon } from "./EditorIcons";
 import { PageEditorSettingsPanel } from "./PageEditorSettingsPanel";
 import { PageEditorInferenceStatus } from "./PageEditorInferenceStatus";
 import { PAGE_EDITOR_SHORTCUTS } from "./pageEditorShortcuts";
-import type { InferenceRouting } from "../../inference/preference";
 import type { HostEligibility } from "../../inference/types";
 import type { PageEditorCanvasSettings } from "./pageEditorSettings";
 import { ToolbarKbd } from "./ToolbarKbd";
@@ -66,8 +65,9 @@ type PageEditorToolbarProps = {
   onSettingsOpenChange: (open: boolean) => void;
   canvasSettings: PageEditorCanvasSettings;
   onCanvasSettingsChange: (settings: PageEditorCanvasSettings) => void;
-  inferenceRouting: InferenceRouting;
-  onInferenceRoutingChange: (routing: InferenceRouting) => void;
+  preferLocalInference: boolean;
+  onPreferLocalInferenceChange: (preferLocal: boolean) => void;
+  preferenceSaving: boolean;
   helperAvailable: boolean;
   helperProbing: boolean;
   selectedModelHostEligibility: HostEligibility | null;
@@ -114,8 +114,9 @@ export function PageEditorToolbar({
   onSettingsOpenChange,
   canvasSettings,
   onCanvasSettingsChange,
-  inferenceRouting,
-  onInferenceRoutingChange,
+  preferLocalInference,
+  onPreferLocalInferenceChange,
+  preferenceSaving,
   helperAvailable,
   helperProbing,
   selectedModelHostEligibility,
@@ -223,7 +224,7 @@ export function PageEditorToolbar({
         <PageEditorInferenceStatus
           probing={helperProbing}
           helperAvailable={helperAvailable}
-          routing={inferenceRouting}
+          preferLocalInference={preferLocalInference}
         />
         {processingLabel && (
           <div
@@ -505,8 +506,9 @@ export function PageEditorToolbar({
               <PageEditorSettingsPanel
                 settings={canvasSettings}
                 onSettingsChange={onCanvasSettingsChange}
-                routing={inferenceRouting}
-                onRoutingChange={onInferenceRoutingChange}
+                preferLocalInference={preferLocalInference}
+                onPreferLocalInferenceChange={onPreferLocalInferenceChange}
+                preferenceSaving={preferenceSaving}
                 helperAvailable={helperAvailable}
                 selectedModelHostEligibility={selectedModelHostEligibility}
               />

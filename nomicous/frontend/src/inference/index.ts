@@ -20,24 +20,27 @@ export type {
 export { modelDisplayName } from "./modelDisplayName";
 export { blobToBase64, registrySelectionFromArtifactRef } from "./registry";
 export {
-  cloudInferenceEnabled,
-  DEFAULT_INFERENCE_ROUTING,
-  INFERENCE_ROUTING_HINTS,
-  INFERENCE_ROUTING_LABELS,
-  loadInferenceRouting,
-  localInferenceEnabled,
-  normalizeInferenceRouting,
-  saveInferenceRouting,
-} from "./preference";
+  HOST_PREFERENCE_HINT,
+  HOST_PREFERENCE_LABEL,
+  useHostPreference,
+} from "./hostPreference";
+export type { HostPreference } from "./hostPreference";
+export {
+  executionAnnouncement,
+  INFERENCE_HOST_LABEL,
+  INFERENCE_HOST_NOUN,
+  INFERENCE_HOST_PHRASE,
+  isSubmissionRefusal,
+  jobExecution,
+  submissionRefusalExplanation,
+} from "./executionTarget";
+export type { JobExecution } from "./executionTarget";
 export {
   isAbortError,
   isRunSupersededError,
-  localOnlyRunFailedMessage,
-  localOnlyUnavailableMessage,
   RunSupersededError,
 } from "./localInferenceCallbacks";
 export type { HelperInfo, HelperModelInfo } from "./helperInfo";
-export type { InferenceRouting } from "./preference";
 export type {
   LocalInferenceCallbacks,
   LocalRun,
