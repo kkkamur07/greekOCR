@@ -14,8 +14,8 @@ Three of fourteen issues remain. Nothing has been pushed.
 | | |
 |---|---|
 | Trunk branch | `feat/inference-cli-redesign` |
-| Head | `aaf289d` |
-| Ahead of `origin/main` | 83 commits, **none pushed** |
+| Head | the last `docs:` commit of 2026-08-05 — `git log -1` |
+| Ahead of `origin/main` | ~85 commits, **none pushed** |
 | Working tree | clean |
 | Parent PRD | [#47](https://github.com/kkkamur07/greekOCR/issues/47) |
 | Decisions | ADRs [0001](./adr/0001-outbound-helper-device-pairing.md)–[0005](./adr/0005-agent-claim-endpoint-and-the-inference-service-account.md) |
@@ -206,7 +206,7 @@ and `actions/attest-build-provenance` records it under PEP 740. There is no key 
 
 ### The push
 
-The trunk has never been pushed. Whether these 83 commits reach `main` as a merge, a
+The trunk has never been pushed. Whether these commits reach `main` as a merge, a
 rebase, or a pull request is the owner's call.
 
 ## 9. Open questions
