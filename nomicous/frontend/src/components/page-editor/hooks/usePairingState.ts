@@ -7,25 +7,13 @@ import {
 } from "react";
 import {
   api,
-  type InferenceModelResponse,
   type JobResponse,
   type LineResponse,
   type TranscribeJobResult,
   type TranscriptionLayerResponse,
 } from "../../../api/client";
-import { fetchPartImage } from "../../../api/imageCache";
-import {
-  blobToBase64,
-  registrySelectionFromArtifactRef,
-  runLocalFirstWrite,
-  runLocalInference,
-  type LocalInferenceCallbacks,
-  type LocalRun,
-  type TranscribeBatchRunOutput,
-  isAbortError,
-  isRunSupersededError,
-  submissionRefusalExplanation,
-} from "../../../inference";
+import { isAbortError } from "../../../api/errors";
+import { submissionRefusalExplanation } from "../../../inference";
 import type { PageEditorJobKind } from "../jobProgress";
 import { segmentNumberFor, segmentsInNumberOrder } from "../segmentNumbering";
 import {
@@ -61,24 +49,16 @@ type PairingStateInput = {
   >;
   setPairingError: Dispatch<SetStateAction<string | null>>;
   selectedTranscribeModelId: string | null;
-  transcribeModels: InferenceModelResponse[];
-  partImageUrl: string | null;
-  shouldUseLocalPath: (registryModelId: string) => boolean;
   /**
    * Where a refused submission is explained. It is a standing line rather than
    * the error toast, because "no inference host had capacity" is something the
    * researcher has to act on, and a toast is gone before they can.
    */
   setSubmissionRefusal: Dispatch<SetStateAction<string | null>>;
-  localInference: LocalInferenceCallbacks;
   trackJobAndWait: (
     jobId: string,
     meta: { label: string; kind: PageEditorJobKind },
   ) => Promise<JobResponse>;
-  trackLocalTask: <T>(
-    meta: { label: string; kind: PageEditorJobKind },
-    run: (signal: AbortSignal) => Promise<T>,
-  ) => Promise<T>;
 };
 
 export function usePairingState({
@@ -96,13 +76,8 @@ export function usePairingState({
   setPairingProgress,
   setPairingError,
   selectedTranscribeModelId,
-  transcribeModels,
-  partImageUrl,
-  shouldUseLocalPath,
   setSubmissionRefusal,
-  localInference,
   trackJobAndWait,
-  trackLocalTask,
 }: PairingStateInput) {
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(
     null,
@@ -325,149 +300,6 @@ export function usePairingState({
     return applyTranscribeResult(transcribeJobResult(job));
   }
 
-  function selectedTranscribeModel(): InferenceModelResponse | null {
-    if (!selectedTranscribeModelId) return null;
-    return (
-      transcribeModels.find(
-        (model) => model.id === selectedTranscribeModelId,
-      ) ?? null
-    );
-  }
-
-  async function loadPartImageBase64(): Promise<string> {
-    if (!partImageUrl) {
-      throw new Error("Page image is not available for local inference.");
-    }
-    const blob = await fetchPartImage(partImageUrl);
-    return blobToBase64(blob);
-  }
-
-  /**
-   * Runs the helper and persists what it produced, and nothing more.
-   *
-   * Everything in here is part of "did the local run produce a saved result": a
-   * failure means the cloud still has to do the work. The refresh that follows a
-   * success is deliberately left to the caller - see `runLocalFirstWrite`.
-   */
-  async function runLocalTranscribe(
-    lineIds: string[],
-    signal: AbortSignal,
-    onRunStarted: (run: LocalRun) => void,
-  ): Promise<TranscribeJobResult> {
-    const model = selectedTranscribeModel();
-    if (!model) {
-      throw new Error("Select an HTR model before running OCR.");
-    }
-    const { registryModelId, registryTag } = registrySelectionFromArtifactRef(
-      model.artifact_ref,
-    );
-    if (!shouldUseLocalPath(registryModelId)) {
-      throw new Error("Selected model is not eligible for local inference.");
-    }
-
-    const targetLines = segmentsInNumberOrder(
-      lines.filter((line) => lineIds.includes(line.id)),
-    );
-    if (targetLines.length === 0) {
-      throw new Error("No matching segments to transcribe.");
-    }
-
-    const imageBytes = await loadPartImageBase64();
-    signal.throwIfAborted();
-    const run = localInference.startRun(registryModelId, registryTag);
-    onRunStarted(run);
-    try {
-      const combinedSignal = AbortSignal.any([
-        signal,
-        run.cloudSwitchSignal,
-        run.supersededSignal,
-      ]);
-      combinedSignal.throwIfAborted();
-      const response = await runLocalInference({
-        task: "transcribe",
-        registry_model_id: registryModelId,
-        registry_tag: registryTag,
-        image_bytes: imageBytes,
-        signal: combinedSignal,
-        params: {
-          lines: targetLines.map((line, index) => ({
-            line_id: line.id,
-            line_index: index,
-            points: line.points,
-          })),
-        },
-      });
-      combinedSignal.throwIfAborted();
-
-      if (response.task !== "transcribe" || !("lines" in response.output)) {
-        throw new Error("Local transcribe returned an unexpected response.");
-      }
-      const batch = response.output as TranscribeBatchRunOutput;
-      // A batch is now allowed to be a partial success, so drop the lines that
-      // failed rather than reading `.text` off a null output. Persisting the
-      // survivors is the point of the isolation: one bad line used to discard
-      // the whole page.
-      const transcribed = batch.lines.flatMap((entry) =>
-        entry.output
-          ? [
-              {
-                line_id:
-                  entry.line_id ?? targetLines[entry.line_index]?.id ?? "",
-                text: entry.output.text,
-                confidence: entry.output.confidence,
-                character_confidences: entry.output.character_confidences,
-              },
-            ]
-          : [],
-      );
-      if (transcribed.length === 0) {
-        throw new Error("Local transcribe returned no usable lines.");
-      }
-      return await api.persistLocalTranscribe(
-        projectId!,
-        documentId!,
-        partId!,
-        {
-          registry_model_id: registryModelId,
-          registry_tag: registryTag,
-          lines: transcribed,
-        },
-      );
-    } finally {
-      run.end();
-    }
-  }
-
-  async function runLocalTranscribeWithFallback(
-    lineIds: string[],
-    jobMeta: { label: string; kind: PageEditorJobKind },
-  ) {
-    const { result } = await runLocalFirstWrite<TranscribeJobResult>({
-      trackLocalTask: (run) => trackLocalTask(jobMeta, run),
-      runLocally: ({ signal, reportRun }) =>
-        runLocalTranscribe(lineIds, signal, reportRun),
-      runInCloud: async () => {
-        const enqueued = await api.enqueueTranscribePart(
-          projectId!,
-          documentId!,
-          partId!,
-          {
-            model_id: selectedTranscribeModelId!,
-            line_ids: lineIds.length === lines.length ? undefined : lineIds,
-          },
-        );
-        const job = await trackJobAndWait(enqueued.job_id, jobMeta);
-        return transcribeJobResult(job);
-      },
-    });
-
-    // Whichever path produced it, the transcription is stored by now and only
-    // the reload is left. A failure here is a stale view of saved work, so it
-    // surfaces as an error banner and stops; `runLocalFirstWrite` has already
-    // returned, so there is no cloud fallback left for it to trigger.
-    return applyTranscribeResult(result);
-  }
-
   async function runSegmentOcr() {
     if (!projectId || !documentId || !partId) {
       setPairingError("Page context is missing. Reload and try again.");
@@ -487,29 +319,6 @@ export function usePairingState({
     setPairingError(null);
     setSubmissionRefusal(null);
     try {
-      const model = selectedTranscribeModel();
-      const registryModelId = model
-        ? registrySelectionFromArtifactRef(model.artifact_ref).registryModelId
-        : null;
-      if (model && registryModelId && shouldUseLocalPath(registryModelId)) {
-        const result = await runLocalTranscribeWithFallback(
-          [selectedSegmentId],
-          {
-            label: selectedSegmentNumber
-              ? `Segment ${selectedSegmentNumber}`
-              : "Selected segment",
-            kind: "transcription-segment",
-          },
-        );
-        const hasAnyText = result.lines.some((line) => line.text?.trim());
-        setOcrMessage(
-          hasAnyText
-            ? "OCR prediction completed for selected Segment (local)."
-            : "OCR finished with no text for this segment.",
-        );
-        return;
-      }
-
       const enqueued = await api.enqueueTranscribePart(
         projectId,
         documentId,
@@ -533,9 +342,8 @@ export function usePairingState({
           : "OCR finished with no text for this segment.",
       );
     } catch (err) {
-      // The jobs panel already reports a user cancellation, and a superseded run
-      // is replaced by its successor; neither deserves an error banner.
-      if (isAbortError(err) || isRunSupersededError(err)) return;
+      // The jobs panel already reports a user cancellation.
+      if (isAbortError(err)) return;
       const refusal = submissionRefusalExplanation(err);
       if (refusal) {
         setSubmissionRefusal(refusal);
@@ -565,29 +373,6 @@ export function usePairingState({
     setPairingError(null);
     setSubmissionRefusal(null);
     try {
-      const model = selectedTranscribeModel();
-      const registryModelId = model
-        ? registrySelectionFromArtifactRef(model.artifact_ref).registryModelId
-        : null;
-      if (model && registryModelId && shouldUseLocalPath(registryModelId)) {
-        const result = await runLocalTranscribeWithFallback(
-          lines.map((line) => line.id),
-          {
-            label: "Full page",
-            kind: "transcription-page",
-          },
-        );
-        const withText = result.lines.filter((line) =>
-          line.text?.trim(),
-        ).length;
-        setOcrMessage(
-          withText > 0
-            ? `OCR prediction completed for ${withText} Segment(s) (local).`
-            : "OCR finished with no text for the selected segments.",
-        );
-        return;
-      }
-
       const enqueued = await api.enqueueTranscribePart(
         projectId,
         documentId,
@@ -608,9 +393,8 @@ export function usePairingState({
           : "OCR finished with no text for the selected segments.",
       );
     } catch (err) {
-      // The jobs panel already reports a user cancellation, and a superseded run
-      // is replaced by its successor; neither deserves an error banner.
-      if (isAbortError(err) || isRunSupersededError(err)) return;
+      // The jobs panel already reports a user cancellation.
+      if (isAbortError(err)) return;
       const refusal = submissionRefusalExplanation(err);
       if (refusal) {
         setSubmissionRefusal(refusal);

@@ -14,18 +14,8 @@ import {
   type LineResponse,
   type PartLayoutResponse,
 } from "../../../api/client";
-import { fetchPartImage } from "../../../api/imageCache";
-import { ApiError } from "../../../api/errors";
-import {
-  blobToBase64,
-  DEFAULT_SEGMENT_REGISTRY_MODEL_ID,
-  runLocalFirstWrite,
-  runLocalInference,
-  type LocalInferenceCallbacks,
-  isAbortError,
-  isRunSupersededError,
-  submissionRefusalExplanation,
-} from "../../../inference";
+import { ApiError, isAbortError } from "../../../api/errors";
+import { submissionRefusalExplanation } from "../../../inference";
 import { cleanPolygonPoints, offsetGeometry } from "../canvasGeometry";
 import {
   applyCanvasEdit,
@@ -74,25 +64,17 @@ type LayoutMutationsInput = {
   setSelectedSegmentId: Dispatch<SetStateAction<string | null>>;
   setApprovedTextDraft: Dispatch<SetStateAction<string>>;
   onDrawComplete: () => void;
-  partImageUrl: string | null;
-  shouldUseLocalPath: (registryModelId: string) => boolean;
   /**
    * Where a refused submission is explained. It is a standing line rather than
    * the error toast, because "no inference host had capacity" is something the
    * researcher has to act on, and a toast is gone before they can.
    */
   setSubmissionRefusal: Dispatch<SetStateAction<string | null>>;
-  segmentRegistryModelId?: string | null;
-  localInference: LocalInferenceCallbacks;
   trackJobAndWait: (
     jobId: string,
     meta: { label: string; kind: PageEditorJobKind },
     options?: { timeoutMs?: number },
   ) => Promise<JobResponse>;
-  trackLocalTask: <T>(
-    meta: { label: string; kind: PageEditorJobKind },
-    run: (signal: AbortSignal) => Promise<T>,
-  ) => Promise<T>;
 };
 
 export function useLayoutMutations({
@@ -111,13 +93,8 @@ export function useLayoutMutations({
   setSelectedSegmentId,
   setApprovedTextDraft,
   onDrawComplete,
-  partImageUrl,
-  shouldUseLocalPath,
   setSubmissionRefusal,
-  segmentRegistryModelId,
-  localInference,
   trackJobAndWait,
-  trackLocalTask,
 }: LayoutMutationsInput) {
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
   const [selectedLineSnapshot, setSelectedLineSnapshot] = useState<{
@@ -510,15 +487,17 @@ export function useLayoutMutations({
     return reloadedLines.length;
   }
 
-  /** The sentence a finished segmentation reports, which is all the two paths differ by. */
-  function segmentationMessage(
-    source: "local" | "cloud",
-    segmentCount: number,
-  ): string {
-    const where = source === "local" ? " locally" : "";
+  /**
+   * The sentence a finished segmentation reports.
+   *
+   * It no longer names a host: the job does that itself, on the job, which is
+   * the entire user interface for **execution target** (ADR 0002). Saying it
+   * twice, in two places, with two sources, is how they come to disagree.
+   */
+  function segmentationMessage(segmentCount: number): string {
     return useOtsuRefinement
-      ? `Kraken segmentation completed${where} with Otsu refinement (${otsuSphereRadius}px sphere, ${segmentCount} Segment(s)).`
-      : `Kraken segmentation completed${where} using raw Kraken boundaries (${segmentCount} Segment(s)).`;
+      ? `Kraken segmentation completed with Otsu refinement (${otsuSphereRadius}px sphere, ${segmentCount} Segment(s)).`
+      : `Kraken segmentation completed using raw Kraken boundaries (${segmentCount} Segment(s)).`;
   }
 
   async function runAutoSegment() {
@@ -541,7 +520,7 @@ export function useLayoutMutations({
       kind: "segmentation" as const,
     };
 
-    const segmentInCloud = async () => {
+    try {
       const enqueued = await api.segmentPart(projectId, documentId, partId, {
         use_otsu_refinement: useOtsuRefinement,
         otsu_sphere_radius: otsuSphereRadius,
@@ -549,75 +528,15 @@ export function useLayoutMutations({
       await trackJobAndWait(enqueued.job_id, jobMeta, {
         timeoutMs: SEGMENT_JOB_TIMEOUT_MS,
       });
-    };
 
-    try {
-      const resolvedSegmentModelId =
-        segmentRegistryModelId ?? DEFAULT_SEGMENT_REGISTRY_MODEL_ID;
-
-      let source: "local" | "cloud" = "cloud";
-      if (shouldUseLocalPath(resolvedSegmentModelId)) {
-        ({ source } = await runLocalFirstWrite<void>({
-          trackLocalTask: (run) => trackLocalTask(jobMeta, run),
-          runInCloud: segmentInCloud,
-          runLocally: async ({ signal, reportRun }) => {
-            if (!partImageUrl) {
-              throw new Error(
-                "Page image is not available for local segmentation.",
-              );
-            }
-            const run = localInference.startRun(resolvedSegmentModelId);
-            reportRun(run);
-            try {
-              const combinedSignal = AbortSignal.any([
-                signal,
-                run.cloudSwitchSignal,
-                run.supersededSignal,
-              ]);
-              const imageBytes = await blobToBase64(
-                await fetchPartImage(partImageUrl),
-              );
-              combinedSignal.throwIfAborted();
-              const response = await runLocalInference({
-                task: "segment",
-                registry_model_id: resolvedSegmentModelId,
-                image_bytes: imageBytes,
-                signal: combinedSignal,
-                params: {
-                  use_otsu_refinement: useOtsuRefinement,
-                  otsu_sphere_radius: otsuSphereRadius,
-                },
-              });
-              combinedSignal.throwIfAborted();
-              if (response.task !== "segment") {
-                throw new Error(
-                  "Local segment returned an unexpected response.",
-                );
-              }
-              await api.persistLocalSegment(projectId, documentId, partId, {
-                registry_model_id: resolvedSegmentModelId,
-                output: response.output,
-              });
-            } finally {
-              run.end();
-            }
-          },
-        }));
-      } else {
-        await segmentInCloud();
-      }
-
-      // Whichever path ran it, the segmentation is stored by now and only the
-      // reload is left. A failure here is a stale view of saved Segments, so it
-      // surfaces as an error banner and stops; the write is already finished, so
-      // there is no cloud fallback left for it to trigger.
-      setSegmentMessage(
-        segmentationMessage(source, await reloadAfterSegmentation()),
-      );
+      // The segmentation is stored by now and only the reload is left. A
+      // failure here is a stale view of saved Segments, so it surfaces as an
+      // error banner and stops: the write is already finished, and there is
+      // nothing left for it to re-run.
+      setSegmentMessage(segmentationMessage(await reloadAfterSegmentation()));
     } catch (err) {
-      // The jobs panel already reports a user cancellation, and a superseded run
-      // is replaced by its successor; neither deserves an error banner.
-      if (isAbortError(err) || isRunSupersededError(err)) return;
+      // The jobs panel already reports a user cancellation.
+      if (isAbortError(err)) return;
       const refusal = submissionRefusalExplanation(err);
       if (refusal) {
         setSubmissionRefusal(refusal);

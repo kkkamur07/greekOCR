@@ -56,13 +56,6 @@ export type ExecutionTarget = components["schemas"]["ExecutionTarget"];
 export type ExecutionPreferenceResponse =
   components["schemas"]["ExecutionPreferenceResponse"];
 export type EnqueueJobResponse = components["schemas"]["EnqueueJobResponse"];
-/**
- * A field with a server-side default is generated as always present, which is
- * true of a response and backwards for a request body: the server fills in
- * whatever the caller omits. This marks those fields optional to send.
- */
-type Defaulted<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
-
 /** Every tuning field is server-defaulted, so any subset is a valid body. */
 export type SegmentPartRequest = Partial<
   components["schemas"]["SegmentPartRequest"]
@@ -78,40 +71,14 @@ export type EnqueueTestJobRequest =
   components["schemas"]["EnqueueTestJobRequest"];
 export type EnqueueTestJobResponse =
   components["schemas"]["EnqueueTestJobResponse"];
-export type LocalTranscribePersistRequest = Defaulted<
-  components["schemas"]["LocalTranscribePersistRequest"],
-  "registry_tag"
->;
-export type LocalSegmentPersistResponse =
-  components["schemas"]["LocalSegmentPersistResponse"];
 /**
  * What a finished transcribe carries back. The server types it as a bare
- * `dict` - on the job (`JobResponse.result`) and on the local-inference
- * persist response alike - so the shape is the client's claim, made once here
- * and read by `applyTranscribeResult` on both paths.
+ * `dict` on the job (`JobResponse.result`), so the shape is the client's
+ * claim, made once here and read by `applyTranscribeResult`.
  */
 export type TranscribeJobResult = {
   transcription_id: string;
   lines: Array<{ line_id: string; text: string; confidence: number }>;
-};
-export type LocalTranscribePersistResponse = Omit<
-  components["schemas"]["LocalTranscribePersistResponse"],
-  "lines"
-> &
-  Pick<TranscribeJobResult, "lines">;
-export type LocalSegmentPersistRequest = Omit<
-  Defaulted<
-    components["schemas"]["LocalSegmentPersistRequest"],
-    "registry_tag"
-  >,
-  "output"
-> & {
-  /**
-   * The helper's segment output, forwarded exactly as it arrived. The frontend
-   * does not inspect it; the server parses it as `BoundedSegmentRunResponse`
-   * and rejects the request when it is not one.
-   */
-  output: Record<string, unknown>;
 };
 /**
  * The one place the generated wire types are narrowed by hand.
@@ -711,28 +678,6 @@ export const api = {
     apiRequest<EnqueueJobResponse>(
       `/projects/${projectId}/documents/${documentId}/parts/${partId}/transcribe`,
       { method: "POST", body: body ?? {} },
-    ),
-
-  persistLocalTranscribe: (
-    projectId: string,
-    documentId: string,
-    partId: string,
-    body: LocalTranscribePersistRequest,
-  ) =>
-    apiRequest<LocalTranscribePersistResponse>(
-      `/projects/${projectId}/documents/${documentId}/parts/${partId}/local-inference/transcribe`,
-      { method: "POST", body },
-    ),
-
-  persistLocalSegment: (
-    projectId: string,
-    documentId: string,
-    partId: string,
-    body: LocalSegmentPersistRequest,
-  ) =>
-    apiRequest<LocalSegmentPersistResponse>(
-      `/projects/${projectId}/documents/${documentId}/parts/${partId}/local-inference/segment`,
-      { method: "POST", body },
     ),
 
   listInferenceModels: () =>

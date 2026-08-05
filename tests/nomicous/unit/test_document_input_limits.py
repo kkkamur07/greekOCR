@@ -1,8 +1,13 @@
 """Bounds on untrusted document input and on the unauthenticated read surface.
 
-The local-inference persist routes accept model output straight from the browser and the
-public layout endpoint answers anonymous callers, so both need the caps their siblings
-(``PUT /lines`` and every other list endpoint) already enforce.
+The public layout endpoint answers anonymous callers, so it needs the caps its
+siblings (``PUT /lines`` and every other list endpoint) already enforce.
+
+The local-inference persist routes were the other subject here. They existed
+because the browser ran the model itself and posted the result back; ADR 0002
+retired that path (#60), and an **inference agent** now reports through the same
+job callback a hosted worker uses, so its output is bounded where every other
+job result is.
 """
 
 from __future__ import annotations
@@ -18,17 +23,12 @@ from backend.document.api import public as public_api
 from backend.document.api.schemas import (
     DEFAULT_PUBLIC_LAYOUT_LINES,
     MAX_LINE_GEOMETRY_POINTS,
-    MAX_LINE_TEXT_CHARS,
-    MAX_LOCAL_TRANSCRIBE_LINES,
     MAX_PUBLIC_LAYOUT_LINES,
-    MAX_REPLACE_PART_LINES,
     BlockPatchRequest,
     LineCreateRequest,
     LinePatchRequest,
     LinesReplaceRequest,
     LineUpsertRequest,
-    LocalSegmentPersistRequest,
-    LocalTranscribePersistRequest,
     SegmentPartRequest,
 )
 from backend.document.infrastructure.orm_models import Line
@@ -92,98 +92,6 @@ def test_segmentation_cannot_request_more_points_than_the_platform_stores() -> N
 
 def test_block_patch_still_accepts_a_partial_update() -> None:
     assert BlockPatchRequest(order=2).model_dump(exclude_unset=True) == {"order": 2}
-
-
-# --- Local transcribe persist ---
-
-
-def _transcribe_line(text: str = "alpha") -> dict:
-    return {"line_id": str(uuid.uuid4()), "text": text, "confidence": 0.5}
-
-
-def test_local_transcribe_caps_line_count() -> None:
-    assert MAX_LOCAL_TRANSCRIBE_LINES == MAX_REPLACE_PART_LINES
-
-    with pytest.raises(PydanticValidationError):
-        LocalTranscribePersistRequest(
-            registry_model_id="m",
-            lines=[_transcribe_line() for _ in range(MAX_LOCAL_TRANSCRIBE_LINES + 1)],
-        )
-
-
-def test_local_transcribe_caps_per_line_text() -> None:
-    with pytest.raises(PydanticValidationError):
-        LocalTranscribePersistRequest(
-            registry_model_id="m",
-            lines=[_transcribe_line("x" * (MAX_LINE_TEXT_CHARS + 1))],
-        )
-
-
-def test_local_transcribe_caps_total_text() -> None:
-    oversized = [_transcribe_line("y" * MAX_LINE_TEXT_CHARS) for _ in range(200)]
-
-    with pytest.raises(PydanticValidationError):
-        LocalTranscribePersistRequest(registry_model_id="m", lines=oversized)
-
-
-def test_local_transcribe_rejects_misaligned_character_confidences() -> None:
-    short = _transcribe_line("ab")
-    short["character_confidences"] = [{"char": "a", "confidence": 0.5}]
-
-    with pytest.raises(PydanticValidationError):
-        LocalTranscribePersistRequest(registry_model_id="m", lines=[short])
-
-    mismatched = _transcribe_line("ab")
-    mismatched["character_confidences"] = [
-        {"char": "a", "confidence": 0.5},
-        {"char": "z", "confidence": 0.5},
-    ]
-
-    with pytest.raises(PydanticValidationError):
-        LocalTranscribePersistRequest(registry_model_id="m", lines=[mismatched])
-
-
-def test_local_transcribe_accepts_a_normal_payload() -> None:
-    payload = _transcribe_line("ab")
-    payload["character_confidences"] = [
-        {"char": "a", "confidence": 0.5},
-        {"char": "b", "confidence": 0.25},
-    ]
-
-    request = LocalTranscribePersistRequest(registry_model_id="m", lines=[payload])
-
-    assert request.lines[0].character_confidences is not None
-
-
-# --- Local segment persist ---
-
-
-def test_local_segment_caps_line_count() -> None:
-    with pytest.raises(PydanticValidationError):
-        LocalSegmentPersistRequest(
-            registry_model_id="m",
-            output={"lines": [_line_payload(4) for _ in range(MAX_REPLACE_PART_LINES + 1)]},
-        )
-
-
-def test_local_segment_caps_points_per_line() -> None:
-    with pytest.raises(PydanticValidationError):
-        LocalSegmentPersistRequest(
-            registry_model_id="m",
-            output={"lines": [_line_payload(MAX_LINE_GEOMETRY_POINTS + 1)]},
-        )
-
-
-def test_local_segment_accepts_a_normal_payload() -> None:
-    request = LocalSegmentPersistRequest(
-        registry_model_id="m",
-        output={
-            "blocks": [{"external_id": "b1", "order": 0, "box": {"x": 1}}],
-            "lines": [_line_payload(8)],
-        },
-    )
-
-    assert len(request.output.lines[0].points) == 8
 
 
 # --- Public layout read surface ---

@@ -1,7 +1,12 @@
-"""Environment settings for the ML inference service.
+"""Environment settings for the inference runtime.
 
-Nothing here reaches a database. The inference service reads a registry file and
+Nothing here reaches a database. The inference runtime reads a registry file and
 runs models; the only job queue is the platform's (ADR 0003).
+
+Nothing here opens a port either. ADR 0002 deleted the loopback service, so
+there is no listener whose callers need authenticating and therefore no service
+secret: an **inference agent** presents its **device credential** to the
+platform, outbound, and nothing presents anything to it.
 """
 
 from __future__ import annotations
@@ -15,21 +20,6 @@ from pydantic_settings import SettingsConfigDict
 from inference.admission import AdmissionSettings
 
 INFERENCE_ROOT = Path(__file__).resolve().parent
-_PLACEHOLDER_SECRET_VALUES = {
-    "change-me",
-    "change-me-in-production",
-    "replace-me",
-    "replace-with-a-secret",
-}
-
-
-def _is_placeholder_secret(value: str | None) -> bool:
-    normalized = (value or "").strip().casefold()
-    return (
-        not normalized
-        or normalized in _PLACEHOLDER_SECRET_VALUES
-        or normalized.startswith("replace-with-")
-    )
 
 
 class InferenceSettings(AdmissionSettings):
@@ -40,16 +30,6 @@ class InferenceSettings(AdmissionSettings):
         default=INFERENCE_ROOT / "registry.yaml",
         alias="INFERENCE_REGISTRY_PATH",
     )
-    inference_service_secret: str | None = Field(default=None, alias="INFERENCE_SERVICE_SECRET")
-
-    def require_service_endpoint_configuration(self) -> None:
-        """Fail closed when the HTTP inference API cannot authenticate callers."""
-        if self.environment.casefold() != "production":
-            return
-        if _is_placeholder_secret(self.inference_service_secret):
-            raise ValueError(
-                "INFERENCE_SERVICE_SECRET must be set to a non-placeholder value in production"
-            )
 
 
 @lru_cache

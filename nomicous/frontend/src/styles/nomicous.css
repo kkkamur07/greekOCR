@@ -19,29 +19,51 @@
   border-bottom-color: var(--green-banner-border);
   color: #065f46;
 }
-.pe-helper-install-overlay {
+.pe-agent-install-overlay {
   z-index: 400;
 }
-.pe-helper-install-modal {
+.pe-agent-install-modal {
   max-width: 480px;
 }
-.pe-helper-install-modal__lead {
+.pe-agent-install-modal__lead {
   margin: 0 0 16px;
   color: var(--text-2);
   font-size: 0.9375rem;
   line-height: 1.5;
 }
-.pe-helper-install-modal__steps {
+.pe-agent-install-modal__steps {
   margin: 0 0 20px;
   padding-left: 1.25rem;
   color: var(--text-2);
   font-size: 0.875rem;
   line-height: 1.55;
 }
-.pe-helper-install-modal__steps li + li {
-  margin-top: 8px;
+.pe-agent-install-modal__steps li + li {
+  margin-top: 14px;
 }
-.pe-helper-install-modal__actions {
+.pe-agent-install-modal__lead-in {
+  display: block;
+  color: var(--text-1);
+}
+.pe-agent-install-modal__command {
+  display: block;
+  margin: 6px 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--surface-2, #f4f4f5);
+  color: var(--text-1);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.pe-agent-install-modal__note {
+  display: block;
+  color: var(--text-2);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+.pe-agent-install-modal__actions {
   display: flex;
   flex-direction: column;
   gap: 8px;

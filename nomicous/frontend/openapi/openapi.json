@@ -325,114 +325,6 @@
         "title": "Body_upload_part_projects__project_id__documents__document_id__parts_post",
         "type": "object"
       },
-      "BoundedSegmentLine": {
-        "description": "Segment line with the platform's geometry bound applied to untrusted browser output.",
-        "properties": {
-          "baseline": {
-            "additionalProperties": true,
-            "title": "Baseline",
-            "type": "object"
-          },
-          "block_external_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Block External Id"
-          },
-          "external_id": {
-            "minLength": 1,
-            "title": "External Id",
-            "type": "string"
-          },
-          "kind": {
-            "$ref": "#/components/schemas/SegmentGeometryKind",
-            "default": "polygon"
-          },
-          "kraken_ceiling": {
-            "anyOf": [
-              {
-                "items": {
-                  "items": {
-                    "type": "number"
-                  },
-                  "type": "array"
-                },
-                "maxItems": 256,
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Kraken Ceiling"
-          },
-          "mask": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Mask"
-          },
-          "order": {
-            "minimum": 0.0,
-            "title": "Order",
-            "type": "integer"
-          },
-          "points": {
-            "items": {
-              "items": {
-                "type": "number"
-              },
-              "type": "array"
-            },
-            "maxItems": 256,
-            "minItems": 4,
-            "title": "Points",
-            "type": "array"
-          },
-          "source_metadata": {
-            "additionalProperties": true,
-            "title": "Source Metadata",
-            "type": "object"
-          }
-        },
-        "required": ["external_id", "order", "baseline", "points"],
-        "title": "BoundedSegmentLine",
-        "type": "object"
-      },
-      "BoundedSegmentRunResponse": {
-        "description": "Browser-supplied segmentation output, bounded before it reaches the merge service.",
-        "properties": {
-          "blocks": {
-            "items": {
-              "$ref": "#/components/schemas/SegmentBlock"
-            },
-            "maxItems": 10000,
-            "title": "Blocks",
-            "type": "array"
-          },
-          "lines": {
-            "items": {
-              "$ref": "#/components/schemas/BoundedSegmentLine"
-            },
-            "maxItems": 10000,
-            "title": "Lines",
-            "type": "array"
-          }
-        },
-        "title": "BoundedSegmentRunResponse",
-        "type": "object"
-      },
       "CharacterConfidence": {
         "properties": {
           "char": {
@@ -453,6 +345,7 @@
         "type": "object"
       },
       "ClaimedPageResponse": {
+        "description": "One page of work, and the short-lived link to its image.\n\nThe link is not authenticated by anything the agent presents: the signature\nin it *is* the authorization, and it reaches exactly one object (ADR 0002).\nAn authenticated ``GET /device/v1/jobs/{id}/image`` was rejected because the\nproduction API is serverless - streaming manuscript scans through it costs\nmoney for nothing - and because it would put a route on the device credential\nthat must independently re-derive job ownership.",
         "properties": {
           "execution_target": {
             "$ref": "#/components/schemas/ExecutionTarget"
@@ -470,6 +363,17 @@
             "title": "Lease Expires At",
             "type": "string"
           },
+          "page_image_expires_at": {
+            "description": "When the link above stops working - about a minute out, and deliberately not the lease. The agent fetches once, right after claiming.",
+            "format": "date-time",
+            "title": "Page Image Expires At",
+            "type": "string"
+          },
+          "page_image_url": {
+            "description": "Signed link to this page's image, and to nothing else. Carries its own authorization, so it is fetched with no device credential attached.",
+            "title": "Page Image Url",
+            "type": "string"
+          },
           "product_job_id": {
             "format": "uuid",
             "title": "Product Job Id",
@@ -485,7 +389,9 @@
           "job_type",
           "execution_target",
           "lease_expires_at",
-          "request"
+          "request",
+          "page_image_url",
+          "page_image_expires_at"
         ],
         "title": "ClaimedPageResponse",
         "type": "object"
@@ -2088,179 +1994,6 @@
           }
         },
         "title": "LinesReplaceRequest",
-        "type": "object"
-      },
-      "LocalCharacterConfidenceRequest": {
-        "properties": {
-          "char": {
-            "maxLength": 1,
-            "minLength": 1,
-            "title": "Char",
-            "type": "string"
-          },
-          "confidence": {
-            "maximum": 1.0,
-            "minimum": 0.0,
-            "title": "Confidence",
-            "type": "number"
-          }
-        },
-        "required": ["char", "confidence"],
-        "title": "LocalCharacterConfidenceRequest",
-        "type": "object"
-      },
-      "LocalSegmentPersistRequest": {
-        "properties": {
-          "output": {
-            "$ref": "#/components/schemas/BoundedSegmentRunResponse"
-          },
-          "registry_model_id": {
-            "maxLength": 255,
-            "minLength": 1,
-            "title": "Registry Model Id",
-            "type": "string"
-          },
-          "registry_tag": {
-            "default": "stable",
-            "maxLength": 255,
-            "minLength": 1,
-            "title": "Registry Tag",
-            "type": "string"
-          }
-        },
-        "required": ["registry_model_id", "output"],
-        "title": "LocalSegmentPersistRequest",
-        "type": "object"
-      },
-      "LocalSegmentPersistResponse": {
-        "properties": {
-          "added_lines": {
-            "title": "Added Lines",
-            "type": "integer"
-          },
-          "blocks_count": {
-            "title": "Blocks Count",
-            "type": "integer"
-          },
-          "job_id": {
-            "format": "uuid",
-            "title": "Job Id",
-            "type": "string"
-          },
-          "lines_count": {
-            "title": "Lines Count",
-            "type": "integer"
-          },
-          "preserved_manual_lines": {
-            "title": "Preserved Manual Lines",
-            "type": "integer"
-          },
-          "pruned_lines": {
-            "title": "Pruned Lines",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "job_id",
-          "blocks_count",
-          "lines_count",
-          "added_lines",
-          "pruned_lines",
-          "preserved_manual_lines"
-        ],
-        "title": "LocalSegmentPersistResponse",
-        "type": "object"
-      },
-      "LocalTranscribeLinePersistRequest": {
-        "properties": {
-          "character_confidences": {
-            "anyOf": [
-              {
-                "items": {
-                  "$ref": "#/components/schemas/LocalCharacterConfidenceRequest"
-                },
-                "maxItems": 10000,
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Character Confidences"
-          },
-          "confidence": {
-            "maximum": 1.0,
-            "minimum": 0.0,
-            "title": "Confidence",
-            "type": "number"
-          },
-          "line_id": {
-            "format": "uuid",
-            "title": "Line Id",
-            "type": "string"
-          },
-          "text": {
-            "maxLength": 10000,
-            "title": "Text",
-            "type": "string"
-          }
-        },
-        "required": ["line_id", "text", "confidence"],
-        "title": "LocalTranscribeLinePersistRequest",
-        "type": "object"
-      },
-      "LocalTranscribePersistRequest": {
-        "properties": {
-          "lines": {
-            "items": {
-              "$ref": "#/components/schemas/LocalTranscribeLinePersistRequest"
-            },
-            "maxItems": 10000,
-            "minItems": 1,
-            "title": "Lines",
-            "type": "array"
-          },
-          "registry_model_id": {
-            "maxLength": 255,
-            "minLength": 1,
-            "title": "Registry Model Id",
-            "type": "string"
-          },
-          "registry_tag": {
-            "default": "stable",
-            "maxLength": 255,
-            "minLength": 1,
-            "title": "Registry Tag",
-            "type": "string"
-          }
-        },
-        "required": ["registry_model_id", "lines"],
-        "title": "LocalTranscribePersistRequest",
-        "type": "object"
-      },
-      "LocalTranscribePersistResponse": {
-        "properties": {
-          "job_id": {
-            "format": "uuid",
-            "title": "Job Id",
-            "type": "string"
-          },
-          "lines": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "title": "Lines",
-            "type": "array"
-          },
-          "transcription_id": {
-            "format": "uuid",
-            "title": "Transcription Id",
-            "type": "string"
-          }
-        },
-        "required": ["job_id", "transcription_id", "lines"],
-        "title": "LocalTranscribePersistResponse",
         "type": "object"
       },
       "LoginRequest": {
@@ -4312,6 +4045,126 @@
         },
         "summary": "Report Client Failure",
         "tags": ["observability"]
+      }
+    },
+    "/device/v1/agent/version": {
+      "get": {
+        "description": "The version verdict on its own, with no page attached.\n\nThe whole endpoint is its dependency. An agent below the floor never reaches\nthis body - it gets the same 426 the claim path would have given it, from the\nsame comparison - and one that is served gets the same notice the claim\nresponse would have carried.\n\nThis is what makes ADR 0002's launch check possible. An agent that had to\nclaim in order to learn it was stale would be holding a page at the exact\nmoment it decided to replace its own code, which is the thing that must never\nhappen: the launch moment is the only safe one because nothing is in flight\nduring it.",
+        "operationId": "read_agent_version_device_v1_agent_version_get",
+        "parameters": [
+          {
+            "description": "Agent version, MAJOR.MINOR.PATCH. Required: an agent that does not say what it is cannot claim.",
+            "in": "header",
+            "name": "X-Nomicous-Agent-Version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Agent version, MAJOR.MINOR.PATCH. Required: an agent that does not say what it is cannot claim.",
+              "title": "X-Nomicous-Agent-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentVersionNotice"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict with current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "426": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentVersionRefusalResponse"
+                }
+              }
+            },
+            "description": "The agent is below the version floor, or did not say what version it is. It must upgrade before it claims; retrying the same build cannot succeed."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Read Agent Version",
+        "tags": ["device-jobs"]
       }
     },
     "/device/v1/jobs/claim": {
@@ -6688,6 +6541,149 @@
           }
         ],
         "summary": "Get Part Image",
+        "tags": ["media"]
+      }
+    },
+    "/media/signed/{image_key}": {
+      "get": {
+        "operationId": "get_signed_object_media_signed__image_key__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "image_key",
+            "required": true,
+            "schema": {
+              "title": "Image Key",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Unix seconds after which the link is dead.",
+            "in": "query",
+            "name": "expires",
+            "required": true,
+            "schema": {
+              "description": "Unix seconds after which the link is dead.",
+              "title": "Expires",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "HMAC over the object key and expiry.",
+            "in": "query",
+            "name": "signature",
+            "required": true,
+            "schema": {
+              "description": "HMAC over the object key and expiry.",
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Signature",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "image/jpeg": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "image/webp": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Page image bytes"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Missing, forged, or expired signature"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "No such object"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict with current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Get Signed Object",
         "tags": ["media"]
       }
     },
@@ -10457,278 +10453,6 @@
           }
         ],
         "summary": "Patch Part Line",
-        "tags": ["documents"]
-      }
-    },
-    "/projects/{project_id}/documents/{document_id}/parts/{part_id}/local-inference/segment": {
-      "post": {
-        "operationId": "persist_local_segment_projects__project_id__documents__document_id__parts__part_id__local_inference_segment_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "project_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Project Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "document_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Document Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "part_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Part Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LocalSegmentPersistRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LocalSegmentPersistResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
-            "description": "Not authenticated"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
-            "description": "Not authorized"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
-            "description": "Resource not found"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
-            "description": "Conflict with current state"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
-            "description": "Validation error"
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
-            "description": "Rate limit exceeded"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
-            "description": "Internal server error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Persist Local Segment",
-        "tags": ["documents"]
-      }
-    },
-    "/projects/{project_id}/documents/{document_id}/parts/{part_id}/local-inference/transcribe": {
-      "post": {
-        "operationId": "persist_local_transcribe_projects__project_id__documents__document_id__parts__part_id__local_inference_transcribe_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "project_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Project Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "document_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Document Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "part_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Part Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LocalTranscribePersistRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LocalTranscribePersistResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
-            "description": "Not authenticated"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
-            "description": "Not authorized"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
-            "description": "Resource not found"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
-            "description": "Conflict with current state"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
-            "description": "Validation error"
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
-            "description": "Rate limit exceeded"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
-            "description": "Internal server error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Persist Local Transcribe",
         "tags": ["documents"]
       }
     },

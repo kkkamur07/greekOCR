@@ -13,7 +13,6 @@ import { SettingsIcon } from "./EditorIcons";
 import { PageEditorSettingsPanel } from "./PageEditorSettingsPanel";
 import { PageEditorInferenceStatus } from "./PageEditorInferenceStatus";
 import { PAGE_EDITOR_SHORTCUTS } from "./pageEditorShortcuts";
-import type { HostEligibility } from "../../inference/types";
 import type { PageEditorCanvasSettings } from "./pageEditorSettings";
 import { ToolbarKbd } from "./ToolbarKbd";
 
@@ -68,9 +67,9 @@ type PageEditorToolbarProps = {
   preferLocalInference: boolean;
   onPreferLocalInferenceChange: (preferLocal: boolean) => void;
   preferenceSaving: boolean;
-  helperAvailable: boolean;
-  helperProbing: boolean;
-  selectedModelHostEligibility: HostEligibility | null;
+  /** **Capacity** for this account's own computer, as the platform reports it. */
+  hasLocalCapacity: boolean;
+  hostPreferenceLoading: boolean;
 };
 
 export function PageEditorToolbar({
@@ -117,9 +116,8 @@ export function PageEditorToolbar({
   preferLocalInference,
   onPreferLocalInferenceChange,
   preferenceSaving,
-  helperAvailable,
-  helperProbing,
-  selectedModelHostEligibility,
+  hasLocalCapacity,
+  hostPreferenceLoading,
 }: PageEditorToolbarProps) {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const settingsRef = useRef<HTMLDivElement>(null);
@@ -222,8 +220,8 @@ export function PageEditorToolbar({
 
       <div className="pe-toolbar__center" aria-label="Page statistics">
         <PageEditorInferenceStatus
-          probing={helperProbing}
-          helperAvailable={helperAvailable}
+          loading={hostPreferenceLoading}
+          hasLocalCapacity={hasLocalCapacity}
           preferLocalInference={preferLocalInference}
         />
         {processingLabel && (
@@ -509,8 +507,7 @@ export function PageEditorToolbar({
                 preferLocalInference={preferLocalInference}
                 onPreferLocalInferenceChange={onPreferLocalInferenceChange}
                 preferenceSaving={preferenceSaving}
-                helperAvailable={helperAvailable}
-                selectedModelHostEligibility={selectedModelHostEligibility}
+                hasLocalCapacity={hasLocalCapacity}
               />
             )}
           </div>

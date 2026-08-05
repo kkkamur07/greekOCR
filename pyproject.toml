@@ -15,10 +15,11 @@ readme = "inference/README.md"
 requires-python = ">=3.11,<3.13"
 # [project].dependencies is the closure that reaches a researcher's laptop.
 # Anything added here is downloaded by every `uv tool install nomicous-inference`,
-# so it is the runtime imports of the shipped modules and nothing else. The
-# loopback HTTP surfaces (`inference/api`, `inference/helper`) are excluded from
-# the wheel, which is why FastAPI, uvicorn and httpx are absent; they stay in
-# the `helper` dependency-group for as long as those modules do (#60).
+# so it is the runtime imports of the shipped modules and nothing else. There is
+# no FastAPI, uvicorn or httpx because since #60 there is nothing under
+# `inference/` that serves HTTP: the wheel is now the whole package, with no
+# excluded subtree, because the loopback surfaces that had to be excluded are
+# gone (ADR 0002).
 dependencies = [
     "huggingface-hub>=0.27.0",
     "numpy>=1.24.4,<2",
@@ -55,13 +56,11 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["inference"]
-# `inference/api` is the synchronous HTTP inference service and
-# `inference/helper` the loopback sidecar. ADR 0002 deletes both (#60); until
-# it does, they stay in the repository and out of the wheel. Keeping them out
-# is what lets the published closure hold no web server.
+# Nothing is excluded for being a web server any more: #60 deleted
+# `inference/api` and `inference/helper` outright, so "the published closure
+# holds no web server" is now true by construction rather than by an exclude
+# list somebody has to keep correct.
 exclude = [
-    "/inference/api",
-    "/inference/helper",
     "/inference/CONTEXT.md",
     # Empty placeholder tree from the pre-Hub weights layout. Weights come from
     # the Hub now and are cached under the researcher's home directory.
@@ -72,10 +71,6 @@ exclude = [
 include = [
     "/inference",
     "/pyproject.toml",
-]
-exclude = [
-    "/inference/api",
-    "/inference/helper",
 ]
 
 [dependency-groups]
@@ -115,26 +110,24 @@ service-core = [
     "pydantic-settings>=2.6.0",
     "pyyaml>=6.0.2",
 ]
-# What the loopback HTTP surfaces (`inference/api`, `inference/helper`) need on
-# top of the published runtime. The model runtime itself is no longer listed
-# here - it moved to [project].dependencies, which is now the single statement
-# of what reaches a researcher. This group is what does *not* reach one, and it
-# disappears with those modules in #60.
-helper = [
-    { include-group = "service-core" },
-    # Floor clears CVE-2025-4565 / CVE-2026-0994.
-    "protobuf>=5.29.6",
-    "uvicorn>=0.32.0",
-]
-# Inference runtime (contracts importable from nomicous). No Postgres driver and
-# no ORM: since ADR 0003 the platform owns the only job queue, and nothing under
-# `inference/` touches a database.
+# The `helper` group is gone with the modules it existed for (#60). It named
+# what the loopback HTTP surfaces needed on top of the published runtime, and
+# there is no longer anything under `inference/` that serves HTTP.
+#
+# What is left is what `tests/inference` needs in order to have a *platform* to
+# drive the CLI against: the integration tests stand up a real uvicorn process
+# on the platform's own `create_app()` and point `nomicous pair` / `nomicous
+# run` at it. None of it reaches a researcher - that is [project].dependencies,
+# which is now the single statement of what does.
+#
 # NOTE: the model runtime itself (numpy / torch / pillow / scikit-image / scipy
 # / shapely / safetensors / opencv-python-headless / huggingface-hub) lives in
 # [project].dependencies, so this group must be installed with
 # `--group inference`, never `--only-group`.
 inference = [
-    { include-group = "helper" },
+    { include-group = "service-core" },
+    # Floor clears CVE-2025-4565 / CVE-2026-0994.
+    "protobuf>=5.29.6",
     "uvicorn[standard]>=0.32.0",
 ]
 load-testing = [
@@ -208,7 +201,6 @@ explicit = true
 migrate = { shell = "cd ${NOMICOUS_APP_ROOT:-nomicous} && alembic -c infrastructure/alembic.ini upgrade head" }
 serve = { shell = "cd ${NOMICOUS_APP_ROOT:-nomicous} && uvicorn backend.core.main:app --host 0.0.0.0 --port 8000 --workers 1" }
 api = { sequence = ["migrate", "serve"] }
-inference-helper = "python -m inference.helper"
 # `--group test` is named explicitly on every task: the inference group carries
 # no pytest, so omitting it silently falls back to whatever `pytest` is on PATH
 # (unpinned) or fails outright.

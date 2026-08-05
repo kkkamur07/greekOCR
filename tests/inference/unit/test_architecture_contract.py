@@ -7,14 +7,18 @@ These tests are written against the two shared seams rather than against either
 architecture, and every case runs over both:
 
 * ``architectures.artifact.resolve_artifact`` - the order of the preflight
-  checks, and therefore the HTTP status a broken deployment answers with.
+  checks, and therefore which of the two failure families a broken deployment
+  lands in.
 * ``architectures.isolation.reraise_if_none_survived`` - partial pages survive,
   an entirely failed page re-raises its first cause with the original type.
 
-The HTTP assertions go through ``run_errors.http_exception_for_run_error``
-deliberately. It is the only thing that reads these exception types, and a
-refactor that collapsed two of them into one would be invisible to a test that
-only asserted the type.
+The two families are asserted by type, not by HTTP status. Until #60 they were
+read by ``run_errors.http_exception_for_run_error``, which turned a
+``RuntimeError`` into a 503 and a ``ValueError`` into a 422 for the loopback
+service; that service is gone and an **inference agent** reports a failed page
+in words through the job callback. The distinction still has to hold, because
+``ArtifactIntegrityError`` subclasses ``ValueError`` on purpose and is a broken
+deployment rather than a bad request - it just no longer has a status attached.
 """
 
 from __future__ import annotations
@@ -34,14 +38,13 @@ from inference.architectures.blla.blla_decoder import DecodedBLLALine
 from inference.architectures.calamari import adapter as calamari_adapter
 from inference.architectures.calamari.adapter import TranscribeLineFailure
 from inference.contracts.transcribe import CharacterConfidence, TranscribeRunResponse
-from inference.run_errors import http_exception_for_run_error
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 # --- Artifact preflight contract ---------------------------------------------
 # Every execution path must reject a missing, foreign, or corrupt artifact in
-# the same order and with types that carry the same HTTP status.
+# the same order and with types from the same failure family.
 
 
 @dataclass(frozen=True)
@@ -117,10 +120,11 @@ def test_missing_artifact_is_a_service_error_on_every_path(
     with pytest.raises(FileNotFoundError):
         path.run(absent, None)
 
-    # 503, never 404: the registry entry resolved, the file behind it did not.
+    # A deployment failure, never a "no such model": the registry entry
+    # resolved, the file behind it did not.
     with pytest.raises(FileNotFoundError) as caught:
         path.run(absent, None)
-    assert http_exception_for_run_error(caught.value).status_code == 503
+    assert not isinstance(caught.value, ValueError)
 
 
 @pytest.mark.parametrize("path", EXECUTION_PATHS, ids=PATH_IDS)
@@ -138,7 +142,6 @@ def test_foreign_artifact_is_a_service_error_on_every_path(
     # subclass. Demote one to ValueError and this deployment failure silently
     # starts telling callers their request was malformed.
     assert isinstance(caught.value, RuntimeError)
-    assert http_exception_for_run_error(caught.value).status_code == 503
 
 
 @pytest.mark.parametrize("path", EXECUTION_PATHS, ids=PATH_IDS)
@@ -146,7 +149,7 @@ def test_corrupt_artifact_is_a_service_error_not_a_client_error(
     path: ExecutionPath,
     tmp_path: Path,
 ) -> None:
-    """``ArtifactIntegrityError`` subclasses ``ValueError`` and must stay a 503."""
+    """``ArtifactIntegrityError`` subclasses ``ValueError`` but is not a bad request."""
     from inference.hub.artifacts import ArtifactIntegrityError
 
     artifact = tmp_path / f"model{path.native_suffix}"
@@ -156,7 +159,7 @@ def test_corrupt_artifact_is_a_service_error_not_a_client_error(
         path.run(artifact, "0" * 64)
 
     assert isinstance(caught.value, ValueError)
-    assert http_exception_for_run_error(caught.value).status_code == 503
+    assert type(caught.value) is ArtifactIntegrityError
 
 
 @pytest.mark.parametrize("path", EXECUTION_PATHS, ids=PATH_IDS)
@@ -315,20 +318,20 @@ def test_a_page_with_no_failures_returns_every_unit(
 
 @pytest.mark.parametrize("run_page", PAGE_RUNNERS)
 @pytest.mark.parametrize(
-    ("failure", "expected_status"),
+    ("failure", "expected_family"),
     [
-        # A broken artifact must stay a 503 and a bad request a 422. Flattening
-        # the isolated failures into one error type - or into an empty page -
-        # would silently merge these two answers.
-        (calamari_adapter.CalamariUnavailableError("runtime is gone"), 503),
-        (ValueError("caller sent nonsense geometry"), 422),
+        # A broken artifact must stay a deployment failure and a bad request a
+        # client one. Flattening the isolated failures into one error type - or
+        # into an empty page - would silently merge these two answers.
+        (calamari_adapter.CalamariUnavailableError("runtime is gone"), RuntimeError),
+        (ValueError("caller sent nonsense geometry"), ValueError),
     ],
     ids=["unusable-runtime", "bad-request"],
 )
 def test_a_page_where_every_unit_failed_reraises_the_first_cause(
     run_page,
     failure: Exception,
-    expected_status: int,
+    expected_family: type[Exception],
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -339,7 +342,7 @@ def test_a_page_where_every_unit_failed_reraises_the_first_cause(
 
     # The *first* failure, not the last, and not a generic wrapper.
     assert caught.value is failure
-    assert http_exception_for_run_error(caught.value).status_code == expected_status
+    assert isinstance(caught.value, expected_family)
 
 
 def test_an_empty_page_is_where_the_two_architectures_legitimately_differ(
@@ -351,16 +354,16 @@ def test_an_empty_page_is_where_the_two_architectures_legitimately_differ(
     The shared rule only covers a page that *failed* and produced nothing. A
     page with zero units is architecture-specific and must stay that way,
     because the units do not mean the same thing: Calamari's are line regions
-    the caller supplied, so asking for none of them is a malformed request
-    (422), while BLLA's are lines the decoder discovered, so finding none is a
-    blank page and a legitimate empty response. Neither may re-raise, and the
-    contract test pins that they do not converge by accident.
+    the caller supplied, so asking for none of them is a malformed request,
+    while BLLA's are lines the decoder discovered, so finding none is a blank
+    page and a legitimate empty response. Neither may re-raise, and the contract
+    test pins that they do not converge by accident.
     """
     from inference.contracts.segment import SegmentRunResponse
 
     with pytest.raises(ValueError) as caught:
         _calamari_page(monkeypatch, tmp_path, [])
-    assert http_exception_for_run_error(caught.value).status_code == 422
+    assert not isinstance(caught.value, RuntimeError)
 
     blla_result = _blla_page(monkeypatch, tmp_path, [])
     assert isinstance(blla_result, SegmentRunResponse)

@@ -75,9 +75,7 @@ function setup(initialLines: LineResponse[]) {
       shouldUseLocalPath: () => false,
       setSubmissionRefusal: vi.fn(),
       segmentRegistryModelId: "blla-segment",
-      localInference: { startRun: vi.fn() },
       trackJobAndWait: vi.fn(),
-      trackLocalTask: vi.fn(),
     });
     return { lines, setLines, ...mutations };
   });

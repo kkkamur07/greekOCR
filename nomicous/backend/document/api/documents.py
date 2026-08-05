@@ -6,7 +6,6 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Query, Response, UploadFile, status
-from inference.contracts.transcribe import CharacterConfidence, TranscribeRunResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.annotation.application.export_service import AnnotationExportService
@@ -44,10 +43,6 @@ from backend.document.api.schemas import (
     LinesReplaceRequest,
     LineTranscriptionPatchRequest,
     LineTranscriptionResponse,
-    LocalSegmentPersistRequest,
-    LocalSegmentPersistResponse,
-    LocalTranscribePersistRequest,
-    LocalTranscribePersistResponse,
     PagePairingResponse,
     PageTranscriptionImportRequest,
     PageTranscriptionTextLineResponse,
@@ -61,7 +56,6 @@ from backend.document.api.schemas import (
 from backend.document.application.document_catalog import DocumentCatalog
 from backend.document.application.document_job_enqueue import DocumentJobEnqueueService
 from backend.document.application.layout_service import LayoutService
-from backend.document.application.local_inference_service import LocalInferenceService
 from backend.document.application.part_service import DocumentPartService
 from backend.document.application.transcription_service import TranscriptionService
 from backend.document.infrastructure.document_repository import DocumentRepository
@@ -79,7 +73,6 @@ _layout = LayoutService()
 _transcriptions = TranscriptionService()
 _enqueue = DocumentJobEnqueueService()
 _capacity = InferenceCapacityService()
-_local_inference_service = LocalInferenceService()
 _document_repo = DocumentRepository()
 _export_service = AnnotationExportService()
 _page_xml_export_service = PageXmlExportService()
@@ -697,87 +690,6 @@ async def transcribe_part(
         line_ids=body.line_ids,
     )
     return EnqueueJobResponse(job_id=job.id)
-
-
-@router.post(
-    "/{document_id}/parts/{part_id}/local-inference/transcribe",
-    response_model=LocalTranscribePersistResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-async def persist_local_transcribe(
-    project_id: UUID,
-    document_id: UUID,
-    part_id: UUID,
-    body: LocalTranscribePersistRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-) -> LocalTranscribePersistResponse:
-    lines = [
-        (
-            line.line_id,
-            TranscribeRunResponse(
-                text=line.text,
-                confidence=line.confidence,
-                character_confidences=[
-                    CharacterConfidence(char=entry.char, confidence=entry.confidence)
-                    for entry in (line.character_confidences or [])
-                ]
-                or [
-                    CharacterConfidence(char=character, confidence=line.confidence)
-                    for character in line.text
-                ],
-            ),
-        )
-        for line in body.lines
-    ]
-    result = await _local_inference_service.persist_local_transcribe(
-        db,
-        current_user,
-        project_id,
-        document_id,
-        part_id,
-        registry_model_id=body.registry_model_id,
-        registry_tag=body.registry_tag,
-        lines=lines,
-    )
-    return LocalTranscribePersistResponse(
-        job_id=UUID(result["job_id"]),
-        transcription_id=UUID(result["transcription_id"]),
-        lines=result["lines"],
-    )
-
-
-@router.post(
-    "/{document_id}/parts/{part_id}/local-inference/segment",
-    response_model=LocalSegmentPersistResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-async def persist_local_segment(
-    project_id: UUID,
-    document_id: UUID,
-    part_id: UUID,
-    body: LocalSegmentPersistRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-) -> LocalSegmentPersistResponse:
-    result = await _local_inference_service.persist_local_segment(
-        db,
-        current_user,
-        project_id,
-        document_id,
-        part_id,
-        registry_model_id=body.registry_model_id,
-        registry_tag=body.registry_tag,
-        output=body.output,
-    )
-    return LocalSegmentPersistResponse(
-        job_id=UUID(result["job_id"]),
-        blocks_count=result["blocks_count"],
-        lines_count=result["lines_count"],
-        added_lines=result["added_lines"],
-        pruned_lines=result["pruned_lines"],
-        preserved_manual_lines=result["preserved_manual_lines"],
-    )
 
 
 @router.post(

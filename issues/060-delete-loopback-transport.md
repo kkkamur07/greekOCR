@@ -2,7 +2,7 @@
 id: "060"
 title: "delete-loopback-transport"
 type: AFK
-status: backlog
+status: done
 tracker: "https://github.com/kkkamur07/greekOCR/issues/60"
 blocked_by:
   - "057-cli-run-loop.md 059-frontend-host-preference.md"
@@ -27,12 +27,12 @@ Keeping loopback as a transitional second mode was rejected: every feature — c
 
 ## Acceptance criteria
 
-- [ ] Nothing in the repository opens a listening port on the researcher's machine
-- [ ] The frontend contains no loopback discovery, probe, or client code
-- [ ] The content security policy no longer permits connections to localhost
-- [ ] Tests whose subject was the loopback transport are deleted, not ported
-- [ ] Local inference works end to end with the browser entirely uninvolved in reaching the agent
-- [ ] Full platform and frontend suites green
+- [x] Nothing in the repository opens a listening port on the researcher's machine
+- [x] The frontend contains no loopback discovery, probe, or client code
+- [x] The content security policy no longer permits connections to localhost
+- [x] Tests whose subject was the loopback transport are deleted, not ported
+- [x] Local inference works end to end with the browser entirely uninvolved in reaching the agent
+- [x] Full platform and frontend suites green
 
 ## Blocked by
 

@@ -79,7 +79,7 @@ Python code at `inference/hub/` that resolves `hf://` URIs, checks **Hub cache**
 _Avoid_: huggingface module (too generic), src/hf/resolve (pre-package location)
 
 **Published package**:
-The one distribution, `nomicous-inference`, carrying the inference library, **Hub integration**, and the `nomicous` console entry point. A researcher's laptop and a hosted worker install the same package (ADR 0002), so there is no version-compatibility matrix between components that always ship together. Built from the repository root; the wheel contains `inference/` minus the loopback HTTP surfaces.
+The one distribution, `nomicous-inference`, carrying the inference library, **Hub integration**, and the `nomicous` console entry point. A researcher's laptop and a hosted worker install the same package (ADR 0002), so there is no version-compatibility matrix between components that always ship together. Built from the repository root; the wheel is now the whole of `inference/`, because the loopback HTTP surfaces it used to exclude were deleted (#60) rather than merely held out of the build.
 _Avoid_: helper bundle (frozen-installer era), library package vs CLI package (there is one)
 
 **Inference host**:
@@ -197,7 +197,7 @@ _Avoid_: org (when meaning the namespace generically)
 
 ### Current (interim)
 
-- Sync inference: `POST /inference/v1/run` via `inference/api/run.py` and `inference/jobs/runner.py`
+- Entry point: `run_model` in `inference/jobs/runner.py`, called in process by whichever **inference agent** claimed the page. There is no HTTP surface under `inference/`: `inference/api` (sync `POST /inference/v1/run`) and `inference/helper` (the loopback sidecar) were deleted by #60, and with them `run_errors.py`, `contracts/run.py`, and the `INFERENCE_SERVICE_SECRET` that authenticated their callers.
 - Queued jobs: the platform owns the only queue (ADR 0003). `inference` holds no database, ORM, or claim loop of its own.
 - **Claim**: `POST /device/v1/jobs/claim` on the platform - the one endpoint this layer adds (ADR 0005). Completion and failure are the existing `POST /internal/inference/job-complete` with a `JobCallbackRequest`; abandonment is the existing stale sweep. There is no heartbeat and no release endpoint.
 - **Signed page image link**: `page_image_url` / `page_image_expires_at` on the claimed page. Minted by the media store, so Supabase signs a Storage URL and the local filesystem backend signs a path the platform serves at `/media/signed/{image_key}` - a route with no credential dependency, which refuses to answer unless `STORAGE_BACKEND=local`.
@@ -207,7 +207,7 @@ _Avoid_: org (when meaning the namespace generically)
 - **Calamari runtime**: local PyTorch graph + local preprocessing; no TensorFlow or vendored `calamari_ocr` import at inference time.
 - Weight resolution: `file://`, `hf://`, and `package://` (see `inference/weights/__init__.py` and `inference/hub/`)
 - Runtime cache: `~/.nomicous/hf/cache/<registry_model_id>/<registry_tag>/`
-- **CLI** (`inference/cli/`): `nomicous pair` and `nomicous version` (#56), `nomicous run` (#57), `nomicous upgrade` (#58). `pair` runs the pairing protocol above and writes the **device credential file**; `version` reports what the **version floor** will read, and asks the platform nothing; `upgrade` is the **launch check** run on demand, and prints nothing when this agent is current. `run` is the **claim** loop: one page in flight, fetched through the **signed page image link**, executed by the same `run_model` the platform's own worker calls, and ended through the existing job callback - `--exit-when-empty` for a script, waiting otherwise. `run` is also the only command that claims, so it is the only one the launch check gates, and it runs that check before its first claim and never again. A hosted **inference agent** runs the same loop with a **service credential** in `NOMICOUS_SERVICE_TOKEN` and a short poll. The platform base URL comes from `NOMICOUS_API_URL` or `--api-url`.
+- **CLI** (`inference/cli/`): the only entry point a researcher has. `nomicous pair` and `nomicous version` (#56), `nomicous run` (#57), `nomicous upgrade` (#58). `pair` runs the pairing protocol above and writes the **device credential file**; `version` reports what the **version floor** will read, and asks the platform nothing; `upgrade` is the **launch check** run on demand, and prints nothing when this agent is current. `run` is the **claim** loop: one page in flight, fetched through the **signed page image link**, executed by the same `run_model` the platform's own worker calls, and ended through the existing job callback - `--exit-when-empty` for a script, waiting otherwise. `run` is also the only command that claims, so it is the only one the launch check gates, and it runs that check before its first claim and never again. A hosted **inference agent** runs the same loop with a **service credential** in `NOMICOUS_SERVICE_TOKEN` and a short poll. The platform base URL comes from `NOMICOUS_API_URL` or `--api-url`.
 
 ### Hub layout (`src/hf/`)
 

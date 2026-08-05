@@ -38,7 +38,7 @@ annotation conventions, and infrastructure.
 
 You can:
 
-- run supported inference on a researcher’s own computer through the native helper;
+- run supported inference on a researcher’s own computer through the `nomicous` agent;
 - keep application data behind an API you control;
 - collaborate through projects and document sharing;
 - correct model output instead of treating it as automatic ground truth;
@@ -98,13 +98,9 @@ Open [http://localhost:5173](http://localhost:5173). Development seed credential
 | Editor                | [http://localhost:5173](http://localhost:5173)           |
 | Platform API          | [http://localhost:8000](http://localhost:8000)           |
 | API docs              | [http://localhost:8000/docs](http://localhost:8000/docs) |
-| Compose inference API | [http://localhost:8010](http://localhost:8010)           |
 | Postgres              | `127.0.0.1:5433`                                         |
 
 The first inference request downloads public weights into `~/.nomicous/hf/cache`.
-Host port `8001` is reserved for the optional local inference helper; the
-Compose inference container listens on `8001` internally and is exposed as
-`8010` on the host.
 
 ```bash
 docker compose ps
@@ -117,25 +113,28 @@ docker compose down
 
 The complete local stack is available for development and evaluation. A production deployment currently requires manual configuration of Supabase, three Vercel projects, DNS, secrets, migrations, and if remote inference is enabled, a persistent Docker host for the workers. It is not currently a one-click full-stack hosting product.
 
-The native inference helper is the one-click part: it runs Kraken and Calamari
-on a researcher’s machine, caches weights under
-`~/.nomicous/hf/cache`, and lets the hosted browser persist results through the
-platform API.
-
-Start a source helper with:
+Local inference is a command-line agent, not a background service (ADR 0002).
+It is the one published package, `nomicous-inference`, and a hosted worker
+installs the same one. It runs BLLA and Calamari on the researcher's CPU and
+caches weights under `~/.nomicous/hf/cache`.
 
 ```bash
-HELPER_REGISTRY_URL=http://localhost:8000/inference/v1/registry \
-HF_CACHE_ROOT=~/.nomicous/hf/cache \
-uv run --group inference python -m inference.helper
+uv tool install nomicous-inference --torch-backend=cpu   # or: pip install nomicous-inference
+nomicous pair          # links this machine to your account
+nomicous run           # takes pages from the queue until you stop it
 ```
 
-Then verify:
+It opens no port. The agent asks the platform for work, downloads the one page
+image it was handed through a short-lived signed link, runs the model, and
+reports the result back - so nothing on the researcher's machine has to be
+reachable from a browser, a proxy, or a VPN. Point it at a different platform
+with `NOMICOUS_API_URL` or `--api-url`.
 
-```bash
-curl -s http://127.0.0.1:8001/health
-curl -s http://127.0.0.1:8001/inference/v1/info
-```
+Where a job runs is decided once, when it is submitted, from the account
+setting "use my computer when it is available" and whether that computer has
+been seen recently. Every job then says which host ran it. An agent that is not
+running is an ordinary announced state, not a failure: the work goes to the
+cloud and the page says so.
 
 ## Architecture in one picture
 
@@ -144,11 +143,11 @@ flowchart LR
     Researcher["Researcher"] --> Editor["Next.js editor"]
     Editor --> API["FastAPI platform API"]
     API --> Data[("Postgres + private storage")]
-    Editor --> Helper["Optional local helper"]
-    Helper --> LocalModels["CPU model cache"]
     API --> Jobs["Durable job state"]
-    Jobs --> Worker["Persistent workers"]
-    Worker --> Models["Kraken + Calamari"]
+    Jobs --> Agent["nomicous agent (researcher's machine)"]
+    Agent --> LocalModels["CPU model cache"]
+    Jobs --> Worker["Hosted worker (same package)"]
+    Worker --> Models["BLLA + Calamari"]
     API -.-> Vercel["Vercel"]
     Data -.-> Supabase["Supabase"]
     Worker -.-> Docker["Docker host"]

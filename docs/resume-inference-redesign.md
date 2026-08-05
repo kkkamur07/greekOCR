@@ -93,7 +93,7 @@ docker ps --filter name=nomicous-db-1
 
 # Python. Bare `uv sync` PRUNES the venv to the default groups and takes zxcvbn,
 # fastapi and the rest with it; every backend import then fails. Always name the groups:
-uv sync --group dev --group test --group platform --group inference --group helper
+uv sync --group dev --group test --group platform --group inference
 
 # Frontend
 cd nomicous/frontend && npm install

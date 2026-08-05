@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
 
-from inference.api.app import create_app
 from inference.settings import InferenceSettings, get_inference_settings
 
 
@@ -16,37 +14,23 @@ def clear_inference_settings_cache() -> None:
     get_inference_settings.cache_clear()
 
 
-@pytest.mark.parametrize("secret", [None, "", "replace-me", "replace-with-a-secret"])
-def test_production_service_endpoint_rejects_missing_or_placeholder_secret(
-    secret: str | None,
-) -> None:
-    with pytest.raises(ValueError, match="INFERENCE_SERVICE_SECRET"):
-        InferenceSettings(
-            ENVIRONMENT="production",
-            INFERENCE_SERVICE_SECRET=secret,
-            _env_file=None,
-        ).require_service_endpoint_configuration()
-
-
-def test_development_service_endpoint_tolerates_missing_secret() -> None:
-    InferenceSettings(
-        ENVIRONMENT="development",
-        _env_file=None,
-    ).require_service_endpoint_configuration()
-
-
-def test_inference_api_fails_fast_for_production_placeholder_secret(monkeypatch) -> None:
-    monkeypatch.setenv("ENVIRONMENT", "production")
-    monkeypatch.setenv("INFERENCE_SERVICE_SECRET", "replace-me")
-    get_inference_settings.cache_clear()
-
-    with pytest.raises(ValueError, match="INFERENCE_SERVICE_SECRET"):
-        create_app()
-
-
 def test_settings_carry_no_database_configuration() -> None:
     """ADR 0003: the inference service owns no queue, so it owns no database."""
     field_names = set(InferenceSettings.model_fields)
 
     assert not [name for name in field_names if "database" in name or name.startswith("db_")]
     assert "worker_notify_channel" not in field_names
+
+
+def test_settings_carry_no_listening_service_configuration() -> None:
+    """ADR 0002: nothing here serves HTTP, so nothing here configures a server.
+
+    The service secret and its production placeholder check existed only to
+    authenticate callers of ``POST /inference/v1/run``. With that front door
+    gone, a surviving knob would be the first foothold for growing it back.
+    """
+    field_names = set(InferenceSettings.model_fields)
+
+    assert "inference_service_secret" not in field_names
+    assert not [name for name in field_names if "host" in name or "port" in name]
+    assert not hasattr(InferenceSettings, "require_service_endpoint_configuration")

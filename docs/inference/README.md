@@ -1,6 +1,6 @@
 # Inference documentation
 
-Models, registry, Hub weights, and the local Inference Helper.
+Models, registry, Hub weights, and the **inference agent** that runs them.
 
 | Doc                                                      | When to read                                            |
 | -------------------------------------------------------- | ------------------------------------------------------- |

@@ -13,22 +13,25 @@ This document covers setup, configuration choices, known pitfalls, and trade-off
 ┌─────────────────────────────────────────────────────────────────┐
 │  Browser (frontend)                                              │
 │    → Platform API (FastAPI, local or hosted)                     │
-│    → Inference helper (optional, localhost:8001) for local OCR    │
 └─────────────────────────────────────────────────────────────────┘
-         │                              │
-         │ JWT auth (app-owned)         │ local /run only
-         ▼                              ▼
-┌─────────────────────┐        ┌──────────────────────┐
-│ Supabase Postgres   │        │ Inference helper     │
-│ (postgres DB)       │        │ (on researcher Mac)  │
-└─────────────────────┘        └──────────────────────┘
-         │
-         ▼
-┌─────────────────────┐
-│ Supabase Storage    │
+         │                                        ▲
+         │ JWT auth (app-owned)                   │ claim a page, report it
+         ▼                                        │ (outbound, device token)
+┌─────────────────────┐              ┌──────────────────────────┐
+│ Supabase Postgres   │              │ nomicous inference agent │
+│ (postgres DB)       │              │ (researcher's machine)   │
+└─────────────────────┘              └──────────────────────────┘
+         │                                        │
+         ▼                                        │ signed page image link
+┌─────────────────────┐                           │
+│ Supabase Storage    │ ◄─────────────────────────┘
 │ bucket document-media│  ← page images only (WebP)
 └─────────────────────┘
 ```
+
+The browser never talks to the agent. The agent connects out to the platform,
+claims one page, and fetches that page's image through a short-lived **signed
+page image link** (ADR 0002).
 
 ### What goes where
 
@@ -214,28 +217,43 @@ Keys look like: `parts/<uuid>/<stem>.webp`
 
 ---
 
-## Inference: local helper vs cloud jobs
+## Inference: local agent vs hosted agent
 
-Two **separate** paths. Frontend chooses; backend `INFERENCE_*` vars are for **cloud jobs only**.
+One path, two hosts. Every job is queued on the platform and claimed by an
+**inference agent**; the only difference is which machine that agent runs on and
+which credential it presents.
 
 ```text
-Local path:  Browser → Inference helper (127.0.0.1:8001) → API persists results
-Cloud path:  Browser → API creates job → hosted agent claims it → webhook callback
+Browser → API creates job → agent claims it → runs the model → job callback
+             │                   │
+             │                   ├─ researcher's machine, device token   → local
+             │                   └─ persistent host, service credential  → cloud
+             └─ execution target fixed here, from host preference + capacity
 ```
 
-|                     | Local helper                                                         | Cloud (hosted agent)                                        |
-| ------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------- |
-| **Frontend config** | `NEXT_PUBLIC_INFERENCE_HELPER_URL` (default `http://127.0.0.1:8001`) | “Use cloud inference” toggle in page editor                 |
-| **Backend env**     | Not required                                                         | `INFERENCE_WEBHOOK_SECRET`                                  |
-| **Pros**            | GPU on your machine; no hosted inference cost                        | Works without local install; queued on the platform         |
-| **Cons**            | Must run helper; model weights local                                 | Needs a hosted agent running; webhook secret must match     |
+|                     | Local (researcher's machine)                            | Cloud (hosted agent)                                      |
+| ------------------- | -------------------------------------------------------- | ----------------------------------------------------------- |
+| **Started by**      | The researcher: `nomicous pair`, then `nomicous run`     | An operator, as a supervised process                        |
+| **Credential**      | Device token in `~/.nomicous/device.json`                | **Service credential** in `NOMICOUS_SERVICE_TOKEN`          |
+| **Frontend config** | None - the editor reads **capacity** from the API         | None                                                        |
+| **Backend env**     | `DEVICE_PAIRING_ENABLED`, `DEVICE_TOKEN_HMAC_SECRET`     | `INFERENCE_WORKER_SERVICE_TOKEN`                            |
+| **Pros**            | No hosted inference cost; weights stay warm on one machine | Works with nothing installed; always available              |
+| **Cons**            | Runs only while the researcher's terminal does            | Needs a persistent host                                     |
 
-**Typical Supabase test setup:** Supabase DB + Storage, API local, **inference helper local**. Leave `INFERENCE_WEBHOOK_SECRET=replace-me` until you run cloud inference.
+Which one a job gets is fixed at submission from the account's **host
+preference** and **capacity**, and announced on the job. There is no per-job
+toggle in the editor.
 
-The local helper uses host port **8001**. In the Compose profile, the cloud
-inference API uses host port **8010** while its container still listens on
-**8001**, so both can run without a host-port conflict. A standalone
-inference API started directly on the host still uses **8001**.
+Neither agent holds `INFERENCE_WEBHOOK_SECRET`: an agent's job callback is
+authorized by the same credential it claimed the page with, and narrowed to the
+page it is holding. The secret still guards the platform's own webhook path, so
+it stays configured on the API.
+
+**Typical Supabase test setup:** Supabase DB + Storage, API local, agent on the
+same machine pointed at `NOMICOUS_API_URL=http://localhost:8000`.
+
+Nothing in this stack publishes an inference port. Compose runs no inference
+container, and the agent listens on nothing.
 
 ---
 
@@ -362,11 +380,10 @@ docker compose -f docker-compose.yml -f docker-compose.supabase.yml up
 docker compose -f docker-compose.yml -f docker-compose.supabase.yml up -d --build
 ```
 
-| URL                   | Service                                                           |
-| --------------------- | ----------------------------------------------------------------- |
-| http://localhost:5173 | Frontend                                                          |
-| http://localhost:8000 | Platform API                                                      |
-| http://localhost:8010 | Inference API (cloud jobs) - host port; container listens on 8001 |
+| URL                   | Service      |
+| --------------------- | ------------ |
+| http://localhost:5173 | Frontend     |
+| http://localhost:8000 | Platform API |
 
 This profile **does not start local Postgres** (`db` is disabled). Apply
 Alembic from the operator/migrator host first; the Compose API only runs the
@@ -383,14 +400,18 @@ docker compose -f docker-compose.yml -f docker-compose.supabase.yml logs -f api 
 docker compose -f docker-compose.yml -f docker-compose.supabase.yml up --build api
 ```
 
-**Local inference helper** is not in Compose - run on the host if needed:
+The **inference agent** is not in Compose - run it on the host if you want jobs
+to execute:
 
 ```bash
-PYTHONPATH=. uv run python -m inference.helper
+NOMICOUS_API_URL=http://localhost:8000 uv run --group inference python -m inference.cli pair
+NOMICOUS_API_URL=http://localhost:8000 uv run --group inference python -m inference.cli run
 ```
 
-The page editor probes `http://127.0.0.1:8001` from your browser (not from inside Docker).
-Host port **8001 is reserved for this helper**; Compose publishes nothing on it.
+It reaches the API the same way your browser does, so it works from the host
+against the Compose API without any published port of its own. The page editor
+never contacts it: what the editor shows about this machine is **capacity** read
+from the API.
 
 ### 6. Run frontend (without Docker)
 
@@ -416,7 +437,9 @@ Dev login after seed: `dev@example.com` / `dev-pass-123`
 | `SUPABASE_STORAGE_BUCKET`   | Yes                 | Default `document-media`                           |
 | `JWT_SECRET`                | Yes                 | App auth (not Supabase)                            |
 | `MEDIA_WEBP_LOSSLESS`       | No                  | Default `true`                                     |
-| `INFERENCE_WEBHOOK_SECRET`  | Only for cloud jobs | Authenticates the agent's job callback             |
+| `INFERENCE_WEBHOOK_SECRET`  | Yes in production   | Authenticates the platform's own webhook callback path - not an agent's |
+| `DEVICE_TOKEN_HMAC_SECRET`  | Yes when pairing is on | Keys every device token; must differ from `JWT_SECRET`, or a JWT rotation unpairs every machine |
+| `INFERENCE_WORKER_SERVICE_TOKEN` | Only for a hosted agent | The **service credential** that claims `cloud` work |
 
 ---
 
@@ -428,7 +451,7 @@ Dev login after seed: `dev@example.com` / `dev-pass-123`
 | Migrations   | `alembic upgrade head`               | Same Alembic → direct URL |
 | Page images  | `MEDIA_ROOT` filesystem              | Storage bucket (WebP)     |
 | Auth         | App JWT                              | App JWT                   |
-| Inference    | Local helper and/or Docker inference | Local helper typical      |
+| Inference    | Agent on the host                    | Agent on the host typical |
 | Cost / setup | Free, offline                        | Hosted; needs network     |
 
 ---
@@ -451,6 +474,6 @@ Dev login after seed: `dev@example.com` / `dev-pass-123`
 ## Related docs
 
 - [Supabase learnings (pitfalls + connection URLs)](../guides/learnings.md#supabase-hosted-postgres--storage)
-- [Local inference helper](../../README.md#local-inference-helper)
+- [Self-hosting and local inference](../../README.md#self-hosting-and-local-inference)
 - [Local development guide](../guides/local-development.md)
 - [Infrastructure README](../../nomicous/infrastructure/README.md)
