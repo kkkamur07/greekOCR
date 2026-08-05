@@ -1,0 +1,9 @@
+# Raised from the defaults (in_progress 4, max_lanes 2) on the owner's explicit
+# instruction to run multiple parallel agents AFK for the inference redesign.
+# The DAG's widest independent set is 5 (wave C), so lanes are capped there —
+# more lanes than the graph can feed is just idle agents.
+wip:
+  in_progress: 5
+  review: 8
+parallel:
+  max_lanes: 5
