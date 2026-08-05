@@ -50,6 +50,7 @@ from backend.ml.api.agent_version import (
     AGENT_VERSION_REFUSED_STATUS,
     AgentVersionRefusedError,
 )
+from backend.ml.api.agent_version import router as agent_version_router
 from backend.ml.api.device_pairing import router as device_pairing_router
 from backend.ml.api.device_self import router as device_self_router
 from backend.ml.api.execution_preference import router as execution_preference_router
@@ -394,6 +395,10 @@ def create_app() -> FastAPI:
     # subject, and it carries the same DEVICE_PAIRING_ENABLED gate as the rest of
     # the device surface - one switch turns the whole outbound agent layer on.
     app.include_router(device_claim_router)
+    # The version floor on its own, so an agent can learn it is too old at launch
+    # instead of finding out by claiming a page it would then have to hold while
+    # it upgraded (ADR 0002, issue 058).
+    app.include_router(agent_version_router)
     app.include_router(jobs_router)
     app.include_router(internal_inference_router)
     return app

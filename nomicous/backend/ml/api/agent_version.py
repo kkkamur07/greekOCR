@@ -45,6 +45,22 @@ A normal ``200`` claim response, carrying an :class:`AgentVersionNotice` on
 ``agent``. Every claim response has one, page or no page, so an idle agent still
 learns it is behind.
 
+Asking without asking for work
+------------------------------
+``GET /device/v1/agent/version`` answers the same verdict - the same 426 or the
+same notice - and takes nothing from the queue. ADR 0002 gives the agent a
+*launch moment*, before any page is in flight, as the one point where it may
+swap its own code; issue 058 needs the verdict there, and the claim endpoint
+cannot supply it without also handing over a page the agent would then be
+holding while it upgraded. Two states, one comparison, two ways in.
+
+It is deliberately unauthenticated, because the check it runs already is: the
+version dependency is resolved before any credential is looked at, so an
+unpaired laptop that has just been installed can find out it is too old before
+it is anything else. It discloses the floor, the latest release, and the package
+name - all three of which a 426 already hands to any unauthenticated caller, and
+none of which is a secret. It opens no database session.
+
 Where the check sits
 --------------------
 Before authentication, as a route dependency. Two consequences, both wanted: a
@@ -58,10 +74,11 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import Depends, Header
+from fastapi import APIRouter, Depends, Header
 from pydantic import BaseModel, Field
 
 from backend.core.settings.device import DeviceSettings, get_device_settings
+from backend.ml.api.device_dependencies import require_device_pairing_enabled
 from backend.ml.domain.agent_version import AgentVersionVerdict, evaluate_agent_version
 
 AGENT_VERSION_HEADER = "X-Nomicous-Agent-Version"
@@ -203,3 +220,37 @@ def require_supported_agent_version(
 
 SupportedAgentVersion = Annotated[AgentVersionNotice, Depends(require_supported_agent_version)]
 """Route annotation: refuses a stale agent, and hands the route the notice."""
+
+
+router = APIRouter(tags=["device-jobs"], dependencies=[Depends(require_device_pairing_enabled)])
+
+
+@router.get(
+    "/device/v1/agent/version",
+    response_model=AgentVersionNotice,
+    responses={
+        AGENT_VERSION_REFUSED_STATUS: {
+            "model": AgentVersionRefusalResponse,
+            "description": (
+                "The agent is below the version floor, or did not say what version it "
+                "is. It must upgrade before it claims; retrying the same build cannot "
+                "succeed."
+            ),
+        }
+    },
+)
+def read_agent_version(agent: SupportedAgentVersion) -> AgentVersionNotice:
+    """The version verdict on its own, with no page attached.
+
+    The whole endpoint is its dependency. An agent below the floor never reaches
+    this body - it gets the same 426 the claim path would have given it, from the
+    same comparison - and one that is served gets the same notice the claim
+    response would have carried.
+
+    This is what makes ADR 0002's launch check possible. An agent that had to
+    claim in order to learn it was stale would be holding a page at the exact
+    moment it decided to replace its own code, which is the thing that must never
+    happen: the launch moment is the only safe one because nothing is in flight
+    during it.
+    """
+    return agent
