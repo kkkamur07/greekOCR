@@ -122,6 +122,14 @@ _Avoid_: image endpoint (an authenticated `GET /device/v1/jobs/{id}/image` was r
 How long a claimed page stays with the **inference agent** that took it before the platform may give it to another - 600 seconds, deliberately shorter than the platform's 1800-second job timeout, which is sized for a server that does not sleep. There is no heartbeat: work is seconds-to-minutes, so the lease covers it with margin, and a stopped agent loses one page rather than a document. When it expires the page returns to the queue and the claim is cleared, so any agent may take it next; it is never failed, because a closed lid is not a failed job. A hosted worker inherits the same lease - it is now the one timeout rather than one of two.
 _Avoid_: timeout (ambiguous with the platform-wide job timeout), lock (nothing is held in the database between requests)
 
+**Device credential file**:
+Where one paired machine keeps its **device token**: `~/.nomicous/device.json`, mode `0600` in a `0700` directory (override the root with `NOMICOUS_HOME`). Owner-only is the only control the client side of ADR 0001's accepted risk actually owns - per-account scope and revocation are the platform's. It also records which platform minted the token, because a credential is only meaningful against that one.
+_Avoid_: config file (it holds a credential, not settings), keychain entry (nothing uses one), token in the environment
+
+**Confirmation code**:
+A short keyed derivation of one pairing request, shown by the CLI and on the consent screen so a researcher can compare them. Not a `user_code` under another name: no endpoint accepts it, so it adds no brute-forceable surface. It is the only thing on the consent screen not supplied by whoever started the pairing, which is what makes it the check - and it only works if the client prints it.
+_Avoid_: pairing code (that is the `device_code`), verification token (that is the browser handoff secret), OTP
+
 **Service credential**:
 The credential a hosted **inference agent** presents instead of a device token. It claims `cloud` work for the whole platform, which is why it is not a device token: a device token's entire authorization scope is the one account on its device row, and `cloud` work has no such owner. Its **capacity** row is owned by a service account no person can log into.
 _Avoid_: device token for cloud, webhook secret (that authenticates the platform's own callback receiver), API key
@@ -149,6 +157,7 @@ _Avoid_: org (when meaning the namespace generically)
 - **Registry model id** = `{script}-{architecture}-{model_version}`; maps to one **Hub repo slug** + **model version**
 - Local **Hub staging tree**: `src/hf/staging/models/{script}/{architecture}/{model_version}/{registry_tag}/`
 - **Hub cache**: `~/.nomicous/hf/cache/{registry_model_id}/{registry_tag}/`
+- **Device credential file**: `~/.nomicous/device.json` - the same home-directory root as the **Hub cache**, one **device token** per machine
 - **Local bundled weights**: `src/hf/local/{script}/{architecture}/{model_version}/{registry_tag}/`
 - The **Hub staging tree** and **Local bundled weights** live under `src/hf/`; the **Hub cache** is in the researcher's home directory and **Hub integration** code is in the package
 - **Hub cache** reuse requires matching **Hub cache manifest** hash, not just present files
@@ -162,6 +171,7 @@ _Avoid_: org (when meaning the namespace generically)
 - A **claim** starts a **lease**; the page returns to the queue as `pending` when the lease expires - recovered opportunistically by the platform's existing stale sweep on read paths, never by a background worker - and completion or failure ends it through the platform's existing job callback contract
 - One **claim** carries one **signed page image link**, to one object; the two lifetimes are separate dials (`DEVICE_PAGE_IMAGE_URL_TTL_SECONDS` ~60s, `DEVICE_LEASE_SECONDS` 600s) because the fetch happens once at the start of the run
 - Every **claim** states which agent version is calling; below the **version floor** it is refused before it is authenticated, so a refused agent also stops reporting **capacity** and submission announces no host rather than creating pages nobody may claim
+- Pairing writes one **device credential file** per machine; the **confirmation code** is printed before the wait, and the pairing URL before any browser is opened
 - A **Hub collection** (`nomos`) links to many **Hub model repos** and **Hub dataset repos**; defined in `src/hf/publish/collection.yaml`
 
 ## Example dialogue
@@ -191,6 +201,7 @@ _Avoid_: org (when meaning the namespace generically)
 - **Calamari runtime**: local PyTorch graph + local preprocessing; no TensorFlow or vendored `calamari_ocr` import at inference time.
 - Weight resolution: `file://`, `hf://`, and `package://` (see `inference/weights/__init__.py` and `inference/hub/`)
 - Runtime cache: `~/.nomicous/hf/cache/<registry_model_id>/<registry_tag>/`
+- **CLI** (`inference/cli/`): `nomicous pair` and `nomicous version` (#56). `pair` runs the pairing protocol above and writes the **device credential file**; `version` reports what the **version floor** will read, and asks the platform nothing. `nomicous run` - the **claim** loop - is #57, and self-upgrade #58. The platform base URL comes from `NOMICOUS_API_URL` or `--api-url`.
 
 ### Hub layout (`src/hf/`)
 

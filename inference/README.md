@@ -40,13 +40,50 @@ therefore cannot install this package.
 
 | Piece | State |
 |-------|--------|
-| Console entry point (`inference/cli/`) | `nomicous`, no subcommands yet (#56, #57, #58) |
+| Console entry point (`inference/cli/`) | `nomicous pair`, `nomicous version`. `run` is #57, self-upgrade #58 |
 | Hub integration (`inference/hub/`) | `hf://` resolution, cache manifest, artifact SHA-256 |
 | Request/response contracts (`inference/contracts/`) | Defined for segment, transcribe, jobs, and callbacks |
 | Model registry (`inference/registry.yaml`) | Calamari transcribe + BLLA segmentation entries |
 | Model runner (`inference/jobs/runner.py`) | Registry lookup, weight resolution, and model execution |
 | HTTP API (`inference/api/`) | Health and sync `/inference/v1/run`. Not in the wheel; deleted by #60 |
 | Local helper (`inference/helper/`) | Loopback sidecar. Not in the wheel; deleted by #60 |
+
+## Pairing a machine
+
+```bash
+nomicous pair
+```
+
+It prints a link and a confirmation code, then waits. **Open the link and check
+that the page shows the same code the terminal did.** That comparison is the
+only check available: every other field on the consent screen — the machine
+name, the platform, the version — is supplied by whoever started the pairing, so
+a convincing one is not evidence. A different code means the request came from
+somewhere else. Close the page and approve nothing
+([ADR 0001](../docs/adr/0001-outbound-helper-device-pairing.md), decision 13).
+
+The URL is printed before any browser is opened, and no browser is opened at all
+over SSH. `--no-browser` forces that everywhere.
+
+The device token lands in `~/.nomicous/device.json`, mode `0600` in a `0700`
+directory. Running `pair` again on a paired machine reports the existing pairing
+rather than creating a second device; `--force` overrides that. If the device has
+been removed from the account, `pair` says so and exits non-zero — revoking is a
+decision made in the browser, and only `--force` reverses it.
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `NOMICOUS_API_URL` | `https://api.nomicous.com` | Platform to pair against (`--api-url` wins) |
+| `NOMICOUS_HOME` | `~/.nomicous` | Where the device credential is kept |
+
+```bash
+nomicous version
+```
+
+Reports the installed distribution version — the exact string sent as
+`X-Nomicous-Agent-Version` on every claim, which the platform's **version floor**
+refuses on. It contacts nothing: the floor is served only on a claim response,
+and reporting a version should not cost a page of work.
 
 ## Building the wheel
 

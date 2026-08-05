@@ -408,6 +408,20 @@ decoration.
 It must never write the `device_code`, the `verification_token`, or the device
 token to that log.
 
+> **As built (issue 056).** There is no helper and no log file: ADR 0002 made
+> the client a CLI, so the code is printed to the terminal, before the wait and
+> before any `webbrowser.open()`. The pairing URL is printed before it too — a
+> browser that cannot open, or opens on the wrong machine over SSH, now costs
+> nothing. `nomicous pair` prints neither the `device_code` nor the device token;
+> the `verification_token` is unavoidably inside the URL a researcher has to be
+> shown. The token is written to `~/.nomicous/device.json` at `0600` in a `0700`
+> directory, which is the mode this record's consequences section requires.
+>
+> The `/pair` page requirements below are still unbuilt, and
+> `DEVICE_PAIRING_ENABLED` should stay off in production until they are. The
+> client half of decision 13 now holds up its end; the screen half does not
+> exist yet, and one without the other compares nothing.
+
 ### Operational
 
 - The three device routers are mounted in `create_app()`. The first cut was not,
