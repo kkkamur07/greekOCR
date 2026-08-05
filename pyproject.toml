@@ -180,11 +180,14 @@ package = false
 # Windows it drags none. So the CPU pin has to be re-stated at install time,
 # and the documented install command is
 #
-#     uv tool install nomicous-inference --torch-backend=cpu
+#     uv tool install nomicous-inference --torch-backend=cpu   # uv >= 0.10
 #
 # which resolves `torch==<v>+cpu` and zero CUDA wheels on every platform that
-# has a wheel at all. `tests/inference/integration/test_published_package.py`
-# holds that claim to a real per-platform resolution.
+# has a wheel at all. The version floor is load-bearing: `uv tool install`
+# grew the flag in 0.10, and 0.7.x accepts `UV_TORCH_BACKEND=cpu` from the
+# environment and then ignores it. `tests/inference/integration/
+# test_published_package.py` holds the resolution claim to a real per-platform
+# resolve; nothing can hold the *user's* install command to anything.
 [tool.uv.sources]
 torch = [
     { index = "pytorch-cpu", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },

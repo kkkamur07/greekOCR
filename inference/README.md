@@ -14,20 +14,27 @@ see the [root README](../README.md), [use and hosting guide](../docs/guides/usin
 ## Install
 
 ```bash
-uv tool install nomicous-inference --torch-backend=cpu
+uv tool install nomicous-inference --torch-backend=cpu   # requires uv >= 0.10
 nomicous --version
 ```
 
-`--torch-backend=cpu` is not optional on Linux. PyTorch's default PyPI wheel
-there pulls sixteen `nvidia-*`/`triton` packages behind it, which are several
-gigabytes and useless on a CPU-only laptop; ADR 0004 accepted Torch's size on
-the understanding that the CPU build is what ships. No packaging metadata can
-express "resolve this dependency from that index", so the flag is the pin. On
-macOS arm64 and Windows the default wheel is already CPU-only and the flag is
-harmless.
+`--torch-backend=cpu` is not optional on Linux, and **the uv version floor is
+part of the instruction, not a footnote**. PyTorch's default PyPI wheel on
+Linux pulls sixteen `nvidia-*`/`triton` packages behind it — measured at
+4801 MB installed against 969 MB with the flag — which are useless on a
+CPU-only laptop. No packaging metadata can express "resolve this dependency
+from that index", so the flag is the pin, and nothing in the package can
+enforce it.
 
-Intel macOS has no PyTorch wheel at all from 2.10 onward and therefore cannot
-install this package.
+`uv tool install` only grew `--torch-backend` in uv 0.10. Older uv does not
+merely reject the flag: **0.7.x accepts `UV_TORCH_BACKEND=cpu` in the
+environment and silently ignores it**, installing the full CUDA tree. Check
+`uv --version` before trusting the install. `uv pip install --torch-backend=cpu`
+has worked since 0.7.
+
+On macOS arm64 and Windows the default wheel is already CPU-only and the flag
+changes nothing. Intel macOS has no PyTorch wheel at all from 2.10 onward and
+therefore cannot install this package.
 
 ## Status
 

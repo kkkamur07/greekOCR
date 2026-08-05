@@ -151,9 +151,13 @@ declared dependencies:
 
 | | installed | bytes fetched | cold install |
 |---|---|---|---|
-| Linux aarch64, `--torch-backend=cpu` | **969 MB** | 979 MB | 7 s |
+| Linux aarch64, `--torch-backend=cpu` | **969 MB** | 979 MB | 7-8 s |
 | Linux aarch64, no flag | 4801 MB | 4812 MB | 71 s |
 | macOS arm64 (PyPI wheel is CPU-only) | **811 MB** | 836 MB | 7 s |
+
+Measured with `uv pip install` into an empty virtual environment and confirmed
+end to end with `uv tool install --torch-backend=cpu`, which is the command a
+researcher runs.
 
 Torch is 475-597 MB of that; OpenCV, SciPy, NumPy, SymPy and scikit-image are
 most of the rest. Seconds is a property of the connection, not of the package -
@@ -170,8 +174,14 @@ at install time instead, and the documented command is
 `uv tool install nomicous-inference --torch-backend=cpu`.
 `tests/inference/integration/test_published_package.py` resolves the wheel's
 own metadata on all four target platforms and fails if any of them admits a
-CUDA wheel. A researcher who installs with plain `pip` gets the 4.8 GB tree and
-nothing stops them; that is a real residual risk, not a solved problem.
+CUDA wheel.
+
+Two residual risks, neither solved: a researcher who installs with plain `pip`
+gets the 4.8 GB tree and nothing stops them; and `uv tool install` only accepts
+`--torch-backend` from uv 0.10 onward, where uv 0.7.x reads
+`UV_TORCH_BACKEND=cpu` from the environment and silently installs the CUDA tree
+anyway. The failure mode of a stale uv is therefore a quiet 4.8 GB download
+rather than an error, which is the worst shape it could have taken.
 
 **Intel macOS drops off the supported set.** PyTorch publishes no
 `x86_64-apple-darwin` wheel from 2.10 onward, so the package cannot be
