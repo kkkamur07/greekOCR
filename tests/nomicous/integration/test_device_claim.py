@@ -25,6 +25,7 @@ from sqlalchemy import select
 import infrastructure.models  # noqa: F401 - register all ORM mappers
 from backend.jobs.application.job_claim_service import agent_claim_owner
 from backend.jobs.infrastructure.orm_models import Job, JobStatus
+from backend.ml.api.agent_version import AGENT_VERSION_HEADER
 from backend.ml.application.agent_credentials import (
     SERVICE_ACCOUNT_ID,
     SERVICE_TOKEN_HEADER,
@@ -46,7 +47,16 @@ pytestmark = pytest.mark.integration
 CLAIM_URL = "/device/v1/jobs/claim"
 CALLBACK_URL = "/internal/inference/job-complete"
 SERVICE_TOKEN = "test-inference-worker-service-token-not-for-production"
-SERVICE_HEADERS = {SERVICE_TOKEN_HEADER: SERVICE_TOKEN}
+
+# Every claim states which agent is calling (issue 055): one that does not is
+# refused rather than assumed current. Comfortably above the configured floor, so
+# nothing in this file is testing the floor - that is
+# ``test_agent_version_floor.py``.
+CURRENT_AGENT_VERSION = "1.0.0"
+SERVICE_HEADERS = {
+    SERVICE_TOKEN_HEADER: SERVICE_TOKEN,
+    AGENT_VERSION_HEADER: CURRENT_AGENT_VERSION,
+}
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -74,7 +84,7 @@ def return_pooled_connections_before_leaving(client: TestClient):
 
 
 def _device_headers(token: str) -> dict[str, str]:
-    return {DEVICE_TOKEN_HEADER: token}
+    return {DEVICE_TOKEN_HEADER: token, AGENT_VERSION_HEADER: CURRENT_AGENT_VERSION}
 
 
 def _claim(client: TestClient, headers: dict[str, str], *, wait_seconds: int = 0):
@@ -287,17 +297,26 @@ def test_a_service_credential_cannot_claim_local_work(
 def test_an_unauthenticated_or_wrong_credential_never_reaches_the_queue(
     client: TestClient, owner_headers
 ) -> None:
-    assert client.post(CLAIM_URL, json={"wait_seconds": 0}).status_code == 401
+    """Every call here states a current agent version, so the only thing being
+    judged is the credential. A stale agent is a different refusal with a
+    different status; ``test_agent_version_floor.py`` proves they stay apart."""
+    version = {AGENT_VERSION_HEADER: CURRENT_AGENT_VERSION}
+    assert client.post(CLAIM_URL, headers=version, json={"wait_seconds": 0}).status_code == 401
     assert (
         client.post(
-            CLAIM_URL, headers={DEVICE_TOKEN_HEADER: "nmd1.not-a-token"}, json={"wait_seconds": 0}
+            CLAIM_URL,
+            headers={**version, DEVICE_TOKEN_HEADER: "nmd1.not-a-token"},
+            json={"wait_seconds": 0},
         ).status_code
         == 401
     )
     assert (
         client.post(
             CLAIM_URL,
-            headers={SERVICE_TOKEN_HEADER: "wrong-service-token-but-long-enough-to-pass"},
+            headers={
+                **version,
+                SERVICE_TOKEN_HEADER: "wrong-service-token-but-long-enough-to-pass",
+            },
             json={"wait_seconds": 0},
         ).status_code
         == 401
@@ -306,7 +325,9 @@ def test_an_unauthenticated_or_wrong_credential_never_reaches_the_queue(
     bearer = owner_headers["Authorization"].split(" ", 1)[1]
     assert (
         client.post(
-            CLAIM_URL, headers={DEVICE_TOKEN_HEADER: bearer}, json={"wait_seconds": 0}
+            CLAIM_URL,
+            headers={**version, DEVICE_TOKEN_HEADER: bearer},
+            json={"wait_seconds": 0},
         ).status_code
         == 401
     )

@@ -15,6 +15,7 @@ from inference.contracts.jobs import JobSubmitRequest
 from pydantic import BaseModel, Field
 
 from backend.jobs.infrastructure.orm_models import JobType
+from backend.ml.api.agent_version import AgentVersionNotice
 from backend.ml.domain.execution import ExecutionTarget
 
 
@@ -87,4 +88,11 @@ class JobClaimResponse(BaseModel):
     )
     server_time: datetime = Field(
         description="So an agent with a wrong clock can still reason about its lease."
+    )
+    agent: AgentVersionNotice = Field(
+        description=(
+            "What the platform makes of this agent's version. Present on every claim "
+            "response, page or no page, so an idle agent still learns it is behind. An "
+            "agent below the floor never sees this - it gets a 426 instead."
+        )
     )

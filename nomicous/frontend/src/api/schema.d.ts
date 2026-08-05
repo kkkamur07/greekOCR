@@ -147,6 +147,12 @@ export interface paths {
      *     The credential decides the **execution target**, and the caller cannot ask for
      *     a different one: a device token claims ``local`` work on its own account, a
      *     service credential claims ``cloud`` work for the platform.
+     *
+     *     ``agent_version`` is resolved before this body runs, so an agent below the
+     *     floor is refused without a session being opened and without its
+     *     ``last_seen_at`` being touched - it stops reporting **capacity**, and
+     *     submission announces "no host available" rather than creating pages it may
+     *     not claim.
      */
     post: operations["claim_job_device_v1_jobs_claim_post"];
     delete?: never;
@@ -1310,6 +1316,93 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    /**
+     * AgentVersionNotice
+     * @description What the platform makes of a served agent's version.
+     *
+     *     Present on every claim response. ``outdated`` is the only field a CLI has to
+     *     branch on; the rest are for the line it prints.
+     */
+    AgentVersionNotice: {
+      /**
+       * Agent Version
+       * @description The version this agent presented.
+       */
+      agent_version: string;
+      /**
+       * Latest Version
+       * @description Newest published agent.
+       */
+      latest_version: string;
+      /**
+       * Minimum Version
+       * @description Below this, the next claim is refused with 426. Read it every poll.
+       */
+      minimum_version: string;
+      /**
+       * Outdated
+       * @description True when the agent is at or above the floor but behind the latest. It is still being served: this is a notice, not a refusal.
+       */
+      outdated: boolean;
+      /**
+       * Package
+       * @description Distribution to upgrade.
+       */
+      package: string;
+      /**
+       * Upgrade Command
+       * @description Human-facing hint; print it, do not exec it.
+       */
+      upgrade_command: string;
+    };
+    /**
+     * AgentVersionRefusal
+     * @description Body of a 426 - the ``error`` member of the platform's error envelope.
+     */
+    AgentVersionRefusal: {
+      /**
+       * Agent Version
+       * @description Echo of what was sent; null when nothing was.
+       */
+      agent_version?: string | null;
+      /**
+       * Code
+       * @default AGENT_VERSION_UNSUPPORTED
+       */
+      code: string;
+      /** Latest Version */
+      latest_version: string;
+      /** Message */
+      message: string;
+      /** Minimum Version */
+      minimum_version: string;
+      /** Package */
+      package: string;
+      /**
+       * Reason
+       * @description missing | malformed | below_floor
+       */
+      reason: string;
+      /**
+       * Retryable
+       * @description Always false. Retrying the same version cannot succeed; upgrading can.
+       * @default false
+       */
+      retryable: boolean;
+      /** Upgrade Command */
+      upgrade_command: string;
+    };
+    /**
+     * AgentVersionRefusalResponse
+     * @description The 426 body as it goes out - the standard envelope, with a richer member.
+     *
+     *     Same ``{"error": {...}}`` shape as every other failure on the platform, so a
+     *     client that already parses one parses this; the extra fields are additions to
+     *     :class:`~backend.core.schemas.errors.ApiErrorDetail`, not a second envelope.
+     */
+    AgentVersionRefusalResponse: {
+      error: components["schemas"]["AgentVersionRefusal"];
+    };
     /** AnnotationHistorySnapshotResponse */
     AnnotationHistorySnapshotResponse: {
       /**
@@ -1910,6 +2003,8 @@ export interface components {
      *     into treating "nothing to do" as a failure to back off from.
      */
     JobClaimResponse: {
+      /** @description What the platform makes of this agent's version. Present on every claim response, page or no page, so an idle agent still learns it is behind. An agent below the floor never sees this - it gets a 426 instead. */
+      agent: components["schemas"]["AgentVersionNotice"];
       /**
        * Lease Seconds
        * @description How long a claimed page stays with the agent. Read from the platform, not compiled in.
@@ -3562,6 +3657,8 @@ export interface operations {
         "X-Nomicous-Device-Token"?: string | null;
         "X-Nomicous-Service-Token"?: string | null;
         "X-Nomicous-Worker-Name"?: string | null;
+        /** @description Agent version, MAJOR.MINOR.PATCH. Required: an agent that does not say what it is cannot claim. */
+        "X-Nomicous-Agent-Version"?: string | null;
       };
       path?: never;
       cookie?: never;
@@ -3624,6 +3721,15 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description The agent is below the version floor, or did not say what version it is. It must upgrade; retrying the same build cannot succeed. */
+      426: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentVersionRefusalResponse"];
         };
       };
       /** @description Rate limit exceeded */

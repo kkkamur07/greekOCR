@@ -1,6 +1,125 @@
 {
   "components": {
     "schemas": {
+      "AgentVersionNotice": {
+        "description": "What the platform makes of a served agent's version.\n\nPresent on every claim response. ``outdated`` is the only field a CLI has to\nbranch on; the rest are for the line it prints.",
+        "properties": {
+          "agent_version": {
+            "description": "The version this agent presented.",
+            "title": "Agent Version",
+            "type": "string"
+          },
+          "latest_version": {
+            "description": "Newest published agent.",
+            "title": "Latest Version",
+            "type": "string"
+          },
+          "minimum_version": {
+            "description": "Below this, the next claim is refused with 426. Read it every poll.",
+            "title": "Minimum Version",
+            "type": "string"
+          },
+          "outdated": {
+            "description": "True when the agent is at or above the floor but behind the latest. It is still being served: this is a notice, not a refusal.",
+            "title": "Outdated",
+            "type": "boolean"
+          },
+          "package": {
+            "description": "Distribution to upgrade.",
+            "title": "Package",
+            "type": "string"
+          },
+          "upgrade_command": {
+            "description": "Human-facing hint; print it, do not exec it.",
+            "title": "Upgrade Command",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_version",
+          "minimum_version",
+          "latest_version",
+          "outdated",
+          "package",
+          "upgrade_command"
+        ],
+        "title": "AgentVersionNotice",
+        "type": "object"
+      },
+      "AgentVersionRefusal": {
+        "description": "Body of a 426 - the ``error`` member of the platform's error envelope.",
+        "properties": {
+          "agent_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Echo of what was sent; null when nothing was.",
+            "title": "Agent Version"
+          },
+          "code": {
+            "default": "AGENT_VERSION_UNSUPPORTED",
+            "title": "Code",
+            "type": "string"
+          },
+          "latest_version": {
+            "title": "Latest Version",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "minimum_version": {
+            "title": "Minimum Version",
+            "type": "string"
+          },
+          "package": {
+            "title": "Package",
+            "type": "string"
+          },
+          "reason": {
+            "description": "missing | malformed | below_floor",
+            "title": "Reason",
+            "type": "string"
+          },
+          "retryable": {
+            "default": false,
+            "description": "Always false. Retrying the same version cannot succeed; upgrading can.",
+            "title": "Retryable",
+            "type": "boolean"
+          },
+          "upgrade_command": {
+            "title": "Upgrade Command",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message",
+          "reason",
+          "minimum_version",
+          "latest_version",
+          "package",
+          "upgrade_command"
+        ],
+        "title": "AgentVersionRefusal",
+        "type": "object"
+      },
+      "AgentVersionRefusalResponse": {
+        "description": "The 426 body as it goes out - the standard envelope, with a richer member.\n\nSame ``{\"error\": {...}}`` shape as every other failure on the platform, so a\nclient that already parses one parses this; the extra fields are additions to\n:class:`~backend.core.schemas.errors.ApiErrorDetail`, not a second envelope.",
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/AgentVersionRefusal"
+          }
+        },
+        "required": ["error"],
+        "title": "AgentVersionRefusalResponse",
+        "type": "object"
+      },
       "AnnotationHistorySnapshotResponse": {
         "properties": {
           "created_at": {
@@ -1206,6 +1325,10 @@
       "JobClaimResponse": {
         "description": "Always 200, with or without a page.\n\nAn empty queue is the normal state of a healthy platform, not an error. A 404\nor a 204 here would make an agent's logs unreadable and would tempt a client\ninto treating \"nothing to do\" as a failure to back off from.",
         "properties": {
+          "agent": {
+            "$ref": "#/components/schemas/AgentVersionNotice",
+            "description": "What the platform makes of this agent's version. Present on every claim response, page or no page, so an idle agent still learns it is behind. An agent below the floor never sees this - it gets a 426 instead."
+          },
           "lease_seconds": {
             "description": "How long a claimed page stays with the agent. Read from the platform, not compiled in.",
             "title": "Lease Seconds",
@@ -1233,7 +1356,12 @@
             "type": "string"
           }
         },
-        "required": ["poll_after_seconds", "lease_seconds", "server_time"],
+        "required": [
+          "poll_after_seconds",
+          "lease_seconds",
+          "server_time",
+          "agent"
+        ],
         "title": "JobClaimResponse",
         "type": "object"
       },
@@ -4188,7 +4316,7 @@
     },
     "/device/v1/jobs/claim": {
       "post": {
-        "description": "Claim at most one page of work.\n\nThe credential decides the **execution target**, and the caller cannot ask for\na different one: a device token claims ``local`` work on its own account, a\nservice credential claims ``cloud`` work for the platform.",
+        "description": "Claim at most one page of work.\n\nThe credential decides the **execution target**, and the caller cannot ask for\na different one: a device token claims ``local`` work on its own account, a\nservice credential claims ``cloud`` work for the platform.\n\n``agent_version`` is resolved before this body runs, so an agent below the\nfloor is refused without a session being opened and without its\n``last_seen_at`` being touched - it stops reporting **capacity**, and\nsubmission announces \"no host available\" rather than creating pages it may\nnot claim.",
         "operationId": "claim_job_device_v1_jobs_claim_post",
         "parameters": [
           {
@@ -4237,6 +4365,24 @@
                 }
               ],
               "title": "X-Nomicous-Worker-Name"
+            }
+          },
+          {
+            "description": "Agent version, MAJOR.MINOR.PATCH. Required: an agent that does not say what it is cannot claim.",
+            "in": "header",
+            "name": "X-Nomicous-Agent-Version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Agent version, MAJOR.MINOR.PATCH. Required: an agent that does not say what it is cannot claim.",
+              "title": "X-Nomicous-Agent-Version"
             }
           }
         ],
@@ -4317,6 +4463,16 @@
               }
             },
             "description": "Validation error"
+          },
+          "426": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentVersionRefusalResponse"
+                }
+              }
+            },
+            "description": "The agent is below the version floor, or did not say what version it is. It must upgrade; retrying the same build cannot succeed."
           },
           "429": {
             "content": {

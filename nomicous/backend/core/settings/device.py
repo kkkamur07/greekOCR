@@ -102,6 +102,44 @@ class DeviceSettings(BaseSettings):
         le=300,
         description="What an empty claim response tells the agent to wait before asking again.",
     )
+    # ------------------------------------------------------------------
+    # The agent version floor (ADR 0002). Three dials, all turnable without a
+    # release - which is the entire reason the signal comes from here rather
+    # than from PyPI. Raising the floor stops a known-bad agent from claiming
+    # in the time it takes to change an environment variable, with nothing to
+    # install and nobody to wait for.
+    # ------------------------------------------------------------------
+    inference_agent_min_version: str = Field(
+        default="0.1.0",
+        alias="INFERENCE_AGENT_MIN_VERSION",
+        description=(
+            "Oldest agent allowed to claim. Anything below it is refused with 426 and "
+            "must upgrade; a missing or unparseable version is refused too, rather "
+            "than assumed current."
+        ),
+    )
+    inference_agent_latest_version: str | None = Field(
+        default=None,
+        alias="INFERENCE_AGENT_LATEST_VERSION",
+        description=(
+            "Newest published agent. An agent at or above the floor but below this is "
+            "served normally and told it is outdated - deliberately a different state "
+            "from being refused. Unset means the floor is the newest thing we know "
+            "about, so nobody is told they are behind; see agent_latest_version()."
+        ),
+    )
+    inference_agent_package: str = Field(
+        default="nomicous-inference",
+        alias="INFERENCE_AGENT_PACKAGE",
+        min_length=1,
+        max_length=64,
+        description=(
+            "Distribution name the refusal tells the agent to upgrade. A package name "
+            "rather than a command string: the platform names what to install, it does "
+            "not hand a remote agent a line to execute."
+        ),
+    )
+
     inference_worker_service_token: str | None = Field(
         default=None,
         alias="INFERENCE_WORKER_SERVICE_TOKEN",
@@ -202,6 +240,36 @@ class DeviceSettings(BaseSettings):
         return self
 
     @model_validator(mode="after")
+    def _validate_agent_version_policy(self) -> "DeviceSettings":
+        """A floor nobody can parse is a floor that refuses every agent.
+
+        Both dials are compared against every claim, so an unparseable one would
+        fail the whole claim path at request time - as a 500, on the endpoint all
+        inference runs through. Refusing to start is the cheaper failure, and it
+        happens on the deploy that set the bad value rather than on the first
+        agent that polls afterwards.
+
+        ``latest`` below ``minimum`` is also refused: it would describe a
+        platform that refuses an agent for being below the floor and calls the
+        same version ahead of the newest release.
+        """
+        from backend.ml.domain.agent_version import AgentVersion, MalformedAgentVersionError
+
+        try:
+            minimum = AgentVersion.parse(self.inference_agent_min_version)
+            latest = AgentVersion.parse(self.agent_latest_version())
+        except MalformedAgentVersionError as exc:
+            raise ValueError(
+                "INFERENCE_AGENT_MIN_VERSION and INFERENCE_AGENT_LATEST_VERSION must be "
+                f"MAJOR.MINOR.PATCH versions: {exc}"
+            ) from exc
+        if latest < minimum:
+            raise ValueError(
+                "INFERENCE_AGENT_LATEST_VERSION must not be below INFERENCE_AGENT_MIN_VERSION"
+            )
+        return self
+
+    @model_validator(mode="after")
     def _validate_poll_interval(self) -> "DeviceSettings":
         if (
             self.device_pairing_max_poll_interval_seconds
@@ -257,6 +325,17 @@ class DeviceSettings(BaseSettings):
             return get_auth_settings().jwt_secret
         except Exception:  # pragma: no cover - AuthSettings reports its own failure
             return None
+
+    def agent_latest_version(self) -> str:
+        """Newest published agent, defaulting to the floor.
+
+        Defaulting rather than requiring both is what keeps the kill switch a
+        one-variable turn: raising ``INFERENCE_AGENT_MIN_VERSION`` alone must not
+        make the API refuse to start because a second variable was left at an
+        older release. With only the floor set, nothing is ever "outdated" - the
+        newest thing the platform knows about is the oldest thing it accepts.
+        """
+        return self.inference_agent_latest_version or self.inference_agent_min_version
 
     def pairing_enabled(self) -> bool:
         """Whether the device layer serves requests at all.
