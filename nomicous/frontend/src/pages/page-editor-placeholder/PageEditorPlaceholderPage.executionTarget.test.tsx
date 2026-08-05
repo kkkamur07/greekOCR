@@ -1,11 +1,10 @@
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import type { MessageInstance } from "antd/es/message/interface";
+
 import { ApiError } from "../../api/errors";
-import {
-  registerToastHandler,
-  type ToastItem,
-} from "../../components/ui/toast";
+import { registerToastApi } from "../../components/ui/toast";
 import { platformNoCapacityMessage } from "../../inference/platformMessages";
 import {
   DOCUMENT,
@@ -15,6 +14,34 @@ import {
   resetPageEditorApiMocks,
   seedExecutionPreference,
 } from "./testSupport";
+
+/**
+ * Records what `toast` would have put on screen.
+ *
+ * The themed `message` instance is normally handed to `toast` at mount by
+ * `ToastBridge`, which these tests do not render - so without a stand-in every
+ * toast is silently dropped and "this did not become a toast" would pass for
+ * the wrong reason. The returned array is the assertion's evidence.
+ */
+function recordedToasts(): string[] {
+  const shown: string[] = [];
+  const record = (content: unknown) => {
+    shown.push(String(content));
+    return (() => {}) as unknown as ReturnType<MessageInstance["success"]>;
+  };
+  registerToastApi({
+    success: record,
+    error: record,
+    info: record,
+    warning: record,
+    loading: record,
+    open: record,
+    destroy: () => {},
+  } as unknown as MessageInstance);
+  return shown;
+}
+
+afterEach(() => registerToastApi(null));
 
 const LINE = {
   id: "line-1",
@@ -170,8 +197,7 @@ describe("the announcement on a job", () => {
   });
 
   it("states a substituted host on the job rather than in a toast", async () => {
-    const toasts: Array<Omit<ToastItem, "id">> = [];
-    registerToastHandler((item) => toasts.push(item));
+    const toasts = recordedToasts();
     mockedApi.getJob.mockResolvedValue(
       jobResponse({
         execution_target: "cloud",
@@ -190,9 +216,9 @@ describe("the announcement on a job", () => {
     // It stays on the job. A toast would be gone before a researcher who
     // looked away could read where their work went.
     expect(announcement).toBeTruthy();
-    expect(
-      toasts.filter((item) => /had no capacity/i.test(item.message)),
-    ).toEqual([]);
+    expect(toasts.filter((shown) => /had no capacity/i.test(shown))).toEqual(
+      [],
+    );
   });
 
   it("shows which host a failed job failed on", async () => {
@@ -224,8 +250,7 @@ describe("a submission the platform refuses", () => {
   });
 
   it("explains that no inference host had capacity, and keeps the explanation on screen", async () => {
-    const toasts: Array<Omit<ToastItem, "id">> = [];
-    registerToastHandler((item) => toasts.push(item));
+    const toasts = recordedToasts();
     mockedApi.enqueueTranscribePart.mockRejectedValue(
       new ApiError(platformNoCapacityMessage(), 409),
     );
@@ -236,8 +261,6 @@ describe("a submission the platform refuses", () => {
     const explanation = await screen.findByText(platformNoCapacityMessage());
     expect(explanation).toBeTruthy();
     // Not the generic error toast the ordinary failure path uses.
-    expect(toasts.map((item) => item.message)).not.toContain(
-      platformNoCapacityMessage(),
-    );
+    expect(toasts).not.toContain(platformNoCapacityMessage());
   });
 });
