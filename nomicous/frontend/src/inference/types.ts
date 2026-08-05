@@ -1,11 +1,12 @@
-export type InferenceTask = "segment" | "transcribe" | "binarize";
+// The helper serves models from the platform's registry and echoes its
+// per-character score shape, so both vocabularies come from the generated
+// schema rather than a second copy here.
+import type { CharacterConfidence, InferenceTask } from "../api/client";
 
+export type { CharacterConfidence, InferenceTask };
+
+/** Helper-only: the platform catalog does not publish routing eligibility. */
 export type HostEligibility = "local" | "remote" | "any";
-
-export type CharacterConfidence = {
-  char: string;
-  confidence: number;
-};
 
 export type TranscribeRunOutput = {
   text: string;

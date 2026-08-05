@@ -27,6 +27,7 @@ import {
   submissionRefusalExplanation,
 } from "../../../inference";
 import type { PageEditorJobKind } from "../jobProgress";
+import { segmentNumberFor, segmentsInNumberOrder } from "../segmentNumbering";
 import {
   lineTextForLayer,
   modelLayerIdForPromotion,
@@ -121,17 +122,7 @@ export function usePairingState({
     setOcrMessage(null);
   }, [projectId, documentId, partId]);
 
-  const selectedSegmentIndex =
-    selectedSegmentId === null
-      ? null
-      : [...lines]
-          .sort((a, b) => a.order - b.order)
-          .findIndex((line) => line.id === selectedSegmentId);
-
-  const selectedSegmentNumber =
-    selectedSegmentIndex === null || selectedSegmentIndex < 0
-      ? null
-      : selectedSegmentIndex + 1;
+  const selectedSegmentNumber = segmentNumberFor(lines, selectedSegmentId);
 
   const selectedTranscriptionLayer =
     selectedTranscriptionLayerId === null
@@ -374,9 +365,9 @@ export function usePairingState({
       throw new Error("Selected model is not eligible for local inference.");
     }
 
-    const targetLines = lines
-      .filter((line) => lineIds.includes(line.id))
-      .sort((a, b) => a.order - b.order);
+    const targetLines = segmentsInNumberOrder(
+      lines.filter((line) => lineIds.includes(line.id)),
+    );
     if (targetLines.length === 0) {
       throw new Error("No matching segments to transcribe.");
     }
@@ -686,7 +677,7 @@ export function usePairingState({
   }
 
   function navigateSegment(direction: -1 | 1) {
-    const sorted = [...lines].sort((a, b) => a.order - b.order);
+    const sorted = segmentsInNumberOrder(lines);
     if (sorted.length === 0) return;
 
     const currentIndex = selectedSegmentId

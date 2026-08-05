@@ -250,7 +250,6 @@ export function resetPageEditorApiMocks() {
     transcription_kind: "ground_truth",
     text: "typed approved text",
     confidence: null,
-    text_source: "human_edited",
     character_confidences: null,
   });
   mockedApi.copyToGroundTruth.mockResolvedValue({

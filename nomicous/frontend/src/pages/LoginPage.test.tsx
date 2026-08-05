@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { testRouter } from "../../vitest.setup";
 
 import { api } from "../api/client";
-import { clearAccessToken, getAccessToken } from "../auth/storage";
+import { clearAccessToken } from "../auth/storage";
 import { LoginPage } from "./LoginPage";
 
 vi.mock("../api/client", async (importOriginal) => {
