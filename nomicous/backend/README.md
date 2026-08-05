@@ -68,7 +68,7 @@ Important rules:
 | `project` | Project CRUD, owner/shared-user membership | `project/api/projects.py`, `project/domain/access.py` |
 | `document` | Documents, Document parts, media, layout Blocks/Lines, Transcriptions, Pairing progress | `document/api/documents.py`, `document/application/document_service.py` |
 | `annotation` | Annotation history, Export artifacts, Transcription PDF artifacts | `annotation/api/history.py`, `annotation/application/export_service.py`, `annotation/application/transcription_pdf_service.py` |
-| `ml` | ML model catalog, model bindings, ML service client, canonical model outputs | `ml/api/models.py`, `ml/application/model_service.py`, `ml/infrastructure/ml_client.py` |
+| `ml` | ML model catalog, model bindings, device pairing, canonical model outputs | `ml/api/models.py`, `ml/application/model_service.py`, `ml/application/segment_mapping.py` |
 | `jobs` | Async job enqueueing, status reads (`GET /jobs/{id}`), SSE push (`GET /jobs/{id}/events`), claiming, worker execution, failure persistence | `jobs/api/jobs.py`, `jobs/application/job_service.py`, `jobs/infrastructure/notifications.py`, `jobs/infrastructure/worker.py` |
 
 ## Job status notifications
