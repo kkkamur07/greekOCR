@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import base64
 from importlib import resources
 from pathlib import Path
 
@@ -10,7 +9,6 @@ import numpy as np
 import pytest
 import torch
 import torch.nn.functional as F
-from fastapi.testclient import TestClient
 from PIL import Image
 
 from inference.architectures.blla.blla import _load_blla_model
@@ -20,8 +18,9 @@ from inference.architectures.blla.blla_preprocessing import (
     MAX_WIDTH_TO_HEIGHT_RATIO,
     preprocess_blla_image,
 )
-from inference.helper.app import create_helper_app
-from inference.helper.settings import get_helper_settings
+from inference.contracts.common import InferenceTask
+from inference.contracts.segment import SegmentRunResponse
+from inference.jobs.runner import run_model
 from inference.settings import get_inference_settings
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -170,38 +169,33 @@ def test_blla_sigmoid_interpolated_heatmaps_match_optional_kraken_reference(
     torch.testing.assert_close(native_heatmaps, reference_heatmaps, rtol=1e-5, atol=1e-5)
 
 
-def test_standalone_helper_returns_blla_response_for_real_image(
+def test_run_model_returns_a_blla_response_for_a_real_image(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """Exercise HTTP validation, runner dispatch, and response serialization."""
+    """Exercise admission, registry resolution, runner dispatch and the response.
+
+    This is the whole entry point now: an **inference agent** calls `run_model`
+    in its own process, so there is no serialization step between the decoder
+    and the caller and nothing to POST it to (ADR 0002).
+    """
     registry = REPO_ROOT / "inference" / "registry.yaml"
     monkeypatch.setenv("INFERENCE_REGISTRY_PATH", str(registry))
-    monkeypatch.setenv("HELPER_BUNDLED_REGISTRY_PATH", str(registry))
-    monkeypatch.setenv("HELPER_CACHED_REGISTRY_PATH", str(tmp_path / "registry.yaml"))
-    monkeypatch.setenv("HELPER_CACHED_REGISTRY_ETAG_PATH", str(tmp_path / "registry.etag"))
     monkeypatch.setenv("HF_CACHE_ROOT", str(tmp_path / "hf-cache"))
-    get_helper_settings.cache_clear()
     get_inference_settings.cache_clear()
     monkeypatch.setattr(
         "inference.jobs.runner.resolve_weights_source",
         lambda *_args, **_kwargs: BLLA_ARTIFACT,
     )
 
-    with TestClient(create_helper_app()) as client:
-        response = client.post(
-            "/inference/v1/run",
-            json={
-                "task": "segment",
-                "registry_model_id": "blla-segment",
-                "registry_tag": "stable",
-                "image_bytes": base64.b64encode(SEGMENT_PAGE.read_bytes()).decode(),
-            },
-        )
+    output = run_model(
+        task=InferenceTask.segment,
+        registry_model_id="blla-segment",
+        registry_tag="stable",
+        image_bytes=SEGMENT_PAGE.read_bytes(),
+    )
 
-    assert response.status_code == 200
-    body = response.json()
-    assert body["task"] == "segment"
-    assert len(body["output"]["blocks"]) == 1
-    assert len(body["output"]["lines"]) > 10
-    assert all(line["source_metadata"]["adapter"] == "blla" for line in body["output"]["lines"])
+    assert isinstance(output, SegmentRunResponse)
+    assert len(output.blocks) == 1
+    assert len(output.lines) > 10
+    assert all(line.source_metadata["adapter"] == "blla" for line in output.lines)

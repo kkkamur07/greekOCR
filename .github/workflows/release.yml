@@ -85,8 +85,8 @@ jobs:
 
       # The scan input is `[project].dependencies` resolved from the lockfile -
       # exactly the closure that reaches a researcher's laptop, and nothing
-      # else. `--no-default-groups` drops dev, test, platform, and the loopback
-      # `helper` group, none of which ship.
+      # else. `--no-default-groups` drops dev, test, platform and inference,
+      # none of which ship.
       - name: Export the published dependency closure
         run: |
           mkdir -p release-scan

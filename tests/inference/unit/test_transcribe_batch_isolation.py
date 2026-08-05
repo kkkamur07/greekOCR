@@ -199,8 +199,8 @@ def test_batch_where_every_line_failed_reraises_the_original_error() -> None:
 
     Run live against the real checkpoint: every crop is unreadable, so every
     line fails and the first failure comes back out with its original type. The
-    type matters because ``run_errors`` reads it - here it is PIL's
-    ``UnidentifiedImageError`` rather than a generic wrapper, and an empty
+    type matters because it is what the agent reports as the reason - here it is
+    PIL's ``UnidentifiedImageError`` rather than a generic wrapper, and an empty
     successful page would have been the far worse answer.
     """
     from PIL import UnidentifiedImageError

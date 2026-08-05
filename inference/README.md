@@ -40,13 +40,11 @@ therefore cannot install this package.
 
 | Piece | State |
 |-------|--------|
-| Console entry point (`inference/cli/`) | `nomicous pair`, `nomicous run`, `nomicous version`. Self-upgrade is #58 |
+| Console entry point (`inference/cli/`) | `nomicous pair`, `nomicous run`, `nomicous version`, `nomicous upgrade` |
 | Hub integration (`inference/hub/`) | `hf://` resolution, cache manifest, artifact SHA-256 |
 | Request/response contracts (`inference/contracts/`) | Defined for segment, transcribe, jobs, and callbacks |
 | Model registry (`inference/registry.yaml`) | Calamari transcribe + BLLA segmentation entries |
 | Model runner (`inference/jobs/runner.py`) | Registry lookup, weight resolution, and model execution |
-| HTTP API (`inference/api/`) | Health and sync `/inference/v1/run`. Not in the wheel; deleted by #60 |
-| Local helper (`inference/helper/`) | Loopback sidecar. Not in the wheel; deleted by #60 |
 
 ## Pairing a machine
 
@@ -175,14 +173,17 @@ Training and vendored TensorFlow Calamari: [`docs/guides/learnings.md`](../docs/
 
 **Hub integration:** `hf://` weight-source resolution, Hub cache, and digest verification live *inside* this package at `inference/hub/` - they are on the runtime path, so they ship in the published wheel. Publish-side tooling (staging tree, model cards, collection sync) stays under `src/hf/` and `scripts/hf/`, which never ship. See `inference/CONTEXT.md` for domain terminology and [`scripts/hf/README.md`](../scripts/hf/README.md) for the Hub publish runbook.
 
-## Run locally (without Compose)
+## Run from a source checkout
 
 From the repository root, with the `inference` dependency group installed:
 
 ```bash
 uv sync --group inference
-PYTHONPATH=. uvicorn inference.api.main:app --host 0.0.0.0 --port 8001 --reload
+PYTHONPATH=. python -m inference.cli run --api-url http://localhost:8000
 ```
+
+That is the same claim loop the installed `nomicous run` executes; there is no
+server to start, because since ADR 0002 nothing here listens.
 
 Environment:
 
@@ -224,68 +225,28 @@ the migration note in [`docs/inference/adding-inference-models.md`](../docs/infe
 
 **Adding a model:** step-by-step checklist in [`docs/inference/adding-inference-models.md`](../docs/inference/adding-inference-models.md).
 
-## Inference helper (local CPU on researcher machines)
+## Admission control
 
-For hosted SPA + local inference, run the slim helper sidecar (no Postgres, no job queue):
+`run_model` enforces the `INFERENCE_*` limits before base64 decoding or model
+loading, and `JobSubmitRequest` enforces the same ones at submission - so a page
+is bounded on the way into the queue and again on the machine that runs it.
+Defaults are: 160 MiB encoded image, 100 MiB decoded image, 128 MiB job payload,
+200 million pixels, 64 MiB parameters, depth 8, 8,000,000 parameter items,
+10,000 transcription lines, and 256 geometry points per line. Allowed image
+formats default to `JPEG,PNG,TIFF,WEBP`. Operators may lower or raise these with
+the corresponding `INFERENCE_MAX_*` environment variables; only trusted
+deployment configuration should do so.
 
-```bash
-HELPER_REGISTRY_URL=http://localhost:8000/inference/v1/registry \
-HF_CACHE_ROOT=~/.nomicous/hf/cache uv run --group inference python -m inference.helper
-curl -s http://127.0.0.1:8001/health
-curl -s http://127.0.0.1:8001/inference/v1/info
-```
+These are per-process input controls only. Queue admission, rate limiting across
+replicas, and stale-lease recovery belong to the platform's queue, which is now
+the only one.
 
-The helper serves three routes: `GET /health` (liveness),
-`GET /inference/v1/info`, and `POST /inference/v1/run`.
-
-`GET /inference/v1/info` is the single capability document and the only supported
-discovery probe. Clients must check `service` before sending work: something else
-may own port 8001, and a manuscript image should never be POSTed to it.
-
-```json
-{
-  "service": "nomicous-inference-helper",
-  "version": "0.1.6",
-  "models": [
-    {"registry_model_id": "blla-segment", "task": "segment",
-     "host_eligibility": "local", "tags": ["stable"], "cached": true}
-  ]
-}
-```
-
-`cached` is a local-disk answer only: it means the pinned weights are present and
-match their `artifact_sha256`, checked without contacting the Hub.
-
-On startup the helper fetches `registry.yaml` from the hosted platform (`GET /inference/v1/registry`, public, ETag-aware) into `~/.nomicous/registry.yaml`. The copy shipped in the package is only a fallback when offline. Model weights download lazily when the first `/run` needs them.
-
-The browser calls `/inference/v1/run` through the configured helper URL, then falls back
-to `127.0.0.1:8001` and `localhost:8001`. The production Vercel CSP permits
-these loopback URLs. The helper accepts browser requests only from
-`https://app.nomicous.com`.
-
-There are no native installers. The helper runs from the source tree until #60
-deletes it; the supported distribution is `uv tool install nomicous-inference`
-(see [Install](#install) and [Releasing](#releasing-and-what-that-changed-about-security-patching)).
-
-## Admission control and helper exposure
-
-Both the API and local helper enforce the same `INFERENCE_*` limits before
-base64 decoding or model loading. Defaults are: 160 MiB request body, 160 MiB encoded image,
-100 MiB decoded image, 128 MiB job payload, 200 million pixels, 64 MiB parameters, depth 8,
-8,000,000 parameter items, 10,000 transcription lines, 256 geometry points per line,
-and 60 POSTs per minute per process. Allowed image formats default
-to `JPEG,PNG,TIFF,WEBP`. Operators may lower or raise these with the corresponding
-`INFERENCE_MAX_*` and `INFERENCE_RATE_LIMIT_PER_MINUTE` environment variables;
-only trusted deployment configuration should do so.
-
-These are per-process request controls only. Queue admission, rate limiting
-across replicas, and stale-lease recovery belong to the platform's queue, which
-is now the only one.
-
-The helper is unauthenticated by design, so the loopback bind is what keeps it off the
-network. `HELPER_HOST` must be a loopback address; any other value is rejected at startup,
-and the listening socket is IPv4 `127.0.0.1` only. Exposing the helper to other machines is
-not supported: run inference on the hosted API instead.
+There is nothing here to expose. ADR 0002 deleted the loopback service, its CORS
+allowlist, its request-body middleware, and its per-process rate limiter,
+because all four existed to make a listening socket on a researcher's machine
+safe - and the socket is gone. An **inference agent** reaches the platform
+outbound, authenticated as itself with a **device credential**, and accepts no
+connections at all.
 
 ## Tests
 

@@ -186,20 +186,23 @@ def test_the_installed_closure_carries_no_onnxruntime_and_no_cuda_wheels(
     assert "torch" in names
 
 
-def test_the_loopback_http_surfaces_are_not_in_the_wheel(
+def test_the_installed_package_holds_no_web_server(
     installed_package: dict[str, Path],
 ) -> None:
-    """`inference/api` and `inference/helper` are excluded on purpose (#60).
+    """Nothing a researcher installs can listen on a port (ADR 0002, #60).
 
-    Keeping them out is what lets the published closure hold no web server;
-    this is the assertion that notices if one leaks back in with FastAPI
-    behind it.
+    `inference/api` and `inference/helper` used to be held out of the wheel by
+    an exclude list; #60 deleted them, so this is now a property of the tree
+    rather than of the build configuration. The assertion stays because the
+    thing it guards is the same either way: no ASGI framework and no server
+    reach a laptop, so there is nothing there for a hosted page to call.
     """
     output = _run_installed(
         installed_package,
         "import json, importlib.util as u;"
         " print(json.dumps({name: u.find_spec(name) is not None"
-        " for name in ('inference.api', 'inference.helper', 'fastapi', 'uvicorn')}))",
+        " for name in ('inference.api', 'inference.helper', 'fastapi',"
+        " 'uvicorn', 'starlette')}))",
     )
     present = _last_json_line(output)
 
@@ -208,7 +211,30 @@ def test_the_loopback_http_surfaces_are_not_in_the_wheel(
         "inference.helper": False,
         "fastapi": False,
         "uvicorn": False,
+        "starlette": False,
     }
+
+
+def test_the_installed_package_opens_no_socket(
+    installed_package: dict[str, Path],
+) -> None:
+    """Importing the shipped modules must not bind anything.
+
+    A grep proves no source file *says* `bind`; this proves no import path
+    reaches one, which is the property the researcher's machine actually has.
+    """
+    probe = (
+        "import json, socket;"
+        " bound = [];"
+        " real = socket.socket.bind;"
+        " socket.socket.bind = lambda self, address: bound.append(address);"
+        " import inference, inference.cli, inference.cli.run, inference.jobs.runner;"
+        " socket.socket.bind = real;"
+        " print(json.dumps(bound))"
+    )
+    output = _run_installed(installed_package, probe)
+
+    assert _last_json_line(output) == []
 
 
 def test_the_hub_cache_defaults_under_the_researchers_home_directory(

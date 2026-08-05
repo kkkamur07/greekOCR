@@ -17,12 +17,13 @@ CLIENT_INPUT_ERROR = "Invalid inference request"
 REQUEST_LIMIT_ERROR = "Request exceeds configured limits"
 
 # Upper bounds for the BLLA refinement knobs, mirroring ``SegmentPartRequest`` in
-# the platform API. They cannot only live there: ``/inference/v1/run`` is its own
-# front door and the local helper accepts browser POSTs directly, so a request
-# that never passed through the platform still reaches ``blla_runtime``. Each
-# bound is the value at which the parameter stops meaning anything - see the
-# per-key notes - and the lower bound is 0 everywhere because the runtime already
-# treats non-positive values as "use the default".
+# the platform API. They cannot only live there: ``run_model`` is reached from
+# both sides of a **claim** - the platform's own submission path and an
+# **inference agent** running the model on a laptop - so the seam that bounds an
+# allocation has to sit next to the runtime, not next to one caller. Each bound
+# is the value at which the parameter stops meaning anything - see the per-key
+# notes - and the lower bound is 0 everywhere because the runtime already treats
+# non-positive values as "use the default".
 SEGMENT_PARAM_BOUNDS: dict[str, tuple[float, float]] = {
     # ``margin_px`` becomes a (2r+1)x(2r+1) morphology kernel in
     # ``otsu_band_contours``: the allocation and the dilation cost are quadratic

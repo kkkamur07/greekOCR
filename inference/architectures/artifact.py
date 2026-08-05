@@ -3,25 +3,25 @@
 Each execution path - once four of them, Calamari and BLLA on ONNX and on
 Torch, now the two Torch paths ADR 0004 kept - used to open its artifact with
 its own copy of the same steps, and the copies had already drifted apart. They
-are collapsed here because the *order*
-of those steps is load-bearing: ``run_errors.http_exception_for_run_error``
-turns each failure into a different HTTP status, so a path that verified the
-digest before checking existence, or that raised a bare ``ValueError`` for an
-unusable suffix, would answer the same broken deployment with a different
-status than its sibling.
+are collapsed here because the *order* of those steps is load-bearing: each
+failure says something different about a deployment, so a path that verified
+the digest before checking existence, or that raised a bare ``ValueError`` for
+an unusable suffix, would describe the same broken deployment differently from
+its sibling.
 
-The order, and what each step is worth on the wire:
+The order, and what each step says:
 
-1. missing file    -> ``FileNotFoundError``       -> 503 (weights unavailable)
-2. wrong suffix    -> the caller's ``RuntimeError`` subclass -> 503 (runtime unusable)
-3. bad digest      -> ``ArtifactIntegrityError``  -> 503 (integrity failure)
+1. missing file    -> ``FileNotFoundError``                  (weights unavailable)
+2. wrong suffix    -> the caller's ``RuntimeError`` subclass (runtime unusable)
+3. bad digest      -> ``ArtifactIntegrityError``             (integrity failure)
 
-None of the three is a 422: in all three cases the request was fine and the
-artifact on disk is not. Step 3 is the subtle one - ``ArtifactIntegrityError``
-subclasses ``ValueError``, so it only stays a 503 because ``run_errors``
-checks it before its ``ValueError`` branch. Verifying the digest before the
-suffix check would not change that, but verifying it before the existence
-check would turn a missing file into an ``OSError`` from the hasher.
+None of the three is a client error: in all three cases the request was fine
+and the artifact on disk is not. Step 3 is the subtle one -
+``ArtifactIntegrityError`` subclasses ``ValueError``, so anything that sorts
+these by type has to check it before its ``ValueError`` branch. Verifying the
+digest before the suffix check would not change that, but verifying it before
+the existence check would turn a missing file into an ``OSError`` from the
+hasher.
 
 Step 3 also gates a code-execution surface: ``artifact_sha256`` is verified
 here, before the architecture loader ever opens the file, so a Calamari
