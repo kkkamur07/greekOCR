@@ -46,7 +46,7 @@ dependencies = [
 
 [project.scripts]
 # ADR 0002: local inference is a CLI, not a loopback service. `pair` and
-# `version` shipped in #56; `run` lands in #57 and self-upgrade in #58.
+# `version` shipped in #56, the `run` claim loop in #57; self-upgrade is #58.
 nomicous = "inference.cli:main"
 
 [build-system]

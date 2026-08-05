@@ -201,7 +201,7 @@ _Avoid_: org (when meaning the namespace generically)
 - **Calamari runtime**: local PyTorch graph + local preprocessing; no TensorFlow or vendored `calamari_ocr` import at inference time.
 - Weight resolution: `file://`, `hf://`, and `package://` (see `inference/weights/__init__.py` and `inference/hub/`)
 - Runtime cache: `~/.nomicous/hf/cache/<registry_model_id>/<registry_tag>/`
-- **CLI** (`inference/cli/`): `nomicous pair` and `nomicous version` (#56). `pair` runs the pairing protocol above and writes the **device credential file**; `version` reports what the **version floor** will read, and asks the platform nothing. `nomicous run` - the **claim** loop - is #57, and self-upgrade #58. The platform base URL comes from `NOMICOUS_API_URL` or `--api-url`.
+- **CLI** (`inference/cli/`): `nomicous pair` and `nomicous version` (#56), `nomicous run` (#57). `pair` runs the pairing protocol above and writes the **device credential file**; `version` reports what the **version floor** will read, and asks the platform nothing. `run` is the **claim** loop: one page in flight, fetched through the **signed page image link**, executed by the same `run_model` the platform's own worker calls, and ended through the existing job callback - `--exit-when-empty` for a script, waiting otherwise. A hosted **inference agent** runs the same loop with a **service credential** in `NOMICOUS_SERVICE_TOKEN` and a short poll. Self-upgrade is #58. The platform base URL comes from `NOMICOUS_API_URL` or `--api-url`.
 
 ### Hub layout (`src/hf/`)
 

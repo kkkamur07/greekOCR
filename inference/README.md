@@ -40,7 +40,7 @@ therefore cannot install this package.
 
 | Piece | State |
 |-------|--------|
-| Console entry point (`inference/cli/`) | `nomicous pair`, `nomicous version`. `run` is #57, self-upgrade #58 |
+| Console entry point (`inference/cli/`) | `nomicous pair`, `nomicous run`, `nomicous version`. Self-upgrade is #58 |
 | Hub integration (`inference/hub/`) | `hf://` resolution, cache manifest, artifact SHA-256 |
 | Request/response contracts (`inference/contracts/`) | Defined for segment, transcribe, jobs, and callbacks |
 | Model registry (`inference/registry.yaml`) | Calamari transcribe + BLLA segmentation entries |

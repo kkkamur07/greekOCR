@@ -7,6 +7,7 @@ from collections.abc import Sequence
 
 from inference.cli import console as ui
 from inference.cli import pair as pair_command
+from inference.cli import run as run_command
 from inference.cli import version as version_command
 from inference.cli.version import DISTRIBUTION_NAME, SOURCE_CHECKOUT_VERSION, installed_version
 
@@ -14,15 +15,16 @@ PROGRAM_NAME = "nomicous"
 
 _DESCRIPTION = "Run nomicous manuscript segmentation and transcription on this machine."
 
-# Listed but not built: `run` lands in #57. A researcher who pairs a machine
-# today should be able to see from `--help` what the pairing was for.
-_PENDING_SUBCOMMANDS = (("run", "claim pages from the platform and run them here"),)
-
 _COMMANDS = {
     "pair": (
         "authorise this machine against your nomicous account",
         pair_command.add_arguments,
         pair_command.run,
+    ),
+    "run": (
+        "claim pages from the platform and run them here",
+        run_command.add_arguments,
+        run_command.run,
     ),
     "version": (
         "report the version this agent presents to the platform",
@@ -53,19 +55,16 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command is None:
         parser.print_help()
-        console = ui.out()
-        console.print()
-        console.print("Not built yet:")
-        for name, summary in _PENDING_SUBCOMMANDS:
-            console.print(f"  {name:<8} {summary}")
         return ui.EXIT_OK
 
     handler = _COMMANDS[args.command][2]
     try:
         return handler(args)
     except KeyboardInterrupt:
-        # Nothing partial survives a Ctrl-C: the credential is written once, at
-        # the end, through a rename.
+        # A backstop, not the handler that matters. `pair` writes its credential
+        # once at the end through a rename, so nothing partial survives; `run`
+        # catches its own interrupt, because it may be holding a page and has to
+        # report it before it stops.
         ui.err().print("\nInterrupted. Nothing was changed on this machine.")
         return ui.EXIT_INTERRUPTED
 
