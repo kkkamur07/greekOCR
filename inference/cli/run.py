@@ -273,19 +273,45 @@ def _claim_loop(
             continue
 
         waiting_announced = False
-        claimed += 1
         try:
-            outcome = _handle_page(console, errors, client, identity, claim.page, claimed)
+            outcome = _handle_page(console, errors, client, identity, claim.page, claimed + 1)
         except KeyboardInterrupt:
-            # The page was reported terminally on the way out of `_handle_page`;
-            # only the loop is being abandoned.
+            # Reachable only in the handful of bytecodes between the claim
+            # returning and `_handle_page` taking responsibility for the page -
+            # it does not raise this itself. Reporting here is what closes the
+            # one window in which a page could be claimed and never ended.
             console.print()
+            _report(
+                console,
+                errors,
+                client,
+                identity,
+                claim.page,
+                output=None,
+                reason=INTERRUPTED_ERROR,
+            )
             _summarise(console, done, failed + 1, "Stopped.")
             return ui.EXIT_INTERRUPTED
-        if outcome:
+
+        claimed += 1
+        if outcome.finished:
             done += 1
         else:
             failed += 1
+        if outcome.stopped:
+            console.print()
+            _summarise(console, done, failed, "Stopped.")
+            return ui.EXIT_INTERRUPTED
+
+
+@dataclass(frozen=True)
+class PageOutcome:
+    """What became of one page, and whether the loop should keep going."""
+
+    finished: bool
+    stopped: bool
+    """A Ctrl-C arrived while this page was in flight. The page has already been
+    reported by the time this is read - stopping is the only thing left to do."""
 
 
 def _handle_page(
@@ -295,23 +321,24 @@ def _handle_page(
     identity: AgentIdentity,
     page: ClaimedPage,
     index: int,
-) -> bool:
-    """Run one page and report it. `True` when it finished, `False` when it did not.
+) -> PageOutcome:
+    """Run one page and report it, whatever happens to it.
 
-    Every path out of here has reported the page, including the interrupted one,
-    which re-raises only after the callback has been sent.
+    This deliberately never raises `KeyboardInterrupt`. Reporting the page is
+    the *last* thing that must survive an interrupt, so an exception that skips
+    past the callback would be the one bug this whole design exists to prevent -
+    a researcher left watching a page nobody is running any more.
     """
-    console.print(
-        f"[bold][{index}][/bold] {page.task} [cyan]{page.registry_model_id}[/cyan] "
-        f"job {_short(page.product_job_id)}"
-    )
-
     output: dict | None = None
     reason: str | None = None
     interrupted = False
     started = time.monotonic()
 
     try:
+        console.print(
+            f"[bold][{index}][/bold] {page.task} [cyan]{page.registry_model_id}[/cyan] "
+            f"job {_short(page.product_job_id)}"
+        )
         image = client.fetch_page_image(page.page_image_url)
         console.print(f"    fetched {_bytes(len(image))}")
         output = _job_output(page, _execute(page, image))
@@ -328,9 +355,7 @@ def _handle_page(
         console.print(f"    [red]failed after {elapsed:.1f}s:[/red] {reason}")
 
     _report(console, errors, client, identity, page, output=output, reason=reason)
-    if interrupted:
-        raise KeyboardInterrupt
-    return reason is None
+    return PageOutcome(finished=reason is None, stopped=interrupted)
 
 
 def _report(
