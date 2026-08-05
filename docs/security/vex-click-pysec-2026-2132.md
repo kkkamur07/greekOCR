@@ -14,9 +14,8 @@ attacker controls the filename argument (`shell=True` command construction).
 ## Why the ignore remains
 
 The current inference dependency graph resolves Click 8.2.1 through CLI tooling.
-The original Kraken package is no longer part of the inference or container
-dependency groups; it remains only in the development-only `parity` group for
-model comparison.
+The original Kraken package is gone from the repository entirely: it was the
+oracle for the ONNX parity harness, and ADR 0004 retired both.
 
 ## Reachability
 

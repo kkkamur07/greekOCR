@@ -17,7 +17,7 @@ flowchart LR
     PlatformWorker --> InferenceAPI["Inference API"]
     InferenceAPI --> InferenceJobs[("Inference job queue")]
     InferenceJobs --> InferenceWorker["Inference worker"]
-    InferenceWorker --> Models["BLLA ONNX + Calamari ONNX"]
+    InferenceWorker --> Models["BLLA + Calamari (PyTorch CPU)"]
     InferenceWorker -->|"signed callback"| API
     Browser -->|"loopback HTTP"| Helper["Local inference helper"]
     Helper --> LocalModels["Local CPU model cache"]

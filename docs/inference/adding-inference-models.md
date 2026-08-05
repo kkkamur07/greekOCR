@@ -120,11 +120,10 @@ metadata lookup for public repositories.
 
 ### BLLA segment
 
-The BLLA runtime loads `blla.onnx` from the registry-pinned
-`segmentation-blla` Hub artifact. The inference image does not install
-the Kraken Python package. The optional `parity` dependency group is reserved
-for comparing the ONNX runtime against Kraken's original model during
-development.
+The BLLA runtime loads `blla.safetensors` from the registry-pinned
+`segmentation-blla` Hub artifact. The inference image does not install the
+Kraken Python package; nothing in the repository does since ADR 0004 retired
+the ONNX runtime and the parity harness Kraken was the oracle for.
 
 ### Local / offline dev
 

@@ -36,10 +36,10 @@ Background (persistent compute, not serverless):
 
 ### Why local inference is the default
 
-The local Inference Helper bundles the **ONNX Calamari runtime** and the
-inference-owned **ONNX BLLA runtime** and runs jobs for up to **30 minutes**.
+The local Inference Helper bundles the **PyTorch CPU Calamari runtime** and the
+inference-owned **PyTorch BLLA runtime** and runs jobs for up to **30 minutes**.
 Hub weights are resolved lazily into the runtime cache; the BLLA asset is loaded
-from the registry-pinned `segmentation-blla` repository as `blla.onnx`. Vercel serverless functions have strict size limits and short execution
+from the registry-pinned `segmentation-blla` repository as `blla.safetensors`. Vercel serverless functions have strict size limits and short execution
 timeouts, so researchers run inference on their own machines through the
 loopback-only helper; the hosted platform persists only the result.
 

@@ -1,9 +1,9 @@
 1. Verification of the whole codebase including the tests
 2. Development of the local helpers - like more ui side so that they are convenient to use.
 3. ✅ Move off the Kraken package for segmentation: native BLLA PyTorch
-   topology, preprocessing, decoder, registry-pinned safetensors, and real-page
-   parity coverage are complete. The optional `parity` dependency group remains
-   only as a development oracle.
+   topology, preprocessing, decoder, and registry-pinned safetensors are
+   complete. The `parity` dependency group is gone with the ONNX runtime it
+   compared against (ADR 0004).
 4. Remove the Click VEX
    (`docs/security/vex-click-pysec-2026-2132.md`) when the inference dependency
    graph resolves Click >=8.3.3, and remove the Torch VEX
