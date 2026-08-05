@@ -37,6 +37,7 @@ from backend.document.infrastructure.media_store import (
 )
 from backend.document.infrastructure.orm_models import DocumentPart
 from backend.jobs.infrastructure.orm_models import Job
+from backend.ml.api.agent_version import AGENT_VERSION_HEADER
 from backend.ml.application.device_auth import DEVICE_TOKEN_HEADER
 from infrastructure.db import sync_system_session
 from tests.nomicous.integration.helpers import (
@@ -50,6 +51,31 @@ pytestmark = pytest.mark.integration
 
 CLAIM_URL = "/device/v1/jobs/claim"
 
+# Every claim states which agent is calling (issue 055); one that does not is
+# refused before it is authenticated. Comfortably above the configured floor -
+# the floor itself is tested in ``test_agent_version_floor.py``.
+CURRENT_AGENT_VERSION = "1.0.0"
+
+
+@pytest.fixture(autouse=True)
+def serve_objects_from_the_local_filesystem(monkeypatch):
+    """Pin the storage backend rather than inherit whatever is configured.
+
+    Every test here but one is about the path where *the platform* signs and
+    serves the object, which is `STORAGE_BACKEND=local`. Settings resolve from
+    `backend/core/.env`, falling back to `.env.supabase` - both gitignored, so
+    whether this module talks to the local filesystem or to a real Supabase
+    project depended on which untracked file happened to exist. It passed in a
+    fresh worktree and, in a checkout with Supabase credentials, uploaded
+    manuscript pages to live Storage and then asserted against its URLs.
+
+    The one test that wants the production profile monkeypatches it back.
+    """
+    monkeypatch.setenv("STORAGE_BACKEND", "local")
+    reset_settings_caches()
+    yield
+    reset_settings_caches()
+
 
 # ---------------------------------------------------------------------------
 # Live fixtures: real pairing, real upload, real claim
@@ -58,7 +84,12 @@ CLAIM_URL = "/device/v1/jobs/claim"
 
 def _claim(client: TestClient, device_token: str) -> dict:
     response = client.post(
-        CLAIM_URL, headers={DEVICE_TOKEN_HEADER: device_token}, json={"wait_seconds": 0}
+        CLAIM_URL,
+        headers={
+            DEVICE_TOKEN_HEADER: device_token,
+            AGENT_VERSION_HEADER: CURRENT_AGENT_VERSION,
+        },
+        json={"wait_seconds": 0},
     )
     assert response.status_code == 200, response.text
     return response.json()

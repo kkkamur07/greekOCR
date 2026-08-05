@@ -46,8 +46,21 @@ class DocumentPartService:
     ) -> None:
         self._documents = documents or DocumentRepository()
         self._projects = projects or ProjectRepository()
-        self._media = media or get_media_store()
+        self._injected_media = media
         self._access = access or DocumentAccess(documents=self._documents, projects=self._projects)
+
+    @property
+    def _media(self) -> MediaStore:
+        """Resolve the configured store per use, not once at construction.
+
+        Four route modules build this service at import time, so capturing the
+        store in ``__init__`` pinned it to whatever ``STORAGE_BACKEND`` said
+        before the first request - and left this service the one holder that
+        ``reset_settings_caches`` could not reach. Writes then went to the
+        import-time backend while readers that call ``get_media_store()`` per
+        use went to the current one. An explicitly injected store still wins.
+        """
+        return self._injected_media or get_media_store()
 
     async def list_parts(
         self,

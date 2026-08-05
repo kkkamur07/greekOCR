@@ -43,6 +43,7 @@ from backend.jobs.infrastructure.stale_sweep import (
     reset_stale_sweep_throttle,
     run_stale_job_sweep,
 )
+from backend.ml.api.agent_version import AGENT_VERSION_HEADER
 from backend.ml.application.agent_credentials import SERVICE_TOKEN_HEADER, WORKER_NAME_HEADER
 from backend.ml.application.device_auth import DEVICE_TOKEN_HEADER
 from infrastructure.db import engine, sync_system_session
@@ -56,7 +57,15 @@ pytestmark = pytest.mark.integration
 
 CLAIM_URL = "/device/v1/jobs/claim"
 CALLBACK_URL = "/internal/inference/job-complete"
-SERVICE_HEADERS = {SERVICE_TOKEN_HEADER: "test-inference-worker-service-token-not-for-production"}
+
+# Every claim states which agent is calling (issue 055); one that does not is
+# refused before it is authenticated. Comfortably above the configured floor -
+# the floor itself is tested in ``test_agent_version_floor.py``.
+CURRENT_AGENT_VERSION = "1.0.0"
+SERVICE_HEADERS = {
+    SERVICE_TOKEN_HEADER: "test-inference-worker-service-token-not-for-production",
+    AGENT_VERSION_HEADER: CURRENT_AGENT_VERSION,
+}
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -85,7 +94,7 @@ def _clean_sweep_throttle():
 
 
 def _device_headers(token: str) -> dict[str, str]:
-    return {DEVICE_TOKEN_HEADER: token}
+    return {DEVICE_TOKEN_HEADER: token, AGENT_VERSION_HEADER: CURRENT_AGENT_VERSION}
 
 
 def _claim(client: TestClient, token: str):

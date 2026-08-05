@@ -1,11 +1,11 @@
 """Select the configured media store backend."""
 
 from datetime import datetime
-from functools import lru_cache
 from typing import Protocol
 from uuid import UUID
 
 from backend.core.settings import get_storage_settings
+from backend.core.settings._cache import settings_cache
 from backend.document.infrastructure.media_store.local import LocalMediaStore
 from backend.document.infrastructure.media_store.supabase import SupabaseMediaStore
 
@@ -39,8 +39,15 @@ class MediaStore(Protocol):
     def delete(self, image_key: str) -> None: ...
 
 
-@lru_cache
+@settings_cache
 def get_media_store() -> MediaStore:
+    """The configured store, built once per process.
+
+    Enrolled in ``reset_settings_caches`` rather than memoized with a bare
+    ``lru_cache``: which backend this returns is read from ``STORAGE_BACKEND``,
+    so a plain cache keeps serving the backend that was configured the first
+    time anything asked - exactly the leak that registry exists to remove.
+    """
     if get_storage_settings().storage_backend == "supabase":
         return SupabaseMediaStore()
     return LocalMediaStore()

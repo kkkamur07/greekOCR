@@ -246,7 +246,11 @@ def test_callback_wrong_secret_returns_403(client: TestClient):
 
 
 def test_callback_unconfigured_secret_returns_503(client: TestClient, monkeypatch):
-    monkeypatch.delenv("INFERENCE_WEBHOOK_SECRET", raising=False)
+    # Empty rather than deleted: settings also read `backend/core/.env`, falling
+    # back to `.env.supabase`, so removing the process variable leaves whatever
+    # the dotenv supplies and this asserts nothing in a configured checkout. An
+    # env var overrides the file, and the route treats empty as unconfigured.
+    monkeypatch.setenv("INFERENCE_WEBHOOK_SECRET", "")
     get_inference_settings.cache_clear()
     product_job_id, inference_job_id = _seed_waiting_job()
 
