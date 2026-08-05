@@ -1,15 +1,18 @@
-"""The CLI's side of the device-pairing protocol, over plain HTTP.
+"""The CLI's side of the platform protocols, over plain HTTP.
 
-The protocol itself already exists and is tested on the platform
-(`backend/ml/api/device_pairing.py`): RFC 8628's device authorization grant with
-the typable `user_code` removed. Nothing here designs anything - it is the client
-for a wire contract that is already settled, and the shapes below are the
-platform's DTOs read back.
+Two protocols, one client. Pairing is RFC 8628's device authorization grant with
+the typable `user_code` removed (`backend/ml/api/device_pairing.py`); the
+**claim** loop is the one endpoint ADR 0003 costs, plus the platform's existing
+job callback (`backend/jobs/api/device_claim.py`,
+`backend/jobs/api/internal_inference.py`). Nothing here designs anything - it is
+the client for wire contracts that are already settled, and the shapes below are
+the platform's DTOs read back.
 
 `urllib.request` rather than an HTTP library, because `[project].dependencies` is
-the closure that reaches a researcher's laptop and this is three requests with no
-streaming, no connection reuse, and no authentication scheme to negotiate. The
-**claim** loop in #57 has the same properties.
+the closure that reaches a researcher's laptop, and neither protocol needs
+streaming, connection reuse, or an authentication scheme to negotiate. One page
+per claim (ADR 0002) is what keeps that true: there is no long-lived transfer to
+manage, only a request per page.
 """
 
 from __future__ import annotations
@@ -33,7 +36,31 @@ DEVICE_TOKEN_HEADER = "X-Nomicous-Device-Token"
 AGENT_VERSION_HEADER = "X-Nomicous-Agent-Version"
 """Which build of the agent is calling. The **version floor** is enforced on the
 **claim** path only (`backend/ml/api/agent_version.py`); the constant lives here
-so the run loop in #57 states the same version this CLI reports."""
+so the run loop states the same version this CLI reports."""
+
+SERVICE_TOKEN_HEADER = "X-Nomicous-Service-Token"
+"""A hosted worker's **service credential**. A separate header from the device
+token because the two resolve to different scopes (ADR 0005, decision 1): a
+device token claims `local` work on one account, this claims `cloud` work for the
+platform. Two credentials that must never be interchangeable by accident do not
+share a header."""
+
+WORKER_NAME_HEADER = "X-Nomicous-Worker-Name"
+"""Which hosted worker is calling. Names its device row; not a secret."""
+
+CLAIM_PATH = "/device/v1/jobs/claim"
+CALLBACK_PATH = "/internal/inference/job-complete"
+
+AGENT_VERSION_REFUSED_STATUS = 426
+AGENT_VERSION_UNSUPPORTED = "AGENT_VERSION_UNSUPPORTED"
+"""The one error code the run loop matches on. The platform's error envelope
+replaces `HTTPException.detail` with a fixed public string everywhere else, so
+this is the only refusal that arrives machine-readable."""
+
+IMAGE_TIMEOUT_SECONDS = 120.0
+"""A manuscript scan on a bad connection, not a JSON round trip. Still bounded:
+the **signed page image link** dies in about a minute anyway, so a fetch that has
+not finished long after that is not going to."""
 
 # The platform caps these on the way in (`PairingStartRequest`). Truncating here
 # rather than sending an over-long value keeps a long hostname from turning into
@@ -57,6 +84,37 @@ STATUS_APPROVED = "approved"
 
 class PlatformError(RuntimeError):
     """The platform could not be reached, or answered something unusable."""
+
+
+class AgentVersionRefused(PlatformError):
+    """This build is below the **version floor** and may not claim (issue 055).
+
+    Deliberately its own exception rather than a status code the loop inspects.
+    `retryable` is always false on the wire: no amount of backing off turns this
+    into work, so a claim loop that treats it as a transient failure would spin
+    forever against a platform that has already told it what to do.
+    """
+
+    def __init__(
+        self,
+        *,
+        message: str,
+        reason: str,
+        agent_version: str | None,
+        minimum_version: str,
+        latest_version: str,
+        package: str,
+        upgrade_command: str,
+    ) -> None:
+        super().__init__(message)
+        self.reason = reason
+        """`below_floor`, `missing`, or `malformed`. A source checkout reports
+        `0+unknown`, which lands here as `malformed` rather than as too old."""
+        self.agent_version = agent_version
+        self.minimum_version = minimum_version
+        self.latest_version = latest_version
+        self.package = package
+        self.upgrade_command = upgrade_command
 
 
 @dataclass(frozen=True)
@@ -96,6 +154,59 @@ class DeviceIdentity:
     token_expires_at: datetime | None
 
 
+@dataclass(frozen=True)
+class AgentNotice:
+    """What the platform makes of this build, delivered *with* the work.
+
+    On every claim response, page or no page, so an idle agent still learns it
+    is behind. **Outdated** is not the same state as being below the **version
+    floor**: this one is served normally and merely told.
+    """
+
+    agent_version: str
+    minimum_version: str
+    latest_version: str
+    outdated: bool
+    package: str
+    upgrade_command: str
+
+
+@dataclass(frozen=True)
+class ClaimedPage:
+    """One page of work, and everything needed to run and report it.
+
+    The run fields are a flattened `JobSubmitRequest` - the contract the
+    inference runtime already takes, which is what keeps a laptop and a hosted
+    worker literally the same program (ADR 0003).
+    """
+
+    product_job_id: str
+    inference_job_id: str
+    job_type: str
+    execution_target: str
+    lease_expires_at: datetime | None
+    task: str
+    registry_model_id: str
+    registry_tag: str
+    params: dict
+    page_image_url: str
+    page_image_expires_at: datetime | None
+    """Two fields rather than one, so the agent can tell whether its link is
+    still worth using without parsing a URL."""
+
+
+@dataclass(frozen=True)
+class Claim:
+    """One answer from the claim endpoint. An empty queue is one of these, not
+    an error: it arrives as a 200 with no page, because a healthy platform is
+    idle most of the time."""
+
+    page: ClaimedPage | None
+    poll_after_seconds: float
+    lease_seconds: int
+    agent: AgentNotice | None
+
+
 def default_platform_url(environ: dict[str, str] | None = None) -> str:
     source = environ if environ is not None else os.environ
     return (source.get(PLATFORM_URL_ENV) or DEFAULT_PLATFORM_URL).rstrip("/")
@@ -128,7 +239,7 @@ def _parse_datetime(value: object) -> datetime | None:
 
 
 class PlatformClient:
-    """Three requests: start a pairing, poll for the token, confirm the token."""
+    """Every request the CLI makes: pair a machine, then claim, fetch, report."""
 
     def __init__(self, base_url: str, *, timeout: float = REQUEST_TIMEOUT_SECONDS) -> None:
         self.base_url = base_url.rstrip("/")
@@ -261,6 +372,176 @@ class PlatformClient:
             account_email=str(body.get("account_email") or ""),
             token_expires_at=_parse_datetime(body.get("token_expires_at")),
         )
+
+    # ------------------------------------------------------------------
+    # The claim loop
+    # ------------------------------------------------------------------
+    def claim_page(self, *, credential: dict[str, str], wait_seconds: int) -> Claim:
+        """Take at most one page of work, or come back empty.
+
+        The credential decides the **execution target** and the caller cannot
+        ask for a different one, so there is nothing to send but how long this
+        agent is willing to wait. `wait_seconds` is clamped by the platform, not
+        here: the ceiling is an operational dial and belongs to whoever is
+        running it.
+        """
+        status, body = self._request(
+            "POST",
+            CLAIM_PATH,
+            body={"wait_seconds": max(0, int(wait_seconds))},
+            headers=credential,
+        )
+        if status == AGENT_VERSION_REFUSED_STATUS:
+            raise _version_refusal(body, self.base_url)
+        if status == 401:
+            raise PlatformError(
+                f"{self.base_url} does not accept this machine's credential. "
+                "Run `nomicous pair` to authorise it again."
+            )
+        if status == 404:
+            raise PlatformError(
+                f"{self.base_url} is not serving the claim endpoint. "
+                "The device layer is disabled by default in production."
+            )
+        if status != 200 or not isinstance(body, dict):
+            raise PlatformError(_unexpected(status, body, "claiming a page"))
+
+        try:
+            return Claim(
+                page=_claimed_page(body.get("page")),
+                poll_after_seconds=float(body.get("poll_after_seconds") or 0.0),
+                lease_seconds=int(body.get("lease_seconds") or 0),
+                agent=_agent_notice(body.get("agent")),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise PlatformError(f"{self.base_url} returned an unusable claim response") from exc
+
+    def fetch_page_image(self, url: str) -> bytes:
+        """Download the one page image a claim points at.
+
+        **No credential is attached, deliberately.** The signature in the URL is
+        the authorization (ADR 0002); sending the device token here would imply
+        the link needed it, and the link reaches exactly one object either way.
+        It is also why this bypasses `_request`: that method adds headers this
+        request has no business carrying, and the answer is bytes rather than
+        JSON.
+        """
+        request = urllib.request.Request(url, method="GET")
+        request.add_header("User-Agent", f"nomicous-inference/{installed_version()}")
+        try:
+            with urllib.request.urlopen(request, timeout=IMAGE_TIMEOUT_SECONDS) as response:
+                return response.read()
+        except urllib.error.HTTPError as exc:
+            if exc.code == 403:
+                # Forged, malformed, and expired are one status on purpose, so
+                # the route is not an oracle for which object keys exist. Only
+                # one of the three can plausibly happen to an honest agent.
+                raise PlatformError(
+                    "The link to this page's image was refused. It expires about a "
+                    "minute after the claim, so it was most likely used too late."
+                ) from exc
+            raise PlatformError(f"The page image could not be fetched ({exc.code})") from exc
+        except urllib.error.URLError as exc:
+            raise PlatformError(f"The page image could not be fetched: {exc.reason}") from exc
+        except TimeoutError as exc:
+            raise PlatformError("The page image did not arrive in time") from exc
+        except OSError as exc:  # pragma: no cover - socket-level failures
+            raise PlatformError(f"The page image could not be fetched: {exc}") from exc
+
+    def report_page(
+        self,
+        *,
+        credential: dict[str, str],
+        page: ClaimedPage,
+        output: dict | None = None,
+        error: str | None = None,
+    ) -> None:
+        """End the page, one way or the other.
+
+        Not a new endpoint: this is the platform's existing `JobCallbackRequest`
+        (ADR 0003), authorised by the same credential the page was claimed with
+        and narrowed to the page this agent is actually holding. A researcher's
+        laptop has no webhook secret and must not be given one.
+        """
+        payload: dict[str, Any] = {
+            "inference_job_id": page.inference_job_id,
+            "product_job_id": page.product_job_id,
+            "task": page.task,
+            "status": "done" if error is None else "failed",
+        }
+        if error is None:
+            payload["output"] = output
+        else:
+            payload["error"] = error
+
+        status, body = self._request("POST", CALLBACK_PATH, body=payload, headers=credential)
+        if status == 204:
+            return
+        if status == 403:
+            raise PlatformError(
+                "The platform says this machine is not holding that page. Its "
+                "**lease** most likely expired and the page went back to the queue."
+            )
+        raise PlatformError(_unexpected(status, body, "reporting a page"))
+
+
+def _agent_notice(raw: object) -> AgentNotice | None:
+    if not isinstance(raw, dict):
+        return None
+    return AgentNotice(
+        agent_version=str(raw.get("agent_version") or ""),
+        minimum_version=str(raw.get("minimum_version") or ""),
+        latest_version=str(raw.get("latest_version") or ""),
+        outdated=bool(raw.get("outdated")),
+        package=str(raw.get("package") or ""),
+        upgrade_command=str(raw.get("upgrade_command") or ""),
+    )
+
+
+def _claimed_page(raw: object) -> ClaimedPage | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise TypeError("page must be an object")
+    request = raw["request"]
+    if not isinstance(request, dict):
+        raise TypeError("page.request must be an object")
+    params = request.get("params")
+    return ClaimedPage(
+        product_job_id=str(raw["product_job_id"]),
+        inference_job_id=str(raw["inference_job_id"]),
+        job_type=str(raw["job_type"]),
+        execution_target=str(raw.get("execution_target") or ""),
+        lease_expires_at=_parse_datetime(raw.get("lease_expires_at")),
+        task=str(request["task"]),
+        registry_model_id=str(request["registry_model_id"]),
+        registry_tag=str(request.get("registry_tag") or "stable"),
+        params=params if isinstance(params, dict) else {},
+        page_image_url=str(raw["page_image_url"]),
+        page_image_expires_at=_parse_datetime(raw.get("page_image_expires_at")),
+    )
+
+
+def _version_refusal(body: Any, base_url: str) -> AgentVersionRefused:
+    """Read a 426 back into an exception the run loop can print.
+
+    The refusal is the one failure on this platform that keeps its detail, so
+    every field below really is there - but a 426 from something that is not the
+    platform is still possible, and reading it must not raise a `KeyError` on
+    top of the refusal.
+    """
+    error = body.get("error") if isinstance(body, dict) else None
+    if not isinstance(error, dict):
+        error = {}
+    return AgentVersionRefused(
+        message=str(error.get("message") or f"{base_url} refused this version of the agent"),
+        reason=str(error.get("reason") or "unknown"),
+        agent_version=error.get("agent_version"),
+        minimum_version=str(error.get("minimum_version") or "unknown"),
+        latest_version=str(error.get("latest_version") or "unknown"),
+        package=str(error.get("package") or "nomicous-inference"),
+        upgrade_command=str(error.get("upgrade_command") or "uv tool upgrade nomicous-inference"),
+    )
 
 
 def _decode(raw: bytes) -> Any:
