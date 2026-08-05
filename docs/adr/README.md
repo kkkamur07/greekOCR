@@ -12,3 +12,7 @@ the time, and why.
 | # | Title | Status |
 |---|-------|--------|
 | [0001](0001-outbound-helper-device-pairing.md) | Outbound helper device pairing and device-scoped tokens | Accepted |
+| [0002](0002-inference-cli-replaces-loopback-helper.md) | Local inference is a CLI, not a loopback service | Accepted — packaging section superseded in part by 0004 |
+| [0003](0003-single-job-queue-cloud-worker-claims-like-a-device.md) | One job queue: the cloud worker claims like any paired device | Accepted |
+| [0004](0004-pytorch-is-the-inference-runtime.md) | PyTorch is the inference runtime; ONNX is archived | Accepted |
+| [0005](0005-agent-claim-endpoint-and-the-inference-service-account.md) | The agent claim endpoint and the inference service account | Accepted |

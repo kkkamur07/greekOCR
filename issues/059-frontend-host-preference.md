@@ -2,7 +2,7 @@
 id: "059"
 title: "frontend-host-preference"
 type: AFK
-status: in_progress
+status: done
 tracker: "https://github.com/kkkamur07/greekOCR/issues/59"
 blocked_by:
   - "051-execution-target-capacity-gating.md"

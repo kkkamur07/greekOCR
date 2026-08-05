@@ -2,7 +2,7 @@
 id: "053"
 title: "signed-page-image-link"
 type: AFK
-status: backlog
+status: in_progress
 tracker: "https://github.com/kkkamur07/greekOCR/issues/53"
 blocked_by:
   - "052-device-claim-endpoint.md"

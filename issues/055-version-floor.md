@@ -2,7 +2,7 @@
 id: "055"
 title: "version-floor"
 type: AFK
-status: backlog
+status: in_progress
 tracker: "https://github.com/kkkamur07/greekOCR/issues/55"
 blocked_by:
   - "052-device-claim-endpoint.md"

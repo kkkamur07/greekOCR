@@ -2,7 +2,7 @@
 id: "052"
 title: "device-claim-endpoint"
 type: AFK
-status: in_progress
+status: done
 tracker: "https://github.com/kkkamur07/greekOCR/issues/52"
 blocked_by:
   - "048-collapse-second-job-queue.md"
