@@ -17,7 +17,13 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from src.logging.wandb_logger import WandbLogger  # noqa: E402
-from train_utils import build_calamari_train_command, stream_process, validate_pack  # noqa: E402
+from train_utils import (  # noqa: E402
+    build_calamari_command,
+    stream_process,
+    uses_gpu,
+    validate_pack,
+    write_header,
+)
 
 
 @hydra.main(version_base=None, config_path="../../../configs", config_name="calamari_train")
@@ -32,50 +38,28 @@ def main(cfg: DictConfig) -> None:
     log_file = log_dir / f"train_{timestamp}.log"
     run_name = str(cfg.wandb.name) if cfg.wandb.name is not None else f"calamari-train-{timestamp}"
 
-    base_cmd, cmd_env = build_calamari_train_command()
-    cmd = base_cmd + [
-        "--network",
-        str(cfg.model.network),
-        "--n_augmentations",
-        str(cfg.training.n_augmentations),
-        "--trainer.output_dir",
-        str(output_dir),
-        "--trainer.epochs",
-        str(cfg.training.epochs),
-        "--early_stopping.n_to_go",
-        str(cfg.training.early_stopping_patience),
-        "--early_stopping.frequency",
-        str(cfg.training.early_stopping_frequency),
-        "--train.gt_extension",
-        ".gt.txt",
-        "--val.gt_extension",
-        ".gt.txt",
-        "--train.images",
-        *train_images,
-        "--val.images",
-        *val_images,
-    ]
-    if cfg.training.gpu is not None and str(cfg.training.gpu) != "":
-        cmd.extend(["--device.gpus", str(cfg.training.gpu)])
+    cmd, cmd_env = build_calamari_command(
+        cfg,
+        output_dir=output_dir,
+        train_images=train_images,
+        val_images=val_images,
+    )
 
-    header = [
-        "=" * 40,
-        f"Calamari training started: {datetime.now()}",
-        f"  Pack:              {pack_dir}",
-        f"  Output:            {output_dir}",
-        f"  Train images:      {len(train_images)}",
-        f"  Val images:        {len(val_images)}",
-        f"  Network:           {cfg.model.network}",
-        f"  Epochs:            {cfg.training.epochs}",
-        f"  Augmentations:     {cfg.training.n_augmentations}",
-        f"  Early stopping:    {cfg.training.early_stopping_patience}",
-        f"  GPU:               {cfg.training.gpu if cfg.training.gpu is not None else 'CPU'}",
-        "=" * 40,
-    ]
-    with log_file.open("w", encoding="utf-8") as handle:
-        for line in header:
-            print(line)
-            handle.write(line + "\n")
+    write_header(
+        log_file,
+        "Calamari training started",
+        {
+            "Pack": pack_dir,
+            "Output": output_dir,
+            "Train images": len(train_images),
+            "Val images": len(val_images),
+            "Network": cfg.model.network,
+            "Epochs": cfg.training.epochs,
+            "Augmentations": cfg.training.n_augmentations,
+            "Early stopping": cfg.training.early_stopping_patience,
+            "GPU": cfg.training.gpu if uses_gpu(cfg) else "CPU",
+        },
+    )
 
     wandb_logger = WandbLogger(
         enabled=bool(cfg.wandb.enabled),

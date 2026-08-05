@@ -5,6 +5,8 @@ from PIL import Image
 from paiargparse import pai_dataclass, pai_meta
 import cv2 as cv
 
+from calamari_ocr.utils.grayscale import load_line_image_grayscale
+
 
 @pai_dataclass
 @dataclass
@@ -14,10 +16,14 @@ class ImageLoaderParams:
         metadata=pai_meta(help="Number of channels to produce, by default 1=grayscale. Use 3 for colour."),
     )
     to_gray_method: str = field(
-        default="cv",
+        default="pil",
         metadata=pai_meta(
-            help="Method to apply to convert color to gray.",
-            choices=["avg", "cv"],
+            help=(
+                "Method to apply to convert color to gray. 'pil' matches the serving "
+                "preprocessing exactly and is the default. 'cv' and 'avg' are kept so "
+                "trainer params saved by earlier runs still deserialize unchanged."
+            ),
+            choices=["avg", "cv", "pil"],
         ),
     )
 
@@ -30,6 +36,13 @@ class ImageLoader:
         self.params = params
 
     def load_image(self, image_path: str) -> np.ndarray:
+        # Grayscale line images are what this project actually trains on, and
+        # production reads them with PIL's convert("L").  Delegate so the two
+        # agree bit for bit; see calamari_ocr.utils.grayscale for why the
+        # raw-array + cvtColor route below is not equivalent.
+        if self.params.channels == 1 and self.params.to_gray_method == "pil":
+            return load_line_image_grayscale(image_path)
+
         img = load_image(image_path)
         if len(img.shape) == 2:
             img_channels = 1

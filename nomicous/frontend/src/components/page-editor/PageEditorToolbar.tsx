@@ -13,7 +13,7 @@ import { SettingsIcon } from "./EditorIcons";
 import { PageEditorSettingsPanel } from "./PageEditorSettingsPanel";
 import { PageEditorInferenceStatus } from "./PageEditorInferenceStatus";
 import { PAGE_EDITOR_SHORTCUTS } from "./pageEditorShortcuts";
-import type { InferencePreference } from "../../inference/preference";
+import type { InferenceRouting } from "../../inference/preference";
 import type { HostEligibility } from "../../inference/types";
 import type { PageEditorCanvasSettings } from "./pageEditorSettings";
 import { ToolbarKbd } from "./ToolbarKbd";
@@ -66,11 +66,10 @@ type PageEditorToolbarProps = {
   onSettingsOpenChange: (open: boolean) => void;
   canvasSettings: PageEditorCanvasSettings;
   onCanvasSettingsChange: (settings: PageEditorCanvasSettings) => void;
-  inferencePreference: InferencePreference;
-  onInferencePreferenceChange: (preference: InferencePreference) => void;
+  inferenceRouting: InferenceRouting;
+  onInferenceRoutingChange: (routing: InferenceRouting) => void;
   helperAvailable: boolean;
   helperProbing: boolean;
-  preferCloud: boolean;
   selectedModelHostEligibility: HostEligibility | null;
 };
 
@@ -115,11 +114,10 @@ export function PageEditorToolbar({
   onSettingsOpenChange,
   canvasSettings,
   onCanvasSettingsChange,
-  inferencePreference,
-  onInferencePreferenceChange,
+  inferenceRouting,
+  onInferenceRoutingChange,
   helperAvailable,
   helperProbing,
-  preferCloud,
   selectedModelHostEligibility,
 }: PageEditorToolbarProps) {
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -225,7 +223,7 @@ export function PageEditorToolbar({
         <PageEditorInferenceStatus
           probing={helperProbing}
           helperAvailable={helperAvailable}
-          preferCloud={preferCloud}
+          routing={inferenceRouting}
         />
         {processingLabel && (
           <div
@@ -507,8 +505,8 @@ export function PageEditorToolbar({
               <PageEditorSettingsPanel
                 settings={canvasSettings}
                 onSettingsChange={onCanvasSettingsChange}
-                inferencePreference={inferencePreference}
-                onInferencePreferenceChange={onInferencePreferenceChange}
+                routing={inferenceRouting}
+                onRoutingChange={onInferenceRoutingChange}
                 helperAvailable={helperAvailable}
                 selectedModelHostEligibility={selectedModelHostEligibility}
               />

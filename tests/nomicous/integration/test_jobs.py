@@ -16,9 +16,14 @@ from inference.contracts.jobs import JobSubmitRequest, JobSubmitResponse
 from sqlalchemy import update
 
 from backend.jobs.infrastructure.job_repository import (
+    WAITING_TIMEOUT_ERROR,
     claim_next_pending_job,
+    clear_stale_callback_claims,
     count_active_jobs,
+    fail_stale_waiting_jobs,
+    mark_job_done,
     reclaim_stale_running_jobs,
+    waiting_timeout_error,
 )
 from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
 from backend.jobs.infrastructure.worker import execute_claimed_job
@@ -455,6 +460,372 @@ def test_reclaim_stale_running_jobs_moves_expired_jobs_to_pending():
             )
         )
         session.commit()
+
+
+# --- Waiting-state timeout ---
+# Tests jobs dispatched to inference do not sit in waiting forever.
+# Does not test the callback merge, which has its own suite.
+
+
+@pytest.mark.integration
+def test_stale_waiting_job_is_failed_and_notified(monkeypatch: pytest.MonkeyPatch):
+    from backend.jobs.infrastructure import job_repository as repo_module
+
+    notified: list[tuple] = []
+    monkeypatch.setattr(
+        repo_module,
+        "notify_platform_job_status_changed",
+        lambda job_id, status: notified.append((job_id, status)),
+    )
+
+    job_id = uuid.uuid4()
+    stale = datetime.now(UTC) - timedelta(seconds=600)
+    with sync_system_session() as session:
+        session.add(
+            Job(
+                id=job_id,
+                type=JobType.segment,
+                status=JobStatus.waiting,
+                payload={"handler": "noop"},
+                inference_job_id=uuid.uuid4(),
+                updated_at=stale,
+            )
+        )
+        session.commit()
+
+    assert fail_stale_waiting_jobs(waiting_timeout_seconds=240.0) == 1
+
+    with sync_system_session() as session:
+        row = session.get(Job, job_id)
+        assert row is not None
+        assert row.status == JobStatus.failed
+        assert row.error == waiting_timeout_error(240.0)
+        assert row.error.startswith(WAITING_TIMEOUT_ERROR)
+        assert row.completed_at is not None
+    assert (job_id, JobStatus.failed) in notified
+
+
+@pytest.mark.integration
+def test_waiting_job_within_the_timeout_is_left_alone():
+    job_id = uuid.uuid4()
+    with sync_system_session() as session:
+        session.add(
+            Job(
+                id=job_id,
+                type=JobType.segment,
+                status=JobStatus.waiting,
+                payload={"handler": "noop"},
+                updated_at=datetime.now(UTC),
+            )
+        )
+        session.commit()
+
+    assert fail_stale_waiting_jobs(waiting_timeout_seconds=240.0) == 0
+
+    with sync_system_session() as session:
+        row = session.get(Job, job_id)
+        assert row is not None
+        assert row.status == JobStatus.waiting
+        row.status = JobStatus.failed
+        row.completed_at = datetime.now(UTC)
+        session.commit()
+
+
+# --- Stale callback claims ---
+# Tests a crashed callback stops blocking cancellation.
+
+
+@pytest.mark.integration
+def test_stale_callback_claim_makes_the_job_cancellable_again(
+    client: TestClient, registered_user: dict[str, str]
+):
+    auth_headers = {"Authorization": f"Bearer {registered_user['access_token']}"}
+    me = client.get("/me", headers=auth_headers)
+    assert me.status_code == 200
+    user_id = uuid.UUID(me.json()["id"])
+
+    job_id = uuid.uuid4()
+    with sync_system_session() as session:
+        session.add(
+            Job(
+                id=job_id,
+                type=JobType.segment,
+                status=JobStatus.waiting,
+                payload={"handler": "noop"},
+                user_id=user_id,
+                callback_claimed_at=datetime.now(UTC) - timedelta(seconds=900),
+                updated_at=datetime.now(UTC),
+            )
+        )
+        session.commit()
+
+    blocked = client.post(f"/jobs/{job_id}/cancel", headers=auth_headers)
+    assert blocked.status_code == 409, blocked.text
+
+    assert clear_stale_callback_claims(claim_timeout_seconds=300.0) == 1
+
+    cancelled = client.post(f"/jobs/{job_id}/cancel", headers=auth_headers)
+    assert cancelled.status_code == 200, cancelled.text
+    assert cancelled.json()["status"] == "cancelled"
+
+
+@pytest.mark.integration
+def test_clearing_claims_does_not_reset_the_waiting_deadline():
+    job_id = uuid.uuid4()
+    stale_updated_at = datetime.now(UTC) - timedelta(seconds=600)
+    with sync_system_session() as session:
+        session.add(
+            Job(
+                id=job_id,
+                type=JobType.segment,
+                status=JobStatus.waiting,
+                payload={"handler": "noop"},
+                callback_claimed_at=datetime.now(UTC) - timedelta(seconds=900),
+                updated_at=stale_updated_at,
+            )
+        )
+        session.commit()
+
+    assert clear_stale_callback_claims(claim_timeout_seconds=300.0) == 1
+
+    with sync_system_session() as session:
+        row = session.get(Job, job_id)
+        assert row is not None
+        assert row.callback_claimed_at is None
+        assert row.updated_at == stale_updated_at
+
+    # The waiting sweep still sees the original deadline.
+    assert fail_stale_waiting_jobs(waiting_timeout_seconds=240.0) == 1
+
+
+# --- Opportunistic on-read sweep ---
+# Tests the timeout is enforced by a plain read, with no worker loop involved.
+# That is the production API deployment, which runs JOB_WORKER_ENABLED=false.
+
+
+@pytest.mark.integration
+def test_reading_a_job_enforces_the_timeout_without_a_worker(
+    client: TestClient, registered_user: dict[str, str]
+):
+    from backend.jobs.infrastructure import stale_sweep
+
+    auth_headers = {"Authorization": f"Bearer {registered_user['access_token']}"}
+    me = client.get("/me", headers=auth_headers)
+    assert me.status_code == 200
+    user_id = uuid.UUID(me.json()["id"])
+
+    job_id = uuid.uuid4()
+    with sync_system_session() as session:
+        session.add(
+            Job(
+                id=job_id,
+                type=JobType.segment,
+                status=JobStatus.waiting,
+                payload={"handler": "noop"},
+                user_id=user_id,
+                inference_job_id=uuid.uuid4(),
+                updated_at=datetime.now(UTC) - timedelta(seconds=600),
+            )
+        )
+        session.commit()
+
+    stale_sweep.reset_stale_sweep_throttle()
+    read = client.get(f"/jobs/{job_id}", headers=auth_headers)
+
+    assert read.status_code == 200, read.text
+    body = read.json()
+    assert body["status"] == "failed"
+    assert body["error"] == waiting_timeout_error(240.0)
+
+
+@pytest.mark.integration
+def test_reading_a_job_releases_a_stale_callback_claim(
+    client: TestClient, registered_user: dict[str, str]
+):
+    from backend.jobs.infrastructure import stale_sweep
+
+    auth_headers = {"Authorization": f"Bearer {registered_user['access_token']}"}
+    me = client.get("/me", headers=auth_headers)
+    assert me.status_code == 200
+    user_id = uuid.UUID(me.json()["id"])
+
+    job_id = uuid.uuid4()
+    with sync_system_session() as session:
+        session.add(
+            Job(
+                id=job_id,
+                type=JobType.segment,
+                status=JobStatus.waiting,
+                payload={"handler": "noop"},
+                user_id=user_id,
+                callback_claimed_at=datetime.now(UTC) - timedelta(seconds=900),
+                updated_at=datetime.now(UTC),
+            )
+        )
+        session.commit()
+
+    blocked = client.post(f"/jobs/{job_id}/cancel", headers=auth_headers)
+    assert blocked.status_code == 409, blocked.text
+
+    stale_sweep.reset_stale_sweep_throttle()
+    read = client.get(f"/jobs/{job_id}", headers=auth_headers)
+    assert read.status_code == 200, read.text
+    # Fresh updated_at, so only the claim is released - the job stays waiting.
+    assert read.json()["status"] == "waiting"
+
+    cancelled = client.post(f"/jobs/{job_id}/cancel", headers=auth_headers)
+    assert cancelled.status_code == 200, cancelled.text
+    assert cancelled.json()["status"] == "cancelled"
+
+
+# --- Worker ownership ---
+# Tests a reclaimed job cannot be finished by the worker that lost it.
+
+
+@pytest.mark.integration
+def test_reclaimed_job_rejects_the_zombie_workers_terminal_write():
+    job_id = uuid.uuid4()
+    with sync_system_session() as session:
+        session.add(
+            Job(
+                id=job_id,
+                type=JobType.pipeline,
+                status=JobStatus.pending,
+                payload={"handler": "noop", "test": True},
+            )
+        )
+        session.commit()
+
+    claimed = claim_next_pending_job(test_only=True)
+    assert claimed is not None
+    assert claimed.id == job_id
+    zombie_owner = claimed.claimed_by
+    assert zombie_owner is not None
+
+    with sync_system_session() as session:
+        running = session.get(Job, job_id)
+        assert running is not None
+        running.started_at = datetime.now(UTC) - timedelta(minutes=31)
+        session.commit()
+
+    assert reclaim_stale_running_jobs(running_timeout_seconds=1800.0) == 1
+
+    # The lease is gone; the zombie must not overwrite the re-pended job.
+    mark_job_done(job_id, {"stale": True}, claimed_by=zombie_owner)
+
+    with sync_system_session() as session:
+        row = session.get(Job, job_id)
+        assert row is not None
+        assert row.status == JobStatus.pending
+        assert row.claimed_by is None
+        assert row.result is None
+        row.status = JobStatus.failed
+        row.completed_at = datetime.now(UTC)
+        session.commit()
+
+
+# --- Clear job history ---
+# Tests DELETE /jobs/history removes finished jobs only, for authorized projects.
+
+
+def _project_job(
+    *,
+    document_id: uuid.UUID,
+    user_id: uuid.UUID,
+    status: JobStatus,
+) -> uuid.UUID:
+    job_id = uuid.uuid4()
+    with sync_system_session() as session:
+        session.add(
+            Job(
+                id=job_id,
+                type=JobType.segment,
+                status=status,
+                payload={"handler": "noop"},
+                user_id=user_id,
+                document_id=document_id,
+                completed_at=datetime.now(UTC)
+                if status in (JobStatus.done, JobStatus.failed, JobStatus.cancelled)
+                else None,
+            )
+        )
+        session.commit()
+    return job_id
+
+
+@pytest.mark.integration
+def test_clear_job_history_deletes_terminal_jobs_only(
+    client: TestClient,
+    owner_headers: dict[str, str],
+    owner_project: dict,
+):
+    project_id = owner_project["id"]
+    created = client.post(
+        documents_url(project_id), headers=owner_headers, json={"name": "History doc"}
+    )
+    assert created.status_code == 201
+    document_id = uuid.UUID(created.json()["id"])
+    me = client.get("/me", headers=owner_headers)
+    user_id = uuid.UUID(me.json()["id"])
+
+    terminal_ids = [
+        _project_job(document_id=document_id, user_id=user_id, status=status)
+        for status in (JobStatus.done, JobStatus.failed, JobStatus.cancelled)
+    ]
+    active_id = _project_job(document_id=document_id, user_id=user_id, status=JobStatus.waiting)
+
+    response = client.delete(f"/jobs/history?project_id={project_id}", headers=owner_headers)
+    assert response.status_code == 200, response.text
+    assert response.json() == {"deleted": 3}
+
+    with sync_system_session() as session:
+        for job_id in terminal_ids:
+            assert session.get(Job, job_id) is None
+        surviving = session.get(Job, active_id)
+        assert surviving is not None
+        assert surviving.status == JobStatus.waiting
+        surviving.status = JobStatus.failed
+        surviving.completed_at = datetime.now(UTC)
+        session.commit()
+
+
+@pytest.mark.integration
+def test_clear_job_history_requires_auth(client: TestClient, owner_project: dict):
+    response = client.delete(f"/jobs/history?project_id={owner_project['id']}")
+    assert response.status_code == 401
+
+
+@pytest.mark.integration
+def test_clear_job_history_denies_non_members(
+    client: TestClient,
+    owner_project: dict,
+    outsider_headers: dict[str, str],
+):
+    response = client.delete(
+        f"/jobs/history?project_id={owner_project['id']}", headers=outsider_headers
+    )
+    assert response.status_code in (403, 404)
+
+
+# --- SSE authorization ---
+# Tests dropping the request-scoped session kept the rejection path clean.
+
+
+@pytest.mark.integration
+def test_job_events_denies_access_to_other_users_job(
+    client: TestClient,
+    registered_user: dict[str, str],
+    outsider_headers: dict[str, str],
+):
+    auth_headers = {"Authorization": f"Bearer {registered_user['access_token']}"}
+    created = client.post("/jobs/test", headers=auth_headers)
+    job_id = created.json()["job_id"]
+
+    response = client.get(f"/jobs/{job_id}/events", headers=outsider_headers)
+
+    # Rejected before the stream opens, not a hung event-stream response.
+    assert response.status_code == 403
+    assert not response.headers["content-type"].startswith("text/event-stream")
 
 
 def test_execute_claimed_job_marks_unknown_handler_failed():

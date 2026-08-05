@@ -784,6 +784,16 @@ export const api = {
   cancelJob: (jobId: string) =>
     apiRequest<JobResponse>(`/jobs/${jobId}/cancel`, { method: "POST" }),
 
+  /**
+   * Remove finished jobs (done / failed / cancelled) from a project's history.
+   * Active jobs are left alone by the server.
+   */
+  clearProjectJobHistory: (projectId: string) =>
+    apiRequest<{ deleted: number }>(
+      `/jobs/history?project_id=${encodeURIComponent(projectId)}`,
+      { method: "DELETE" },
+    ),
+
   listProjectJobsPage: (projectId: string, options: ListPageOptions = {}) => {
     const query = cursorQuery(options);
     return apiRequest<PageResponse<JobResponse>>(

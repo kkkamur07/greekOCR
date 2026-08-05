@@ -6,6 +6,7 @@ from io import BytesIO
 from pathlib import Path
 
 import numpy as np
+import pytest
 from inference.architectures.blla import blla
 from inference.architectures.blla.blla_decoder import DecodedBLLALine
 from inference.preprocessing.segment_geometry import MIN_VERTEX_SPACING_PX, distance
@@ -246,3 +247,76 @@ def test_blla_adapter_splits_oversized_refined_line(
     assert [line.order for line in response.lines] == [0, 1]
     assert all(line.kraken_ceiling == ceiling for line in response.lines)
     assert all(line.source_metadata["split_count"] == 2 for line in response.lines)
+
+
+# --- Per-line refinement isolation ---
+# Tests one failing line does not discard the page. Does not exercise real weights.
+
+
+def _stub_blla_lines(monkeypatch, decoded: list[DecodedBLLALine]) -> None:
+    monkeypatch.setattr(blla, "_load_blla_model", lambda *_args, **_kwargs: _FakeBLLAModel())
+    monkeypatch.setattr(
+        "inference.architectures.blla.blla_runtime.decode_blla_heatmaps",
+        lambda *_args, **_kwargs: decoded,
+    )
+
+
+def test_blla_adapter_keeps_the_page_when_one_line_refinement_fails(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    image, ceiling = _synthetic_ink_fixture()
+    model_path = tmp_path / "model.safetensors"
+    model_path.write_bytes(b"stub")
+    doomed = [[30.0, 95.0], [190.0, 95.0], [190.0, 110.0], [30.0, 110.0]]
+    _stub_blla_lines(
+        monkeypatch,
+        [
+            DecodedBLLALine(baseline=[[55.0, 57.0], [165.0, 57.0]], polygon=ceiling),
+            DecodedBLLALine(baseline=[[35.0, 102.0], [185.0, 102.0]], polygon=doomed),
+        ],
+    )
+
+    def refine(_image, contour, **_kwargs):
+        if contour == doomed:
+            raise RuntimeError("OpenCV rejected the contour")
+        return refine_segment_candidates(_image, contour, **_kwargs)
+
+    monkeypatch.setattr(
+        "inference.architectures.blla.blla_runtime.refine_segment_candidates", refine
+    )
+
+    response = blla.run_blla_segment(
+        _image_bytes(image),
+        model_path=model_path,
+        params={"use_otsu_refinement": True},
+    )
+
+    assert len(response.lines) == 1
+    assert response.lines[0].source_metadata["raw_order"] == 0
+    assert len(response.blocks) == 1
+
+
+def test_blla_adapter_fails_when_every_line_refinement_fails(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """An empty page is a worse answer than an error when nothing could refine."""
+    image, ceiling = _synthetic_ink_fixture()
+    model_path = tmp_path / "model.safetensors"
+    model_path.write_bytes(b"stub")
+    _stub_blla_lines(
+        monkeypatch,
+        [DecodedBLLALine(baseline=[[55.0, 57.0], [165.0, 57.0]], polygon=ceiling)],
+    )
+    monkeypatch.setattr(
+        "inference.architectures.blla.blla_runtime.refine_segment_candidates",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("OpenCV rejected")),
+    )
+
+    with pytest.raises(RuntimeError, match="OpenCV rejected"):
+        blla.run_blla_segment(
+            _image_bytes(image),
+            model_path=model_path,
+            params={"use_otsu_refinement": True},
+        )

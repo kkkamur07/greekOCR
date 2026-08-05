@@ -47,6 +47,15 @@ Start with the audience-appropriate guide:
 - [`nomicous/frontend/README.md`](../nomicous/frontend/README.md) — editor
   development and generated API client
 
+## Reviews
+
+Point-in-time reviews of the codebase. They carry file paths and line numbers that
+drift, so read them alongside the code rather than as current reference.
+
+| Doc                                                  | Scope                                                                       |
+| ---------------------------------------------------- | --------------------------------------------------------------------------- |
+| [Codebase review, 2026-08-04](codebase-review-2026-08-04.md) | Cleanup backlog, simplification findings, and ranked architectural candidates |
+
 ## Security
 
 Security-specific records live under [`security/`](security/). They include

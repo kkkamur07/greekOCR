@@ -34,6 +34,7 @@ def __getattr__(name: str) -> Any:
         return BLLAOnnxUnavailableError
     raise AttributeError(name)
 
+
 __all__ = [
     "BLLAUnavailableError",
     "BLLAOnnxUnavailableError",

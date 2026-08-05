@@ -9,6 +9,12 @@ COPY --from=ghcr.io/astral-sh/uv:0.11.26 /uv /uvx /bin/
 COPY pyproject.toml uv.lock /app/
 COPY nomicous/README.md nomicous/VERSION /app/
 
+# `--only-group` is deliberate here, unlike in inference/Dockerfile: this image
+# must NOT pick up [project].dependencies (numpy, onnxruntime,
+# opencv-python-headless). The platform API imports none of them -- it only needs
+# inference.contracts / inference.admission, which are pure pydantic -- so
+# installing them would add hundreds of megabytes of unused ML wheels. If the
+# backend ever imports one of them, add it to the platform-prod group explicitly.
 RUN --mount=type=cache,target=/root/.cache/uv \
   uv sync --frozen --only-group platform-prod
 

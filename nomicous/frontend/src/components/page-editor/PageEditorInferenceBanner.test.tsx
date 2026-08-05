@@ -8,22 +8,77 @@ import {
   INFERENCE_HELPER_RELEASES_URL,
   INFERENCE_HELPER_WINDOWS_ZIP_URL,
 } from "../../inference/constants";
+import type { InferenceRouting } from "../../inference/preference";
 import { PageEditorInferenceBanner } from "./PageEditorInferenceBanner";
+
+type BannerProps = {
+  helperAvailable: boolean;
+  probing: boolean;
+  routing: InferenceRouting;
+  onRoutingChange: (routing: InferenceRouting) => void;
+  onRetry: () => void;
+  onUseCloudInstead: () => void;
+};
+
+function renderBanner(overrides: Partial<BannerProps> = {}) {
+  const props: BannerProps = {
+    helperAvailable: false,
+    probing: false,
+    routing: "auto",
+    onRoutingChange: vi.fn(),
+    onRetry: vi.fn(),
+    onUseCloudInstead: vi.fn(),
+    ...overrides,
+  };
+  return { props, ...render(<PageEditorInferenceBanner {...props} />) };
+}
 
 describe("PageEditorInferenceBanner", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
+  it("always offers the three routing choices in plain language", () => {
+    renderBanner();
+
+    expect(screen.getByRole("radio", { name: "Automatic" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Local only" })).toBeTruthy();
+    expect(screen.getByRole("radio", { name: "Cloud only" })).toBeTruthy();
+  });
+
+  it("reports the chosen routing", () => {
+    const { props } = renderBanner();
+
+    fireEvent.click(screen.getByRole("radio", { name: "Local only" }));
+
+    expect(props.onRoutingChange).toHaveBeenCalledWith("local-only");
+  });
+
+  it("offers a retry instead of polling in the background", () => {
+    const { props } = renderBanner();
+
+    fireEvent.click(screen.getByRole("button", { name: /retry/i }));
+
+    expect(props.onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it("hides helper controls once cloud-only is selected", () => {
+    renderBanner({ routing: "cloud-only" });
+
+    expect(screen.queryByRole("button", { name: /retry/i })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /install helper/i }),
+    ).toBeNull();
+  });
+
+  it("warns that runs will fail under local-only without a helper", () => {
+    renderBanner({ routing: "local-only" });
+
+    expect(screen.getByText(/runs will fail until you start it/i)).toBeTruthy();
+  });
+
   it("shows the compact banner (not a blocking modal) when helper is unavailable", () => {
-    render(
-      <PageEditorInferenceBanner
-        helperAvailable={false}
-        probing={false}
-        preferCloud={false}
-        onUseCloudInstead={vi.fn()}
-      />,
-    );
+    renderBanner();
 
     expect(
       screen.queryByRole("dialog", { name: /install inference helper/i }),
@@ -34,14 +89,7 @@ describe("PageEditorInferenceBanner", () => {
   });
 
   it("opens the install modal only after clicking install helper", () => {
-    render(
-      <PageEditorInferenceBanner
-        helperAvailable={false}
-        probing={false}
-        preferCloud={false}
-        onUseCloudInstead={vi.fn()}
-      />,
-    );
+    renderBanner();
 
     fireEvent.click(screen.getByRole("button", { name: /install helper/i }));
     expect(
@@ -56,14 +104,7 @@ describe("PageEditorInferenceBanner", () => {
       userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
     });
 
-    render(
-      <PageEditorInferenceBanner
-        helperAvailable={false}
-        probing={false}
-        preferCloud={false}
-        onUseCloudInstead={vi.fn()}
-      />,
-    );
+    renderBanner();
 
     fireEvent.click(screen.getByRole("button", { name: /install helper/i }));
     const primary = screen.getByRole("link", {
@@ -93,32 +134,17 @@ describe("PageEditorInferenceBanner", () => {
   });
 
   it("calls onUseCloudInstead from the modal", () => {
-    const onUseCloudInstead = vi.fn();
-    render(
-      <PageEditorInferenceBanner
-        helperAvailable={false}
-        probing={false}
-        preferCloud={false}
-        onUseCloudInstead={onUseCloudInstead}
-      />,
-    );
+    const { props } = renderBanner();
 
     fireEvent.click(screen.getByRole("button", { name: /install helper/i }));
     fireEvent.click(
       screen.getByRole("button", { name: /use cloud inference instead/i }),
     );
-    expect(onUseCloudInstead).toHaveBeenCalledTimes(1);
+    expect(props.onUseCloudInstead).toHaveBeenCalledTimes(1);
   });
 
   it("returns to the compact banner after dismissing the modal", () => {
-    render(
-      <PageEditorInferenceBanner
-        helperAvailable={false}
-        probing={false}
-        preferCloud={false}
-        onUseCloudInstead={vi.fn()}
-      />,
-    );
+    renderBanner();
 
     fireEvent.click(screen.getByRole("button", { name: /install helper/i }));
     fireEvent.click(screen.getByRole("button", { name: /not now/i }));
@@ -130,25 +156,25 @@ describe("PageEditorInferenceBanner", () => {
     ).toBeTruthy();
   });
 
-  it("renders nothing while probing or when helper is available", () => {
-    const { container, rerender } = render(
-      <PageEditorInferenceBanner
-        helperAvailable={false}
-        probing={true}
-        preferCloud={false}
-        onUseCloudInstead={vi.fn()}
-      />,
-    );
-    expect(container).toBeEmptyDOMElement();
+  it("does not nag while probing or when the helper is available", () => {
+    const { rerender } = renderBanner({ probing: true });
+    expect(
+      screen.queryByRole("button", { name: /install helper/i }),
+    ).toBeNull();
 
     rerender(
       <PageEditorInferenceBanner
         helperAvailable={true}
         probing={false}
-        preferCloud={false}
+        routing="auto"
+        onRoutingChange={vi.fn()}
+        onRetry={vi.fn()}
         onUseCloudInstead={vi.fn()}
       />,
     );
-    expect(container).toBeEmptyDOMElement();
+    expect(
+      screen.queryByRole("button", { name: /install helper/i }),
+    ).toBeNull();
+    expect(screen.getByText(/helper found on this computer/i)).toBeTruthy();
   });
 });

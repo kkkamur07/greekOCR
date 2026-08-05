@@ -16,11 +16,11 @@ def _image_payload(path) -> str:
 
 
 # --- Sync segment run (ML lane) ---
-# Tests POST /inference/v1/run with Kraken. Does not test async job queue.
+# Tests POST /inference/v1/run with the BLLA segmenter. Does not test async job queue.
 
 
 @pytest.mark.ml
-def test_run_segment_returns_kraken_layout(inference_client: TestClient) -> None:
+def test_run_segment_returns_blla_layout(inference_client: TestClient) -> None:
     response = inference_client.post(
         "/inference/v1/run",
         json={
@@ -36,7 +36,7 @@ def test_run_segment_returns_kraken_layout(inference_client: TestClient) -> None
     assert body["task"] == "segment"
     assert len(body["output"]["blocks"]) == 1
     assert len(body["output"]["lines"]) > 1
-    assert body["output"]["lines"][0]["source_metadata"]["adapter"] == "kraken"
+    assert body["output"]["lines"][0]["source_metadata"]["adapter"] == "blla"
 
 
 # --- Sync transcribe run (ML lane) ---

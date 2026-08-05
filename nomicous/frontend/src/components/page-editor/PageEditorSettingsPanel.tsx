@@ -1,12 +1,23 @@
-import type { InferencePreference } from "../../inference/preference";
+import {
+  INFERENCE_ROUTING_HINTS,
+  INFERENCE_ROUTING_LABELS,
+  normalizeInferenceRouting,
+  type InferenceRouting,
+} from "../../inference/preference";
 import type { HostEligibility } from "../../inference/types";
 import type { PageEditorCanvasSettings } from "./pageEditorSettings";
+
+const ROUTING_OPTIONS: InferenceRouting[] = [
+  "auto",
+  "local-only",
+  "cloud-only",
+];
 
 type PageEditorSettingsPanelProps = {
   settings: PageEditorCanvasSettings;
   onSettingsChange: (settings: PageEditorCanvasSettings) => void;
-  inferencePreference: InferencePreference;
-  onInferencePreferenceChange: (preference: InferencePreference) => void;
+  routing: InferenceRouting;
+  onRoutingChange: (routing: InferenceRouting) => void;
   helperAvailable: boolean;
   selectedModelHostEligibility: HostEligibility | null;
 };
@@ -14,12 +25,15 @@ type PageEditorSettingsPanelProps = {
 export function PageEditorSettingsPanel({
   settings,
   onSettingsChange,
-  inferencePreference,
-  onInferencePreferenceChange,
+  routing,
+  onRoutingChange,
   helperAvailable,
   selectedModelHostEligibility,
 }: PageEditorSettingsPanelProps) {
   const remoteOnly = selectedModelHostEligibility === "remote";
+  const effectiveRouting: InferenceRouting = remoteOnly
+    ? "cloud-only"
+    : routing;
 
   return (
     <div
@@ -28,26 +42,32 @@ export function PageEditorSettingsPanel({
       aria-label="Editor settings"
     >
       <div className="pe-dd-section">Inference</div>
-      <label className="pe-dd-field pe-dd-field--checkbox">
-        <input
-          type="checkbox"
-          checked={remoteOnly || inferencePreference === "cloud"}
+      <div className="pe-dd-field pe-dd-field--stack">
+        <label htmlFor="pe-inference-routing">Run OCR and segmentation</label>
+        <select
+          id="pe-inference-routing"
+          value={effectiveRouting}
           disabled={remoteOnly}
           onChange={(event) =>
-            onInferencePreferenceChange(
-              event.target.checked ? "cloud" : "local",
-            )
+            onRoutingChange(normalizeInferenceRouting(event.target.value))
           }
           onClick={(event) => event.stopPropagation()}
-        />
-        <span>Use cloud inference</span>
-      </label>
+        >
+          {ROUTING_OPTIONS.map((option) => (
+            <option key={option} value={option}>
+              {INFERENCE_ROUTING_LABELS[option]}
+            </option>
+          ))}
+        </select>
+      </div>
       <p className="pe-dd-model">
         {remoteOnly
           ? "The selected model runs on the server only."
-          : helperAvailable
-            ? "Local inference uses the Nomicous helper on this machine when available."
-            : "Install the Inference Helper to run OCR and segmentation on your CPU."}
+          : `${INFERENCE_ROUTING_HINTS[routing]}${
+              routing === "cloud-only" || helperAvailable
+                ? ""
+                : " No helper is running on this computer right now."
+            }`}
       </p>
 
       <div className="pe-dd-section">Canvas overlays</div>

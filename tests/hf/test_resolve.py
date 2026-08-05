@@ -17,6 +17,9 @@ from src.hf.resolve.uri import parse_hf_weights_uri
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MOCK_WEIGHTS = REPO_ROOT / "src/hf/local/syriac/calamari/v1/stable/best.pt"
+# The published Hub repo ships the self-contained ONNX artifact; the registry
+# pins its digest, so the mock snapshot must include it as well.
+MOCK_ONNX_WEIGHTS = REPO_ROOT / "src/hf/staging/models/syriac/calamari/v1/stable/best.onnx"
 HUB_REVISION = "a" * 40
 ARTIFACT_SHA256 = hashlib.sha256(MOCK_WEIGHTS.read_bytes()).hexdigest()
 
@@ -25,6 +28,7 @@ ARTIFACT_SHA256 = hashlib.sha256(MOCK_WEIGHTS.read_bytes()).hexdigest()
 class MockHubClient:
     downloads: list[tuple[str, str, Path]] = field(default_factory=list)
     download_error: Exception | None = None
+    include_onnx: bool = False
 
     def snapshot_download(self, repo_id: str, revision: str, local_dir: Path) -> None:
         if self.download_error is not None:
@@ -32,6 +36,8 @@ class MockHubClient:
         self.downloads.append((repo_id, revision, local_dir))
         local_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(MOCK_WEIGHTS, local_dir / "best.pt")
+        if self.include_onnx:
+            shutil.copy2(MOCK_ONNX_WEIGHTS, local_dir / "best.onnx")
 
 
 @pytest.fixture(autouse=True)
@@ -149,7 +155,9 @@ def test_inference_delegate_requires_hf_context():
 
 def test_fetch_model_warms_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     cache_root = tmp_path / "cache"
-    client = MockHubClient()
+    # fetch_model resolves against the real registry pins, which reference the
+    # ONNX artifact published on the Hub.
+    client = MockHubClient(include_onnx=True)
     set_default_hub_client(client)
     monkeypatch.setenv("HF_CACHE_ROOT", str(cache_root))
 
@@ -166,4 +174,4 @@ def test_fetch_model_warms_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 
     assert module.main() == 0
     assert len(client.downloads) == 1
-    assert (cache_root / "syriac-calamari-v1" / "stable" / "best.pt").is_file()
+    assert (cache_root / "syriac-calamari-v1" / "stable" / "best.onnx").is_file()

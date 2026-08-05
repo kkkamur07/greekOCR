@@ -21,6 +21,16 @@ class AppSettings(BaseSettings):
     )
     behind_proxy: bool = Field(default=False, alias="BEHIND_PROXY")
     forwarded_allow_ips: str | None = Field(default=None, alias="FORWARDED_ALLOW_IPS")
+    #: Whether the direct TCP peer identifies a single client.
+    #:
+    #: Set this to ``false`` on any platform that terminates connections in a
+    #: shared proxy tier whose addresses cannot be allowlisted (Vercel's
+    #: serverless functions are the case that motivated it). There the peer is
+    #: the platform's proxy, so a "per-IP" limit keyed on it is really one global
+    #: bucket: it neither isolates an attacker nor spares legitimate users. When
+    #: this is ``false`` and no trusted forwarded header is configured, IP-keyed
+    #: throttles are skipped and identity-keyed throttles carry the load.
+    trust_peer_ip: bool = Field(default=True, alias="TRUST_PEER_IP")
 
     @field_validator("forwarded_allow_ips")
     @classmethod

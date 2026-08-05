@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter
 
-from inference.admission import CLIENT_INPUT_ERROR, validate_image_bytes
+from inference.admission import validate_image_bytes
 from inference.contracts.run import InferenceRunRequest, InferenceRunResponse
 from inference.helper.settings import get_helper_settings
 from inference.jobs.runner import run_model
+from inference.run_errors import http_exception_for_run_error
 
 router = APIRouter(prefix="/inference/v1", tags=["ml"])
 
@@ -24,28 +25,7 @@ def run_inference(body: InferenceRunRequest) -> InferenceRunResponse:
             params=body.params,
             onnx_only=True,
         )
-    except KeyError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Unknown registry model or tag",
-        ) from exc
-    except FileNotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Model weights are not available locally",
-        ) from exc
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=CLIENT_INPUT_ERROR,
-        ) from exc
-    except RuntimeError as exc:
-        # BLLAUnavailableError, CalamariUnavailableError, and the ONNX runtime
-        # errors all subclass RuntimeError: the artifact or runtime is broken,
-        # not the client request.
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Inference runtime is unavailable for this model",
-        ) from exc
+    except Exception as exc:
+        raise http_exception_for_run_error(exc) from exc
 
     return InferenceRunResponse(task=body.task, output=output)

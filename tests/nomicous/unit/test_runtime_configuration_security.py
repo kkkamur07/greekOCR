@@ -152,7 +152,9 @@ def test_platform_rejects_placeholder_jwt_secret(secret: str) -> None:
 
 def test_platform_app_fails_fast_for_production_inference_configuration(monkeypatch) -> None:
     monkeypatch.setenv("ENVIRONMENT", "production")
-    monkeypatch.setenv("JWT_SECRET", "valid-production-jwt-secret")
+    # Must clear the production JWT_SECRET floor (>=32 bytes, high entropy) so
+    # that this test still fails on the inference secret it is actually about.
+    monkeypatch.setenv("JWT_SECRET", "xQ7v2Kd9RmZ4pB6wLt1yHs3nCf8jUa5eG0oV")
     monkeypatch.setenv("INFERENCE_URL", "https://inference.example.com")
     monkeypatch.setenv("INFERENCE_WEBHOOK_SECRET", "replace-me")
     monkeypatch.setenv("INFERENCE_SERVICE_SECRET", "service-secret")

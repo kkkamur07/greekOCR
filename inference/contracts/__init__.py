@@ -23,6 +23,7 @@ from inference.contracts.segment import (
     SegmentRunResponse,
 )
 from inference.contracts.transcribe import (
+    TRANSCRIBE_LINE_ERROR,
     CharacterConfidence,
     TranscribeBatchLineResult,
     TranscribeBatchRunResponse,
@@ -31,6 +32,7 @@ from inference.contracts.transcribe import (
 )
 
 __all__ = [
+    "TRANSCRIBE_LINE_ERROR",
     "CharacterConfidence",
     "ComputeDevice",
     "HostEligibility",

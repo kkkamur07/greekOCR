@@ -142,7 +142,10 @@ def test_anonymous_gets_layout_and_transcriptions(client, published_document):
 
     layout = client.get(f"{base}/layout")
     assert layout.status_code == 200
-    assert layout.json() == {"blocks": [], "lines": []}
+    assert layout.json() == {"blocks": [], "lines": [], "next_cursor": None}
+
+    over_limit = client.get(f"{base}/layout", params={"limit": 10_001})
+    assert over_limit.status_code == 422
 
     layers = client.get(f"{base}/transcriptions")
     assert layers.status_code == 200

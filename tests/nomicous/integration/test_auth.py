@@ -291,6 +291,33 @@ def test_login_rate_limit_returns_429(client, monkeypatch):
     assert limited.status_code == 429
 
 
+def test_login_rate_limit_survives_a_recapitalised_content_type(client, monkeypatch):
+    """`Application/JSON` used to buy unmetered guessing.
+
+    Media types are case-insensitive, so FastAPI parsed the body and checked the
+    password either way - but the limiter's identity probe compared the header
+    against `"application/json"` byte for byte, found no match, and derived no
+    account key. With `TRUST_PEER_IP=false` in production there was no IP key
+    behind it, and the empty key list took the fail-open branch.
+    """
+    monkeypatch.setenv("AUTH_RATE_LIMIT_REQUESTS", "1")
+    monkeypatch.setenv("AUTH_RATE_LIMIT_WINDOW_SECONDS", "60")
+    monkeypatch.setenv("TRUST_PEER_IP", "false")
+
+    get_auth_settings.cache_clear()
+    get_app_settings.cache_clear()
+    clear_auth_rate_limit_state()
+
+    headers = {"Content-Type": "Application/JSON"}
+    body = '{"email": "recased@test.kalamos", "password": "wrong-password-xyz"}'
+
+    first = client.post("/auth/login", headers=headers, content=body)
+    assert first.status_code == 401, "the route must still parse a recapitalised media type"
+
+    limited = client.post("/auth/login", headers=headers, content=body)
+    assert limited.status_code == 429
+
+
 def test_login_rate_limit_ignores_forwarded_for_without_trusted_proxy(client, monkeypatch):
     monkeypatch.setenv("AUTH_RATE_LIMIT_REQUESTS", "1")
     monkeypatch.setenv("AUTH_RATE_LIMIT_WINDOW_SECONDS", "60")

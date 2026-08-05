@@ -22,6 +22,8 @@ import {
   runLocalInference,
   type LocalInferenceCallbacks,
   isAbortError,
+  localOnlyRunFailedMessage,
+  localOnlyUnavailableMessage,
 } from "../../../inference";
 import { cleanPolygonPoints, offsetGeometry } from "../canvasGeometry";
 import {
@@ -72,6 +74,8 @@ type LayoutMutationsInput = {
   onDrawComplete: () => void;
   partImageUrl: string | null;
   shouldUseLocalPath: (registryModelId: string) => boolean;
+  /** False under "Local only" routing: no cloud job may ever be enqueued. */
+  cloudInferenceEnabled: boolean;
   segmentRegistryModelId?: string | null;
   localInference: LocalInferenceCallbacks;
   trackJobAndWait: (
@@ -103,6 +107,7 @@ export function useLayoutMutations({
   onDrawComplete,
   partImageUrl,
   shouldUseLocalPath,
+  cloudInferenceEnabled,
   segmentRegistryModelId,
   localInference,
   trackJobAndWait,
@@ -115,7 +120,10 @@ export function useLayoutMutations({
   } | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
-  const [segmenting, setSegmenting] = useState(false);
+  // A count, not a flag: a superseded run unwinds while its successor is still
+  // going, and must not report the page as idle on the way out.
+  const [segmentRunCount, setSegmentRunCount] = useState(0);
+  const segmenting = segmentRunCount > 0;
   const [useOtsuRefinement, setUseOtsuRefinement] = useState(false);
   const [otsuSphereRadius, setOtsuSphereRadius] = useState(4);
   const [segmentMessage, setSegmentMessage] = useState<string | null>(null);
@@ -275,7 +283,10 @@ export function useLayoutMutations({
         kind,
         points,
       });
-      const nextLines = mergeSavedLine(lines, saved);
+      // Merge into the segments as they are *now*, not as they were when the
+      // request went out: an edit that landed while it was in flight must
+      // survive, the way undo/redo already reads `linesRef`.
+      const nextLines = mergeSavedLine(linesRef.current, saved);
       applyLocalLines(nextLines);
       recordEdit({ kind: "create", line: saved });
       setLineError(null);
@@ -323,7 +334,9 @@ export function useLayoutMutations({
           points: cleanedPoints,
         },
       );
-      const nextLines = mergeSavedLine(optimisticLines, saved);
+      // `optimisticLines` is the snapshot from before the request; merging into
+      // it would revert any edit made while the patch was in flight.
+      const nextLines = mergeSavedLine(linesRef.current, saved);
       applyLocalLines(nextLines);
       recordEdit({
         kind: "points",
@@ -466,6 +479,31 @@ export function useLayoutMutations({
     }
   }
 
+  /**
+   * The page state that follows a finished segmentation, local or cloud: both
+   * paths replace the same Segments, layout and pairing, and only the sentence
+   * they report differs. Returns the Segment count for that sentence.
+   *
+   * Callers reach this only after the `projectId`/`documentId`/`partId` guard in
+   * `runAutoSegment`.
+   */
+  async function reloadAfterSegmentation(): Promise<number> {
+    const [reloadedLines, reloadedLayout, pairing] = await Promise.all([
+      api.listPartLines(projectId!, documentId!, partId!),
+      api.getPartLayout(projectId!, documentId!, partId!),
+      api.getPagePairing(projectId!, documentId!, partId!),
+    ]);
+    setLines(reloadedLines);
+    setLayout(reloadedLayout ?? { blocks: [], lines: [] });
+    setSelectedLineId(null);
+    setSelectedSegmentId(null);
+    setSelectedLineSnapshot(null);
+    setApprovedTextDraft("");
+    setTextLines(pairing.text_lines);
+    setPairingProgress(pairing.pairing_progress);
+    return reloadedLines.length;
+  }
+
   async function runAutoSegment() {
     if (!projectId || !documentId || !partId) return;
     if (
@@ -476,13 +514,23 @@ export function useLayoutMutations({
     ) {
       return;
     }
-    setSegmenting(true);
+    setSegmentRunCount((count) => count + 1);
     setSegmentMessage(null);
     setPairingError(null);
+    // The signal the jobs panel owns. Only an abort on *this* signal is a user
+    // cancellation; the run's own signals say why else it stopped.
+    let userCancelSignal: AbortSignal | undefined;
+    // Owned by the page, so it stays readable after the run it belongs to has
+    // already unwound.
+    let supersededSignal: AbortSignal | undefined;
     try {
       const resolvedSegmentModelId =
         segmentRegistryModelId ?? DEFAULT_SEGMENT_REGISTRY_MODEL_ID;
       if (shouldUseLocalPath(resolvedSegmentModelId)) {
+        // Set once the server has stored the local segmentation. Only the work
+        // up to that point may send the page to the cloud; running it again
+        // afterwards would replace Segments that are already saved.
+        let persistedLocally = false;
         try {
           await trackLocalTask(
             {
@@ -490,21 +538,24 @@ export function useLayoutMutations({
               kind: "segmentation",
             },
             async (signal) => {
+              userCancelSignal = signal;
               if (!partImageUrl) {
                 throw new Error(
                   "Page image is not available for local segmentation.",
                 );
               }
-              await localInference.onStart(resolvedSegmentModelId);
+              const run = localInference.startRun(resolvedSegmentModelId);
+              supersededSignal = run.supersededSignal;
               try {
+                const combinedSignal = AbortSignal.any([
+                  signal,
+                  run.cloudSwitchSignal,
+                  run.supersededSignal,
+                ]);
                 const imageBytes = await blobToBase64(
                   await fetchPartImage(partImageUrl),
                 );
-                signal.throwIfAborted();
-                const cloudSwitchSignal = localInference.getSignal();
-                const combinedSignal = cloudSwitchSignal
-                  ? AbortSignal.any([signal, cloudSwitchSignal])
-                  : signal;
+                combinedSignal.throwIfAborted();
                 const response = await runLocalInference({
                   task: "segment",
                   registry_model_id: resolvedSegmentModelId,
@@ -515,8 +566,7 @@ export function useLayoutMutations({
                     otsu_sphere_radius: otsuSphereRadius,
                   },
                 });
-                signal.throwIfAborted();
-                cloudSwitchSignal?.throwIfAborted();
+                combinedSignal.throwIfAborted();
                 if (response.task !== "segment") {
                   throw new Error(
                     "Local segment returned an unexpected response.",
@@ -527,35 +577,41 @@ export function useLayoutMutations({
                   output: response.output,
                 });
               } finally {
-                localInference.onEnd();
+                run.end();
               }
             },
           );
-          const [reloadedLines, reloadedLayout, pairing] = await Promise.all([
-            api.listPartLines(projectId, documentId, partId),
-            api.getPartLayout(projectId, documentId, partId),
-            api.getPagePairing(projectId, documentId, partId),
-          ]);
-          setLines(reloadedLines);
-          setLayout(reloadedLayout ?? { blocks: [], lines: [] });
-          setSelectedLineId(null);
-          setSelectedSegmentId(null);
-          setSelectedLineSnapshot(null);
-          setApprovedTextDraft("");
-          setTextLines(pairing.text_lines);
-          setPairingProgress(pairing.pairing_progress);
+          persistedLocally = true;
+        } catch (err) {
+          // A cancellation the user asked for must stop here, never continue
+          // silently in the cloud.
+          if (userCancelSignal?.aborted) throw err;
+          // A newer run for this page owns the outcome now. Drop this one
+          // outright - no banner, and above all no cloud job to race with it.
+          if (supersededSignal?.aborted) return;
+          if (!cloudInferenceEnabled) {
+            throw new Error(localOnlyRunFailedMessage(err));
+          }
+          // Any other local failure (weights missing, helper crash, 503, …)
+          // falls through to the cloud path below.
+        }
+
+        if (persistedLocally) {
+          // Only the reload is left. A failure here is a stale view of a
+          // segmentation that is already saved, so it surfaces as an error
+          // banner and stops - it is not a reason to segment again in the cloud.
+          const segmentCount = await reloadAfterSegmentation();
           setSegmentMessage(
             useOtsuRefinement
-              ? `Kraken segmentation completed locally with Otsu refinement (${otsuSphereRadius}px sphere, ${reloadedLines.length} Segment(s)).`
-              : `Kraken segmentation completed locally using raw Kraken boundaries (${reloadedLines.length} Segment(s)).`,
+              ? `Kraken segmentation completed locally with Otsu refinement (${otsuSphereRadius}px sphere, ${segmentCount} Segment(s)).`
+              : `Kraken segmentation completed locally using raw Kraken boundaries (${segmentCount} Segment(s)).`,
           );
           return;
-        } catch (err) {
-          if (!(isAbortError(err) && localInference.shouldFallbackToCloud())) {
-            throw err;
-          }
-          localInference.clearFallbackToCloud();
         }
+      }
+
+      if (!cloudInferenceEnabled) {
+        throw new Error(localOnlyUnavailableMessage());
       }
 
       const enqueued = await api.segmentPart(projectId, documentId, partId, {
@@ -570,30 +626,22 @@ export function useLayoutMutations({
         },
         { timeoutMs: SEGMENT_JOB_TIMEOUT_MS },
       );
-      const [reloadedLines, reloadedLayout, pairing] = await Promise.all([
-        api.listPartLines(projectId, documentId, partId),
-        api.getPartLayout(projectId, documentId, partId),
-        api.getPagePairing(projectId, documentId, partId),
-      ]);
-      setLines(reloadedLines);
-      setLayout(reloadedLayout ?? { blocks: [], lines: [] });
-      setSelectedLineId(null);
-      setSelectedSegmentId(null);
-      setSelectedLineSnapshot(null);
-      setApprovedTextDraft("");
-      setTextLines(pairing.text_lines);
-      setPairingProgress(pairing.pairing_progress);
+      const segmentCount = await reloadAfterSegmentation();
       setSegmentMessage(
         useOtsuRefinement
-          ? `Kraken segmentation completed with Otsu refinement (${otsuSphereRadius}px sphere, ${reloadedLines.length} Segment(s)).`
-          : `Kraken segmentation completed using raw Kraken boundaries (${reloadedLines.length} Segment(s)).`,
+          ? `Kraken segmentation completed with Otsu refinement (${otsuSphereRadius}px sphere, ${segmentCount} Segment(s)).`
+          : `Kraken segmentation completed using raw Kraken boundaries (${segmentCount} Segment(s)).`,
       );
     } catch (err) {
+      // The jobs panel already reports a user cancellation; no error banner.
+      if (isAbortError(err) && userCancelSignal?.aborted) {
+        return;
+      }
       setPairingError(
         err instanceof Error ? err.message : "Auto segment failed.",
       );
     } finally {
-      setSegmenting(false);
+      setSegmentRunCount((count) => Math.max(0, count - 1));
     }
   }
 

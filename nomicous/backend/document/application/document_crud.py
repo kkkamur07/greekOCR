@@ -1,11 +1,15 @@
 """Document CRUD and public read use cases."""
 
+from __future__ import annotations
+
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core.exceptions import ValidationError
+from backend.core.api.pagination import PageCursor
+from backend.core.exceptions import AccessDeniedError, ValidationError
 from backend.document.domain.access import require_can_read
+from backend.project.domain.access import is_owner
 from backend.document.infrastructure.orm_models import (
     Block,
     Document,
@@ -99,6 +103,11 @@ class DocumentCrudMixin(DocumentServiceSharedMixin):
             workflow = fields["workflow"]
             if not isinstance(workflow, DocumentWorkflow):
                 raise ValidationError("Invalid workflow value")
+            # Publishing drops the whole document - page images and
+            # transcriptions - to unauthenticated readers. That is a decision for
+            # whoever owns the project, not for anyone they shared it with.
+            if workflow is DocumentWorkflow.published and not is_owner(project, user.id):
+                raise AccessDeniedError("Only the project owner can publish a document")
         return await self._documents.update(session, document, **fields)
 
     async def delete_document(
@@ -137,8 +146,23 @@ class DocumentCrudMixin(DocumentServiceSharedMixin):
         session: AsyncSession,
         project_id: UUID,
         document_id: UUID,
+        *,
+        limit: int,
+        cursor: PageCursor | None = None,
     ) -> tuple[list[Block], list[Line]]:
+        """Bounded layout read for anonymous callers.
+
+        Lines are keyset paginated; blocks accompany the first page only, capped at the
+        same bound, so a single unauthenticated request can never fan out to an entire
+        manuscript's geometry.
+        """
         document = await self.get_document_public(session, project_id, document_id)
-        blocks = await self._documents.list_blocks_for_document(session, document.id)
-        lines = await self._documents.list_lines_for_document(session, document.id)
+        blocks: list[Block] = []
+        if cursor is None:
+            blocks = await self._documents.list_blocks_for_document(
+                session, document.id, limit=limit
+            )
+        lines = await self._documents.list_lines_for_document(
+            session, document.id, limit=limit, cursor=cursor
+        )
         return blocks, lines

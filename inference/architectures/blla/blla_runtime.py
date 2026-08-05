@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from typing import Any
 
@@ -21,6 +22,8 @@ from inference.preprocessing.segment_refinement import (
 )
 from inference.architectures.blla.blla_preprocessing import BLLAInput, BLLANumpyInput
 
+logger = logging.getLogger(__name__)
+
 
 def _bool_param(params: Mapping[str, Any], key: str, default: bool = False) -> bool:
     value = params.get(key, default)
@@ -32,6 +35,14 @@ def _bool_param(params: Mapping[str, Any], key: str, default: bool = False) -> b
 
 
 def _positive_float_param(params: Mapping[str, Any], key: str, default: float) -> float:
+    """Parse a caller-supplied positive number, falling back to the default.
+
+    Upper bounds are *not* checked here: they belong to
+    ``admission.validate_segment_params``, which every entry point into the
+    runner passes through (sync run, queued job, helper). Duplicating them would
+    mean two places to keep in step, and the one that runs first is the one that
+    can still return a 422 instead of a half-built response.
+    """
     value = params.get(key, default)
     try:
         parsed = float(value)
@@ -103,6 +114,8 @@ def build_blla_segment_response(
     )
 
     lines: list[SegmentLine] = []
+    first_failure: Exception | None = None
+    failed_lines = 0
     for order, decoded in enumerate(decoded_lines):
         baseline = decoded.baseline
         ceiling = decoded.polygon
@@ -114,28 +127,43 @@ def build_blla_segment_response(
             "decoder": "native",
             "raw_order": order,
         }
-        if use_otsu_refinement:
-            refinements = refine_segment_candidates(
-                refinement_image,
-                ceiling,
-                baseline=baseline,
-                margin_px=otsu_sphere_radius,
-                target_max_points=target_max_points,
-                min_iou=min_iou,
-                min_area_ratio=min_area_ratio,
-                split_large_lines=split_large_lines,
-                split_vertical_gap_px=split_vertical_gap_px,
-            )
-        else:
-            simplified_points, simplify_metrics = simplify_blla_boundary(ceiling)
-            source_metadata.update(simplify_metrics)
-            refinements = [
-                SegmentRefinementResult(
-                    points=simplified_points,
+        try:
+            if use_otsu_refinement:
+                refinements = refine_segment_candidates(
+                    refinement_image,
+                    ceiling,
                     baseline=baseline,
-                    metadata=source_metadata,
+                    margin_px=otsu_sphere_radius,
+                    target_max_points=target_max_points,
+                    min_iou=min_iou,
+                    min_area_ratio=min_area_ratio,
+                    split_large_lines=split_large_lines,
+                    split_vertical_gap_px=split_vertical_gap_px,
                 )
-            ]
+            else:
+                simplified_points, simplify_metrics = simplify_blla_boundary(ceiling)
+                source_metadata.update(simplify_metrics)
+                refinements = [
+                    SegmentRefinementResult(
+                        points=simplified_points,
+                        baseline=baseline,
+                        metadata=source_metadata,
+                    )
+                ]
+        except Exception as error:  # noqa: BLE001 - one bad polygon is not a bad page
+            # Refinement is per-line geometry work: a degenerate contour that
+            # trips OpenCV must cost its own line, not the other thirty-nine on
+            # the page. The line is dropped exactly like the short-ceiling case
+            # above; the failure is kept so an all-failed page can still raise.
+            failed_lines += 1
+            first_failure = first_failure or error
+            logger.warning(
+                "BLLA line refinement failed (raw_order=%s, ceiling_points=%s)",
+                order,
+                len(ceiling),
+                exc_info=error,
+            )
+            continue
 
         for split_index, refinement in enumerate(refinements):
             refined_points = refinement.points
@@ -156,5 +184,10 @@ def build_blla_segment_response(
                     source_metadata=line_metadata,
                 )
             )
+
+    if failed_lines and not lines:
+        # Every candidate line blew up: an empty response would read as "this
+        # page has no text", which is a far worse lie than a 5xx.
+        raise first_failure  # type: ignore[misc]
 
     return SegmentRunResponse(blocks=[block] if lines else [], lines=lines)

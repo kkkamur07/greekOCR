@@ -24,9 +24,7 @@ def _validate_model_path(model_path: Path) -> None:
     if not model_path.exists():
         raise FileNotFoundError(f"BLLA ONNX model not found: {model_path}")
     if model_path.suffix != ".onnx":
-        raise BLLAOnnxUnavailableError(
-            f"ONNX BLLA runtime requires an .onnx model: {model_path}"
-        )
+        raise BLLAOnnxUnavailableError(f"ONNX BLLA runtime requires an .onnx model: {model_path}")
 
 
 def _file_fingerprint(path: Path) -> tuple[int, int]:

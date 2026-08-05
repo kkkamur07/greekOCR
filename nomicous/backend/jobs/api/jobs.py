@@ -1,15 +1,19 @@
 """Job routes - test enqueue and status polling."""
 
 import asyncio
+import json
+import logging
 from collections.abc import AsyncIterator
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.exceptions import GreekOCRException
 from backend.core.settings.job import get_job_settings
 from backend.jobs.api.schemas import (
+    ClearJobHistoryResponse,
     EnqueueTestJobRequest,
     EnqueueTestJobResponse,
     JobResponse,
@@ -18,11 +22,17 @@ from backend.jobs.api.schemas import (
 from backend.jobs.application.job_service import JobService
 from backend.jobs.infrastructure.notifications import job_status_broadcaster
 from backend.jobs.infrastructure.orm_models import JobStatus
+from backend.jobs.infrastructure.stale_sweep import sweep_stale_jobs_on_read
+from backend.project.application.project_service import ProjectService
 from backend.users.api.dependencies import get_current_user
 from backend.users.infrastructure.orm_models import User
 from infrastructure.db import AsyncSessionLocal, get_db
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/jobs", tags=["jobs"])
+
+_project_service = ProjectService()
 
 
 def _job_service(db: AsyncSession = Depends(get_db)) -> JobService:
@@ -73,6 +83,11 @@ async def _job_events(job_id: UUID, current_user: User, request: Request) -> Asy
             yield _sse_event("job", current.model_dump_json())
             if current.status in (JobStatus.done, JobStatus.failed, JobStatus.cancelled):
                 return
+    except (HTTPException, GreekOCRException):
+        # Access revoked or the job disappeared mid-stream. Headers are already
+        # sent, so end with an explicit error event instead of hanging the client.
+        logger.info("closing job %s event stream: no longer readable", job_id)
+        yield _sse_event("error", json.dumps({"detail": "Job stream closed"}))
     finally:
         await job_status_broadcaster.unsubscribe(job_id, queue)
 
@@ -89,12 +104,29 @@ async def enqueue_test_job(
     return EnqueueTestJobResponse(job_id=job.id)
 
 
+@router.delete("/history", response_model=ClearJobHistoryResponse)
+async def clear_job_history(
+    project_id: UUID = Query(...),
+    db: AsyncSession = Depends(get_db),
+    service: JobService = Depends(_job_service),
+    current_user: User = Depends(get_current_user),
+) -> ClearJobHistoryResponse:
+    """Delete finished jobs of a project. Active jobs are left running."""
+    await _project_service.get_project(db, current_user, project_id)
+    deleted = await service.clear_project_job_history(project_id)
+    return ClearJobHistoryResponse(deleted=deleted)
+
+
 @router.get("/{job_id}", response_model=JobResponse)
 async def get_job(
     job_id: UUID,
     service: JobService = Depends(_job_service),
     current_user: User = Depends(get_current_user),
 ) -> JobResponse:
+    # Recover stale jobs before reading. On a request/response host there is no
+    # worker loop, so this poll is the only thing that can enforce the inference
+    # timeout - without it a waiting job is reported as alive forever.
+    await sweep_stale_jobs_on_read()
     job = await service.get_job(job_id)
     _assert_job_access(job, current_user)
     return job_response_from_orm(job)
@@ -116,11 +148,15 @@ async def cancel_job(
 async def stream_job_events(
     job_id: UUID,
     request: Request,
-    service: JobService = Depends(_job_service),
     current_user: User = Depends(get_current_user),
 ) -> StreamingResponse:
-    job = await service.get_job(job_id)
-    _assert_job_access(job, current_user)
+    # Sweep before the initial load so a job that already timed out streams its
+    # failure immediately instead of parking the client on a dead stream.
+    await sweep_stale_jobs_on_read()
+    # No ``get_db`` dependency here: it would pin a pooled connection for the whole
+    # stream. Authorize on a short-lived session so 403/404 still surface as a
+    # normal error response, then let the generator open its own sessions.
+    await _load_authorized_job(job_id, current_user)
     return StreamingResponse(
         _job_events(job_id, current_user, request),
         media_type="text/event-stream",

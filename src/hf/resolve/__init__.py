@@ -1,6 +1,7 @@
 """Download and cache Hub model weights for inference."""
 
 from src.hf.resolve.artifacts import (
+  ArtifactIntegrityError,
   find_hub_artifact,
   sha256_file,
   verify_artifact_sha256,
@@ -24,6 +25,7 @@ from src.hf.resolve.manifest import (
 from src.hf.resolve.uri import HfWeightsUri, parse_hf_weights_uri
 
 __all__ = [
+  "ArtifactIntegrityError",
   "HubCacheManifest",
   "HubClient",
   "HfWeightsUri",

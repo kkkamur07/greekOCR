@@ -2,11 +2,14 @@ import { modelDisplayName } from "../../inference/modelDisplayName";
 
 type PageEditorLocalInferenceBannerProps = {
   registryModelId: string | null;
+  /** Hides the cloud escape hatch under "Local only" routing. */
+  cloudInferenceEnabled: boolean;
   onUseCloudInstead: () => void;
 };
 
 export function PageEditorLocalInferenceBanner({
   registryModelId,
+  cloudInferenceEnabled,
   onUseCloudInstead,
 }: PageEditorLocalInferenceBannerProps) {
   if (!registryModelId) {
@@ -23,13 +26,15 @@ export function PageEditorLocalInferenceBanner({
         Preparing the <strong>{modelDisplayName(registryModelId)}</strong> on
         this machine (first run may download weights)…
       </span>
-      <button
-        type="button"
-        className="pe-inference-banner__action"
-        onClick={onUseCloudInstead}
-      >
-        Use cloud for this run
-      </button>
+      {cloudInferenceEnabled ? (
+        <button
+          type="button"
+          className="pe-inference-banner__action"
+          onClick={onUseCloudInstead}
+        >
+          Use cloud for this run
+        </button>
+      ) : null}
     </div>
   );
 }

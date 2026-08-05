@@ -118,15 +118,36 @@ For hosted SPA + local inference, run the slim helper sidecar (no Postgres, no j
 HELPER_REGISTRY_URL=http://localhost:8000/inference/v1/registry \
 HF_CACHE_ROOT=~/.nomicous/hf/cache uv run --group inference python -m inference.helper
 curl -s http://127.0.0.1:8001/health
-curl -s http://127.0.0.1:8001/inference/v1/catalog
+curl -s http://127.0.0.1:8001/inference/v1/info
 ```
+
+The helper serves three routes: `GET /health` (liveness, used by the installers),
+`GET /inference/v1/info`, and `POST /inference/v1/run`.
+
+`GET /inference/v1/info` is the single capability document and the only supported
+discovery probe. Clients must check `service` before sending work: something else
+may own port 8001, and a manuscript image should never be POSTed to it.
+
+```json
+{
+  "service": "nomicous-inference-helper",
+  "version": "0.1.6",
+  "models": [
+    {"registry_model_id": "blla-segment", "task": "segment",
+     "host_eligibility": "local", "tags": ["stable"], "cached": true}
+  ]
+}
+```
+
+`cached` is a local-disk answer only: it means the pinned weights are present and
+match their `artifact_sha256`, checked without contacting the Hub.
 
 On startup the helper fetches `registry.yaml` from the hosted platform (`GET /inference/v1/registry`, public, ETag-aware) into `~/.nomicous/registry.yaml`. The bundled copy in the installer is only a fallback when offline. Model weights download lazily when the first `/run` needs them.
 
 The browser calls `/inference/v1/run` through the configured helper URL, then falls back
-to `127.0.0.1:8001`, `[::1]:8001`, and `localhost:8001`. The production Vercel CSP permits
+to `127.0.0.1:8001` and `localhost:8001`. The production Vercel CSP permits
 these loopback URLs. The helper accepts browser requests only from
-`https://app.nomicous.com`; do not ship a helper secret in frontend code.
+`https://app.nomicous.com`.
 
 Packaging for `.dmg` / `.msi` / Linux installers: [`packaging/helper/README.md`](../packaging/helper/README.md) - PyInstaller spec excludes training stacks, platform API, and unused torch backends so installers ship the Calamari + BLLA ONNX runtimes.
 
@@ -149,11 +170,10 @@ timed-out Python model threads: ML libraries cannot be safely killed in-process.
 under a host/container supervisor with an execution deadline and restart policy; the existing
 running-job timeout is a stale-lease recovery mechanism, not execution cancellation.
 
-The helper defaults to `127.0.0.1` and is intentionally unauthenticated only in that loopback
-mode. Binding it to any non-loopback host requires both `HELPER_SECURE_MODE=true` and a
-non-placeholder `HELPER_AUTH_SECRET` of at least 32 characters. Secure mode protects all
-helper routes with the `X-Inference-Helper-Secret` header. Put the helper behind TLS and an
-authenticated reverse proxy when exposing it beyond the local machine.
+The helper is unauthenticated by design, so the loopback bind is what keeps it off the
+network. `HELPER_HOST` must be a loopback address; any other value is rejected at startup,
+and the listening socket is IPv4 `127.0.0.1` only. Exposing the helper to other machines is
+not supported: run inference on the hosted API instead.
 
 ## Tests
 

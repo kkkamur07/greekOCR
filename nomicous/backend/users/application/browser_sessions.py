@@ -54,10 +54,32 @@ class BrowserSessionService:
         session.token_hash = _hash(session_secret, self._settings)
         session.csrf_token_hash = _hash(csrf_token, self._settings)
         return BrowserSessionTokens(
-            access_token=create_access_token(user.id, self._settings),
+            # Binding the access token to this session id is what lets logout
+            # invalidate it: revoking the row invalidates every token it minted.
+            access_token=create_access_token(user.id, self._settings, session_id=session.id),
             session_cookie=f"{session.id}.{session_secret}",
             csrf_token=csrf_token,
         )
+
+    async def resolve_active_session_user(
+        self, db: AsyncSession, *, session_id: UUID, user_id: UUID
+    ) -> User | None:
+        """Return the user when ``session_id`` is a live session belonging to them.
+
+        A single joined read replaces the plain user lookup an authenticated
+        request already performed, so enforcing revocation costs no extra query.
+        """
+        result = await db.execute(
+            select(User)
+            .join(AuthSession, AuthSession.user_id == User.id)
+            .where(
+                AuthSession.id == session_id,
+                User.id == user_id,
+                AuthSession.revoked_at.is_(None),
+                AuthSession.expires_at > datetime.now(UTC),
+            )
+        )
+        return result.scalar_one_or_none()
 
     async def create(self, db: AsyncSession, user: User) -> BrowserSessionTokens:
         # Assign id before issuing the cookie - SQLAlchemy column defaults run on flush.

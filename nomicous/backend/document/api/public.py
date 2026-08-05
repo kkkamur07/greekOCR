@@ -1,15 +1,20 @@
 """Public read-only routes for published documents."""
 
+from __future__ import annotations
+
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.annotation.application.page_xml_export_service import PageXmlExportService
 from backend.annotation.application.transcription_pdf_service import TranscriptionPdfService
+from backend.core.api.pagination import MAX_CURSOR_LENGTH, decode_cursor, paginate_rows
 from backend.document.api.responses import document_with_parts_response
 from backend.document.api.schemas import (
+    DEFAULT_PUBLIC_LAYOUT_LINES,
+    MAX_PUBLIC_LAYOUT_LINES,
     DocumentWithPartsResponse,
     LineTranscriptionResponse,
     PublicBlockResponse,
@@ -68,6 +73,9 @@ async def get_published_document(
     db: AsyncSession = Depends(get_db),
 ) -> DocumentWithPartsResponse:
     document = await _service.get_document_public(db, project_id, document_id)
+    # Parts uploaded before dimensions were persisted are filled here; without width and
+    # height the published page canvas has no coordinate space to render into.
+    await _service.backfill_part_dimensions(db, document.parts)
     return document_with_parts_response(document, public=True)
 
 
@@ -79,8 +87,23 @@ async def get_published_layout(
     project_id: UUID,
     document_id: UUID,
     db: AsyncSession = Depends(get_db),
+    limit: int = Query(default=DEFAULT_PUBLIC_LAYOUT_LINES, ge=1, le=MAX_PUBLIC_LAYOUT_LINES),
+    cursor: str | None = Query(default=None, max_length=MAX_CURSOR_LENGTH),
 ) -> PublicLayoutResponse:
-    blocks, lines = await _service.list_document_layout_public(db, project_id, document_id)
+    page_cursor = decode_cursor(cursor) if cursor else None
+    blocks, lines = await _service.list_document_layout_public(
+        db,
+        project_id,
+        document_id,
+        limit=limit + 1,
+        cursor=page_cursor,
+    )
+    page, next_cursor = paginate_rows(
+        lines,
+        limit=limit,
+        created_at_getter=lambda line: line.created_at,
+        id_getter=lambda line: line.id,
+    )
     return PublicLayoutResponse(
         blocks=[
             PublicBlockResponse(
@@ -91,7 +114,8 @@ async def get_published_layout(
             )
             for block in blocks
         ],
-        lines=[_public_line_response(line) for line in lines],
+        lines=[_public_line_response(line) for line in page],
+        next_cursor=next_cursor,
     )
 
 

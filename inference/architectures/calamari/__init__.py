@@ -2,6 +2,7 @@
 
 from inference.architectures.calamari.adapter import (
     CalamariUnavailableError,
+    TranscribeLineFailure,
     run_calamari_transcribe,
     run_calamari_transcribe_many,
 )
@@ -33,6 +34,7 @@ __all__ = [
     "CalamariTorchLayerConfig",
     "CalamariTorchModel",
     "CalamariUnavailableError",
+    "TranscribeLineFailure",
     "preprocess_line_image_to_calamari_tensor",
     "run_calamari_transcribe",
     "run_calamari_transcribe_many",

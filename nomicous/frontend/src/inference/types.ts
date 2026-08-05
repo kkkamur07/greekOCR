@@ -17,7 +17,11 @@ export type TranscribeBatchRunOutput = {
   lines: Array<{
     line_id: string | null;
     line_index: number;
-    output: TranscribeRunOutput;
+    // Exactly one of these is set. The inference service isolates per-line
+    // failures rather than discarding the whole page, so a batch can come back
+    // as a partial success and `output` is absent on the lines that failed.
+    output: TranscribeRunOutput | null;
+    error?: string | null;
   }>;
 };
 

@@ -57,7 +57,7 @@ multidict==6.7.1
     # via yarl
 packaging==26.2
     # via deprecation
-pillow==12.2.0
+pillow==12.3.0
     # via reportlab
 postgrest==2.31.0
     # via supabase

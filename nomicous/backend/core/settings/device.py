@@ -1,0 +1,214 @@
+"""Helper device pairing and device-token settings.
+
+Every value here is an operational dial that can be turned without shipping a
+new helper build - the helper reads its poll cadence and lifetimes from the
+platform rather than compiling them in.
+"""
+
+import logging
+from functools import lru_cache
+
+from pydantic import Field, model_validator
+from pydantic_settings import BaseSettings
+
+from backend.core.settings._env import env_settings_config
+
+logger = logging.getLogger(__name__)
+
+_PLACEHOLDER_SECRETS = {"change-me", "change-me-in-production", "replace-me"}
+
+
+class DeviceSettings(BaseSettings):
+    model_config = env_settings_config()
+
+    environment: str = Field(default="development", alias="ENVIRONMENT")
+    device_pairing_enabled: bool | None = Field(
+        default=None,
+        alias="DEVICE_PAIRING_ENABLED",
+        description=(
+            "Kill switch for the whole device layer. Unset means off in production "
+            "and on everywhere else; see pairing_enabled()."
+        ),
+    )
+
+    device_token_hmac_secret: str | None = Field(
+        default=None,
+        alias="DEVICE_TOKEN_HMAC_SECRET",
+        description=(
+            "Keys every device credential digest. Required in production once "
+            "DEVICE_PAIRING_ENABLED is true; falls back to JWT_SECRET elsewhere."
+        ),
+    )
+    device_token_ttl_days: int = Field(default=180, alias="DEVICE_TOKEN_TTL_DAYS", ge=1, le=730)
+    device_token_renew_overlap_hours: int = Field(
+        default=24, alias="DEVICE_TOKEN_RENEW_OVERLAP_HOURS", ge=0, le=168
+    )
+    device_max_per_user: int = Field(default=10, alias="DEVICE_MAX_PER_USER", ge=1, le=100)
+    device_online_window_seconds: int = Field(
+        default=120, alias="DEVICE_ONLINE_WINDOW_SECONDS", ge=10
+    )
+    device_idle_window_seconds: int = Field(default=900, alias="DEVICE_IDLE_WINDOW_SECONDS", ge=10)
+
+    device_pairing_ttl_seconds: int = Field(
+        default=300,
+        alias="DEVICE_PAIRING_TTL_SECONDS",
+        ge=60,
+        le=3600,
+        description="How long one consent link stays live. This is the phishing window.",
+    )
+    device_pairing_max_lifetime_seconds: int = Field(
+        default=900,
+        alias="DEVICE_PAIRING_MAX_LIFETIME_SECONDS",
+        ge=300,
+        le=86_400,
+        description=(
+            "Hard cap on how far polling can extend a pairing request. The poller is "
+            "whoever created the request, so this - not the TTL - is the real ceiling "
+            "on how long a transferable consent link survives."
+        ),
+    )
+    device_pairing_max_live_total: int = Field(
+        default=10_000,
+        alias="DEVICE_PAIRING_MAX_LIVE_TOTAL",
+        ge=1,
+        description=(
+            "Platform-wide ceiling on live pairing requests. A table-growth backstop, "
+            "not an abuse control - see DevicePairingService.start_pairing."
+        ),
+    )
+    device_pairing_retention_seconds: int = Field(
+        default=86_400,
+        alias="DEVICE_PAIRING_RETENTION_SECONDS",
+        ge=60,
+        description="How long a dead pairing row is kept before the sweep deletes it.",
+    )
+    device_pairing_poll_interval_seconds: int = Field(
+        default=5, alias="DEVICE_PAIRING_POLL_INTERVAL_SECONDS", ge=1, le=60
+    )
+    device_pairing_max_poll_interval_seconds: int = Field(
+        default=30, alias="DEVICE_PAIRING_MAX_POLL_INTERVAL_SECONDS", ge=1, le=300
+    )
+    device_pairing_max_attempts: int = Field(
+        default=5,
+        alias="DEVICE_PAIRING_MAX_ATTEMPTS",
+        ge=1,
+        le=20,
+        description="Wrong device_code presentations before the pairing row is burned.",
+    )
+    device_pairing_app_origin: str | None = Field(
+        default=None,
+        alias="DEVICE_PAIRING_APP_ORIGIN",
+        description="Origin of the SPA that renders /pair; defaults to the first CORS origin.",
+    )
+
+    @model_validator(mode="after")
+    def _validate_secret(self) -> "DeviceSettings":
+        if self.device_token_hmac_secret is None:
+            return self
+        normalized = self.device_token_hmac_secret.strip()
+        if (
+            len(normalized) < 32
+            or normalized.casefold() in _PLACEHOLDER_SECRETS
+            or normalized.casefold().startswith("replace-with-")
+        ):
+            raise ValueError(
+                "DEVICE_TOKEN_HMAC_SECRET must be at least 32 non-placeholder characters"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_poll_interval(self) -> "DeviceSettings":
+        if (
+            self.device_pairing_max_poll_interval_seconds
+            < self.device_pairing_poll_interval_seconds
+        ):
+            raise ValueError(
+                "DEVICE_PAIRING_MAX_POLL_INTERVAL_SECONDS must not be below "
+                "DEVICE_PAIRING_POLL_INTERVAL_SECONDS"
+            )
+        if self.device_pairing_max_lifetime_seconds < self.device_pairing_ttl_seconds:
+            raise ValueError(
+                "DEVICE_PAIRING_MAX_LIFETIME_SECONDS must not be below DEVICE_PAIRING_TTL_SECONDS"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_production_credential_key(self) -> "DeviceSettings":
+        """Fail closed rather than key device tokens off ``JWT_SECRET``.
+
+        Sharing the key means a routine ``JWT_SECRET`` rotation - which today
+        only logs browsers out - also unpairs every UI-less laptop, which is not
+        recoverable without a terminal. In production that is a refusal to start
+        once the feature is on, and a loud warning while it is off.
+        """
+        if self.environment.casefold() != "production":
+            return self
+        problem = self._device_key_problem()
+        if problem is None:
+            return self
+        if self.pairing_enabled():
+            raise ValueError(problem)
+        logger.warning("%s Device pairing is disabled, so this is not fatal yet.", problem)
+        return self
+
+    def _device_key_problem(self) -> str | None:
+        if not self.device_token_hmac_secret:
+            return (
+                "DEVICE_TOKEN_HMAC_SECRET must be set in production; falling back to "
+                "JWT_SECRET makes a JWT rotation unpair every helper."
+            )
+        if self.device_token_hmac_secret == self._jwt_secret():
+            return (
+                "DEVICE_TOKEN_HMAC_SECRET must differ from JWT_SECRET; sharing the key "
+                "makes a JWT rotation unpair every helper."
+            )
+        return None
+
+    @staticmethod
+    def _jwt_secret() -> str | None:
+        from backend.core.settings.auth import get_auth_settings
+
+        try:
+            return get_auth_settings().jwt_secret
+        except Exception:  # pragma: no cover - AuthSettings reports its own failure
+            return None
+
+    def pairing_enabled(self) -> bool:
+        """Whether the device layer serves requests at all.
+
+        Off by default in production until the ``/pair`` consent page exists:
+        pairing endpoints that mint a 180-day credential must not be reachable
+        before the screen that explains what is being granted.
+        """
+        if self.device_pairing_enabled is not None:
+            return self.device_pairing_enabled
+        return self.environment.casefold() != "production"
+
+    def hmac_key(self) -> str:
+        """Key for every device credential digest.
+
+        A dedicated secret rather than ``JWT_SECRET`` because the blast radius
+        differs: rotating ``JWT_SECRET`` logs browsers out, which a researcher
+        recovers from by logging in again. Rotating the key that unpairs every
+        UI-less laptop is not recoverable without a terminal. The fallback below
+        exists for development only - production refuses to start on it, see
+        :meth:`_validate_production_credential_key`.
+        """
+        if self.device_token_hmac_secret:
+            return self.device_token_hmac_secret
+        from backend.core.settings.auth import get_auth_settings
+
+        return get_auth_settings().jwt_secret
+
+    def pair_url_origin(self) -> str:
+        """Origin the helper opens for consent."""
+        if self.device_pairing_app_origin:
+            return self.device_pairing_app_origin.rstrip("/")
+        from backend.core.settings.app import get_app_settings
+
+        return get_app_settings().cors_origin_list[0].rstrip("/")
+
+
+@lru_cache
+def get_device_settings() -> DeviceSettings:
+    return DeviceSettings()

@@ -2,9 +2,21 @@
 
 from __future__ import annotations
 
+import re
 import tomllib
 
 from tests.fixtures.paths import REPO_ROOT
+
+
+def _flatten_group(groups: dict[str, list], name: str) -> list[str]:
+    """Resolve a PEP 735 dependency group, following `include-group` entries."""
+    resolved: list[str] = []
+    for entry in groups[name]:
+        if isinstance(entry, dict):
+            resolved.extend(_flatten_group(groups, entry["include-group"]))
+        else:
+            resolved.append(entry)
+    return resolved
 
 
 def test_inference_image_reincludes_only_required_hub_resolver_sources() -> None:
@@ -36,15 +48,14 @@ def test_helper_freeze_is_onnx_only() -> None:
 
     pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     groups = pyproject["dependency-groups"]
-    assert not any(dependency.startswith(("torch", "safetensors")) for dependency in groups["inference"])
+    inference = _flatten_group(groups, "inference")
+    assert not any(dependency.startswith(("torch", "safetensors")) for dependency in inference)
     assert any(dependency.startswith("torch") for dependency in groups["export"])
     assert any(dependency.startswith("safetensors") for dependency in groups["export"])
 
 
 def test_helper_packaging_uses_one_foreground_server() -> None:
-    launcher = (REPO_ROOT / "packaging" / "helper" / "tray_launcher.py").read_text(
-        encoding="utf-8"
-    )
+    launcher = (REPO_ROOT / "packaging" / "helper" / "tray_launcher.py").read_text(encoding="utf-8")
     pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
     windows_build = (
         REPO_ROOT / "packaging" / "helper" / "windows" / "build-installer.ps1"
@@ -69,12 +80,12 @@ def test_helper_packaging_uses_one_foreground_server() -> None:
 
 
 def test_helper_installers_are_user_scoped_and_verify_startup() -> None:
-    linux_install = (
-        REPO_ROOT / "packaging" / "helper" / "linux" / "install-helper.sh"
-    ).read_text(encoding="utf-8")
-    mac_install = (
-        REPO_ROOT / "packaging" / "helper" / "macos" / "install-helper.sh"
-    ).read_text(encoding="utf-8")
+    linux_install = (REPO_ROOT / "packaging" / "helper" / "linux" / "install-helper.sh").read_text(
+        encoding="utf-8"
+    )
+    mac_install = (REPO_ROOT / "packaging" / "helper" / "macos" / "install-helper.sh").read_text(
+        encoding="utf-8"
+    )
     windows_install = (
         REPO_ROOT / "packaging" / "helper" / "windows" / "install-helper.ps1"
     ).read_text(encoding="utf-8")
@@ -99,8 +110,8 @@ def test_helper_installers_are_user_scoped_and_verify_startup() -> None:
     assert "APP_STAGE=" in mac_install
     assert "APP_BACKUP=" in mac_install
     assert "restore_previous_install" in mac_install
-    assert 's|__INSTALL_DIR__|$INSTALL_DIR|g' in mac_install
-    assert 's|__INSTALL_DIR__|$INSTALL_DIR/nomicous-inference-helper|g' not in mac_install
+    assert "s|__INSTALL_DIR__|$INSTALL_DIR|g" in mac_install
+    assert "s|__INSTALL_DIR__|$INSTALL_DIR/nomicous-inference-helper|g" not in mac_install
     assert 'launchctl bootstrap "gui/$(id -u)"' in mac_install
     assert "Invoke-WebRequest" in windows_install
     assert "Stop-ScheduledTask" in windows_install
@@ -170,16 +181,41 @@ def test_platform_backend_ships_bundled_unicode_pdf_font() -> None:
     assert '"nomicous" / "backend"' in build_script
 
 
-def test_vercel_frontend_permits_helper_loopback_origins() -> None:
+def test_vercel_frontend_permits_only_the_one_helper_loopback_origin() -> None:
+    """`connect-src` names the single helper origin the app actually calls.
+
+    A port wildcard let any page on the app origin reach every service listening
+    on the visitor's machine, which is a far larger grant than talking to the
+    helper. `nomicous/frontend/src/inference/constants.ts` builds exactly one
+    URL (`HELPER_BASE_URL`), defaulting to `http://127.0.0.1:8001`, so the
+    wildcards protected nothing that is reachable today.
+    """
     vercel = (REPO_ROOT / "nomicous" / "frontend" / "vercel.json").read_text(encoding="utf-8")
 
     assert "http://127.0.0.1:8001" in vercel
-    assert "http://127.0.0.1:*" in vercel
-    assert "http://localhost:8001" in vercel
-    assert "http://localhost:*" in vercel
-    assert "http://[::1]:8001" in vercel
-    assert "http://[::1]:*" in vercel
+    assert "http://127.0.0.1:*" not in vercel
+    assert "http://localhost:8001" not in vercel
+    assert "http://localhost:*" not in vercel
+    assert "http://[::1]:8001" not in vercel
+    assert "http://[::1]:*" not in vercel
     assert "connect-src" in vercel
+
+
+def test_vercel_frontend_csp_records_why_inline_scripts_are_still_allowed() -> None:
+    """`'unsafe-inline'` in script-src is a known gap; it must stay documented.
+
+    Next.js 16's App Router emits per-render inline `<script>` blocks carrying the
+    RSC flight payload, with no nonce attribute, so neither a hash allowlist nor
+    a static header can admit them. Removing the keyword here would ship a page
+    that renders but never hydrates. See docs/security/frontend-csp.md.
+    """
+    vercel = (REPO_ROOT / "nomicous" / "frontend" / "vercel.json").read_text(encoding="utf-8")
+    rationale = (REPO_ROOT / "docs" / "security" / "frontend-csp.md").read_text(encoding="utf-8")
+
+    assert "script-src 'self' 'unsafe-inline'" in vercel
+    assert "middleware" in rationale
+    assert "nonce" in rationale
+    assert "self.__next_f" in rationale
 
 
 def test_landing_csp_uses_json_ld_hash_instead_of_unsafe_inline() -> None:
@@ -229,7 +265,9 @@ def test_release_workflow_refuses_asset_replacement_and_generates_evidence() -> 
     assert "SHA256SUMS" in workflow
     assert "actions/attest-build-provenance@" in workflow
     assert "anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610" in workflow
-    assert "aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1" in workflow
+    # 57a97c7e... was pinned with a `# v0.36.0` comment but is in fact the v0.35.0
+    # commit; ed142fd0... is the real v0.36.0.
+    assert "aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25" in workflow
     assert "overwrite: false" in workflow
     assert "types: [published]" in workflow
     assert 'gh release view "$RELEASE_TAG"' in workflow
@@ -238,3 +276,75 @@ def test_release_workflow_refuses_asset_replacement_and_generates_evidence() -> 
     assert "nomicous-inference-helper-macos.dmg" in workflow
     assert "nomicous-inference-helper-macos-intel.dmg" in workflow
     assert "expected four installer assets" in workflow
+
+
+def test_inference_image_installs_the_onnx_runtime() -> None:
+    """`--only-group inference` drops [project].dependencies, i.e. onnxruntime.
+
+    Model imports are lazy, so an image built that way still starts, still serves
+    /health, and fails every real inference request. Assert both the install flag
+    and a build-time check that actually loads the native runtime.
+    """
+    pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    dockerfile = (REPO_ROOT / "inference" / "Dockerfile").read_text(encoding="utf-8")
+
+    assert any(
+        dependency.startswith("onnxruntime") for dependency in pyproject["project"]["dependencies"]
+    )
+    assert "--only-group inference" not in dockerfile
+    assert "uv sync --frozen --no-default-groups --group inference" in dockerfile
+    assert "import onnxruntime" in dockerfile
+    assert "get_available_providers" in dockerfile
+
+    deployment = (REPO_ROOT / ".github" / "workflows" / "deployment.yml").read_text(
+        encoding="utf-8"
+    )
+    assert "import onnxruntime" in deployment
+    assert "inference.architectures.calamari.onnx" in deployment
+
+
+def test_workflows_pin_every_action_to_a_commit_sha() -> None:
+    """A floating tag in a job holding `contents: write` is a release-signing risk."""
+    workflows = sorted((REPO_ROOT / ".github" / "workflows").glob("*.yml"))
+    assert workflows
+
+    floating: list[str] = []
+    for workflow in workflows:
+        for line in workflow.read_text(encoding="utf-8").splitlines():
+            match = re.search(r"uses:\s*([^\s@]+)@([^\s]+)", line)
+            if match and not re.fullmatch(r"[0-9a-f]{40}", match.group(2)):
+                floating.append(f"{workflow.name}: {match.group(0)}")
+    assert not floating, f"unpinned action references: {floating}"
+
+
+def test_release_signing_is_mandatory_not_best_effort() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "release-helper.yml").read_text(
+        encoding="utf-8"
+    )
+
+    # Provenance attestation must not be skippable by flipping repo visibility.
+    assert "!github.event.repository.private" not in workflow
+    assert "Require code-signing credentials" in workflow
+    assert "Require release manifest signing key" in workflow
+    assert "Refusing to publish unsigned installers" in workflow
+    assert "SHA256SUMS.asc" in workflow
+    # The scan inputs must be the shipped bytes, not the build-script directory.
+    assert "scan-ref: release-scan" in workflow
+    assert "scan-ref: packaging/helper" not in workflow
+    # The sbom-action `path:` input (not `subject-path:`) must not be the
+    # build-script directory.
+    assert re.search(r"^\s+path: packaging/helper\s*$", workflow, re.M) is None
+
+
+def test_platform_requirements_are_gated_against_the_lockfile() -> None:
+    deployment = (REPO_ROOT / ".github" / "workflows" / "deployment.yml").read_text(
+        encoding="utf-8"
+    )
+    requirements = (REPO_ROOT / "deploy" / "platform" / "requirements.txt").read_text(
+        encoding="utf-8"
+    )
+
+    export = "uv export --locked --only-group platform-prod --no-hashes -o deploy/platform/requirements.txt"
+    assert export in requirements, "requirements.txt header no longer records its export command"
+    assert export in deployment
+    assert "git diff --exit-code -- deploy/platform/requirements.txt" in deployment

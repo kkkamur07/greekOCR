@@ -1,14 +1,12 @@
 """Document and DocumentPart routes under projects."""
 
-from io import BytesIO
+from __future__ import annotations
+
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Query, Response, UploadFile, status
-from inference.contracts.segment import SegmentRunResponse
 from inference.contracts.transcribe import CharacterConfidence, TranscribeRunResponse
-from PIL import Image, UnidentifiedImageError
-from PIL.Image import DecompressionBombError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.annotation.application.export_service import AnnotationExportService
@@ -77,7 +75,6 @@ _export_service = AnnotationExportService()
 _page_xml_export_service = PageXmlExportService()
 _transcription_pdf_service = TranscriptionPdfService()
 MAX_UPLOAD_BYTES = 100 * 1024 * 1024
-Image.MAX_IMAGE_PIXELS = 200_000_000
 PDF_RESPONSE = {
     200: {
         "content": {"application/pdf": {"schema": {"type": "string", "format": "binary"}}},
@@ -194,6 +191,7 @@ async def get_document(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> DocumentWithPartsResponse:
     document = await _service.get_document(db, current_user, project_id, document_id)
+    await _service.backfill_part_dimensions(db, document.parts)
     return document_with_parts_response(document)
 
 
@@ -249,11 +247,8 @@ async def upload_part(
         raise ValidationError("Uploaded file is empty")
     if len(data) > MAX_UPLOAD_BYTES:
         raise ValidationError("File exceeds the 100 MB upload limit")
-    try:
-        with Image.open(BytesIO(data)) as image:
-            image.load()
-    except (DecompressionBombError, UnidentifiedImageError, OSError) as exc:
-        raise ValidationError("Uploaded file is not a valid image") from exc
+    # Validation happens inside the single bounded decode the service performs to encode
+    # the stored WebP; decoding here as well doubled the peak memory of every upload.
     part = await _service.upload_part(
         db,
         current_user,
@@ -712,7 +707,7 @@ async def persist_local_transcribe(
                 text=line.text,
                 confidence=line.confidence,
                 character_confidences=[
-                    CharacterConfidence.model_validate(entry)
+                    CharacterConfidence(char=entry.char, confidence=entry.confidence)
                     for entry in (line.character_confidences or [])
                 ]
                 or [
@@ -753,7 +748,6 @@ async def persist_local_segment(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> LocalSegmentPersistResponse:
-    output = SegmentRunResponse.model_validate(body.output)
     result = await _local_inference_service.persist_local_segment(
         db,
         current_user,
@@ -762,7 +756,7 @@ async def persist_local_segment(
         part_id,
         registry_model_id=body.registry_model_id,
         registry_tag=body.registry_tag,
-        output=output,
+        output=body.output,
     )
     return LocalSegmentPersistResponse(
         job_id=UUID(result["job_id"]),

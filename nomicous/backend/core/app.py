@@ -32,6 +32,7 @@ from backend.core.settings import (
     get_ml_settings,
     get_storage_settings,
 )
+from backend.core.settings.device import get_device_settings
 from backend.core.settings.job import get_job_settings
 from backend.core.version import get_version
 from backend.jobs.api.internal_inference import router as internal_inference_router
@@ -43,6 +44,9 @@ from backend.document.api.media import router as media_router
 from backend.document.api.public import router as public_router
 from backend.document.api.public_media import router as public_media_router
 from backend.document.infrastructure.media_gc import media_gc_loop
+from backend.ml.api.device_pairing import router as device_pairing_router
+from backend.ml.api.device_self import router as device_self_router
+from backend.ml.api.devices import router as devices_router
 from backend.ml.api.models import router as ml_models_router
 from backend.ml.api.registry import router as ml_registry_router
 from backend.project.api.projects import router as projects_router
@@ -289,8 +293,11 @@ async def _lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     # Resolve every API runtime setting before registering routes so a production
     # deployment cannot serve traffic with missing or placeholder credentials.
-    get_infrastructure_settings()
+    infrastructure_settings = get_infrastructure_settings()
     get_auth_settings()
+    # Refuses to start when a production deployment would key device tokens off
+    # JWT_SECRET, which would make a routine JWT rotation unpair every helper.
+    get_device_settings()
     app_settings = get_app_settings()
     job_settings = get_job_settings()
     ml_settings = get_ml_settings()
@@ -299,12 +306,19 @@ def create_app() -> FastAPI:
     if job_settings.job_worker_enabled:
         ml_settings.require_job_dispatcher_configuration()
     get_storage_settings()
+    # The interactive docs and the OpenAPI document enumerate every route, body
+    # schema, and auth requirement. That is a development aid, not something an
+    # unauthenticated caller needs in production.
+    docs_enabled = not infrastructure_settings.is_production
     app = FastAPI(
         title="greekOCR Platform",
         version=get_version(),
         description="Greek manuscript OCR and annotation platform",
         lifespan=_lifespan,
         responses=COMMON_ERROR_RESPONSES,
+        docs_url="/docs" if docs_enabled else None,
+        redoc_url="/redoc" if docs_enabled else None,
+        openapi_url="/openapi.json" if docs_enabled else None,
     )
 
     @app.middleware("http")
@@ -333,6 +347,12 @@ def create_app() -> FastAPI:
     app.include_router(public_media_router)
     app.include_router(ml_models_router)
     app.include_router(ml_registry_router)
+    # Always mounted; each device router carries require_device_pairing_enabled,
+    # so DEVICE_PAIRING_ENABLED turns the surface off per request rather than at
+    # boot. Off by default in production until the /pair consent page exists.
+    app.include_router(device_pairing_router)
+    app.include_router(devices_router)
+    app.include_router(device_self_router)
     app.include_router(jobs_router)
     app.include_router(internal_inference_router)
     return app

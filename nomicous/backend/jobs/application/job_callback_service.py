@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
+import re
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -25,7 +28,37 @@ from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
 from backend.ml.infrastructure.ml_client import InferenceClient
 from infrastructure.db import sync_system_session
 
+logger = logging.getLogger(__name__)
+
 _TERMINAL_STATUSES = frozenset({JobStatus.done, JobStatus.failed, JobStatus.cancelled})
+
+INFERENCE_FAILURE_ERROR = "Inference job failed"
+CALLBACK_PROCESSING_ERROR = "Callback processing failed"
+
+# ``job.error`` is Text (unbounded), so this cap is not a column constraint. It
+# exists because the string is rendered whole in a toast and a traceback-length
+# message there is unreadable. The ``INFERENCE_FAILURE_ERROR`` prefix stays
+# stable so callers can still recognise the class of failure, same contract as
+# ``job_repository.WAITING_TIMEOUT_ERROR``.
+_MAX_PUBLIC_ERROR_CHARS = 200
+
+# Ordered: URLs are swallowed whole before the path rule can nibble at their
+# path component, and assignments before the opaque-token rule, so the redacted
+# text names what was removed.
+_ERROR_REDACTIONS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"\b[a-z][a-z0-9+.\-]*://\S+", re.IGNORECASE), "<url>"),
+    (
+        re.compile(
+            r"\b(?:token|secret|password|passwd|api[_-]?key|access[_-]?key|authorization)\b"
+            r"\s*[:=]\s*\S+",
+            re.IGNORECASE,
+        ),
+        "<redacted>",
+    ),
+    (re.compile(r"\bbearer\s+\S+", re.IGNORECASE), "<redacted>"),
+    (re.compile(r"(?<![\w/])/(?:[\w.\-]+/)+[\w.\-]*"), "<path>"),
+    (re.compile(r"\b[A-Za-z0-9_\-]{24,}\b"), "<redacted>"),
+)
 
 
 @dataclass(frozen=True)
@@ -96,6 +129,7 @@ def _apply_transcribe_merge_sync(
         raise TranscribeJobHandlerError("Transcribe job is missing its target document part")
 
     lines_with_output = []
+    failed_line_indexes: list[int] = []
     for result in sorted(output.lines, key=lambda item: item.line_index):
         if result.line_id is None:
             raise TranscribeJobHandlerError("Transcribe callback line is missing line_id")
@@ -106,8 +140,22 @@ def _apply_transcribe_merge_sync(
         line = session.get(Line, line_id)
         if line is None or line.part_id != context.document_part_id:
             raise TranscribeJobHandlerError("Document line not found")
+        # A batch may now be a partial success: the inference service isolates
+        # per-line failures instead of discarding the whole page, and sends those
+        # lines with ``error`` set and ``output`` absent. Merging one would pass
+        # ``None`` where the merge service dereferences ``.text``. Skip them, but
+        # count them - a page that silently transcribed 12 of 40 lines and
+        # reported plain success would be worse than the total failure this
+        # replaced.
+        if result.output is None:
+            failed_line_indexes.append(result.line_index)
+            continue
         lines_with_output.append((line, result.output))
-    return TranscribeMergeService().apply_sync(
+
+    if not lines_with_output:
+        raise TranscribeJobHandlerError("Transcribe callback contained no successful lines")
+
+    summary = TranscribeMergeService().apply_sync(
         session,
         document_id=context.document_id,
         part_id=context.document_part_id,
@@ -115,30 +163,68 @@ def _apply_transcribe_merge_sync(
         lines_with_output=lines_with_output,
         commit=False,
     )
+    if failed_line_indexes:
+        logger.warning(
+            "transcribe_callback_partial job_id=%s inference_job_id=%s failed_lines=%s",
+            context.job_id,
+            context.inference_job_id,
+            failed_line_indexes,
+        )
+        summary = {**summary, "failed_line_indexes": failed_line_indexes}
+    return summary
 
 
-def _run_merge(context: _MergeContext, callback: JobCallbackRequest) -> dict:
-    with sync_system_session() as session:
-        if context.job_type == JobType.segment:
-            result = _apply_segment_merge(session, context, callback)
-        elif context.job_type == JobType.transcribe:
-            result = _apply_transcribe_merge_sync(
-                session,
-                context=context,
-                output=_transcribe_output(callback),
-            )
-        else:
-            raise ConflictError(
-                f"job {context.job_id} type {context.job_type.value} cannot receive inference callbacks"
-            )
-        session.commit()
-        return result
+def _merge_into_session(session, context: _MergeContext, callback: JobCallbackRequest) -> dict:
+    """Stage the document writes for this callback. Never commits; see ``_merge_and_finalize``."""
+    if context.job_type == JobType.segment:
+        return _apply_segment_merge(session, context, callback)
+    if context.job_type == JobType.transcribe:
+        return _apply_transcribe_merge_sync(
+            session,
+            context=context,
+            output=_transcribe_output(callback),
+        )
+    raise ConflictError(
+        f"job {context.job_id} type {context.job_type.value} cannot receive inference callbacks"
+    )
+
+
+def _public_callback_error(callback: JobCallbackRequest) -> str:
+    """Client-visible failure text derived from the inference service's message.
+
+    ``job.error`` is served verbatim by ``JobResponse`` and rendered in a toast,
+    while ``callback.error`` is ``str(exc)`` raised anywhere inside ``run_job``:
+    weights paths, registry download URLs, driver chatter. So the same rule as
+    ``worker._public_job_error`` applies - nothing that could carry a credential
+    or a server-side path reaches the client - but blanket-dropping the message
+    is what made production failures unattributable. Redact the shapes that can
+    hold a secret and keep the human sentence, which is the only part a user can
+    act on. The unredacted text is logged, never stored.
+    """
+    detail = " ".join((callback.error or "").split())
+    for pattern, placeholder in _ERROR_REDACTIONS:
+        detail = pattern.sub(placeholder, detail)
+    detail = detail.strip()
+    # A message that redacted down to nothing but placeholders carries no signal.
+    if not detail or not re.search(r"[^\W\d_]", re.sub(r"<[a-z]+>", "", detail)):
+        return INFERENCE_FAILURE_ERROR
+    if len(detail) > _MAX_PUBLIC_ERROR_CHARS:
+        detail = detail[: _MAX_PUBLIC_ERROR_CHARS - 1].rstrip() + "…"
+    return f"{INFERENCE_FAILURE_ERROR}: {detail}"
 
 
 def _mark_failed_from_callback_sync(job: Job, callback: JobCallbackRequest) -> None:
+    # The callback message is the only diagnostic the inference service sends;
+    # log it whole here because the stored copy is redacted and truncated.
+    logger.warning(
+        "inference callback reported failure for job %s (inference_job_id=%s): %s",
+        job.id,
+        callback.inference_job_id,
+        callback.error or "<no error reported>",
+    )
     now = datetime.now(UTC)
     job.status = JobStatus.failed
-    job.error = "Inference job failed"
+    job.error = _public_callback_error(callback)
     job.callback_claimed_at = None
     job.completed_at = now
     job.updated_at = now
@@ -169,22 +255,47 @@ def _mark_done_from_callback_sync(
     job.updated_at = now
 
 
-def _mark_failed_after_merge(job_id: uuid.UUID, error: str) -> None:
+def _release_claim_as_failed(job_id: uuid.UUID, error: str) -> bool:
+    """Fail a job whose merge transaction rolled back. Returns whether it moved.
+
+    Merge and finalize now share a transaction, so a failure in there leaves no
+    document rows behind - but the claim from ``_validate_callback`` committed in
+    its own transaction and is still on the row. Without this compensating write
+    the job sits ``waiting`` and uncancellable until the stale-claim sweep gets
+    to it, which is minutes of a user staring at a job that is already dead. The
+    guard keeps it a no-op if anything else already moved the row.
+    """
     now = datetime.now(UTC)
     with sync_system_session() as session:
-        job = session.get(Job, job_id)
+        job = session.execute(
+            select(Job).where(Job.id == job_id).with_for_update()
+        ).scalar_one_or_none()
         if job is None or job.status != JobStatus.waiting or job.callback_claimed_at is None:
-            return
+            return False
         job.status = JobStatus.failed
         job.error = error
+        # Clearing the claim keeps failed rows consistent with every other
+        # terminal write; a lingering claim only confuses the sweeps.
+        job.callback_claimed_at = None
         job.completed_at = now
         job.updated_at = now
         session.commit()
-        notify_platform_job_status_changed(job.id, job.status)
+    return True
 
 
 def _validate_callback(callback: JobCallbackRequest) -> tuple[bool, _MergeContext | None]:
-    """Atomically claim one waiting callback before its merge can begin."""
+    """Atomically claim one waiting callback before its merge can begin.
+
+    Deliberately its own transaction, separate from merge + finalize. The claim
+    has to be durable before the merge starts: that is what makes a duplicate
+    callback in another worker return immediately instead of queueing behind the
+    row lock for the length of a thousand-line merge, and what lets
+    ``clear_stale_callback_claims`` see a merge that is in flight. Folding it
+    into the merge transaction would hide the claim until the merge commits and
+    turn concurrent deliveries into lock waits bounded only by statement_timeout.
+    """
+    notify_failed = False
+    context: _MergeContext | None = None
     with sync_system_session() as session:
         job = session.execute(
             select(Job).where(Job.id == callback.product_job_id).with_for_update()
@@ -201,21 +312,36 @@ def _validate_callback(callback: JobCallbackRequest) -> tuple[bool, _MergeContex
 
         if callback.status == InferenceJobStatus.failed:
             _mark_failed_from_callback_sync(job, callback)
-            session.commit()
-            notify_platform_job_status_changed(job.id, job.status)
-            return True, None
-
-        context = _merge_context(job, callback)
-        job.callback_claimed_at = datetime.now(UTC)
-        job.updated_at = job.callback_claimed_at
+            notify_failed = True
+        else:
+            context = _merge_context(job, callback)
+            job.callback_claimed_at = datetime.now(UTC)
+            job.updated_at = job.callback_claimed_at
         session.commit()
-        return True, context
+
+    # Announce outside the transaction, only once the commit is durable: an SSE
+    # subscriber that reacts to a status a rollback then erased has been lied to.
+    if notify_failed:
+        notify_platform_job_status_changed(callback.product_job_id, JobStatus.failed)
+    return True, context
 
 
-def _finalize_successful_callback(
-    context: _MergeContext, callback: JobCallbackRequest, result: dict
-) -> bool:
+def _merge_and_finalize(context: _MergeContext, callback: JobCallbackRequest) -> bool:
+    """Merge the document writes and complete the job in a single transaction.
+
+    The merge services are called with ``commit=False`` so the document rows, the
+    ``done`` status and the cleared claim land in one commit. Committing them
+    separately meant a crash - or any raise - between the two commits left merged
+    lines under a job still marked ``waiting``, which the compensation then
+    failed: a failed job sitting on top of successfully merged content, and a
+    retry that merged it a second time.
+    """
     with sync_system_session() as session:
+        # FOR UPDATE taken before the first document write and held to commit.
+        # This subsumes the old pre-merge terminal check, which read its own
+        # snapshot that could go stale before the merge even started: a cancel
+        # that beat us to the row is visible here and we return without merging,
+        # and one arriving later blocks until this transaction resolves.
         job = session.execute(
             select(Job).where(Job.id == context.job_id).with_for_update()
         ).scalar_one_or_none()
@@ -226,10 +352,11 @@ def _finalize_successful_callback(
             return False
         if job.status != JobStatus.waiting or job.callback_claimed_at is None:
             raise ConflictError(f"job {job.id} is not processing this inference callback")
+
+        result = _merge_into_session(session, context, callback)
         _mark_done_from_callback_sync(job, callback, result)
         session.commit()
-        notify_platform_job_status_changed(job.id, job.status)
-        return True
+    return True
 
 
 def _apply_callback_locked(callback: JobCallbackRequest) -> bool:
@@ -237,20 +364,21 @@ def _apply_callback_locked(callback: JobCallbackRequest) -> bool:
     if not applied or context is None:
         return applied
 
-    # Defense in depth: a cancel that raced the claim leaves the job terminal;
-    # never merge document changes after durable cancellation.
-    with sync_system_session() as session:
-        job = session.get(Job, context.job_id)
-        if job is None or job.status in _TERMINAL_STATUSES:
-            return False
-
     try:
-        result = _run_merge(context, callback)
+        finalized = _merge_and_finalize(context, callback)
     except Exception:
-        _mark_failed_after_merge(context.job_id, "Callback processing failed")
+        logger.exception(
+            "inference callback merge failed for job %s (inference_job_id=%s)",
+            context.job_id,
+            context.inference_job_id,
+        )
+        if _release_claim_as_failed(context.job_id, CALLBACK_PROCESSING_ERROR):
+            notify_platform_job_status_changed(context.job_id, JobStatus.failed)
         raise
 
-    return _finalize_successful_callback(context, callback, result)
+    if finalized:
+        notify_platform_job_status_changed(context.job_id, JobStatus.done)
+    return finalized
 
 
 class JobCallbackService:
@@ -259,4 +387,10 @@ class JobCallbackService:
 
     async def apply_callback(self, callback: JobCallbackRequest) -> bool:
         """Apply callback. Returns False when the Product job was already terminal."""
-        return _apply_callback_locked(callback)
+        # Everything below the seam is sync: ``sync_system_session`` round-trips
+        # plus a document merge that can touch thousands of lines. Running it on
+        # the event loop stalls every other request on this worker. Offload the
+        # whole claim -> merge -> finalize sequence as one unit, matching
+        # ``cancel_job_async``; splitting it would let a cancel interleave between
+        # the claim and the merge and change the transaction semantics.
+        return await asyncio.to_thread(_apply_callback_locked, callback)

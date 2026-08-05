@@ -2,13 +2,74 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 from pathlib import Path
 
 import torch
+from torch import Tensor, nn
 
 from inference.architectures.blla.blla import _load_blla_model
-from inference.architectures.blla.blla_model import BLLATorchModel
+from inference.architectures.blla.blla_model import BLLATorchModel, _GroupNorm
+
+
+class _ExportGroupNorm(nn.Module):
+    """Group normalisation with a two-stage moment reduction, for ONNX export.
+
+    ``nn.GroupNorm`` lowers to ``Reshape([0, 32, -1]) -> InstanceNormalization``,
+    which flattens each group into a single axis of ``C/G * H * W`` elements.
+    onnxruntime's CPU kernel accumulates that group's mean and variance in one
+    float32 accumulator, so a 1800x2471 manuscript page puts 2,224,800 values
+    through a single serial reduction. On real, spatially correlated post-ReLU
+    activations the rounding bias accumulates instead of cancelling: the
+    recovered per-group sigma drifts by ~1.2e-03 relative, the logits move by up
+    to 0.89, and the handful of pixels that cross the 0.5 sigmoid boundary
+    restructure short line polygons entirely (IoU 0.50 against the oracle).
+
+    ``torch.nn.functional.group_norm`` uses a blocked/Welford accumulation and
+    stays within float32 rounding noise, which is why only the ONNX runtime is
+    affected. Reducing over the width axis first and then over the remaining
+    group axis computes the identical arithmetic mean -- every block has exactly
+    ``width`` elements -- but no accumulator ever sees more than a few thousand
+    terms. Both stages lower to ``ReduceMean``, whose error onnxruntime then
+    holds flat in the reduction length.
+
+    This module is used *only* while tracing. ``BLLATorchModel`` keeps calling
+    ``nn.GroupNorm`` at runtime, because the staged reduction perturbs the native
+    float32 logits by up to 1.8e-03 -- harmless numerically, but enough to break
+    the native decoder's bit-exact agreement with the Kraken oracle.
+    """
+
+    def __init__(self, layer: nn.GroupNorm) -> None:
+        super().__init__()
+        self.layer = layer
+
+    def forward(self, inputs: Tensor) -> Tensor:
+        values = inputs.float()
+        batch, channels, height, width = values.shape
+        grouped = values.reshape(batch, self.layer.num_groups, -1, width)
+        mean = grouped.mean(dim=3).mean(dim=2)[:, :, None, None]
+        centred = grouped - mean
+        variance = centred.pow(2).mean(dim=3).mean(dim=2)[:, :, None, None]
+        normalized = centred * torch.rsqrt(variance + self.layer.eps)
+        normalized = normalized.reshape(batch, channels, height, width)
+        scaled = normalized * self.layer.weight.view(1, -1, 1, 1)
+        return (scaled + self.layer.bias.view(1, -1, 1, 1)).to(dtype=inputs.dtype)
+
+
+def _with_export_group_norm(model: nn.Module) -> nn.Module:
+    """Copy ``model`` with every ``_GroupNorm`` swapped for the stable form.
+
+    The replacement keeps the original ``nn.GroupNorm`` as its ``layer`` child,
+    so parameter names, the state dict, and ``blla.safetensors`` are untouched.
+    """
+
+    exportable = copy.deepcopy(model)
+    for parent in exportable.modules():
+        for name, child in list(parent.named_children()):
+            if isinstance(child, _GroupNorm):
+                setattr(parent, name, _ExportGroupNorm(child.layer))
+    return exportable.eval()
 
 
 def export_blla_onnx(
@@ -44,7 +105,7 @@ def export_blla_onnx(
         dtype=torch.float32,
     )
     torch.onnx.export(
-        model,
+        _with_export_group_norm(model),
         example,
         destination,
         input_names=["input"],

@@ -3,12 +3,11 @@
 import base64
 from pathlib import Path
 
-import httpx
 import pytest
 from fastapi.testclient import TestClient
 from inference.contracts.transcribe import TranscribeRunResponse
 from inference.helper.app import create_helper_app
-from inference.helper.settings import HelperSettings, get_helper_settings
+from inference.helper.settings import HELPER_VERSION, HelperSettings, get_helper_settings
 from pydantic import ValidationError
 from tests.fixtures.paths import TRANSCRIBE_LINE
 
@@ -19,8 +18,6 @@ REPO_REGISTRY = Path(__file__).resolve().parents[3] / "inference" / "registry.ya
 def helper_client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> TestClient:
     """Isolate helper tests from ~/.nomicous cache and shell env."""
     monkeypatch.delenv("HELPER_REGISTRY_URL", raising=False)
-    monkeypatch.delenv("HELPER_SECURE_MODE", raising=False)
-    monkeypatch.delenv("HELPER_AUTH_SECRET", raising=False)
     monkeypatch.setenv("INFERENCE_REGISTRY_PATH", str(REPO_REGISTRY))
     monkeypatch.setenv("HELPER_BUNDLED_REGISTRY_PATH", str(REPO_REGISTRY))
     monkeypatch.setenv("HELPER_CACHED_REGISTRY_PATH", str(tmp_path / "registry.yaml"))
@@ -35,16 +32,52 @@ def test_helper_health_returns_ok(helper_client: TestClient):
     assert response.json()["status"] == "ok"
 
 
-def test_helper_catalog_lists_host_eligibility(helper_client: TestClient):
-    response = helper_client.get("/inference/v1/catalog")
+def test_helper_info_identifies_the_service(helper_client: TestClient):
+    """Discovery hinges on this: a foreign server on :8001 must not look like us."""
+    response = helper_client.get("/inference/v1/info")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["service"] == "nomicous-inference-helper"
+    assert body["version"] == HELPER_VERSION
+    assert set(body) == {"service", "version", "models"}
+
+
+def test_helper_info_lists_models_with_capabilities(helper_client: TestClient):
+    response = helper_client.get("/inference/v1/info")
     assert response.status_code == 200
     models = response.json()["models"]
     assert len(models) >= 2
     model_ids = {item["registry_model_id"] for item in models}
     assert "greek-calamari-v1" not in model_ids
+
     syriac = next(item for item in models if item["registry_model_id"] == "syriac-calamari-v1")
-    assert syriac["host_eligibility"] == "local"
+    assert set(syriac) == {
+        "registry_model_id",
+        "task",
+        "host_eligibility",
+        "tags",
+        "cached",
+    }
     assert syriac["task"] == "transcribe"
+    assert syriac["host_eligibility"] == "local"
+    assert syriac["tags"] == ["stable"]
+    assert isinstance(syriac["cached"], bool)
+
+    segment = next(item for item in models if item["registry_model_id"] == "blla-segment")
+    assert segment["task"] == "segment"
+
+
+def test_helper_info_reports_uncached_weights_without_network(
+    helper_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    """An empty cache root must yield cached=false, never a Hub download."""
+    monkeypatch.setenv("HF_CACHE_ROOT", str(tmp_path / "empty-cache"))
+
+    response = helper_client.get("/inference/v1/info")
+    assert response.status_code == 200
+    assert all(item["cached"] is False for item in response.json()["models"])
 
 
 def test_helper_run_requires_no_service_secret_for_unknown_model(helper_client: TestClient):
@@ -121,25 +154,93 @@ def test_helper_allows_only_configured_browser_origin(helper_client: TestClient)
     assert "access-control-allow-origin" not in blocked.headers
 
 
-def test_helper_rejects_non_loopback_binding_without_secure_mode(
+def test_helper_unhandled_errors_still_include_cors_headers(
+    helper_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Bare Starlette 500s omit ACAO; UnhandledErrorMiddleware must prevent that."""
+
+    def boom(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("registry exploded")
+
+    monkeypatch.setattr("inference.helper.routes.info.load_registry", boom)
+    response = helper_client.get(
+        "/inference/v1/info",
+        headers={"Origin": "https://app.nomicous.com"},
+    )
+    assert response.status_code == 500
+    assert response.json()["detail"] == "Internal helper error"
+    assert response.headers["access-control-allow-origin"] == "https://app.nomicous.com"
+
+
+def test_helper_mapped_run_errors_still_include_cors_headers(
+    helper_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    def raise_type_error(**_kwargs: object) -> None:
+        raise TypeError("unexpected runner failure")
+
+    monkeypatch.setattr("inference.helper.routes.run.run_model", raise_type_error)
+    response = helper_client.post(
+        "/inference/v1/run",
+        headers={"Origin": "https://app.nomicous.com"},
+        json={
+            "task": "transcribe",
+            "registry_model_id": "syriac-calamari-v1",
+            "registry_tag": "stable",
+            "image_bytes": base64.b64encode(TRANSCRIBE_LINE.read_bytes()).decode(),
+        },
+    )
+    assert response.status_code == 500
+    assert response.json()["detail"] == "Internal inference error"
+    assert response.headers["access-control-allow-origin"] == "https://app.nomicous.com"
+
+
+@pytest.mark.parametrize("host", ["0.0.0.0", "192.168.1.10", "::", "example.com"])
+def test_helper_refuses_to_bind_off_loopback(host: str):
+    """The helper is unauthenticated; loopback is the only thing containing it."""
+    with pytest.raises(ValidationError, match="HELPER_HOST must be a loopback address"):
+        HelperSettings(HELPER_HOST=host)
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1", "localhost", "127.0.0.2"])
+def test_helper_accepts_loopback_hosts(host: str):
+    assert HelperSettings(HELPER_HOST=host).helper_host == host
+
+
+def test_helper_rejects_non_loopback_binding_from_environment(
     monkeypatch: pytest.MonkeyPatch,
 ):
     monkeypatch.setenv("HELPER_HOST", "0.0.0.0")
-    monkeypatch.delenv("HELPER_SECURE_MODE", raising=False)
-    monkeypatch.delenv("HELPER_AUTH_SECRET", raising=False)
     get_helper_settings.cache_clear()
 
-    with pytest.raises(ValidationError, match="HELPER_HOST must be loopback"):
+    with pytest.raises(ValidationError, match="HELPER_HOST must be a loopback address"):
         get_helper_settings()
 
-    assert (
-        HelperSettings(
-            HELPER_HOST="0.0.0.0",
-            HELPER_SECURE_MODE=True,
-            HELPER_AUTH_SECRET="secure-helper-test-secret-0123456789",
-        ).helper_host
-        == "0.0.0.0"
-    )
+    get_helper_settings.cache_clear()
+
+
+def test_helper_has_no_auth_secret_settings():
+    """Secure mode is gone: stray env vars must not resurrect it."""
+    assert not hasattr(HelperSettings(), "helper_secure_mode")
+    assert not hasattr(HelperSettings(), "helper_auth_secret")
+
+
+def test_helper_ignores_secure_mode_environment(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    """Leftover HELPER_SECURE_MODE from an old install must not lock users out."""
+    monkeypatch.setenv("HELPER_SECURE_MODE", "true")
+    monkeypatch.setenv("HELPER_AUTH_SECRET", "secure-helper-test-secret-0123456789")
+    monkeypatch.setenv("INFERENCE_REGISTRY_PATH", str(REPO_REGISTRY))
+    monkeypatch.setenv("HELPER_BUNDLED_REGISTRY_PATH", str(REPO_REGISTRY))
+    monkeypatch.setenv("HELPER_CACHED_REGISTRY_PATH", str(tmp_path / "registry.yaml"))
+    monkeypatch.setenv("HELPER_CACHED_REGISTRY_ETAG_PATH", str(tmp_path / "registry.etag"))
+    monkeypatch.setenv("HF_CACHE_ROOT", str(tmp_path / "hf-cache"))
+    monkeypatch.delenv("HELPER_REGISTRY_URL", raising=False)
+    get_helper_settings.cache_clear()
+    client = TestClient(create_helper_app())
+
+    assert client.get("/health").status_code == 200
+    assert client.get("/inference/v1/info").status_code == 200
 
 
 def test_helper_rejects_plain_http_registry_url_off_host(
@@ -164,46 +265,9 @@ def test_helper_rejects_plain_http_registry_url_off_host(
     )
 
 
-def test_helper_secure_mode_rejects_non_ascii_secret_header(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-):
-    monkeypatch.setenv("HELPER_SECURE_MODE", "true")
-    monkeypatch.setenv("HELPER_AUTH_SECRET", "secure-helper-test-secret-0123456789")
-    monkeypatch.setenv("INFERENCE_REGISTRY_PATH", str(REPO_REGISTRY))
-    monkeypatch.setenv("HELPER_BUNDLED_REGISTRY_PATH", str(REPO_REGISTRY))
-    monkeypatch.setenv("HELPER_CACHED_REGISTRY_PATH", str(tmp_path / "registry.yaml"))
-    monkeypatch.setenv("HELPER_CACHED_REGISTRY_ETAG_PATH", str(tmp_path / "registry.etag"))
-    monkeypatch.setenv("HF_CACHE_ROOT", str(tmp_path / "hf-cache"))
-    monkeypatch.delenv("HELPER_REGISTRY_URL", raising=False)
-    get_helper_settings.cache_clear()
-    client = TestClient(create_helper_app())
-
-    # Latin-1 headers with non-ASCII bytes must yield 401, not a crash.
-    response = client.get(
-        "/health",
-        headers=httpx.Headers({b"X-Inference-Helper-Secret": "sécrèt".encode("latin-1")}),
-    )
-    assert response.status_code == 401
-
-
-def test_helper_secure_mode_requires_authentication(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-):
-    monkeypatch.setenv("HELPER_SECURE_MODE", "true")
-    monkeypatch.setenv("HELPER_AUTH_SECRET", "secure-helper-test-secret-0123456789")
-    monkeypatch.setenv("INFERENCE_REGISTRY_PATH", str(REPO_REGISTRY))
-    monkeypatch.setenv("HELPER_BUNDLED_REGISTRY_PATH", str(REPO_REGISTRY))
-    monkeypatch.setenv("HELPER_CACHED_REGISTRY_PATH", str(tmp_path / "registry.yaml"))
-    monkeypatch.setenv("HELPER_CACHED_REGISTRY_ETAG_PATH", str(tmp_path / "registry.etag"))
-    monkeypatch.setenv("HF_CACHE_ROOT", str(tmp_path / "hf-cache"))
-    get_helper_settings.cache_clear()
-    client = TestClient(create_helper_app())
-
-    assert client.get("/health").status_code == 401
+def test_helper_no_longer_serves_replaced_routes(helper_client: TestClient):
+    assert helper_client.get("/inference/v1/catalog").status_code == 404
     assert (
-        client.get(
-            "/health",
-            headers={"X-Inference-Helper-Secret": "secure-helper-test-secret-0123456789"},
-        ).status_code
-        == 200
+        helper_client.get("/inference/v1/cache-status?registry_model_id=blla-segment").status_code
+        == 404
     )

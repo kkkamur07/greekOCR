@@ -189,8 +189,7 @@ def _assert_native_matches_kraken_lines(
         iou, hausdorff_distance = _polygon_similarity(oracle_boundary, native_ceiling)
         if iou < POLYGON_MIN_IOU or hausdorff_distance > POLYGON_MAX_HAUSDORFF_PX:
             geometry_failures.append(
-                f"{page_name} line {index}: IoU={iou:.6f}, "
-                f"Hausdorff={hausdorff_distance:.2f}px"
+                f"{page_name} line {index}: IoU={iou:.6f}, Hausdorff={hausdorff_distance:.2f}px"
             )
         expected_points, _ = simplify_blla_boundary(native_ceiling)
         assert native_line.points == expected_points
@@ -235,7 +234,7 @@ def test_native_blla_matches_kraken_on_real_fixture() -> None:
 
     logit_difference = native_logits - oracle_logits
 
-    # Asserting the mean logit difference. 
+    # Asserting the mean logit difference.
     assert float(logit_difference.abs().mean()) < 1e-5
     assert float(logit_difference.abs().max()) < 1e-4
 
@@ -308,9 +307,7 @@ def _assert_onnx_matches_kraken_page(
     minimum_iou = min(iou for iou, _ in similarities)
     mean_iou = sum(iou for iou, _ in similarities) / len(similarities)
     maximum_hausdorff = max(hausdorff for _, hausdorff in similarities)
-    assert minimum_iou >= POLYGON_MIN_IOU, (
-        f"{page_path.name}: minimum IoU={minimum_iou:.6f}"
-    )
+    assert minimum_iou >= POLYGON_MIN_IOU, f"{page_path.name}: minimum IoU={minimum_iou:.6f}"
     assert mean_iou >= 0.95, f"{page_path.name}: mean IoU={mean_iou:.6f}"
     assert maximum_hausdorff <= POLYGON_MAX_HAUSDORFF_PX, (
         f"{page_path.name}: maximum Hausdorff={maximum_hausdorff:.2f}px"
@@ -352,9 +349,7 @@ def test_torch_and_numpy_decoders_match_on_identical_real_logits() -> None:
         )
         for torch_free in (False, True)
     ]
-    assert [
-        (line.baseline, line.polygon) for line in decoded[0]
-    ] == [
+    assert [(line.baseline, line.polygon) for line in decoded[0]] == [
         (line.baseline, line.polygon) for line in decoded[1]
     ]
 
@@ -383,7 +378,7 @@ def test_kraken_native_and_onnx_match_on_all_manuscript_pages() -> None:
     oracle_state = oracle.nn.state_dict()
     native_state = native.state_dict()
 
-    # Testing whether the graph of the model matches or not. 
+    # Testing whether the graph of the model matches or not.
     assert native_state.keys() == oracle_state.keys()
     assert all(torch.equal(native_state[name], oracle_state[name]) for name in native_state)
 
@@ -393,10 +388,10 @@ def test_kraken_native_and_onnx_match_on_all_manuscript_pages() -> None:
             image = opened.convert("RGB")
         oracle_input = _oracle_input(oracle, image)
         prepared = preprocess_blla_image(image, input_height=oracle.input[2])
-        
+
         assert oracle_input.shape == prepared.tensor.shape
         torch.testing.assert_close(oracle_input, prepared.tensor, rtol=0, atol=1e-6)
-        
+
         assert np.array_equal(
             prepared.scaled_gray,
             np.asarray(

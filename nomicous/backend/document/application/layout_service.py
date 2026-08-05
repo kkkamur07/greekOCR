@@ -76,9 +76,10 @@ class LayoutServiceMixin(DocumentServiceSharedMixin):
         document = await self.get_document(session, user, project_id, document_id)
         part = await self._document_part_or_404(session, document, part_id)
         block = await self._block_or_404(session, part.id, block_id)
+        # ``updates`` already went through ``exclude_unset``: every key present was sent
+        # by the client, so applying it verbatim is what makes explicit nulls meaningful.
         for key, value in updates.items():
-            if value is not None:
-                setattr(block, key, value)
+            setattr(block, key, value)
         block.manual_geometry = True
         await session.commit()
         await session.refresh(block)
@@ -151,9 +152,11 @@ class LayoutServiceMixin(DocumentServiceSharedMixin):
         line = await self._line_or_404(session, part.id, line_id)
         if "block_id" in updates and updates["block_id"] is not None:
             await self._block_or_404(session, part.id, updates["block_id"])
+        # ``updates`` already went through ``exclude_unset``: every key present was sent by
+        # the client. Applying it verbatim is what lets a client clear a nullable field
+        # (``block_id``/``mask``); the request schema rejects nulls for the rest.
         for key, value in updates.items():
-            if value is not None:
-                setattr(line, key, value)
+            setattr(line, key, value)
         line.manual_geometry = True
         line.source = LineSource.manual
         await session.commit()
@@ -254,8 +257,11 @@ class LayoutServiceMixin(DocumentServiceSharedMixin):
                 line.block_id = block_id
             elif prior is not None:
                 line.block_id = prior.block_id
+            # ``order`` and ``points`` are required by the request schema, so they are
+            # always present. ``kind`` and ``source`` are optional and carry schema
+            # defaults, which ``exclude_unset`` strips from an omitting client's payload.
             line.order = data["order"]
-            line.kind = data["kind"]
+            line.kind = data.get("kind", LineGeometryKind.polygon)
             line.points = points
             line.baseline, line.mask = resolve_line_baseline_and_mask(
                 points=points,
@@ -264,7 +270,8 @@ class LayoutServiceMixin(DocumentServiceSharedMixin):
                 existing_baseline=prior.baseline if prior is not None else None,
                 existing_mask=prior.mask if prior is not None else None,
             )
-            line.source = data["source"]
+            source = data.get("source", LineSource.manual)
+            line.source = source
             if "source_metadata" in data:
                 line.source_metadata = data["source_metadata"]
             elif prior is not None:
@@ -273,9 +280,7 @@ class LayoutServiceMixin(DocumentServiceSharedMixin):
                 line.kraken_ceiling = data["kraken_ceiling"]
             elif prior is not None:
                 line.kraken_ceiling = prior.kraken_ceiling
-            source_value = (
-                data["source"].value if hasattr(data["source"], "value") else data["source"]
-            )
+            source_value = source.value if hasattr(source, "value") else source
             line.manual_geometry = source_value == "manual"
 
             await self._set_ground_truth_text(

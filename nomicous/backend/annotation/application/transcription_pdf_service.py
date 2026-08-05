@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import io
+import threading
+from dataclasses import dataclass
 from pathlib import Path
 from uuid import UUID
 
-from PIL import Image, ImageFont
+from PIL import ImageFont
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
@@ -16,14 +19,29 @@ from backend.core.exceptions import NotFoundError, ValidationError
 from backend.core.fonts import resolve_unicode_font
 from backend.document.application.document_service import DocumentService
 from backend.document.infrastructure.document_repository import DocumentRepository
-from backend.document.infrastructure.media_store import MediaStore, get_media_store
-from backend.document.infrastructure.orm_models import Line, TranscriptionKind
+from backend.document.infrastructure.orm_models import DocumentPart, Line, TranscriptionKind
 from backend.users.infrastructure.orm_models import User
 
 _FONT_NAME = "AnnotePlatformTranscriptionPdf"
 _font_registered = False
+# Rendering runs on worker threads, so two requests can reach the one-time font
+# registration at once; without the lock the second could draw with a font reportlab has
+# not finished registering.
+_font_lock = threading.Lock()
 _PAGE_FILL = (1.0, 1.0, 1.0)
 _TEXT_FILL = (0.1, 0.1, 0.35)
+
+
+@dataclass(frozen=True)
+class _PdfLine:
+    """A line reduced to the values the renderer needs.
+
+    ORM rows never cross the worker-thread boundary: touching an expired attribute there
+    would drive the async session from a thread that has no greenlet context.
+    """
+
+    text: str
+    points: list[list[float]]
 
 
 class TranscriptionPdfService:
@@ -32,11 +50,9 @@ class TranscriptionPdfService:
         *,
         documents: DocumentRepository | None = None,
         document_service: DocumentService | None = None,
-        media: MediaStore | None = None,
     ) -> None:
         self._documents = documents or DocumentRepository()
         self._document_service = document_service or DocumentService()
-        self._media = media or get_media_store()
 
     async def generate_part_pdf(
         self,
@@ -51,14 +67,11 @@ class TranscriptionPdfService:
         if part is None or part.document_id != document.id:
             raise NotFoundError("Part not found")
 
-        with Image.open(io.BytesIO(self._media.read(part.image_key))) as page_image:
-            width, height = page_image.size
-
-        return self._render_pdf(
-            width=width,
-            height=height,
-            lines=await self._documents.list_part_lines(session, part.id),
-        )
+        width, height = await self._page_size(session, part)
+        lines = self._pdf_lines(await self._documents.list_part_lines(session, part.id))
+        # reportlab lays out and compresses the page synchronously; on a single-worker
+        # event loop that would stall every other in-flight request.
+        return await asyncio.to_thread(self._render_pdf, width=width, height=height, lines=lines)
 
     async def generate_part_pdf_public(
         self,
@@ -70,16 +83,32 @@ class TranscriptionPdfService:
         part = await self._document_service.get_published_part(
             session, project_id, document_id, part_id
         )
-        with Image.open(io.BytesIO(self._media.read(part.image_key))) as page_image:
-            width, height = page_image.size
+        width, height = await self._page_size(session, part)
+        lines = self._pdf_lines(await self._documents.list_part_lines(session, part.id))
+        return await asyncio.to_thread(self._render_pdf, width=width, height=height, lines=lines)
 
-        return self._render_pdf(
-            width=width,
-            height=height,
-            lines=await self._documents.list_part_lines(session, part.id),
-        )
+    async def _page_size(self, session: AsyncSession, part: DocumentPart) -> tuple[int, int]:
+        """Page dimensions come from the row, not from re-decoding the stored image.
 
-    def _render_pdf(self, *, width: int, height: int, lines: list[Line]) -> bytes:
+        Parts uploaded before the dimensions were persisted are backfilled lazily by the
+        document service, so at most one request per legacy part pays for a decode.
+        """
+        if part.width is None or part.height is None:
+            await self._document_service.backfill_part_dimensions(session, [part])
+        if part.width is None or part.height is None:
+            raise NotFoundError("Part image not found")
+        return part.width, part.height
+
+    def _pdf_lines(self, lines: list[Line]) -> list[_PdfLine]:
+        prepared: list[_PdfLine] = []
+        for line in lines:
+            text = self._ground_truth_text(line)
+            if text is None:
+                continue
+            prepared.append(_PdfLine(text=text, points=line.points))
+        return prepared
+
+    def _render_pdf(self, *, width: int, height: int, lines: list[_PdfLine]) -> bytes:
         try:
             font_path = resolve_unicode_font()
         except RuntimeError as exc:
@@ -91,9 +120,7 @@ class TranscriptionPdfService:
         pdf.rect(0, 0, width, height, fill=1, stroke=0)
 
         for line in lines:
-            text = self._ground_truth_text(line)
-            if text is None:
-                continue
+            text = line.text
             x0, y0, x1, y1 = _line_bbox(line.points)
             box_w = max(x1 - x0, 1)
             box_h = max(y1 - y0, 1)
@@ -118,9 +145,10 @@ class TranscriptionPdfService:
 
 def _ensure_font(font_path: Path) -> str:
     global _font_registered
-    if not _font_registered:
-        pdfmetrics.registerFont(TTFont(_FONT_NAME, str(font_path)))
-        _font_registered = True
+    with _font_lock:
+        if not _font_registered:
+            pdfmetrics.registerFont(TTFont(_FONT_NAME, str(font_path)))
+            _font_registered = True
     return _FONT_NAME
 
 

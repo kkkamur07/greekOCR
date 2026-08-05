@@ -130,9 +130,29 @@ curl -sS https://api.nomicous.com/health
 
 Local OCR is currently the default. The browser connects to the user's local
 Inference Helper; the helper is not a Vercel service. The browser tries
-`NEXT_PUBLIC_INFERENCE_HELPER_URL` first, then `127.0.0.1:8001`, `[::1]:8001`,
-and `localhost:8001`. The frontend Content Security Policy allows these loopback
-origins.
+`NEXT_PUBLIC_INFERENCE_HELPER_URL` first, then `127.0.0.1:8001` and
+`localhost:8001`. The frontend Content Security Policy allows these loopback
+origins. IPv6 loopback (`[::1]`) is not probed: even though the helper may also
+bind `::1`, Chromium does not reliably honor IPv6 literals in `connect-src`, so
+probing it only adds CSP console noise.
+
+#### HTTPS app → HTTP loopback contract
+
+The hosted app at `https://app.nomicous.com` calls `http://127.0.0.1:8001`
+directly. That cross-origin, public-HTTPS → private-loopback path is intentional:
+
+- Helper CORS allows only `https://app.nomicous.com` (no credentials).
+- Chromium Private Network Access requires
+  `Access-Control-Allow-Private-Network` on preflight (`allow_private_network`).
+- **Invariant:** every helper response for that origin — including mapped and
+  unhandled failures — must carry `Access-Control-Allow-Origin`. Starlette's
+  `ServerErrorMiddleware` sits outside CORS and would otherwise emit a bare
+  500 that the browser reports as a CORS failure; the helper converts escaping
+  exceptions to JSON inside the CORS layer so the UI can read `detail`.
+- Do not embed a helper auth secret in frontend code for this browser flow.
+
+Loopback TLS (or a Safari-specific Local Network path) remains a follow-up if
+Safari still blocks mixed-content / local-network access after this hardening.
 
 Do **not** set the Vercel API's `INFERENCE_URL` to `localhost:8001`. From inside a
 Vercel function, `localhost` means the ephemeral function container, not the

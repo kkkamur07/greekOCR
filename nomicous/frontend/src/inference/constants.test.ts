@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  HELPER_BASE_URLS,
-  HELPER_PROBE_INTERVAL_MS,
+  HELPER_BASE_URL,
+  HELPER_INFO_PATH,
+  HELPER_PROBE_TIMEOUT_MS,
+  HELPER_SERVICE_NAME,
   INFERENCE_HELPER_MACOS_INTEL_DMG_URL,
   INFERENCE_HELPER_LINUX_TARBALL_URL,
   INFERENCE_HELPER_MACOS_DMG_URL,
@@ -27,9 +29,17 @@ describe("inference helper download constants", () => {
     expect(INFERENCE_HELPER_LINUX_TARBALL_URL).toBe(
       "https://github.com/kkkamur07/greekOCR/releases/latest/download/nomicous-inference-helper-linux.tar.gz",
     );
-    expect(HELPER_PROBE_INTERVAL_MS).toBeGreaterThan(0);
-    expect(HELPER_BASE_URLS).toContain("http://127.0.0.1:8001");
-    expect(HELPER_BASE_URLS).toContain("http://localhost:8001");
-    expect(HELPER_BASE_URLS).toContain("http://[::1]:8001");
+    expect(HELPER_PROBE_TIMEOUT_MS).toBeGreaterThan(0);
+  });
+});
+
+describe("inference helper discovery constants", () => {
+  it("uses one IPv4 loopback origin, not a list of candidates", () => {
+    expect(HELPER_BASE_URL).toBe("http://127.0.0.1:8001");
+    expect(HELPER_INFO_PATH).toBe("/inference/v1/info");
+  });
+
+  it("pins the identity a responder must claim to be trusted", () => {
+    expect(HELPER_SERVICE_NAME).toBe("nomicous-inference-helper");
   });
 });

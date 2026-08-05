@@ -91,9 +91,9 @@ def fine_tune(cfg: DictConfig, *, run_dir: Path, log_dir: Path) -> Path | None:
     from kraken.models.writers import write_safetensors
     from kraken.train import BLLASegmentationModel, KrakenTrainer
 
-    from model.transcription.kraken.dataloader import TeacherPseudoLabelDataModule
-    from model.transcription.kraken.dataset import build_segmentation_documents, split_documents
-    from model.transcription.kraken.logging_utils import LocalMetricsLogger
+    from src.model.kraken.dataloader import TeacherPseudoLabelDataModule
+    from src.model.kraken.dataset import build_segmentation_documents, split_documents
+    from src.model.kraken.logging_utils import LocalMetricsLogger
 
     class FineTuneSegmentationModel(BLLASegmentationModel):
         """Kraken model with explicit validation-loss logging."""

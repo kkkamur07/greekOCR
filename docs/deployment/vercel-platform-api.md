@@ -232,7 +232,7 @@ Browser on the user's machine → http://localhost:8001
 ```
 
 This is configured as `NEXT_PUBLIC_INFERENCE_HELPER_URL` for the frontend, with
-IPv4, IPv6, and `localhost` loopback fallbacks, and is allowed by the frontend
+`127.0.0.1` and `localhost` loopback fallbacks, and is allowed by the frontend
 Content Security Policy. It must not replace the
 API's production `INFERENCE_URL`: `localhost` inside a Vercel function refers
 to that ephemeral function container, not the researcher's computer. Cloud

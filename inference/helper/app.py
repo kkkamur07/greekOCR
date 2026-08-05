@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-import secrets
+import logging
+from collections.abc import Awaitable, Callable
 
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -12,19 +13,57 @@ from fastapi.responses import JSONResponse
 from inference.admission import CLIENT_INPUT_ERROR
 from inference.api.admission import RequestBodyLimitMiddleware, ServiceRateLimitMiddleware
 from inference.api.health import router as health_router
-from inference.helper.routes.cache import router as cache_router
-from inference.helper.routes.catalog import router as catalog_router
+from inference.helper.routes.info import router as info_router
 from inference.helper.routes.run import router as run_router
-from inference.helper.settings import apply_helper_environment
+from inference.helper.settings import HELPER_VERSION, apply_helper_environment
 
-HELPER_AUTH_SECRET_HEADER = "X-Inference-Helper-Secret"
+HELPER_INTERNAL_ERROR = "Internal helper error"
+
+logger = logging.getLogger(__name__)
+
+ASGIApp = Callable[
+    [dict, Callable[[], Awaitable[dict]], Callable[[dict], Awaitable[None]]],
+    Awaitable[None],
+]
+
+
+class UnhandledErrorMiddleware:
+    """Convert escaping exceptions into JSON before ServerErrorMiddleware runs.
+
+    Starlette's ``ServerErrorMiddleware`` sits outside user middleware (including
+    CORS). An uncaught exception therefore becomes a bare 500 with no
+    ``Access-Control-Allow-Origin``, which browsers report as a CORS failure.
+    Catching here (inside CORS) keeps error bodies readable to the hosted app.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(
+        self,
+        scope: dict,
+        receive: Callable[[], Awaitable[dict]],
+        send: Callable[[dict], Awaitable[None]],
+    ) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        try:
+            await self.app(scope, receive, send)
+        except Exception:
+            logger.exception("Unhandled inference helper error")
+            response = JSONResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                content={"detail": HELPER_INTERNAL_ERROR},
+            )
+            await response(scope, receive, send)
 
 
 def create_helper_app() -> FastAPI:
     settings = apply_helper_environment()
     app = FastAPI(
         title="Nomicous Inference Helper",
-        version="0.1.6",
+        version=HELPER_VERSION,
     )
     app.add_middleware(
         RequestBodyLimitMiddleware,
@@ -35,34 +74,21 @@ def create_helper_app() -> FastAPI:
         requests_per_minute=settings.inference_rate_limit_per_minute,
     )
 
-    @app.middleware("http")
-    async def require_helper_secret(request: Request, call_next):
-        if settings.helper_secure_mode and request.method != "OPTIONS":
-            supplied = request.headers.get(HELPER_AUTH_SECRET_HEADER)
-            expected = settings.helper_auth_secret or ""
-            # Compare as bytes: ``compare_digest`` raises TypeError on
-            # non-ASCII str input, which a malformed header could trigger.
-            if supplied is None or not secrets.compare_digest(
-                supplied.encode("utf-8"), expected.encode("utf-8")
-            ):
-                return JSONResponse(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    content={"detail": "Helper authentication required"},
-                )
-        return await call_next(request)
+    # Inside CORS so converted 500s still receive Access-Control-Allow-Origin.
+    app.add_middleware(UnhandledErrorMiddleware)
 
-    # Added last so CORS is the outermost middleware and 401/429/413 responses
+    # Added last so CORS is the outermost middleware and 429/413/500 responses
     # still carry CORS headers that browser clients can read.
     # allow_private_network: Chrome/Edge send Access-Control-Request-Private-Network
     # on preflight for public HTTPS → loopback POSTs. Without this, GET /health and
-    # /catalog succeed (simple requests, no preflight) while POST /inference/v1/run
+    # /info succeed (simple requests, no preflight) while POST /inference/v1/run
     # fails in the browser as TypeError "Failed to fetch".
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["https://app.nomicous.com"],
         allow_credentials=False,
         allow_methods=["GET", "POST", "OPTIONS"],
-        allow_headers=["Content-Type", HELPER_AUTH_SECRET_HEADER],
+        allow_headers=["Content-Type"],
         allow_private_network=True,
     )
 
@@ -74,7 +100,6 @@ def create_helper_app() -> FastAPI:
         )
 
     app.include_router(health_router)
-    app.include_router(catalog_router)
-    app.include_router(cache_router)
+    app.include_router(info_router)
     app.include_router(run_router)
     return app

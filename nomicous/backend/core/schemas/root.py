@@ -7,5 +7,6 @@ class WelcomeResponse(BaseModel):
     service: str
     message: str
     version: str
-    docs_url: str
+    #: ``None`` in production, where the interactive docs are not served.
+    docs_url: str | None = None
     health_url: str

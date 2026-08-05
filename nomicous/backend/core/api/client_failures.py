@@ -4,29 +4,27 @@ from __future__ import annotations
 
 import logging
 import re
-import threading
-import time
 import uuid
-from collections import defaultdict, deque
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field, field_validator
 
-from backend.users.api.rate_limit import client_ip_for_request
+from backend.users.api.rate_limit import attributable_client_ip, consume_rate_limit
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["observability"])
 
 _CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
-_RATE_LIMIT = 30
-_RATE_WINDOW_SECONDS = 60.0
-_rate_lock = threading.Lock()
-_rate_buckets: dict[str, deque[float]] = defaultdict(deque)
+CLIENT_FAILURE_RATE_LIMIT = 30
+#: Applied when no address identifies a single client. A beacon is best-effort
+#: logging, so a shared ceiling that sheds excess reports is an acceptable
+#: outcome here - unlike on login, where a global bucket would lock everyone out.
+CLIENT_FAILURE_GLOBAL_RATE_LIMIT = 300
+CLIENT_FAILURE_RATE_WINDOW_SECONDS = 60
 
 
 def clear_client_failure_rate_limit_state() -> None:
-    with _rate_lock:
-        _rate_buckets.clear()
+    """No-op - state lives in Postgres and is cleared by database truncation in tests."""
 
 
 def _sanitize_log_field(value: str, *, max_len: int) -> str:
@@ -34,26 +32,25 @@ def _sanitize_log_field(value: str, *, max_len: int) -> str:
     return cleaned.strip()[:max_len]
 
 
-def _throttle_client_failure(request: Request) -> None:
-    """Rate-limit before body validation (route dependency)."""
-    host = client_ip_for_request(request)
-    now = time.monotonic()
-    cutoff = now - _RATE_WINDOW_SECONDS
-    with _rate_lock:
-        # Drop idle IPs so the map cannot grow without bound in long-lived workers.
-        stale = [ip for ip, stamps in _rate_buckets.items() if not stamps or stamps[-1] < cutoff]
-        for ip in stale:
-            del _rate_buckets[ip]
-        bucket = _rate_buckets[host]
-        while bucket and bucket[0] < cutoff:
-            bucket.popleft()
-        if len(bucket) >= _RATE_LIMIT:
-            raise HTTPException(
-                status_code=429,
-                detail="Too many client failure reports; try again later",
-                headers={"Retry-After": str(int(_RATE_WINDOW_SECONDS))},
-            )
-        bucket.append(now)
+async def _throttle_client_failure(request: Request) -> None:
+    """Rate-limit before body validation (route dependency).
+
+    Shares the auth limiter's Postgres-backed store. The previous in-process
+    dictionary reset on every serverless cold start and was divided by the
+    worker count everywhere else, which is exactly the failure mode the auth
+    limiter was written to avoid.
+    """
+    client_ip = attributable_client_ip(request)
+    if client_ip:
+        key, limit = f"client-failure:ip:{client_ip}", CLIENT_FAILURE_RATE_LIMIT
+    else:
+        key, limit = "client-failure:global", CLIENT_FAILURE_GLOBAL_RATE_LIMIT
+    await consume_rate_limit(
+        [key],
+        limit=limit,
+        window_seconds=CLIENT_FAILURE_RATE_WINDOW_SECONDS,
+        detail="Too many client failure reports; try again later",
+    )
 
 
 class ClientFailureRequest(BaseModel):

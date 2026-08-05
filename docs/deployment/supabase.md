@@ -297,11 +297,33 @@ receive the app JWT, storage service-role key, or migration URL.
 For the disposable pre-production project only, reset the application schema
 and rerun the consolidated migrations with an explicit guard:
 
+The guard is deliberately **not** satisfiable from your shell. `SUPABASE_NON_PRODUCTION=true`
+must appear inside the environment file itself, which is parsed before anything is
+merged into the process environment — an `export` in your profile will not do it, and
+neither will an `ENVIRONMENT` of `production` in that file. Add to `.env.supabase`:
+
+```dotenv
+SUPABASE_NON_PRODUCTION=true
+ENVIRONMENT=staging
+```
+
+Then run it. Interactively, the script prints the resolved target (the Supabase
+project ref parsed from `MIGRATOR_DATABASE_URL`, cross-checked against `SUPABASE_URL`)
+and requires you to type it back:
+
 ```bash
-export SUPABASE_NON_PRODUCTION=true
-export CONFIRM_SUPABASE_RESET=RESET
 ./scripts/platform/reset_supabase_nonprod.sh
 ```
+
+Unattended, name the same target explicitly — a fixed literal such as `RESET` is
+rejected, because a confirmation that is identical for every project confirms nothing:
+
+```bash
+CONFIRM_SUPABASE_RESET=<project-ref> ./scripts/platform/reset_supabase_nonprod.sh --yes
+```
+
+In CI, set `SUPABASE_PRODUCTION_PROJECT_REFS` to a comma-separated denylist of refs
+that must never be reset, whatever the environment file claims.
 
 This drops only the application tables, enums, Alembic history, and obsolete
 RLS helper functions before applying `001_initial_schema` and

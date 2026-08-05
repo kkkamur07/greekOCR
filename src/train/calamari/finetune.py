@@ -18,9 +18,11 @@ if str(REPO_ROOT) not in sys.path:
 
 from src.logging.wandb_logger import WandbLogger  # noqa: E402
 from train_utils import (  # noqa: E402
-    build_calamari_train_command,
+    build_calamari_command,
     stream_process,
+    uses_gpu,
     validate_pack,
+    write_header,
 )
 
 
@@ -29,6 +31,8 @@ def main(cfg: DictConfig) -> None:
     pack_dir = Path(to_absolute_path(cfg.data.pack_dir)).expanduser().resolve()
     train_images, val_images = validate_pack(pack_dir)
     warmstart = Path(to_absolute_path(cfg.model.warmstart_checkpoint)).expanduser().resolve()
+    # Calamari stores the trainer params (including the preprocessing pipeline) in a
+    # sidecar .json, so a checkpoint without it cannot be warmstarted.
     if not warmstart.exists() or not Path(str(warmstart) + ".json").exists():
         raise SystemExit(f"Missing warmstart checkpoint or metadata: {warmstart}")
 
@@ -38,59 +42,41 @@ def main(cfg: DictConfig) -> None:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     log_file = log_dir / f"finetune_{timestamp}.log"
     cer_log_file = log_dir / f"finetune_{timestamp}_cer.log"
-    run_name = str(cfg.wandb.name) if cfg.wandb.name is not None else f"calamari-finetune-{timestamp}"
+    run_name = (
+        str(cfg.wandb.name) if cfg.wandb.name is not None else f"calamari-finetune-{timestamp}"
+    )
 
-    base_cmd, cmd_env = build_calamari_train_command()
-    cmd = base_cmd + [
-        "--network",
-        str(cfg.model.network),
-        "--warmstart.model",
-        str(warmstart),
-        "--codec.keep_loaded",
-        "true",
-        "--n_augmentations",
-        str(cfg.training.n_augmentations),
-        "--trainer.output_dir",
-        str(output_dir),
-        "--trainer.epochs",
-        str(cfg.training.epochs),
-        "--learning_rate.lr",
-        str(cfg.training.learning_rate),
-        "--early_stopping.n_to_go",
-        str(cfg.training.early_stopping_patience),
-        "--early_stopping.frequency",
-        str(cfg.training.early_stopping_frequency),
-        "--train.gt_extension",
-        ".gt.txt",
-        "--val.gt_extension",
-        ".gt.txt",
-        "--train.images",
-        *train_images,
-        "--val.images",
-        *val_images,
-    ]
-    if cfg.training.gpu is not None and str(cfg.training.gpu) != "":
-        cmd.extend(["--device.gpus", str(cfg.training.gpu)])
+    cmd, cmd_env = build_calamari_command(
+        cfg,
+        output_dir=output_dir,
+        train_images=train_images,
+        val_images=val_images,
+        extra_args=[
+            "--warmstart.model",
+            str(warmstart),
+            "--codec.keep_loaded",
+            "true",
+            "--learning_rate.lr",
+            str(cfg.training.learning_rate),
+        ],
+    )
 
-    header = [
-        "=" * 40,
-        f"Calamari finetune started: {datetime.now()}",
-        f"  Pack:              {pack_dir}",
-        f"  Warmstart model:   {warmstart}",
-        f"  Output:            {output_dir}",
-        f"  Train images:      {len(train_images)}",
-        f"  Val images:        {len(val_images)}",
-        f"  Epochs:            {cfg.training.epochs}",
-        f"  Learning rate:     {cfg.training.learning_rate}",
-        f"  Augmentations:     {cfg.training.n_augmentations}",
-        f"  Early stopping:    {cfg.training.early_stopping_patience}",
-        f"  GPU:               {cfg.training.gpu if cfg.training.gpu is not None else 'CPU'}",
-        "=" * 40,
-    ]
-    with log_file.open("w", encoding="utf-8") as handle:
-        for line in header:
-            print(line)
-            handle.write(line + "\n")
+    write_header(
+        log_file,
+        "Calamari finetune started",
+        {
+            "Pack": pack_dir,
+            "Warmstart model": warmstart,
+            "Output": output_dir,
+            "Train images": len(train_images),
+            "Val images": len(val_images),
+            "Epochs": cfg.training.epochs,
+            "Learning rate": cfg.training.learning_rate,
+            "Augmentations": cfg.training.n_augmentations,
+            "Early stopping": cfg.training.early_stopping_patience,
+            "GPU": cfg.training.gpu if uses_gpu(cfg) else "CPU",
+        },
+    )
 
     wandb_logger = WandbLogger(
         enabled=bool(cfg.wandb.enabled),

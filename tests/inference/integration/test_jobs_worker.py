@@ -48,7 +48,7 @@ def test_wait_for_worker_schema_returns_after_table_appears(monkeypatch: pytest.
 
 
 def _submit_segment(product_job_id=None) -> InferenceJob:
-    # Full-page manuscript fixture; Kraken returns multiple text lines.
+    # Full-page manuscript fixture; BLLA returns multiple text lines.
     return create_job(
         JobSubmitRequest(
             task=InferenceTask.segment,
@@ -151,7 +151,7 @@ def test_skip_locked_allows_parallel_claims():
 
 
 # --- Worker thread end-to-end (ML lane) ---
-# Tests pg_notify on create_job, worker LISTEN wakeup, Kraken page segment, one-line Calamari transcribe.
+# Tests pg_notify on create_job, worker LISTEN wakeup, BLLA page segment, one-line Calamari transcribe.
 
 
 @pytest.mark.ml
@@ -173,7 +173,7 @@ def test_worker_processes_segment_and_transcribe_jobs_on_notify():
     assert segment_processed.status == InferenceJobStatus.done
     assert segment_processed.output is not None
     assert len(segment_processed.output["lines"]) > 1
-    assert segment_processed.output["lines"][0]["source_metadata"]["adapter"] == "kraken"
+    assert segment_processed.output["lines"][0]["source_metadata"]["adapter"] == "blla"
 
     transcribe_processed = get_job_by_id(transcribe_job.id)
     assert transcribe_processed is not None
@@ -185,7 +185,7 @@ def test_worker_processes_segment_and_transcribe_jobs_on_notify():
 
 
 # --- Worker stale reclaim without NOTIFY (ML lane) ---
-# Tests worker polls, reclaims a stuck running job, and runs Kraken. Does not test NOTIFY wakeup.
+# Tests worker polls, reclaims a stuck running job, and runs BLLA. Does not test NOTIFY wakeup.
 
 
 @pytest.mark.ml
@@ -219,4 +219,4 @@ def test_worker_recovers_stale_running_job_without_notification(
     assert processed is not None
     assert processed.status == InferenceJobStatus.done
     assert processed.output is not None
-    assert processed.output["lines"][0]["source_metadata"]["adapter"] == "kraken"
+    assert processed.output["lines"][0]["source_metadata"]["adapter"] == "blla"

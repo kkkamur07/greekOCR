@@ -1,28 +1,42 @@
 export {
-  fetchHelperCatalog,
+  fetchHelperInfo,
   isModelLocalEligible,
   isModelRemoteOnly,
+  modelCacheState,
+  parseHelperInfo,
   shouldRunOnLocalHelper,
-} from "./catalog";
+} from "./helperInfo";
 export {
   HELPER_BASE_URL,
-  HELPER_PROBE_INTERVAL_MS,
+  HELPER_SERVICE_NAME,
   DEFAULT_SEGMENT_REGISTRY_MODEL_ID,
 } from "./constants";
 export { runLocalInference } from "./localClient";
-export { fetchLocalCacheStatus } from "./cacheStatus";
 export { modelDisplayName } from "./modelDisplayName";
 export { blobToBase64, registrySelectionFromArtifactRef } from "./registry";
 export {
-  loadInferencePreference,
-  preferCloudInference,
-  saveInferencePreference,
+  cloudInferenceEnabled,
+  DEFAULT_INFERENCE_ROUTING,
+  INFERENCE_ROUTING_HINTS,
+  INFERENCE_ROUTING_LABELS,
+  loadInferenceRouting,
+  localInferenceEnabled,
+  normalizeInferenceRouting,
+  saveInferenceRouting,
 } from "./preference";
-export { probeHelperHealth } from "./probe";
-export { isAbortError } from "./localInferenceCallbacks";
-export type { HelperCatalogModel } from "./catalog";
-export type { InferencePreference } from "./preference";
-export type { LocalInferenceCallbacks } from "./localInferenceCallbacks";
+export {
+  isAbortError,
+  isRunSupersededError,
+  localOnlyRunFailedMessage,
+  localOnlyUnavailableMessage,
+  RunSupersededError,
+} from "./localInferenceCallbacks";
+export type { HelperInfo, HelperModelInfo } from "./helperInfo";
+export type { InferenceRouting } from "./preference";
+export type {
+  LocalInferenceCallbacks,
+  LocalRun,
+} from "./localInferenceCallbacks";
 export type {
   InferenceRunResponse,
   SegmentRunOutput,
@@ -30,3 +44,4 @@ export type {
   TranscribeRunOutput,
 } from "./types";
 export { useInferenceHost } from "./useInferenceHost";
+export { useLocalInferenceRuns } from "./useLocalInferenceRuns";

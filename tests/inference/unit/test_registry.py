@@ -29,10 +29,7 @@ def test_registry_yaml_validates_model_entries():
     assert blla.task == InferenceTask.segment
     assert blla.architecture == RegistryArchitecture.blla
     assert blla.device == ComputeDevice.cpu
-    assert (
-        blla.versions["stable"].weights_source
-        == "hf://kkkamur07/segmentation-blla@stable"
-    )
+    assert blla.versions["stable"].weights_source == "hf://kkkamur07/segmentation-blla@stable"
     assert (
         blla.versions["stable"].artifact_sha256
         == "5871e3755d414c00380794bafd570c1bb3d6a3255cdfb11b1bbe99dcec084d5e"

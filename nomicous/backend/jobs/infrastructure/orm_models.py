@@ -76,6 +76,8 @@ class Job(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    claimed_by: Mapped[str | None] = mapped_column(Text, nullable=True)
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     callback_claimed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

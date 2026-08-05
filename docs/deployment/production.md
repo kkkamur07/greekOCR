@@ -128,6 +128,7 @@ Environment variables: copy from [`nomicous/backend/core/.env.production.example
 | `JOB_SSE_NOTIFICATIONS_ENABLED` | `false` | NOTIFY listener needs long-lived process |
 | `BEHIND_PROXY` | `false` (current Vercel deployment) | Forwarded headers are not trusted without a fixed proxy allowlist |
 | `FORWARDED_ALLOW_IPS` | Unset (current Vercel deployment) | Set explicit IP/CIDRs before enabling `BEHIND_PROXY`; never `*` |
+| `TRUST_PEER_IP` | `false` (current Vercel deployment) | The peer is the platform proxy, so IP-keyed throttles are skipped rather than made global - [`docs/security/rate-limiting.md`](../security/rate-limiting.md) |
 | `CORS_ORIGINS` | `https://app.nomicous.com` | Browser origin |
 | `STORAGE_BACKEND` | `supabase` | No local filesystem on Vercel |
 
@@ -135,8 +136,15 @@ Job progress in the browser falls back to **HTTP polling** when SSE is unavailab
 
 `FORWARDED_ALLOW_IPS` accepts only explicit proxy IPs or CIDRs. Do not trust
 forwarded headers on Vercel unless the request reaches the function from a
-stable, allowlisted proxy address; otherwise set `BEHIND_PROXY=false` and rate
-limits use the direct connection peer.
+stable, allowlisted proxy address; otherwise set `BEHIND_PROXY=false`.
+
+With `BEHIND_PROXY=false` the direct connection peer is Vercel's proxy, not the
+browser, so **per-IP rate limiting is inoperative on this deployment**. Set
+`TRUST_PEER_IP=false` so IP-keyed buckets are skipped rather than collapsed into
+one global bucket that would 429 real users on each other's traffic.
+`/auth/login` and `/auth/register` stay capped per targeted account, which does
+not depend on the network path. Full reasoning and the remaining gap:
+[`docs/security/rate-limiting.md`](../security/rate-limiting.md).
 
 Config: [`deploy/platform/vercel.json`](../../deploy/platform/vercel.json).
 
@@ -234,7 +242,9 @@ If a secret scanner or Git-history review identifies a possible exposure:
 
 - [ ] Supabase migrations applied (`alembic upgrade head`)
 - [ ] Service-role bootstrap completed and each runtime has only its own DB URL
-- [ ] `CORS_ORIGINS` includes only production app origins (`https://app.nomicous.com`)
+- [ ] `CORS_ORIGINS` includes only production app origins (`https://app.nomicous.com`) - never the marketing apex, since CORS runs with credentials
+- [ ] `TRUST_PEER_IP=false` on Vercel, so auth throttling falls back to the per-account budget
+- [ ] `/docs`, `/redoc`, and `/openapi.json` return 404 in production
 - [ ] `AUTH_CSRF_COOKIE_DOMAIN=.nomicous.com` so `app.nomicous.com` can read the CSRF cookie for refresh
 - [ ] Production verification uses `app.nomicous.com` / `api.nomicous.com` only - never `*.vercel.app` deployment or Preview URLs
 - [ ] `ENABLE_TEST_JOB_ROUTES=false`

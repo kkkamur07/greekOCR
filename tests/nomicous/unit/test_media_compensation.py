@@ -7,6 +7,7 @@ import uuid
 import pytest
 
 from backend.document.application.document_service import DocumentService
+from backend.document.infrastructure.media_store.encoding import DecodedPartImage
 from backend.document.infrastructure.orm_models import Document
 
 
@@ -66,8 +67,8 @@ async def test_failed_upload_commit_records_compensating_delete_intent(monkeypat
 
     monkeypatch.setattr(service, "get_document", get_document)
     monkeypatch.setattr(
-        "backend.document.application.part_service.encode_part_image",
-        lambda _data: b"encoded",
+        "backend.document.application.part_service.encode_part_image_with_size",
+        lambda _data: DecodedPartImage(data=b"encoded", width=4, height=6),
     )
     session = _CommitFailingSession()
 

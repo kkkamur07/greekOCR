@@ -28,6 +28,14 @@ class InfrastructureSettings(BaseSettings):
     db_max_overflow: int = Field(default=10, alias="DB_MAX_OVERFLOW")
     db_pool_recycle: int = Field(default=1800, alias="DB_POOL_RECYCLE")
 
+    @property
+    def is_production(self) -> bool:
+        return self.environment.casefold() == "production"
+
+    @property
+    def is_development(self) -> bool:
+        return self.environment.casefold() == "development"
+
 
 @lru_cache
 def get_infrastructure_settings() -> InfrastructureSettings:

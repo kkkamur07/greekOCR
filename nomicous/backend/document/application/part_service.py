@@ -1,5 +1,7 @@
 """Document part upload, ordering, review, and media access."""
 
+from __future__ import annotations
+
 import asyncio
 import logging
 from uuid import UUID
@@ -10,14 +12,19 @@ from backend.core.exceptions import NotFoundError, ValidationError
 from backend.document.domain.access import require_can_read
 from backend.document.infrastructure.media_store import (
     DEFAULT_PART_IMAGE_SUFFIX,
-    encode_part_image,
+    encode_part_image_with_size,
     encode_part_thumbnail,
+    read_image_size,
 )
 from backend.document.infrastructure.orm_models import DocumentPart
 from backend.document.application.document_service_shared import DocumentServiceSharedMixin
 from backend.users.infrastructure.orm_models import User
 
 logger = logging.getLogger(__name__)
+
+# Parts uploaded before dimensions were persisted are backfilled lazily on read; bound how
+# many object-store round trips a single request may trigger.
+MAX_DIMENSION_BACKFILLS_PER_REQUEST = 25
 
 
 class PartServiceMixin(DocumentServiceSharedMixin):
@@ -29,7 +36,9 @@ class PartServiceMixin(DocumentServiceSharedMixin):
         document_id: UUID,
     ) -> list[DocumentPart]:
         document = await self.get_document(session, user, project_id, document_id)
-        return sorted(document.parts, key=lambda p: p.order)
+        parts = sorted(document.parts, key=lambda p: p.order)
+        await self.backfill_part_dimensions(session, parts)
+        return parts
 
     async def upload_part(
         self,
@@ -46,8 +55,16 @@ class PartServiceMixin(DocumentServiceSharedMixin):
         filename_stem: str | None = None
         if filename and "." in filename:
             filename_stem = filename.rsplit(".", 1)[0]
-        encoded = encode_part_image(data)
-        part = DocumentPart(document_id=document.id, order=order, image_key="pending")
+        # Single bounded decode: it validates the upload, produces the stored WebP, and
+        # yields the dimensions the page canvas and PAGE XML export need.
+        encoded = await asyncio.to_thread(encode_part_image_with_size, data)
+        part = DocumentPart(
+            document_id=document.id,
+            order=order,
+            image_key="pending",
+            width=encoded.width,
+            height=encoded.height,
+        )
         session.add(part)
         await session.flush()
         image_key = self._media.part_image_key(
@@ -56,7 +73,7 @@ class PartServiceMixin(DocumentServiceSharedMixin):
             filename_stem=filename_stem,
         )
         try:
-            self._media.write(image_key, encoded)
+            self._media.write(image_key, encoded.data)
             part.image_key = image_key
             await session.commit()
         except Exception:
@@ -72,6 +89,36 @@ class PartServiceMixin(DocumentServiceSharedMixin):
             raise
         await session.refresh(part)
         return part
+
+    async def backfill_part_dimensions(
+        self,
+        session: AsyncSession,
+        parts: list[DocumentPart],
+    ) -> None:
+        """Fill width/height for parts stored before dimensions were persisted.
+
+        Dimensions only exist inside the stored blob, so migration 004 cannot backfill
+        them in SQL. Read paths that expose dimensions decode the stored image once and
+        persist the result; every later read is served from Postgres. Storage failures are
+        swallowed — a missing blob must not break listing the rest of the document.
+        """
+        pending = [part for part in parts if part.width is None or part.height is None]
+        if not pending:
+            return
+        changed = False
+        for part in pending[:MAX_DIMENSION_BACKFILLS_PER_REQUEST]:
+            try:
+                size = await asyncio.to_thread(self._read_part_image_size, part)
+            except Exception:
+                logger.warning("Could not recover dimensions for part %s", part.id, exc_info=True)
+                continue
+            part.width, part.height = size
+            changed = True
+        if changed:
+            await session.commit()
+
+    def _read_part_image_size(self, part: DocumentPart) -> tuple[int, int]:
+        return read_image_size(self._media.read(part.image_key))
 
     async def reorder_parts(
         self,

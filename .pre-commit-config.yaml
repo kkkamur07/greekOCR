@@ -4,10 +4,22 @@ repos:
     hooks:
       - id: ruff-check
         name: Ruff correctness checks
-        entry: uv run --locked --group dev ruff check nomicous/backend inference scripts/platform tests/nomicous tests/inference tests/hf
+        # `ruff check .` rather than a path list, so a new top-level package is
+        # linted by default. Vendored and generated trees are excluded in
+        # pyproject.toml (tool.ruff.extend-exclude).
+        entry: uv run --locked --group dev ruff check .
         language: system
         types_or: [python, pyi]
         pass_filenames: false
+
+      # src/experiments/trOCR.ipynb once carried ~42 MB of committed cell
+      # outputs. Strip outputs before they reach a commit; code cells are
+      # untouched.
+      - id: nbstripout
+        name: Strip Jupyter notebook outputs
+        entry: uv run --locked --group dev nbstripout
+        language: system
+        types: [jupyter]
 
       - id: ruff-format
         name: Ruff formatting

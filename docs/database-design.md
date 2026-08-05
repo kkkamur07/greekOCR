@@ -222,6 +222,63 @@ Many-to-many project sharing table.
 - Both foreign keys cascade on deletion.
 - A project owner is stored separately in `projects.owner_id`.
 
+#### `helper_devices`
+
+A researcher's own computer, authorised once from a logged-in browser and
+thereafter authenticating outbound with an opaque device token. See
+`docs/adr/0001-outbound-helper-device-pairing.md`.
+
+- `user_id` is `NOT NULL` and cascades to the owning user. That foreign key is
+  the entire authorization scope of the credential, which is why it is a schema
+  constraint and not an application check.
+- `token_hash` stores only a credential hash, as `auth_sessions` does. `''` marks
+  a device approved in the browser whose helper has not collected its token yet;
+  an empty string can never equal a 64-character digest, so a half-finished
+  pairing cannot authenticate.
+- `previous_token_hash` and `previous_token_expires_at` keep the predecessor
+  valid during a renewal overlap, so a UI-less helper that loses a rotation
+  response is not bricked.
+- `token_prefix` is a log-safe correlation handle (`nmd1.<8 hex>`), never secret
+  material. There is no index on `token_hash`: the wire token carries its own
+  `device_id`, so authentication is a primary-key fetch plus one constant-time
+  compare.
+- `revoked_at` is a soft delete, so jobs referencing the device keep resolving.
+  Revocation also blanks `token_hash`.
+- `paired_from_ip` and `last_seen_ip` record the address the platform observed,
+  for support correlation only. Behind a proxy that is not allowlisted that is
+  the edge's address, identical for every row, so nothing queries or filters on
+  them and no UI presents them as identifying a computer.
+- Partial index on `(user_id) WHERE revoked_at IS NULL`; index on `last_seen_at`.
+
+#### `helper_pairings`
+
+A single-use, short-lived authorisation request from an unpaired helper. Kept
+separate from `helper_devices` so `user_id` there can stay `NOT NULL`: folding
+the two together would make every device query depend on remembering
+`AND approved_at IS NOT NULL`, and one forgotten clause is an authentication
+bypass.
+
+- `device_code_hash` is held by the helper; `verification_token_hash` is held by
+  the browser and is `UNIQUE`, because it is the one value looked up *by* digest
+  (the browser holds no row id). Only hashes are stored.
+- `requested_name`, `requested_platform`, `requested_helper_version`, and
+  `requested_capabilities` are attacker-controlled: the creating endpoint is
+  unauthenticated. They are normalised on write and must be rendered as inert
+  text.
+- `attempts` burns the row after `DEVICE_PAIRING_MAX_ATTEMPTS` wrong
+  `device_code` presentations; `last_polled_at` and `poll_interval_seconds` carry
+  the per-row cadence throttle.
+- `approved_user_id`, `approved_at`, `device_id`, `denied_at`, and `consumed_at`
+  are the state machine and the audit trail of what was approved by whom.
+- `expires_at` is short (minutes) and is the only index, serving both the live
+  count and the sweep. Rows are **deleted** once past
+  `DEVICE_PAIRING_RETENTION_SECONDS` beyond expiry, and consumed or denied rows
+  past that age, from the endpoint that inserts them — the table is written
+  without authentication and would otherwise grow without bound.
+- `device_id` references `helper_devices` with `ON DELETE CASCADE` in that
+  direction only: deleting a device removes its pairing rows, and sweeping a
+  consumed pairing never removes the device it created.
+
 ### 3.2 Project and document tables
 
 #### `projects`

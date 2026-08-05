@@ -7,6 +7,19 @@ from dataclasses import dataclass
 import numpy as np
 from PIL import Image
 
+# The model height is fixed (1800 by default) while the width scales with the
+# source aspect ratio. Without a bound, an extreme panorama that still passes
+# the pixel-count admission cap can balloon into a multi-gigabyte tensor, so
+# clamp the scaled width to this multiple of the input height. Capped images
+# lose horizontal resolution but still decode correctly because coordinates
+# are mapped back through ``scale_xy``.
+MAX_WIDTH_TO_HEIGHT_RATIO = 8
+
+
+def _scaled_blla_width(source_width: int, source_height: int, input_height: int) -> int:
+    proportional = int(source_width * input_height / source_height)
+    return min(max(1, proportional), input_height * MAX_WIDTH_TO_HEIGHT_RATIO)
+
 
 @dataclass(frozen=True)
 class BLLAInput:
@@ -46,7 +59,7 @@ def preprocess_blla_image(
     if source_width <= 0 or source_height <= 0:
         raise ValueError("BLLA input image must not be empty")
 
-    scaled_width = max(1, int(source_width * input_height / source_height))
+    scaled_width = _scaled_blla_width(source_width, source_height, input_height)
     scaled = rgb.resize((scaled_width, input_height), Image.Resampling.LANCZOS)
     scaled_array = np.asarray(scaled, dtype=np.uint8)
     scaled_gray = np.asarray(scaled.convert("L"), dtype=np.uint8)
@@ -77,7 +90,7 @@ def preprocess_blla_image_numpy(
     if source_width <= 0 or source_height <= 0:
         raise ValueError("BLLA input image must not be empty")
 
-    scaled_width = max(1, int(source_width * input_height / source_height))
+    scaled_width = _scaled_blla_width(source_width, source_height, input_height)
     scaled = rgb.resize((scaled_width, input_height), Image.Resampling.LANCZOS)
     scaled_array = np.asarray(scaled, dtype=np.uint8)
     scaled_gray = np.asarray(scaled.convert("L"), dtype=np.uint8)

@@ -53,3 +53,7 @@ def job_response_from_orm(job: Job) -> JobResponse:
 class JobPageResponse(BaseModel):
     items: list[JobResponse]
     next_cursor: str | None = None
+
+
+class ClearJobHistoryResponse(BaseModel):
+    deleted: int

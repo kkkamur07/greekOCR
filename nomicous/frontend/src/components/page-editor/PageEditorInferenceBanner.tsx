@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useState } from "react";
+import { Segmented } from "antd";
 
 import {
   INFERENCE_HELPER_LINUX_TARBALL_URL,
@@ -7,6 +8,11 @@ import {
   INFERENCE_HELPER_RELEASES_URL,
   INFERENCE_HELPER_WINDOWS_ZIP_URL,
 } from "../../inference/constants";
+import {
+  INFERENCE_ROUTING_HINTS,
+  INFERENCE_ROUTING_LABELS,
+  type InferenceRouting,
+} from "../../inference/preference";
 
 type HelperPlatform = "macos" | "windows" | "linux";
 
@@ -62,20 +68,45 @@ function detectPlatform(): HelperPlatform | null {
   return null;
 }
 
+const ROUTING_OPTIONS: InferenceRouting[] = [
+  "auto",
+  "local-only",
+  "cloud-only",
+];
+
+function helperStatusText(
+  routing: InferenceRouting,
+  probing: boolean,
+  helperAvailable: boolean,
+): string {
+  if (routing === "cloud-only") return INFERENCE_ROUTING_HINTS[routing];
+  if (probing) return "Looking for the helper on this computer…";
+  if (helperAvailable) return "Helper found on this computer.";
+  if (routing === "local-only") {
+    return "No helper found on this computer. Runs will fail until you start it.";
+  }
+  return "No helper found on this computer, so runs go to the cloud.";
+}
+
 type PageEditorInferenceBannerProps = {
   helperAvailable: boolean;
   probing: boolean;
-  preferCloud: boolean;
+  routing: InferenceRouting;
+  onRoutingChange: (routing: InferenceRouting) => void;
+  onRetry: () => void;
   onUseCloudInstead: () => void;
 };
 
 export function PageEditorInferenceBanner({
   helperAvailable,
   probing,
-  preferCloud,
+  routing,
+  onRoutingChange,
+  onRetry,
   onUseCloudInstead,
 }: PageEditorInferenceBannerProps) {
   const titleId = useId();
+  const routingLabelId = useId();
   const [modalOpen, setModalOpen] = useState(false);
   const [showOtherPlatforms, setShowOtherPlatforms] = useState(false);
 
@@ -99,7 +130,7 @@ export function PageEditorInferenceBanner({
     };
   }, [detected]);
 
-  const shouldPrompt = !probing && !helperAvailable && !preferCloud;
+  const shouldPrompt = !probing && !helperAvailable && routing !== "cloud-only";
 
   useEffect(() => {
     if (!shouldPrompt) {
@@ -118,10 +149,6 @@ export function PageEditorInferenceBanner({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [modalOpen]);
-
-  if (!shouldPrompt) {
-    return null;
-  }
 
   function handleUseCloud() {
     setModalOpen(false);
@@ -245,21 +272,49 @@ export function PageEditorInferenceBanner({
             </div>
           </div>
         </div>
-      ) : (
-        <div className="pe-inference-banner" role="status">
-          <span>
-            Local inference is faster with the Nomicous Inference Helper
-            installed on this computer.
-          </span>
-          <button
-            type="button"
-            className="pe-inference-banner__action"
-            onClick={() => setModalOpen(true)}
-          >
-            Install helper
-          </button>
-        </div>
-      )}
+      ) : null}
+      <div
+        className="pe-inference-banner"
+        role="group"
+        aria-label="Where inference runs"
+      >
+        <span className="pe-inference-banner__routing">
+          <span id={routingLabelId}>Run OCR and segmentation:</span>{" "}
+          <Segmented
+            size="small"
+            value={routing}
+            aria-labelledby={routingLabelId}
+            onChange={(value) => onRoutingChange(value as InferenceRouting)}
+            options={ROUTING_OPTIONS.map((option) => ({
+              label: INFERENCE_ROUTING_LABELS[option],
+              value: option,
+              title: INFERENCE_ROUTING_HINTS[option],
+            }))}
+          />
+        </span>
+        <span className="pe-inference-banner__status" role="status">
+          {helperStatusText(routing, probing, helperAvailable)}{" "}
+          {routing !== "cloud-only" ? (
+            <button
+              type="button"
+              className="pe-inference-banner__action"
+              onClick={onRetry}
+              disabled={probing}
+            >
+              {probing ? "Checking…" : "Retry"}
+            </button>
+          ) : null}{" "}
+          {shouldPrompt ? (
+            <button
+              type="button"
+              className="pe-inference-banner__action"
+              onClick={() => setModalOpen(true)}
+            >
+              Install helper
+            </button>
+          ) : null}
+        </span>
+      </div>
     </>
   );
 }

@@ -106,6 +106,230 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/device/v1/pairings": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Start Device Pairing
+     * @description Create a pairing request and hand the helper its two one-time secrets.
+     *
+     *     Under the shared auth throttle, which is the right limiter for a route
+     *     called once per installation. Note which bucket this route actually lands
+     *     in: the body carries no account identity, so where the observed address is a
+     *     proxy the platform does not allowlist, there is no per-caller dimension at
+     *     all. Such requests are charged to the coarse ``unattributable:<path>``
+     *     bucket, which is path-scoped and far looser than the per-caller limit
+     *     (``UNATTRIBUTABLE_AUTH_RATE_LIMIT`` per window, not the per-caller
+     *     ``auth_rate_limit_requests``). It bounds free database work rather than
+     *     identifying an abuser, and it is the reason no second IP-keyed cap sits
+     *     behind it.
+     */
+    post: operations["start_device_pairing_device_v1_pairings_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/device/v1/pairings/token": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Collect Device Token
+     * @description Poll for the browser's decision; return the device token exactly once.
+     *
+     *     Deliberately **not** under ``throttle_auth_attempts``: that limiter is
+     *     10 requests / 60s / (ip + path), and a compliant 5 second poll is 12 per
+     *     minute, so a well-behaved helper would throttle itself at poll 11. Cadence
+     *     is enforced on the pairing row instead (``slow_down`` with a doubling
+     *     interval), and wrong ``device_code`` presentations burn the row after
+     *     ``DEVICE_PAIRING_MAX_ATTEMPTS``.
+     *
+     *     Always HTTP 200 - see :class:`PairingTokenResponse`.
+     */
+    post: operations["collect_device_token_device_v1_pairings_token_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/device/v1/self": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Read Device Self
+     * @description Confirm the credential and record liveness.
+     *
+     *     ``server_time`` is returned so a laptop with a wrong clock still behaves,
+     *     and ``token_expires_at`` is what tells the helper when to renew.
+     */
+    get: operations["read_device_self_device_v1_self_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/device/v1/token/renew": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Renew Device Token
+     * @description Replace this device's token, keeping the previous one valid for an overlap.
+     *
+     *     A helper with no UI cannot be told that a lost rotation response has bricked
+     *     it, so the predecessor stays valid for ``DEVICE_TOKEN_RENEW_OVERLAP_HOURS``.
+     */
+    post: operations["renew_device_token_device_v1_token_renew_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/devices": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List Devices */
+    get: operations["list_devices_devices_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/devices/pairings/lookup": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Lookup Device Pairing
+     * @description Resolve the fragment token into the consent screen's contents.
+     *
+     *     Unknown, expired, consumed, and denied all return one indistinguishable 404.
+     *
+     *     There is deliberately no companion "list my live pairing requests" route.
+     *     The one that existed filtered solely on the observed client address - a
+     *     pairing has no owner before consent, so there was no user to filter on - and
+     *     behind a proxy the platform does not allowlist that address is the same for
+     *     everybody, which made it a list of *every* user's pending pairing requests,
+     *     ``pairing_id`` included. Recovering a closed consent tab now means starting a
+     *     new pairing from the helper, which costs one click.
+     */
+    post: operations["lookup_device_pairing_devices_pairings_lookup_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/devices/pairings/{pairing_id}/approve": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Approve Device Pairing
+     * @description Grant this computer permission to run the caller's jobs.
+     *
+     *     The click is the entire anti-phishing control, so this must never be reached
+     *     from page load. ``verification_token`` is re-verified server-side: possession
+     *     of the fragment, not knowledge of a pairing id, is what authorises the grant.
+     *
+     *     Possession of the fragment is *all* it proves. Nothing binds this approval to
+     *     the computer that asked for it, so a consent link forwarded to a researcher
+     *     and clicked mints a token on that researcher's account for someone else's
+     *     device. The confirmation code on the consent screen is what gives the
+     *     researcher a chance to notice; it is a mitigation, not a barrier. See ADR
+     *     0001, "Pairing phishing".
+     */
+    post: operations["approve_device_pairing_devices_pairings__pairing_id__approve_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/devices/pairings/{pairing_id}/deny": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Deny Device Pairing */
+    post: operations["deny_device_pairing_devices_pairings__pairing_id__deny_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/devices/{device_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /**
+     * Revoke Device
+     * @description Remove a computer's access. Works from a phone; the helper is not consulted.
+     *
+     *     Takes effect on that device's next request - every device call re-reads the
+     *     row, so there is no cache expiry to wait out.
+     */
+    delete: operations["revoke_device_devices__device_id__delete"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/health": {
     parameters: {
       query?: never;
@@ -175,6 +399,26 @@ export interface paths {
     /** Complete Inference Job */
     post: operations["complete_inference_job_internal_inference_job_complete_post"];
     delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/jobs/history": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /**
+     * Clear Job History
+     * @description Delete finished jobs of a project. Active jobs are left running.
+     */
+    delete: operations["clear_job_history_jobs_history_delete"];
     options?: never;
     head?: never;
     patch?: never;
@@ -1096,14 +1340,21 @@ export interface components {
       /** Order */
       order: number;
     };
-    /** BlockPatchRequest */
+    /**
+     * BlockPatchRequest
+     * @description Partial block update.
+     *
+     *     ``order``/``box`` back NOT NULL columns, so an explicit ``null`` is rejected rather
+     *     than silently ignored. Routes send ``model_dump(exclude_unset=True)``, which is what
+     *     separates "field omitted" from "field explicitly set".
+     */
     BlockPatchRequest: {
       /** Box */
       box?: {
         [key: string]: unknown;
-      } | null;
+      };
       /** Order */
-      order?: number | null;
+      order?: number;
     };
     /** BlockResponse */
     BlockResponse: {
@@ -1136,12 +1387,57 @@ export interface components {
       /** File */
       file: string;
     };
+    /**
+     * BoundedSegmentLine
+     * @description Segment line with the platform's geometry bound applied to untrusted browser output.
+     */
+    BoundedSegmentLine: {
+      /** Baseline */
+      baseline: {
+        [key: string]: unknown;
+      };
+      /** Block External Id */
+      block_external_id?: string | null;
+      /** External Id */
+      external_id: string;
+      /** @default polygon */
+      kind: components["schemas"]["SegmentGeometryKind"];
+      /** Kraken Ceiling */
+      kraken_ceiling?: number[][] | null;
+      /** Mask */
+      mask?: {
+        [key: string]: unknown;
+      } | null;
+      /** Order */
+      order: number;
+      /** Points */
+      points: number[][];
+      /** Source Metadata */
+      source_metadata?: {
+        [key: string]: unknown;
+      };
+    };
+    /**
+     * BoundedSegmentRunResponse
+     * @description Browser-supplied segmentation output, bounded before it reaches the merge service.
+     */
+    BoundedSegmentRunResponse: {
+      /** Blocks */
+      blocks?: components["schemas"]["SegmentBlock"][];
+      /** Lines */
+      lines?: components["schemas"]["BoundedSegmentLine"][];
+    };
     /** CharacterConfidence */
     CharacterConfidence: {
       /** Char */
       char: string;
       /** Confidence */
       confidence: number;
+    };
+    /** ClearJobHistoryResponse */
+    ClearJobHistoryResponse: {
+      /** Deleted */
+      deleted: number;
     };
     /** ClientFailureRequest */
     ClientFailureRequest: {
@@ -1175,6 +1471,76 @@ export interface components {
     CopyToGroundTruthResponse: {
       /** Copied Line Ids */
       copied_line_ids: string[];
+    };
+    /** DeviceResponse */
+    DeviceResponse: {
+      /** Helper Version */
+      helper_version: string;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Last Seen At */
+      last_seen_at?: string | null;
+      /** Last Seen Ip */
+      last_seen_ip?: string | null;
+      /** Name */
+      name: string;
+      /**
+       * Paired At
+       * Format: date-time
+       */
+      paired_at: string;
+      /** Paired From Ip */
+      paired_from_ip?: string | null;
+      /** Platform */
+      platform: string;
+      /** Revoked At */
+      revoked_at?: string | null;
+      status: components["schemas"]["DeviceStatus"];
+      /** Token Expires At */
+      token_expires_at?: string | null;
+      /** Token Prefix */
+      token_prefix: string;
+    };
+    /**
+     * DeviceSelfResponse
+     * @description What a paired helper is allowed to learn about itself.
+     */
+    DeviceSelfResponse: {
+      /** Account Email */
+      account_email: string;
+      /**
+       * Device Id
+       * Format: uuid
+       */
+      device_id: string;
+      /** Name */
+      name: string;
+      /**
+       * Server Time
+       * Format: date-time
+       */
+      server_time: string;
+      /** Token Expires At */
+      token_expires_at?: string | null;
+    };
+    /**
+     * DeviceStatus
+     * @description Liveness of a paired helper, derived from ``last_seen_at``.
+     * @enum {string}
+     */
+    DeviceStatus: "pairing" | "online" | "idle" | "offline" | "revoked";
+    /** DeviceTokenRenewResponse */
+    DeviceTokenRenewResponse: {
+      /** Device Token */
+      device_token: string;
+      /**
+       * Token Expires At
+       * Format: date-time
+       */
+      token_expires_at: string;
     };
     /** DocumentCreateRequest */
     DocumentCreateRequest: {
@@ -1520,12 +1886,18 @@ export interface components {
      * @enum {string}
      */
     LineGeometryKind: "polygon" | "rectangle";
-    /** LinePatchRequest */
+    /**
+     * LinePatchRequest
+     * @description Partial line update.
+     *
+     *     ``block_id`` and ``mask`` back nullable columns, so an explicit ``null`` clears them.
+     *     ``order``/``baseline``/``points`` back NOT NULL columns and reject an explicit null.
+     */
     LinePatchRequest: {
       /** Baseline */
       baseline?: {
         [key: string]: unknown;
-      } | null;
+      };
       /** Block Id */
       block_id?: string | null;
       /** Mask */
@@ -1533,7 +1905,7 @@ export interface components {
         [key: string]: unknown;
       } | null;
       /** Order */
-      order?: number | null;
+      order?: number;
       /** Points */
       points?: number[][] | null;
     };
@@ -1645,12 +2017,16 @@ export interface components {
       /** Lines */
       lines?: components["schemas"]["LineUpsertRequest"][];
     };
+    /** LocalCharacterConfidenceRequest */
+    LocalCharacterConfidenceRequest: {
+      /** Char */
+      char: string;
+      /** Confidence */
+      confidence: number;
+    };
     /** LocalSegmentPersistRequest */
     LocalSegmentPersistRequest: {
-      /** Output */
-      output: {
-        [key: string]: unknown;
-      };
+      output: components["schemas"]["BoundedSegmentRunResponse"];
       /** Registry Model Id */
       registry_model_id: string;
       /**
@@ -1681,10 +2057,7 @@ export interface components {
     LocalTranscribeLinePersistRequest: {
       /** Character Confidences */
       character_confidences?:
-        | {
-            [key: string]: unknown;
-          }[]
-        | null;
+        components["schemas"]["LocalCharacterConfidenceRequest"][] | null;
       /** Confidence */
       confidence: number;
       /**
@@ -1815,6 +2188,19 @@ export interface components {
       /** Text Line Order */
       text_line_order: number;
     };
+    /** PairingConsentRequest */
+    PairingConsentRequest: {
+      /** Verification Token */
+      verification_token: string;
+    };
+    /**
+     * PairingLookupRequest
+     * @description The fragment token travels in a POST body, never a path or query.
+     */
+    PairingLookupRequest: {
+      /** Verification Token */
+      verification_token: string;
+    };
     /** PairingProgressResponse */
     PairingProgressResponse: {
       /** Paired Lines */
@@ -1823,6 +2209,122 @@ export interface components {
       percent: number;
       /** Total Lines */
       total_lines: number;
+    };
+    /**
+     * PairingRequestResponse
+     * @description Consent-screen data. Rendered as inert text under fixed labels.
+     *
+     *     Carries no network-derived signal. ``same_network`` and ``request_ip`` were
+     *     removed: behind a proxy the platform does not allowlist, the observed address
+     *     is the edge's, so ``same_network`` was unconditionally true and ``request_ip``
+     *     was the same string for every request on the platform. A reassurance that is
+     *     always shown is worse than none, because the screen presents it as evidence.
+     */
+    PairingRequestResponse: {
+      /** Confirmation Code */
+      confirmation_code: string;
+      /** Device Name */
+      device_name: string;
+      /**
+       * Expires At
+       * Format: date-time
+       */
+      expires_at: string;
+      /** Helper Version */
+      helper_version: string;
+      /**
+       * Pairing Id
+       * Format: uuid
+       */
+      pairing_id: string;
+      /** Platform */
+      platform: string;
+      /**
+       * Requested At
+       * Format: date-time
+       */
+      requested_at: string;
+    };
+    /**
+     * PairingStartRequest
+     * @description Sent by an unpaired helper. Every field is attacker-controlled.
+     */
+    PairingStartRequest: {
+      /** Capabilities */
+      capabilities?: {
+        [key: string]: unknown;
+      };
+      /** Device Name */
+      device_name: string;
+      /** Helper Version */
+      helper_version: string;
+      /** Platform */
+      platform: string;
+    };
+    /** PairingStartResponse */
+    PairingStartResponse: {
+      /** Confirmation Code */
+      confirmation_code: string;
+      /** Device Code */
+      device_code: string;
+      /** Expires In */
+      expires_in: number;
+      /** Interval Seconds */
+      interval_seconds: number;
+      /**
+       * Pairing Id
+       * Format: uuid
+       */
+      pairing_id: string;
+      /** Verification Url */
+      verification_url: string;
+    };
+    /**
+     * PairingStatus
+     * @description Poll result for the helper's token collection loop.
+     *
+     *     Every one of these is returned inside a ``200`` body. The platform error
+     *     envelope replaces ``HTTPException.detail`` with a fixed public string
+     *     (``backend/core/app.py``), so a machine-readable protocol state can never
+     *     survive a non-2xx response.
+     * @enum {string}
+     */
+    PairingStatus:
+      | "authorization_pending"
+      | "slow_down"
+      | "access_denied"
+      | "expired"
+      | "approved";
+    /** PairingTokenRequest */
+    PairingTokenRequest: {
+      /** Device Code */
+      device_code: string;
+      /**
+       * Pairing Id
+       * Format: uuid
+       */
+      pairing_id: string;
+    };
+    /**
+     * PairingTokenResponse
+     * @description Always returned with HTTP 200 - the status is the payload.
+     *
+     *     The platform error envelope replaces ``HTTPException.detail`` with a fixed
+     *     public string, so a machine-readable protocol state cannot survive a non-2xx
+     *     response.
+     */
+    PairingTokenResponse: {
+      /** Account Email */
+      account_email?: string | null;
+      /** Device Id */
+      device_id?: string | null;
+      /** Device Token */
+      device_token?: string | null;
+      /** Interval Seconds */
+      interval_seconds: number;
+      status: components["schemas"]["PairingStatus"];
+      /** Token Expires At */
+      token_expires_at?: string | null;
     };
     /** ProjectCreateRequest */
     ProjectCreateRequest: {
@@ -1905,6 +2407,8 @@ export interface components {
       blocks?: components["schemas"]["PublicBlockResponse"][];
       /** Lines */
       lines?: components["schemas"]["PublicLineResponse"][];
+      /** Next Cursor */
+      next_cursor?: string | null;
     };
     /** PublicLineResponse */
     PublicLineResponse: {
@@ -1925,6 +2429,24 @@ export interface components {
       /** Points */
       points: number[][];
     };
+    /**
+     * PublicThumbnailWidth
+     * @description Widths the *unauthenticated* route will render.
+     *
+     *     Every distinct width is a separate decode plus LANCZOS resize of a full manuscript
+     *     scan and a separate cache entry, so a free-form range hands an anonymous caller 2048
+     *     ways to miss every cache for one image. A closed set caps that at three renders per
+     *     page. The frontend only asks for 200 (the part list); the larger two leave room for
+     *     denser displays without reopening the range.
+     *
+     *     The authenticated route keeps the continuous range up to ``MAX_THUMBNAIL_WIDTH``:
+     *     the same work there is attributable to an account that is already a project member.
+     *
+     *     An ``IntEnum`` rather than a ``Literal``: FastAPI coerces a query string into an enum
+     *     member but not into a literal int, and it publishes the members as an OpenAPI enum.
+     * @enum {integer}
+     */
+    PublicThumbnailWidth: 200 | 400 | 800;
     /** PublicTranscriptionLayerResponse */
     PublicTranscriptionLayerResponse: {
       /**
@@ -2078,11 +2600,13 @@ export interface components {
     };
     /** TranscribeBatchLineResult */
     TranscribeBatchLineResult: {
+      /** Error */
+      error?: string | null;
       /** Line Id */
       line_id?: string | null;
       /** Line Index */
       line_index: number;
-      output: components["schemas"]["TranscribeRunResponse"];
+      output?: components["schemas"]["TranscribeRunResponse"] | null;
     };
     /** TranscribeBatchRunResponse */
     TranscribeBatchRunResponse: {
@@ -2162,7 +2686,7 @@ export interface components {
     /** WelcomeResponse */
     WelcomeResponse: {
       /** Docs Url */
-      docs_url: string;
+      docs_url?: string | null;
       /** Health Url */
       health_url: string;
       /** Message */
@@ -2689,6 +3213,781 @@ export interface operations {
       };
     };
   };
+  start_device_pairing_device_v1_pairings_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PairingStartRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PairingStartResponse"];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
+  collect_device_token_device_v1_pairings_token_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PairingTokenRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PairingTokenResponse"];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
+  read_device_self_device_v1_self_get: {
+    parameters: {
+      query?: never;
+      header?: {
+        "X-Nomicous-Device-Token"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DeviceSelfResponse"];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
+  renew_device_token_device_v1_token_renew_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        "X-Nomicous-Device-Token"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DeviceTokenRenewResponse"];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
+  list_devices_devices_get: {
+    parameters: {
+      query?: {
+        include_revoked?: boolean;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DeviceResponse"][];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
+  lookup_device_pairing_devices_pairings_lookup_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PairingLookupRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PairingRequestResponse"];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
+  approve_device_pairing_devices_pairings__pairing_id__approve_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        pairing_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PairingConsentRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DeviceResponse"];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
+  deny_device_pairing_devices_pairings__pairing_id__deny_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        pairing_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PairingConsentRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
+  revoke_device_devices__device_id__delete: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        device_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
   health_health_get: {
     parameters: {
       query?: never;
@@ -2968,6 +4267,91 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
+  clear_job_history_jobs_history_delete: {
+    parameters: {
+      query: {
+        project_id: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ClearJobHistoryResponse"];
+        };
       };
       /** @description Not authenticated */
       401: {
@@ -8242,7 +9626,7 @@ export interface operations {
   get_public_part_image_public_media_parts__part_id__get: {
     parameters: {
       query?: {
-        w?: number | null;
+        w?: components["schemas"]["PublicThumbnailWidth"] | null;
       };
       header?: {
         "if-none-match"?: string | null;
@@ -8319,14 +9703,12 @@ export interface operations {
           "application/json": components["schemas"]["ApiErrorResponse"];
         };
       };
-      /** @description Rate limit exceeded */
+      /** @description Thumbnail rate limit exceeded */
       429: {
         headers: {
           [name: string]: unknown;
         };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
+        content?: never;
       };
       /** @description Internal server error */
       500: {
@@ -8427,7 +9809,10 @@ export interface operations {
   };
   get_published_layout_public_projects__project_id__documents__document_id__layout_get: {
     parameters: {
-      query?: never;
+      query?: {
+        limit?: number;
+        cursor?: string | null;
+      };
       header?: never;
       path: {
         project_id: string;

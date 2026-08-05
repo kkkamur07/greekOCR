@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import uuid
 from uuid import UUID
 
 from inference.contracts.segment import SegmentRunResponse
@@ -17,7 +16,7 @@ from backend.document.application.transcribe_merge_service import (
     TranscribeMergeService,
 )
 from backend.jobs.infrastructure.job_repository import JobRepository
-from backend.jobs.infrastructure.orm_models import JobType
+from backend.jobs.infrastructure.orm_models import Job, JobType
 from backend.document.infrastructure.document_repository import DocumentRepository
 from backend.document.infrastructure.orm_models import DocumentPart, Line
 from backend.ml.infrastructure.ml_client import InferenceClient
@@ -46,8 +45,8 @@ class LocalInferenceService(DocumentServiceSharedMixin):
         registry_model_id: str,
         registry_tag: str,
         result: dict,
-    ) -> UUID:
-        job = await JobRepository(session).record_local_job(
+    ) -> Job:
+        return await JobRepository(session).record_local_job(
             user_id=user.id,
             document_id=document_id,
             document_part_id=part_id,
@@ -56,7 +55,6 @@ class LocalInferenceService(DocumentServiceSharedMixin):
             registry_tag=registry_tag,
             result=result,
         )
-        return job.id
 
     async def persist_local_transcribe(
         self,
@@ -101,7 +99,7 @@ class LocalInferenceService(DocumentServiceSharedMixin):
                 return result
 
         result = await asyncio.to_thread(_persist)
-        job_id = await self._record_local_job(
+        job = await self._record_local_job(
             session,
             user=user,
             document_id=document_id,
@@ -111,7 +109,7 @@ class LocalInferenceService(DocumentServiceSharedMixin):
             registry_tag=registry_tag,
             result=result,
         )
-        result["job_id"] = str(job_id)
+        result["job_id"] = str(job.id)
         return result
 
     async def persist_local_segment(
@@ -129,8 +127,24 @@ class LocalInferenceService(DocumentServiceSharedMixin):
         project = await self._require_member(session, project_id, user.id)
         document = await self._load_document_in_project(session, project, document_id)
         await self._document_part_or_404(session, document, part_id)
-        merge_job_id = uuid.uuid4()
         canonical = InferenceClient.to_canonical_segment(output)
+
+        # The job row has to exist before the merge, because its primary key is
+        # the only durable identity this run has: it is what the caller gets back
+        # and what the jobs list shows, so it must also be what every merged line
+        # records in ``source_metadata.job_id``. Minting a separate uuid for the
+        # merge - as this used to - stamped the lines with an id no API ever
+        # surfaced, which made local-run provenance impossible to query.
+        job = await self._record_local_job(
+            session,
+            user=user,
+            document_id=document_id,
+            part_id=part_id,
+            job_type=JobType.segment,
+            registry_model_id=registry_model_id,
+            registry_tag=registry_tag,
+            result={"registry_model_id": registry_model_id, "registry_tag": registry_tag},
+        )
 
         def _persist() -> dict:
             with sync_system_session() as sync_session:
@@ -138,7 +152,7 @@ class LocalInferenceService(DocumentServiceSharedMixin):
                     sync_session,
                     part_id=part_id,
                     canonical_segment=canonical,
-                    job_id=merge_job_id,
+                    job_id=job.id,
                     commit=True,
                 )
                 return {
@@ -151,16 +165,17 @@ class LocalInferenceService(DocumentServiceSharedMixin):
                     "preserved_manual_lines": summary.preserved_manual_lines,
                 }
 
-        result = await asyncio.to_thread(_persist)
-        job_id = await self._record_local_job(
-            session,
-            user=user,
-            document_id=document_id,
-            part_id=part_id,
-            job_type=JobType.segment,
-            registry_model_id=registry_model_id,
-            registry_tag=registry_tag,
-            result=result,
-        )
-        result["job_id"] = str(job_id)
+        try:
+            result = await asyncio.to_thread(_persist)
+        except Exception:
+            # Nothing was merged, so a "done" job row claiming otherwise would be
+            # a lie in the project's job history. Drop the placeholder and let the
+            # failure surface exactly as it did when the row was written last.
+            await session.delete(job)
+            await session.commit()
+            raise
+
+        job.result = result
+        await session.commit()
+        result["job_id"] = str(job.id)
         return result

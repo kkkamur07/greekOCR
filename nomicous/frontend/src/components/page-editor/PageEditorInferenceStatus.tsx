@@ -1,7 +1,9 @@
+import type { InferenceRouting } from "../../inference/preference";
+
 type PageEditorInferenceStatusProps = {
   probing: boolean;
   helperAvailable: boolean;
-  preferCloud: boolean;
+  routing: InferenceRouting;
 };
 
 type StatusVariant = "checking" | "connected" | "cloud" | "unavailable";
@@ -9,10 +11,10 @@ type StatusVariant = "checking" | "connected" | "cloud" | "unavailable";
 function resolveVariant({
   probing,
   helperAvailable,
-  preferCloud,
+  routing,
 }: PageEditorInferenceStatusProps): StatusVariant {
+  if (routing === "cloud-only") return "cloud";
   if (probing) return "checking";
-  if (preferCloud) return "cloud";
   if (helperAvailable) return "connected";
   return "unavailable";
 }

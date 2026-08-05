@@ -226,7 +226,12 @@ def crop_polygon(image: np.ndarray, polygon: list[list[int]], padding: int, keep
     if keep_color:
         return masked, [x_min, y_min, x_max, y_max]
 
-    gray = cv2.cvtColor(masked, cv2.COLOR_BGR2GRAY)
+    # These crops become training line images, so convert them the way the serving
+    # preprocessing does (PIL convert("L")) rather than with cvtColor. The luminance
+    # coefficients agree, but the rounding does not, and one convention across the
+    # pipeline is worth more than saving a round trip through PIL.
+    rgb = cv2.cvtColor(masked, cv2.COLOR_BGR2RGB)
+    gray = np.asarray(Image.fromarray(rgb, mode="RGB").convert("L"), dtype=np.uint8)
     return gray, [x_min, y_min, x_max, y_max]
 
 

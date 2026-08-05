@@ -2,6 +2,7 @@
 
 from backend.core.settings.app import AppSettings, get_app_settings
 from backend.core.settings.auth import AuthSettings, get_auth_settings
+from backend.core.settings.device import DeviceSettings, get_device_settings
 from backend.core.settings.infrastructure import InfrastructureSettings, get_infrastructure_settings
 from backend.core.settings.job import JobSettings, get_job_settings
 from backend.core.settings.ml import MLSettings, get_inference_settings, get_ml_settings
@@ -10,12 +11,14 @@ from backend.core.settings.storage import StorageSettings, get_storage_settings
 __all__ = [
     "AppSettings",
     "AuthSettings",
+    "DeviceSettings",
     "InfrastructureSettings",
     "JobSettings",
     "MLSettings",
     "StorageSettings",
     "get_app_settings",
     "get_auth_settings",
+    "get_device_settings",
     "get_infrastructure_settings",
     "get_job_settings",
     "get_inference_settings",

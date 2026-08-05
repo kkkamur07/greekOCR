@@ -71,3 +71,9 @@ lerna-debug.log*
 data/
 .vercel
 .lgraph/
+
+# Hugging Face resolver cache. src/hf/resolve/cache.py shutil.rmtree()s the model
+# directories under here whenever a cached artifact fails verification, so a
+# tracked file in this tree is deleted by the application at runtime. Weights are
+# resolved from the Hub on demand and must never be committed.
+/src/hf/cache/

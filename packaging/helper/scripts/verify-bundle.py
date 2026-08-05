@@ -125,9 +125,7 @@ def _smoke_test(executable: Path, bundle_root: Path) -> None:
         home = Path(temporary)
         env = os.environ.copy()
         for name in (
-            "HELPER_AUTH_SECRET",
             "HELPER_REGISTRY_URL",
-            "HELPER_SECURE_MODE",
             "INFERENCE_REGISTRY_PATH",
         ):
             env.pop(name, None)
@@ -163,9 +161,11 @@ def _smoke_test(executable: Path, bundle_root: Path) -> None:
                     health = _request_json(f"{base_url}/health")
                     if not isinstance(health, dict) or health.get("status") != "ok":
                         raise RuntimeError(f"unexpected health response: {health!r}")
-                    catalog = _request_json(f"{base_url}/inference/v1/catalog")
-                    if not isinstance(catalog, dict) or not catalog.get("models"):
-                        raise RuntimeError(f"unexpected catalog response: {catalog!r}")
+                    info = _request_json(f"{base_url}/inference/v1/info")
+                    if not isinstance(info, dict) or not info.get("models"):
+                        raise RuntimeError(f"unexpected info response: {info!r}")
+                    if info.get("service") != "nomicous-inference-helper":
+                        raise RuntimeError(f"info document does not identify the helper: {info!r}")
                     return
                 except Exception as request_error:
                     error = request_error

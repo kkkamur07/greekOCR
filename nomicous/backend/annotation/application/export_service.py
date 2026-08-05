@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 from dataclasses import dataclass
 from io import BytesIO
@@ -76,54 +77,75 @@ class AnnotationExportService:
 
             raise NotFoundError("Part not found")
 
-        source_image = self._load_page_image(part.image_key)
-        try:
-            page_stem = self._page_stem(part.image_key)
-            export_steps = steps if steps is not None else ["rectify"]
-            text_lines = await self._documents.list_page_transcription_lines(session, part.id)
+        page_stem = self._page_stem(part.image_key)
+        export_steps = steps if steps is not None else ["rectify"]
+        text_lines = await self._documents.list_page_transcription_lines(session, part.id)
 
-            artifacts: list[ExportArtifact] = []
-            unpaired_segments: list[int] = []
-            paired_text_orders: set[int] = set()
-            for line in await self._documents.list_part_lines(session, part.id):
-                segment_number = line.order + 1
-                text = self._ground_truth_text(line)
-                if text is None:
-                    unpaired_segments.append(segment_number)
-                    continue
-                text_order = self._paired_text_order(text_lines, line.id)
-                if text_order is not None:
-                    paired_text_orders.add(text_order)
-                image_base64 = self._processed_image_base64(
-                    source_image,
-                    line,
-                    export_steps,
-                )
-                artifacts.append(
-                    ExportArtifact(
-                        line_id=line.id,
-                        segment_number=segment_number,
-                        image_filename=f"{page_stem}_{segment_number}.jpg",
-                        transcription_filename=f"{page_stem}_{segment_number}.txt",
-                        transcription_text=text,
-                        image_base64=image_base64,
-                    )
-                )
+        # Every attribute the renderer needs is read here, on the event loop: the ORM rows
+        # belong to an async session that cannot be touched from a worker thread.
+        pending: list[tuple[UUID, int, str, dict]] = []
+        unpaired_segments: list[int] = []
+        paired_text_orders: set[int] = set()
+        for line in await self._documents.list_part_lines(session, part.id):
+            segment_number = line.order + 1
+            text = self._ground_truth_text(line)
+            if text is None:
+                unpaired_segments.append(segment_number)
+                continue
+            text_order = self._paired_text_order(text_lines, line.id)
+            if text_order is not None:
+                paired_text_orders.add(text_order)
+            segment = {"points": line.points, "kind": line.kind.value}
+            pending.append((line.id, segment_number, text, segment))
 
-            unused_text_lines = [
-                text_line.order
-                for text_line in text_lines
-                if text_line.order not in paired_text_orders
-            ]
-            return ExportResult(
-                exported_count=len(artifacts),
-                artifacts=artifacts,
-                warnings=ExportWarnings(
-                    unpaired_segments=unpaired_segments,
-                    unused_text_lines=unused_text_lines,
-                ),
-                steps=export_steps,
+        # Decode, rectify, JPEG-encode and base64 the whole page in one hop off the loop:
+        # a manuscript-sized page costs hundreds of milliseconds per segment.
+        images = await asyncio.to_thread(
+            self._render_segment_images,
+            part.image_key,
+            [segment for *_, segment in pending],
+            export_steps,
+        )
+
+        artifacts = [
+            ExportArtifact(
+                line_id=line_id,
+                segment_number=segment_number,
+                image_filename=f"{page_stem}_{segment_number}.jpg",
+                transcription_filename=f"{page_stem}_{segment_number}.txt",
+                transcription_text=text,
+                image_base64=image_base64,
             )
+            for (line_id, segment_number, text, _), image_base64 in zip(
+                pending, images, strict=True
+            )
+        ]
+
+        unused_text_lines = [
+            text_line.order for text_line in text_lines if text_line.order not in paired_text_orders
+        ]
+        return ExportResult(
+            exported_count=len(artifacts),
+            artifacts=artifacts,
+            warnings=ExportWarnings(
+                unpaired_segments=unpaired_segments,
+                unused_text_lines=unused_text_lines,
+            ),
+            steps=export_steps,
+        )
+
+    def _render_segment_images(
+        self,
+        image_key: str,
+        segments: list[dict],
+        steps: list[str],
+    ) -> list[str]:
+        """Blocking: reads the blob, decodes it once, and renders every segment from it."""
+        source_image = self._load_page_image(image_key)
+        try:
+            return [
+                self._processed_image_base64(source_image, segment, steps) for segment in segments
+            ]
         finally:
             source_image.close()
 
@@ -157,11 +179,10 @@ class AnnotationExportService:
     def _processed_image_base64(
         self,
         source_image: Image.Image,
-        line: Line,
+        segment: dict,
         steps: list[str],
     ) -> str:
         image = source_image
-        segment = {"points": line.points, "kind": line.kind.value}
         for step in steps:
             image = apply_step(image, segment, step)
         buf = BytesIO()

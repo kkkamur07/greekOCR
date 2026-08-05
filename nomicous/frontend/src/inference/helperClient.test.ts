@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { HELPER_BASE_URLS } from "./constants";
+import { HELPER_BASE_URL, HELPER_INFO_PATH } from "./constants";
 import { fetchHelper } from "./helperClient";
 
 describe("fetchHelper", () => {
@@ -8,26 +8,32 @@ describe("fetchHelper", () => {
     vi.unstubAllGlobals();
   });
 
-  it("tries localhost after connection failures on earlier loopback URLs", async () => {
+  it("calls the single loopback origin and marks the request as loopback", async () => {
     const fetchMock = vi
       .fn()
-      .mockRejectedValueOnce(new TypeError("connection refused"))
-      .mockResolvedValueOnce(new Response("ok", { status: 200 }));
+      .mockResolvedValue(new Response("ok", { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
 
-    const response = await fetchHelper("/health");
+    const response = await fetchHelper(HELPER_INFO_PATH);
 
     expect(response.status).toBe(200);
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      1,
-      `${HELPER_BASE_URLS[0]}/health`,
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${HELPER_BASE_URL}${HELPER_INFO_PATH}`,
       { targetAddressSpace: "loopback" },
     );
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      2,
-      `${HELPER_BASE_URLS[1]}/health`,
-      { targetAddressSpace: "loopback" },
+  });
+
+  it("does not walk alternative URLs when the helper is unreachable", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValue(new TypeError("connection refused"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(fetchHelper(HELPER_INFO_PATH)).rejects.toThrow(
+      "connection refused",
     );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("does not retry an aborted request", async () => {
@@ -39,7 +45,7 @@ describe("fetchHelper", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(
-      fetchHelper("/health", { signal: controller.signal }),
+      fetchHelper(HELPER_INFO_PATH, { signal: controller.signal }),
     ).rejects.toThrow("aborted");
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });

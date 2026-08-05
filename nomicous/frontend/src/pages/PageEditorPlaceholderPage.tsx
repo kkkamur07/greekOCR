@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { type LayoutPoint, type LinePoint, api } from "../api/client";
 import {
   DEFAULT_SEGMENT_REGISTRY_MODEL_ID,
-  fetchLocalCacheStatus,
   isModelRemoteOnly,
   registrySelectionFromArtifactRef,
   useInferenceHost,
+  useLocalInferenceRuns,
+  type InferenceRouting,
 } from "../inference";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import { PageEditorCanvas } from "../components/page-editor/PageEditorCanvas";
@@ -23,10 +24,6 @@ import {
 import { PageEditorInferenceBanner } from "../components/page-editor/PageEditorInferenceBanner";
 import { PageEditorLocalInferenceBanner } from "../components/page-editor/PageEditorLocalInferenceBanner";
 import { PageEditorToolbar } from "../components/page-editor/PageEditorToolbar";
-import {
-  getPageEditorProcessingLabel,
-  type PageEditorProcessingKind,
-} from "../components/page-editor/PageEditorProcessingBanner";
 import { PageEditorTranscriptionPdfWrap } from "../components/page-editor/PageEditorTranscriptionPdfWrap";
 import {
   rectanglePoints,
@@ -36,6 +33,7 @@ import {
   useLayoutMutations,
   usePageEditorData,
   usePageEditorJobQueue,
+  usePageEditorRunState,
   usePairingState,
 } from "../components/page-editor/hooks";
 import {
@@ -112,49 +110,24 @@ export function PageEditorPlaceholderPage() {
   const [segmentRegistryModelId, setSegmentRegistryModelId] = useState<
     string | null
   >(null);
-  const [localInferenceModelId, setLocalInferenceModelId] = useState<
-    string | null
-  >(null);
-  const localInferenceAbortRef = useRef<AbortController | null>(null);
-  const switchToCloudRef = useRef(false);
-
-  const localInference = useMemo(
-    () => ({
-      onStart: async (registryModelId: string, registryTag = "stable") => {
-        localInferenceAbortRef.current?.abort();
-        localInferenceAbortRef.current = new AbortController();
-        // Only surface the download banner the first time a model is used on this
-        // machine. Once the weights are cached locally, the run proceeds silently.
-        const cached = await fetchLocalCacheStatus(
-          registryModelId,
-          registryTag,
-        );
-        setLocalInferenceModelId(cached === false ? registryModelId : null);
-      },
-      onEnd: () => {
-        setLocalInferenceModelId(null);
-        localInferenceAbortRef.current = null;
-      },
-      getSignal: () => localInferenceAbortRef.current?.signal,
-      shouldFallbackToCloud: () => switchToCloudRef.current,
-      clearFallbackToCloud: () => {
-        switchToCloudRef.current = false;
-      },
-    }),
-    [],
-  );
-
-  /** Abort the in-flight local run and fall through to cloud for this job only. */
-  function abortLocalRunToCloud() {
-    switchToCloudRef.current = true;
-    localInferenceAbortRef.current?.abort();
-    setLocalInferenceModelId(null);
-  }
+  const {
+    localInference,
+    abortRunToCloud,
+    downloadingModelId: localInferenceModelId,
+  } = useLocalInferenceRuns(inferenceHost.isModelCached);
 
   /** Persist cloud as the default host (install banner / settings intent). */
   function preferCloudInferencePermanently() {
-    abortLocalRunToCloud();
-    inferenceHost.setInferencePreference("cloud");
+    abortRunToCloud();
+    inferenceHost.setInferenceRouting("cloud-only");
+  }
+
+  function changeInferenceRouting(next: InferenceRouting) {
+    if (next === "cloud-only") {
+      // Leaving the local host mid-run must not strand the in-flight job.
+      abortRunToCloud();
+    }
+    inferenceHost.setInferenceRouting(next);
   }
 
   useEffect(() => {
@@ -198,7 +171,7 @@ export function PageEditorPlaceholderPage() {
       const { registryModelId } = registrySelectionFromArtifactRef(
         model.artifact_ref,
       );
-      if (isModelRemoteOnly(inferenceHost.catalog, registryModelId)) {
+      if (isModelRemoteOnly(inferenceHost.models, registryModelId)) {
         return "remote" as const;
       }
       if (inferenceHost.shouldUseLocalPath(registryModelId)) {
@@ -228,6 +201,7 @@ export function PageEditorPlaceholderPage() {
     transcribeModels,
     partImageUrl,
     shouldUseLocalPath,
+    cloudInferenceEnabled: inferenceHost.cloudEnabled,
     localInference,
     trackJobAndWait: jobQueue.trackAndWait,
     trackLocalTask: jobQueue.trackLocalTask,
@@ -251,6 +225,7 @@ export function PageEditorPlaceholderPage() {
     onDrawComplete: () => setDrawMode("none"),
     partImageUrl,
     shouldUseLocalPath,
+    cloudInferenceEnabled: inferenceHost.cloudEnabled,
     segmentRegistryModelId,
     localInference,
     trackJobAndWait: jobQueue.trackAndWait,
@@ -325,16 +300,10 @@ export function PageEditorPlaceholderPage() {
     void updateSegmentPoints(selectedSegmentId, nextPoints);
   }
 
-  const processingKind: PageEditorProcessingKind = segmenting
-    ? "segmentation"
-    : ocrRunning
-      ? ocrScope === "page"
-        ? "transcription-page"
-        : "transcription-segment"
-      : null;
+  const runState = usePageEditorRunState({ segmenting, ocrRunning, ocrScope });
 
-  const canvasHint = processingKind
-    ? `${getPageEditorProcessingLabel(processingKind)}…`
+  const canvasHint = runState.processingLabel
+    ? `${runState.processingLabel}…`
     : editorMode === "layout" && drawMode === "polygon"
       ? draftPolygon.length === 0
         ? "Polygon: click to place the first corner"
@@ -445,17 +414,19 @@ export function PageEditorPlaceholderPage() {
       }
       showStatusAlerts={hasPageEditorStatusAlerts(statusAlertProps)}
       statusAlerts={<PageEditorStatusAlerts {...statusAlertProps} />}
-      processingBanner={null}
       inferenceBanner={
         <>
           <PageEditorLocalInferenceBanner
             registryModelId={localInferenceModelId}
-            onUseCloudInstead={abortLocalRunToCloud}
+            cloudInferenceEnabled={inferenceHost.cloudEnabled}
+            onUseCloudInstead={abortRunToCloud}
           />
           <PageEditorInferenceBanner
             helperAvailable={inferenceHost.helperAvailable}
             probing={inferenceHost.probing}
-            preferCloud={inferenceHost.preferCloud}
+            routing={inferenceHost.routing}
+            onRoutingChange={changeInferenceRouting}
+            onRetry={() => void inferenceHost.refresh()}
             onUseCloudInstead={preferCloudInferencePermanently}
           />
         </>
@@ -512,11 +483,10 @@ export function PageEditorPlaceholderPage() {
             onSettingsOpenChange={setSettingsOpen}
             canvasSettings={canvasSettings}
             onCanvasSettingsChange={handleCanvasSettingsChange}
-            inferencePreference={inferenceHost.preference}
-            onInferencePreferenceChange={inferenceHost.setInferencePreference}
+            inferenceRouting={inferenceHost.routing}
+            onInferenceRoutingChange={changeInferenceRouting}
             helperAvailable={inferenceHost.helperAvailable}
             helperProbing={inferenceHost.probing}
-            preferCloud={inferenceHost.preferCloud}
             selectedModelHostEligibility={selectedModelHostEligibility}
           />
         ) : null
@@ -575,7 +545,7 @@ export function PageEditorPlaceholderPage() {
                 onSegmentPointsChange={updateSegmentPoints}
               />
               <p
-                className={`pe-canvas-hint${processingKind ? " pe-canvas-hint--processing" : ""}`}
+                className={`pe-canvas-hint${runState.processingKind ? " pe-canvas-hint--processing" : ""}`}
                 id="canvas-hint"
                 role="status"
               >
@@ -657,7 +627,7 @@ export function PageEditorPlaceholderPage() {
             onSelectedTranscribeModelIdChange={setSelectedTranscribeModelId}
             ocrRunning={ocrRunning}
             ocrScope={ocrScope}
-            backgroundJobsActive={jobQueue.activeCount > 0}
+            backgroundJobsActive={runState.backgroundJobsActive}
           />
         </div>
       )}

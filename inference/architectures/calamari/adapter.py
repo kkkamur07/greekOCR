@@ -10,6 +10,7 @@ from src.hf.resolve.artifacts import verify_artifact_sha256
 
 from inference.architectures.calamari.onnx import (
     CalamariUnavailableError,
+    TranscribeLineFailure,
     _decode_greedy,
     _response_from_decoded,
     run_calamari_onnx_transcribe_many,
@@ -50,12 +51,29 @@ def _load_checkpoint(
     return model, list(metadata.charset), metadata.line_height
 
 
+def _reject_fully_failed_batch(
+    results: list[TranscribeRunResponse | TranscribeLineFailure],
+) -> list[TranscribeRunResponse | TranscribeLineFailure]:
+    """Let partial results through, but never an all-failed batch.
+
+    Isolating per-line failures is only safe while at least one line survived.
+    If none did, the cause is almost certainly the artifact or the runtime, and
+    re-raising the first line's original exception keeps its HTTP mapping (503
+    for an unusable runtime, 422 for an unusable request) instead of handing the
+    caller a page of identical per-line errors that looks like a successful run.
+    """
+    failures = [result for result in results if isinstance(result, TranscribeLineFailure)]
+    if failures and len(failures) == len(results):
+        raise failures[0].error
+    return results
+
+
 def run_calamari_transcribe_many(
     line_images: list[bytes],
     *,
     checkpoint_path: Path,
     artifact_sha256: str | None = None,
-) -> list[TranscribeRunResponse]:
+) -> list[TranscribeRunResponse | TranscribeLineFailure]:
     if not checkpoint_path.exists():
         raise FileNotFoundError(f"Calamari checkpoint not found: {checkpoint_path}")
     if checkpoint_path.suffix not in {".pt", ".onnx"}:
@@ -68,14 +86,18 @@ def run_calamari_transcribe_many(
         raise ValueError("at least one line image is required")
 
     if checkpoint_path.suffix == ".onnx":
-        return run_calamari_onnx_transcribe_many(
+        return _reject_fully_failed_batch(
+            run_calamari_onnx_transcribe_many(
+                line_images,
+                checkpoint_path=checkpoint_path,
+            )
+        )
+
+    return _reject_fully_failed_batch(
+        _run_legacy_pytorch_transcribe_many(
             line_images,
             checkpoint_path=checkpoint_path,
         )
-
-    return _run_legacy_pytorch_transcribe_many(
-        line_images,
-        checkpoint_path=checkpoint_path,
     )
 
 
@@ -83,7 +105,7 @@ def _run_legacy_pytorch_transcribe_many(
     line_images: list[bytes],
     *,
     checkpoint_path: Path,
-) -> list[TranscribeRunResponse]:
+) -> list[TranscribeRunResponse | TranscribeLineFailure]:
     import torch
 
     model, charset, line_height = _load_checkpoint(
@@ -94,19 +116,24 @@ def _run_legacy_pytorch_transcribe_many(
             f"Calamari checkpoint has no codec metadata: {checkpoint_path}"
         )
 
-    responses: list[TranscribeRunResponse] = []
+    responses: list[TranscribeRunResponse | TranscribeLineFailure] = []
     with torch.inference_mode():
-        for image_bytes in line_images:
-            image = preprocess_line_image_bytes_to_calamari_tensor(
-                image_bytes,
-                line_height=line_height,
-            )
-            image_tensor = torch.from_numpy(image.astype(np.float32))
-            image_lengths = torch.tensor([image.shape[1]], dtype=torch.long)
-            outputs = model(image_tensor, image_lengths=image_lengths)
-            softmax = outputs["softmax"][0].detach().cpu().numpy()
-            text, confidences = _decode_greedy(softmax, charset=charset)
-            responses.append(_response_from_decoded(text, confidences))
+        for index, image_bytes in enumerate(line_images):
+            # Same per-line isolation as the ONNX path: the caller decides what a
+            # failed line means, and one of them must not end the batch.
+            try:
+                image = preprocess_line_image_bytes_to_calamari_tensor(
+                    image_bytes,
+                    line_height=line_height,
+                )
+                image_tensor = torch.from_numpy(image.astype(np.float32))
+                image_lengths = torch.tensor([image.shape[1]], dtype=torch.long)
+                outputs = model(image_tensor, image_lengths=image_lengths)
+                softmax = outputs["softmax"][0].detach().cpu().numpy()
+                text, confidences = _decode_greedy(softmax, charset=charset)
+                responses.append(_response_from_decoded(text, confidences))
+            except Exception as error:  # noqa: BLE001 - per-line isolation is the point
+                responses.append(TranscribeLineFailure(index=index, error=error))
     return responses
 
 
@@ -116,15 +143,20 @@ def run_calamari_transcribe(
     checkpoint_path: Path,
     artifact_sha256: str | None = None,
 ) -> TranscribeRunResponse:
-    return run_calamari_transcribe_many(
+    result = run_calamari_transcribe_many(
         [image_bytes],
         checkpoint_path=checkpoint_path,
         artifact_sha256=artifact_sha256,
     )[0]
+    if isinstance(result, TranscribeLineFailure):
+        # Unreachable: a one-line batch that failed already re-raised above.
+        raise result.error
+    return result
 
 
 __all__ = [
     "CalamariUnavailableError",
+    "TranscribeLineFailure",
     "run_calamari_transcribe",
     "run_calamari_transcribe_many",
 ]

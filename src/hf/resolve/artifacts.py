@@ -14,13 +14,55 @@ def sha256_file(path: Path) -> str:
   return digest.hexdigest()
 
 
+class ArtifactIntegrityError(ValueError):
+  """A weights artifact does not match its pinned SHA-256 digest.
+
+  Subclasses ``ValueError`` for backwards compatibility, but HTTP surfaces
+  must map it to a service error (503), never a client error (422): the
+  request was fine, the artifact on disk is not.
+  """
+
+
+# Digest of artifacts already hashed in this process, keyed by identity.
+# Bounded so a long-lived process cannot grow it without limit.
+_VERIFIED_DIGESTS: dict[tuple[str, int, int], str] = {}
+_VERIFIED_DIGESTS_MAX = 64
+
+
+def _artifact_identity(path: Path) -> tuple[str, int, int]:
+  """Identify file *content* well enough to reuse a digest.
+
+  Any write to the artifact changes its size or its mtime, so a rewritten,
+  truncated, or swapped file misses the cache and gets hashed again.
+  """
+  stat = path.stat()
+  return (str(path), stat.st_size, stat.st_mtime_ns)
+
+
 def verify_artifact_sha256(path: Path, expected_sha256: str) -> None:
+  """Raise ``ArtifactIntegrityError`` unless ``path`` matches its pinned digest.
+
+  The same artifact is verified from several call sites per run (weights
+  resolution, the helper capability document, and the architecture adapter).
+  Hashing is memoized per ``(path, size, mtime_ns)`` so those cost one read of
+  the file rather than one each; a file that changed on disk is always re-read.
+  """
+  # stat() first: a missing artifact must still raise FileNotFoundError here,
+  # exactly as the unmemoized read did.
+  identity = _artifact_identity(path)
+  if _VERIFIED_DIGESTS.get(identity) == expected_sha256:
+    return
+
   actual_sha256 = sha256_file(path)
   if actual_sha256 != expected_sha256:
-    raise ValueError(
+    _VERIFIED_DIGESTS.pop(identity, None)
+    raise ArtifactIntegrityError(
       f"artifact SHA-256 mismatch for {path}: "
       f"expected {expected_sha256}, got {actual_sha256}"
     )
+  if len(_VERIFIED_DIGESTS) >= _VERIFIED_DIGESTS_MAX:
+    _VERIFIED_DIGESTS.clear()
+  _VERIFIED_DIGESTS[identity] = actual_sha256
 
 
 def find_hub_artifact(cache_dir: Path, *, architecture: str | None) -> Path:

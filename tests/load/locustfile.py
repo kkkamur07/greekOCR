@@ -235,7 +235,11 @@ class PlatformApiUser(HttpUser):
         if not self.part_id:
             return
         self.client.get(
-            f"/public/media/parts/{self.part_id}?w=1200",
+            # Must be one of PublicThumbnailWidth; the public route allowlists
+            # widths so an unauthenticated caller cannot mint unbounded cache
+            # misses. 800 is the largest allowed, so this stays the heaviest
+            # thumbnail the load profile can ask for.
+            f"/public/media/parts/{self.part_id}?w=800",
             name="GET /public/media/parts/{part_id}",
         )
 

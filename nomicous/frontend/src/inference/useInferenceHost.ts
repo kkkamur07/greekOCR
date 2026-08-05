@@ -1,25 +1,29 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  fetchHelperCatalog,
+  fetchHelperInfo,
+  modelCacheState,
+  sameHelperModels,
   shouldRunOnLocalHelper,
-  type HelperCatalogModel,
-} from "./catalog";
-import { HELPER_PROBE_INTERVAL_MS } from "./constants";
+  NO_HELPER_MODELS,
+  type HelperModelInfo,
+} from "./helperInfo";
 import {
-  preferCloudInference,
-  saveInferencePreference,
-  type InferencePreference,
+  cloudInferenceEnabled,
+  loadInferenceRouting,
+  saveInferenceRouting,
+  type InferenceRouting,
 } from "./preference";
-import { probeHelperHealth } from "./probe";
 
 export function useInferenceHost() {
   const [helperAvailable, setHelperAvailable] = useState(false);
-  const [catalog, setCatalog] = useState<HelperCatalogModel[]>([]);
-  const [preference, setPreference] = useState<InferencePreference>(() =>
-    preferCloudInference() ? "cloud" : "local",
-  );
+  const [helperVersion, setHelperVersion] = useState<string | null>(null);
+  const [models, setModels] = useState<HelperModelInfo[]>(NO_HELPER_MODELS);
+  const [routing, setRouting] =
+    useState<InferenceRouting>(loadInferenceRouting);
   const [probing, setProbing] = useState(true);
   const probingRef = useRef(false);
+  const routingRef = useRef(routing);
+  routingRef.current = routing;
 
   const refresh = useCallback(async (options?: { quiet?: boolean }) => {
     if (probingRef.current) return;
@@ -28,16 +32,17 @@ export function useInferenceHost() {
       setProbing(true);
     }
     try {
-      const healthy = await probeHelperHealth();
-      setHelperAvailable(healthy);
-      if (healthy) {
-        setCatalog(await fetchHelperCatalog());
-      } else {
-        setCatalog([]);
-      }
-    } catch {
-      setHelperAvailable(false);
-      setCatalog([]);
+      // "Cloud only" must not touch the loopback port at all.
+      const info =
+        routingRef.current === "cloud-only" ? null : await fetchHelperInfo();
+      setHelperAvailable(info !== null);
+      setHelperVersion(info?.version ?? null);
+      const nextModels = info?.models ?? NO_HELPER_MODELS;
+      // Replace state only when the content actually changed: a fresh array on
+      // every probe would re-render the whole editor for nothing.
+      setModels((current) =>
+        sameHelperModels(current, nextModels) ? current : nextModels,
+      );
     } finally {
       probingRef.current = false;
       if (!options?.quiet) {
@@ -48,9 +53,12 @@ export function useInferenceHost() {
 
   useEffect(() => {
     void refresh();
-  }, [refresh]);
+  }, [refresh, routing]);
 
   useEffect(() => {
+    // Re-check when the user returns to the tab - they may have just started the
+    // helper. Everything in between is covered by the explicit Retry control,
+    // not by a background timer.
     function onFocus() {
       void refresh({ quiet: true });
     }
@@ -61,36 +69,39 @@ export function useInferenceHost() {
     }
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onVisibility);
-    const interval = window.setInterval(() => {
-      void refresh({ quiet: true });
-    }, HELPER_PROBE_INTERVAL_MS);
     return () => {
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisibility);
-      window.clearInterval(interval);
     };
   }, [refresh]);
 
-  function setInferencePreference(next: InferencePreference) {
-    setPreference(next);
-    saveInferencePreference(next);
-  }
+  const setInferenceRouting = useCallback((next: InferenceRouting) => {
+    setRouting(next);
+    saveInferenceRouting(next);
+  }, []);
 
   function shouldUseLocalPath(registryModelId: string): boolean {
-    return shouldRunOnLocalHelper(catalog, registryModelId, {
+    return shouldRunOnLocalHelper(models, registryModelId, {
       helperAvailable,
-      preferCloud: preference === "cloud",
+      routing,
     });
+  }
+
+  /** `true` / `false` when the helper listed the model, `null` when unknown. */
+  function isModelCached(registryModelId: string): boolean | null {
+    return modelCacheState(models, registryModelId);
   }
 
   return {
     helperAvailable,
-    catalog,
-    preference,
-    preferCloud: preference === "cloud",
+    helperVersion,
+    models,
+    routing,
+    cloudEnabled: cloudInferenceEnabled(routing),
     probing,
     refresh,
-    setInferencePreference,
+    setInferenceRouting,
     shouldUseLocalPath,
+    isModelCached,
   };
 }

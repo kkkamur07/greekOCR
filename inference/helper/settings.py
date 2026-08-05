@@ -13,6 +13,8 @@ from pydantic_settings import SettingsConfigDict
 
 from inference.admission import AdmissionSettings
 
+HELPER_VERSION = "0.1.6"
+
 INFERENCE_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_HF_CACHE_ROOT = Path.home() / ".nomicous" / "hf" / "cache"
 DEFAULT_NOMICOUS_HOME = Path.home() / ".nomicous"
@@ -31,22 +33,11 @@ def _is_loopback_host(host: str) -> bool:
         return False
 
 
-def _is_non_placeholder_secret(secret: str | None) -> bool:
-    if secret is None or len(secret.strip()) < 32:
-        return False
-    normalized = secret.strip().lower()
-    return not any(
-        marker in normalized for marker in ("change", "example", "placeholder", "replace")
-    )
-
-
 class HelperSettings(AdmissionSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     helper_host: str = Field(default="127.0.0.1", alias="HELPER_HOST")
     helper_port: int = Field(default=8001, alias="HELPER_PORT")
-    helper_secure_mode: bool = Field(default=False, alias="HELPER_SECURE_MODE")
-    helper_auth_secret: str | None = Field(default=None, alias="HELPER_AUTH_SECRET")
     bundled_registry_path: Path = Field(
         default=DEFAULT_BUNDLED_REGISTRY_PATH,
         alias="HELPER_BUNDLED_REGISTRY_PATH",
@@ -68,22 +59,15 @@ class HelperSettings(AdmissionSettings):
 
     @model_validator(mode="after")
     def validate_exposure(self) -> HelperSettings:
-        secret_is_safe = _is_non_placeholder_secret(self.helper_auth_secret)
-        if self.helper_secure_mode and not secret_is_safe:
-            raise ValueError("HELPER_SECURE_MODE requires a non-placeholder HELPER_AUTH_SECRET")
-        if not _is_loopback_host(self.helper_host) and not (
-            self.helper_secure_mode and secret_is_safe
-        ):
-            raise ValueError(
-                "HELPER_HOST must be loopback unless secure mode has a non-placeholder auth secret"
-            )
+        # The helper is unauthenticated by design: loopback is the only thing
+        # keeping it off the network, so a non-loopback bind is never allowed.
+        if not _is_loopback_host(self.helper_host):
+            raise ValueError("HELPER_HOST must be a loopback address")
         if self.helper_registry_url:
             # The synced registry defines weight sources and their digests, so
             # it must not be fetchable over plaintext off-host transport.
             parsed = urlparse(self.helper_registry_url)
-            is_loopback_http = parsed.scheme == "http" and _is_loopback_host(
-                parsed.hostname or ""
-            )
+            is_loopback_http = parsed.scheme == "http" and _is_loopback_host(parsed.hostname or "")
             if parsed.scheme != "https" and not is_loopback_http:
                 raise ValueError(
                     "HELPER_REGISTRY_URL must use https (plain http is allowed only for loopback)"

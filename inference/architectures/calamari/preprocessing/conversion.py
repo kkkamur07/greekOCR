@@ -4,25 +4,27 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import cv2 as cv
 import numpy as np
 from PIL import Image
 
 
 def load_line_image_grayscale(image_path: Path) -> np.ndarray:
-    """Load an image using Calamari's RGB-to-gray convention."""
-    with Image.open(image_path) as image:
-        data = to_uint8(np.asarray(image))
+    """Load a line image as grayscale, matching what the served model is fed.
 
-    if data.ndim == 2:
-        return data
-    if data.ndim == 3 and data.shape[-1] == 1:
-        return data[:, :, 0]
-    if data.ndim == 3 and data.shape[-1] == 3:
-        return cv.cvtColor(data, cv.COLOR_RGB2GRAY)
-    if data.ndim == 3 and data.shape[-1] == 4:
-        return cv.cvtColor(data, cv.COLOR_RGBA2GRAY)
-    raise ValueError(f"unsupported image shape for grayscale conversion: {data.shape}")
+    This must stay identical to the serving path in ``pipeline.py``, which does
+    ``image.convert("L")``. The previous implementation dispatched on channel
+    *count* from the raw PIL mode, which agrees with ``convert("L")`` only for
+    RGB/RGBA/L sources. For a palette PNG it handed the model palette indices as
+    if they were luminance (measured: 98.6% of pixels differ, up to 231 levels);
+    CMYK and I;16 were similarly wrong, and LA raised outright. Training on that
+    distribution while serving another is a skew no test was watching for.
+
+    ``convert("L")`` and OpenCV's ``COLOR_RGB2GRAY`` use the same ITU-R 601-2
+    coefficients and differ by at most 1 LSB on true RGB input, so this does not
+    disturb the RGB corpus - it fixes the modes that were never handled.
+    """
+    with Image.open(image_path) as image:
+        return np.asarray(image.convert("L"), dtype=np.uint8)
 
 
 def to_uint8(data: np.ndarray) -> np.ndarray:

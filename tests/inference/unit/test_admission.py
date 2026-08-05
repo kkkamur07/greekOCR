@@ -230,3 +230,72 @@ def test_worker_concurrency_configuration_is_bounded() -> None:
         InferenceSettings(INFERENCE_WORKER_CONCURRENCY=0)
     with pytest.raises(ValidationError, match="less than or equal to 4"):
         InferenceSettings(INFERENCE_WORKER_CONCURRENCY=5)
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        # A radius this large becomes a multi-thousand-pixel morphology kernel.
+        {"use_otsu_refinement": True, "otsu_sphere_radius": 4_096},
+        # Ratios that no mask comparison can ever satisfy.
+        {"min_iou": 1.5},
+        {"min_area_ratio": 12.0},
+        # Past the stored-geometry cap the extra vertices are unusable.
+        {"target_max_points": 100_000},
+        {"split_vertical_gap_px": 100_000.0},
+        # Non-positive values are refused at the same seam, matching the
+        # platform's SegmentPartRequest bounds.
+        {"otsu_sphere_radius": 0},
+        {"min_iou": -1},
+        {"target_max_points": 3},
+    ],
+)
+def test_rejects_out_of_range_segment_params(admission_client, params: dict) -> None:
+    client = admission_client()
+
+    response = client.post(
+        "/inference/v1/run",
+        json=_payload(image_bytes=_png_bytes(), params=params),
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": CLIENT_INPUT_ERROR}
+
+
+def test_accepts_segment_params_at_their_upper_bound(admission_client) -> None:
+    """The bound is inclusive, and an in-range request still reaches the runner."""
+    client = admission_client()
+
+    response = client.post(
+        "/inference/v1/run",
+        json=_payload(
+            image_bytes=_png_bytes(),
+            params={
+                "use_otsu_refinement": True,
+                "otsu_sphere_radius": 128,
+                "min_iou": 1.0,
+                "min_area_ratio": 2.0,
+                "target_max_points": 256,
+                "split_vertical_gap_px": 256,
+            },
+        ),
+    )
+
+    # 404: admission passed and the unknown registry model is what failed.
+    assert response.status_code == 404
+
+
+def test_out_of_range_segment_params_are_refused_on_the_job_path_too(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The queued path never sees InferenceRunRequest, so it needs the same seam."""
+    get_inference_settings.cache_clear()
+
+    with pytest.raises(ValidationError, match=CLIENT_INPUT_ERROR):
+        JobSubmitRequest(
+            task=InferenceTask.segment,
+            registry_model_id="blla-segment",
+            product_job_id=uuid4(),
+            image_bytes=_png_bytes(),
+            params={"otsu_sphere_radius": 10_000},
+        )

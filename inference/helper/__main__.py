@@ -10,31 +10,16 @@ from pathlib import Path
 from uvicorn import Config, Server
 
 from inference.helper.app import create_helper_app
-from inference.helper.settings import _is_loopback_host, get_helper_settings
-
-logger = logging.getLogger(__name__)
+from inference.helper.settings import get_helper_settings
 
 
-def bind_loopback_sockets(port: int) -> list[socket.socket]:
-    """Listen on both IPv4 and IPv6 loopback so 127.0.0.1 / localhost / [::1] work."""
-    sockets: list[socket.socket] = []
-    for family, address in (
-        (socket.AF_INET, "127.0.0.1"),
-        (socket.AF_INET6, "::1"),
-    ):
-        try:
-            sock = socket.socket(family, socket.SOCK_STREAM)
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            if family == socket.AF_INET6:
-                sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
-            sock.bind((address, port))
-            sock.listen(2048)
-            sockets.append(sock)
-        except OSError as exc:
-            logger.warning("Could not bind helper on [%s]:%s (%s)", address, port, exc)
-    if not sockets:
-        raise RuntimeError(f"Could not bind helper on any loopback interface port {port}")
-    return sockets
+def bind_loopback_socket(port: int) -> socket.socket:
+    """Listen on IPv4 loopback only. Clients reach the helper at 127.0.0.1."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind(("127.0.0.1", port))
+    sock.listen(2048)
+    return sock
 
 
 def main() -> None:
@@ -54,6 +39,8 @@ def main() -> None:
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
         force=True,
     )
+    # HelperSettings rejects any non-loopback HELPER_HOST, so this always binds
+    # to the local machine only.
     config = Config(
         create_helper_app(),
         host=settings.helper_host,
@@ -61,11 +48,7 @@ def main() -> None:
         log_level="info",
         log_config=None,
     )
-    server = Server(config)
-    if _is_loopback_host(settings.helper_host):
-        server.run(sockets=bind_loopback_sockets(settings.helper_port))
-    else:
-        server.run()
+    Server(config).run(sockets=[bind_loopback_socket(settings.helper_port)])
 
 
 if __name__ == "__main__":

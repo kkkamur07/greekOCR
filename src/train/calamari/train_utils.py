@@ -1,38 +1,43 @@
 from __future__ import annotations
 
-import csv
 import os
 import subprocess
 import sys
+from collections.abc import Sequence
+from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    # hydra/omegaconf only exist in the training environment (they pull in tfaip and
+    # TensorFlow). Keeping the import type-only leaves this module importable — and
+    # therefore testable — from the repo venv.
+    from omegaconf import DictConfig
 
 IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".tif", ".tiff")
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
-def locate_python_bin() -> str:
-    venv_python = REPO_ROOT / ".venv" / "bin" / "python"
-    if venv_python.is_file():
-        return str(venv_python)
-    return sys.executable
-
-
-def locate_local_calamari_root() -> Path:
-    calamari_root = REPO_ROOT / "src" / "model" / "calamari"
-    expected_train_module = calamari_root / "calamari_ocr" / "scripts" / "train.py"
-    if not expected_train_module.is_file():
-        raise FileNotFoundError(f"Local Calamari source not found at {calamari_root}")
-    return calamari_root
-
-
 def build_calamari_train_command() -> tuple[list[str], dict[str, str]]:
-    calamari_root = locate_local_calamari_root()
+    """Return the interpreter invocation and env for the vendored Calamari trainer.
+
+    Calamari is not installed as a package; it is imported from src/model/calamari via
+    PYTHONPATH so the fork's preprocessing (notably the grayscale convention in
+    calamari_ocr/utils/grayscale.py) is what actually trains.
+    """
+    calamari_root = REPO_ROOT / "src" / "model" / "calamari"
+    if not (calamari_root / "calamari_ocr" / "scripts" / "train.py").is_file():
+        raise FileNotFoundError(f"Local Calamari source not found at {calamari_root}")
+
+    venv_python = REPO_ROOT / ".venv" / "bin" / "python"
+    python_bin = str(venv_python) if venv_python.is_file() else sys.executable
+
     env = os.environ.copy()
     pythonpath_parts = [str(calamari_root)]
     if env.get("PYTHONPATH"):
         pythonpath_parts.append(env["PYTHONPATH"])
     env["PYTHONPATH"] = os.pathsep.join(pythonpath_parts)
-    return [locate_python_bin(), "-m", "calamari_ocr.scripts.train"], env
+    return [python_bin, "-m", "calamari_ocr.scripts.train"], env
 
 
 def collect_images(split_dir: Path) -> list[str]:
@@ -53,6 +58,62 @@ def validate_pack(pack_dir: Path) -> tuple[list[str], list[str]]:
     if not train_images or not val_images:
         raise FileNotFoundError(f"Expected train/ and val/ images under {pack_dir}")
     return train_images, val_images
+
+
+def build_calamari_command(
+    cfg: DictConfig,
+    *,
+    output_dir: Path,
+    train_images: list[str],
+    val_images: list[str],
+    extra_args: Sequence[str] = (),
+) -> tuple[list[str], dict[str, str]]:
+    """Assemble the trainer argv shared by the train and finetune entrypoints.
+
+    ``extra_args`` carries the flags only one entrypoint sets (warmstart, codec,
+    learning rate). It is spliced in ahead of the image lists because those are
+    variadic and have to stay last.
+    """
+    base_cmd, env = build_calamari_train_command()
+    cmd = base_cmd + [
+        "--network",
+        str(cfg.model.network),
+        "--n_augmentations",
+        str(cfg.training.n_augmentations),
+        "--trainer.output_dir",
+        str(output_dir),
+        "--trainer.epochs",
+        str(cfg.training.epochs),
+        "--early_stopping.n_to_go",
+        str(cfg.training.early_stopping_patience),
+        "--early_stopping.frequency",
+        str(cfg.training.early_stopping_frequency),
+        "--train.gt_extension",
+        ".gt.txt",
+        "--val.gt_extension",
+        ".gt.txt",
+    ]
+    cmd.extend(extra_args)
+    if uses_gpu(cfg):
+        cmd.extend(["--device.gpus", str(cfg.training.gpu)])
+    cmd.extend(["--train.images", *train_images, "--val.images", *val_images])
+    return cmd, env
+
+
+def uses_gpu(cfg: DictConfig) -> bool:
+    """An unset or blank ``training.gpu`` means train on CPU."""
+    return cfg.training.gpu is not None and str(cfg.training.gpu) != ""
+
+
+def write_header(log_file: Path, title: str, rows: dict[str, object]) -> None:
+    """Print the run banner to the terminal and start the log file with it."""
+    lines = ["=" * 40, f"{title}: {datetime.now()}"]
+    lines += [f"  {label + ':':<19}{value}" for label, value in rows.items()]
+    lines.append("=" * 40)
+    with log_file.open("w", encoding="utf-8") as handle:
+        for line in lines:
+            print(line)
+            handle.write(line + "\n")
 
 
 def stream_process(
@@ -86,55 +147,3 @@ def stream_process(
         finally:
             if cer_handle:
                 cer_handle.close()
-
-
-def load_scalars(directory: Path, tag: str) -> dict[int, float]:
-    try:
-        from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
-    except Exception as exc:  # pragma: no cover - environment dependent
-        print(f"Could not import TensorBoard event reader: {exc}")
-        return {}
-
-    if not directory.is_dir():
-        return {}
-
-    try:
-        accumulator = EventAccumulator(str(directory))
-        accumulator.Reload()
-        if tag not in accumulator.Tags().get("scalars", []):
-            return {}
-        return {event.step: event.value for event in accumulator.Scalars(tag)}
-    except Exception as exc:  # pragma: no cover - environment dependent
-        print(f"Could not read metrics from {directory}: {exc}")
-        return {}
-
-
-def write_metrics_csv(output_dir: Path, metrics_file: Path) -> None:
-    rows: list[dict[str, object]] = []
-    for stage, stage_dir in (("main", output_dir), ("aug_data", output_dir / "aug_data"), ("real_data", output_dir / "real_data")):
-        train_dir = stage_dir / "train"
-        val_dir = stage_dir / "validation"
-        train_cer = load_scalars(train_dir, "epoch_CER")
-        train_loss = load_scalars(train_dir, "epoch_ctc-loss")
-        val_cer = load_scalars(val_dir, "epoch_CER")
-        val_loss = load_scalars(val_dir, "epoch_ctc-loss")
-        for step in sorted(set(train_cer) | set(train_loss) | set(val_cer) | set(val_loss)):
-            rows.append(
-                {
-                    "stage": stage,
-                    "epoch": step,
-                    "train_cer": train_cer.get(step, ""),
-                    "train_ctc_loss": train_loss.get(step, ""),
-                    "val_cer": val_cer.get(step, ""),
-                    "val_ctc_loss": val_loss.get(step, ""),
-                }
-            )
-
-    metrics_file.parent.mkdir(parents=True, exist_ok=True)
-    with metrics_file.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=["stage", "epoch", "train_cer", "train_ctc_loss", "val_cer", "val_ctc_loss"],
-        )
-        writer.writeheader()
-        writer.writerows(rows)

@@ -60,6 +60,40 @@ def test_export_embeds_codec_metadata_and_handles_odd_even_widths(tmp_path: Path
         np.testing.assert_array_equal(actual_lengths, expected["out_len"].numpy())
 
 
+def test_export_bakes_positive_temperature_into_graph(tmp_path: Path) -> None:
+    """A positive checkpoint temperature must scale the exported logits.
+
+    The runtime never re-applies the metadata temperature, so the graph itself
+    has to produce ``logits / temperature`` for tempered checkpoints.
+    """
+    checkpoint = dict(torch.load(CHECKPOINT, map_location="cpu", weights_only=True))
+    checkpoint["temperature"] = 2.0
+    tempered_checkpoint = tmp_path / "tempered.pt"
+    torch.save(checkpoint, tempered_checkpoint)
+
+    base_destination = tmp_path / "base.onnx"
+    tempered_destination = tmp_path / "tempered.onnx"
+    base_metadata = export_calamari_onnx(CHECKPOINT, base_destination)
+    tempered_metadata = export_calamari_onnx(tempered_checkpoint, tempered_destination)
+    assert base_metadata.temperature == -1.0
+    assert tempered_metadata.temperature == 2.0
+
+    image = np.random.default_rng(29).random((1, 12, 48, 1), dtype=np.float32) * 255
+    lengths = np.asarray([12], dtype=np.int64)
+    feeds = {"image": image, "image_lengths": lengths}
+    base_logits = ort.InferenceSession(
+        str(base_destination), providers=["CPUExecutionProvider"]
+    ).run(["logits"], feeds)[0]
+    tempered_logits = ort.InferenceSession(
+        str(tempered_destination), providers=["CPUExecutionProvider"]
+    ).run(["logits"], feeds)[0]
+
+    np.testing.assert_allclose(tempered_logits, base_logits / 2.0, rtol=1e-4, atol=1e-5)
+
+    embedded = {entry.key: entry.value for entry in onnx.load(tempered_destination).metadata_props}
+    assert embedded["temperature"] == "2.0"
+
+
 def test_onnx_adapter_preserves_legacy_decoding(tmp_path: Path) -> None:
     destination = tmp_path / "calamari.onnx"
     export_calamari_onnx(CHECKPOINT, destination)

@@ -118,8 +118,7 @@ def _decode_reference_pipeline(
     # Kraken round-trips regions through original-image coordinates before
     # using them as polygonization supplements.
     regions_for_polygonization = [
-        (np.asarray(region) * (1 / scale_xy)).astype("uint").tolist()
-        for region in regions_original
+        (np.asarray(region) * (1 / scale_xy)).astype("uint").tolist() for region in regions_original
     ]
 
     decoded: list[DecodedBLLALine] = []

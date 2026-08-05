@@ -91,8 +91,12 @@ A registry model id for **remote inference** only - too large or too slow for ty
 _Avoid_: Large model (vague), cloud model (ambiguous with Hub hosting)
 
 **Host eligibility**:
-Whether a registry model id may run on the researcher's machine (`local`), only on a hosted server (`remote`), or either (`any`). Distinct from **Compute device** (`cpu` / `cuda`), which says what hardware to use once a host is chosen. All `local` models - transcribe and segment - run on **Inference helper** when it is present; cloud is fallback only.
+Whether a registry model id may run on the researcher's machine (`local`), only on a hosted server (`remote`), or either (`any`). Distinct from **Compute device** (`cpu` / `cuda`), which says what hardware to use once a host is chosen. Constrains which **execution target**s a job may choose; it does not choose one.
 _Avoid_: device (already means cpu/cuda), tier alone (ambiguous)
+
+**Execution target**:
+The **inference host** a single job runs on - `local` or `cloud` - fixed when the job is submitted and never changed afterwards. Choosing `local` requires a present device; when none is present the researcher is told so and the job is submitted as `cloud` instead, before it exists. A job that fails reports which host it failed on.
+_Avoid_: routing/preference (implies the platform may re-decide mid-flight), fallback (nothing changes target after submission)
 
 **Hub namespace**:
 The Hugging Face account or org that owns **Hub model repos** and **Hub dataset repos**. Starts under a personal username; may later move to the `nomicous` org without changing repo slugs.

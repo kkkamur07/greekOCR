@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 from collections.abc import Mapping
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
@@ -18,6 +19,22 @@ from inference.contracts.transcribe import CharacterConfidence, TranscribeRunRes
 
 class CalamariUnavailableError(RuntimeError):
     """Raised when a Calamari runtime artifact cannot be used."""
+
+
+@dataclass(frozen=True)
+class TranscribeLineFailure:
+    """One line of a batch that could not be transcribed.
+
+    Returned in place of that line's output instead of raised, so a single
+    unusable crop degrades to a per-line error rather than discarding the whole
+    page. The original exception rides along because an all-failed batch has to
+    re-raise it: the run-error mapping distinguishes a broken artifact (503)
+    from a bad request (422), and both would collapse into a generic 500 if the
+    cause were flattened to a string here.
+    """
+
+    index: int
+    error: Exception
 
 
 def _file_fingerprint(path: Path) -> tuple[int, int]:
@@ -41,9 +58,12 @@ def _load_onnx_session(
         classes = _metadata_int(metadata, "classes", minimum=2)
         line_height = _metadata_int(metadata, "line_height", minimum=1)
         if metadata.get("blank_index") != "0":
-            raise CalamariUnavailableError(
-                "Calamari ONNX artifact has an unsupported blank index"
-            )
+            raise CalamariUnavailableError("Calamari ONNX artifact has an unsupported blank index")
+        # The exporter bakes any positive temperature into the graph itself
+        # (CalamariTorchModel.forward divides the logits before tracing), so
+        # the session output is already temperature-scaled. The metadata value
+        # is validated only to reject corrupted artifacts; the runtime must
+        # NOT re-apply it to the logits.
         try:
             temperature = float(metadata["temperature"])
         except (KeyError, TypeError, ValueError) as error:
@@ -140,31 +160,39 @@ def run_calamari_onnx_transcribe_many(
     line_images: list[bytes],
     *,
     checkpoint_path: Path,
-) -> list[TranscribeRunResponse]:
-    """Run the self-contained ONNX artifact for one or more line images."""
+) -> list[TranscribeRunResponse | TranscribeLineFailure]:
+    """Run the self-contained ONNX artifact for one or more line images.
+
+    Per-line failures are returned, never raised: one line whose crop cannot be
+    preprocessed must not take the other lines of the page down with it. Loading
+    the session still raises - that is the artifact failing, not a line.
+    """
 
     session, charset, line_height = _load_onnx_session(
         str(checkpoint_path), _file_fingerprint(checkpoint_path)
     )
-    responses: list[TranscribeRunResponse] = []
-    for image_bytes in line_images:
-        image = preprocess_line_image_bytes_to_calamari_tensor(
-            image_bytes,
-            line_height=line_height,
-        ).astype(np.float32, copy=False)
-        outputs = session.run(
-            ["logits", "out_len"],
-            {
-                "image": image,
-                "image_lengths": np.asarray([image.shape[1]], dtype=np.int64),
-            },
-        )
-        logits = np.asarray(outputs[0], dtype=np.float32)[0]
-        logits -= np.max(logits, axis=-1, keepdims=True)
-        softmax = np.exp(logits)
-        softmax /= np.sum(softmax, axis=-1, keepdims=True)
-        text, confidences = _decode_greedy(softmax, charset=charset)
-        responses.append(_response_from_decoded(text, confidences))
+    responses: list[TranscribeRunResponse | TranscribeLineFailure] = []
+    for index, image_bytes in enumerate(line_images):
+        try:
+            image = preprocess_line_image_bytes_to_calamari_tensor(
+                image_bytes,
+                line_height=line_height,
+            ).astype(np.float32, copy=False)
+            outputs = session.run(
+                ["logits", "out_len"],
+                {
+                    "image": image,
+                    "image_lengths": np.asarray([image.shape[1]], dtype=np.int64),
+                },
+            )
+            logits = np.asarray(outputs[0], dtype=np.float32)[0]
+            logits -= np.max(logits, axis=-1, keepdims=True)
+            softmax = np.exp(logits)
+            softmax /= np.sum(softmax, axis=-1, keepdims=True)
+            text, confidences = _decode_greedy(softmax, charset=charset)
+            responses.append(_response_from_decoded(text, confidences))
+        except Exception as error:  # noqa: BLE001 - per-line isolation is the point
+            responses.append(TranscribeLineFailure(index=index, error=error))
     return responses
 
 
@@ -173,14 +201,19 @@ def run_calamari_onnx_transcribe(
     *,
     checkpoint_path: Path,
 ) -> TranscribeRunResponse:
-    return run_calamari_onnx_transcribe_many(
+    result = run_calamari_onnx_transcribe_many(
         [image_bytes],
         checkpoint_path=checkpoint_path,
     )[0]
+    if isinstance(result, TranscribeLineFailure):
+        # A one-line batch that failed is a failed run, not a partial success.
+        raise result.error
+    return result
 
 
 __all__ = [
     "CalamariUnavailableError",
+    "TranscribeLineFailure",
     "run_calamari_onnx_transcribe",
     "run_calamari_onnx_transcribe_many",
 ]

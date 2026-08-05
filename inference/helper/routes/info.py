@@ -1,20 +1,34 @@
-"""Local weights cache status for the Inference helper (no network calls)."""
+"""The helper's one capability document: who it is and what it can run."""
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, status
 from pydantic import BaseModel
 
-from inference.helper.settings import get_helper_settings
-from inference.registry import get_model_entry, load_registry
+from inference.contracts.common import HostEligibility, InferenceTask
+from inference.helper.settings import HELPER_VERSION, get_helper_settings
+from inference.registry import load_registry
 
-router = APIRouter(prefix="/inference/v1", tags=["cache"])
+router = APIRouter(prefix="/inference/v1", tags=["info"])
+
+# Identifies this process as the Nomicous helper. A browser that finds *some*
+# server on 127.0.0.1:8001 must be able to tell it apart from an unrelated one
+# before POSTing a manuscript image to it.
+HELPER_SERVICE_NAME = "nomicous-inference-helper"
 
 
-class CacheStatusResponse(BaseModel):
+class InfoModel(BaseModel):
     registry_model_id: str
-    registry_tag: str
+    task: InferenceTask
+    host_eligibility: HostEligibility
+    tags: list[str]
     cached: bool
+
+
+class InfoResponse(BaseModel):
+    service: str
+    version: str
+    models: list[InfoModel]
 
 
 def _is_weights_cached(
@@ -30,6 +44,8 @@ def _is_weights_cached(
 
     Only inspects local disk; never contacts the Hub. Non-hf sources (bundled,
     package, file) ship with the helper, but their presence is still verified.
+    Digest verification is memoized in ``src.hf.resolve.artifacts``, so this
+    reuses the hash a run of the same artifact already computed.
     """
     if not weights_source.startswith("hf://"):
         from inference.weights import resolve_weights_source
@@ -75,29 +91,32 @@ def _is_weights_cached(
     return True
 
 
-@router.get(
-    "/cache-status",
-    response_model=CacheStatusResponse,
-    status_code=status.HTTP_200_OK,
-)
-def cache_status(registry_model_id: str, registry_tag: str = "stable") -> CacheStatusResponse:
+@router.get("/info", response_model=InfoResponse, status_code=status.HTTP_200_OK)
+def info() -> InfoResponse:
+    """Everything a client needs to decide whether to send work here."""
     registry = load_registry(get_helper_settings().inference_registry_path)
-    try:
-        entry = get_model_entry(registry, registry_model_id, registry_tag)
-    except KeyError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-
-    version = entry.versions[registry_tag]
-    cached = _is_weights_cached(
-        version.weights_source,
-        registry_model_id=registry_model_id,
-        registry_tag=registry_tag,
-        hub_revision=version.hub_revision,
-        artifact_sha256=version.artifact_sha256,
-        architecture=entry.architecture.value,
-    )
-    return CacheStatusResponse(
-        registry_model_id=registry_model_id,
-        registry_tag=registry_tag,
-        cached=cached,
+    models = [
+        InfoModel(
+            registry_model_id=model_id,
+            task=entry.task,
+            host_eligibility=entry.host_eligibility,
+            tags=sorted(entry.versions),
+            cached=all(
+                _is_weights_cached(
+                    version.weights_source,
+                    registry_model_id=model_id,
+                    registry_tag=tag,
+                    hub_revision=version.hub_revision,
+                    artifact_sha256=version.artifact_sha256,
+                    architecture=entry.architecture.value,
+                )
+                for tag, version in entry.versions.items()
+            ),
+        )
+        for model_id, entry in sorted(registry.models.items())
+    ]
+    return InfoResponse(
+        service=HELPER_SERVICE_NAME,
+        version=HELPER_VERSION,
+        models=models,
     )

@@ -5,6 +5,7 @@ from io import BytesIO
 import pytest
 from PIL import Image
 
+from backend.document.api.media_responses import PUBLIC_THUMBNAIL_WIDTHS
 from backend.document.infrastructure.media_store.encoding import encode_part_image
 
 
@@ -103,7 +104,13 @@ def test_public_part_media_requires_publication_before_conditional_cache(
     assert full.status_code == 200
     assert full.content == encode_part_image(source)
     assert full.headers["cache-control"] == "public, max-age=300, must-revalidate"
+    # Unauthenticated callers may only ask for the widths the reader actually renders;
+    # a free-form width lets anyone force an unbounded number of decodes and resizes.
     assert client.get(f"{public_url}?w=0").status_code == 422
+    for rejected_width in ("201", "1200", "2048"):
+        assert client.get(f"{public_url}?w={rejected_width}").status_code == 422
+    for allowed_width in PUBLIC_THUMBNAIL_WIDTHS:
+        assert client.get(f"{public_url}?w={allowed_width}").status_code == 200
 
     etag = full.headers["etag"]
     assert client.get(public_url, headers={"If-None-Match": etag}).status_code == 304

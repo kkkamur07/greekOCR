@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import socket
 import uuid
 from datetime import UTC, datetime, timedelta
 
 import infrastructure.models  # noqa: F401 - register all ORM mappers
 from infrastructure.db import sync_system_session
-from sqlalchemy import func, select, tuple_, update
+from sqlalchemy import delete, func, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.api.pagination import PageCursor
@@ -16,6 +18,31 @@ from backend.core.exceptions import ConflictError
 from backend.document.infrastructure.orm_models import Document
 from backend.jobs.infrastructure.notifications import notify_platform_job_status_changed
 from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
+
+_TERMINAL_STATUSES = (JobStatus.done, JobStatus.failed, JobStatus.cancelled)
+_NON_TERMINAL_STATUSES = (JobStatus.pending, JobStatus.running, JobStatus.waiting)
+
+WAITING_TIMEOUT_ERROR = "Inference timed out with no response"
+
+
+def waiting_timeout_error(waiting_timeout_seconds: float) -> str:
+    """Reason recorded when the inference service never called back.
+
+    Allowlisted static text, same rule as ``worker._public_job_error``: no
+    exception detail reaches the client. Naming the deadline is what separates
+    "inference went silent for 240s" from every other failure, so the UI can say
+    something honest instead of a generic error. The ``WAITING_TIMEOUT_ERROR``
+    prefix stays stable so callers can still recognise the timeout.
+    """
+    return f"{WAITING_TIMEOUT_ERROR} after {int(waiting_timeout_seconds)}s"
+
+
+_WORKER_IDENTITY = f"{socket.gethostname()}:{os.getpid()}"
+
+
+def worker_identity() -> str:
+    """Stable per-process worker id recorded on claim (host:pid)."""
+    return _WORKER_IDENTITY
 
 
 class JobRepository:
@@ -93,6 +120,19 @@ class JobRepository:
         result = await self._session.execute(query)
         return list(result.scalars().all())
 
+    async def delete_terminal_jobs_for_project(self, project_id: uuid.UUID) -> int:
+        """Delete finished jobs of a project; pending/running/waiting rows are kept."""
+        terminal_ids = (
+            select(Job.id)
+            .join(Document, Job.document_id == Document.id)
+            .where(Document.project_id == project_id)
+            .where(Job.status.in_(_TERMINAL_STATUSES))
+            .scalar_subquery()
+        )
+        result = await self._session.execute(delete(Job).where(Job.id.in_(terminal_ids)))
+        await self._session.commit()
+        return result.rowcount or 0
+
 
 def _pending_job_query(*, test_only: bool | None = None):
     query = select(Job).where(Job.status == JobStatus.pending).order_by(Job.created_at, Job.id)
@@ -111,6 +151,8 @@ def claim_next_pending_job(*, test_only: bool | None = None) -> Job | None:
             return None
         now = datetime.now(UTC)
         job.status = JobStatus.running
+        job.claimed_by = worker_identity()
+        job.heartbeat_at = now
         job.started_at = now
         job.updated_at = now
         session.commit()
@@ -148,8 +190,73 @@ def reclaim_stale_running_jobs(*, running_timeout_seconds: float) -> int:
             .values(
                 status=JobStatus.pending,
                 started_at=None,
+                claimed_by=None,
+                heartbeat_at=None,
                 updated_at=now,
             )
+        )
+        session.commit()
+        return result.rowcount or 0
+
+
+def fail_stale_waiting_jobs(*, waiting_timeout_seconds: float) -> int:
+    """Fail jobs stuck in ``waiting`` because the inference callback never arrived.
+
+    Unlike a crashed *running* job there is nothing to retry: the dispatch
+    already happened and the inference service went silent, so re-pending would
+    duplicate work. Fail instead, with an error the user can act on.
+    """
+    now = datetime.now(UTC)
+    stale_before = now - timedelta(seconds=waiting_timeout_seconds)
+    with sync_system_session() as session:
+        stale_ids = list(
+            session.execute(
+                select(Job.id)
+                .where(Job.status == JobStatus.waiting)
+                .where(Job.updated_at <= stale_before)
+                .with_for_update(skip_locked=True)
+            ).scalars()
+        )
+        if not stale_ids:
+            return 0
+        result = session.execute(
+            update(Job)
+            .where(Job.id.in_(stale_ids))
+            .where(Job.status == JobStatus.waiting)
+            .values(
+                status=JobStatus.failed,
+                error=waiting_timeout_error(waiting_timeout_seconds),
+                callback_claimed_at=None,
+                completed_at=now,
+                updated_at=now,
+            )
+        )
+        session.commit()
+        # A bulk update emits no per-job NOTIFY, so SSE subscribers would keep
+        # waiting on a job that just died. Notify each id after the commit.
+        for job_id in stale_ids:
+            notify_platform_job_status_changed(job_id, JobStatus.failed)
+        return result.rowcount or 0
+
+
+def clear_stale_callback_claims(*, claim_timeout_seconds: float) -> int:
+    """Release abandoned inference callback claims on non-terminal jobs.
+
+    A callback that crashes after claiming never clears ``callback_claimed_at``,
+    which makes the job permanently uncancellable. Dropping the stale claim
+    hands control back to the user.
+    """
+    now = datetime.now(UTC)
+    stale_before = now - timedelta(seconds=claim_timeout_seconds)
+    with sync_system_session() as session:
+        result = session.execute(
+            update(Job)
+            .where(Job.status.in_(_NON_TERMINAL_STATUSES))
+            .where(Job.callback_claimed_at.is_not(None))
+            .where(Job.callback_claimed_at <= stale_before)
+            # Keep ``updated_at`` as-is: the column's ``onupdate`` would otherwise
+            # bump it and push the waiting-timeout deadline back another window.
+            .values(callback_claimed_at=None, updated_at=Job.updated_at)
         )
         session.commit()
         return result.rowcount or 0
@@ -167,6 +274,20 @@ def seconds_until_next_stale_running_job(*, running_timeout_seconds: float) -> f
     now = datetime.now(UTC)
     reclaim_at = oldest_started_at + timedelta(seconds=running_timeout_seconds)
     return max((reclaim_at - now).total_seconds(), 0.0)
+
+
+def seconds_until_next_stale_waiting_job(*, waiting_timeout_seconds: float) -> float | None:
+    """Return seconds until the oldest waiting job is eligible for the timeout sweep."""
+    with sync_system_session() as session:
+        oldest_updated_at = session.execute(
+            select(func.min(Job.updated_at)).where(Job.status == JobStatus.waiting)
+        ).scalar_one_or_none()
+    if oldest_updated_at is None:
+        return None
+
+    now = datetime.now(UTC)
+    fail_at = oldest_updated_at + timedelta(seconds=waiting_timeout_seconds)
+    return max((fail_at - now).total_seconds(), 0.0)
 
 
 def mark_job_waiting(
@@ -202,14 +323,27 @@ def mark_job_waiting(
         notify_platform_job_status_changed(job.id, job.status)
 
 
-def mark_job_failed(job_id: uuid.UUID, error: str) -> None:
+def _owned_by(statement, claimed_by: str | None):
+    """Restrict a worker's terminal write to the claim it still owns.
+
+    ``reclaim_stale_running_jobs`` clears ``claimed_by`` and re-pends the job, so
+    a zombie worker that lost its lease no longer matches: either the column is
+    NULL (not yet re-claimed) or it holds the new owner's id. Status alone is not
+    enough, because the reclaimed job is legitimately non-terminal again.
+    """
+    return statement.where(Job.claimed_by.is_not_distinct_from(claimed_by))
+
+
+def mark_job_failed(job_id: uuid.UUID, error: str, *, claimed_by: str | None) -> None:
     now = datetime.now(UTC)
     with sync_system_session() as session:
         update_result = session.execute(
-            update(Job)
-            .where(Job.id == job_id)
-            .where(Job.status.notin_((JobStatus.cancelled, JobStatus.done)))
-            .values(
+            _owned_by(
+                update(Job)
+                .where(Job.id == job_id)
+                .where(Job.status.notin_((JobStatus.cancelled, JobStatus.done))),
+                claimed_by,
+            ).values(
                 status=JobStatus.failed,
                 error=error,
                 callback_claimed_at=None,
@@ -222,14 +356,16 @@ def mark_job_failed(job_id: uuid.UUID, error: str) -> None:
         notify_platform_job_status_changed(job_id, JobStatus.failed)
 
 
-def mark_job_done(job_id: uuid.UUID, result: dict | None = None) -> None:
+def mark_job_done(job_id: uuid.UUID, result: dict | None = None, *, claimed_by: str | None) -> None:
     now = datetime.now(UTC)
     with sync_system_session() as session:
         update_result = session.execute(
-            update(Job)
-            .where(Job.id == job_id)
-            .where(Job.status.notin_((JobStatus.cancelled, JobStatus.failed)))
-            .values(
+            _owned_by(
+                update(Job)
+                .where(Job.id == job_id)
+                .where(Job.status.notin_((JobStatus.cancelled, JobStatus.failed))),
+                claimed_by,
+            ).values(
                 status=JobStatus.done,
                 result=result or {},
                 error=None,
@@ -242,7 +378,7 @@ def mark_job_done(job_id: uuid.UUID, result: dict | None = None) -> None:
         notify_platform_job_status_changed(job_id, JobStatus.done)
 
 
-_CANCELABLE = (JobStatus.pending, JobStatus.running, JobStatus.waiting)
+_CANCELABLE = _NON_TERMINAL_STATUSES
 
 
 def _apply_cancellation(job: Job, now: datetime) -> None:
