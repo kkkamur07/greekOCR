@@ -22,6 +22,7 @@ import {
   type PageEditorJobKind,
 } from "../components/page-editor/jobProgress";
 import { isAbortError } from "../inference/localInferenceCallbacks";
+import { jobExecution, type JobExecution } from "../inference/executionTarget";
 
 export type TrackedBackgroundJob = {
   id: string;
@@ -31,6 +32,12 @@ export type TrackedBackgroundJob = {
   error: string | null;
   progressLabel: string;
   finishedAt: number | null;
+  /**
+   * Which **inference host** the platform fixed for this job, and which one the
+   * account asked for. `null` until the platform has answered - and for a task
+   * that runs entirely in this browser, which the platform never sees.
+   */
+  execution: JobExecution | null;
 };
 
 type BackgroundJobsContextValue = {
@@ -71,6 +78,9 @@ function patchTrackedJob(
     error: latest.error,
     progressLabel: jobStatusLabel(latest),
     finishedAt: isTerminalJobStatus(latest.status) ? Date.now() : null,
+    // Re-read on every poll rather than only at submission: the host is fixed,
+    // but the *status* is part of the announcement ("Failed on your computer").
+    execution: jobExecution(latest),
   };
 }
 
@@ -167,6 +177,9 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
             error: null,
             progressLabel: "Queued",
             finishedAt: null,
+            // Filled by the first update from the platform. Enqueueing returns
+            // only an id, and guessing a host would be a claim, not a report.
+            execution: null,
           },
         ];
       });
@@ -190,6 +203,11 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
                   error: message,
                   progressLabel: "Failed",
                   finishedAt: Date.now(),
+                  // A failed job says which host it failed on, so the host it
+                  // was given has to travel with the new status.
+                  execution: job.execution
+                    ? { ...job.execution, status: "failed" }
+                    : null,
                 }
               : job,
           ),
@@ -238,6 +256,10 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
           error: null,
           progressLabel: "Running locally",
           finishedAt: null,
+          // A browser-side task the platform never saw. It has no execution
+          // target because it is not a platform job; the loopback path that
+          // creates these is issue 060's to remove.
+          execution: null,
         },
       ]);
       setPanelExpanded(false);

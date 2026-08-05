@@ -4,12 +4,19 @@ import { api, type JobResponse } from "../../api/client";
 import { ApiError } from "../../api/errors";
 import { useJobPolling } from "../../hooks/useJobPolling";
 import { isTerminalJobStatus } from "../page-editor/jobProgress";
+import {
+  jobExecution,
+  type JobExecution,
+} from "../../inference/executionTarget";
+import { JobExecutionAnnouncement } from "../JobExecutionAnnouncement";
 
 type TrackedJob = {
   jobId: string;
   status: JobResponse["status"];
   type?: JobResponse["type"];
   error?: string | null;
+  /** Which **inference host** runs it; `null` until the platform has answered. */
+  execution: JobExecution | null;
 };
 
 function shortId(jobId: string): string {
@@ -29,7 +36,7 @@ export function JobsNotice({ enableTestJobs = false }: JobsNoticeProps) {
   const trackJob = useCallback((jobId: string) => {
     setTrackedJobs((prev) => {
       if (prev.some((j) => j.jobId === jobId)) return prev;
-      return [...prev, { jobId, status: "pending" }];
+      return [...prev, { jobId, status: "pending", execution: null }];
     });
     setExpanded(true);
   }, []);
@@ -49,6 +56,7 @@ export function JobsNotice({ enableTestJobs = false }: JobsNoticeProps) {
           status: job.status,
           type: job.type,
           error: job.error,
+          execution: jobExecution(job),
         };
         if (
           job.status === "failed" &&
@@ -133,6 +141,10 @@ export function JobsNotice({ enableTestJobs = false }: JobsNoticeProps) {
                   {job.type ?? "job"} · {job.status}
                   {job.error ? `: ${job.error}` : ""}
                 </div>
+                <JobExecutionAnnouncement
+                  execution={job.execution}
+                  className="part-desc"
+                />
               </div>
             </li>
           ))}

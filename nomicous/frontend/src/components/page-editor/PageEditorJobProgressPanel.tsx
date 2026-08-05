@@ -1,4 +1,5 @@
 import type { TrackedBackgroundJob } from "../../context/BackgroundJobsContext";
+import { JobExecutionAnnouncement } from "../JobExecutionAnnouncement";
 import { isTerminalJobStatus, pageEditorJobKindLabel } from "./jobProgress";
 
 type PageEditorJobProgressPanelProps = {
@@ -102,6 +103,10 @@ export function PageEditorJobProgressPanel({
                 <span className="pe-job-item__status">{job.progressLabel}</span>
               </div>
               <strong className="pe-job-item__label">{job.label}</strong>
+              <JobExecutionAnnouncement
+                execution={job.execution}
+                className="pe-job-item__host"
+              />
               {job.error && <p className="pe-job-item__error">{job.error}</p>}
               {!isTerminalJobStatus(job.status) && (
                 <div className="pe-job-item__actions">

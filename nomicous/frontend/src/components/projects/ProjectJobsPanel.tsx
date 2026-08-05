@@ -9,6 +9,11 @@ import {
   isTerminalJobStatus,
   jobStatusLabel,
 } from "../page-editor/jobProgress";
+import {
+  executionAnnouncement,
+  INFERENCE_HOST_LABEL,
+  jobExecution,
+} from "../../inference/executionTarget";
 
 type ProjectJobsPanelProps = {
   projectId: string;
@@ -41,14 +46,10 @@ function formatWhen(iso: string): string {
   });
 }
 
-function formatExecution(execution: JobResponse["execution"]): string {
-  if (execution === "local") return "Local";
-  return "Cloud";
-}
-
-function executionClass(execution: JobResponse["execution"]): string {
-  if (execution === "local") return "project-jobs-panel__host--local";
-  return "project-jobs-panel__host--cloud";
+function executionClass(job: JobResponse): string {
+  return job.execution_target === "local"
+    ? "project-jobs-panel__host--local"
+    : "project-jobs-panel__host--cloud";
 }
 
 function statusClass(status: JobResponse["status"]): string {
@@ -295,9 +296,15 @@ export function ProjectJobsPanel({
                       </td>
                       <td>
                         <span
-                          className={`project-jobs-panel__host ${executionClass(job.execution)}`}
+                          className={`project-jobs-panel__host ${executionClass(job)}`}
                         >
-                          {formatExecution(job.execution)}
+                          {INFERENCE_HOST_LABEL[job.execution_target]}
+                        </span>
+                        {/* The host is stated in full on the row itself, not
+                            only as a badge: a substituted host has to be
+                            readable long after the submission that caused it. */}
+                        <span className="row-sub">
+                          {executionAnnouncement(jobExecution(job))}
                         </span>
                       </td>
                       <td className="col-muted">
