@@ -199,7 +199,7 @@ DROP TABLE IF EXISTS
   page_transcription_lines,
   line_transcriptions,
   transcriptions,
-  inference_jobs,
+  inference_jobs,  -- pre-006 databases only; harmless once dropped
   jobs,
   model_bindings,
   inference_models,

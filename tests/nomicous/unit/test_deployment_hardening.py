@@ -252,8 +252,30 @@ def test_role_migration_defines_service_boundaries_without_passwords() -> None:
         assert role in migration
     assert "NOLOGIN" in migration
     assert "PASSWORD" not in migration
-    assert "GRANT SELECT, UPDATE ON TABLE inference_jobs TO nomicous_inference_worker" in migration
     assert "GRANT SELECT, UPDATE ON TABLE jobs TO nomicous_platform_worker" in migration
+
+
+def test_inference_worker_role_reaches_nothing_after_the_queue_collapse() -> None:
+    """ADR 0003 left the group with no table to read; 006 revokes what remains."""
+    drop = (
+        REPO_ROOT
+        / "nomicous"
+        / "infrastructure"
+        / "alembic"
+        / "versions"
+        / "006_drop_inference_jobs.py"
+    ).read_text(encoding="utf-8")
+    bootstrap = (REPO_ROOT / "scripts" / "platform" / "provision_database_roles.sql").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'op.drop_table("inference_jobs")' in drop
+    assert "REVOKE ALL ON SCHEMA public FROM nomicous_inference_worker" in drop
+    assert not [
+        line
+        for line in bootstrap.splitlines()
+        if "nomicous_inference_worker" in line and line.lstrip().startswith("GRANT")
+    ]
 
 
 def test_release_workflow_refuses_asset_replacement_and_generates_evidence() -> None:
