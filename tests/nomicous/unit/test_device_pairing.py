@@ -947,23 +947,28 @@ def test_migration_005_matches_the_orm_models(monkeypatch) -> None:
 
     Integration tests cannot catch this without Postgres, and a missing column
     in 005 is an outage on the first deploy rather than a test failure.
+
+    Columns added to these tables by *later* revisions are folded in here rather
+    than excluded, so the guard keeps meaning "the chain builds the ORM" instead
+    of decaying into "005 built what 005 built". ``helper_devices.inference_host``
+    arrives in 006.
     """
     import importlib.util
     from pathlib import Path
 
     import sqlalchemy as sa
 
-    migration_path = (
-        Path(__file__).resolve().parents[3]
-        / "nomicous"
-        / "infrastructure"
-        / "alembic"
-        / "versions"
-        / "005_helper_devices.py"
+    versions = (
+        Path(__file__).resolve().parents[3] / "nomicous" / "infrastructure" / "alembic" / "versions"
     )
-    spec = importlib.util.spec_from_file_location("migration_005", migration_path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+
+    def _load(name: str):
+        spec = importlib.util.spec_from_file_location(f"migration_{name}", versions / f"{name}.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    module = _load("005_helper_devices")
 
     assert module.revision == "005_helper_devices"
     assert module.down_revision == "004_document_part_dimensions"
@@ -978,6 +983,17 @@ def test_migration_005_matches_the_orm_models(monkeypatch) -> None:
 
     module._create_helper_devices()
     module._create_helper_pairings()
+
+    later = _load("006_execution_target")
+    added: list[tuple[str, sa.Column]] = []
+    monkeypatch.setattr(later.op, "get_bind", lambda: None)
+    monkeypatch.setattr(later.op, "execute", lambda *args, **kw: None)
+    monkeypatch.setattr(later.op, "add_column", lambda table, column: added.append((table, column)))
+    monkeypatch.setattr(later._EXECUTION_TARGET, "create", lambda *args, **kw: None)
+    later.upgrade()
+    for table_name, column in added:
+        if table_name in tables:
+            tables[table_name] = tables[table_name] + (column,)
 
     for table_name, model in (
         ("helper_devices", HelperDevice),

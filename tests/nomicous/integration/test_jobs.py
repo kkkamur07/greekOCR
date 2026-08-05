@@ -31,7 +31,9 @@ from infrastructure.db import sync_system_session
 from tests.nomicous.integration.helpers import (
     MINIMAL_PNG,
     documents_url,
+    pair_inference_device,
     poll_job,
+    user_id_for_email,
 )
 
 
@@ -375,12 +377,16 @@ def test_worker_processes_pending_job_via_lifespan(
 
 def test_transcribe_job_submits_one_batched_inference_job(
     client: TestClient,
+    owner_user: dict[str, str],
     owner_headers: dict[str, str],
     owner_project: dict,
     monkeypatch: pytest.MonkeyPatch,
 ):
     from backend.jobs.infrastructure import worker as worker_module
 
+    # Submission is gated on **capacity**: this job is dispatched to the hosted
+    # inference service, so a cloud worker has to be up for it to be accepted.
+    pair_inference_device(user_id=user_id_for_email(owner_user["email"]), host="cloud")
     document_id, part_id, lines = _create_document_part_with_lines(
         client,
         owner_headers,

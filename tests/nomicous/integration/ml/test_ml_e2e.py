@@ -10,7 +10,22 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from tests.fixtures.paths import MINIMAL_PNG, segment_page_bytes
-from tests.nomicous.integration.helpers import documents_url, poll_job
+from tests.nomicous.integration.helpers import (
+    documents_url,
+    pair_inference_device,
+    poll_job,
+    user_id_for_email,
+)
+
+
+@pytest.fixture(autouse=True)
+def _cloud_worker_has_capacity(owner_user: dict[str, str]) -> None:
+    """This lane exercises the cloud pipeline, so a cloud worker has to be up.
+
+    Submission is gated on **capacity**: without a recently-seen ``cloud``
+    device the platform refuses rather than creating a job nobody will claim.
+    """
+    pair_inference_device(user_id=user_id_for_email(owner_user["email"]), host="cloud")
 
 
 def _compact_segment_page_bytes() -> bytes:
