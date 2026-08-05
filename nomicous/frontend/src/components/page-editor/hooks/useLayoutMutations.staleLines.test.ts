@@ -73,7 +73,7 @@ function setup(initialLines: LineResponse[]) {
       onDrawComplete: vi.fn(),
       partImageUrl: null,
       shouldUseLocalPath: () => false,
-      cloudInferenceEnabled: true,
+      setSubmissionRefusal: vi.fn(),
       segmentRegistryModelId: "blla-segment",
       localInference: { startRun: vi.fn() },
       trackJobAndWait: vi.fn(),
