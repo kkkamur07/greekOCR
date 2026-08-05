@@ -99,8 +99,12 @@ The **inference host** a single job runs on - `local` or `cloud` - fixed when th
 _Avoid_: routing/preference (implies the platform may re-decide mid-flight), fallback (nothing changes target after submission)
 
 **Capacity**:
-Whether an **inference host** currently has a machine able to take work, answered by whether any device for that host was seen recently. The researcher's laptop and a hosted worker are the same kind of thing here, so cloud availability is not a separate concept.
+Whether an **inference host** currently has a machine able to take work, answered by whether any device for that host was seen recently. The researcher's laptop and a hosted worker are the same kind of thing here, so cloud availability is not a separate concept. "Recently" is the device layer's existing idle window; a device with no **capacity** is not a failure, it is an announced state.
 _Avoid_: helper available (loopback-era, meant a port answering), online (ambiguous with the researcher's own connectivity)
+
+**Host preference**:
+The account-level setting "use my computer when it is available", the only researcher input to **execution target** selection. Combined with **host eligibility** and **capacity** it fixes one target at submission; there is no per-job toggle, because a researcher cannot know which host is faster for a given page.
+_Avoid_: per-job execution mode, `local_only` (retired by ADR 0002), routing rule
 
 **Hub namespace**:
 The Hugging Face account or org that owns **Hub model repos** and **Hub dataset repos**. Starts under a personal username; may later move to the `nomicous` org without changing repo slugs.
@@ -120,6 +124,8 @@ _Avoid_: org (when meaning the namespace generically)
 - One **registry tag** records one immutable **Hub revision** on that repo
 - Training output is copied into **Hub staging tree** when ready to publish
 - One **Hub dataset repo** may train many **registry model ids** over time
+- **Host eligibility** constrains which **execution target**s a job may choose; **host preference** and **capacity** choose one from what is left
+- **Capacity** for one **inference host** = any device recorded as that host was seen recently; a hosted worker is such a device, not a separate concept
 - A **Hub collection** (`nomos`) links to many **Hub model repos** and **Hub dataset repos**; defined in `src/hf/publish/collection.yaml`
 
 ## Example dialogue

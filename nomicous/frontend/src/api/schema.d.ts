@@ -21,6 +21,31 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/account/execution-target": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Read Execution Preference */
+    get: operations["read_execution_preference_account_execution_target_get"];
+    /**
+     * Set Execution Preference
+     * @description Change the preference. Jobs already submitted keep the host they were given.
+     *
+     *     The setting selects the *next* job's preferred host and nothing else - an
+     *     **execution target** is fixed at submission, so changing this can never move
+     *     work that is already queued.
+     */
+    put: operations["set_execution_preference_account_execution_target_put"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/auth/login": {
     parameters: {
       query?: never;
@@ -1687,6 +1712,28 @@ export interface components {
        */
       job_id: string;
     };
+    /** ExecutionPreferenceRequest */
+    ExecutionPreferenceRequest: {
+      /** Prefer Local Inference */
+      prefer_local_inference: boolean;
+    };
+    /** ExecutionPreferenceResponse */
+    ExecutionPreferenceResponse: {
+      /** Available Targets */
+      available_targets: components["schemas"]["ExecutionTarget"][];
+      /** Prefer Local Inference */
+      prefer_local_inference: boolean;
+      preferred_execution_target: components["schemas"]["ExecutionTarget"];
+    };
+    /**
+     * ExecutionTarget
+     * @description The **inference host** a single job runs on.
+     *
+     *     Also the discriminator on a paired device, because a hosted worker is a
+     *     device like any other (ADR 0003) - a device *is* one of these two hosts.
+     * @enum {string}
+     */
+    ExecutionTarget: "local" | "cloud";
     /** ExportArtifactResponse */
     ExportArtifactResponse: {
       /** Image Base64 */
@@ -1814,6 +1861,12 @@ export interface components {
       error: string | null;
       /** Execution */
       execution?: ("local" | "cloud") | null;
+      execution_target: components["schemas"]["ExecutionTarget"];
+      /**
+       * Execution Target Substituted
+       * @default false
+       */
+      execution_target_substituted: boolean;
       /**
        * Id
        * Format: uuid
@@ -1823,6 +1876,7 @@ export interface components {
       payload: {
         [key: string]: unknown;
       };
+      preferred_execution_target: components["schemas"]["ExecutionTarget"];
       /** Result */
       result: {
         [key: string]: unknown;
@@ -2680,6 +2734,11 @@ export interface components {
        * Format: uuid
        */
       id: string;
+      /**
+       * Prefer Local Inference
+       * @default false
+       */
+      prefer_local_inference: boolean;
       /** Username */
       username: string;
     };
@@ -2721,6 +2780,176 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["WelcomeResponse"];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
+  read_execution_preference_account_execution_target_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ExecutionPreferenceResponse"];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
+  set_execution_preference_account_execution_target_put: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ExecutionPreferenceRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ExecutionPreferenceResponse"];
         };
       };
       /** @description Not authenticated */
