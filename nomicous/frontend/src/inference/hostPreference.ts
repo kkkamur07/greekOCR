@@ -132,6 +132,12 @@ export function useHostPreference(): HostPreference {
     saving,
     error,
     setPreferLocalInference,
-    refresh: () => read(),
+    // Retry says "Checking…" while it runs; the focus and visibility re-reads
+    // deliberately do not, because a quiet background refresh that flickers the
+    // banner every time the tab regains focus is worse than one that does not.
+    refresh: async () => {
+      setLoading(true);
+      await read();
+    },
   };
 }
