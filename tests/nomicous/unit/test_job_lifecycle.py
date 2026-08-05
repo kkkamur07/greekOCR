@@ -22,6 +22,7 @@ from backend.jobs.infrastructure import job_repository
 from backend.jobs.infrastructure import stale_sweep as stale_sweep_module
 from backend.jobs.infrastructure import worker as worker_module
 from backend.jobs.infrastructure.job_repository import (
+    AGENT_CLAIM_PREFIX,
     WAITING_TIMEOUT_ERROR,
     _apply_cancellation,
     claim_next_pending_job,
@@ -30,6 +31,7 @@ from backend.jobs.infrastructure.job_repository import (
     mark_job_done,
     mark_job_failed,
     reclaim_stale_running_jobs,
+    release_expired_device_leases,
     waiting_timeout_error,
     worker_identity,
 )
@@ -279,7 +281,28 @@ class _SweepStore:
         self.lock_granted = lock_granted
         self.lock_attempts = 0
         self.waiting_selects = 0
+        self.lease_selects = 0
         self.claim_clears = 0
+
+
+def _wants_agent_claims(statement) -> bool | None:
+    """Which half of ``waiting`` this statement addresses, read from its own SQL.
+
+    True for the device-lease sweep, False for the waiting-timeout sweep, None for
+    a statement that does not discriminate. The two are complements over one
+    column, so the fake has to model ``claimed_by`` or it would hand every job to
+    both sweeps - which is precisely the bug this issue fixes.
+    """
+    sql = _sql(statement)
+    if "jobs.claimed_by NOT LIKE" in sql:
+        return False
+    if "jobs.claimed_by LIKE" in sql:
+        return True
+    return None
+
+
+def _agent_held(job: Job) -> bool:
+    return bool(job.claimed_by and job.claimed_by.startswith(AGENT_CLAIM_PREFIX))
 
 
 class _SweepSession:
@@ -296,18 +319,34 @@ class _SweepSession:
             return _FakeResult(rows=[store.lock_granted])
 
         values = _params(statement)
+        wants_agent = _wants_agent_claims(statement)
+        matches_claim = wants_agent is None or wants_agent == _agent_held(job)
+
         if isinstance(statement, Select):
-            store.waiting_selects += 1
-            stale = job.status == JobStatus.waiting and job.updated_at <= values["updated_at_1"]
+            if wants_agent:
+                store.lease_selects += 1
+            else:
+                store.waiting_selects += 1
+            stale = (
+                job.status == JobStatus.waiting
+                and matches_claim
+                and job.updated_at <= values["updated_at_1"]
+            )
             return _FakeResult(rows=[job.id] if stale else [])
 
-        if "status" in values:  # fail_stale_waiting_jobs
-            if job.status != JobStatus.waiting:
+        if "status" in values:  # fail_stale_waiting_jobs / release_expired_device_leases
+            if job.status != JobStatus.waiting or not matches_claim:
                 return _FakeResult(rowcount=0)
             job.status = values["status"]
-            job.error = values["error"]
             job.callback_claimed_at = None
-            job.completed_at = values["completed_at"]
+            if values["status"] == JobStatus.pending:  # the lease went back to the queue
+                job.claimed_by = None
+                job.inference_job_id = None
+                job.started_at = None
+                job.heartbeat_at = None
+            else:
+                job.error = values["error"]
+                job.completed_at = values["completed_at"]
             return _FakeResult(rowcount=1)
 
         store.claim_clears += 1  # clear_stale_callback_claims
