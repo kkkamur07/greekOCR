@@ -11,10 +11,13 @@
 
 ## Parallel lanes (ready now)
 
-**Waves 1-3, 5 and 061 are merged**, 056 included. What remains is the tail of
-the graph: 057 and 058 are both ready and independent of each other, and 060
-waits on 057. The lane cap of 5 stopped being the constraint once wave 3 landed
-- the graph itself is the limit, and it allows two lanes now and one after that.
+**None — every wave is merged.** The graph is fully consumed: 057 and 058 ran as
+the last parallel pair, and 060 ran alone behind them as the terminal node.
+
+Worth recording for the next decomposition: the lane cap of 5 was only ever the
+binding constraint during wave 3. Everywhere else the *graph* was the limit, and
+it narrowed as the work went on — 5 lanes, then 2, then 1. Sizing an agent pool
+to the widest point of a DAG buys idle agents for most of the run.
 
 | Wave | Issues | Why they can run together |
 |------|--------|---------------------------|
@@ -42,7 +45,7 @@ replacement is demonstrably working.
 
 ## Stats
 
-- **Total:** 14 | **Done:** 11 | **Ready:** 2 (057, 058) | **In progress:** 0 | **Blocked:** 1 (060)
+- **Total:** 14 | **Done:** 14 | **Ready:** 0 | **In progress:** 0 | **Blocked:** 0
 - Follow-up issues filed by the lanes themselves, outside the original 14:
   [#62](https://github.com/kkkamur07/greekOCR/issues/62) (segmentation peak memory),
   [#63](https://github.com/kkkamur07/greekOCR/issues/63) (device-pairing event-loop collision),

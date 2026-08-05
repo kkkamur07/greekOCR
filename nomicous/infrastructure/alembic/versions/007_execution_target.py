@@ -40,9 +40,7 @@ down_revision: str | None = "006_drop_inference_jobs"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-_EXECUTION_TARGET = postgresql.ENUM(
-    "local", "cloud", name="execution_target", create_type=False
-)
+_EXECUTION_TARGET = postgresql.ENUM("local", "cloud", name="execution_target", create_type=False)
 
 _FIX_TRIGGER_FUNCTION = """
 CREATE OR REPLACE FUNCTION jobs_execution_target_is_fixed() RETURNS trigger AS $$

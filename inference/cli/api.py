@@ -562,7 +562,6 @@ class PlatformClient:
             ) from exc
 
 
-
 def _agent_notice(raw: object) -> AgentNotice | None:
     if not isinstance(raw, dict):
         return None
@@ -620,6 +619,8 @@ def _version_refusal(body: Any, base_url: str) -> AgentVersionRefused:
         package=str(error.get("package") or "nomicous-inference"),
         upgrade_command=str(error.get("upgrade_command") or "uv tool upgrade nomicous-inference"),
     )
+
+
 def _refusal_floor(base_url: str, agent_version: str, body: Any) -> AgentFloor:
     """Read a 426 body into the same record a 200 produces.
 

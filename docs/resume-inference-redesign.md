@@ -1,11 +1,11 @@
-# Resuming the inference redesign
+# The inference redesign — complete, unpushed
 
-**Start here.** This is the state of the work as of 2026-08-05, written so it can be picked
-up cold. [`merge-handoff-inference-redesign.md`](./merge-handoff-inference-redesign.md) is
-now history: the merge it describes has been carried out, and every branch it lists is in
-the trunk. Read it only for *why* a conflict was resolved the way it was.
+**Start here.** As of 2026-08-05 all fourteen issues under PRD
+[#47](https://github.com/kkkamur07/greekOCR/issues/47) are implemented, merged and verified
+on `feat/inference-cli-redesign`. **Nothing has been pushed.** `origin/main` has none of it.
 
-Three of fourteen issues remain. Nothing has been pushed.
+What is left is not implementation. It is the owner's push decision (§7) and two credential
+actions (§8).
 
 ---
 
@@ -14,85 +14,96 @@ Three of fourteen issues remain. Nothing has been pushed.
 | | |
 |---|---|
 | Trunk branch | `feat/inference-cli-redesign` |
-| Head | the last `docs:` commit of 2026-08-05 — `git log -1` |
-| Ahead of `origin/main` | ~85 commits, **none pushed** |
-| Working tree | clean |
+| Head | `git log -1` — the last `docs:` commit of 2026-08-05 |
+| Ahead of `origin/main` | ~100 commits, **none pushed** |
+| Worktrees | none — all 17 removed after verifying each branch is an ancestor of the trunk |
 | Parent PRD | [#47](https://github.com/kkkamur07/greekOCR/issues/47) |
 | Decisions | ADRs [0001](./adr/0001-outbound-helper-device-pairing.md)–[0005](./adr/0005-agent-claim-endpoint-and-the-inference-service-account.md) |
-| Glossary | [`inference/CONTEXT.md`](../inference/CONTEXT.md) — the vocabulary every issue and commit message uses |
+| Glossary | [`inference/CONTEXT.md`](../inference/CONTEXT.md) |
 
-`main` and `origin/main` are untouched by any of this. The redesign exists only on the
-trunk branch and in the worktrees listed in §7.
+Every lane branch (`feat/048-…` … `feat/061-…`, plus `feat/deep-cleanup` and
+`feat/frontend-libraries`) is kept as the audit trail. `git branch --no-merged HEAD` is empty.
+[`merge-handoff-inference-redesign.md`](./merge-handoff-inference-redesign.md) is history now
+— read it only for *why* a particular conflict was resolved the way it was.
 
-## 2. What is done
+## 2. What was built
 
-Eleven lanes are merged, each as its own `merge:` commit whose body records the conflicts
-it resolved.
+All 14 merged, each as its own `merge:` commit whose body records the conflicts it resolved.
+See [`issues/kanban.md`](../issues/kanban.md) for the per-lane table.
 
-| # | Lane | State |
-|---|---|---|
-| 048 | collapse the second job queue | merged |
-| 049 | Torch runtime, ONNX archived | merged |
-| 050 | publish the inference package | merged |
-| 051 | execution target + capacity gating | merged |
-| 052 | device claim endpoint | merged |
-| 053 | signed page image link | merged |
-| 054 | device lease + stale sweep | merged |
-| 055 | version floor | merged |
-| 056 | `nomicous pair` and `nomicous version` | merged, **13 live tests passing** |
-| 059 | frontend host preference | merged |
-| 061 | delete native packaging; release is a PyPI publish | merged |
-| — | `feat/deep-cleanup` | merged |
-| — | `feat/frontend-libraries` | merged |
-| **057** | **CLI run loop** | **not started** |
-| **058** | **CLI self-upgrade** | **not started** |
-| **060** | **delete the loopback transport** | **not started** |
+The shape of the change: a browser talked to a loopback HTTP server on the researcher's own
+machine; now a CLI installed from PyPI pairs with the platform and **pulls** work outbound.
+
+- **048–052** collapsed the second job queue, moved the runtime to PyTorch (ADR 0004),
+  published the package, added the execution target, and opened the device claim endpoint.
+- **053–056** added the signed page-image link, the device lease and stale sweep, the version
+  floor, and `nomicous pair` / `nomicous version`.
+- **057** closed the loop: `nomicous run` claims a page, fetches it through the signed link,
+  runs the model, reports through the existing job callback. 11 live tests.
+- **058** made the launch moment the only point at which the agent replaces its own code.
+  14 live tests, real `execve`, a real local PEP 503 index.
+- **059, 061** the frontend host preference, and the deletion of native packaging.
+- **060** deleted the loopback transport itself: `inference/api`, `inference/helper`, the
+  platform's local-inference persist routes, the frontend probe/client layer, and the
+  `127.0.0.1:8001` CSP entry. −6714 lines.
+
+**The published package now contains no code path that opens a listening socket.** That is
+ADR 0002 made structural rather than documented, and it is worth re-checking after any merge:
+
+```bash
+grep -rnE "uvicorn\.run|HTTPServer|\.listen\(|socket\.bind|\.bind\(" inference/ --include='*.py'   # must be empty
+```
 
 Schema is at alembic head `007_execution_target`.
 
 ## 3. What red looks like, so a real regression is visible
 
-Run the suites separately — the numbers below are per-suite, and the last row explains why.
+Run the suites **separately** — they share one Postgres, and running them together is what
+produces phantom failures (see the notes below).
 
 | Command | Expected |
 |---|---|
-| `uv run pytest tests/nomicous` | 669 passed, 1 skipped, **9 failed** |
-| `uv run pytest tests/inference tests/hf` | 1 failed (`test_calamari_grayscale_parity`) |
-| `cd nomicous/frontend && npm test` | 51 files, 217 passed |
+| `pytest tests/nomicous` | 659 passed, 1 skipped, **9 failed** |
+| `pytest tests/inference tests/hf` | 206 passed, 2 skipped, **1 failed** |
+| `cd nomicous/frontend && npm test` | 45 files, 182 passed |
 | `npx tsc --noEmit` / `npx eslint .` | clean / 0 errors, 2 warnings |
-| `uv run --group dev ruff check .` | **164 errors, all under `src/`** |
+| `ruff check .` | **164 errors, all under `src/`** |
+| `ruff format --check .` | 105 files, **all pre-existing**; 100 under `src/`, 5 in `scripts/hf` and `tests/` |
 
-The failures are all pre-existing and all understood:
+Every failure is pre-existing and understood:
 
-- **4 × `tests/nomicous/integration/test_device_pairing.py`** — asyncpg event-loop
-  collision, issue #63. Not a product bug.
+- **4 × `integration/test_device_pairing.py`** — asyncpg event-loop collision, issue
+  [#63](https://github.com/kkkamur07/greekOCR/issues/63). Not a product bug.
 - **5 × caplog cross-contamination** (`unit/test_device_pairing.py` ×4,
-  `unit/test_job_callback_service.py` ×1). Passing `-p no:logging` turns these five into
-  ERRORs instead, so only compare like-for-like invocations.
+  `unit/test_job_callback_service.py` ×1). `-p no:logging` turns these into ERRORs instead,
+  so only ever compare like-for-like invocations.
 - **1 × `test_grayscale_helper_is_the_only_convention_under_src`** —
-  `src/models/trocr/augmentation/weather.py` uses `COLOR_RGB2GRAY` and is not in the test's
-  allow-list. It is under `src/`, which is audit-only, so it is reported rather than fixed.
-- **164 ruff errors** — every one under `src/`. The `per-file-ignores` block names
-  `src/model/**` (singular); the offending tree is `src/models/**` (plural), restored later
-  by `516c3fc`, so the ignores never matched it. Again `src/`, again audit-only. Fixing it
-  is a config change plus a decision about the vendored tree, not a merge task.
+  `src/models/trocr/augmentation/weather.py` uses `COLOR_RGB2GRAY` outside the allow-list.
+  Under `src/`, which is audit-only, so it is reported rather than fixed.
+- **164 ruff errors** — all under `src/`. `per-file-ignores` names `src/model/**` (singular);
+  the offending tree is `src/models/**` (plural), restored later by `516c3fc`, so the ignores
+  never matched. Config change plus a decision about the vendored tree — not a merge task.
 
-One further failure appears **only in a single whole-suite `uv run pytest` run**:
-`test_device_lease.py::test_concurrent_agents_racing_a_swept_queue_each_get_a_distinct_page`.
-It passes alone, passes with its own file, passes across `tests/nomicous`, and passes
-across `tests/nomicous/integration tests/inference/integration`. It is an ordering
-interaction, not a lane regression — `tests/nomicous` produces byte-identical results
-before and after every merge in §2. Track it with the other two contamination families
-rather than treating a whole-suite red as a blocker.
+> **A tenth failure that is not real.** Running another suite, or another agent, against the
+> same Postgres concurrently produces one extra failure — and **not always the same one**. It
+> was `test_device_lease.py::test_concurrent_agents_racing_a_swept_queue…` in one run and
+> `test_documents.py::test_upload_reorder_delete_part_and_serve_media` in the next; both pass
+> together in isolation. A regression does not move. Measure on an idle database before
+> believing a tenth red.
+
+> **A whole suite of errors that is also not real.** If ~146 tests ERROR at fixture setup and
+> the run stops around 520 passed, the database is gone, not the code. Check
+> `docker ps --filter name=nomicous-db-1` first.
 
 ## 4. Getting an environment that works
 
 ```bash
-# Postgres — container nomicous-db-1, already exposed on 127.0.0.1:5433
-docker ps --filter name=nomicous-db-1
+# Postgres — container nomicous-db-1, exposed on 127.0.0.1:5433
+docker ps --filter name=nomicous-db-1 || docker start nomicous-db-1
 
 # Python. Bare `uv sync` PRUNES the venv to the default groups and takes zxcvbn,
-# fastapi and the rest with it; every backend import then fails. Always name the groups:
+# fastapi and the rest with it; every backend import then fails. Always name the groups.
+# NOTE: `--group helper` is gone as of #060.
 uv sync --group dev --group test --group platform --group inference
 
 # Frontend
@@ -100,84 +111,68 @@ cd nomicous/frontend && npm install
 ```
 
 Tests are live by owner's instruction: real Postgres, real `create_app()`, real console
-scripts. If something cannot be tested live, defer it rather than mocking it — installing a
-package into an isolated environment to make it live is allowed. `test_cli_pairing.py`
-is the model: a real wheel in its own venv, a real uvicorn process, its own database
-(`kalamos_056_cli`), and approval driven by a second process over HTTP.
+scripts, real wheels in real venvs. If something cannot be tested live, defer it rather than
+mocking it — installing a package into an isolated environment to make it live is allowed.
+`test_cli_pairing.py`, `test_cli_run.py` and `test_cli_self_upgrade.py` are the models.
 
-## 5. What is left
+## 5. Traps that have already cost time
 
-### #057 — CLI run loop *(blocked by 053, 054, 056 — all merged, so it is ready)*
-
-The `nomicous run` subcommand: claim a page, fetch it through the **signed page image
-link**, run the model, report through the platform's existing job callback, repeat.
-Everything it needs is on the trunk — the claim endpoint (052), the link (053), the lease
-(054), and the credential and version header (056, 055).
-
-### #058 — CLI self-upgrade *(blocked by 055, 056 — ready)*
-
-Reads the **version floor** the platform advertises and upgrades the installed package
-when it falls below it. `nomicous version` already reports what the floor will read.
-
-### #060 — delete the loopback transport *(blocked by 057, 059)*
-
-The last deletion. It removes `inference/api` and `inference/helper` (both are already
-excluded from the wheel — see `[tool.hatch.build.targets.wheel] exclude` in
-`pyproject.toml`) and the frontend's helper client.
-
-> **Do not skip #060 indefinitely.** `nomicous/frontend/src/inference/constants.ts` still
-> publishes four installer download URLs pointing at
-> `github.com/kkkamur07/greekOCR/releases/latest/download/…`, and
-> `PageEditorInferenceBanner.tsx` still renders a "Download the installer" button over
-> them. They work today only because the old `v0.1.6` release still exists. #061 deleted
-> the workflow that produces those artifacts, so the first release cut after this lands
-> makes `latest` an installer-free release and every one of those links 404s.
-
-## 6. Traps that have already cost time
-
-1. **Every claim must send `X-Nomicous-Agent-Version`.** #055 made it mandatory and
-   evaluates it *before* authentication (HTTP 426). Any test helper or client written
-   against a pre-055 tree gets refused with a status nobody expects.
-2. **Settings read an ambient dotenv.** `backend/core/settings/_env.py` resolves
-   `backend/core/.env`, falling back to `.env.supabase` — both gitignored. A test that
-   assumes a backend must pin it (`monkeypatch.setenv("STORAGE_BACKEND", "local")` plus
-   `reset_settings_caches()`). Before that fix, `test_signed_page_image_link.py` was
-   uploading manuscript pages to a **live Supabase project** in any checkout that had the
-   file.
-3. **Never memoize anything settings-derived with a bare `lru_cache`.** Use
-   `@settings_cache` from `backend/core/settings/_cache.py` so `reset_settings_caches()`
-   can reach it. `get_media_store` was the leak.
-4. **Do not capture a settings-derived object in `__init__`.** Four route modules build
-   `DocumentPartService()` at import time; it now resolves the media store through a
-   property per use for exactly that reason.
-5. **ADR 0004 is invisible in a diff.** PyTorch replaced ONNX Runtime and the ONNX code
-   moved to `archive/onnx-runtime/`. A three-way merge resolves "modified here, deleted
-   there" by keeping the modification, which silently resurrects it. After any merge:
+1. **A merge can produce code that parses and is still dead.** Resolving a conflict by taking
+   both sides in file order put a method-indented `def read_agent_floor` *after* the
+   module-level helpers, where Python silently absorbed it as a nested function. The file
+   imported, `ast` parsed it, and `PlatformClient.read_agent_floor` did not exist. Verify a
+   merged class by asserting the attribute (`hasattr`), never by checking that the file
+   imports.
+2. **Every claim must send `X-Nomicous-Agent-Version`.** #055 made it mandatory and evaluates
+   it *before* authentication (HTTP 426). A client written against a pre-055 tree gets refused
+   with a status nobody expects.
+3. **Settings read an ambient dotenv.** `backend/core/settings/_env.py` resolves
+   `backend/core/.env`, falling back to `.env.supabase` — both gitignored. A test that assumes
+   a backend must pin it (`monkeypatch.setenv("STORAGE_BACKEND", "local")` plus
+   `reset_settings_caches()`). Before that fix, `test_signed_page_image_link.py` was uploading
+   manuscript pages to a **live Supabase project** in any checkout that had the file.
+4. **Never memoize anything settings-derived with a bare `lru_cache`.** Use `@settings_cache`
+   from `backend/core/settings/_cache.py` so `reset_settings_caches()` can reach it.
+5. **Do not capture a settings-derived object in `__init__`.**
+6. **ADR 0004 is invisible in a diff.** A three-way merge resolves "modified here, deleted
+   there" by keeping the modification, silently resurrecting ONNX. After any merge:
    `grep -rl onnxruntime inference/` must be empty and `inference/architectures/*/onnx.py`
    must not exist.
-6. **`src/` is audit-only.** Report what is wrong there; do not edit it.
+7. **`src/` is audit-only.** Report what is wrong there; do not edit it.
 
-## 7. Worktrees still on disk
+## 6. Known gaps, deliberately not closed
 
-All are merged and safe to remove.
+- **`selectedModelHostEligibility`** ("this model is remote-only") is gone from the settings
+  panel. Its only data source was the loopback probe; the platform's `/inference/models`
+  publishes no `host_eligibility`. Restoring it needs a platform change.
+- **`GET /inference/v1/registry`** survives though its only consumer was deleted. It is
+  platform surface, not transport.
+- **The device API still says "helper"** (`helper_version` column, pairing docstrings) and
+  that word leaks into the generated `schema.d.ts`. Renaming needs a migration.
+- **`ClaimedPageResponse.request` carries the page image twice** — inline base64 *and*
+  `page_image_url` — which contradicts ADR 0002's cost rationale. Reported, not fixed;
+  touches `tests/nomicous/integration/test_device_claim.py`.
+- **Adding a model is now a package release, not a hot registry sync.** The CLI resolves
+  against the `registry.yaml` inside its own wheel; `HELPER_REGISTRY_URL` lived only in the
+  deleted helper. Documented in `docs/inference/adding-inference-models.md`.
+- Follow-ups filed by the lanes themselves: [#62](https://github.com/kkkamur07/greekOCR/issues/62)
+  (segmentation peak memory), [#63](https://github.com/kkkamur07/greekOCR/issues/63),
+  [#64](https://github.com/kkkamur07/greekOCR/issues/64),
+  [#65](https://github.com/kkkamur07/greekOCR/issues/65) (CUDA pin),
+  [#66](https://github.com/kkkamur07/greekOCR/issues/66) (**rename the import package before
+  PyPI** — the name is claimable exactly once).
 
-```
-$WT/wt-{048,050,051,052,053,054,055,056,059,061}
-   where $WT=/private/tmp/claude-501/-Users-krishuagarwal-Desktop-Programming-python-greekOCR/b5e3d048-1766-4578-a155-c909851d5110
-/Users/krishuagarwal/Desktop/Programming/python/greekOCR-deepclean      feat/deep-cleanup
-/Users/krishuagarwal/Desktop/Programming/python/greekOCR-frontend       feat/frontend-libraries
-/Users/krishuagarwal/Desktop/Programming/python/greekOCR/.claude/worktrees/agent-af7f62c472b9cf6ac
-```
+## 7. The push — the owner's call
 
-`git worktree list` is authoritative; `git worktree remove <path>` then
-`git branch -d <branch>` once you are satisfied the trunk carries everything.
+The trunk has never been pushed. Whether these ~100 commits reach `main` as a merge, a
+rebase, or a pull request has not been decided, and no agent should decide it.
 
 ## 8. Owner's actions — not an agent's
 
 ### Revoke eight CI secrets
 
-#061 deleted the native installer pipeline, so these are unused credentials with signing
-authority. Deleting the repository secret is only half of it; the parenthesised half
+#061 deleted the native installer pipeline, so these are unused credentials **with signing
+authority**. Deleting the repository secret is only half of it; the parenthesised half
 revokes the underlying credential.
 
 | Secret | Also revoke |
@@ -192,9 +187,9 @@ revokes the underlying credential.
 | `RELEASE_SIGNING_GPG_PASSPHRASE` | — |
 
 Nothing in `.github/workflows/` or `deploy/` references `cosign`, `gpg`, `codesign`,
-`signtool`, `notarytool`, or any `SIGNING` variable any more. A published Python package
-is not signed by its author: PyPI Trusted Publishing establishes provenance through OIDC,
-and `actions/attest-build-provenance` records it under PEP 740. There is no key to hold.
+`signtool`, `notarytool`, or any `SIGNING` variable any more. A published Python package is
+not signed by its author: PyPI Trusted Publishing establishes provenance through OIDC, and
+`actions/attest-build-provenance` records it under PEP 740. There is no key to hold.
 
 ### Before the first release can be cut
 
@@ -202,17 +197,6 @@ and `actions/attest-build-provenance` records it under PEP 740. There is no key 
 `uv publish --trusted-publishing always` and holds no secrets. It needs, one time:
 
 1. a **PyPI Trusted Publisher** registered for this repository and that workflow filename;
-2. a GitHub environment named **`pypi`**.
-
-### The push
-
-The trunk has never been pushed. Whether these commits reach `main` as a merge, a
-rebase, or a pull request is the owner's call.
-
-## 9. Open questions
-
-- Keep `release.yml` inside #061, or split it into its own issue? It is separable at
-  commit `131d6be`.
-- The `src/` lint and grayscale findings (§3) need a decision: fix the `src/model` vs
-  `src/models` mismatch in `per-file-ignores`, exclude the tree outright, or leave both
-  gates red on purpose.
+2. a GitHub environment named **`pypi`**;
+3. issue [#66](https://github.com/kkkamur07/greekOCR/issues/66) resolved first — the package
+   name is claimable exactly once.
