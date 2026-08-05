@@ -364,6 +364,7 @@ def test_worker_processes_pending_job_via_lifespan(
 # line payload. Does not run Kraken or Calamari.
 
 
+@pytest.mark.integration
 def test_transcribe_job_is_left_pending_for_an_inference_agent(
     client: TestClient,
     owner_headers: dict[str, str],
@@ -400,6 +401,7 @@ def test_transcribe_job_is_left_pending_for_an_inference_agent(
         assert job.inference_job_id is None
 
 
+@pytest.mark.integration
 def test_transcribe_job_payload_batches_every_selected_line(
     client: TestClient,
     owner_headers: dict[str, str],
