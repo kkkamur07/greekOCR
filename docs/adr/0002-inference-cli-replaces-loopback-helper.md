@@ -122,6 +122,25 @@ Accepted risk: auto-upgrade executes newly fetched code without asking. A
 compromised PyPI package reaches every researcher's laptop at next launch.
 Mitigable by pinning to published hashes; not eliminable.
 
+> **As built (issue 058):** "asks the platform for its version floor" needed
+> somewhere to ask. The claim endpoint could not be it — an agent that had to
+> claim in order to learn it was stale would be holding a page at the exact
+> moment it replaced its own code — so the floor is also served on its own, at
+> `GET /device/v1/agent/version`, from the same comparison and with the same 426.
+> It is unauthenticated because the version dependency already resolves before
+> any credential is looked at, and it discloses nothing a 426 does not.
+>
+> Two narrowings of the accepted risk, neither of which closes it. The platform
+> names a *package* and never a command, so a compromised platform cannot choose
+> what executes on a laptop; and the upgrade runs whichever installer already
+> owns the environment (`pip` if the interpreter has one, else `uv pip`), so the
+> index is the researcher's configured one rather than one the platform picked.
+> Hash pinning is still the mitigation and is still not done.
+>
+> The check has exactly one call site, in `main()`, before the command is
+> dispatched — structural rather than disciplined, so no future claim loop has
+> anywhere to call an upgrade from.
+
 ### One page per claim
 
 A batch is N claims. Work stays seconds-to-minutes, so the lease covers it with

@@ -135,8 +135,12 @@ The credential a hosted **inference agent** presents instead of a device token. 
 _Avoid_: device token for cloud, webhook secret (that authenticates the platform's own callback receiver), API key
 
 **Version floor**:
-The oldest **inference agent** the platform will hand a **claim** to, served by the platform rather than read from PyPI so it can be turned without a release. An agent below it is refused outright and told to upgrade; an agent that states no version, or one that cannot be compared, is refused on the same terms rather than assumed current. Distinct from **outdated**, which is a notice delivered *with* the work.
+The oldest **inference agent** the platform will hand a **claim** to, served by the platform rather than read from PyPI so it can be turned without a release. An agent below it is refused outright and told to upgrade; an agent that states no version, or one that cannot be compared, is refused on the same terms rather than assumed current. Asked for on its own at the **launch check**, and repeated on every claim response. Distinct from **outdated**, which is a notice delivered *with* the work.
 _Avoid_: minimum supported version (fine in prose, but this is a runtime dial not a support policy), pinned version, auto-update setting
+
+**Launch check**:
+The one moment an **inference agent** may replace its own code: before it has claimed anything, it asks the platform for the **version floor**, installs a newer build and re-execs into it if it is below the floor, prints a notice if it is merely **outdated**, and then begins claiming. Never during a batch - a process that swaps its own code while a page is in flight has already told the platform which version it was. A failed upgrade is fatal and claims nothing. Accepted risk (ADR 0002): it executes newly fetched code without asking, so a compromised package reaches every laptop at next launch; mitigable by pinning to published hashes, not eliminable.
+_Avoid_: auto-update (implies a background updater), self-healing, restart (the process is replaced, not restarted by anything outside it)
 
 **Outdated**:
 An **inference agent** at or above the **version floor** but behind the newest published release. It is served normally and told, on every claim response, page or no page. Deliberately not the same state as being below the floor: most upgrades are not urgent, and refusing them would make every release an outage for anyone who had not restarted.
@@ -171,6 +175,7 @@ _Avoid_: org (when meaning the namespace generically)
 - A **claim** starts a **lease**; the page returns to the queue as `pending` when the lease expires - recovered opportunistically by the platform's existing stale sweep on read paths, never by a background worker - and completion or failure ends it through the platform's existing job callback contract
 - One **claim** carries one **signed page image link**, to one object; the two lifetimes are separate dials (`DEVICE_PAGE_IMAGE_URL_TTL_SECONDS` ~60s, `DEVICE_LEASE_SECONDS` 600s) because the fetch happens once at the start of the run
 - Every **claim** states which agent version is calling; below the **version floor** it is refused before it is authenticated, so a refused agent also stops reporting **capacity** and submission announces no host rather than creating pages nobody may claim
+- The **launch check** asks for the same verdict with no page attached (`GET /device/v1/agent/version`), so an agent learns it is below the **version floor** while nothing is in flight; it runs once per process and has no call site inside the **claim** loop
 - Pairing writes one **device credential file** per machine; the **confirmation code** is printed before the wait, and the pairing URL before any browser is opened
 - A **Hub collection** (`nomos`) links to many **Hub model repos** and **Hub dataset repos**; defined in `src/hf/publish/collection.yaml`
 
@@ -197,11 +202,12 @@ _Avoid_: org (when meaning the namespace generically)
 - **Claim**: `POST /device/v1/jobs/claim` on the platform - the one endpoint this layer adds (ADR 0005). Completion and failure are the existing `POST /internal/inference/job-complete` with a `JobCallbackRequest`; abandonment is the existing stale sweep. There is no heartbeat and no release endpoint.
 - **Signed page image link**: `page_image_url` / `page_image_expires_at` on the claimed page. Minted by the media store, so Supabase signs a Storage URL and the local filesystem backend signs a path the platform serves at `/media/signed/{image_key}` - a route with no credential dependency, which refuses to answer unless `STORAGE_BACKEND=local`.
 - **Version floor**: every claim sends `X-Nomicous-Agent-Version`. Below the floor the platform answers `426` with `error.code = AGENT_VERSION_UNSUPPORTED`, `reason` (`below_floor` / `missing` / `malformed`), `minimum_version`, `latest_version`, `package`, and `retryable: false`. At or above it, the 200 response carries an `agent` notice with `outdated`. Configured by `INFERENCE_AGENT_MIN_VERSION` / `INFERENCE_AGENT_LATEST_VERSION` on the platform (`backend/ml/domain/agent_version.py`, `backend/ml/api/agent_version.py`).
+- **Launch check**: `GET /device/v1/agent/version` answers the same 426 or the same notice with nothing taken from the queue - unauthenticated, because the version dependency resolves before any credential is looked at. The CLI half is `inference/cli/upgrade.py`, wired into `main.py` for the commands that claim and nowhere else; it upgrades with whichever installer already owns the environment (`pip` if this interpreter has one, otherwise `uv pip`) and re-execs through `os.execve`.
 - Architectures implemented: **Calamari** (`inference/architectures/calamari/`) and native **BLLA segment** (`inference/architectures/blla/`)
 - **Calamari runtime**: local PyTorch graph + local preprocessing; no TensorFlow or vendored `calamari_ocr` import at inference time.
 - Weight resolution: `file://`, `hf://`, and `package://` (see `inference/weights/__init__.py` and `inference/hub/`)
 - Runtime cache: `~/.nomicous/hf/cache/<registry_model_id>/<registry_tag>/`
-- **CLI** (`inference/cli/`): `nomicous pair` and `nomicous version` (#56). `pair` runs the pairing protocol above and writes the **device credential file**; `version` reports what the **version floor** will read, and asks the platform nothing. `nomicous run` - the **claim** loop - is #57, and self-upgrade #58. The platform base URL comes from `NOMICOUS_API_URL` or `--api-url`.
+- **CLI** (`inference/cli/`): `nomicous pair` and `nomicous version` (#56), `nomicous upgrade` (#58). `pair` runs the pairing protocol above and writes the **device credential file**; `version` reports what the **version floor** will read, and asks the platform nothing; `upgrade` is the **launch check** run on demand, and prints nothing when this agent is current. `nomicous run` - the **claim** loop - is #57, and runs the same launch check before its first claim. The platform base URL comes from `NOMICOUS_API_URL` or `--api-url`.
 
 ### Hub layout (`src/hf/`)
 
