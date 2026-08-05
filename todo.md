@@ -4,8 +4,9 @@ Everything from the 109-finding review is implemented and unit-tested (backend 2
 frontend 185 pass + typecheck clean, inference 159 pass / 1 skip / 1 fail). What follows is
 what is **not** done. Ordered by what blocks what.
 
-Current tree: 159 files changed, uncommitted on `main`. No `git add`/`commit`/`push` has been
-run — the whole pass is still in the working tree.
+Current tree: committed on `feat/inference-cli-redesign`. The 2026-08-04 inference
+redesign (ADRs 0002-0005, issues #48-#66) is layered on top; see
+`docs/merge-handoff-inference-redesign.md` before merging anything into it.
 
 ---
 
@@ -41,12 +42,55 @@ runs with `JOB_WORKER_ENABLED=false` (it is request/response only), so if that s
 isn't running, **nothing claims `pending` jobs in production**. The new on-read stale sweep
 covers timeouts but does not claim work.
 
-### 4. Commit
+### 4. Benchmark ONNX vs Torch **closure** sizes, then decide
 
-14 workstreams sitting uncommitted on `main`. Worth splitting into logical commits and keeping
-the pre-existing modifications (the ones present before this pass) separate.
+ADR 0004 retired ONNX on measurements that were real but not comparable, and the
+one number that matters was never taken.
 
-### 5. Release signing secrets
+What we measured:
+
+| | measured |
+|---|---|
+| `onnxruntime` package, installed | 63 MB |
+| `torch` package, installed | 388 MB |
+| **Full `nomicous-inference` closure, CPU-pinned (Linux)** | **969 MB** |
+| Full closure, no pin (Linux) — 16 CUDA wheels | **4801 MB** |
+| Full closure, macOS arm64 | 811 MB |
+
+The first two rows compare *packages*. The last three measure a *closure* — Torch
+plus OpenCV, SciPy, NumPy, SymPy, scikit-image and the rest of what a researcher
+actually downloads. **There is no ONNX counterpart to those three rows**, so the
+comparison that would justify or overturn the decision has never been run: nobody
+has built the equivalent ONNX-runtime closure and weighed it against 969 MB.
+
+That gap matters more now than when ADR 0004 was written, because the closure came
+in far worse than the ADR assumed — 2.5x its stated figure at best, 12x at worst,
+and the worst case is what a plain `pip install` produces (issue #65).
+
+Take both closures on the same machine, same lockfile discipline, same platforms
+(Linux x86_64/aarch64, macOS arm64, Windows), and report installed size, bytes
+fetched, and cold-cache wall clock. Include peak RSS while segmenting one page —
+issue #62 measured 3.0 GB for ONNX against 7.0 GB for Torch, which is the same
+question in memory rather than disk, and on an 8 GB laptop it may matter more.
+
+Then decide, on the numbers:
+
+- **Keep Torch** if the closure gap is modest. Output is byte-identical, PyTorch is
+  14%/40%/12% faster (ADR 0004), and the ONNX↔Torch parity apparatus stays deleted
+  — that was the recurring cost the owner named.
+- **Revisit** if the gap is large. Reversal is now cheap by design: the ONNX
+  implementation was archived rather than deleted, under `archive/onnx-runtime/`
+  with a README and a revival checklist, precisely so this stays a live option.
+
+Do not decide this from the package-level 63 MB vs 388 MB figures. They are the
+numbers that made the original argument and they are the wrong unit.
+
+### 5. ~~Commit~~ - done
+
+The pass is committed on `feat/inference-cli-redesign`, split into logical commits.
+The inference redesign (issues #48-#61) landed on top of it in per-issue lanes.
+
+### 6. Release signing secrets
 
 Six secrets are still unset; the release workflow stays red **by design** until they exist.
 
@@ -54,12 +98,12 @@ Six secrets are still unset; the release workflow stays red **by design** until 
 
 ## P1 — Correctness / safety
 
-### 6. `bounded_image` is not thread-safe
+### 7. `bounded_image` is not thread-safe
 
 Introduced by this pass's own `asyncio.to_thread` work. Shared mutable state now reachable from
 multiple worker threads.
 
-### 7. BLLA residual divergence at extreme widths
+### 8. BLLA residual divergence at extreme widths
 
 The fix bounds the accumulator; it does not remove the mechanism.
 
@@ -73,17 +117,17 @@ The fix bounds the accumulator; it does not remove the mechanism.
 `MAX_WIDTH_TO_HEIGHT_RATIO = 8` permits up to 14400. Either lower the clamp or add a third
 reduction stage to `_ExportGroupNorm`.
 
-### 8. BLLA regression guards have three blind spots
+### 9. BLLA regression guards have three blind spots
 
 - They read only the staging path, so a stale `src/hf/cache/` copy is invisible to them.
 - The parity suite bypasses the resolver entirely.
 - The graph-shape guard inspects the committed blob rather than a freshly exported one.
 
-### 9. Pin the helper download URLs
+### 10. Pin the helper download URLs
 
 Currently unversioned. Pin to a specific release and verify against `SHA256SUMS`.
 
-### 10. conftest environment pollution
+### 11. conftest environment pollution
 
 `tests/nomicous/integration/conftest.py` sets `INFERENCE_DATABASE_URL` via `setdefault` at
 import time, which makes one security test vacuous — it asserts against a value the test file
@@ -102,24 +146,24 @@ live pooler. Worth adding a local `.env` so nothing defaults to production.
 
 ## P2 — Deferred / cleanup
 
-### 11. Integration suite unverified
+### 12. Integration suite unverified
 
 Deferred by request. Needs a throwaway Postgres (local or a scratch Supabase project) before it
 can run — see the hazard in #10.
 
-### 12. 519 ruff violations behind a per-file-ignores allowlist
+### 13. 519 ruff violations behind a per-file-ignores allowlist
 
 `src/model` holds 385 of them, including real `F901` / `F403` / `F841`.
 
-### 13. Build the `/pair` consent page + device management UI
+### 14. Build the `/pair` consent page + device management UI
 
 Backend is complete and tested; the feature flag is off. Frontend is the remaining half.
 
-### 14. Regenerate `openapi.json` and `schema.d.ts`
+### 15. Regenerate `openapi.json` and `schema.d.ts`
 
 Stale after the device-pairing routers and the job-lifecycle schema changes.
 
-### 15. Docs: stale `/inference/v1/catalog` references
+### 16. Docs: stale `/inference/v1/catalog` references
 
 That route was removed and folded into `/inference/v1/info`.
 
