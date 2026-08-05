@@ -69,22 +69,15 @@ export function parseHelperInfo(body: unknown): HelperInfo | null {
  * `null` as "helper absent" and never fall back to a bare reachability check.
  */
 export async function fetchHelperInfo(): Promise<HelperInfo | null> {
-  const controller = new AbortController();
-  const timeout = window.setTimeout(
-    () => controller.abort(),
-    HELPER_PROBE_TIMEOUT_MS,
-  );
   try {
     const response = await fetchHelper(HELPER_INFO_PATH, {
       method: "GET",
-      signal: controller.signal,
+      signal: AbortSignal.timeout(HELPER_PROBE_TIMEOUT_MS),
     });
     if (!response.ok) return null;
     return parseHelperInfo(await response.json());
   } catch {
     return null;
-  } finally {
-    window.clearTimeout(timeout);
   }
 }
 

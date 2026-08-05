@@ -9,7 +9,7 @@ import {
   type TranscriptionLayerResponse,
 } from "../../../api/client";
 import { ApiError } from "../../../api/errors";
-import { readResource } from "../../../api/resourceCache";
+import { queryClient, taggedMeta } from "../../../api/queryClient";
 import { resourceTags } from "../../../api/resources";
 import {
   hasAccessToken,
@@ -185,11 +185,11 @@ export function usePageEditorData(
         // each page turn from refetching it.
         const doc = canReuseDocument(initialDocument, projectId, documentId)
           ? initialDocument
-          : await readResource(
-              ["document", projectId, documentId],
-              [resourceTags.document(projectId, documentId)],
-              () => api.getDocument(projectId, documentId),
-            );
+          : await queryClient.fetchQuery({
+              queryKey: ["document", projectId, documentId],
+              queryFn: () => api.getDocument(projectId, documentId),
+              meta: taggedMeta([resourceTags.document(projectId, documentId)]),
+            });
         if (cancelled) return;
 
         const selectedPart = resolvePart(doc, partId);

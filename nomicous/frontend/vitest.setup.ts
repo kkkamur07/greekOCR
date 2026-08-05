@@ -6,7 +6,7 @@ import {
   type AnchorHTMLAttributes,
   type ReactNode,
 } from "react";
-import { clearResourceCache } from "./src/api/resourceCache";
+import { queryClient } from "./src/api/queryClient";
 
 const storage = new Map<string, string>();
 
@@ -104,8 +104,8 @@ vi.stubGlobal("ResizeObserver", ResizeObserverMock);
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
-  // Server-state reads are cached in a module-level map, so one test's data
+  // Server-state reads are cached on a module-level client, so one test's data
   // would otherwise still be current for the next one and its mocks never called.
-  clearResourceCache();
+  queryClient.clear();
   window.history.replaceState({}, "", "/");
 });
