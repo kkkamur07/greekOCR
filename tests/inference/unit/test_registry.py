@@ -21,7 +21,7 @@ def test_registry_yaml_validates_model_entries():
     assert syriac.versions["stable"].hub_revision == "5ff715e873f1ae3f325ebea4d2c4a95eb5094601"
     assert (
         syriac.versions["stable"].artifact_sha256
-        == "3cb01b58be5809032318c717c079a5b681a87074a372ea4334b9767c67ce301c"
+        == "ea711b918010aa31bd4a8a5de99c7953207421a7c7d4a39163166db380013053"
     )
     assert "greek-calamari-v1" not in registry.models
 
@@ -32,7 +32,7 @@ def test_registry_yaml_validates_model_entries():
     assert blla.versions["stable"].weights_source == "hf://kkkamur07/segmentation-blla@stable"
     assert (
         blla.versions["stable"].artifact_sha256
-        == "5871e3755d414c00380794bafd570c1bb3d6a3255cdfb11b1bbe99dcec084d5e"
+        == "8b5b6ec21947d3c5a7c117c7b873f3a923aab48950ba05707805899877c397ce"
     )
     assert blla.versions["stable"].hub_revision == "444d51dd7b34cd2012b1ffe1c9c9442c875d8230"
 

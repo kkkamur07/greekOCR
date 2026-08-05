@@ -3,8 +3,8 @@
 Ship a **minimal** native install (`.dmg`, Windows zip + installer script, Linux tarball) containing only what local inference needs:
 
 - `inference/helper` slim FastAPI app (`health`, `catalog`, `/inference/v1/run`)
-- Calamari transcribe (ONNX Runtime **CPU**)
-- BLLA page segmentation (`hf://kkkamur07/segmentation-blla@stable`, ONNX)
+- Calamari transcribe (PyTorch **CPU**, `best.pt`)
+- BLLA page segmentation (`hf://kkkamur07/segmentation-blla@stable`, `blla.safetensors`)
 - `src/hf/resolve` for `hf://` weight download into `~/.nomicous/hf/cache/`
 - Bundled `inference/registry.yaml`
 
@@ -12,18 +12,17 @@ Ship a **minimal** native install (`.dmg`, Windows zip + installer script, Linux
 
 - Platform API (`nomicous/`), Postgres drivers, Alembic, frontend assets
 - Training stacks (`transformers`, `accelerate`, `datasets`, notebooks)
-- Torch, torchvision, safetensors, and all native model implementations
-- GPU/CUDA runtime libraries
+- GPU/CUDA runtime libraries - the Torch pin is the CPU-only build (ADR 0004)
 - Desktop shells (Tauri/Electron) - helper is a background service
 
 ## Layout
 
 ```
 packaging/helper/
-  excludes.txt              # PyInstaller exclude list (one module per line)
-  pyinstaller.spec            # loads excludes.txt
+  pyinstaller.spec            # hidden imports + size/correctness excludes
   scripts/
     build-pyinstaller.sh      # shared uv + PyInstaller build
+    smoke-test.py             # launches the frozen binary, checks its API
   macos/
     build-dmg.sh              # entry: build → .app → .dmg
     Info.plist
@@ -67,17 +66,17 @@ uv run --isolated --no-dev --group helper --group packaging pyinstaller --clean 
 
 The spec entry point is `packaging/helper/tray_launcher.py` and runs the server directly.
 
-Every platform build runs `scripts/verify-bundle.py` before assembling its
-installer. The verifier rejects leaked Torch/safetensors files, launches the
-actual frozen executable (the `.app` executable on macOS), and checks both
-`/health` and `/inference/v1/catalog`. Do **not** exclude `onnxruntime`,
-`opencv`, `Pillow`, or `httpx`: those are required by inference, preprocessing,
-and `hf://` downloads.
+Every platform build runs `scripts/smoke-test.py` before assembling its
+installer. It launches the actual frozen executable (the `.app` executable on
+macOS) and checks `/health` and `/inference/v1/info`. Do **not** exclude
+`torch`, `safetensors`, `opencv`, `Pillow`, or `httpx`: those are required by
+inference, preprocessing, and `hf://` downloads.
 
-The native Python/Torch implementations remain available in the `train`,
-`export`, and `parity` environments for training, export, and parity checks.
-The production `inference` dependency set and frozen helper are ONNX-only; the
-helper explicitly rejects non-`.onnx` artifacts.
+This build used to be policed by a `excludes.txt` denylist and a release-time
+verifier that rejected any leaked Torch or safetensors file. ADR 0004 made
+PyTorch the runtime, so both were deleted: there is no forbidden dependency
+left to police, and the helper loads the same native artifacts as the hosted
+service.
 
 ## Per-OS installers
 
@@ -123,7 +122,7 @@ MACOS_NOTARY_PROFILE="nomicous-notary" \
 ```
 
 - `MACOS_CODESIGN_IDENTITY` - deep-signs the `.app` (and inner dylibs) with the hardened runtime and signs the `.dmg`.
-- `MACOS_ENTITLEMENTS` - override the default `macos/entitlements.plist` (relaxes library validation for bundled native Python/ONNX libraries).
+- `MACOS_ENTITLEMENTS` - override the default `macos/entitlements.plist` (relaxes library validation for bundled native Python/Torch libraries).
 - `MACOS_NOTARY_PROFILE` - submits the `.dmg` to Apple, waits, and staples the ticket.
 
 Signing only (no notarization) still leaves a Gatekeeper prompt on first launch - set the notary profile for a clean install.

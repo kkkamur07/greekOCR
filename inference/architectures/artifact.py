@@ -1,8 +1,9 @@
 """Artifact preflight shared by every architecture execution path.
 
-Each execution path - Calamari ONNX, Calamari Torch, BLLA ONNX, BLLA Torch -
-used to open its artifact with its own copy of the same four steps, and the
-copies had already drifted apart. They are collapsed here because the *order*
+Each execution path - once four of them, Calamari and BLLA on ONNX and on
+Torch, now the two Torch paths ADR 0004 kept - used to open its artifact with
+its own copy of the same steps, and the copies had already drifted apart. They
+are collapsed here because the *order*
 of those steps is load-bearing: ``run_errors.http_exception_for_run_error``
 turns each failure into a different HTTP status, so a path that verified the
 digest before checking existence, or that raised a bare ``ValueError`` for an
@@ -22,8 +23,9 @@ checks it before its ``ValueError`` branch. Verifying the digest before the
 suffix check would not change that, but verifying it before the existence
 check would turn a missing file into an ``OSError`` from the hasher.
 
-This module must stay Torch-free: it is imported by the ONNX paths that the
-frozen, no-Torch helper bundle ships.
+Step 3 also gates a code-execution surface: ``artifact_sha256`` is verified
+here, before the architecture loader ever opens the file, so a Calamari
+``.pt`` checkpoint is never handed to ``torch.load`` unverified.
 """
 
 from __future__ import annotations

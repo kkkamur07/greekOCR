@@ -1,4 +1,9 @@
-"""Focused ONNX BLLA export and Torch-free runtime tests."""
+"""Focused ONNX BLLA export and Torch-free runtime tests.
+
+RETIRED. See ``archive/onnx-runtime/README.md`` and ADR 0004. Originally
+``tests/inference/unit/test_blla_onnx.py``; not collected, since ``archive/``
+is outside ``testpaths``.
+"""
 
 from __future__ import annotations
 

@@ -1,4 +1,16 @@
-"""Inference-only parity checks against Kraken's bundled BLLA oracle."""
+"""Inference-only parity checks against Kraken's bundled BLLA oracle.
+
+RETIRED. See ``archive/onnx-runtime/README.md`` and ADR 0004. Originally
+``tests/inference/integration/test_blla_parity.py``; not collected, since
+``archive/`` is outside ``testpaths`` and the ``kraken`` oracle dependency has
+been removed.
+
+Worth knowing if you revive it: this file also held the *native* Torch checks
+against the Kraken oracle (weights equality, logits within 1e-5 mean / 1e-4
+max, and decoded-line equality on every local manuscript page). Those did not
+depend on ONNX, only on `kraken` being installed, which is the reason they went
+with it.
+"""
 
 from __future__ import annotations
 

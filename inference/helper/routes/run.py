@@ -23,7 +23,6 @@ def run_inference(body: InferenceRunRequest) -> InferenceRunResponse:
             registry_tag=body.registry_tag,
             image_bytes=body.image_bytes,
             params=body.params,
-            onnx_only=True,
         )
     except Exception as exc:
         raise http_exception_for_run_error(exc) from exc

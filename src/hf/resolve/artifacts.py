@@ -66,48 +66,23 @@ def verify_artifact_sha256(path: Path, expected_sha256: str) -> None:
 
 
 def find_hub_artifact(cache_dir: Path, *, architecture: str | None) -> Path:
+  """Locate the one architecture-native **Hub artifact** in a cache directory.
+
+  There is exactly one runtime format per architecture since ADR 0004 retired
+  the ONNX runtime: Calamari loads ``.pt`` and BLLA loads ``.safetensors``.
+  This function used to rank two formats per architecture, which meant a
+  directory holding both silently decided which runtime ran.
+  """
   if architecture == "calamari":
-    # Prefer the self-contained ONNX artifact over the legacy Torch formats.
-    for name in ("model.onnx", "best.onnx", "stable.onnx"):
-      candidate = cache_dir / name
-      if candidate.is_file():
-        return candidate
-    for path in sorted(cache_dir.glob("*.onnx")):
-      if path.is_file():
-        return path
-    for name in ("best.pt", "stable.pt"):
+    for name in ("best.pt", "stable.pt", "model.pt"):
       candidate = cache_dir / name
       if candidate.is_file():
         return candidate
     for path in sorted(cache_dir.glob("*.pt")):
       if path.is_file():
         return path
-    for name in ("best.ckpt", "stable.ckpt"):
-      candidate = cache_dir / name
-      if candidate.exists():
-        return candidate
-    for path in sorted(cache_dir.glob("*.ckpt")):
-      if path.is_dir() or path.is_file():
-        return path
 
-  if architecture in ("blla", "blla-segment", "blla_segment"):
-    # Prefer the Torch-free ONNX artifact over the native safetensors one.
-    candidate = cache_dir / "blla.onnx"
-    if candidate.is_file():
-      return candidate
-    for path in sorted(cache_dir.glob("*.onnx")):
-      if path.is_file():
-        return path
-
-  if architecture in (None, "blla-segment", "kraken_segment"):
-    for path in sorted(cache_dir.glob("*.mlmodel")):
-      if path.is_file():
-        return path
-    candidate = cache_dir / "blla.safetensors"
-    if candidate.is_file():
-      return candidate
-
-  if architecture in ("blla", "blla-segment", "blla_segment"):
+  if architecture in (None, "blla", "blla-segment", "blla_segment", "kraken_segment"):
     candidate = cache_dir / "blla.safetensors"
     if candidate.is_file():
       return candidate

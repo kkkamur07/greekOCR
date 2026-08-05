@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import numpy as np
+import torch
 from scipy.ndimage import gaussian_filter
 from skimage import filters
 
-from inference.architectures.blla.blla_decoder.common import (
-    as_heatmaps,
-    resize_heatmaps_nearest,
-)
+from inference.architectures.blla.blla_decoder.common import as_heatmaps
 from shapely import geometry as geom
 
 from inference.architectures.blla.blla_decoder.lines import (
@@ -33,15 +31,13 @@ def decode_blla_heatmaps(
     min_length: float = 5.0,
     raw_logits: bool = False,
     scaled_gray: np.ndarray | None = None,
-    torch_free: bool = False,
 ) -> list[DecodedBLLALine]:
     """Decode BLLA channels into image-space baselines and polygons.
 
     Production inference follows the reference BLLA decoder when
     ``scaled_gray`` is supplied. The small connected-component path remains
     available for focused decoder tests that provide synthetic probabilities
-    without an image. ``torch_free`` selects NumPy interpolation for the
-    ONNX Runtime adapter; native inference keeps the legacy Torch operation.
+    without an image.
     """
 
     if not 0.0 < threshold < 1.0:
@@ -63,7 +59,6 @@ def decode_blla_heatmaps(
         raw_logits=raw_logits,
         scaled_gray=scaled_gray,
         min_length=min_length,
-        torch_free=torch_free,
     )
 
 
@@ -75,34 +70,19 @@ def _decode_reference_pipeline(
     raw_logits: bool,
     scaled_gray: np.ndarray,
     min_length: float,
-    torch_free: bool,
 ) -> list[DecodedBLLALine]:
     """Run the reference heatmap, skeleton, and polygonization sequence."""
 
     values = as_heatmaps(heatmaps)
     scaled_height, scaled_width = scaled_gray.shape
-    if torch_free:
-        resized = resize_heatmaps_nearest(
-            values,
-            height=scaled_height,
-            width=scaled_width,
-        )
-    else:
-        import torch
-
-        resized_tensor = torch.nn.functional.interpolate(
+    # ``interpolate`` without a mode is nearest-neighbour for a 4D tensor, which
+    # is what the reference BLLA decoder uses.
+    with torch.inference_mode():
+        resized = torch.nn.functional.interpolate(
             torch.from_numpy(values).unsqueeze(0),
             size=(scaled_height, scaled_width),
         )[0]
-        probabilities = (
-            torch.sigmoid(resized_tensor).numpy() if raw_logits else resized_tensor.numpy()
-        )
-    if torch_free:
-        probabilities = (
-            np.reciprocal(np.add(1.0, np.exp(-resized), dtype=np.float32))
-            if raw_logits
-            else resized
-        )
+        probabilities = (torch.sigmoid(resized) if raw_logits else resized).numpy()
     baselines = vectorize_lines(
         probabilities[:3],
         threshold=threshold,

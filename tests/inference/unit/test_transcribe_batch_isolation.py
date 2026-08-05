@@ -16,11 +16,10 @@ import pytest
 from PIL import Image
 from pydantic import ValidationError
 
+from tests.fixtures.paths import TRANSCRIBE_LINE
+
 from inference.architectures.calamari import adapter
-from inference.architectures.calamari.onnx import (
-    TranscribeLineFailure,
-    run_calamari_onnx_transcribe_many,
-)
+from inference.architectures.calamari.adapter import TranscribeLineFailure
 from inference.contracts.common import InferenceTask, RegistryArchitecture
 from inference.contracts.transcribe import (
     TRANSCRIBE_LINE_ERROR,
@@ -31,7 +30,10 @@ from inference.contracts.transcribe import (
 )
 from inference.jobs.runner import run_model
 
-CHARSET = ["", "a", "b", "c"]
+CALAMARI_CHECKPOINT = (
+    Path(__file__).resolve().parents[3]
+    / "src/hf/local/syriac/calamari/v1/stable/best.pt"
+)
 
 
 def _png_line(width: int = 40) -> bytes:
@@ -63,7 +65,7 @@ def _line_params(count: int) -> dict:
 
 @pytest.fixture
 def calamari_runner(monkeypatch: pytest.MonkeyPatch):
-    """Wire ``run_model`` to a Calamari ONNX entry without touching weights."""
+    """Wire ``run_model`` to a Calamari entry without touching weights."""
     monkeypatch.setattr("inference.jobs.runner.validate_image_bytes", lambda *_args: None)
     monkeypatch.setattr("inference.jobs.runner.validate_request_params", lambda *_args: None)
     monkeypatch.setattr(
@@ -85,7 +87,7 @@ def calamari_runner(monkeypatch: pytest.MonkeyPatch):
     )
     monkeypatch.setattr(
         "inference.jobs.runner.resolve_weights_source",
-        lambda *_args, **_kwargs: Path("calamari.onnx"),
+        lambda *_args, **_kwargs: CALAMARI_CHECKPOINT,
     )
 
     def run(params: dict, image_bytes: bytes | None = None):
@@ -171,63 +173,43 @@ def test_batch_with_no_croppable_line_fails_instead_of_returning_nothing(
         calamari_runner(_line_params(3))
 
 
-def test_calamari_onnx_batch_reports_the_failing_line_and_keeps_the_rest(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    checkpoint = tmp_path / "calamari.onnx"
-    checkpoint.write_bytes(b"stub")
-    calls = {"count": 0}
+def test_one_undecodable_crop_does_not_take_the_page_down() -> None:
+    """Run the real checkpoint: one bad crop, two real ones, one page.
 
-    class _FakeSession:
-        def run(self, _names, _feeds):
-            calls["count"] += 1
-            if calls["count"] == 2:
-                raise RuntimeError("onnxruntime rejected the input shape")
-            logits = np.zeros((1, 2, len(CHARSET)), dtype=np.float32)
-            logits[0, :, 1] = 10.0
-            return [logits, np.asarray([2], dtype=np.int64)]
-
-    monkeypatch.setattr(
-        "inference.architectures.calamari.onnx._load_onnx_session",
-        lambda *_args, **_kwargs: (_FakeSession(), CHARSET, 48),
-    )
-
-    results = run_calamari_onnx_transcribe_many(
-        [_png_line(), _png_line(), _png_line()],
-        checkpoint_path=checkpoint,
+    No stubbed session. The middle "crop" is not an image at all, so
+    preprocessing raises inside the batch loop and the adapter has to isolate
+    it while the two real line crops still transcribe.
+    """
+    results = adapter.run_calamari_transcribe_many(
+        [TRANSCRIBE_LINE.read_bytes(), b"not an image", TRANSCRIBE_LINE.read_bytes()],
+        checkpoint_path=CALAMARI_CHECKPOINT,
     )
 
     assert len(results) == 3
     assert isinstance(results[1], TranscribeLineFailure)
     assert results[1].index == 1
-    assert isinstance(results[1].error, RuntimeError)
-    assert [result.text for result in results if isinstance(result, TranscribeRunResponse)] == [
-        "a",
-        "a",
-    ]
+    survivors = [result for result in results if isinstance(result, TranscribeRunResponse)]
+    assert len(survivors) == 2
+    # The surviving lines produced real text from real weights, not a placeholder.
+    assert all(survivor.text for survivor in survivors)
+    assert survivors[0].text == survivors[1].text
 
 
-def test_batch_where_every_line_failed_reraises_the_original_error(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    """An all-failed batch must keep the cause, so a broken artifact stays a 503."""
-    checkpoint = tmp_path / "calamari.onnx"
-    checkpoint.write_bytes(b"stub")
-    monkeypatch.setattr(
-        adapter,
-        "run_calamari_onnx_transcribe_many",
-        lambda line_images, **_kwargs: [
-            TranscribeLineFailure(index=index, error=adapter.CalamariUnavailableError("no runtime"))
-            for index, _ in enumerate(line_images)
-        ],
-    )
+def test_batch_where_every_line_failed_reraises_the_original_error() -> None:
+    """An all-failed batch must keep the cause, not return an empty page.
 
-    with pytest.raises(adapter.CalamariUnavailableError, match="no runtime"):
+    Run live against the real checkpoint: every crop is unreadable, so every
+    line fails and the first failure comes back out with its original type. The
+    type matters because ``run_errors`` reads it - here it is PIL's
+    ``UnidentifiedImageError`` rather than a generic wrapper, and an empty
+    successful page would have been the far worse answer.
+    """
+    from PIL import UnidentifiedImageError
+
+    with pytest.raises(UnidentifiedImageError):
         adapter.run_calamari_transcribe_many(
-            [_png_line(), _png_line()],
-            checkpoint_path=checkpoint,
+            [b"not an image", b"also not an image"],
+            checkpoint_path=CALAMARI_CHECKPOINT,
         )
 
 

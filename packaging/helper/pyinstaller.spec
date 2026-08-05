@@ -1,8 +1,11 @@
 # PyInstaller spec for the Nomicous Inference Helper.
 #
-# Goal: ship only the ONNX Runtime paths for Calamari transcribe and BLLA
-# segmentation on CPU. Native Torch implementations remain in the repository
-# for training, export, parity checks, and the unfrozen inference service.
+# Goal: ship Calamari transcribe and BLLA segmentation on the PyTorch CPU
+# runtime (ADR 0004). The excludes below are size and correctness pruning -
+# training stacks, GUI toolkits, the platform API, and the Postgres job queue
+# the helper does not serve. They are *not* a Torch denylist: the denylist
+# (`excludes.txt`) and its release-time verifier were deleted when Torch became
+# the runtime rather than a forbidden dependency.
 
 import os
 import sys
@@ -38,19 +41,24 @@ hiddenimports = [
     "inference.helper.__main__",
     "inference.architectures.calamari",
     "inference.architectures.calamari.adapter",
-    "inference.architectures.calamari.onnx",
+    "inference.architectures.calamari.checkpoint",
+    "inference.architectures.calamari.config",
+    "inference.architectures.calamari.layers",
+    "inference.architectures.calamari.model",
     "inference.architectures.blla",
+    "inference.architectures.blla.blla",
+    "inference.architectures.blla.blla_model",
     "inference.architectures.blla.blla_decoder",
     "inference.architectures.blla.blla_decoder.common",
     "inference.architectures.blla.blla_decoder.lines",
     "inference.architectures.blla.blla_decoder.polygon",
     "inference.architectures.blla.blla_decoder.simple",
     "inference.architectures.blla.blla_decoder.types",
-    "inference.architectures.blla.onnx",
     "inference.architectures.blla.blla_preprocessing",
     "inference.architectures.blla.blla_runtime",
-    "onnxruntime",
-    "onnxruntime.capi.onnxruntime_pybind11_state",
+    "safetensors",
+    "safetensors.torch",
+    "torch",
     "src.hf.resolve",
     "uvicorn.logging",
     "uvicorn.loops.auto",
@@ -66,11 +74,43 @@ hiddenimports = [
 hiddenimports += collect_submodules("httpx")
 hiddenimports += collect_submodules("huggingface_hub")
 
-_excludes_path = Path(SPECPATH) / "excludes.txt"
 excludes = [
-    line.strip()
-    for line in _excludes_path.read_text(encoding="utf-8").splitlines()
-    if line.strip() and not line.strip().startswith("#")
+    # Training and experiment stacks.
+    "accelerate",
+    "datasets",
+    "kraken",
+    "matplotlib",
+    "pandas",
+    "tensorboard",
+    "tensorflow",
+    "transformers",
+    # Notebook and GUI toolkits.
+    "gradio",
+    "IPython",
+    "jupyter",
+    "notebook",
+    "PyQt5",
+    "PyQt6",
+    "PySide2",
+    "PySide6",
+    "tkinter",
+    # Test runner.
+    "pytest",
+    # Platform API and the Postgres job queue: the helper serves sync /run only.
+    "alembic",
+    "asyncpg",
+    "inference.api.dependencies",
+    "inference.api.jobs",
+    "inference.api.main",
+    "inference.infrastructure.db",
+    "inference.infrastructure.job_repository",
+    "inference.infrastructure.orm_models",
+    "inference.jobs.callback",
+    "inference.jobs.worker",
+    "nomicous",
+    "psycopg2",
+    "sqlalchemy",
+    "src.hf.publish",
 ]
 
 a = Analysis(

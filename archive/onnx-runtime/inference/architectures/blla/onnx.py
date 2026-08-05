@@ -1,4 +1,10 @@
-"""Torch-free BLLA inference through ONNX Runtime."""
+"""Torch-free BLLA inference through ONNX Runtime.
+
+RETIRED. See ``archive/onnx-runtime/README.md`` and ADR 0004. Originally
+``inference/architectures/blla/onnx.py``. The ``preprocess_blla_image_numpy``
+it imports, and the ``torch_free=True`` decoder branch it selected, are in
+``numpy_support.py`` beside this file.
+"""
 
 from __future__ import annotations
 

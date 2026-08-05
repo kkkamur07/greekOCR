@@ -5,10 +5,12 @@ description = "OCR and processing for Greek documents"
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "numpy>=1.24.4,<2",
-    # 1.24+ no longer publishes Intel macOS wheels; the helper still ships an
-    # x86_64 macOS artifact and PyInstaller cannot cross-compile it.
-    "onnxruntime>=1.23.2,<1.24",
     "opencv-python-headless>=4.8,<4.13",
+    # ADR 0004: PyTorch is the inference runtime for both architectures. CPU
+    # only - see [tool.uv.sources] below, which pins the CPU wheel index on the
+    # platforms where PyPI would otherwise serve a CUDA build.
+    "safetensors>=0.5.0",
+    "torch>=2.10.0",
 ]
 
 [project.optional-dependencies]
@@ -44,14 +46,8 @@ service-core = [
     "pydantic-settings>=2.6.0",
     "pyyaml>=6.0.2",
 ]
-parity = ["kraken>=7.0.2"]
-export = [
-    "onnx>=1.17.0",
-    "safetensors>=0.5.0",
-    "torch>=2.10.0",
-]
-# Torch-free ONNX runtime shipped inside the frozen Inference Helper.
-# Deliberately minimal: anything added here also ships in the signed installers.
+# Inference runtime shipped inside the Inference Helper.
+# Deliberately minimal: anything added here also ships to researchers.
 helper = [
     { include-group = "service-core" },
     "huggingface-hub>=0.27.0",
@@ -65,8 +61,9 @@ helper = [
 ]
 # Inference service API (separate container; contracts importable from nomicous).
 # The hosted API is the helper runtime plus the job database and OpenCV.
-# NOTE: numpy / onnxruntime / opencv-python-headless live in [project].dependencies,
-# so this group must be installed with `--group inference`, never `--only-group`.
+# NOTE: numpy / torch / safetensors / opencv-python-headless live in
+# [project].dependencies, so this group must be installed with
+# `--group inference`, never `--only-group`.
 inference = [
     { include-group = "helper" },
     "opencv-python-headless>=4.8,<4.13",
@@ -113,12 +110,15 @@ platform = [
 [tool.uv]
 package = false
 
+# ADR 0004 requires the CPU-only Torch build: CUDA wheels dominate the download
+# and are useless on a researcher's laptop. PyPI's macOS wheels are already CPU
+# only, so the explicit index is pinned on the platforms where they are not.
 [tool.uv.sources]
 torch = [
-    { index = "pytorch-cpu", marker = "sys_platform == 'linux'" },
+    { index = "pytorch-cpu", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
 torchvision = [
-    { index = "pytorch-cpu", marker = "sys_platform == 'linux'" },
+    { index = "pytorch-cpu", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
 
 [[tool.uv.index]]
@@ -133,14 +133,14 @@ api = { sequence = ["migrate", "serve"] }
 inference-api = "uvicorn inference.api.main:app --host 0.0.0.0 --port 8001 --workers 1"
 inference-helper = "python -m inference.helper"
 inference-worker = "python -m inference.jobs.worker"
-# `--group test` is named explicitly on every task: the inference/export groups
-# carry no pytest, so omitting it silently falls back to whatever `pytest` is on
-# PATH (unpinned) or fails outright.
+# `--group test` is named explicitly on every task: the inference group carries
+# no pytest, so omitting it silently falls back to whatever `pytest` is on PATH
+# (unpinned) or fails outright.
 test-fast = { shell = "uv run --group test --group platform --group inference pytest tests/nomicous/unit" }
 test-integration = { shell = "uv run --group test --group platform --group inference pytest tests/nomicous -m integration" }
 test-ml = { shell = "uv run --group test --group platform --group inference pytest tests/nomicous -m ml" }
-test-inference = { shell = "uv run --group test --group platform --group inference --group export pytest tests/inference" }
-test-hf = { shell = "uv run --group test --group inference --group export pytest tests/hf" }
+test-inference = { shell = "uv run --group test --group platform --group inference pytest tests/inference" }
+test-hf = { shell = "uv run --group test --group inference pytest tests/hf" }
 
 [tool.pytest.ini_options]
 addopts = ["--import-mode=importlib"]
@@ -149,13 +149,10 @@ asyncio_mode = "auto"
 testpaths = ["tests/nomicous", "tests/inference", "tests/hf"]
 filterwarnings = [
     "ignore:Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.:starlette.exceptions.StarletteDeprecationWarning",
-    "ignore:`TorchVGSLModel\\.load_model` is deprecated.*:DeprecationWarning:kraken\\.lib\\.vgsl\\.model",
-    "ignore:You will not be able to run predict\\(\\) on this Core ML model.*:RuntimeWarning:coremltools\\.models\\.model",
-    "ignore:`blla\\.segment\\(\\)` is deprecated.*:DeprecationWarning:kraken\\.blla",
 ]
 markers = [
     "integration: requires Postgres",
-    "ml: runs real Kraken/Calamari weights (slow)",
+    "ml: runs real BLLA/Calamari weights (slow)",
 ]
 
 [tool.ruff]
@@ -168,6 +165,8 @@ src = ["nomicous/backend", "inference"]
 # already in ruff's default excludes.)
 extend-exclude = [
     ".lgraph",
+    # Retired subsystems, kept readable as they were. See archive/*/README.md.
+    "archive",
     "data",
     "deploy/platform/inference",
     "deploy/platform/nomicous",

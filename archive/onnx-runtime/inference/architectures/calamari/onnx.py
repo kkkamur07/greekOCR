@@ -1,4 +1,10 @@
-"""Calamari inference through ONNX Runtime."""
+"""Calamari inference through ONNX Runtime.
+
+RETIRED. See ``archive/onnx-runtime/README.md`` and ADR 0004. Originally
+``inference/architectures/calamari/onnx.py``; ``TranscribeLineFailure``,
+``_decode_greedy`` and ``_response_from_decoded`` were shared with the Torch
+adapter and now live in ``inference/architectures/calamari/adapter.py``.
+"""
 
 from __future__ import annotations
 

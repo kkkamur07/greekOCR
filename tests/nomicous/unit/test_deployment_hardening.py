@@ -31,27 +31,62 @@ def test_inference_image_reincludes_only_required_hub_resolver_sources() -> None
     assert "COPY src/hf /app/src/hf" not in dockerfile
 
 
-def test_helper_freeze_is_onnx_only() -> None:
+def test_helper_freeze_ships_the_torch_runtime_and_nothing_else() -> None:
+    """ADR 0004: one runtime, CPU only, and no training stack in the installer.
+
+    The inverse of this test used to enforce a Torch denylist through
+    `excludes.txt` and a release-time bundle verifier. Both were deleted with
+    the second runtime; what still has to hold is that the frozen helper can
+    actually load the models and does not drag Kraken or the training stack in
+    with them.
+    """
     spec = (REPO_ROOT / "packaging" / "helper" / "pyinstaller.spec").read_text(encoding="utf-8")
-    excludes = (REPO_ROOT / "packaging" / "helper" / "excludes.txt").read_text(encoding="utf-8")
+
+    assert not (REPO_ROOT / "packaging" / "helper" / "excludes.txt").exists()
+    assert not (REPO_ROOT / "packaging" / "helper" / "scripts" / "verify-bundle.py").exists()
 
     assert 'collect_submodules("kraken")' not in spec
     assert '"kraken.blla"' not in spec
     assert '"kraken.lib.vgsl"' not in spec
-    assert '"inference.architectures.blla.blla"' not in spec
-    assert '"inference.architectures.blla.blla_model"' not in spec
-    assert '"safetensors.torch"' not in spec
-    assert '"inference.architectures.blla.blla_decoder"' in spec
-    assert '"inference.architectures.blla.onnx"' in spec
-    for dependency in ("torch", "torchvision", "safetensors", "kraken"):
-        assert f"\n{dependency}\n" in excludes
+    # The frozen helper runs the same modules as the hosted service.
+    for module in (
+        '"inference.architectures.blla.blla"',
+        '"inference.architectures.blla.blla_model"',
+        '"inference.architectures.blla.blla_decoder"',
+        '"inference.architectures.calamari.checkpoint"',
+        '"inference.architectures.calamari.model"',
+        '"safetensors.torch"',
+        '"torch"',
+    ):
+        assert module in spec
+    # Excludes are size pruning now, not a runtime denylist.
+    for excluded in ('"kraken"', '"transformers"', '"nomicous"', '"sqlalchemy"'):
+        assert excluded in spec
 
     pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    project_dependencies = pyproject["project"]["dependencies"]
+    assert any(dependency.startswith("torch") for dependency in project_dependencies)
+    assert any(dependency.startswith("safetensors") for dependency in project_dependencies)
+    assert not any(dependency.startswith("onnxruntime") for dependency in project_dependencies)
+
     groups = pyproject["dependency-groups"]
-    inference = _flatten_group(groups, "inference")
-    assert not any(dependency.startswith(("torch", "safetensors")) for dependency in inference)
-    assert any(dependency.startswith("torch") for dependency in groups["export"])
-    assert any(dependency.startswith("safetensors") for dependency in groups["export"])
+    assert "parity" not in groups, "the kraken parity group outlived its second runtime"
+    assert "export" not in groups
+    assert not any(
+        "kraken" in dependency
+        for group in groups.values()
+        for dependency in group
+        if isinstance(dependency, str)
+    )
+    # The helper group is what the frozen installer installs; it must resolve to
+    # a runtime that can actually open both artifacts.
+    helper = _flatten_group(groups, "helper")
+    assert not any(dependency.startswith("onnxruntime") for dependency in helper)
+
+    # CUDA wheels must not be reachable: PyPI serves them on Linux and Windows.
+    sources = pyproject["tool"]["uv"]["sources"]["torch"]
+    markers = {entry["marker"] for entry in sources if entry["index"] == "pytorch-cpu"}
+    assert markers == {"sys_platform == 'linux' or sys_platform == 'win32'"}
 
 
 def test_helper_packaging_uses_one_foreground_server() -> None:
@@ -63,8 +98,8 @@ def test_helper_packaging_uses_one_foreground_server() -> None:
     shared_build = (
         REPO_ROOT / "packaging" / "helper" / "scripts" / "build-pyinstaller.sh"
     ).read_text(encoding="utf-8")
-    bundle_verifier = (
-        REPO_ROOT / "packaging" / "helper" / "scripts" / "verify-bundle.py"
+    smoke_test = (
+        REPO_ROOT / "packaging" / "helper" / "scripts" / "smoke-test.py"
     ).read_text(encoding="utf-8")
 
     assert "multiprocessing" not in launcher
@@ -72,11 +107,12 @@ def test_helper_packaging_uses_one_foreground_server() -> None:
     for build in (shared_build, windows_build):
         assert "--isolated --no-dev --group helper --group packaging" in build
         assert "--group inference" not in build
-        assert "verify-bundle.py" in build
+        assert "smoke-test.py" in build
     assert "& bash" not in windows_build
-    assert '"PYZ-00.toc"' in bundle_verifier
-    assert '"COLLECT-00.toc"' in bundle_verifier
-    assert '"src.model.inference_export"' in bundle_verifier
+    # The freeze is still proven to serve, even though it is no longer proven
+    # to be Torch-free.
+    assert "/health" in smoke_test
+    assert "/inference/v1/info" in smoke_test
 
 
 def test_helper_installers_are_user_scoped_and_verify_startup() -> None:
@@ -278,29 +314,31 @@ def test_release_workflow_refuses_asset_replacement_and_generates_evidence() -> 
     assert "expected four installer assets" in workflow
 
 
-def test_inference_image_installs_the_onnx_runtime() -> None:
-    """`--only-group inference` drops [project].dependencies, i.e. onnxruntime.
+def test_inference_image_installs_the_model_runtime() -> None:
+    """`--only-group inference` drops [project].dependencies, i.e. torch.
 
     Model imports are lazy, so an image built that way still starts, still serves
     /health, and fails every real inference request. Assert both the install flag
-    and a build-time check that actually loads the native runtime.
+    and a build-time check that actually loads the runtime - and that the wheel
+    it loads is the CPU build (ADR 0004).
     """
     pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     dockerfile = (REPO_ROOT / "inference" / "Dockerfile").read_text(encoding="utf-8")
 
     assert any(
-        dependency.startswith("onnxruntime") for dependency in pyproject["project"]["dependencies"]
+        dependency.startswith("torch") for dependency in pyproject["project"]["dependencies"]
     )
     assert "--only-group inference" not in dockerfile
     assert "uv sync --frozen --no-default-groups --group inference" in dockerfile
-    assert "import onnxruntime" in dockerfile
-    assert "get_available_providers" in dockerfile
+    assert "import torch" in dockerfile
+    assert "torch.version.cuda" in dockerfile
 
     deployment = (REPO_ROOT / ".github" / "workflows" / "deployment.yml").read_text(
         encoding="utf-8"
     )
-    assert "import onnxruntime" in deployment
-    assert "inference.architectures.calamari.onnx" in deployment
+    assert "import torch" in deployment
+    assert "inference.architectures.calamari.adapter" in deployment
+    assert "torch.version.cuda" in deployment
 
 
 def test_workflows_pin_every_action_to_a_commit_sha() -> None:

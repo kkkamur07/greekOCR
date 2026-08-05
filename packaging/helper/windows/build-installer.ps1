@@ -46,15 +46,15 @@ function Invoke-AuthenticodeSign([string[]]$Paths) {
 
 Push-Location $HelperDir
 try {
-  # Build natively from an isolated ONNX-only environment. Passing a Windows
-  # path through Bash causes path conversion issues and an existing developer
-  # environment could otherwise leak Torch into PyInstaller Analysis.
+  # Build natively from an isolated environment. Passing a Windows path through
+  # Bash causes path conversion issues, and an existing developer environment
+  # could otherwise leak the training stack into PyInstaller Analysis.
   & uv run --isolated --no-dev --group helper --group packaging pyinstaller --noconfirm --clean pyinstaller.spec
   if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed (exit $LASTEXITCODE)" }
 
   $HelperExe = Join-Path $BundleDir "nomicous-inference-helper.exe"
-  & python (Join-Path $HelperDir "scripts/verify-bundle.py") $BundleDir $HelperExe
-  if ($LASTEXITCODE -ne 0) { throw "Frozen helper verification failed (exit $LASTEXITCODE)" }
+  & python (Join-Path $HelperDir "scripts/smoke-test.py") $BundleDir $HelperExe
+  if ($LASTEXITCODE -ne 0) { throw "Frozen helper smoke test failed (exit $LASTEXITCODE)" }
 
   $InstallDir = Join-Path $DistDir "windows-installer"
   if (Test-Path $InstallDir) { Remove-Item -Recurse -Force $InstallDir }

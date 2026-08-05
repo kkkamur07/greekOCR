@@ -1,4 +1,10 @@
-"""Standalone BLLA segmentation inference adapter."""
+"""BLLA segmentation inference adapter.
+
+The **Hub artifact** is ``blla.safetensors``: safetensors carries tensors only
+and cannot execute code on load, which is why it is preferred over a pickled
+checkpoint here (ADR 0004). The **artifact SHA-256** is still verified through
+``architectures.artifact`` before the file is opened.
+"""
 
 from __future__ import annotations
 
@@ -86,6 +92,9 @@ def run_blla_segment(
     )
 
     model = _load_blla_model(handle.path, handle.fingerprint)
+    # ``_load_blla_model`` already called ``eval()``; the model is cached across
+    # calls, so assert it here rather than trust the cache.
+    model.eval()
     with Image.open(BytesIO(image_bytes)) as image:
         image = image.convert("RGB")
         prepared = preprocess_blla_image(image)

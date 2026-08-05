@@ -32,7 +32,7 @@ from PIL import Image
 
 from inference.architectures.blla.blla_decoder import DecodedBLLALine
 from inference.architectures.calamari import adapter as calamari_adapter
-from inference.architectures.calamari.onnx import TranscribeLineFailure
+from inference.architectures.calamari.adapter import TranscribeLineFailure
 from inference.contracts.transcribe import CharacterConfidence, TranscribeRunResponse
 from inference.run_errors import http_exception_for_run_error
 
@@ -79,30 +79,13 @@ def _run_blla_native(artifact: Path, artifact_sha256: str | None) -> object:
     )
 
 
-def _run_blla_onnx(artifact: Path, artifact_sha256: str | None) -> object:
-    from inference.architectures.blla.onnx import run_blla_onnx_segment
-
-    return run_blla_onnx_segment(
-        _page_bytes(),
-        model_path=artifact,
-        artifact_sha256=artifact_sha256,
-    )
-
-
 def _execution_paths() -> list[ExecutionPath]:
     from inference.architectures.blla.blla import BLLAUnavailableError
-    from inference.architectures.blla.onnx import BLLAOnnxUnavailableError
 
+    # ADR 0004 left one execution path per architecture. Each architecture's
+    # native suffix is the other's foreign one, which is exactly the confusion
+    # the preflight has to refuse.
     return [
-        # Calamari accepts both suffixes through one preflight, so the artifact
-        # it must refuse has to sit outside the pair.
-        ExecutionPath(
-            name="calamari-onnx",
-            native_suffix=".onnx",
-            foreign_suffix=".safetensors",
-            unusable_error=calamari_adapter.CalamariUnavailableError,
-            run=_run_calamari,
-        ),
         ExecutionPath(
             name="calamari-torch",
             native_suffix=".pt",
@@ -113,16 +96,9 @@ def _execution_paths() -> list[ExecutionPath]:
         ExecutionPath(
             name="blla-native",
             native_suffix=".safetensors",
-            foreign_suffix=".onnx",
+            foreign_suffix=".pt",
             unusable_error=BLLAUnavailableError,
             run=_run_blla_native,
-        ),
-        ExecutionPath(
-            name="blla-onnx",
-            native_suffix=".onnx",
-            foreign_suffix=".safetensors",
-            unusable_error=BLLAOnnxUnavailableError,
-            run=_run_blla_onnx,
         ),
     ]
 
@@ -222,12 +198,19 @@ def _calamari_page(
     tmp_path: Path,
     unit_failures: list[Exception | None],
 ) -> object:
-    """Run a Calamari page where the listed units fail."""
-    checkpoint = tmp_path / "calamari.onnx"
+    """Run a Calamari page where the listed units fail.
+
+    The failures are injected at the adapter's internal batch seam rather than
+    produced by a real crop: the subject here is the isolation *policy*, and
+    "every line fails with an unusable-runtime error" is not a state a working
+    checkpoint can be coaxed into. The runtime itself is exercised on real
+    weights in ``test_transcribe_batch_isolation``.
+    """
+    checkpoint = tmp_path / "calamari.pt"
     checkpoint.write_bytes(b"stub")
     monkeypatch.setattr(
         calamari_adapter,
-        "run_calamari_onnx_transcribe_many",
+        "_run_torch_transcribe_many",
         lambda line_images, **_kwargs: [
             TranscribeLineFailure(index=index, error=failure)
             if failure is not None
@@ -385,16 +368,17 @@ def test_an_empty_page_is_where_the_two_architectures_legitimately_differ(
     assert blla_result.blocks == []
 
 
-# --- No-Torch boundary --------------------------------------------------------
+# --- Runtime boundary ---------------------------------------------------------
 
 
-def test_the_shared_seam_does_not_pull_torch_into_the_onnx_only_paths() -> None:
-    """The frozen helper ships these modules and must stay Torch-free.
+def test_no_onnx_runtime_remains_in_the_inference_import_graph() -> None:
+    """ADR 0004 retired ONNX Runtime; nothing may drag it back in.
 
     Checked against the real import graph in a fresh interpreter rather than by
-    inspection: the seam modules sit between the ONNX adapters and the runner,
-    so a stray top-level import in either of them would add Torch to a bundle
-    built to exclude it, and the bundle verifier only catches that at release.
+    inspection. This is the inverse of the test it replaces, which imported the
+    same modules and asserted *Torch* was absent - the denylist that enforced
+    that (``packaging/helper/excludes.txt``) and its release-time verifier were
+    deleted along with the second runtime.
     """
     program = (
         "import importlib, sys\n"
@@ -403,16 +387,15 @@ def test_the_shared_seam_does_not_pull_torch_into_the_onnx_only_paths() -> None:
         "    'inference.architectures.isolation',\n"
         "    'inference.architectures.calamari',\n"
         "    'inference.architectures.calamari.adapter',\n"
-        "    'inference.architectures.calamari.onnx',\n"
         "    'inference.architectures.blla',\n"
-        "    'inference.architectures.blla.onnx',\n"
+        "    'inference.architectures.blla.blla',\n"
         "    'inference.architectures.blla.blla_runtime',\n"
         "    'inference.jobs.runner',\n"
         "):\n"
         "    importlib.import_module(name)\n"
         "leaked = sorted(\n"
         "    m for m in sys.modules\n"
-        "    if m.split('.')[0] in {'torch', 'torchvision', 'safetensors', 'kraken'}\n"
+        "    if m.split('.')[0] in {'onnx', 'onnxruntime', 'kraken', 'coremltools'}\n"
         ")\n"
         "print(','.join(leaked))\n"
     )
@@ -426,5 +409,23 @@ def test_the_shared_seam_does_not_pull_torch_into_the_onnx_only_paths() -> None:
 
     assert completed.returncode == 0, completed.stderr
     assert completed.stdout.strip() == "", (
-        f"Torch leaked into the ONNX-only import graph: {completed.stdout}"
+        f"a retired runtime is back in the inference import graph: {completed.stdout}"
     )
+
+
+def test_both_architectures_run_on_cpu_only() -> None:
+    """No CUDA, no MPS: the target is a researcher's laptop CPU (ADR 0004).
+
+    A device selection sneaking into either adapter would make local results
+    irreproducible against the cloud worker, and would do it silently on the
+    machines that have an accelerator.
+    """
+    sources = [
+        (REPO_ROOT / "inference/architectures/calamari/adapter.py").read_text(),
+        (REPO_ROOT / "inference/architectures/calamari/checkpoint.py").read_text(),
+        (REPO_ROOT / "inference/architectures/blla/blla.py").read_text(),
+        (REPO_ROOT / "inference/architectures/blla/blla_preprocessing.py").read_text(),
+    ]
+    for source in sources:
+        assert "cuda" not in source
+        assert "mps" not in source

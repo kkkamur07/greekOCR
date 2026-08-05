@@ -1,38 +1,61 @@
-"""Calamari OCR adapter with ONNX and legacy PyTorch dispatch."""
+"""Calamari transcription on the PyTorch CPU runtime (ADR 0004)."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
+import torch
 
 from inference.architectures.artifact import ArtifactHandle, resolve_artifact
-from inference.architectures.calamari.onnx import (
-    CalamariUnavailableError,
-    TranscribeLineFailure,
-    _decode_greedy,
-    _response_from_decoded,
-    run_calamari_onnx_transcribe_many,
-)
+from inference.architectures.calamari.checkpoint import load_calamari_checkpoint
+from inference.architectures.calamari.model import CalamariTorchModel
 from inference.architectures.calamari.preprocessing import (
     preprocess_line_image_bytes_to_calamari_tensor,
 )
 from inference.architectures.isolation import reraise_if_none_survived
-from inference.contracts.transcribe import TranscribeRunResponse
+from inference.contracts.transcribe import CharacterConfidence, TranscribeRunResponse
 
-CALAMARI_ARTIFACT_SUFFIXES = frozenset({".pt", ".onnx"})
+# The Calamari **Hub artifact** is the native ``.pt`` checkpoint the training
+# run produced. There is no second format to accept since ADR 0004 retired the
+# ONNX runtime.
+CALAMARI_ARTIFACT_SUFFIXES = frozenset({".pt"})
+
+
+class CalamariUnavailableError(RuntimeError):
+    """Raised when a Calamari runtime artifact cannot be used."""
+
+
+@dataclass(frozen=True)
+class TranscribeLineFailure:
+    """One line of a batch that could not be transcribed.
+
+    Returned in place of that line's output instead of raised, so a single
+    unusable crop degrades to a per-line error rather than discarding the whole
+    page. The original exception rides along because an all-failed batch has to
+    re-raise it: the run-error mapping distinguishes a broken artifact (503)
+    from a bad request (422), and both would collapse into a generic 500 if the
+    cause were flattened to a string here.
+    """
+
+    index: int
+    error: Exception
 
 
 @lru_cache(maxsize=4)
 def _load_checkpoint(
     checkpoint_path: str,
     fingerprint: tuple[int, int] | None = None,
-) -> tuple[object, list[str] | None, int]:
-    """Load the legacy checkpoint only for the transition period."""
-    try:
-        from src.model.inference_export.calamari.export import load_calamari_checkpoint
+) -> tuple[CalamariTorchModel, list[str], int]:
+    """Open a digest-verified checkpoint without unpickling it.
 
+    ``fingerprint`` is part of the cache key rather than an argument the loader
+    reads: it is what makes a *replaced* artifact file miss the cache instead of
+    serving the previous model for the life of the process.
+    """
+    try:
         model, metadata = load_calamari_checkpoint(Path(checkpoint_path))
     except ValueError as error:
         message = str(error)
@@ -46,6 +69,55 @@ def _load_checkpoint(
     except Exception as error:
         raise CalamariUnavailableError("unable to safely load Calamari checkpoint") from error
     return model, list(metadata.charset), metadata.line_height
+
+
+def _decode_greedy(
+    softmax: np.ndarray,
+    *,
+    charset: list[str],
+) -> tuple[str, list[float]]:
+    labels = np.argmax(softmax, axis=1)
+    text_parts: list[str] = []
+    confidences: list[float] = []
+    last_label = 0
+
+    for index, label in enumerate(labels):
+        label = int(label)
+        if label == 0:
+            last_label = label
+            continue
+        if label != last_label:
+            char = charset[label] if label < len(charset) else ""
+            if char:
+                text_parts.append(char)
+                confidences.append(float(softmax[index, label]))
+        elif confidences:
+            confidences[-1] = max(confidences[-1], float(softmax[index, label]))
+        last_label = label
+
+    # Trim edge whitespace together with its confidences so the per-character
+    # confidence alignment survives (a bare ``str.strip`` would desync them).
+    while text_parts and text_parts[0].isspace():
+        text_parts.pop(0)
+        confidences.pop(0)
+    while text_parts and text_parts[-1].isspace():
+        text_parts.pop()
+        confidences.pop()
+    return "".join(text_parts), confidences
+
+
+def _response_from_decoded(text: str, confidences: list[float]) -> TranscribeRunResponse:
+    if len(confidences) != len(text):
+        confidences = [float(np.mean(confidences)) if confidences else 0.0 for _ in text]
+    confidence = float(np.mean(confidences)) if confidences else 0.0
+    return TranscribeRunResponse(
+        text=text,
+        confidence=max(0.0, min(1.0, confidence)),
+        character_confidences=[
+            CharacterConfidence(char=char, confidence=max(0.0, min(1.0, confidence)))
+            for char, confidence in zip(text, confidences, strict=True)
+        ],
+    )
 
 
 def _reject_fully_failed_batch(
@@ -82,45 +154,33 @@ def run_calamari_transcribe_many(
         allowed_suffixes=CALAMARI_ARTIFACT_SUFFIXES,
         unusable_error=CalamariUnavailableError,
         unusable_message=(
-            f"Calamari runtime requires a self-contained .onnx artifact: {checkpoint_path}"
+            f"Calamari runtime requires a native .pt checkpoint: {checkpoint_path}"
         ),
         artifact_sha256=artifact_sha256,
     )
     if not line_images:
         raise ValueError("at least one line image is required")
 
-    if checkpoint_path.suffix == ".onnx":
-        return _reject_fully_failed_batch(
-            run_calamari_onnx_transcribe_many(
-                line_images,
-                checkpoint_path=checkpoint_path,
-            )
-        )
-
-    return _reject_fully_failed_batch(
-        _run_legacy_pytorch_transcribe_many(
-            line_images,
-            handle=handle,
-        )
-    )
+    return _reject_fully_failed_batch(_run_torch_transcribe_many(line_images, handle=handle))
 
 
-def _run_legacy_pytorch_transcribe_many(
+def _run_torch_transcribe_many(
     line_images: list[bytes],
     *,
     handle: ArtifactHandle,
 ) -> list[TranscribeRunResponse | TranscribeLineFailure]:
-    import torch
-
     model, charset, line_height = _load_checkpoint(handle.path, handle.fingerprint)
     if not charset:
         raise CalamariUnavailableError(f"Calamari checkpoint has no codec metadata: {handle.path}")
 
     responses: list[TranscribeRunResponse | TranscribeLineFailure] = []
+    # ``load_calamari_checkpoint`` already called ``eval()``; the model is
+    # cached across calls, so assert it here rather than trust the cache.
+    model.eval()
     with torch.inference_mode():
         for index, image_bytes in enumerate(line_images):
-            # Same per-line isolation as the ONNX path: the caller decides what a
-            # failed line means, and one of them must not end the batch.
+            # Per-line isolation: the caller decides what a failed line means,
+            # and one of them must not end the batch.
             try:
                 image = preprocess_line_image_bytes_to_calamari_tensor(
                     image_bytes,

@@ -53,21 +53,21 @@ jobs:
             --entrypoint python nomicous-api:ci \
             -c "from backend.core.main import app; assert app.title"
           docker run --rm --entrypoint python nomicous-inference:ci -c "from inference.api.main import app; assert app.title"
-      # Importing the FastAPI app proves nothing about the model runtime: every
-      # onnxruntime import in inference/architectures is lazy and is swallowed
-      # into a *Unavailable error at request time. Load the native ONNX Runtime
-      # and both architecture modules so a container missing onnxruntime (the
+      # Importing the FastAPI app proves nothing about the model runtime: the
+      # architecture modules in inference/architectures are imported lazily and
+      # a failure is swallowed into a *Unavailable error at request time. Load
+      # Torch and both architecture modules so a container missing Torch (the
       # `uv sync --only-group inference` failure mode) fails CI instead of every
-      # production inference request.
-      - name: Verify ONNX Runtime is present and usable in the inference image
+      # production inference request. CUDA is asserted absent: ADR 0004 pins the
+      # CPU-only build.
+      - name: Verify the PyTorch CPU runtime is present and usable in the inference image
         run: |
           docker run --rm --entrypoint python nomicous-inference:ci -c '
-          import onnxruntime
-          import inference.architectures.calamari.onnx  # noqa: F401
-          import inference.architectures.blla.onnx  # noqa: F401
-          providers = onnxruntime.get_available_providers()
-          assert "CPUExecutionProvider" in providers, providers
-          print("onnxruntime", onnxruntime.__version__, providers)
+          import torch
+          import inference.architectures.calamari.adapter  # noqa: F401
+          import inference.architectures.blla.blla  # noqa: F401
+          assert not torch.version.cuda, torch.version.cuda
+          print("torch", torch.__version__)
           '
       - name: Verify health checks and minimal Hub resolver image content
         run: |
@@ -109,7 +109,7 @@ jobs:
       # An SBOM pointed at the wrong path still produces a valid, empty document
       # and every downstream gate then passes vacuously. Require real content,
       # and require the runtime dependency we actually care about.
-      - name: Verify SBOMs are non-empty and record the ONNX runtime
+      - name: Verify SBOMs are non-empty and record the model runtime
         run: |
           python - <<'PY'
           import json
@@ -121,7 +121,7 @@ jobs:
           expected = {
               "sbom/nomicous-api.spdx.json": {"fastapi", "sqlalchemy", "supabase"},
               "sbom/nomicous-frontend.spdx.json": {"next"},
-              "sbom/nomicous-inference.spdx.json": {"fastapi", "onnxruntime", "opencv-python-headless"},
+              "sbom/nomicous-inference.spdx.json": {"fastapi", "torch", "opencv-python-headless"},
           }
           failed = False
           for relative, markers in expected.items():
