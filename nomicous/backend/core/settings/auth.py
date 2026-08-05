@@ -1,12 +1,12 @@
 """JWT and browser-session authentication settings."""
 
-from functools import lru_cache
 from typing import Literal
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings
 from zxcvbn import zxcvbn
 
+from backend.core.settings._cache import settings_cache
 from backend.core.settings._env import env_settings_config
 
 _PLACEHOLDER_SECRET_VALUES = {"change-me", "change-me-in-production", "replace-me"}
@@ -99,6 +99,6 @@ class AuthSettings(BaseSettings):
         return self
 
 
-@lru_cache
+@settings_cache
 def get_auth_settings() -> AuthSettings:
     return AuthSettings()

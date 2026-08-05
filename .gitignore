@@ -77,3 +77,7 @@ data/
 # tracked file in this tree is deleted by the application at runtime. Weights are
 # resolved from the Hub on demand and must never be committed.
 /src/hf/cache/
+# Local agent tooling state. `worktrees/` in particular holds full checkouts of
+# this repo, so committing one would nest the tree inside itself and make
+# `ruff check .` lint every copy. Nothing here is authored by hand or shared.
+/.claude/

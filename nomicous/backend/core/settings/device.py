@@ -6,11 +6,11 @@ platform rather than compiling them in.
 """
 
 import logging
-from functools import lru_cache
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings
 
+from backend.core.settings._cache import settings_cache
 from backend.core.settings._env import env_settings_config
 
 logger = logging.getLogger(__name__)
@@ -209,6 +209,6 @@ class DeviceSettings(BaseSettings):
         return get_app_settings().cors_origin_list[0].rstrip("/")
 
 
-@lru_cache
+@settings_cache
 def get_device_settings() -> DeviceSettings:
     return DeviceSettings()

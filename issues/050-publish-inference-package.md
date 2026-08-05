@@ -5,7 +5,7 @@ type: AFK
 status: backlog
 tracker: "https://github.com/kkkamur07/greekOCR/issues/50"
 blocked_by:
-  - "048-collapse-second-job-queue.md 049-torch-free-runtime-boundary.md"
+  - "048-collapse-second-job-queue.md 049-torch-runtime-archive-onnx.md"
 parent_prd: "https://github.com/kkkamur07/greekOCR/issues/47"
 ---
 

@@ -45,9 +45,7 @@ class LayoutService:
     ) -> None:
         self._documents = documents or DocumentRepository()
         self._projects = projects or ProjectRepository()
-        self._access = access or DocumentAccess(
-            documents=self._documents, projects=self._projects
-        )
+        self._access = access or DocumentAccess(documents=self._documents, projects=self._projects)
         self._ground_truth = ground_truth or GroundTruthText(documents=self._documents)
 
     async def list_part_lines(
@@ -58,9 +56,7 @@ class LayoutService:
         document_id: UUID,
         part_id: UUID,
     ) -> list[Line]:
-        context = await self._access.require_part(
-            session, user, project_id, document_id, part_id
-        )
+        context = await self._access.require_part(session, user, project_id, document_id, part_id)
         return await self._documents.list_part_lines(session, context.part.id)
 
     async def list_part_layout(
@@ -71,9 +67,7 @@ class LayoutService:
         document_id: UUID,
         part_id: UUID,
     ) -> tuple[list[Block], list[Line]]:
-        context = await self._access.require_part(
-            session, user, project_id, document_id, part_id
-        )
+        context = await self._access.require_part(session, user, project_id, document_id, part_id)
         blocks = await self._documents.list_part_blocks(session, context.part.id)
         lines = await self._documents.list_part_lines(session, context.part.id)
         return blocks, lines
@@ -89,9 +83,7 @@ class LayoutService:
         order: int,
         box: dict,
     ) -> Block:
-        context = await self._access.require_part(
-            session, user, project_id, document_id, part_id
-        )
+        context = await self._access.require_part(session, user, project_id, document_id, part_id)
         block = Block(part_id=context.part.id, order=order, box=box, manual_geometry=True)
         session.add(block)
         await session.commit()
@@ -109,9 +101,7 @@ class LayoutService:
         **updates: object,
     ) -> Block:
         reject_unknown_fields(updates, BLOCK_PATCH_FIELDS, "block patch")
-        context = await self._access.require_part(
-            session, user, project_id, document_id, part_id
-        )
+        context = await self._access.require_part(session, user, project_id, document_id, part_id)
         block = await self._block_or_404(session, context.part.id, block_id)
         # ``updates`` already went through ``exclude_unset``: every key present was sent
         # by the client, so applying it verbatim is what makes explicit nulls meaningful.
@@ -131,9 +121,7 @@ class LayoutService:
         part_id: UUID,
         block_id: UUID,
     ) -> None:
-        context = await self._access.require_part(
-            session, user, project_id, document_id, part_id
-        )
+        context = await self._access.require_part(session, user, project_id, document_id, part_id)
         block = await self._block_or_404(session, context.part.id, block_id)
         await session.delete(block)
         await session.commit()
@@ -153,9 +141,7 @@ class LayoutService:
         baseline: dict | None = None,
         mask: dict | None = None,
     ) -> Line:
-        context = await self._access.require_part(
-            session, user, project_id, document_id, part_id
-        )
+        context = await self._access.require_part(session, user, project_id, document_id, part_id)
         part = context.part
         if block_id is not None:
             await self._block_or_404(session, part.id, block_id)
@@ -187,9 +173,7 @@ class LayoutService:
         # Any geometry edit through PATCH marks the line as manually overridden.
         # Bulk PUT /lines and POST /layout/reset are the paths that preserve kraken source.
         reject_unknown_fields(updates, LINE_PATCH_FIELDS, "line patch")
-        context = await self._access.require_part(
-            session, user, project_id, document_id, part_id
-        )
+        context = await self._access.require_part(session, user, project_id, document_id, part_id)
         part = context.part
         line = await self._line_or_404(session, part.id, line_id)
         if "block_id" in updates and updates["block_id"] is not None:
@@ -213,9 +197,7 @@ class LayoutService:
         part_id: UUID,
         line_id: UUID,
     ) -> None:
-        context = await self._access.require_part(
-            session, user, project_id, document_id, part_id
-        )
+        context = await self._access.require_part(session, user, project_id, document_id, part_id)
         line = await self._line_or_404(session, context.part.id, line_id)
         await session.delete(line)
         await session.commit()
@@ -230,9 +212,7 @@ class LayoutService:
         *,
         line_ids: list[UUID] | None = None,
     ) -> tuple[list[Block], list[Line]]:
-        context = await self._access.require_part(
-            session, user, project_id, document_id, part_id
-        )
+        context = await self._access.require_part(session, user, project_id, document_id, part_id)
         part = context.part
         lines = await self._documents.list_part_lines(session, part.id)
         selected_ids = set(line_ids) if line_ids is not None else {line.id for line in lines}
@@ -263,9 +243,7 @@ class LayoutService:
             raise ValidationError(
                 f"Cannot replace more than {MAX_REPLACE_PART_LINES} lines at once"
             )
-        context = await self._access.require_part(
-            session, user, project_id, document_id, part_id
-        )
+        context = await self._access.require_part(session, user, project_id, document_id, part_id)
         part = context.part
         ground_truth = await self._ground_truth.layer_for(session, context.document)
 

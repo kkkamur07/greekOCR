@@ -84,15 +84,18 @@ growing a tray icon.
 worker installs the same package. Two packages would buy a version-compatibility
 matrix between components that always ship together.
 
-The boundary moves the Torch modules (`architectures/calamari/{model,layers,
-config}.py` and equivalents) out of the published package into the export/parity
-tree, and moves `hf` weight resolution in — it is already on the ONNX runtime path
+The boundary moves `hf` weight resolution *in* — it is already on the runtime path
 (`adapter.py`, `weights/__init__.py`, `run_errors.py`, both BLLA modules) despite
 living outside `inference/`.
 
-That deletion is the point: `excludes.txt` and `scripts/verify-bundle.py` exist to
-keep Torch out of a bundle by denylist. A real package boundary makes it
-unleakable, so both files go away rather than being ported forward.
+> **Superseded in part by [0004](./0004-pytorch-is-the-inference-runtime.md).**
+> This section originally moved the Torch modules *out* of the published package
+> and treated `excludes.txt` and `scripts/verify-bundle.py` as things a real
+> package boundary would make unnecessary. ADR 0004 makes PyTorch the inference
+> runtime, so the Torch modules stay *inside* the package and both files die by
+> construction — there is no forbidden dependency left to police. The reasoning
+> below was bundle-era: it inherited "keep Torch out" from the frozen installer
+> without rechecking whether PyPI distribution still required it. It did not.
 
 ### Auto-update at launch, from the platform
 

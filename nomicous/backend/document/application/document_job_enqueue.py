@@ -37,9 +37,7 @@ class DocumentJobEnqueueService:
     ) -> None:
         self._documents = documents or DocumentRepository()
         self._projects = projects or ProjectRepository()
-        self._access = access or DocumentAccess(
-            documents=self._documents, projects=self._projects
-        )
+        self._access = access or DocumentAccess(documents=self._documents, projects=self._projects)
         self._inference_models = inference_models or InferenceModelService()
 
     async def enqueue_transcribe_part(
@@ -53,9 +51,7 @@ class DocumentJobEnqueueService:
         model_id: UUID | None = None,
         line_ids: list[UUID] | None = None,
     ) -> Job:
-        context = await self._access.require_part(
-            session, user, project_id, document_id, part_id
-        )
+        context = await self._access.require_part(session, user, project_id, document_id, part_id)
         document, part = context.document, context.part
         lines = await self._documents.list_part_lines(session, part.id)
         if not lines:
@@ -120,9 +116,7 @@ class DocumentJobEnqueueService:
         model_id: UUID | None = None,
         ml_params: dict | None = None,
     ) -> Job:
-        context = await self._access.require_part(
-            session, user, project_id, document_id, part_id
-        )
+        context = await self._access.require_part(session, user, project_id, document_id, part_id)
         document, part = context.document, context.part
         binding_id: UUID | None = None
         selected_model_id = model_id

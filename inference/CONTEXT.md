@@ -51,8 +51,8 @@ The immutable 40-character git commit on a **Hub model repo** selected by a **re
 _Avoid_: mutable tag as a runtime revision, version (too generic), release branch
 
 **Hub artifact**:
-The checkpoint files published inside a **Hub model repo** at one **Hub revision** - Calamari and BLLA inference use self-contained ONNX `.onnx` artifacts; native `.pt` and `.safetensors` files remain conversion/parity sources.
-_Avoid_: weights (too generic), model file
+The checkpoint files published inside a **Hub model repo** at one **Hub revision** - Calamari and BLLA inference load native PyTorch checkpoints (`.pt`, `.safetensors`) directly. There is no conversion step between the trained artifact and the run artifact.
+_Avoid_: weights (too generic), model file, ONNX artifact (retired runtime)
 
 **Artifact SHA-256**:
 The required 64-character SHA-256 digest for the architecture-native **Hub artifact**. The inference service verifies it after download, before Hub-cache reuse, and before passing the artifact to an architecture loader.
@@ -131,8 +131,8 @@ _Avoid_: org (when meaning the namespace generically)
 
 - "data" was used to mean both weights and training material - resolved: use **Hub model repo** vs **Hub dataset repo**.
 - "kalamos" vs "nomicous" as public product name - resolved for Hub: product is **nomicous**; **Hub namespace** may be personal until the org exists.
-- Checkpoint filename at repo root - resolved: use runtime artifact names (**Hub artifact**), e.g. Calamari `best.onnx` and BLLA `blla.onnx`; native source checkpoints remain beside them for conversion and parity.
-- Calamari and BLLA runtime **Hub artifact** format is self-contained ONNX (`.onnx`); native source formats are retained only for conversion and parity.
+- Checkpoint filename at repo root - resolved: use native runtime artifact names (**Hub artifact**), e.g. Calamari `best.pt` and BLLA `blla.safetensors`.
+- Calamari and BLLA runtime **Hub artifact** format is native PyTorch (`.pt`, `.safetensors`). ONNX was the runtime until 2026-08-04 and is retired - the trained artifact and the run artifact are now the same file, which is what removed the parity problem. See ADR 0004.
 - Legacy registry ids (`greek-calamariv1`) - resolved: migrate to `{script}-{architecture}-{model_version}` (e.g. `greek-calamari-v1`); **Hub repo slug** is task-specific.
 - **Hub cache** invalidation - resolved: manifest hash (not files-exist-only).
 

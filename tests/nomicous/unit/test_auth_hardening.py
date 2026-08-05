@@ -28,6 +28,7 @@ from backend.core.settings import (
     get_job_settings,
     get_ml_settings,
     get_storage_settings,
+    reset_settings_caches,
 )
 from backend.core.settings.auth import (
     MIN_JWT_SECRET_BYTES,
@@ -50,16 +51,9 @@ STRONG_SECRET = "xQ7v2Kd9RmZ4pB6wLt1yHs3nCf8jUa5eG0oV"
 
 
 def _clear_platform_settings() -> None:
-    for get_settings in (
-        get_app_settings,
-        get_auth_settings,
-        get_device_settings,
-        get_infrastructure_settings,
-        get_job_settings,
-        get_ml_settings,
-        get_storage_settings,
-    ):
-        get_settings.cache_clear()
+    # This list happened to be complete; the two others like it were not. Sharing
+    # one registry-backed reset is what stops that from being luck.
+    reset_settings_caches()
 
 
 @pytest.fixture(autouse=True)
@@ -733,9 +727,7 @@ def _publish_fixture(*, owner_id, collaborator_ids=()):
     project = _Project()
     document = _Document(project.id)
     documents = _StubDocumentRepository(document)
-    service = DocumentCatalog(
-        documents=documents, projects=_StubProjectRepository(project)
-    )
+    service = DocumentCatalog(documents=documents, projects=_StubProjectRepository(project))
     return service, project, document
 
 

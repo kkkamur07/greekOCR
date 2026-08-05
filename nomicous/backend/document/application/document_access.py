@@ -85,9 +85,7 @@ class DocumentAccess:
 
     # --- Composite entry points: what an endpoint should ask for ---
 
-    async def require_project(
-        self, session: AsyncSession, user: User, project_id: UUID
-    ) -> Project:
+    async def require_project(self, session: AsyncSession, user: User, project_id: UUID) -> Project:
         """The project, if ``user`` is a member of it.
 
         Typed ``User`` rather than ``User | None``: there is no anonymous read that stops

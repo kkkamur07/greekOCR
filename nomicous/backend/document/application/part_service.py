@@ -47,9 +47,7 @@ class DocumentPartService:
         self._documents = documents or DocumentRepository()
         self._projects = projects or ProjectRepository()
         self._media = media or get_media_store()
-        self._access = access or DocumentAccess(
-            documents=self._documents, projects=self._projects
-        )
+        self._access = access or DocumentAccess(documents=self._documents, projects=self._projects)
 
     async def list_parts(
         self,
@@ -168,9 +166,7 @@ class DocumentPartService:
         *,
         reviewed: bool,
     ) -> DocumentPart:
-        context = await self._access.require_part(
-            session, user, project_id, document_id, part_id
-        )
+        context = await self._access.require_part(session, user, project_id, document_id, part_id)
         part = context.part
         part.reviewed = reviewed
         await session.commit()
@@ -185,9 +181,7 @@ class DocumentPartService:
         document_id: UUID,
         part_id: UUID,
     ) -> None:
-        context = await self._access.require_part(
-            session, user, project_id, document_id, part_id
-        )
+        context = await self._access.require_part(session, user, project_id, document_id, part_id)
         await self._documents.delete_part(session, context.part)
 
     async def get_part_for_media(

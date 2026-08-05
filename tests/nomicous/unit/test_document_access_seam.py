@@ -110,9 +110,7 @@ async def test_shared_collaborator_is_a_member() -> None:
     collaborator = _user()
     access, project, document, _part, _repo = _fixture(shared=[collaborator])
 
-    context = await access.require_document(
-        _Session(), collaborator, project.id, document.id
-    )
+    context = await access.require_document(_Session(), collaborator, project.id, document.id)
 
     assert context.document is document
 
@@ -196,9 +194,7 @@ async def test_part_filed_under_another_document_reads_as_missing() -> None:
     part.document_id = uuid.uuid4()
 
     with pytest.raises(NotFoundError, match="Part not found"):
-        await access.require_part(
-            _Session(), _user(owner_id), project.id, document.id, part.id
-        )
+        await access.require_part(_Session(), _user(owner_id), project.id, document.id, part.id)
 
 
 @pytest.mark.asyncio

@@ -1,5 +1,16 @@
-"""Application settings - split by concern, single .env at backend/core/.env."""
+"""Application settings - split by concern, single .env at backend/core/.env.
 
+Each concern keeps its own class and its own accessor: a caller that needs the
+job worker's timeouts should say so by importing ``get_job_settings``, not by
+reaching through an aggregate that also carries the JWT secret.
+
+Importing this package imports all seven modules, which is what makes
+:func:`reset_settings_caches` complete - it is the one supported way to discard
+memoized settings after the environment changes, and it replaces enumerating the
+accessors at the call site.
+"""
+
+from backend.core.settings._cache import reset_settings_caches
 from backend.core.settings.app import AppSettings, get_app_settings
 from backend.core.settings.auth import AuthSettings, get_auth_settings
 from backend.core.settings.device import DeviceSettings, get_device_settings
@@ -24,4 +35,5 @@ __all__ = [
     "get_inference_settings",
     "get_ml_settings",
     "get_storage_settings",
+    "reset_settings_caches",
 ]

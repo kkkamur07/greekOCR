@@ -1,13 +1,13 @@
 """ML service integration settings."""
 
 import os
-from functools import lru_cache
 from pathlib import Path
 from urllib.parse import urlparse
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings
 
+from backend.core.settings._cache import settings_cache
 from backend.core.settings._env import REPO_ROOT, env_settings_config
 
 _PLACEHOLDER_SECRET_VALUES = {
@@ -111,7 +111,7 @@ class MLSettings(BaseSettings):
             )
 
 
-@lru_cache
+@settings_cache
 def get_inference_settings() -> MLSettings:
     return MLSettings()
 

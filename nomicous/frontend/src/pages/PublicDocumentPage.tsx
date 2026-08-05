@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
@@ -84,12 +84,23 @@ export function PublicDocumentPage() {
   const activePart =
     parts.find((part) => part.id === activePartId) ?? parts[0] ?? null;
 
-  // Settled during render rather than in an effect: `PublicPartTabs` echoes the
-  // id it is given back through `onChange`, so if the page were still holding
-  // null one commit after the document arrived, that echo would read as the
-  // reader switching pages and would clear their line selection.
+  // Settled during render rather than in an effect, so the page never spends a
+  // commit disagreeing with the tab strip about which page is open.
   if (activePart && activePart.id !== activePartId) {
     setActivePartId(activePart.id);
+  }
+
+  /**
+   * `PublicPartTabs` echoes the id it was given back through `onChange` on
+   * essentially every render, so only a genuine change of page may clear the
+   * reader's line selection - hence the guard rather than an effect keyed on
+   * the active id.
+   */
+  function selectPart(partId: string) {
+    if (partId === activePartId) return;
+    setActivePartId(partId);
+    setSelectedLineIndex(null);
+    setCanvasView("image");
   }
 
   const activePartIndex = activePart
@@ -119,11 +130,6 @@ export function PublicDocumentPage() {
     height: activePart?.height ?? 0,
   };
 
-  useEffect(() => {
-    setSelectedLineIndex(null);
-    setCanvasView("image");
-  }, [activePartId]);
-
   let content;
   if (loading) {
     content = <ContentRegionLoading label="Loading document" />;
@@ -148,7 +154,7 @@ export function PublicDocumentPage() {
           <PublicPartTabs
             parts={partTabs}
             activeId={activePart?.id ?? null}
-            onChange={setActivePartId}
+            onChange={selectPart}
             variant="workspace"
           />
 

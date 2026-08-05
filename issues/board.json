@@ -17,11 +17,11 @@
     "blocked": 12
   },
   "dag": {
-    "mermaid": "flowchart TD\n  048[\"048 \u00b7 collapse second job queue\"]\n  049[\"049 \u00b7 Torch-free runtime boundary\"]\n  050[\"050 \u00b7 publish inference package\"]\n  051[\"051 \u00b7 execution target + capacity\"]\n  052[\"052 \u00b7 device claim endpoint\"]\n  053[\"053 \u00b7 signed page-image link\"]\n  054[\"054 \u00b7 device lease stale sweep\"]\n  055[\"055 \u00b7 version floor\"]\n  056[\"056 \u00b7 CLI pair + version\"]\n  057[\"057 \u00b7 CLI run loop\"]\n  058[\"058 \u00b7 CLI self-upgrade\"]\n  059[\"059 \u00b7 frontend host preference\"]\n  060[\"060 \u00b7 delete loopback transport\"]\n  061[\"061 \u00b7 delete native packaging\"]\n\n  048 --> 050\n  049 --> 050\n  048 --> 051\n  048 --> 052\n  052 --> 053\n  052 --> 054\n  052 --> 055\n  050 --> 056\n  050 --> 061\n  053 --> 057\n  054 --> 057\n  056 --> 057\n  055 --> 058\n  056 --> 058\n  051 --> 059\n  057 --> 060\n  059 --> 060\n\n  classDef hitl stroke-dasharray: 5 5\n  classDef critical stroke-width:3px\n  class 048,052,053,057,060 critical",
+    "mermaid": "flowchart TD\n  048[\"048 \u00b7 collapse second job queue\"]\n  049[\"049 \u00b7 Torch runtime, archive ONNX\"]\n  050[\"050 \u00b7 publish inference package\"]\n  051[\"051 \u00b7 execution target + capacity\"]\n  052[\"052 \u00b7 device claim endpoint\"]\n  053[\"053 \u00b7 signed page-image link\"]\n  054[\"054 \u00b7 device lease stale sweep\"]\n  055[\"055 \u00b7 version floor\"]\n  056[\"056 \u00b7 CLI pair + version\"]\n  057[\"057 \u00b7 CLI run loop\"]\n  058[\"058 \u00b7 CLI self-upgrade\"]\n  059[\"059 \u00b7 frontend host preference\"]\n  060[\"060 \u00b7 delete loopback transport\"]\n  061[\"061 \u00b7 delete native packaging\"]\n\n  048 --> 050\n  049 --> 050\n  048 --> 051\n  048 --> 052\n  052 --> 053\n  052 --> 054\n  052 --> 055\n  050 --> 056\n  050 --> 061\n  053 --> 057\n  054 --> 057\n  056 --> 057\n  055 --> 058\n  056 --> 058\n  051 --> 059\n  057 --> 060\n  059 --> 060\n\n  classDef hitl stroke-dasharray: 5 5\n  classDef critical stroke-width:3px\n  class 048,052,053,057,060 critical",
     "parallel_lanes": [
       [
         "048-collapse-second-job-queue.md",
-        "049-torch-free-runtime-boundary.md"
+        "049-torch-runtime-archive-onnx.md"
       ]
     ],
     "critical_path": [
@@ -44,8 +44,8 @@
             "type": "AFK"
           },
           {
-            "file": "049-torch-free-runtime-boundary.md",
-            "title": "torch-free-runtime-boundary",
+            "file": "049-torch-runtime-archive-onnx.md",
+            "title": "torch-runtime-archive-onnx",
             "type": "AFK"
           }
         ]
@@ -79,7 +79,7 @@
             "title": "publish-inference-package",
             "type": "AFK",
             "blocked_by": [
-              "048-collapse-second-job-queue.md 049-torch-free-runtime-boundary.md"
+              "048-collapse-second-job-queue.md 049-torch-runtime-archive-onnx.md"
             ]
           },
           {
@@ -185,9 +185,9 @@
       "blocked_by": []
     },
     {
-      "file": "049-torch-free-runtime-boundary.md",
+      "file": "049-torch-runtime-archive-onnx.md",
       "id": "049",
-      "title": "torch-free-runtime-boundary",
+      "title": "torch-runtime-archive-onnx",
       "type": "AFK",
       "status": "ready",
       "tracker": "https://github.com/kkkamur07/greekOCR/issues/49",
@@ -201,7 +201,7 @@
       "status": "backlog",
       "tracker": "https://github.com/kkkamur07/greekOCR/issues/50",
       "blocked_by": [
-        "048-collapse-second-job-queue.md 049-torch-free-runtime-boundary.md"
+        "048-collapse-second-job-queue.md 049-torch-runtime-archive-onnx.md"
       ]
     },
     {

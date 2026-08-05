@@ -1,11 +1,11 @@
 """Object storage settings (local filesystem or Supabase Storage)."""
 
-from functools import lru_cache
 from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
+from backend.core.settings._cache import settings_cache
 from backend.core.settings._env import env_settings_config
 
 StorageBackend = Literal["local", "supabase"]
@@ -22,6 +22,6 @@ class StorageSettings(BaseSettings):
     media_webp_quality: int = Field(default=95, alias="MEDIA_WEBP_QUALITY")
 
 
-@lru_cache
+@settings_cache
 def get_storage_settings() -> StorageSettings:
     return StorageSettings()

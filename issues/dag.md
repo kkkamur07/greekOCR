@@ -16,7 +16,7 @@ plan is visible up front.
 
 | Wave | Issues | Why they can run together |
 |------|--------|---------------------------|
-| **1** | `048`, `049` | No blockers. 048 is platform-side (queue deletion), 049 is runtime-side (Torch boundary) — disjoint trees. |
+| **1** | `048`, `049` | No blockers. 048 is platform-side (queue deletion), 049 is runtime-side (ONNX → Torch, per ADR 0004) — disjoint trees apart from `pyproject.toml`, where a small dependency-group conflict is expected and cheap to resolve. |
 | **2** | `050`, `051`, `052` | All unblocked once 048 lands (050 also needs 049). 051 and 052 touch the same job tables, so they share a lane rather than racing. |
 | **3** | `053`, `054`, `055`, `056`, `061` | Widest point of the graph — five independent slices. |
 | **4** | `057`, `058` | Both need the CLI skeleton from 056; 057 additionally needs 053+054, 058 needs 055. |
@@ -42,14 +42,14 @@ replacement is demonstrably working.
 
 - **Total:** 14 | **Ready (AFK):** 2 | **Ready (HITL):** 0 | **Blocked:** 12
 - All 14 slices are AFK. No HITL slice — every architectural decision was
-  resolved into ADR 0002 and ADR 0003 before decomposition.
+  resolved into ADR 0002, ADR 0003, and ADR 0004 before decomposition.
 
 ## Mermaid
 
 ```mermaid
 flowchart TD
   048["048 · collapse second job queue"]
-  049["049 · Torch-free runtime boundary"]
+  049["049 · Torch runtime, archive ONNX"]
   050["050 · publish inference package"]
   051["051 · execution target + capacity"]
   052["052 · device claim endpoint"]
@@ -92,7 +92,7 @@ One branch per issue, all off `feat/inference-cli-redesign`:
 
 ```
 feat/048-collapse-second-job-queue
-feat/049-torch-free-runtime-boundary
+feat/049-torch-runtime-archive-onnx
 feat/050-publish-inference-package
 ...
 ```

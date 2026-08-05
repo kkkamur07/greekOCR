@@ -46,9 +46,7 @@ class DocumentCatalog:
     ) -> None:
         self._documents = documents or DocumentRepository()
         self._projects = projects or ProjectRepository()
-        self._access = access or DocumentAccess(
-            documents=self._documents, projects=self._projects
-        )
+        self._access = access or DocumentAccess(documents=self._documents, projects=self._projects)
 
     async def list_documents(
         self,

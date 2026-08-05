@@ -1,10 +1,9 @@
 """Database and runtime environment settings."""
 
-from functools import lru_cache
-
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
+from backend.core.settings._cache import settings_cache
 from backend.core.settings._env import env_settings_config
 
 
@@ -37,6 +36,6 @@ class InfrastructureSettings(BaseSettings):
         return self.environment.casefold() == "development"
 
 
-@lru_cache
+@settings_cache
 def get_infrastructure_settings() -> InfrastructureSettings:
     return InfrastructureSettings()

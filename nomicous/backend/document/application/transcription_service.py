@@ -52,9 +52,7 @@ class TranscriptionService:
     ) -> None:
         self._documents = documents or DocumentRepository()
         self._projects = projects or ProjectRepository()
-        self._access = access or DocumentAccess(
-            documents=self._documents, projects=self._projects
-        )
+        self._access = access or DocumentAccess(documents=self._documents, projects=self._projects)
         self._ground_truth = ground_truth or GroundTruthText(documents=self._documents)
 
     # --- Page transcription import and pairing ---
@@ -69,9 +67,7 @@ class TranscriptionService:
         *,
         text: str,
     ) -> tuple[list[PageTranscriptionLine], dict[str, int]]:
-        context = await self._access.require_part(
-            session, user, project_id, document_id, part_id
-        )
+        context = await self._access.require_part(session, user, project_id, document_id, part_id)
         part = context.part
         text_lines = self._split_page_transcription(text)
         if len(text_lines) > MAX_PAGE_TRANSCRIPTION_LINES:
@@ -106,9 +102,7 @@ class TranscriptionService:
         document_id: UUID,
         part_id: UUID,
     ) -> tuple[list[PageTranscriptionLine], dict[str, int]]:
-        context = await self._access.require_part(
-            session, user, project_id, document_id, part_id
-        )
+        context = await self._access.require_part(session, user, project_id, document_id, part_id)
         part = context.part
         text_lines = await self._documents.list_page_transcription_lines(session, part.id)
         total_lines = await self._documents.count_part_lines(session, part.id)
@@ -131,9 +125,7 @@ class TranscriptionService:
         line_id: UUID,
         text_line_order: int,
     ) -> tuple[list[PageTranscriptionLine], dict[str, int]]:
-        context = await self._access.require_part(
-            session, user, project_id, document_id, part_id
-        )
+        context = await self._access.require_part(session, user, project_id, document_id, part_id)
         part = context.part
         line = await self._line_or_404(session, part.id, line_id)
         text_line = await self._page_transcription_line_or_404(session, part.id, text_line_order)

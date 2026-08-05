@@ -7,11 +7,11 @@
 ## Ready (AFK)
 
 - [ ] [048 · collapse second job queue](048-collapse-second-job-queue.md)
-- [ ] [049 · Torch-free runtime boundary](049-torch-free-runtime-boundary.md)
+- [ ] [049 · Torch runtime, archive ONNX](049-torch-runtime-archive-onnx.md)
 
 ## Ready (HITL)
 
-_None. Every architectural decision was resolved into ADR 0002 / ADR 0003 before decomposition._
+_None. Every architectural decision was resolved into ADR 0002 / ADR 0003 / ADR 0004 before decomposition._
 
 ## In progress
 

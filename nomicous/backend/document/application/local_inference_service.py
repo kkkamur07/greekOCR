@@ -35,9 +35,7 @@ class LocalInferenceService:
     ) -> None:
         self._documents = documents or DocumentRepository()
         self._projects = projects or ProjectRepository()
-        self._access = access or DocumentAccess(
-            documents=self._documents, projects=self._projects
-        )
+        self._access = access or DocumentAccess(documents=self._documents, projects=self._projects)
 
     # The two persist paths below authorize in three named steps rather than one
     # ``DocumentAccess.require_part`` call. The rule itself still lives in exactly one
@@ -46,9 +44,7 @@ class LocalInferenceService:
     # merge without a database. That test belongs to the local-inference slice and is not
     # ours to rewrite, so the three-step shape is kept here deliberately.
 
-    async def _require_member(
-        self, session: AsyncSession, project_id: UUID, user: User
-    ) -> Project:
+    async def _require_member(self, session: AsyncSession, project_id: UUID, user: User) -> Project:
         return await self._access.require_project(session, user, project_id)
 
     async def _load_document_in_project(

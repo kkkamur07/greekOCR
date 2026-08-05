@@ -52,6 +52,7 @@ from backend.core.settings import (
     get_infrastructure_settings,
     get_job_settings,
     get_ml_settings,
+    reset_settings_caches,
 )
 from backend.users.api.rate_limit import clear_auth_rate_limit_state
 
@@ -103,11 +104,10 @@ def client() -> TestClient:
 def isolated_platform_state(client: TestClient):
     from backend.jobs.infrastructure import worker as worker_module
 
-    get_app_settings.cache_clear()
-    get_auth_settings.cache_clear()
-    get_infrastructure_settings.cache_clear()
-    get_job_settings.cache_clear()
-    get_ml_settings.cache_clear()
+    # Every settings accessor at once. The hand-written list this replaces omitted
+    # the storage and device accessors, so a test that repointed STORAGE_BACKEND or
+    # any DEVICE_* value leaked it into whichever test ran next.
+    reset_settings_caches()
     clear_auth_rate_limit_state()
 
     worker_module._inference_client = None

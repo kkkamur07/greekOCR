@@ -17,21 +17,17 @@ from backend.core.settings import (
     get_job_settings,
     get_ml_settings,
     get_storage_settings,
+    reset_settings_caches,
 )
 from backend.jobs.worker_main import validate_worker_settings
 from backend.users.api.rate_limit import _real_ip
 
 
 def _clear_platform_settings() -> None:
-    for get_settings in (
-        get_app_settings,
-        get_auth_settings,
-        get_infrastructure_settings,
-        get_job_settings,
-        get_ml_settings,
-        get_storage_settings,
-    ):
-        get_settings.cache_clear()
+    # Enumerating the accessors by hand is what let this list drift - it was
+    # missing the device accessor. The registry cannot go stale: an accessor is
+    # enrolled by the decorator that caches it.
+    reset_settings_caches()
 
 
 @pytest.fixture(autouse=True)

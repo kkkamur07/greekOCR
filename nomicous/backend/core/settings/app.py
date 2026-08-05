@@ -1,6 +1,5 @@
 """API application settings (CORS, media paths)."""
 
-from functools import lru_cache
 from ipaddress import ip_network
 from pathlib import Path
 from urllib.parse import urlparse
@@ -8,6 +7,7 @@ from urllib.parse import urlparse
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings
 
+from backend.core.settings._cache import settings_cache
 from backend.core.settings._env import REPO_ROOT, env_settings_config
 
 
@@ -91,6 +91,6 @@ class AppSettings(BaseSettings):
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
 
-@lru_cache
+@settings_cache
 def get_app_settings() -> AppSettings:
     return AppSettings()

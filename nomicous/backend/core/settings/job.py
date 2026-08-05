@@ -1,10 +1,9 @@
 """Background job worker settings."""
 
-from functools import lru_cache
-
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
+from backend.core.settings._cache import settings_cache
 from backend.core.settings._env import env_settings_config
 
 
@@ -59,6 +58,6 @@ class JobSettings(BaseSettings):
     )
 
 
-@lru_cache
+@settings_cache
 def get_job_settings() -> JobSettings:
     return JobSettings()
