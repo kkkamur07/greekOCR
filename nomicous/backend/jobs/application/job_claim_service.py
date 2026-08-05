@@ -42,7 +42,10 @@ from inference.contracts.jobs import JobSubmitRequest
 from sqlalchemy import select
 
 from backend.jobs.application.inference_dispatcher import build_inference_submit_request
-from backend.jobs.infrastructure.job_repository import AGENT_CLAIMED_JOB_TYPES
+from backend.jobs.infrastructure.job_repository import (
+    AGENT_CLAIM_PREFIX,
+    AGENT_CLAIMED_JOB_TYPES,
+)
 from backend.jobs.infrastructure.notifications import notify_platform_job_status_changed
 from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
 from backend.ml.application.agent_credentials import InferenceAgent
@@ -50,8 +53,6 @@ from backend.ml.domain.execution import ExecutionTarget
 from infrastructure.db import sync_system_session
 
 logger = logging.getLogger(__name__)
-
-_CLAIMED_BY_PREFIX = "agent:"
 
 UNBUILDABLE_PAYLOAD_ERROR = "This page could not be prepared for inference"
 
@@ -61,9 +62,11 @@ def agent_claim_owner(device_id: uuid.UUID) -> str:
 
     Prefixed so it can never collide with ``worker_identity()``'s ``host:pid``,
     and so "which agent holds this page" is answerable from the row alone - which
-    is what lets the callback authorise a device without a second table.
+    is what lets the callback authorise a device without a second table, and what
+    lets the stale sweep tell a leased page from a dispatched one without joining
+    anything.
     """
-    return f"{_CLAIMED_BY_PREFIX}{device_id}"
+    return f"{AGENT_CLAIM_PREFIX}{device_id}"
 
 
 @dataclass(frozen=True)
