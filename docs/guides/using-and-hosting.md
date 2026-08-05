@@ -32,7 +32,6 @@ Replace the placeholders in `.env`:
 POSTGRES_PASSWORD
 JWT_SECRET
 INFERENCE_WEBHOOK_SECRET
-INFERENCE_SERVICE_SECRET
 ```
 
 Start the stack:
@@ -167,17 +166,16 @@ There is no complete one-click hosting template. Operators must configure DNS,
 secrets, roles, migrations, TLS, backups, monitoring, and worker supervision.
 
 The documented default is local inference through the user-installed helper.
-Vercel cannot run long-lived PyTorch, Kraken, or Calamari workers. If remote
-inference is enabled, all of these persistent processes are required:
+Vercel cannot run a long-lived model process. If remote inference is enabled,
+these persistent processes are required:
 
 ```text
-platform-worker   -> submits platform jobs
-inference-api     -> accepts and queues inference jobs
-inference-worker  -> runs models and calls the platform API
+platform-worker   -> runs the job types the platform executes itself
+inference agent   -> claims pages from the platform, runs models, calls back
 ```
 
 Cloud inference is disabled in the documented Vercel defaults. Enable it only
-after deploying and verifying the complete worker and callback path.
+after deploying and verifying the complete claim and callback path.
 
 See the detailed operator runbooks:
 

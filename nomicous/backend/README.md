@@ -126,19 +126,19 @@ sequenceDiagram
   participant B as Browser
   participant API as nomicous-api
   participant PG as Postgres
-  participant INF as inference-worker
+  participant INF as inference agent
 
   B->>API: POST …/segment or …/transcribe
   API-->>B: job_id
-  API->>PG: claim job → running
+  API->>PG: insert job → pending
   Note over API,PG: pg_notify(platform_jobs)
   B->>API: GET /jobs/{id}/events (SSE)
-  API-->>B: event: job (running)
-  API->>INF: POST /inference/v1/jobs
+  API-->>B: event: job (pending)
+  INF->>API: claim one page
   API->>PG: status → waiting
   Note over API,PG: pg_notify(platform_jobs)
   API-->>B: event: job (waiting)
-  INF->>INF: Kraken / Calamari
+  INF->>INF: BLLA / Calamari
   INF->>API: POST /internal/inference/job-complete
   API->>PG: merge result → done
   Note over API,PG: pg_notify(platform_jobs)
@@ -223,10 +223,9 @@ The notification listener must use a plain `postgresql://` DSN (`SYNC_DATABASE_U
 - `tests/nomicous/integration/test_jobs.py` - `GET /jobs/{id}/events` auth and
   snapshot streaming.
 
-**Inference worker notifications (separate channel):** The `inference/` service uses
-its own `inference_jobs` Postgres channel to wake `inference-worker`. That path
-does not talk to the browser; the platform callback updates `jobs` and triggers
-`platform_jobs` NOTIFY above.
+There is one channel, because there is one queue: `platform_jobs`. The inference
+service used to run a second one over its own `inference_jobs` table; ADR 0003
+deleted it.
 
 ## API Surface
 
@@ -314,9 +313,14 @@ platform FastAPI app.
 
 ## ML inference service
 
-Segment and transcribe jobs call the repository-level **`inference/` service** through `InferenceClient` (`backend/ml/infrastructure/ml_client.py`).
+The platform makes no outbound call to an inference service. Segment and
+transcribe rows are left `pending` for an inference agent to claim over HTTP,
+and the agent reports the outcome to `POST /internal/inference/job-complete`
+(ADR 0003).
 
-Compose sets `INFERENCE_URL=http://inference-api:8001` on the API container. The standalone service (health, sync `/inference/v1/run`, async job submission, contracts, registry - see [`inference/README.md`](../../inference/README.md)) runs as `inference-api` + `inference-worker`.
+What the platform imports from the repository-level [`inference/`](../../inference/)
+package is the wire contract (`inference/contracts/`), the shared admission
+limits, and the registry it serves to agents at `GET /inference/v1/registry`.
 
 ## Special Notes
 

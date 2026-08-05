@@ -83,8 +83,8 @@ cp .env.compose.example .env
 ```
 
 Replace the placeholder values in `.env` for:
-`POSTGRES_PASSWORD`, `JWT_SECRET`, `INFERENCE_WEBHOOK_SECRET`, and
-`INFERENCE_SERVICE_SECRET`. Then start the stack:
+`POSTGRES_PASSWORD`, `JWT_SECRET`, and `INFERENCE_WEBHOOK_SECRET`.
+Then start the stack:
 
 ```bash
 docker compose up --build

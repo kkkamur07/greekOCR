@@ -6,10 +6,6 @@ x-api-build: &api-build
   args:
     APP_VERSION: ${NOMICOUS_VERSION:-0.3.3}
 
-x-inference-build: &inference-build
-  context: .
-  dockerfile: inference/Dockerfile
-
 services:
   db:
     image: postgres:16-alpine
@@ -42,7 +38,6 @@ services:
       MEDIA_ROOT: /app/backend/media
       NOMICOUS_APP_ROOT: /app
       CLOUD_INFERENCE_ENABLED: "true"
-      INFERENCE_URL: http://inference-api:8001
       INFERENCE_WEBHOOK_SECRET: ${INFERENCE_WEBHOOK_SECRET:?copy .env.compose.example to .env and set INFERENCE_WEBHOOK_SECRET}
       # API hosts remain request/response only; Compose runs platform-worker separately.
       JOB_WORKER_ENABLED: "false"
@@ -56,8 +51,6 @@ services:
       - ./data:/data:ro
     depends_on:
       db:
-        condition: service_healthy
-      inference-api:
         condition: service_healthy
     healthcheck:
       test:
@@ -86,8 +79,6 @@ services:
       ENVIRONMENT: development
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?copy .env.compose.example to .env and set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-kalamos}
       SYNC_DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?copy .env.compose.example to .env and set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-kalamos}
-      INFERENCE_URL: http://inference-api:8001
-      INFERENCE_SERVICE_SECRET: ${INFERENCE_SERVICE_SECRET:?copy .env.compose.example to .env and set INFERENCE_SERVICE_SECRET}
       JOB_WORKER_ENABLED: "true"
       JOB_SSE_NOTIFICATIONS_ENABLED: "false"
     volumes:
@@ -96,67 +87,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      inference-api:
-        condition: service_healthy
     command: python -m backend.jobs.worker_main
-
-  inference-api:
-    image: nomicous-inference:latest
-    build: *inference-build
-    # Host port 8001 is reserved for the local Inference helper (the browser probes
-    # http://127.0.0.1:8001 directly - see docs/deployment/supabase.md). Publish the cloud
-    # inference API on 8010 so it never shadows a locally installed helper. The
-    # container still listens on 8001, so INFERENCE_URL (docker network) is unchanged.
-    ports:
-      - "127.0.0.1:8010:8001"
-    environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?copy .env.compose.example to .env and set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-kalamos}
-      INFERENCE_DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?copy .env.compose.example to .env and set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-kalamos}
-      INFERENCE_CALLBACK_URL: http://api:8000/internal/inference/job-complete
-      INFERENCE_REGISTRY_PATH: /app/inference/registry.yaml
-      INFERENCE_SERVICE_SECRET: ${INFERENCE_SERVICE_SECRET:?copy .env.compose.example to .env and set INFERENCE_SERVICE_SECRET}
-      HF_CACHE_ROOT: /app/src/hf/cache
-      INFERENCE_CALAMARI_NUM_PROCESSES: "1"
-    volumes:
-      - ./src/hf:/app/src/hf
-    depends_on:
-      db:
-        condition: service_healthy
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "python",
-          "-c",
-          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=2).read()",
-        ]
-      interval: 5s
-      timeout: 3s
-      retries: 12
-      start_period: 5s
-    command: uvicorn inference.api.main:app --host 0.0.0.0 --port 8001 --workers 1
-
-  inference-worker:
-    image: nomicous-inference:latest
-    healthcheck:
-      disable: true
-    environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?copy .env.compose.example to .env and set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-kalamos}
-      INFERENCE_DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?copy .env.compose.example to .env and set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-kalamos}
-      INFERENCE_CALLBACK_URL: http://api:8000/internal/inference/job-complete
-      INFERENCE_REGISTRY_PATH: /app/inference/registry.yaml
-      INFERENCE_WEBHOOK_SECRET: ${INFERENCE_WEBHOOK_SECRET:?copy .env.compose.example to .env and set INFERENCE_WEBHOOK_SECRET}
-      HF_CACHE_ROOT: /app/src/hf/cache
-      INFERENCE_CALAMARI_NUM_PROCESSES: "1"
-      INFERENCE_WORKER_RUNNING_JOB_TIMEOUT_SECONDS: "1800"
-    volumes:
-      - ./src/hf:/app/src/hf
-    depends_on:
-      db:
-        condition: service_healthy
-      api:
-        condition: service_healthy
-    command: python -m inference.jobs.worker
 
   frontend:
     image: nomicous-frontend:latest

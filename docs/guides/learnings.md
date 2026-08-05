@@ -93,7 +93,7 @@ We plan a **persistent Docker deployment** (API + workers on one host) where `JO
 | Symptom | Cause | Fix |
 |---------|-------|-----|
 | Jobs stuck in `pending` | `platform-worker` not running | Deploy worker on Docker; keep `JOB_WORKER_ENABLED=false` on Vercel API |
-| Jobs stuck in `waiting` | `inference-worker` not running | Start inference worker; check `INFERENCE_URL` / callback URL |
+| Jobs stuck in `waiting` | No inference agent finished the page it claimed | Check the agent is running and its callback URL is reachable |
 | SSE never connects on production | Expected on Vercel | Polling fallback should still complete jobs |
 | CORS errors from `app.nomicous.com` | Missing origin | Set `CORS_ORIGINS=https://app.nomicous.com` on API |
 | Wrong scheme / redirect loops | Proxy headers | Set `BEHIND_PROXY=true` only with an explicit `FORWARDED_ALLOW_IPS` proxy IP/CIDR list |
@@ -113,8 +113,7 @@ The fixes were configuration changes, not application workarounds:
 |--------------|---------------|----------------|
 | `FORWARDED_ALLOW_IPS=*` | Wildcard forwarded-header trust permits spoofed client IPs | Remove the variable |
 | `BEHIND_PROXY=true` without a CIDR | Forwarded headers were enabled without a known trusted proxy range | Set `BEHIND_PROXY=false` |
-| Missing or non-HTTPS `INFERENCE_URL` | Production ML settings require an HTTPS cloud endpoint | Set `https://inference.nomicous.com` |
-| Placeholder/missing inference secrets | Production callbacks require real shared secrets | Store `INFERENCE_WEBHOOK_SECRET` and `INFERENCE_SERVICE_SECRET` as encrypted Vercel variables |
+| Placeholder/missing inference secret | Production callbacks require a real shared secret | Store `INFERENCE_WEBHOOK_SECRET` as an encrypted Vercel variable |
 | Only `VITE_*` frontend variables | The frontend migrated from Vite to Next.js | Use `NEXT_PUBLIC_*` names |
 
 The API is deployed at **`https://api.nomicous.com`** and pinned to Vercel's
@@ -154,11 +153,11 @@ directly. That cross-origin, public-HTTPS → private-loopback path is intention
 Loopback TLS (or a Safari-specific Local Network path) remains a follow-up if
 Safari still blocks mixed-content / local-network access after this hardening.
 
-Do **not** set the Vercel API's `INFERENCE_URL` to `localhost:8001`. From inside a
-Vercel function, `localhost` means the ephemeral function container, not the
-researcher's computer. Keep cloud inference disabled until a persistent
-inference host is available. When enabled later, use the HTTPS endpoint and
-configure the callback and shared secrets together.
+The Vercel API never dials out to an inference host, which is what removed a
+whole class of this mistake: `localhost` inside a Vercel function means the
+ephemeral function container, not the researcher's computer. Inference is
+inbound now — an agent claims from the API (ADR 0003). Keep cloud inference
+disabled until a persistent agent host is available.
 
 Runbook: [`docs/deployment/production.md`](../deployment/production.md). Vercel Python notes: [`docs/deployment/vercel-platform-api.md`](../deployment/vercel-platform-api.md).
 

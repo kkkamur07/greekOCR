@@ -10,11 +10,12 @@ or a Docker image.
 | `nomicous_migrator` | one-off Alembic operator | schema usage/create plus application tables, sequences, and types |
 | `nomicous_api` | platform API | application-table CRUD, sequence usage, and type usage |
 | `nomicous_platform_worker` | persistent platform worker | claim/update `jobs`; read job-input tables |
-| `nomicous_inference_worker` | inference API and worker | read/update `inference_jobs` only |
+| `nomicous_inference_worker` | nothing — retained only so `002_service_roles` finds all four groups | none since `006_drop_inference_jobs` |
 
-The platform API does not need the migrator connection at runtime. The
-inference containers do not receive the API, storage, JWT, or migration
-credentials.
+The platform API does not need the migrator connection at runtime. An inference
+agent needs no database credential at all: it reaches the platform over HTTP
+(ADR 0003). Drop `nomicous_inference_worker` once no login principal is a
+member of it.
 
 ## Bootstrap
 
@@ -36,15 +37,13 @@ credentials.
    ```sql
    GRANT nomicous_api TO <provider-managed-api-login>;
    GRANT nomicous_platform_worker TO <provider-managed-platform-worker-login>;
-   GRANT nomicous_inference_worker TO <provider-managed-inference-worker-login>;
    GRANT nomicous_migrator TO <provider-managed-migrator-login>;
    ```
 
-6. Store the four connection URLs in the appropriate provider services:
+6. Store the connection URLs in the appropriate provider services:
    - Alembic runner: `MIGRATOR_DATABASE_URL`
    - platform API: `DATABASE_URL`, `SYNC_DATABASE_URL`
    - platform worker: `DATABASE_URL`, `SYNC_DATABASE_URL`
-   - inference API and worker: `INFERENCE_DATABASE_URL`
 7. Run `alembic upgrade head` through the migrator/operator connection.
 
 Migration `002_service_roles` performs the same grants when the current
@@ -85,8 +84,8 @@ ORDER BY grantee, table_name, privilege_type;
 ```
 
 Smoke-test each service with its own runtime URL. A platform worker should
-claim a job, and an inference worker should see and update `inference_jobs`;
-neither should be able to create tables or read unrelated runtime tables.
+claim a job and should not be able to create tables or read unrelated runtime
+tables.
 
 `alembic downgrade -1` removes grants but preserves the group roles and login
 memberships. Remove memberships and roles manually only after every service has

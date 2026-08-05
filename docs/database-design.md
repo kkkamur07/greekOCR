@@ -26,10 +26,9 @@ authentication and authorization.
 flowchart LR
     Browser["Browser / Next.js frontend"]
     API["Platform API<br/>FastAPI"]
-    PlatformWorker["Platform worker<br/>job dispatcher"]
-    InferenceAPI["Inference API"]
-    InferenceWorker["Inference worker"]
-    DB[("Supabase PostgreSQL<br/>application + inference tables")]
+    PlatformWorker["Platform worker"]
+    Agent["Inference agent<br/>laptop or hosted worker"]
+    DB[("Supabase PostgreSQL<br/>application tables")]
     Storage[("Supabase Storage<br/>private document-media bucket")]
 
     Browser -->|"HTTPS JSON API"| API
@@ -37,38 +36,32 @@ flowchart LR
     API -->|"async SQLAlchemy / asyncpg"| DB
     API -->|"server-side Storage SDK"| Storage
     PlatformWorker -->|"sync SQLAlchemy / psycopg2"| DB
-    PlatformWorker -->|"HTTP job submission"| InferenceAPI
-    InferenceAPI -->|"sync SQLAlchemy / psycopg2"| DB
-    InferenceWorker -->|"sync SQLAlchemy / psycopg2"| DB
-    InferenceAPI -->|"callback"| API
-    InferenceWorker -->|"runs OCR models"| InferenceAPI
+    Agent -->|"claim one page"| API
+    Agent -->|"job callback"| API
     DB -.->|"pg_notify"| API
 ```
 
-There are two related job records:
+There is one job record. `jobs` represents user-visible work such as
+segmentation or transcription, and it is the only queue.
 
-1. `jobs` is the **platform job**. It represents user-visible work such as
-   segmentation or transcription.
-2. `inference_jobs` is the **inference job**. It contains the image bytes and
-   model execution payload used by the inference service.
-
-The two records are linked by `jobs.inference_job_id` and
-`inference_jobs.product_job_id`.
+A second table, `inference_jobs`, used to hold the same work again for the
+inference service. Migration `006_drop_inference_jobs` removed it (ADR 0003);
+`jobs.inference_job_id` survives as the identifier an agent echoes back in its
+completion callback.
 
 ## 2. Database boundaries and service ownership
 
 The database is shared, but access is divided by service role. The API owns
 user-facing application data. The platform worker reads application context and
-updates platform job dispatch state. The inference service owns the
-`inference_jobs` queue.
+updates job dispatch state. An inference agent has no database access: it
+reaches the platform over HTTP.
 
 | Component | Primary responsibility | Database access |
 |---|---|---|
 | Migrator/operator | Alembic DDL and schema changes | Direct PostgreSQL connection; `MIGRATOR_DATABASE_URL` |
 | Platform API | Auth, projects, documents, annotations, job state, callbacks | Async SQLAlchemy for request work; API service role |
-| Platform worker | Claims platform jobs and dispatches inference requests | Sync SQLAlchemy; platform-worker role |
-| Inference API | Accepts inference submissions and exposes inference status | Sync SQLAlchemy; inference-worker role |
-| Inference worker | Claims and executes `inference_jobs` | Sync SQLAlchemy; inference-worker role |
+| Platform worker | Claims and runs the job types the platform executes itself | Sync SQLAlchemy; platform-worker role |
+| Inference agent | Claims one page at a time and runs the model | None; HTTP to the platform API only |
 | Browser | UI and job observation | Never connects directly to PostgreSQL or private Storage |
 | Supabase Storage | Page image object storage | Backend only, using the secret Storage key |
 
@@ -427,18 +420,11 @@ index supports payload filtering. References to users, documents, parts,
 models, and bindings use `SET NULL`, preserving job history if source objects
 are later removed.
 
-#### `inference_jobs` - inference-owned queue
+#### `inference_jobs` - removed
 
-This queue is used by the inference API and inference worker.
-
-- `product_job_id` points back to `jobs.id` logically; it is indexed but is not
-  declared as a database foreign key because the inference service has a
-  separate ownership boundary.
-- `image_bytes` contains the input image for the inference execution.
-- `registry_model_id` and `registry_tag` identify the resolved model artifact.
-- `params` contains task parameters, including line regions for transcription.
-- `output` and `error` hold execution results.
-- Claiming uses `(status, created_at, id)` ordering.
+Dropped by `006_drop_inference_jobs`. It duplicated the image bytes and the
+execution payload of a `jobs` row so a second worker could claim the same work
+a second time. See ADR 0003.
 
 ## 4. Enumerations and state machines
 
@@ -448,63 +434,42 @@ This queue is used by the inference API and inference worker.
 stateDiagram-v2
     [*] --> pending: API creates jobs row
     pending --> running: platform worker claims row
-    running --> waiting: inference submission accepted
+    pending --> waiting: inference agent claims page
     running --> done: local/test handler succeeds
-    running --> failed: dispatch or local handler fails
+    running --> failed: local handler fails
     waiting --> done: callback merge succeeds
     waiting --> failed: inference fails or merge fails
     done --> [*]
     failed --> [*]
 ```
 
-`waiting` means the platform has handed work to the inference service and is
-waiting for a callback. It does not mean the job is idle or lost.
+`waiting` means an inference agent has taken the page and the platform is
+waiting for its callback. It does not mean the job is idle or lost.
 
-### 4.2 Inference job states
+Segment and transcribe rows are never claimed by the platform worker: it has no
+model to run, so it leaves them for an agent.
 
-```mermaid
-stateDiagram-v2
-    [*] --> pending: inference API inserts row
-    pending --> running: inference worker claims row
-    running --> done: model execution succeeds
-    running --> failed: model execution fails
-    running --> pending: stale worker lease reclaimed
-    done --> [*]
-    failed --> [*]
-```
-
-Admission is bounded. The inference API serializes the active-job count and
-insert using a PostgreSQL advisory transaction lock. This avoids multiple API
-processes accepting work beyond the configured queue capacity.
-
-### 4.3 Job dispatch and callback sequence
+### 4.2 Job dispatch and callback sequence
 
 ```mermaid
 sequenceDiagram
     participant UI as Browser
     participant API as Platform API
     participant PDB as Supabase Postgres
-    participant PW as Platform worker
-    participant IA as Inference API
-    participant IW as Inference worker
+    participant AG as Inference agent
 
     UI->>API: POST create job
     API->>PDB: INSERT jobs(status=pending)
     API-->>UI: job_id
 
-    PW->>PDB: SELECT ... FOR UPDATE SKIP LOCKED
-    PDB-->>PW: claim pending job
-    PW->>PDB: UPDATE jobs(status=running)
-    PW->>IA: Submit image + model + params
-    IA->>PDB: INSERT inference_jobs(status=pending)
-    IA-->>PW: inference_job_id
-    PW->>PDB: UPDATE jobs(status=waiting, inference_job_id)
+    AG->>API: Claim one page
+    API->>PDB: SELECT ... FOR UPDATE SKIP LOCKED
+    PDB-->>API: claim pending job
+    API->>PDB: UPDATE jobs(status=waiting, inference_job_id)
+    API-->>AG: Image + model + params
 
-    IW->>PDB: SELECT ... FOR UPDATE SKIP LOCKED
-    PDB-->>IW: claim inference job
-    IW->>IW: Run OCR model
-    IW->>PDB: UPDATE inference_jobs(done/failed)
-    IW->>API: POST /internal/inference/job-complete
+    AG->>AG: Run OCR model
+    AG->>API: POST /internal/inference/job-complete
 
     API->>PDB: Claim callback with row lock
     API->>PDB: Merge output and finalize jobs
@@ -793,7 +758,7 @@ The current migrations define service role groups:
 | `nomicous_migrator` | Schema and full database administration for migrations |
 | `nomicous_api` | CRUD access to application tables |
 | `nomicous_platform_worker` | Read job context and update `jobs` |
-| `nomicous_inference_worker` | Read and update `inference_jobs` |
+| `nomicous_inference_worker` | Nothing; retained only until no login principal is a member |
 
 Provider-managed login principals should be granted exactly one appropriate
 group role. Credentials belong in the deployment secret store.

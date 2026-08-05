@@ -83,12 +83,11 @@ docker compose up --build -d   # detached background
 |---------|-----|
 | Frontend | [http://localhost:5173](http://localhost:5173) |
 | API | [http://localhost:8000](http://localhost:8000) |
-| ML inference API | [http://localhost:8010](http://localhost:8010) (host port; container listens on 8001. Host 8001 is reserved for the local inference helper) |
 | Postgres | `localhost:5433` |
 
 Platform media is mounted at `nomicous/backend/media/`. The existing `data/` folder is not mounted or migrated by the production platform relocation.
 
-Compose also starts **`inference-api`** and **`inference-worker`** from the repository-level [`inference/`](../inference/) package. That separate inference service owns contracts, registry-backed sync runs, and async job submission. `inference-api` is the HTTP boundary; `inference-worker` is reserved for slow CPU/GPU inference work. The platform API calls it through `INFERENCE_URL`. See [`inference/README.md`](../inference/README.md).
+Compose runs no inference service. The repository-level [`inference/`](../inference/) package supplies the contracts the platform imports and the model runtime an agent executes; the platform owns the only job queue (ADR 0003). See [`inference/README.md`](../inference/README.md).
 
 Useful after `-d`: `docker compose ps`, `docker compose logs -f`, `docker compose down`.
 

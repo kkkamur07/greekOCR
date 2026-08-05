@@ -173,7 +173,6 @@ only through the development-only `parity` group:
 uv run --group inference --group export --group parity pytest tests/inference/integration/test_blla_parity.py -q
 ```
 
-Stop the Compose `inference-worker` before local integration runs (`docker stop nomicous-inference-worker-1`).
 Full-suite layout, `DATABASE_URL` caveats, and failure analysis: [`docs/guides/testing.md`](../docs/guides/testing.md).
 
 ## Related docs

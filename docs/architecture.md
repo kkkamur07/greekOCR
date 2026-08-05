@@ -82,29 +82,26 @@ sequenceDiagram
     participant UI as Browser
     participant API as PlatformAPI
     participant DB as Postgres
-    participant PW as PlatformWorker
-    participant IA as InferenceAPI
-    participant IW as InferenceWorker
+    participant AG as InferenceAgent
 
     UI->>API: Create segment or transcribe job
     API->>DB: Insert jobs(status=pending)
     API-->>UI: Return product job id
-    PW->>DB: Claim platform job
-    PW->>IA: Submit image, model, and params
-    IA->>DB: Insert inference_jobs(status=pending)
-    IA-->>PW: Return inference job id
-    PW->>DB: Set platform job to waiting
-    IW->>DB: Claim inference job
-    IW->>IW: Run model
-    IW->>DB: Store done or failed output
-    IW->>API: Signed completion callback
-    API->>DB: Lock, merge, and finalize product job
+    AG->>API: Claim one page
+    API->>DB: Set job to waiting
+    API-->>AG: Image, model, and params
+    AG->>AG: Run model
+    AG->>API: Signed completion callback
+    API->>DB: Lock, merge, and finalize job
 ```
 
-The platform job is user-visible. `pending` means unclaimed, `running` means
-the platform worker is processing it, `waiting` means inference accepted it,
-and `done` or `failed` are terminal. Callback locking and terminal-state
-checks make retries idempotent.
+There is one queue and one database. The agent is a researcher's laptop or a
+hosted worker — the same program with different credentials (ADR 0003).
+
+The job is user-visible. `pending` means unclaimed, `running` means the
+platform worker is processing it, `waiting` means an agent has taken it, and
+`done` or `failed` are terminal. Callback locking and terminal-state checks
+make retries idempotent.
 
 ## Job notifications
 

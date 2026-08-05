@@ -105,9 +105,9 @@ Database name is **`postgres`** (Supabase default) - not `kalamos`.
 
 Copy the direct migrator URI only into the migration runner's secret store.
 Copy an API principal's pooler URI into `DATABASE_URL` and
-`SYNC_DATABASE_URL`; only `DATABASE_URL` adds `+asyncpg`. Copy the inference
-principal's pooler URI into `INFERENCE_DATABASE_URL` on the inference API and
-worker. Add `?sslmode=require` to libpq URLs when the provider URI omits it.
+`SYNC_DATABASE_URL`; only `DATABASE_URL` adds `+asyncpg`. An inference agent
+needs no database URI. Add `?sslmode=require` to libpq URLs when the provider
+URI omits it.
 
 ### Direct vs transaction pooler
 
@@ -220,15 +220,15 @@ Two **separate** paths. Frontend chooses; backend `INFERENCE_*` vars are for **c
 
 ```text
 Local path:  Browser → Inference helper (127.0.0.1:8001) → API persists results
-Cloud path:  Browser → API creates job → INFERENCE_URL service → webhook callback
+Cloud path:  Browser → API creates job → hosted agent claims it → webhook callback
 ```
 
-|                     | Local helper                                                         | Cloud (`INFERENCE_URL`)                                                 |
-| ------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| **Frontend config** | `NEXT_PUBLIC_INFERENCE_HELPER_URL` (default `http://127.0.0.1:8001`) | “Use cloud inference” toggle in page editor                             |
-| **Backend env**     | Not required                                                         | `INFERENCE_URL`, `INFERENCE_WEBHOOK_SECRET`, `INFERENCE_SERVICE_SECRET` |
-| **Pros**            | GPU on your machine; no hosted inference cost                        | Works without local install; async job queue                            |
-| **Cons**            | Must run helper; model weights local                                 | Needs inference-api + worker; secrets must match                        |
+|                     | Local helper                                                         | Cloud (hosted agent)                                        |
+| ------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------- |
+| **Frontend config** | `NEXT_PUBLIC_INFERENCE_HELPER_URL` (default `http://127.0.0.1:8001`) | “Use cloud inference” toggle in page editor                 |
+| **Backend env**     | Not required                                                         | `INFERENCE_WEBHOOK_SECRET`                                  |
+| **Pros**            | GPU on your machine; no hosted inference cost                        | Works without local install; queued on the platform         |
+| **Cons**            | Must run helper; model weights local                                 | Needs a hosted agent running; webhook secret must match     |
 
 **Typical Supabase test setup:** Supabase DB + Storage, API local, **inference helper local**. Leave `INFERENCE_WEBHOOK_SECRET=replace-me` until you run cloud inference.
 
@@ -390,8 +390,7 @@ PYTHONPATH=. uv run python -m inference.helper
 ```
 
 The page editor probes `http://127.0.0.1:8001` from your browser (not from inside Docker).
-Host port **8001 is reserved for this helper** - the Docker `inference-api` (cloud jobs)
-publishes on host **8010** so it never shadows a locally installed helper.
+Host port **8001 is reserved for this helper**; Compose publishes nothing on it.
 
 ### 6. Run frontend (without Docker)
 
@@ -417,9 +416,7 @@ Dev login after seed: `dev@example.com` / `dev-pass-123`
 | `SUPABASE_STORAGE_BUCKET`   | Yes                 | Default `document-media`                           |
 | `JWT_SECRET`                | Yes                 | App auth (not Supabase)                            |
 | `MEDIA_WEBP_LOSSLESS`       | No                  | Default `true`                                     |
-| `INFERENCE_URL`             | Only for cloud jobs | Default `http://localhost:8001`                    |
-| `INFERENCE_WEBHOOK_SECRET`  | Only for cloud jobs | Shared with inference service                      |
-| `INFERENCE_SERVICE_SECRET`  | Only for cloud jobs | Same as webhook secret in dev                      |
+| `INFERENCE_WEBHOOK_SECRET`  | Only for cloud jobs | Authenticates the agent's job callback             |
 
 ---
 

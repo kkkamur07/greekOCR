@@ -236,7 +236,7 @@ uv run --group platform --group inference pytest tests/nomicous/integration/test
    curl -s https://api.example.com/inference/v1/registry
    ```
 
-2. **Deploy cloud inference** (`inference-api` / `inference-worker`) if remote inference should serve the model - same `registry.yaml` mount.
+2. **Roll out to hosted agents** if remote inference should serve the model - they sync the same `registry.yaml` from the platform.
 
 3. **Inference Helper** - **no new installer required**. On next helper start (login / reboot), it fetches the registry when `HELPER_REGISTRY_URL` points at your API. Weights download on first local OCR/segment run.
 
