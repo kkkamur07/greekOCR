@@ -17,9 +17,11 @@ def sha256_file(path: Path) -> str:
 class ArtifactIntegrityError(ValueError):
     """A weights artifact does not match its pinned SHA-256 digest.
 
-    Subclasses ``ValueError`` for backwards compatibility, but HTTP surfaces
-    must map it to a service error (503), never a client error (422): the
-    request was fine, the artifact on disk is not.
+    Subclasses ``ValueError`` for reach - the adapters raise and sort on
+    ``ValueError`` - but callers must never treat it as a bad request: nothing
+    about the submitted job is wrong, the weights on this machine are. The agent
+    reports it as a failed page with its own reason, and any surface that maps
+    exceptions to statuses owes it a service error rather than a client one.
     """
 
 
@@ -42,10 +44,12 @@ def _artifact_identity(path: Path) -> tuple[str, int, int]:
 def verify_artifact_sha256(path: Path, expected_sha256: str) -> None:
     """Raise ``ArtifactIntegrityError`` unless ``path`` matches its pinned digest.
 
-    The same artifact is verified from several call sites per run (weights
-    resolution, the helper capability document, and the architecture adapter).
-    Hashing is memoized per ``(path, size, mtime_ns)`` so those cost one read of
-    the file rather than one each; a file that changed on disk is always re-read.
+    The same artifact is verified from several call sites per run: weights
+    source resolution (``inference/weights/__init__.py``), the Hub cache
+    (``inference/hub/cache.py``), and the architecture adapter
+    (``inference/architectures/artifact.py``). Hashing is memoized per
+    ``(path, size, mtime_ns)`` so those cost one read of the file rather than one
+    each; a file that changed on disk is always re-read.
     """
     # stat() first: a missing artifact must still raise FileNotFoundError here,
     # exactly as the unmemoized read did.
