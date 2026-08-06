@@ -12,9 +12,10 @@ from torch import Tensor
 # The model height is fixed (1800 by default) while the width scales with the
 # source aspect ratio. Without a bound, an extreme panorama that still passes
 # the pixel-count admission cap can balloon into a multi-gigabyte tensor, so
-# clamp the scaled width to this multiple of the input height. Capped images
-# lose horizontal resolution but still decode correctly because coordinates
-# are mapped back through ``scale_xy``.
+# clamp the scaled width to this multiple of the input height. A capped image
+# loses horizontal resolution but still decodes to source coordinates: the
+# decoder derives the mapping from the page size it is given and the shape of
+# ``scaled_gray``, so it sees whatever ratio the cap produced.
 MAX_WIDTH_TO_HEIGHT_RATIO = 8
 
 
@@ -29,7 +30,6 @@ class BLLAInput:
 
     tensor: Tensor
     scaled_gray: np.ndarray
-    scale_xy: tuple[float, float]
 
 
 def preprocess_blla_image(
@@ -60,8 +60,4 @@ def preprocess_blla_image(
     tensor = torch.from_numpy(scaled_array.copy()).permute(2, 0, 1).to(torch.float32)
     tensor = tensor / 255.0
     tensor = tensor.max() - tensor
-    return BLLAInput(
-        tensor=tensor,
-        scaled_gray=scaled_gray,
-        scale_xy=(source_width / scaled_width, source_height / input_height),
-    )
+    return BLLAInput(tensor=tensor, scaled_gray=scaled_gray)

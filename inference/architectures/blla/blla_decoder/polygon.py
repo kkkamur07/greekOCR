@@ -311,7 +311,10 @@ def calculate_polygonal_environment(
     """Extract one polygonal line environment."""
 
     line = geom.LineString(baseline)
-    offset = 8 if topline is not None else 0
+    # Was ``8 if topline is not None else 0``, which never took the else branch:
+    # ``topline`` is a ``bool`` with a default, so it is never ``None``. The
+    # offset the reference decoder uses is 8.
+    offset = 8
     offset_line = line.parallel_offset(offset, side="left" if topline else "right")
     line_array = np.asarray(line.coords, dtype=float)
     offset_array = np.asarray(offset_line.coords, dtype=float)

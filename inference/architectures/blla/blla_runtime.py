@@ -40,9 +40,9 @@ def _positive_float_param(params: Mapping[str, Any], key: str, default: float) -
 
     Upper bounds are *not* checked here: they belong to
     ``admission.validate_segment_params``, which every entry point into the
-    runner passes through (sync run, queued job, helper). Duplicating them would
-    mean two places to keep in step, and the one that runs first is the one that
-    can still return a 422 instead of a half-built response.
+    runner passes through (sync run, queued job). Duplicating them would mean
+    two places to keep in step, and the one that runs first is the one that can
+    still return a 422 instead of a half-built response.
     """
     value = params.get(key, default)
     try:
@@ -97,7 +97,6 @@ def build_blla_segment_response(
         raw_logits=True,
         scaled_gray=prepared.scaled_gray,
     )
-    refinement_image = image.copy()
 
     block = SegmentBlock(
         external_id="blla-block-1",
@@ -130,8 +129,11 @@ def build_blla_segment_response(
         }
         try:
             if use_otsu_refinement:
+                # ``image`` itself, not a copy: refinement reads it once
+                # through ``np.array(image.convert("RGB"))`` and mutates
+                # nothing, so the copy was a full-page allocation per page.
                 refinements = refine_segment_candidates(
-                    refinement_image,
+                    image,
                     ceiling,
                     baseline=baseline,
                     margin_px=otsu_sphere_radius,

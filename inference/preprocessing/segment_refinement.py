@@ -140,29 +140,6 @@ def _refine_cluster(
     )
 
 
-def refine_segment(
-    image: Image.Image,
-    ceiling: list[list[float]],
-    *,
-    baseline: list[list[float]] | None = None,
-    margin_px: float = REFINEMENT_MARGIN_PX,
-    target_max_points: int = TARGET_MAX_POINTS,
-    min_iou: float = MIN_IOU,
-    min_area_ratio: float = MIN_AREA_RATIO,
-) -> SegmentRefinementResult:
-    """Refine one ceiling polygon without splitting it into multiple lines."""
-    return refine_segment_candidates(
-        image,
-        ceiling,
-        baseline=baseline,
-        margin_px=margin_px,
-        target_max_points=target_max_points,
-        min_iou=min_iou,
-        min_area_ratio=min_area_ratio,
-        split_large_lines=False,
-    )[0]
-
-
 def refine_segment_candidates(
     image: Image.Image,
     ceiling: list[list[float]],

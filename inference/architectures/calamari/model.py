@@ -65,9 +65,11 @@ class CalamariTorchModel(nn.Module):
         logits = torch.roll(blank_last_logits, shifts=1, dims=-1)
         if self.config.temperature > 0:
             logits = logits / self.config.temperature
+        # No ``blank_last_softmax``: the decoder reads ``softmax``, and the
+        # blank-last variant is a second full softmax over every timestep of
+        # every line of every page that nothing has ever read.
         return {
             "blank_last_logits": blank_last_logits,
-            "blank_last_softmax": torch.softmax(blank_last_logits, dim=-1),
             "out_len": self.config.downscaled_sequence_lengths(image_lengths),
             "logits": logits,
             "softmax": torch.softmax(logits, dim=-1),

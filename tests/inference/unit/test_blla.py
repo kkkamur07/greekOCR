@@ -63,7 +63,6 @@ def test_blla_preprocessing_matches_fixed_height_rgb_inversion() -> None:
     assert prepared.tensor.dtype == torch.float32
     assert torch.allclose(prepared.tensor[:, 0, 0], torch.tensor([1.0, 0.7490196, 0.0]))
     assert prepared.scaled_gray.shape == (1800, 3600)
-    assert prepared.scale_xy == pytest.approx((20 / 3600, 10 / 1800))
 
 
 def test_blla_preprocessing_caps_extreme_aspect_ratio_width() -> None:
@@ -75,8 +74,9 @@ def test_blla_preprocessing_caps_extreme_aspect_ratio_width() -> None:
     prepared = preprocess_blla_image(image, input_height=input_height)
 
     assert prepared.tensor.shape == (3, input_height, capped_width)
-    # Coordinates still map back to source space through scale_xy.
-    assert prepared.scale_xy == pytest.approx((4000 / capped_width, 10 / input_height))
+    # The decoder maps coordinates back from this shape, so the cap is visible
+    # to it rather than something it has to be told about separately.
+    assert prepared.scaled_gray.shape == (input_height, capped_width)
 
 
 def test_blla_preprocessing_is_proportional_below_the_width_cap() -> None:

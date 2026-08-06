@@ -15,7 +15,7 @@ from inference.preprocessing.segment_geometry import (
     clip_baseline_to_x_span,
     distance,
 )
-from inference.preprocessing.segment_refinement import refine_segment, refine_segment_candidates
+from inference.preprocessing.segment_refinement import refine_segment_candidates
 from PIL import Image
 
 
@@ -73,6 +73,11 @@ def _dense_rectangle(
     return points
 
 
+def _refine_one(image: Image.Image, ceiling: list[list[float]]):
+    """Refine a ceiling without splitting it, the way the runner does when asked not to."""
+    return refine_segment_candidates(image, ceiling, split_large_lines=False)[0]
+
+
 def _bbox(points: list[list[float]]) -> tuple[float, float, float, float]:
     xs = [point[0] for point in points]
     ys = [point[1] for point in points]
@@ -107,7 +112,7 @@ def test_refine_segment_runs_otsu_inside_ceiling_and_simplifies_dense_contour() 
     image, ceiling = _synthetic_ink_fixture()
     dense_ceiling = _dense_rectangle(20, 25, 200, 90)
 
-    result = refine_segment(image, dense_ceiling)
+    result = _refine_one(image, dense_ceiling)
     x0, y0, x1, y1 = _bbox(result.points)
 
     assert len(result.points) <= 80
@@ -133,7 +138,7 @@ def test_refine_segment_runs_otsu_inside_ceiling_and_simplifies_dense_contour() 
 def test_refine_segment_encloses_gapped_ink_components() -> None:
     image, ceiling = _gapped_character_line_fixture()
 
-    result = refine_segment(image, ceiling)
+    result = _refine_one(image, ceiling)
     x0, _, x1, _ = _bbox(result.points)
 
     assert x0 <= 40.0
@@ -261,7 +266,7 @@ def test_refine_segment_falls_back_to_clean_ceiling_without_ink() -> None:
     image = Image.new("RGB", (120, 80), "white")
     dense_ceiling = _dense_rectangle(10, 10, 110, 70)
 
-    result = refine_segment(image, dense_ceiling)
+    result = _refine_one(image, dense_ceiling)
 
     assert len(result.points) < len(dense_ceiling)
     assert result.metadata["simplification_status"] == "no_otsu_contour"
