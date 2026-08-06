@@ -1,4 +1,18 @@
-"""Layout blocks and lines CRUD for document parts."""
+"""Page geometry: the blocks and lines drawn over a document part.
+
+One responsibility — where the writing is on the page. The *text* of a line belongs to the
+transcription module; the only reason this one knows ground truth exists at all is
+``replace_part_lines``, which accepts an ``approved_text`` alongside each polygon so the
+editor can save a redrawn page and its corrections in one request. That single crossing is
+served by an injected :class:`GroundTruthText`, not by inheriting it.
+
+``manual_geometry`` is the through-line. Every single-shape edit here asserts human
+authorship, because a later model run must not silently overwrite a shape a researcher
+drew. The two bulk paths — ``replace_part_lines`` and ``reset_part_layout`` — deliberately
+do not, since they exist to hand geometry back to the model.
+"""
+
+from __future__ import annotations
 
 from uuid import UUID
 
@@ -6,17 +20,49 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.annotation.application.line_geometry import resolve_line_baseline_and_mask
 from backend.core.exceptions import NotFoundError, ValidationError
-from backend.document.infrastructure.orm_models import Block, Line, LineGeometryKind, LineSource
-from backend.document.application.document_service_shared import (
+from backend.document.application.document_access import DocumentAccess
+from backend.document.application.ground_truth import GroundTruthText
+from backend.document.application.patch_fields import (
     BLOCK_PATCH_FIELDS,
     LINE_PATCH_FIELDS,
-    MAX_REPLACE_PART_LINES,
-    DocumentServiceSharedMixin,
+    reject_unknown_fields,
 )
+from backend.document.infrastructure.document_repository import DocumentRepository
+from backend.document.infrastructure.orm_models import Block, Line, LineGeometryKind, LineSource
+from backend.project.infrastructure.project_repository import ProjectRepository
 from backend.users.infrastructure.orm_models import User
 
+MAX_REPLACE_PART_LINES = 10_000
 
-class LayoutServiceMixin(DocumentServiceSharedMixin):
+
+def _preserved(data: dict, field: str, prior: Line | None, default: object) -> object:
+    """Read an optional field from a bulk-replace payload.
+
+    ``model_dump(exclude_unset=True)`` strips any field the client did not send,
+    including ones with a schema default, so presence in ``data`` is the only
+    signal of intent. Absent means keep what the row already had; the default is
+    for rows that do not exist yet.
+    """
+    if field in data:
+        return data[field]
+    if prior is not None:
+        return getattr(prior, field)
+    return default
+
+
+class LayoutService:
+    def __init__(
+        self,
+        documents: DocumentRepository | None = None,
+        projects: ProjectRepository | None = None,
+        access: DocumentAccess | None = None,
+        ground_truth: GroundTruthText | None = None,
+    ) -> None:
+        self._documents = documents or DocumentRepository()
+        self._projects = projects or ProjectRepository()
+        self._access = access or DocumentAccess(documents=self._documents, projects=self._projects)
+        self._ground_truth = ground_truth or GroundTruthText(documents=self._documents)
+
     async def list_part_lines(
         self,
         session: AsyncSession,
@@ -25,9 +71,8 @@ class LayoutServiceMixin(DocumentServiceSharedMixin):
         document_id: UUID,
         part_id: UUID,
     ) -> list[Line]:
-        document = await self.get_document(session, user, project_id, document_id)
-        part = await self._document_part_or_404(session, document, part_id)
-        return await self._documents.list_part_lines(session, part.id)
+        context = await self._access.require_part(session, user, project_id, document_id, part_id)
+        return await self._documents.list_part_lines(session, context.part.id)
 
     async def list_part_layout(
         self,
@@ -37,10 +82,9 @@ class LayoutServiceMixin(DocumentServiceSharedMixin):
         document_id: UUID,
         part_id: UUID,
     ) -> tuple[list[Block], list[Line]]:
-        document = await self.get_document(session, user, project_id, document_id)
-        part = await self._document_part_or_404(session, document, part_id)
-        blocks = await self._list_part_blocks(session, part.id)
-        lines = await self._documents.list_part_lines(session, part.id)
+        context = await self._access.require_part(session, user, project_id, document_id, part_id)
+        blocks = await self._documents.list_part_blocks(session, context.part.id)
+        lines = await self._documents.list_part_lines(session, context.part.id)
         return blocks, lines
 
     async def create_part_block(
@@ -54,9 +98,8 @@ class LayoutServiceMixin(DocumentServiceSharedMixin):
         order: int,
         box: dict,
     ) -> Block:
-        document = await self.get_document(session, user, project_id, document_id)
-        part = await self._document_part_or_404(session, document, part_id)
-        block = Block(part_id=part.id, order=order, box=box, manual_geometry=True)
+        context = await self._access.require_part(session, user, project_id, document_id, part_id)
+        block = Block(part_id=context.part.id, order=order, box=box, manual_geometry=True)
         session.add(block)
         await session.commit()
         await session.refresh(block)
@@ -72,13 +115,13 @@ class LayoutServiceMixin(DocumentServiceSharedMixin):
         block_id: UUID,
         **updates: object,
     ) -> Block:
-        self._reject_unknown_fields(updates, BLOCK_PATCH_FIELDS, "block patch")
-        document = await self.get_document(session, user, project_id, document_id)
-        part = await self._document_part_or_404(session, document, part_id)
-        block = await self._block_or_404(session, part.id, block_id)
+        reject_unknown_fields(updates, BLOCK_PATCH_FIELDS, "block patch")
+        context = await self._access.require_part(session, user, project_id, document_id, part_id)
+        block = await self._block_or_404(session, context.part.id, block_id)
+        # ``updates`` already went through ``exclude_unset``: every key present was sent
+        # by the client, so applying it verbatim is what makes explicit nulls meaningful.
         for key, value in updates.items():
-            if value is not None:
-                setattr(block, key, value)
+            setattr(block, key, value)
         block.manual_geometry = True
         await session.commit()
         await session.refresh(block)
@@ -93,9 +136,8 @@ class LayoutServiceMixin(DocumentServiceSharedMixin):
         part_id: UUID,
         block_id: UUID,
     ) -> None:
-        document = await self.get_document(session, user, project_id, document_id)
-        part = await self._document_part_or_404(session, document, part_id)
-        block = await self._block_or_404(session, part.id, block_id)
+        context = await self._access.require_part(session, user, project_id, document_id, part_id)
+        block = await self._block_or_404(session, context.part.id, block_id)
         await session.delete(block)
         await session.commit()
 
@@ -114,8 +156,8 @@ class LayoutServiceMixin(DocumentServiceSharedMixin):
         baseline: dict | None = None,
         mask: dict | None = None,
     ) -> Line:
-        document = await self.get_document(session, user, project_id, document_id)
-        part = await self._document_part_or_404(session, document, part_id)
+        context = await self._access.require_part(session, user, project_id, document_id, part_id)
+        part = context.part
         if block_id is not None:
             await self._block_or_404(session, part.id, block_id)
         line = Line(
@@ -145,15 +187,17 @@ class LayoutServiceMixin(DocumentServiceSharedMixin):
     ) -> Line:
         # Any geometry edit through PATCH marks the line as manually overridden.
         # Bulk PUT /lines and POST /layout/reset are the paths that preserve kraken source.
-        self._reject_unknown_fields(updates, LINE_PATCH_FIELDS, "line patch")
-        document = await self.get_document(session, user, project_id, document_id)
-        part = await self._document_part_or_404(session, document, part_id)
+        reject_unknown_fields(updates, LINE_PATCH_FIELDS, "line patch")
+        context = await self._access.require_part(session, user, project_id, document_id, part_id)
+        part = context.part
         line = await self._line_or_404(session, part.id, line_id)
         if "block_id" in updates and updates["block_id"] is not None:
             await self._block_or_404(session, part.id, updates["block_id"])
+        # ``updates`` already went through ``exclude_unset``: every key present was sent by
+        # the client. Applying it verbatim is what lets a client clear a nullable field
+        # (``block_id``/``mask``); the request schema rejects nulls for the rest.
         for key, value in updates.items():
-            if value is not None:
-                setattr(line, key, value)
+            setattr(line, key, value)
         line.manual_geometry = True
         line.source = LineSource.manual
         await session.commit()
@@ -168,9 +212,8 @@ class LayoutServiceMixin(DocumentServiceSharedMixin):
         part_id: UUID,
         line_id: UUID,
     ) -> None:
-        document = await self.get_document(session, user, project_id, document_id)
-        part = await self._document_part_or_404(session, document, part_id)
-        line = await self._line_or_404(session, part.id, line_id)
+        context = await self._access.require_part(session, user, project_id, document_id, part_id)
+        line = await self._line_or_404(session, context.part.id, line_id)
         await session.delete(line)
         await session.commit()
 
@@ -184,8 +227,8 @@ class LayoutServiceMixin(DocumentServiceSharedMixin):
         *,
         line_ids: list[UUID] | None = None,
     ) -> tuple[list[Block], list[Line]]:
-        document = await self.get_document(session, user, project_id, document_id)
-        part = await self._document_part_or_404(session, document, part_id)
+        context = await self._access.require_part(session, user, project_id, document_id, part_id)
+        part = context.part
         lines = await self._documents.list_part_lines(session, part.id)
         selected_ids = set(line_ids) if line_ids is not None else {line.id for line in lines}
         if line_ids is not None and selected_ids - {line.id for line in lines}:
@@ -194,7 +237,7 @@ class LayoutServiceMixin(DocumentServiceSharedMixin):
             if line.id in selected_ids:
                 line.manual_geometry = False
         if line_ids is None:
-            blocks = await self._list_part_blocks(session, part.id)
+            blocks = await self._documents.list_part_blocks(session, part.id)
             for block in blocks:
                 block.manual_geometry = False
         await session.commit()
@@ -215,9 +258,9 @@ class LayoutServiceMixin(DocumentServiceSharedMixin):
             raise ValidationError(
                 f"Cannot replace more than {MAX_REPLACE_PART_LINES} lines at once"
             )
-        document = await self.get_document(session, user, project_id, document_id)
-        part = await self._document_part_or_404(session, document, part_id)
-        ground_truth = await self._ensure_ground_truth_transcription(session, document)
+        context = await self._access.require_part(session, user, project_id, document_id, part_id)
+        part = context.part
+        ground_truth = await self._ground_truth.layer_for(session, context.document)
 
         requested_ids = [line["id"] for line in lines if line.get("id") is not None]
         if len(set(requested_ids)) != len(requested_ids):
@@ -254,8 +297,18 @@ class LayoutServiceMixin(DocumentServiceSharedMixin):
                 line.block_id = block_id
             elif prior is not None:
                 line.block_id = prior.block_id
+            # ``order`` and ``points`` are required by the request schema, so they are
+            # always present. ``kind`` and ``source`` are optional and carry schema
+            # defaults, which ``exclude_unset`` strips from an omitting client's payload -
+            # so an absent key means "leave it alone", exactly as it does for
+            # ``block_id``, ``source_metadata`` and ``kraken_ceiling`` below. Falling back
+            # to the schema default instead flipped every pre-existing Kraken line on the
+            # page to ``source=manual`` while keeping its ``kraken_ceiling``: a row that
+            # claims a human drew it and that a model measured it. The editor sends the
+            # whole page on every save, so redrawing one line rewrote the provenance of
+            # all of them.
             line.order = data["order"]
-            line.kind = data["kind"]
+            line.kind = _preserved(data, "kind", prior, LineGeometryKind.polygon)
             line.points = points
             line.baseline, line.mask = resolve_line_baseline_and_mask(
                 points=points,
@@ -264,7 +317,8 @@ class LayoutServiceMixin(DocumentServiceSharedMixin):
                 existing_baseline=prior.baseline if prior is not None else None,
                 existing_mask=prior.mask if prior is not None else None,
             )
-            line.source = data["source"]
+            source = _preserved(data, "source", prior, LineSource.manual)
+            line.source = source
             if "source_metadata" in data:
                 line.source_metadata = data["source_metadata"]
             elif prior is not None:
@@ -273,14 +327,22 @@ class LayoutServiceMixin(DocumentServiceSharedMixin):
                 line.kraken_ceiling = data["kraken_ceiling"]
             elif prior is not None:
                 line.kraken_ceiling = prior.kraken_ceiling
-            source_value = (
-                data["source"].value if hasattr(data["source"], "value") else data["source"]
-            )
+            source_value = source.value if hasattr(source, "value") else source
             line.manual_geometry = source_value == "manual"
 
-            await self._set_ground_truth_text(
-                line, ground_truth, data.get("approved_text"), session
-            )
+            await self._ground_truth.write(session, line, ground_truth, data.get("approved_text"))
 
         await session.commit()
         return await self._documents.list_part_lines(session, part.id)
+
+    async def _block_or_404(self, session: AsyncSession, part_id: UUID, block_id: UUID) -> Block:
+        block = await self._documents.get_block_in_part(session, part_id, block_id)
+        if block is None:
+            raise NotFoundError("Block not found")
+        return block
+
+    async def _line_or_404(self, session: AsyncSession, part_id: UUID, line_id: UUID) -> Line:
+        line = await self._documents.get_line_in_part(session, part_id, line_id)
+        if line is None:
+            raise NotFoundError("Line not found")
+        return line

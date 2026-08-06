@@ -21,7 +21,7 @@ import {
   jobStatusLabel,
   type PageEditorJobKind,
 } from "../components/page-editor/jobProgress";
-import { isAbortError } from "../inference/localInferenceCallbacks";
+import { jobExecution, type JobExecution } from "../inference/executionTarget";
 
 export type TrackedBackgroundJob = {
   id: string;
@@ -31,6 +31,11 @@ export type TrackedBackgroundJob = {
   error: string | null;
   progressLabel: string;
   finishedAt: number | null;
+  /**
+   * Which **inference host** the platform fixed for this job, and which one the
+   * account asked for. `null` until the platform has answered.
+   */
+  execution: JobExecution | null;
 };
 
 type BackgroundJobsContextValue = {
@@ -43,17 +48,9 @@ type BackgroundJobsContextValue = {
     meta: { label: string; kind: PageEditorJobKind },
     options?: { timeoutMs?: number },
   ) => Promise<JobResponse>;
-  trackLocalTask: <T>(
-    meta: { label: string; kind: PageEditorJobKind },
-    run: (signal: AbortSignal) => Promise<T>,
-  ) => Promise<T>;
   cancelJob: (jobId: string) => Promise<void>;
   dismissCompleted: () => void;
 };
-
-function createLocalJobId(): string {
-  return `local-${crypto.randomUUID()}`;
-}
 
 const COMPLETED_TTL_MS = 10_000;
 
@@ -71,6 +68,9 @@ function patchTrackedJob(
     error: latest.error,
     progressLabel: jobStatusLabel(latest),
     finishedAt: isTerminalJobStatus(latest.status) ? Date.now() : null,
+    // Re-read on every poll rather than only at submission: the host is fixed,
+    // but the *status* is part of the announcement ("Failed on your computer").
+    execution: jobExecution(latest),
   };
 }
 
@@ -78,9 +78,6 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
   const [jobs, setJobs] = useState<TrackedBackgroundJob[]>([]);
   const [panelExpanded, setPanelExpanded] = useState(false);
   const timersRef = useRef<Map<string, number>>(new Map());
-  const localAbortControllersRef = useRef<Map<string, AbortController>>(
-    new Map(),
-  );
 
   const scheduleRemoval = useCallback((jobId: string, status?: JobStatus) => {
     // Keep cancelled jobs visible until the user clears them - they are part
@@ -101,10 +98,6 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
         window.clearTimeout(timer);
       }
       timersRef.current.clear();
-      for (const controller of localAbortControllersRef.current.values()) {
-        controller.abort();
-      }
-      localAbortControllersRef.current.clear();
     },
     [],
   );
@@ -126,10 +119,7 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
   const activeJobIds = useMemo(
     () =>
       jobs
-        .filter(
-          (job) =>
-            !isTerminalJobStatus(job.status) && !job.id.startsWith("local-"),
-        )
+        .filter((job) => !isTerminalJobStatus(job.status))
         .map((job) => job.id),
     [jobs],
   );
@@ -167,6 +157,9 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
             error: null,
             progressLabel: "Queued",
             finishedAt: null,
+            // Filled by the first update from the platform. Enqueueing returns
+            // only an id, and guessing a host would be a claim, not a report.
+            execution: null,
           },
         ];
       });
@@ -190,6 +183,11 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
                   error: message,
                   progressLabel: "Failed",
                   finishedAt: Date.now(),
+                  // A failed job says which host it failed on, so the host it
+                  // was given has to travel with the new status.
+                  execution: job.execution
+                    ? { ...job.execution, status: "failed" }
+                    : null,
                 }
               : job,
           ),
@@ -201,95 +199,6 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
     [applyJobUpdate, scheduleRemoval],
   );
 
-  const markLocalCancelled = useCallback(
-    (jobId: string) => {
-      setJobs((current) =>
-        current.map((job) =>
-          job.id === jobId
-            ? {
-                ...job,
-                status: "cancelled",
-                progressLabel: "Cancelled",
-                finishedAt: Date.now(),
-              }
-            : job,
-        ),
-      );
-      scheduleRemoval(jobId, "cancelled");
-    },
-    [scheduleRemoval],
-  );
-
-  const trackLocalTask = useCallback(
-    async <T,>(
-      meta: { label: string; kind: PageEditorJobKind },
-      run: (signal: AbortSignal) => Promise<T>,
-    ): Promise<T> => {
-      const jobId = createLocalJobId();
-      const controller = new AbortController();
-      localAbortControllersRef.current.set(jobId, controller);
-      setJobs((current) => [
-        ...current,
-        {
-          id: jobId,
-          label: meta.label,
-          kind: meta.kind,
-          status: "running" as JobStatus,
-          error: null,
-          progressLabel: "Running locally",
-          finishedAt: null,
-        },
-      ]);
-      setPanelExpanded(false);
-
-      try {
-        const result = await run(controller.signal);
-        if (controller.signal.aborted) {
-          markLocalCancelled(jobId);
-          throw new DOMException("Local job cancelled", "AbortError");
-        }
-        setJobs((current) =>
-          current.map((job) =>
-            job.id === jobId
-              ? {
-                  ...job,
-                  status: "done",
-                  progressLabel: "Complete",
-                  finishedAt: Date.now(),
-                }
-              : job,
-          ),
-        );
-        scheduleRemoval(jobId);
-        return result;
-      } catch (err) {
-        if (controller.signal.aborted || isAbortError(err)) {
-          markLocalCancelled(jobId);
-          throw err;
-        }
-        const message = err instanceof Error ? err.message : "Task failed";
-        setJobs((current) =>
-          current.map((job) =>
-            job.id === jobId
-              ? {
-                  ...job,
-                  status: "failed",
-                  error: message,
-                  progressLabel: "Failed",
-                  finishedAt: Date.now(),
-                }
-              : job,
-          ),
-        );
-        scheduleRemoval(jobId);
-        throw err;
-      } finally {
-        localAbortControllersRef.current.delete(jobId);
-      }
-    },
-    [markLocalCancelled, scheduleRemoval],
-  );
-
   const dismissCompleted = useCallback(() => {
     setJobs((current) =>
       current.filter((job) => !isTerminalJobStatus(job.status)),
@@ -298,18 +207,6 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
 
   const cancelJob = useCallback(
     async (jobId: string) => {
-      if (jobId.startsWith("local-")) {
-        const controller = localAbortControllersRef.current.get(jobId);
-        // Controller is removed in trackLocalTask's finally - missing means the
-        // local job already finished; do not overwrite done/failed with cancelled.
-        if (!controller) {
-          return;
-        }
-        controller.abort();
-        markLocalCancelled(jobId);
-        toast.success("Job cancelled");
-        return;
-      }
       try {
         const latest = await api.cancelJob(jobId);
         applyJobUpdate(jobId, latest);
@@ -321,7 +218,7 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
         throw err;
       }
     },
-    [applyJobUpdate, markLocalCancelled],
+    [applyJobUpdate],
   );
 
   const activeCount = jobs.filter(
@@ -335,7 +232,6 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
       panelExpanded,
       setPanelExpanded,
       trackAndWait,
-      trackLocalTask,
       cancelJob,
       dismissCompleted,
     }),
@@ -344,7 +240,6 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
       activeCount,
       panelExpanded,
       trackAndWait,
-      trackLocalTask,
       cancelJob,
       dismissCompleted,
     ],

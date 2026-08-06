@@ -17,8 +17,21 @@ Place architecture-native **Hub artifact** files at the staging leaf, for exampl
 
 ```
 src/hf/staging/models/greek/calamari/v1/stable/
-  best.pt             # Calamari PyTorch checkpoint
+  best.pt             # Calamari PyTorch checkpoint - the export input
+  best.onnx           # the runtime **Hub artifact** (ADR 0006)
 ```
+
+Both are published together at one **Hub revision**. `publish_model.py` validates
+the staging leaf with `find_hub_artifact`, which names only `.onnx`, so a leaf
+holding just the checkpoint is refused before anything is uploaded. Export with
+`src/model/inference_export/` - see
+[adding-inference-models.md](../docs/inference/adding-inference-models.md).
+
+**The `.onnx` is gitignored on purpose.** It is derived from the checkpoint
+beside it, so export it as part of publishing rather than keeping a copy in the
+tree: a committed blob is a third version that can drift from both the exporter
+and the Hub, and that is not hypothetical - see ADR 0006, where the published
+`blla.onnx` had silently stopped matching what the exporter produced.
 
 The publish script maps this to **Hub repo slug** `{script}-htr-{architecture}` (e.g. `greek-htr-calamari`) and tags the uploaded revision with the **registry tag** (e.g. `stable`). After publish, the checkpoint is addressable as:
 
@@ -95,7 +108,7 @@ Default CI and local dry-runs do **not** call the Hub upload API unless `--uploa
    ```yaml
    weights_source: hf://nomicous/greek-htr-calamari@stable
    hub_revision: <40-character-commit-created-by-the-upload>
-   artifact_sha256: <sha256-of-best.pt>
+   artifact_sha256: <sha256-of-best.onnx>
    ```
 
    Resolve `stable` once after upload and copy its immutable commit plus the

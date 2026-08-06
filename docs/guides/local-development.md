@@ -17,17 +17,19 @@ cp nomicous/backend/core/.env.example nomicous/backend/core/.env
 docker compose up --build
 ```
 
-| Service                | URL                                                                             |
-| ---------------------- | ------------------------------------------------------------------------------- |
-| Frontend               | http://localhost:5173                                                           |
-| Platform API           | http://localhost:8000                                                           |
-| API health             | http://localhost:8000/health                                                    |
-| OpenAPI                | http://localhost:8000/docs                                                      |
-| Inference API (cloud)  | http://localhost:8010                                                           |
-| Local Inference Helper | http://127.0.0.1:8001 (if installed)                                            |
-| Postgres               | `127.0.0.1:5433` - credentials from the ignored root `.env`, database `kalamos` |
+| Service      | URL                                                                             |
+| ------------ | ------------------------------------------------------------------------------- |
+| Frontend     | http://localhost:5173                                                           |
+| Platform API | http://localhost:8000                                                           |
+| API health   | http://localhost:8000/health                                                    |
+| OpenAPI      | http://localhost:8000/docs                                                      |
+| Postgres     | `127.0.0.1:5433` - credentials from the ignored root `.env`, database `kalamos` |
 
 Migrations run automatically when the API container starts.
+
+Compose publishes no inference port. Models run in an **inference agent** you
+start on the host (below); it calls the platform, so it needs no address of its
+own.
 
 ---
 
@@ -73,13 +75,29 @@ App: http://localhost:5173 - see [`nomicous/frontend/README.md`](../../nomicous/
 
 ---
 
-## Inference Helper (local OCR)
+## Inference agent (local OCR)
+
+Against a local platform, from a source checkout:
 
 ```bash
-uv run --group inference python -m inference.helper
+NOMICOUS_API_URL=http://localhost:8000 uv run --group inference python -m inference.cli pair
+NOMICOUS_API_URL=http://localhost:8000 uv run --group inference python -m inference.cli run
 ```
 
-Probes `http://127.0.0.1:8001`. Packaging and DMG install: [`packaging/helper/README.md`](../../packaging/helper/README.md).
+`pair` writes the device credential to `~/.nomicous/device.json`; `run` is the
+**claim** loop - one page at a time, fetched through a short-lived signed link,
+reported through the platform's job callback. It listens on nothing, so there
+is no port to probe and nothing to add to a CORS or CSP allowlist.
+
+`--exit-when-empty` stops the loop once the queue is empty, which is what to use
+in a script; without it `run` waits for more work. `--api-url` overrides
+`NOMICOUS_API_URL` per invocation.
+
+Researchers install the same program from PyPI rather than running it from a
+checkout - `uv tool install nomicous-inference --torch-backend=cpu`, then
+`nomicous pair` and `nomicous run`
+([`inference/README.md`](../../inference/README.md#install)). There is no
+installer to build.
 
 ---
 
@@ -90,6 +108,6 @@ Probes `http://127.0.0.1:8001`. Packaging and DMG install: [`packaging/helper/RE
 | [Root README](../../README.md)                                                 | Repo overview, training, domain model                             |
 | [`nomicous/README.md`](../../nomicous/README.md)                               | App operations, env vars, version bumps                           |
 | [`nomicous/infrastructure/README.md`](../../nomicous/infrastructure/README.md) | Alembic, database wiring                                          |
-| [`inference/README.md`](../../inference/README.md)                             | Inference service, registry, Compose ports                        |
+| [`inference/README.md`](../../inference/README.md)                             | Published package, CLI, registry, weights                         |
 | [learnings.md](learnings.md)                                                   | Supabase, serverless (Vercel), Calamari training, frequent errors |
 | [testing.md](testing.md)                                                       | Pytest commands                                                   |

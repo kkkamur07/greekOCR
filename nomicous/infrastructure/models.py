@@ -12,6 +12,10 @@ from backend.document.infrastructure.orm_models import (  # noqa: F401
     Transcription,
 )
 from backend.jobs.infrastructure.orm_models import Job  # noqa: F401
+from backend.ml.infrastructure.device_orm_models import (  # noqa: F401
+    HelperDevice,
+    HelperPairing,
+)
 from backend.ml.infrastructure.orm_models import (  # noqa: F401
     InferenceModel,
     ModelBinding,

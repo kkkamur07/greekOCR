@@ -13,22 +13,25 @@ This document covers setup, configuration choices, known pitfalls, and trade-off
 ┌─────────────────────────────────────────────────────────────────┐
 │  Browser (frontend)                                              │
 │    → Platform API (FastAPI, local or hosted)                     │
-│    → Inference helper (optional, localhost:8001) for local OCR    │
 └─────────────────────────────────────────────────────────────────┘
-         │                              │
-         │ JWT auth (app-owned)         │ local /run only
-         ▼                              ▼
-┌─────────────────────┐        ┌──────────────────────┐
-│ Supabase Postgres   │        │ Inference helper     │
-│ (postgres DB)       │        │ (on researcher Mac)  │
-└─────────────────────┘        └──────────────────────┘
-         │
-         ▼
-┌─────────────────────┐
-│ Supabase Storage    │
+         │                                        ▲
+         │ JWT auth (app-owned)                   │ claim a page, report it
+         ▼                                        │ (outbound, device token)
+┌─────────────────────┐              ┌──────────────────────────┐
+│ Supabase Postgres   │              │ nomicous inference agent │
+│ (postgres DB)       │              │ (researcher's machine)   │
+└─────────────────────┘              └──────────────────────────┘
+         │                                        │
+         ▼                                        │ signed page image link
+┌─────────────────────┐                           │
+│ Supabase Storage    │ ◄─────────────────────────┘
 │ bucket document-media│  ← page images only (WebP)
 └─────────────────────┘
 ```
+
+The browser never talks to the agent. The agent connects out to the platform,
+claims one page, and fetches that page's image through a short-lived **signed
+page image link** (ADR 0002).
 
 ### What goes where
 
@@ -105,9 +108,9 @@ Database name is **`postgres`** (Supabase default) - not `kalamos`.
 
 Copy the direct migrator URI only into the migration runner's secret store.
 Copy an API principal's pooler URI into `DATABASE_URL` and
-`SYNC_DATABASE_URL`; only `DATABASE_URL` adds `+asyncpg`. Copy the inference
-principal's pooler URI into `INFERENCE_DATABASE_URL` on the inference API and
-worker. Add `?sslmode=require` to libpq URLs when the provider URI omits it.
+`SYNC_DATABASE_URL`; only `DATABASE_URL` adds `+asyncpg`. An inference agent
+needs no database URI. Add `?sslmode=require` to libpq URLs when the provider
+URI omits it.
 
 ### Direct vs transaction pooler
 
@@ -214,28 +217,43 @@ Keys look like: `parts/<uuid>/<stem>.webp`
 
 ---
 
-## Inference: local helper vs cloud jobs
+## Inference: local agent vs hosted agent
 
-Two **separate** paths. Frontend chooses; backend `INFERENCE_*` vars are for **cloud jobs only**.
+One path, two hosts. Every job is queued on the platform and claimed by an
+**inference agent**; the only difference is which machine that agent runs on and
+which credential it presents.
 
 ```text
-Local path:  Browser → Inference helper (127.0.0.1:8001) → API persists results
-Cloud path:  Browser → API creates job → INFERENCE_URL service → webhook callback
+Browser → API creates job → agent claims it → runs the model → job callback
+             │                   │
+             │                   ├─ researcher's machine, device token   → local
+             │                   └─ persistent host, service credential  → cloud
+             └─ execution target fixed here, from host preference + capacity
 ```
 
-|                     | Local helper                                                         | Cloud (`INFERENCE_URL`)                                                 |
-| ------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| **Frontend config** | `NEXT_PUBLIC_INFERENCE_HELPER_URL` (default `http://127.0.0.1:8001`) | “Use cloud inference” toggle in page editor                             |
-| **Backend env**     | Not required                                                         | `INFERENCE_URL`, `INFERENCE_WEBHOOK_SECRET`, `INFERENCE_SERVICE_SECRET` |
-| **Pros**            | GPU on your machine; no hosted inference cost                        | Works without local install; async job queue                            |
-| **Cons**            | Must run helper; model weights local                                 | Needs inference-api + worker; secrets must match                        |
+|                     | Local (researcher's machine)                            | Cloud (hosted agent)                                      |
+| ------------------- | -------------------------------------------------------- | ----------------------------------------------------------- |
+| **Started by**      | The researcher: `nomicous pair`, then `nomicous run`     | An operator, as a supervised process                        |
+| **Credential**      | Device token in `~/.nomicous/device.json`                | **Service credential** in `NOMICOUS_SERVICE_TOKEN`          |
+| **Frontend config** | None - the editor reads **capacity** from the API         | None                                                        |
+| **Backend env**     | `DEVICE_PAIRING_ENABLED`, `DEVICE_TOKEN_HMAC_SECRET`     | `INFERENCE_WORKER_SERVICE_TOKEN`                            |
+| **Pros**            | No hosted inference cost; weights stay warm on one machine | Works with nothing installed; always available              |
+| **Cons**            | Runs only while the researcher's terminal does            | Needs a persistent host                                     |
 
-**Typical Supabase test setup:** Supabase DB + Storage, API local, **inference helper local**. Leave `INFERENCE_WEBHOOK_SECRET=replace-me` until you run cloud inference.
+Which one a job gets is fixed at submission from the account's **host
+preference** and **capacity**, and announced on the job. There is no per-job
+toggle in the editor.
 
-The local helper uses host port **8001**. In the Compose profile, the cloud
-inference API uses host port **8010** while its container still listens on
-**8001**, so both can run without a host-port conflict. A standalone
-inference API started directly on the host still uses **8001**.
+Neither agent holds `INFERENCE_WEBHOOK_SECRET`: an agent's job callback is
+authorized by the same credential it claimed the page with, and narrowed to the
+page it is holding. The secret still guards the platform's own webhook path, so
+it stays configured on the API.
+
+**Typical Supabase test setup:** Supabase DB + Storage, API local, agent on the
+same machine pointed at `NOMICOUS_API_URL=http://localhost:8000`.
+
+Nothing in this stack publishes an inference port. Compose runs no inference
+container, and the agent listens on nothing.
 
 ---
 
@@ -297,11 +315,33 @@ receive the app JWT, storage service-role key, or migration URL.
 For the disposable pre-production project only, reset the application schema
 and rerun the consolidated migrations with an explicit guard:
 
+The guard is deliberately **not** satisfiable from your shell. `SUPABASE_NON_PRODUCTION=true`
+must appear inside the environment file itself, which is parsed before anything is
+merged into the process environment — an `export` in your profile will not do it, and
+neither will an `ENVIRONMENT` of `production` in that file. Add to `.env.supabase`:
+
+```dotenv
+SUPABASE_NON_PRODUCTION=true
+ENVIRONMENT=staging
+```
+
+Then run it. Interactively, the script prints the resolved target (the Supabase
+project ref parsed from `MIGRATOR_DATABASE_URL`, cross-checked against `SUPABASE_URL`)
+and requires you to type it back:
+
 ```bash
-export SUPABASE_NON_PRODUCTION=true
-export CONFIRM_SUPABASE_RESET=RESET
 ./scripts/platform/reset_supabase_nonprod.sh
 ```
+
+Unattended, name the same target explicitly — a fixed literal such as `RESET` is
+rejected, because a confirmation that is identical for every project confirms nothing:
+
+```bash
+CONFIRM_SUPABASE_RESET=<project-ref> ./scripts/platform/reset_supabase_nonprod.sh --yes
+```
+
+In CI, set `SUPABASE_PRODUCTION_PROJECT_REFS` to a comma-separated denylist of refs
+that must never be reset, whatever the environment file claims.
 
 This drops only the application tables, enums, Alembic history, and obsolete
 RLS helper functions before applying `001_initial_schema` and
@@ -340,11 +380,10 @@ docker compose -f docker-compose.yml -f docker-compose.supabase.yml up
 docker compose -f docker-compose.yml -f docker-compose.supabase.yml up -d --build
 ```
 
-| URL                   | Service                                                           |
-| --------------------- | ----------------------------------------------------------------- |
-| http://localhost:5173 | Frontend                                                          |
-| http://localhost:8000 | Platform API                                                      |
-| http://localhost:8010 | Inference API (cloud jobs) - host port; container listens on 8001 |
+| URL                   | Service      |
+| --------------------- | ------------ |
+| http://localhost:5173 | Frontend     |
+| http://localhost:8000 | Platform API |
 
 This profile **does not start local Postgres** (`db` is disabled). Apply
 Alembic from the operator/migrator host first; the Compose API only runs the
@@ -361,15 +400,18 @@ docker compose -f docker-compose.yml -f docker-compose.supabase.yml logs -f api 
 docker compose -f docker-compose.yml -f docker-compose.supabase.yml up --build api
 ```
 
-**Local inference helper** is not in Compose - run on the host if needed:
+The **inference agent** is not in Compose - run it on the host if you want jobs
+to execute:
 
 ```bash
-PYTHONPATH=. uv run python -m inference.helper
+NOMICOUS_API_URL=http://localhost:8000 uv run --group inference python -m inference.cli pair
+NOMICOUS_API_URL=http://localhost:8000 uv run --group inference python -m inference.cli run
 ```
 
-The page editor probes `http://127.0.0.1:8001` from your browser (not from inside Docker).
-Host port **8001 is reserved for this helper** - the Docker `inference-api` (cloud jobs)
-publishes on host **8010** so it never shadows a locally installed helper.
+It reaches the API the same way your browser does, so it works from the host
+against the Compose API without any published port of its own. The page editor
+never contacts it: what the editor shows about this machine is **capacity** read
+from the API.
 
 ### 6. Run frontend (without Docker)
 
@@ -395,9 +437,9 @@ Dev login after seed: `dev@example.com` / `dev-pass-123`
 | `SUPABASE_STORAGE_BUCKET`   | Yes                 | Default `document-media`                           |
 | `JWT_SECRET`                | Yes                 | App auth (not Supabase)                            |
 | `MEDIA_WEBP_LOSSLESS`       | No                  | Default `true`                                     |
-| `INFERENCE_URL`             | Only for cloud jobs | Default `http://localhost:8001`                    |
-| `INFERENCE_WEBHOOK_SECRET`  | Only for cloud jobs | Shared with inference service                      |
-| `INFERENCE_SERVICE_SECRET`  | Only for cloud jobs | Same as webhook secret in dev                      |
+| `INFERENCE_WEBHOOK_SECRET`  | Yes in production   | Authenticates the platform's own webhook callback path - not an agent's |
+| `DEVICE_TOKEN_HMAC_SECRET`  | Yes when pairing is on | Keys every device token; must differ from `JWT_SECRET`, or a JWT rotation unpairs every machine |
+| `INFERENCE_WORKER_SERVICE_TOKEN` | Only for a hosted agent | The **service credential** that claims `cloud` work |
 
 ---
 
@@ -409,7 +451,7 @@ Dev login after seed: `dev@example.com` / `dev-pass-123`
 | Migrations   | `alembic upgrade head`               | Same Alembic → direct URL |
 | Page images  | `MEDIA_ROOT` filesystem              | Storage bucket (WebP)     |
 | Auth         | App JWT                              | App JWT                   |
-| Inference    | Local helper and/or Docker inference | Local helper typical      |
+| Inference    | Agent on the host                    | Agent on the host typical |
 | Cost / setup | Free, offline                        | Hosted; needs network     |
 
 ---
@@ -432,6 +474,6 @@ Dev login after seed: `dev@example.com` / `dev-pass-123`
 ## Related docs
 
 - [Supabase learnings (pitfalls + connection URLs)](../guides/learnings.md#supabase-hosted-postgres--storage)
-- [Local inference helper](../../README.md#local-inference-helper)
+- [Self-hosting and local inference](../../README.md#self-hosting-and-local-inference)
 - [Local development guide](../guides/local-development.md)
 - [Infrastructure README](../../nomicous/infrastructure/README.md)

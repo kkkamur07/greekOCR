@@ -1,15 +1,22 @@
-import type { LineTranscriptionResponse } from "../../api/client";
+import type {
+  CharacterConfidence,
+  LineTranscriptionResponse,
+} from "../../api/client";
 
-export type CharacterConfidence = {
-  char: string;
-  confidence: number;
-};
+export type { CharacterConfidence };
 
-/** Optional per-character scores until OpenAPI exposes them on LineTranscriptionResponse. */
+/**
+ * A transcription plus per-character scores. The platform API has no such
+ * field - `LineTranscriptionResponse` carries one confidence for the whole
+ * line - so this is a client-side extension, declared once, here.
+ *
+ * Nothing populates it today: a local run's `character_confidences` are sent
+ * to the server by `persistLocalTranscribe` and are not returned, so every
+ * transcription the editor holds falls back to the per-line confidence below.
+ */
 export type LineTranscriptionWithCharacterConfidence =
   LineTranscriptionResponse & {
     character_confidences?: CharacterConfidence[] | null;
-    text_source?: string | null;
   };
 
 export function confidenceTierClass(confidence: number): string {

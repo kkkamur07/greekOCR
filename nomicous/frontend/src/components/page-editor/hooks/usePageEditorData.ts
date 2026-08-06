@@ -9,6 +9,8 @@ import {
   type TranscriptionLayerResponse,
 } from "../../../api/client";
 import { ApiError } from "../../../api/errors";
+import { queryClient, taggedMeta } from "../../../api/queryClient";
+import { resourceTags } from "../../../api/resources";
 import {
   hasAccessToken,
   isUnauthorized,
@@ -24,6 +26,25 @@ function accessMessage(error: ApiError): string {
     return "This page is not available to your account.";
   }
   return error.message;
+}
+
+/**
+ * The banner for one part of the page that failed to load while the rest of it
+ * succeeded. 403 and 404 both mean "not yours to see", which reads better as the
+ * feature-specific sentence than as the raw API message.
+ */
+function partialLoadMessage(
+  error: unknown,
+  unavailable: string,
+  fallback: string,
+): string {
+  if (
+    error instanceof ApiError &&
+    (error.status === 403 || error.status === 404)
+  ) {
+    return unavailable;
+  }
+  return error instanceof Error ? error.message : fallback;
 }
 
 function sortedParts(
@@ -159,9 +180,16 @@ export function usePageEditorData(
 
     void (async () => {
       try {
+        // Paging through a document re-runs this effect for every part, and the
+        // document itself does not change between them; the cache is what stops
+        // each page turn from refetching it.
         const doc = canReuseDocument(initialDocument, projectId, documentId)
           ? initialDocument
-          : await api.getDocument(projectId, documentId);
+          : await queryClient.fetchQuery({
+              queryKey: ["document", projectId, documentId],
+              queryFn: () => api.getDocument(projectId, documentId),
+              meta: taggedMeta([resourceTags.document(projectId, documentId)]),
+            });
         if (cancelled) return;
 
         const selectedPart = resolvePart(doc, partId);
@@ -198,12 +226,11 @@ export function usePageEditorData(
           }
           apply(
             setLayoutError,
-            err instanceof ApiError &&
-              (err.status === 403 || err.status === 404)
-              ? "Layout editing is not available for this page."
-              : err instanceof Error
-                ? err.message
-                : "Failed to load layout.",
+            partialLoadMessage(
+              err,
+              "Layout editing is not available for this page.",
+              "Failed to load layout.",
+            ),
           );
         }
 
@@ -217,12 +244,11 @@ export function usePageEditorData(
           }
           apply(
             setLineError,
-            err instanceof ApiError &&
-              (err.status === 403 || err.status === 404)
-              ? "Segment geometry is not available for this page."
-              : err instanceof Error
-                ? err.message
-                : "Failed to load Segment geometry.",
+            partialLoadMessage(
+              err,
+              "Segment geometry is not available for this page.",
+              "Failed to load Segment geometry.",
+            ),
           );
         }
 
@@ -245,12 +271,11 @@ export function usePageEditorData(
           }
           apply(
             setPairingError,
-            err instanceof ApiError &&
-              (err.status === 403 || err.status === 404)
-              ? "Pairing is not available for this page."
-              : err instanceof Error
-                ? err.message
-                : "Failed to load Pairing progress.",
+            partialLoadMessage(
+              err,
+              "Pairing is not available for this page.",
+              "Failed to load Pairing progress.",
+            ),
           );
         }
 
@@ -265,12 +290,11 @@ export function usePageEditorData(
           }
           apply(
             setPairingError,
-            err instanceof ApiError &&
-              (err.status === 403 || err.status === 404)
-              ? "Pairing is not available for this page."
-              : err instanceof Error
-                ? err.message
-                : "Failed to load Pairing progress.",
+            partialLoadMessage(
+              err,
+              "Pairing is not available for this page.",
+              "Failed to load Pairing progress.",
+            ),
           );
         }
 

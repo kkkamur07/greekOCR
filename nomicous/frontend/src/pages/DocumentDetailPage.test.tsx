@@ -2,8 +2,14 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { testRouter } from "../../vitest.setup";
 
-import { api, type DocumentWithPartsResponse } from "../api/client";
+import {
+  api,
+  type DocumentResponse,
+  type DocumentWithPartsResponse,
+} from "../api/client";
 import { ApiError } from "../api/errors";
+import { queryClient, taggedMeta } from "../api/queryClient";
+import { resourceTags } from "../api/resources";
 import * as session from "../auth/session";
 import { DocumentDetailPage } from "./DocumentDetailPage";
 
@@ -65,6 +71,42 @@ const DOCUMENT: DocumentWithPartsResponse = {
   ],
 };
 
+/**
+ * The document, stored the way the platform stores it: a PATCH changes it and
+ * every later GET reflects the change.
+ *
+ * A canned `getDocument` would hide the thing this page has to get right. The
+ * panel patches its own view and then declares the write, which refetches; if
+ * the refetch answered with the pre-write document forever, a mutation that
+ * invalidated nothing would look identical to one that did.
+ */
+function seedDocument() {
+  let stored: DocumentWithPartsResponse = DOCUMENT;
+  vi.mocked(api.getDocument).mockImplementation(async () => stored);
+  vi.mocked(api.updateDocument).mockImplementation(
+    async (
+      _projectId: string,
+      _documentId: string,
+      patch: {
+        name?: string;
+        workflow?: DocumentWithPartsResponse["workflow"];
+      },
+    ): Promise<DocumentResponse> => {
+      stored = { ...stored, ...patch };
+      // The PATCH answers without the parts, as the platform does.
+      return {
+        id: stored.id,
+        project_id: stored.project_id,
+        name: stored.name,
+        workflow: stored.workflow,
+        part_count: stored.part_count,
+        created_at: stored.created_at,
+        updated_at: stored.updated_at,
+      };
+    },
+  );
+}
+
 function renderDocumentPage(
   initialPath = "/projects/project-1/documents/doc-1",
 ) {
@@ -93,7 +135,7 @@ describe("DocumentDetailPage", () => {
       updated_at: "2026-01-01T00:00:00Z",
       document_count: 1,
     });
-    vi.mocked(api.getDocument).mockResolvedValue(DOCUMENT);
+    seedDocument();
   });
 
   it("lists document parts in order and opens the page editor when a row is clicked", async () => {
@@ -188,16 +230,6 @@ describe("DocumentDetailPage", () => {
   });
 
   it("opens live sharing from the document header and publishes the document", async () => {
-    vi.mocked(api.updateDocument).mockResolvedValue({
-      id: "doc-1",
-      project_id: "project-1",
-      name: "Grec 1360",
-      workflow: "published",
-      part_count: 2,
-      created_at: "2026-06-16T10:00:00Z",
-      updated_at: "2026-06-16T10:00:00Z",
-    });
-
     renderDocumentPage();
 
     fireEvent.click(
@@ -214,16 +246,6 @@ describe("DocumentDetailPage", () => {
   });
 
   it("renames the document from the header panel", async () => {
-    vi.mocked(api.updateDocument).mockResolvedValue({
-      id: "doc-1",
-      project_id: "project-1",
-      name: "MS Or. 1445 - Genesis",
-      workflow: "draft",
-      part_count: 2,
-      created_at: "2026-06-16T10:00:00Z",
-      updated_at: "2026-06-16T10:00:00Z",
-    });
-
     renderDocumentPage();
 
     fireEvent.click(
@@ -242,6 +264,34 @@ describe("DocumentDetailPage", () => {
     expect(
       screen.getByRole("heading", { name: "MS Or. 1445 - Genesis" }),
     ).toBeTruthy();
+  });
+
+  it("makes the copy of the document the page editor holds stale after a rename", async () => {
+    // The editor fetches the document under its own key. This page never
+    // renders it, so a rename here used to leave the editor titled with the old
+    // name until the freshness window expired.
+    const editorDocumentKey = ["document", "project-1", "doc-1"];
+    await queryClient.fetchQuery({
+      queryKey: editorDocumentKey,
+      queryFn: () => Promise.resolve(DOCUMENT),
+      meta: taggedMeta([resourceTags.document("project-1", "doc-1")]),
+    });
+
+    renderDocumentPage();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /grec 1360, click to edit/i }),
+    );
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "MS Or. 1445 - Genesis" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /save name/i }));
+
+    await waitFor(() => {
+      expect(queryClient.getQueryState(editorDocumentKey)?.isInvalidated).toBe(
+        true,
+      );
+    });
   });
 
   it("redirects to login when the session is unauthorized", async () => {

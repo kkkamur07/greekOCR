@@ -48,7 +48,15 @@ ENV NODE_ENV=production \
     PORT=5173 \
     HOSTNAME=0.0.0.0
 
-RUN addgroup --system --gid 1001 nodejs \
+# The entrypoint is `node server.js`, so npm is never invoked at runtime, but the
+# node base image ships it with a bundled node_modules that carries 18 HIGH and
+# CRITICAL advisories (tar, minimatch, brace-expansion, sigstore, ...). Deleting
+# it is a smaller runtime and an honest scan, where a Trivy skip-dirs entry would
+# only hide the findings. `apk upgrade` picks up the libssl3/libcrypto3 patch
+# that the current node:20-alpine tag still predates.
+RUN apk upgrade --no-cache \
+  && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx \
+  && addgroup --system --gid 1001 nodejs \
   && adduser --system --uid 1001 nextjs
 
 COPY --from=builder /app/public ./public

@@ -21,6 +21,31 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/account/execution-target": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Read Execution Preference */
+    get: operations["read_execution_preference_account_execution_target_get"];
+    /**
+     * Set Execution Preference
+     * @description Change the preference. Jobs already submitted keep the host they were given.
+     *
+     *     The setting selects the *next* job's preferred host and nothing else - an
+     *     **execution target** is fixed at submission, so changing this can never move
+     *     work that is already queued.
+     */
+    put: operations["set_execution_preference_account_execution_target_put"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/auth/login": {
     parameters: {
       query?: never;
@@ -106,6 +131,289 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/device/v1/agent/version": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Read Agent Version
+     * @description The version verdict on its own, with no page attached.
+     *
+     *     The whole endpoint is its dependency. An agent below the floor never reaches
+     *     this body - it gets the same 426 the claim path would have given it, from the
+     *     same comparison - and one that is served gets the same notice the claim
+     *     response would have carried.
+     *
+     *     This is what makes ADR 0002's launch check possible. An agent that had to
+     *     claim in order to learn it was stale would be holding a page at the exact
+     *     moment it decided to replace its own code, which is the thing that must never
+     *     happen: the launch moment is the only safe one because nothing is in flight
+     *     during it.
+     */
+    get: operations["read_agent_version_device_v1_agent_version_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/device/v1/jobs/claim": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Claim Job
+     * @description Claim at most one page of work.
+     *
+     *     The credential decides the **execution target**, and the caller cannot ask for
+     *     a different one: a device token claims ``local`` work on its own account, a
+     *     service credential claims ``cloud`` work for the platform.
+     *
+     *     ``agent_version`` is resolved before this body runs, so an agent below the
+     *     floor is refused without a session being opened and without its
+     *     ``last_seen_at`` being touched - it stops reporting **capacity**, and
+     *     submission announces "no host available" rather than creating pages it may
+     *     not claim.
+     */
+    post: operations["claim_job_device_v1_jobs_claim_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/device/v1/pairings": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Start Device Pairing
+     * @description Create a pairing request and hand the helper its two one-time secrets.
+     *
+     *     Under its own throttle, not the shared auth one. The body carries no account
+     *     identity, so under ``throttle_auth_attempts`` this route had no per-caller
+     *     dimension at all and every honest pairing was charged to the coarse
+     *     ``unattributable:<path>`` bucket - one bucket shared by every researcher, so
+     *     filling it locked all of them out of `nomicous pair`.
+     *     ``throttle_device_pairing_starts`` charges a per-client bucket where the
+     *     address identifies one client and charges nothing where it does not, leaving
+     *     the platform-wide live-pairing ceiling below as the bound on table growth.
+     */
+    post: operations["start_device_pairing_device_v1_pairings_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/device/v1/pairings/token": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Collect Device Token
+     * @description Poll for the browser's decision; return the device token exactly once.
+     *
+     *     Deliberately **not** under ``throttle_auth_attempts``: that limiter is
+     *     10 requests / 60s / (ip + path), and a compliant 5 second poll is 12 per
+     *     minute, so a well-behaved helper would throttle itself at poll 11. Cadence
+     *     is enforced on the pairing row instead (``slow_down`` with a doubling
+     *     interval), and wrong ``device_code`` presentations burn the row after
+     *     ``DEVICE_PAIRING_MAX_ATTEMPTS``.
+     *
+     *     Always HTTP 200 - see :class:`PairingTokenResponse`.
+     */
+    post: operations["collect_device_token_device_v1_pairings_token_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/device/v1/self": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Read Device Self
+     * @description Confirm the credential and record liveness.
+     *
+     *     ``server_time`` is returned so a laptop with a wrong clock still behaves,
+     *     and ``token_expires_at`` is what tells the helper when to renew.
+     */
+    get: operations["read_device_self_device_v1_self_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/device/v1/token/renew": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Renew Device Token
+     * @description Replace this device's token, keeping the previous one valid for an overlap.
+     *
+     *     A helper with no UI cannot be told that a lost rotation response has bricked
+     *     it, so the predecessor stays valid for ``DEVICE_TOKEN_RENEW_OVERLAP_HOURS``.
+     */
+    post: operations["renew_device_token_device_v1_token_renew_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/devices": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List Devices */
+    get: operations["list_devices_devices_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/devices/pairings/lookup": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Lookup Device Pairing
+     * @description Resolve the fragment token into the consent screen's contents.
+     *
+     *     Unknown, expired, consumed, and denied all return one indistinguishable 404.
+     *
+     *     There is deliberately no companion "list my live pairing requests" route.
+     *     The one that existed filtered solely on the observed client address - a
+     *     pairing has no owner before consent, so there was no user to filter on - and
+     *     behind a proxy the platform does not allowlist that address is the same for
+     *     everybody, which made it a list of *every* user's pending pairing requests,
+     *     ``pairing_id`` included. Recovering a closed consent tab now means starting a
+     *     new pairing from the helper, which costs one click.
+     */
+    post: operations["lookup_device_pairing_devices_pairings_lookup_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/devices/pairings/{pairing_id}/approve": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Approve Device Pairing
+     * @description Grant this computer permission to run the caller's jobs.
+     *
+     *     The click is the entire anti-phishing control, so this must never be reached
+     *     from page load. ``verification_token`` is re-verified server-side: possession
+     *     of the fragment, not knowledge of a pairing id, is what authorises the grant.
+     *
+     *     Possession of the fragment is *all* it proves. Nothing binds this approval to
+     *     the computer that asked for it, so a consent link forwarded to a researcher
+     *     and clicked mints a token on that researcher's account for someone else's
+     *     device. The confirmation code on the consent screen is what gives the
+     *     researcher a chance to notice; it is a mitigation, not a barrier. See ADR
+     *     0001, "Pairing phishing".
+     */
+    post: operations["approve_device_pairing_devices_pairings__pairing_id__approve_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/devices/pairings/{pairing_id}/deny": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Deny Device Pairing */
+    post: operations["deny_device_pairing_devices_pairings__pairing_id__deny_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/devices/{device_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /**
+     * Revoke Device
+     * @description Remove a computer's access. Works from a phone; the helper is not consulted.
+     *
+     *     Takes effect on that device's next request - every device call re-reads the
+     *     row, so there is no cache expiry to wait out.
+     */
+    delete: operations["revoke_device_devices__device_id__delete"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/health": {
     parameters: {
       query?: never;
@@ -175,6 +483,26 @@ export interface paths {
     /** Complete Inference Job */
     post: operations["complete_inference_job_internal_inference_job_complete_post"];
     delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/jobs/history": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /**
+     * Clear Job History
+     * @description Delete finished jobs of a project. Active jobs are left running.
+     */
+    delete: operations["clear_job_history_jobs_history_delete"];
     options?: never;
     head?: never;
     patch?: never;
@@ -274,6 +602,23 @@ export interface paths {
     };
     /** Get Part Image */
     get: operations["get_part_image_media_parts__part_id__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/media/signed/{image_key}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get Signed Object */
+    get: operations["get_signed_object_media_signed__image_key__get"];
     put?: never;
     post?: never;
     delete?: never;
@@ -582,40 +927,6 @@ export interface paths {
     head?: never;
     /** Patch Part Line */
     patch: operations["patch_part_line_projects__project_id__documents__document_id__parts__part_id__lines__line_id__patch"];
-    trace?: never;
-  };
-  "/projects/{project_id}/documents/{document_id}/parts/{part_id}/local-inference/segment": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /** Persist Local Segment */
-    post: operations["persist_local_segment_projects__project_id__documents__document_id__parts__part_id__local_inference_segment_post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/projects/{project_id}/documents/{document_id}/parts/{part_id}/local-inference/transcribe": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /** Persist Local Transcribe */
-    post: operations["persist_local_transcribe_projects__project_id__documents__document_id__parts__part_id__local_inference_transcribe_post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
     trace?: never;
   };
   "/projects/{project_id}/documents/{document_id}/parts/{part_id}/model-bindings": {
@@ -1017,6 +1328,93 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    /**
+     * AgentVersionNotice
+     * @description What the platform makes of a served agent's version.
+     *
+     *     Present on every claim response. ``outdated`` is the only field a CLI has to
+     *     branch on; the rest are for the line it prints.
+     */
+    AgentVersionNotice: {
+      /**
+       * Agent Version
+       * @description The version this agent presented.
+       */
+      agent_version: string;
+      /**
+       * Latest Version
+       * @description Newest published agent.
+       */
+      latest_version: string;
+      /**
+       * Minimum Version
+       * @description Below this, the next claim is refused with 426. Read it every poll.
+       */
+      minimum_version: string;
+      /**
+       * Outdated
+       * @description True when the agent is at or above the floor but behind the latest. It is still being served: this is a notice, not a refusal.
+       */
+      outdated: boolean;
+      /**
+       * Package
+       * @description Distribution to upgrade.
+       */
+      package: string;
+      /**
+       * Upgrade Command
+       * @description Human-facing hint; print it, do not exec it.
+       */
+      upgrade_command: string;
+    };
+    /**
+     * AgentVersionRefusal
+     * @description Body of a 426 - the ``error`` member of the platform's error envelope.
+     */
+    AgentVersionRefusal: {
+      /**
+       * Agent Version
+       * @description Echo of what was sent; null when nothing was.
+       */
+      agent_version?: string | null;
+      /**
+       * Code
+       * @default AGENT_VERSION_UNSUPPORTED
+       */
+      code: string;
+      /** Latest Version */
+      latest_version: string;
+      /** Message */
+      message: string;
+      /** Minimum Version */
+      minimum_version: string;
+      /** Package */
+      package: string;
+      /**
+       * Reason
+       * @description missing | malformed | below_floor
+       */
+      reason: string;
+      /**
+       * Retryable
+       * @description Always false. Retrying the same version cannot succeed; upgrading can.
+       * @default false
+       */
+      retryable: boolean;
+      /** Upgrade Command */
+      upgrade_command: string;
+    };
+    /**
+     * AgentVersionRefusalResponse
+     * @description The 426 body as it goes out - the standard envelope, with a richer member.
+     *
+     *     Same ``{"error": {...}}`` shape as every other failure on the platform, so a
+     *     client that already parses one parses this; the extra fields are additions to
+     *     :class:`~backend.core.schemas.errors.ApiErrorDetail`, not a second envelope.
+     */
+    AgentVersionRefusalResponse: {
+      error: components["schemas"]["AgentVersionRefusal"];
+    };
     /** AnnotationHistorySnapshotResponse */
     AnnotationHistorySnapshotResponse: {
       /**
@@ -1096,14 +1494,23 @@ export interface components {
       /** Order */
       order: number;
     };
-    /** BlockPatchRequest */
+    /**
+     * BlockPatchRequest
+     * @description Partial block update.
+     *
+     *     ``order``/``box`` back NOT NULL columns, so an explicit ``null`` is rejected rather
+     *     than silently ignored. Routes send ``model_dump(exclude_unset=True)``, which is what
+     *     separates "field omitted" from "field explicitly set". An unrecognised key is
+     *     refused for the same reason a null is: it cannot be written, so accepting the
+     *     request would report a write that did not happen.
+     */
     BlockPatchRequest: {
       /** Box */
       box?: {
         [key: string]: unknown;
-      } | null;
+      };
       /** Order */
-      order?: number | null;
+      order?: number;
     };
     /** BlockResponse */
     BlockResponse: {
@@ -1143,6 +1550,83 @@ export interface components {
       /** Confidence */
       confidence: number;
     };
+    /**
+     * ClaimedPageRequest
+     * @description What to run on the claimed page.
+     *
+     *     There is no image field, deliberately: the page arrives by signed link
+     *     (``ClaimedPageResponse.page_image_url``), which is the only mechanism, not
+     *     one of two. An agent that reads these four fields and fetches that link has
+     *     everything it needs.
+     */
+    ClaimedPageRequest: {
+      /** Params */
+      params?: {
+        [key: string]: unknown;
+      };
+      /**
+       * Product Job Id
+       * Format: uuid
+       */
+      product_job_id: string;
+      /** Registry Model Id */
+      registry_model_id: string;
+      /**
+       * Registry Tag
+       * @default stable
+       */
+      registry_tag: string;
+      task: components["schemas"]["InferenceTask"];
+    };
+    /**
+     * ClaimedPageResponse
+     * @description One page of work, and the short-lived link to its image.
+     *
+     *     The link is not authenticated by anything the agent presents: the signature
+     *     in it *is* the authorization, and it reaches exactly one object (ADR 0002).
+     *     An authenticated ``GET /device/v1/jobs/{id}/image`` was rejected because the
+     *     production API is serverless - streaming manuscript scans through it costs
+     *     money for nothing - and because it would put a route on the device credential
+     *     that must independently re-derive job ownership. The same reasoning is why
+     *     ``request`` below carries no image: this response used to stream the scan
+     *     through the API *as well as* hand out the link.
+     */
+    ClaimedPageResponse: {
+      execution_target: components["schemas"]["ExecutionTarget"];
+      /**
+       * Inference Job Id
+       * Format: uuid
+       */
+      inference_job_id: string;
+      job_type: components["schemas"]["JobType"];
+      /**
+       * Lease Expires At
+       * Format: date-time
+       */
+      lease_expires_at: string;
+      /**
+       * Page Image Expires At
+       * Format: date-time
+       * @description When the link above stops working - about a minute out, and deliberately not the lease. The agent fetches once, right after claiming.
+       */
+      page_image_expires_at: string;
+      /**
+       * Page Image Url
+       * @description Signed link to this page's image, and to nothing else. Carries its own authorization, so it is fetched with no device credential attached.
+       */
+      page_image_url: string;
+      /**
+       * Product Job Id
+       * Format: uuid
+       */
+      product_job_id: string;
+      request: components["schemas"]["ClaimedPageRequest"];
+    };
+    /** ClearJobHistoryResponse */
+    ClearJobHistoryResponse: {
+      /** Deleted */
+      deleted: number;
+    };
     /** ClientFailureRequest */
     ClientFailureRequest: {
       /** Message */
@@ -1175,6 +1659,76 @@ export interface components {
     CopyToGroundTruthResponse: {
       /** Copied Line Ids */
       copied_line_ids: string[];
+    };
+    /** DeviceResponse */
+    DeviceResponse: {
+      /** Helper Version */
+      helper_version: string;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Last Seen At */
+      last_seen_at?: string | null;
+      /** Last Seen Ip */
+      last_seen_ip?: string | null;
+      /** Name */
+      name: string;
+      /**
+       * Paired At
+       * Format: date-time
+       */
+      paired_at: string;
+      /** Paired From Ip */
+      paired_from_ip?: string | null;
+      /** Platform */
+      platform: string;
+      /** Revoked At */
+      revoked_at?: string | null;
+      status: components["schemas"]["DeviceStatus"];
+      /** Token Expires At */
+      token_expires_at?: string | null;
+      /** Token Prefix */
+      token_prefix: string;
+    };
+    /**
+     * DeviceSelfResponse
+     * @description What a paired helper is allowed to learn about itself.
+     */
+    DeviceSelfResponse: {
+      /** Account Email */
+      account_email: string;
+      /**
+       * Device Id
+       * Format: uuid
+       */
+      device_id: string;
+      /** Name */
+      name: string;
+      /**
+       * Server Time
+       * Format: date-time
+       */
+      server_time: string;
+      /** Token Expires At */
+      token_expires_at?: string | null;
+    };
+    /**
+     * DeviceStatus
+     * @description Liveness of a paired helper, derived from ``last_seen_at``.
+     * @enum {string}
+     */
+    DeviceStatus: "pairing" | "online" | "idle" | "offline" | "revoked";
+    /** DeviceTokenRenewResponse */
+    DeviceTokenRenewResponse: {
+      /** Device Token */
+      device_token: string;
+      /**
+       * Token Expires At
+       * Format: date-time
+       */
+      token_expires_at: string;
     };
     /** DocumentCreateRequest */
     DocumentCreateRequest: {
@@ -1252,7 +1806,14 @@ export interface components {
       updated_at: string;
       workflow: components["schemas"]["DocumentWorkflow"];
     };
-    /** DocumentUpdateRequest */
+    /**
+     * DocumentUpdateRequest
+     * @description Partial document update.
+     *
+     *     ``extra="forbid"`` because the handler applies ``model_dump(exclude_unset=True)``
+     *     verbatim with ``setattr``: a key it does not recognise cannot be written, so
+     *     dropping it silently would let a client believe it had.
+     */
     DocumentUpdateRequest: {
       /** Name */
       name?: string;
@@ -1321,6 +1882,28 @@ export interface components {
        */
       job_id: string;
     };
+    /** ExecutionPreferenceRequest */
+    ExecutionPreferenceRequest: {
+      /** Prefer Local Inference */
+      prefer_local_inference: boolean;
+    };
+    /** ExecutionPreferenceResponse */
+    ExecutionPreferenceResponse: {
+      /** Available Targets */
+      available_targets: components["schemas"]["ExecutionTarget"][];
+      /** Prefer Local Inference */
+      prefer_local_inference: boolean;
+      preferred_execution_target: components["schemas"]["ExecutionTarget"];
+    };
+    /**
+     * ExecutionTarget
+     * @description The **inference host** a single job runs on.
+     *
+     *     Also the discriminator on a paired device, because a hosted worker is a
+     *     device like any other (ADR 0003) - a device *is* one of these two hosts.
+     * @enum {string}
+     */
+    ExecutionTarget: "local" | "cloud";
     /** ExportArtifactResponse */
     ExportArtifactResponse: {
       /** Image Base64 */
@@ -1424,6 +2007,54 @@ export interface components {
       status: components["schemas"]["InferenceJobStatus"];
       task: components["schemas"]["InferenceTask"];
     };
+    /**
+     * JobClaimRequest
+     * @description How long the agent is willing to wait for work.
+     *
+     *     A laptop long-polls, because an idle researcher's page should start within a
+     *     second of being submitted. A hosted worker sends ``0`` and short-polls: it is
+     *     never idle for long, it does not need the latency, and every second it waits
+     *     is a request-handler slot it is holding on a serverless host.
+     *
+     *     There is deliberately no "how many pages" field. One claim is one page.
+     */
+    JobClaimRequest: {
+      /**
+       * Wait Seconds
+       * @description Seconds to wait for a page before returning empty. Clamped server-side to DEVICE_CLAIM_MAX_WAIT_SECONDS. 0 is a short poll.
+       * @default 0
+       */
+      wait_seconds: number;
+    };
+    /**
+     * JobClaimResponse
+     * @description Always 200, with or without a page.
+     *
+     *     An empty queue is the normal state of a healthy platform, not an error. A 404
+     *     or a 204 here would make an agent's logs unreadable and would tempt a client
+     *     into treating "nothing to do" as a failure to back off from.
+     */
+    JobClaimResponse: {
+      /** @description What the platform makes of this agent's version. Present on every claim response, page or no page, so an idle agent still learns it is behind. An agent below the floor never sees this - it gets a 426 instead. */
+      agent: components["schemas"]["AgentVersionNotice"];
+      /**
+       * Lease Seconds
+       * @description How long a claimed page stays with the agent. Read from the platform, not compiled in.
+       */
+      lease_seconds: number;
+      page?: components["schemas"]["ClaimedPageResponse"] | null;
+      /**
+       * Poll After Seconds
+       * @description What the agent should wait before asking again. 0 when a page was handed over.
+       */
+      poll_after_seconds: number;
+      /**
+       * Server Time
+       * Format: date-time
+       * @description So an agent with a wrong clock can still reason about its lease.
+       */
+      server_time: string;
+    };
     /** JobPageResponse */
     JobPageResponse: {
       /** Items */
@@ -1448,6 +2079,12 @@ export interface components {
       error: string | null;
       /** Execution */
       execution?: ("local" | "cloud") | null;
+      execution_target: components["schemas"]["ExecutionTarget"];
+      /**
+       * Execution Target Substituted
+       * @default false
+       */
+      execution_target_substituted: boolean;
       /**
        * Id
        * Format: uuid
@@ -1457,6 +2094,7 @@ export interface components {
       payload: {
         [key: string]: unknown;
       };
+      preferred_execution_target: components["schemas"]["ExecutionTarget"];
       /** Result */
       result: {
         [key: string]: unknown;
@@ -1520,12 +2158,20 @@ export interface components {
      * @enum {string}
      */
     LineGeometryKind: "polygon" | "rectangle";
-    /** LinePatchRequest */
+    /**
+     * LinePatchRequest
+     * @description Partial line update.
+     *
+     *     ``block_id`` and ``mask`` back nullable columns, so an explicit ``null`` clears them.
+     *     ``order``/``baseline``/``points`` back NOT NULL columns and reject an explicit null.
+     *     An unrecognised key is refused rather than dropped, so a client is never told it
+     *     wrote a field the handler ignored.
+     */
     LinePatchRequest: {
       /** Baseline */
       baseline?: {
         [key: string]: unknown;
-      } | null;
+      };
       /** Block Id */
       block_id?: string | null;
       /** Mask */
@@ -1533,7 +2179,7 @@ export interface components {
         [key: string]: unknown;
       } | null;
       /** Order */
-      order?: number | null;
+      order?: number;
       /** Points */
       points?: number[][] | null;
     };
@@ -1645,85 +2291,6 @@ export interface components {
       /** Lines */
       lines?: components["schemas"]["LineUpsertRequest"][];
     };
-    /** LocalSegmentPersistRequest */
-    LocalSegmentPersistRequest: {
-      /** Output */
-      output: {
-        [key: string]: unknown;
-      };
-      /** Registry Model Id */
-      registry_model_id: string;
-      /**
-       * Registry Tag
-       * @default stable
-       */
-      registry_tag: string;
-    };
-    /** LocalSegmentPersistResponse */
-    LocalSegmentPersistResponse: {
-      /** Added Lines */
-      added_lines: number;
-      /** Blocks Count */
-      blocks_count: number;
-      /**
-       * Job Id
-       * Format: uuid
-       */
-      job_id: string;
-      /** Lines Count */
-      lines_count: number;
-      /** Preserved Manual Lines */
-      preserved_manual_lines: number;
-      /** Pruned Lines */
-      pruned_lines: number;
-    };
-    /** LocalTranscribeLinePersistRequest */
-    LocalTranscribeLinePersistRequest: {
-      /** Character Confidences */
-      character_confidences?:
-        | {
-            [key: string]: unknown;
-          }[]
-        | null;
-      /** Confidence */
-      confidence: number;
-      /**
-       * Line Id
-       * Format: uuid
-       */
-      line_id: string;
-      /** Text */
-      text: string;
-    };
-    /** LocalTranscribePersistRequest */
-    LocalTranscribePersistRequest: {
-      /** Lines */
-      lines: components["schemas"]["LocalTranscribeLinePersistRequest"][];
-      /** Registry Model Id */
-      registry_model_id: string;
-      /**
-       * Registry Tag
-       * @default stable
-       */
-      registry_tag: string;
-    };
-    /** LocalTranscribePersistResponse */
-    LocalTranscribePersistResponse: {
-      /**
-       * Job Id
-       * Format: uuid
-       */
-      job_id: string;
-      /** Lines */
-      lines: {
-        [key: string]: unknown;
-      }[];
-      /**
-       * Transcription Id
-       * Format: uuid
-       */
-      transcription_id: string;
-    };
     /** LoginRequest */
     LoginRequest: {
       /**
@@ -1815,6 +2382,19 @@ export interface components {
       /** Text Line Order */
       text_line_order: number;
     };
+    /** PairingConsentRequest */
+    PairingConsentRequest: {
+      /** Verification Token */
+      verification_token: string;
+    };
+    /**
+     * PairingLookupRequest
+     * @description The fragment token travels in a POST body, never a path or query.
+     */
+    PairingLookupRequest: {
+      /** Verification Token */
+      verification_token: string;
+    };
     /** PairingProgressResponse */
     PairingProgressResponse: {
       /** Paired Lines */
@@ -1823,6 +2403,122 @@ export interface components {
       percent: number;
       /** Total Lines */
       total_lines: number;
+    };
+    /**
+     * PairingRequestResponse
+     * @description Consent-screen data. Rendered as inert text under fixed labels.
+     *
+     *     Carries no network-derived signal. ``same_network`` and ``request_ip`` were
+     *     removed: behind a proxy the platform does not allowlist, the observed address
+     *     is the edge's, so ``same_network`` was unconditionally true and ``request_ip``
+     *     was the same string for every request on the platform. A reassurance that is
+     *     always shown is worse than none, because the screen presents it as evidence.
+     */
+    PairingRequestResponse: {
+      /** Confirmation Code */
+      confirmation_code: string;
+      /** Device Name */
+      device_name: string;
+      /**
+       * Expires At
+       * Format: date-time
+       */
+      expires_at: string;
+      /** Helper Version */
+      helper_version: string;
+      /**
+       * Pairing Id
+       * Format: uuid
+       */
+      pairing_id: string;
+      /** Platform */
+      platform: string;
+      /**
+       * Requested At
+       * Format: date-time
+       */
+      requested_at: string;
+    };
+    /**
+     * PairingStartRequest
+     * @description Sent by an unpaired helper. Every field is attacker-controlled.
+     */
+    PairingStartRequest: {
+      /** Capabilities */
+      capabilities?: {
+        [key: string]: unknown;
+      };
+      /** Device Name */
+      device_name: string;
+      /** Helper Version */
+      helper_version: string;
+      /** Platform */
+      platform: string;
+    };
+    /** PairingStartResponse */
+    PairingStartResponse: {
+      /** Confirmation Code */
+      confirmation_code: string;
+      /** Device Code */
+      device_code: string;
+      /** Expires In */
+      expires_in: number;
+      /** Interval Seconds */
+      interval_seconds: number;
+      /**
+       * Pairing Id
+       * Format: uuid
+       */
+      pairing_id: string;
+      /** Verification Url */
+      verification_url: string;
+    };
+    /**
+     * PairingStatus
+     * @description Poll result for the helper's token collection loop.
+     *
+     *     Every one of these is returned inside a ``200`` body. The platform error
+     *     envelope replaces ``HTTPException.detail`` with a fixed public string
+     *     (``backend/core/app.py``), so a machine-readable protocol state can never
+     *     survive a non-2xx response.
+     * @enum {string}
+     */
+    PairingStatus:
+      | "authorization_pending"
+      | "slow_down"
+      | "access_denied"
+      | "expired"
+      | "approved";
+    /** PairingTokenRequest */
+    PairingTokenRequest: {
+      /** Device Code */
+      device_code: string;
+      /**
+       * Pairing Id
+       * Format: uuid
+       */
+      pairing_id: string;
+    };
+    /**
+     * PairingTokenResponse
+     * @description Always returned with HTTP 200 - the status is the payload.
+     *
+     *     The platform error envelope replaces ``HTTPException.detail`` with a fixed
+     *     public string, so a machine-readable protocol state cannot survive a non-2xx
+     *     response.
+     */
+    PairingTokenResponse: {
+      /** Account Email */
+      account_email?: string | null;
+      /** Device Id */
+      device_id?: string | null;
+      /** Device Token */
+      device_token?: string | null;
+      /** Interval Seconds */
+      interval_seconds: number;
+      status: components["schemas"]["PairingStatus"];
+      /** Token Expires At */
+      token_expires_at?: string | null;
     };
     /** ProjectCreateRequest */
     ProjectCreateRequest: {
@@ -1903,8 +2599,15 @@ export interface components {
     PublicLayoutResponse: {
       /** Blocks */
       blocks?: components["schemas"]["PublicBlockResponse"][];
+      /**
+       * Blocks Truncated
+       * @default false
+       */
+      blocks_truncated: boolean;
       /** Lines */
       lines?: components["schemas"]["PublicLineResponse"][];
+      /** Next Cursor */
+      next_cursor?: string | null;
     };
     /** PublicLineResponse */
     PublicLineResponse: {
@@ -1925,6 +2628,24 @@ export interface components {
       /** Points */
       points: number[][];
     };
+    /**
+     * PublicThumbnailWidth
+     * @description Widths the *unauthenticated* route will render.
+     *
+     *     Every distinct width is a separate decode plus LANCZOS resize of a full manuscript
+     *     scan and a separate cache entry, so a free-form range hands an anonymous caller 2048
+     *     ways to miss every cache for one image. A closed set caps that at three renders per
+     *     page. The frontend only asks for 200 (the part list); the larger two leave room for
+     *     denser displays without reopening the range.
+     *
+     *     The authenticated route keeps the continuous range up to ``MAX_THUMBNAIL_WIDTH``:
+     *     the same work there is attributable to an account that is already a project member.
+     *
+     *     An ``IntEnum`` rather than a ``Literal``: FastAPI coerces a query string into an enum
+     *     member but not into a literal int, and it publishes the members as an OpenAPI enum.
+     * @enum {integer}
+     */
+    PublicThumbnailWidth: 200 | 400 | 800;
     /** PublicTranscriptionLayerResponse */
     PublicTranscriptionLayerResponse: {
       /**
@@ -2078,11 +2799,13 @@ export interface components {
     };
     /** TranscribeBatchLineResult */
     TranscribeBatchLineResult: {
+      /** Error */
+      error?: string | null;
       /** Line Id */
       line_id?: string | null;
       /** Line Index */
       line_index: number;
-      output: components["schemas"]["TranscribeRunResponse"];
+      output?: components["schemas"]["TranscribeRunResponse"] | null;
     };
     /** TranscribeBatchRunResponse */
     TranscribeBatchRunResponse: {
@@ -2156,13 +2879,18 @@ export interface components {
        * Format: uuid
        */
       id: string;
+      /**
+       * Prefer Local Inference
+       * @default false
+       */
+      prefer_local_inference: boolean;
       /** Username */
       username: string;
     };
     /** WelcomeResponse */
     WelcomeResponse: {
       /** Docs Url */
-      docs_url: string;
+      docs_url?: string | null;
       /** Health Url */
       health_url: string;
       /** Message */
@@ -2197,6 +2925,176 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["WelcomeResponse"];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
+  read_execution_preference_account_execution_target_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ExecutionPreferenceResponse"];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
+  set_execution_preference_account_execution_target_put: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ExecutionPreferenceRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ExecutionPreferenceResponse"];
         };
       };
       /** @description Not authenticated */
@@ -2689,6 +3587,978 @@ export interface operations {
       };
     };
   };
+  read_agent_version_device_v1_agent_version_get: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Agent version, MAJOR.MINOR.PATCH. Required: an agent that does not say what it is cannot claim. */
+        "X-Nomicous-Agent-Version"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentVersionNotice"];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description The agent is below the version floor, or did not say what version it is. It must upgrade before it claims; retrying the same build cannot succeed. */
+      426: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentVersionRefusalResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
+  claim_job_device_v1_jobs_claim_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        "X-Nomicous-Device-Token"?: string | null;
+        "X-Nomicous-Service-Token"?: string | null;
+        "X-Nomicous-Worker-Name"?: string | null;
+        /** @description Agent version, MAJOR.MINOR.PATCH. Required: an agent that does not say what it is cannot claim. */
+        "X-Nomicous-Agent-Version"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": components["schemas"]["JobClaimRequest"] | null;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["JobClaimResponse"];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description The agent is below the version floor, or did not say what version it is. It must upgrade; retrying the same build cannot succeed. */
+      426: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentVersionRefusalResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
+  start_device_pairing_device_v1_pairings_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PairingStartRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PairingStartResponse"];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
+  collect_device_token_device_v1_pairings_token_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PairingTokenRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PairingTokenResponse"];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
+  read_device_self_device_v1_self_get: {
+    parameters: {
+      query?: never;
+      header?: {
+        "X-Nomicous-Device-Token"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DeviceSelfResponse"];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
+  renew_device_token_device_v1_token_renew_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        "X-Nomicous-Device-Token"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DeviceTokenRenewResponse"];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
+  list_devices_devices_get: {
+    parameters: {
+      query?: {
+        include_revoked?: boolean;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DeviceResponse"][];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
+  lookup_device_pairing_devices_pairings_lookup_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PairingLookupRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PairingRequestResponse"];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
+  approve_device_pairing_devices_pairings__pairing_id__approve_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        pairing_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PairingConsentRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DeviceResponse"];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
+  deny_device_pairing_devices_pairings__pairing_id__deny_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        pairing_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PairingConsentRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
+  revoke_device_devices__device_id__delete: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        device_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
   health_health_get: {
     parameters: {
       query?: never;
@@ -2952,6 +4822,9 @@ export interface operations {
       query?: never;
       header?: {
         "X-Inference-Webhook-Secret"?: string | null;
+        "X-Nomicous-Device-Token"?: string | null;
+        "X-Nomicous-Service-Token"?: string | null;
+        "X-Nomicous-Worker-Name"?: string | null;
       };
       path?: never;
       cookie?: never;
@@ -2968,6 +4841,91 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
+  clear_job_history_jobs_history_delete: {
+    parameters: {
+      query: {
+        project_id: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ClearJobHistoryResponse"];
+        };
       };
       /** @description Not authenticated */
       401: {
@@ -3512,6 +5470,99 @@ export interface operations {
         };
       };
       /** @description Part or image not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
+  get_signed_object_media_signed__image_key__get: {
+    parameters: {
+      query: {
+        /** @description Unix seconds after which the link is dead. */
+        expires: number;
+        /** @description HMAC over the object key and expiry. */
+        signature: string;
+      };
+      header?: never;
+      path: {
+        image_key: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Page image bytes */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/octet-stream": string;
+          "image/jpeg": string;
+          "image/png": string;
+          "image/webp": string;
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Missing, forged, or expired signature */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description No such object */
       404: {
         headers: {
           [name: string]: unknown;
@@ -6201,188 +8252,6 @@ export interface operations {
       };
     };
   };
-  persist_local_segment_projects__project_id__documents__document_id__parts__part_id__local_inference_segment_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        project_id: string;
-        document_id: string;
-        part_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["LocalSegmentPersistRequest"];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["LocalSegmentPersistResponse"];
-        };
-      };
-      /** @description Not authenticated */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
-      };
-      /** @description Not authorized */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
-      };
-      /** @description Resource not found */
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
-      };
-      /** @description Conflict with current state */
-      409: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
-      };
-      /** @description Validation error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
-      };
-      /** @description Rate limit exceeded */
-      429: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
-      };
-      /** @description Internal server error */
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
-      };
-    };
-  };
-  persist_local_transcribe_projects__project_id__documents__document_id__parts__part_id__local_inference_transcribe_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        project_id: string;
-        document_id: string;
-        part_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["LocalTranscribePersistRequest"];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["LocalTranscribePersistResponse"];
-        };
-      };
-      /** @description Not authenticated */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
-      };
-      /** @description Not authorized */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
-      };
-      /** @description Resource not found */
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
-      };
-      /** @description Conflict with current state */
-      409: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
-      };
-      /** @description Validation error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
-      };
-      /** @description Rate limit exceeded */
-      429: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
-      };
-      /** @description Internal server error */
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
-      };
-    };
-  };
   list_part_model_bindings_projects__project_id__documents__document_id__parts__part_id__model_bindings_get: {
     parameters: {
       query?: never;
@@ -8242,7 +10111,7 @@ export interface operations {
   get_public_part_image_public_media_parts__part_id__get: {
     parameters: {
       query?: {
-        w?: number | null;
+        w?: components["schemas"]["PublicThumbnailWidth"] | null;
       };
       header?: {
         "if-none-match"?: string | null;
@@ -8319,14 +10188,12 @@ export interface operations {
           "application/json": components["schemas"]["ApiErrorResponse"];
         };
       };
-      /** @description Rate limit exceeded */
+      /** @description Thumbnail rate limit exceeded */
       429: {
         headers: {
           [name: string]: unknown;
         };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
+        content?: never;
       };
       /** @description Internal server error */
       500: {
@@ -8410,9 +10277,7 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
+        content?: never;
       };
       /** @description Internal server error */
       500: {
@@ -8427,7 +10292,10 @@ export interface operations {
   };
   get_published_layout_public_projects__project_id__documents__document_id__layout_get: {
     parameters: {
-      query?: never;
+      query?: {
+        limit?: number;
+        cursor?: string | null;
+      };
       header?: never;
       path: {
         project_id: string;
@@ -8496,9 +10364,7 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
+        content?: never;
       };
       /** @description Internal server error */
       500: {
@@ -8583,9 +10449,7 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
+        content?: never;
       };
       /** @description Internal server error */
       500: {
@@ -8670,9 +10534,7 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
+        content?: never;
       };
       /** @description Internal server error */
       500: {
@@ -8756,9 +10618,7 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
+        content?: never;
       };
       /** @description Internal server error */
       500: {

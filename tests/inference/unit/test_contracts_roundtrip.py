@@ -19,7 +19,6 @@ from inference.contracts import (
     InferenceTask,
     JobCallbackRequest,
     JobSubmitRequest,
-    JobSubmitResponse,
     SegmentJobOutput,
     SegmentLine,
     SegmentRunResponse,
@@ -28,7 +27,6 @@ from inference.contracts import (
     TranscribeJobOutput,
     TranscribeRunResponse,
 )
-from inference.contracts.run import InferenceRunRequest
 from inference.contracts.segment import SegmentGeometryKind
 from pydantic import ValidationError
 
@@ -84,37 +82,39 @@ def _transcribe_batch_response() -> TranscribeBatchRunResponse:
 
 # --- image_bytes wire format ---
 # Tests base64 encoding and validation. Does not run inference.
+#
+# Asserted on `JobSubmitRequest`, which is the only request contract left
+# carrying image bytes: `InferenceRunRequest` was the body of the loopback
+# service's `POST /inference/v1/run` and died with it (ADR 0002, #60).
+
+
+def _submit_request(**overrides) -> JobSubmitRequest:
+    payload = {
+        "task": InferenceTask.segment,
+        "registry_model_id": "blla-segment",
+        "product_job_id": uuid4(),
+        "image_bytes": b"\x89PNG\r\n",
+    }
+    payload.update(overrides)
+    return JobSubmitRequest(**payload)
 
 
 def test_image_bytes_json_contract():
-    request = InferenceRunRequest(
-        task=InferenceTask.segment,
-        registry_model_id="blla-segment",
-        image_bytes=b"\x89PNG\r\n",
-        params={"refine": True},
-    )
+    request = _submit_request(params={"refine": True})
     payload = _round_trip(request)
     assert payload["image_bytes"] == base64.b64encode(b"\x89PNG\r\n").decode()
 
 
 def test_image_bytes_accepts_whitespace_wrapped_base64():
     encoded = base64.b64encode(b"\x89PNG\r\n").decode()
-    request = InferenceRunRequest(
-        task=InferenceTask.segment,
-        registry_model_id="blla-segment",
-        image_bytes=f"\n{encoded[:4]} {encoded[4:]}\t",
-    )
+    request = _submit_request(image_bytes=f"\n{encoded[:4]} {encoded[4:]}\t")
 
     assert request.image_bytes == b"\x89PNG\r\n"
 
 
 def test_image_bytes_rejects_invalid_base64():
     with pytest.raises(ValidationError, match="Invalid inference request"):
-        InferenceRunRequest(
-            task=InferenceTask.segment,
-            registry_model_id="blla-segment",
-            image_bytes="not-base64!!!",
-        )
+        _submit_request(image_bytes="not-base64!!!")
 
 
 # --- Segment and transcribe response contracts ---
@@ -159,9 +159,6 @@ def test_job_submit_round_trip():
     )
     payload = _round_trip(request)
     assert payload["product_job_id"] == str(product_job_id)
-
-    response = JobSubmitResponse(inference_job_id=uuid4())
-    _round_trip(response)
 
 
 # --- Job submit validation rules ---

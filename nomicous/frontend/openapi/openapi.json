@@ -1,6 +1,125 @@
 {
   "components": {
     "schemas": {
+      "AgentVersionNotice": {
+        "description": "What the platform makes of a served agent's version.\n\nPresent on every claim response. ``outdated`` is the only field a CLI has to\nbranch on; the rest are for the line it prints.",
+        "properties": {
+          "agent_version": {
+            "description": "The version this agent presented.",
+            "title": "Agent Version",
+            "type": "string"
+          },
+          "latest_version": {
+            "description": "Newest published agent.",
+            "title": "Latest Version",
+            "type": "string"
+          },
+          "minimum_version": {
+            "description": "Below this, the next claim is refused with 426. Read it every poll.",
+            "title": "Minimum Version",
+            "type": "string"
+          },
+          "outdated": {
+            "description": "True when the agent is at or above the floor but behind the latest. It is still being served: this is a notice, not a refusal.",
+            "title": "Outdated",
+            "type": "boolean"
+          },
+          "package": {
+            "description": "Distribution to upgrade.",
+            "title": "Package",
+            "type": "string"
+          },
+          "upgrade_command": {
+            "description": "Human-facing hint; print it, do not exec it.",
+            "title": "Upgrade Command",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_version",
+          "minimum_version",
+          "latest_version",
+          "outdated",
+          "package",
+          "upgrade_command"
+        ],
+        "title": "AgentVersionNotice",
+        "type": "object"
+      },
+      "AgentVersionRefusal": {
+        "description": "Body of a 426 - the ``error`` member of the platform's error envelope.",
+        "properties": {
+          "agent_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Echo of what was sent; null when nothing was.",
+            "title": "Agent Version"
+          },
+          "code": {
+            "default": "AGENT_VERSION_UNSUPPORTED",
+            "title": "Code",
+            "type": "string"
+          },
+          "latest_version": {
+            "title": "Latest Version",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "minimum_version": {
+            "title": "Minimum Version",
+            "type": "string"
+          },
+          "package": {
+            "title": "Package",
+            "type": "string"
+          },
+          "reason": {
+            "description": "missing | malformed | below_floor",
+            "title": "Reason",
+            "type": "string"
+          },
+          "retryable": {
+            "default": false,
+            "description": "Always false. Retrying the same version cannot succeed; upgrading can.",
+            "title": "Retryable",
+            "type": "boolean"
+          },
+          "upgrade_command": {
+            "title": "Upgrade Command",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message",
+          "reason",
+          "minimum_version",
+          "latest_version",
+          "package",
+          "upgrade_command"
+        ],
+        "title": "AgentVersionRefusal",
+        "type": "object"
+      },
+      "AgentVersionRefusalResponse": {
+        "description": "The 426 body as it goes out - the standard envelope, with a richer member.\n\nSame ``{\"error\": {...}}`` shape as every other failure on the platform, so a\nclient that already parses one parses this; the extra fields are additions to\n:class:`~backend.core.schemas.errors.ApiErrorDetail`, not a second envelope.",
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/AgentVersionRefusal"
+          }
+        },
+        "required": ["error"],
+        "title": "AgentVersionRefusalResponse",
+        "type": "object"
+      },
       "AnnotationHistorySnapshotResponse": {
         "properties": {
           "created_at": {
@@ -136,30 +255,18 @@
         "type": "object"
       },
       "BlockPatchRequest": {
+        "additionalProperties": false,
+        "description": "Partial block update.\n\n``order``/``box`` back NOT NULL columns, so an explicit ``null`` is rejected rather\nthan silently ignored. Routes send ``model_dump(exclude_unset=True)``, which is what\nseparates \"field omitted\" from \"field explicitly set\". An unrecognised key is\nrefused for the same reason a null is: it cannot be written, so accepting the\nrequest would report a write that did not happen.",
         "properties": {
           "box": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Box"
+            "additionalProperties": true,
+            "title": "Box",
+            "type": "object"
           },
           "order": {
-            "anyOf": [
-              {
-                "minimum": 0.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Order"
+            "minimum": 0.0,
+            "title": "Order",
+            "type": "integer"
           }
         },
         "title": "BlockPatchRequest",
@@ -236,6 +343,101 @@
         },
         "required": ["char", "confidence"],
         "title": "CharacterConfidence",
+        "type": "object"
+      },
+      "ClaimedPageRequest": {
+        "description": "What to run on the claimed page.\n\nThere is no image field, deliberately: the page arrives by signed link\n(``ClaimedPageResponse.page_image_url``), which is the only mechanism, not\none of two. An agent that reads these four fields and fetches that link has\neverything it needs.",
+        "properties": {
+          "params": {
+            "additionalProperties": true,
+            "title": "Params",
+            "type": "object"
+          },
+          "product_job_id": {
+            "format": "uuid",
+            "title": "Product Job Id",
+            "type": "string"
+          },
+          "registry_model_id": {
+            "minLength": 1,
+            "title": "Registry Model Id",
+            "type": "string"
+          },
+          "registry_tag": {
+            "default": "stable",
+            "minLength": 1,
+            "title": "Registry Tag",
+            "type": "string"
+          },
+          "task": {
+            "$ref": "#/components/schemas/InferenceTask"
+          }
+        },
+        "required": ["task", "registry_model_id", "product_job_id"],
+        "title": "ClaimedPageRequest",
+        "type": "object"
+      },
+      "ClaimedPageResponse": {
+        "description": "One page of work, and the short-lived link to its image.\n\nThe link is not authenticated by anything the agent presents: the signature\nin it *is* the authorization, and it reaches exactly one object (ADR 0002).\nAn authenticated ``GET /device/v1/jobs/{id}/image`` was rejected because the\nproduction API is serverless - streaming manuscript scans through it costs\nmoney for nothing - and because it would put a route on the device credential\nthat must independently re-derive job ownership. The same reasoning is why\n``request`` below carries no image: this response used to stream the scan\nthrough the API *as well as* hand out the link.",
+        "properties": {
+          "execution_target": {
+            "$ref": "#/components/schemas/ExecutionTarget"
+          },
+          "inference_job_id": {
+            "format": "uuid",
+            "title": "Inference Job Id",
+            "type": "string"
+          },
+          "job_type": {
+            "$ref": "#/components/schemas/JobType"
+          },
+          "lease_expires_at": {
+            "format": "date-time",
+            "title": "Lease Expires At",
+            "type": "string"
+          },
+          "page_image_expires_at": {
+            "description": "When the link above stops working - about a minute out, and deliberately not the lease. The agent fetches once, right after claiming.",
+            "format": "date-time",
+            "title": "Page Image Expires At",
+            "type": "string"
+          },
+          "page_image_url": {
+            "description": "Signed link to this page's image, and to nothing else. Carries its own authorization, so it is fetched with no device credential attached.",
+            "title": "Page Image Url",
+            "type": "string"
+          },
+          "product_job_id": {
+            "format": "uuid",
+            "title": "Product Job Id",
+            "type": "string"
+          },
+          "request": {
+            "$ref": "#/components/schemas/ClaimedPageRequest"
+          }
+        },
+        "required": [
+          "product_job_id",
+          "inference_job_id",
+          "job_type",
+          "execution_target",
+          "lease_expires_at",
+          "request",
+          "page_image_url",
+          "page_image_expires_at"
+        ],
+        "title": "ClaimedPageResponse",
+        "type": "object"
+      },
+      "ClearJobHistoryResponse": {
+        "properties": {
+          "deleted": {
+            "title": "Deleted",
+            "type": "integer"
+          }
+        },
+        "required": ["deleted"],
+        "title": "ClearJobHistoryResponse",
         "type": "object"
       },
       "ClientFailureRequest": {
@@ -325,6 +527,7 @@
                   "format": "uuid",
                   "type": "string"
                 },
+                "maxItems": 10000,
                 "type": "array"
               },
               {
@@ -350,6 +553,168 @@
         },
         "required": ["copied_line_ids"],
         "title": "CopyToGroundTruthResponse",
+        "type": "object"
+      },
+      "DeviceResponse": {
+        "properties": {
+          "helper_version": {
+            "title": "Helper Version",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen At"
+          },
+          "last_seen_ip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen Ip"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "paired_at": {
+            "format": "date-time",
+            "title": "Paired At",
+            "type": "string"
+          },
+          "paired_from_ip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paired From Ip"
+          },
+          "platform": {
+            "title": "Platform",
+            "type": "string"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DeviceStatus"
+          },
+          "token_expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token Expires At"
+          },
+          "token_prefix": {
+            "title": "Token Prefix",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "platform",
+          "helper_version",
+          "status",
+          "token_prefix",
+          "paired_at"
+        ],
+        "title": "DeviceResponse",
+        "type": "object"
+      },
+      "DeviceSelfResponse": {
+        "description": "What a paired helper is allowed to learn about itself.",
+        "properties": {
+          "account_email": {
+            "title": "Account Email",
+            "type": "string"
+          },
+          "device_id": {
+            "format": "uuid",
+            "title": "Device Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "server_time": {
+            "format": "date-time",
+            "title": "Server Time",
+            "type": "string"
+          },
+          "token_expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token Expires At"
+          }
+        },
+        "required": ["device_id", "name", "account_email", "server_time"],
+        "title": "DeviceSelfResponse",
+        "type": "object"
+      },
+      "DeviceStatus": {
+        "description": "Liveness of a paired helper, derived from ``last_seen_at``.",
+        "enum": ["pairing", "online", "idle", "offline", "revoked"],
+        "title": "DeviceStatus",
+        "type": "string"
+      },
+      "DeviceTokenRenewResponse": {
+        "properties": {
+          "device_token": {
+            "title": "Device Token",
+            "type": "string"
+          },
+          "token_expires_at": {
+            "format": "date-time",
+            "title": "Token Expires At",
+            "type": "string"
+          }
+        },
+        "required": ["device_token", "token_expires_at"],
+        "title": "DeviceTokenRenewResponse",
         "type": "object"
       },
       "DocumentCreateRequest": {
@@ -513,6 +878,8 @@
         "type": "object"
       },
       "DocumentUpdateRequest": {
+        "additionalProperties": false,
+        "description": "Partial document update.\n\n``extra=\"forbid\"`` because the handler applies ``model_dump(exclude_unset=True)``\nverbatim with ``setattr``: a key it does not recognise cannot be written, so\ndropping it silently would let a client believe it had.",
         "properties": {
           "name": {
             "maxLength": 512,
@@ -622,6 +989,48 @@
         "required": ["job_id"],
         "title": "EnqueueTestJobResponse",
         "type": "object"
+      },
+      "ExecutionPreferenceRequest": {
+        "properties": {
+          "prefer_local_inference": {
+            "title": "Prefer Local Inference",
+            "type": "boolean"
+          }
+        },
+        "required": ["prefer_local_inference"],
+        "title": "ExecutionPreferenceRequest",
+        "type": "object"
+      },
+      "ExecutionPreferenceResponse": {
+        "properties": {
+          "available_targets": {
+            "items": {
+              "$ref": "#/components/schemas/ExecutionTarget"
+            },
+            "title": "Available Targets",
+            "type": "array"
+          },
+          "prefer_local_inference": {
+            "title": "Prefer Local Inference",
+            "type": "boolean"
+          },
+          "preferred_execution_target": {
+            "$ref": "#/components/schemas/ExecutionTarget"
+          }
+        },
+        "required": [
+          "prefer_local_inference",
+          "preferred_execution_target",
+          "available_targets"
+        ],
+        "title": "ExecutionPreferenceResponse",
+        "type": "object"
+      },
+      "ExecutionTarget": {
+        "description": "The **inference host** a single job runs on.\n\nAlso the discriminator on a paired device, because a hosted worker is a\ndevice like any other (ADR 0003) - a device *is* one of these two hosts.",
+        "enum": ["local", "cloud"],
+        "title": "ExecutionTarget",
+        "type": "string"
       },
       "ExportArtifactResponse": {
         "properties": {
@@ -841,6 +1250,63 @@
         "title": "JobCallbackRequest",
         "type": "object"
       },
+      "JobClaimRequest": {
+        "description": "How long the agent is willing to wait for work.\n\nA laptop long-polls, because an idle researcher's page should start within a\nsecond of being submitted. A hosted worker sends ``0`` and short-polls: it is\nnever idle for long, it does not need the latency, and every second it waits\nis a request-handler slot it is holding on a serverless host.\n\nThere is deliberately no \"how many pages\" field. One claim is one page.",
+        "properties": {
+          "wait_seconds": {
+            "default": 0,
+            "description": "Seconds to wait for a page before returning empty. Clamped server-side to DEVICE_CLAIM_MAX_WAIT_SECONDS. 0 is a short poll.",
+            "minimum": 0.0,
+            "title": "Wait Seconds",
+            "type": "integer"
+          }
+        },
+        "title": "JobClaimRequest",
+        "type": "object"
+      },
+      "JobClaimResponse": {
+        "description": "Always 200, with or without a page.\n\nAn empty queue is the normal state of a healthy platform, not an error. A 404\nor a 204 here would make an agent's logs unreadable and would tempt a client\ninto treating \"nothing to do\" as a failure to back off from.",
+        "properties": {
+          "agent": {
+            "$ref": "#/components/schemas/AgentVersionNotice",
+            "description": "What the platform makes of this agent's version. Present on every claim response, page or no page, so an idle agent still learns it is behind. An agent below the floor never sees this - it gets a 426 instead."
+          },
+          "lease_seconds": {
+            "description": "How long a claimed page stays with the agent. Read from the platform, not compiled in.",
+            "title": "Lease Seconds",
+            "type": "integer"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClaimedPageResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "poll_after_seconds": {
+            "description": "What the agent should wait before asking again. 0 when a page was handed over.",
+            "title": "Poll After Seconds",
+            "type": "number"
+          },
+          "server_time": {
+            "description": "So an agent with a wrong clock can still reason about its lease.",
+            "format": "date-time",
+            "title": "Server Time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "poll_after_seconds",
+          "lease_seconds",
+          "server_time",
+          "agent"
+        ],
+        "title": "JobClaimResponse",
+        "type": "object"
+      },
       "JobPageResponse": {
         "properties": {
           "items": {
@@ -932,6 +1398,14 @@
             ],
             "title": "Execution"
           },
+          "execution_target": {
+            "$ref": "#/components/schemas/ExecutionTarget"
+          },
+          "execution_target_substituted": {
+            "default": false,
+            "title": "Execution Target Substituted",
+            "type": "boolean"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -941,6 +1415,9 @@
             "additionalProperties": true,
             "title": "Payload",
             "type": "object"
+          },
+          "preferred_execution_target": {
+            "$ref": "#/components/schemas/ExecutionTarget"
           },
           "result": {
             "anyOf": [
@@ -1003,7 +1480,9 @@
           "created_at",
           "updated_at",
           "started_at",
-          "completed_at"
+          "completed_at",
+          "execution_target",
+          "preferred_execution_target"
         ],
         "title": "JobResponse",
         "type": "object"
@@ -1034,6 +1513,7 @@
                   "format": "uuid",
                   "type": "string"
                 },
+                "maxItems": 10000,
                 "type": "array"
               },
               {
@@ -1121,6 +1601,7 @@
               },
               "type": "array"
             },
+            "maxItems": 256,
             "minItems": 4,
             "title": "Points",
             "type": "array"
@@ -1136,18 +1617,13 @@
         "type": "string"
       },
       "LinePatchRequest": {
+        "additionalProperties": false,
+        "description": "Partial line update.\n\n``block_id`` and ``mask`` back nullable columns, so an explicit ``null`` clears them.\n``order``/``baseline``/``points`` back NOT NULL columns and reject an explicit null.\nAn unrecognised key is refused rather than dropped, so a client is never told it\nwrote a field the handler ignored.",
         "properties": {
           "baseline": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Baseline"
+            "additionalProperties": true,
+            "title": "Baseline",
+            "type": "object"
           },
           "block_id": {
             "anyOf": [
@@ -1174,16 +1650,9 @@
             "title": "Mask"
           },
           "order": {
-            "anyOf": [
-              {
-                "minimum": 0.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Order"
+            "minimum": 0.0,
+            "title": "Order",
+            "type": "integer"
           },
           "points": {
             "anyOf": [
@@ -1194,6 +1663,7 @@
                   },
                   "type": "array"
                 },
+                "maxItems": 256,
                 "type": "array"
               },
               {
@@ -1339,6 +1809,7 @@
       "LineTranscriptionPatchRequest": {
         "properties": {
           "text": {
+            "maxLength": 10000,
             "title": "Text",
             "type": "string"
           }
@@ -1393,6 +1864,7 @@
           "approved_text": {
             "anyOf": [
               {
+                "maxLength": 10000,
                 "type": "string"
               },
               {
@@ -1450,6 +1922,7 @@
                   },
                   "type": "array"
                 },
+                "maxItems": 256,
                 "type": "array"
               },
               {
@@ -1482,6 +1955,7 @@
               },
               "type": "array"
             },
+            "maxItems": 256,
             "minItems": 4,
             "title": "Points",
             "type": "array"
@@ -1519,156 +1993,6 @@
           }
         },
         "title": "LinesReplaceRequest",
-        "type": "object"
-      },
-      "LocalSegmentPersistRequest": {
-        "properties": {
-          "output": {
-            "additionalProperties": true,
-            "title": "Output",
-            "type": "object"
-          },
-          "registry_model_id": {
-            "minLength": 1,
-            "title": "Registry Model Id",
-            "type": "string"
-          },
-          "registry_tag": {
-            "default": "stable",
-            "minLength": 1,
-            "title": "Registry Tag",
-            "type": "string"
-          }
-        },
-        "required": ["registry_model_id", "output"],
-        "title": "LocalSegmentPersistRequest",
-        "type": "object"
-      },
-      "LocalSegmentPersistResponse": {
-        "properties": {
-          "added_lines": {
-            "title": "Added Lines",
-            "type": "integer"
-          },
-          "blocks_count": {
-            "title": "Blocks Count",
-            "type": "integer"
-          },
-          "job_id": {
-            "format": "uuid",
-            "title": "Job Id",
-            "type": "string"
-          },
-          "lines_count": {
-            "title": "Lines Count",
-            "type": "integer"
-          },
-          "preserved_manual_lines": {
-            "title": "Preserved Manual Lines",
-            "type": "integer"
-          },
-          "pruned_lines": {
-            "title": "Pruned Lines",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "job_id",
-          "blocks_count",
-          "lines_count",
-          "added_lines",
-          "pruned_lines",
-          "preserved_manual_lines"
-        ],
-        "title": "LocalSegmentPersistResponse",
-        "type": "object"
-      },
-      "LocalTranscribeLinePersistRequest": {
-        "properties": {
-          "character_confidences": {
-            "anyOf": [
-              {
-                "items": {
-                  "additionalProperties": true,
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Character Confidences"
-          },
-          "confidence": {
-            "maximum": 1.0,
-            "minimum": 0.0,
-            "title": "Confidence",
-            "type": "number"
-          },
-          "line_id": {
-            "format": "uuid",
-            "title": "Line Id",
-            "type": "string"
-          },
-          "text": {
-            "title": "Text",
-            "type": "string"
-          }
-        },
-        "required": ["line_id", "text", "confidence"],
-        "title": "LocalTranscribeLinePersistRequest",
-        "type": "object"
-      },
-      "LocalTranscribePersistRequest": {
-        "properties": {
-          "lines": {
-            "items": {
-              "$ref": "#/components/schemas/LocalTranscribeLinePersistRequest"
-            },
-            "minItems": 1,
-            "title": "Lines",
-            "type": "array"
-          },
-          "registry_model_id": {
-            "minLength": 1,
-            "title": "Registry Model Id",
-            "type": "string"
-          },
-          "registry_tag": {
-            "default": "stable",
-            "minLength": 1,
-            "title": "Registry Tag",
-            "type": "string"
-          }
-        },
-        "required": ["registry_model_id", "lines"],
-        "title": "LocalTranscribePersistRequest",
-        "type": "object"
-      },
-      "LocalTranscribePersistResponse": {
-        "properties": {
-          "job_id": {
-            "format": "uuid",
-            "title": "Job Id",
-            "type": "string"
-          },
-          "lines": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "title": "Lines",
-            "type": "array"
-          },
-          "transcription_id": {
-            "format": "uuid",
-            "title": "Transcription Id",
-            "type": "string"
-          }
-        },
-        "required": ["job_id", "transcription_id", "lines"],
-        "title": "LocalTranscribePersistResponse",
         "type": "object"
       },
       "LoginRequest": {
@@ -1887,6 +2211,33 @@
         "title": "PairTextLineRequest",
         "type": "object"
       },
+      "PairingConsentRequest": {
+        "properties": {
+          "verification_token": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Verification Token",
+            "type": "string"
+          }
+        },
+        "required": ["verification_token"],
+        "title": "PairingConsentRequest",
+        "type": "object"
+      },
+      "PairingLookupRequest": {
+        "description": "The fragment token travels in a POST body, never a path or query.",
+        "properties": {
+          "verification_token": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Verification Token",
+            "type": "string"
+          }
+        },
+        "required": ["verification_token"],
+        "title": "PairingLookupRequest",
+        "type": "object"
+      },
       "PairingProgressResponse": {
         "properties": {
           "paired_lines": {
@@ -1904,6 +2255,214 @@
         },
         "required": ["paired_lines", "total_lines", "percent"],
         "title": "PairingProgressResponse",
+        "type": "object"
+      },
+      "PairingRequestResponse": {
+        "description": "Consent-screen data. Rendered as inert text under fixed labels.\n\nCarries no network-derived signal. ``same_network`` and ``request_ip`` were\nremoved: behind a proxy the platform does not allowlist, the observed address\nis the edge's, so ``same_network`` was unconditionally true and ``request_ip``\nwas the same string for every request on the platform. A reassurance that is\nalways shown is worse than none, because the screen presents it as evidence.",
+        "properties": {
+          "confirmation_code": {
+            "title": "Confirmation Code",
+            "type": "string"
+          },
+          "device_name": {
+            "title": "Device Name",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "helper_version": {
+            "title": "Helper Version",
+            "type": "string"
+          },
+          "pairing_id": {
+            "format": "uuid",
+            "title": "Pairing Id",
+            "type": "string"
+          },
+          "platform": {
+            "title": "Platform",
+            "type": "string"
+          },
+          "requested_at": {
+            "format": "date-time",
+            "title": "Requested At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "pairing_id",
+          "device_name",
+          "platform",
+          "helper_version",
+          "confirmation_code",
+          "requested_at",
+          "expires_at"
+        ],
+        "title": "PairingRequestResponse",
+        "type": "object"
+      },
+      "PairingStartRequest": {
+        "description": "Sent by an unpaired helper. Every field is attacker-controlled.",
+        "properties": {
+          "capabilities": {
+            "additionalProperties": true,
+            "title": "Capabilities",
+            "type": "object"
+          },
+          "device_name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Device Name",
+            "type": "string"
+          },
+          "helper_version": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Helper Version",
+            "type": "string"
+          },
+          "platform": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Platform",
+            "type": "string"
+          }
+        },
+        "required": ["device_name", "platform", "helper_version"],
+        "title": "PairingStartRequest",
+        "type": "object"
+      },
+      "PairingStartResponse": {
+        "properties": {
+          "confirmation_code": {
+            "title": "Confirmation Code",
+            "type": "string"
+          },
+          "device_code": {
+            "title": "Device Code",
+            "type": "string"
+          },
+          "expires_in": {
+            "title": "Expires In",
+            "type": "integer"
+          },
+          "interval_seconds": {
+            "title": "Interval Seconds",
+            "type": "integer"
+          },
+          "pairing_id": {
+            "format": "uuid",
+            "title": "Pairing Id",
+            "type": "string"
+          },
+          "verification_url": {
+            "title": "Verification Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "pairing_id",
+          "device_code",
+          "verification_url",
+          "confirmation_code",
+          "expires_in",
+          "interval_seconds"
+        ],
+        "title": "PairingStartResponse",
+        "type": "object"
+      },
+      "PairingStatus": {
+        "description": "Poll result for the helper's token collection loop.\n\nEvery one of these is returned inside a ``200`` body. The platform error\nenvelope replaces ``HTTPException.detail`` with a fixed public string\n(``backend/core/app.py``), so a machine-readable protocol state can never\nsurvive a non-2xx response.",
+        "enum": [
+          "authorization_pending",
+          "slow_down",
+          "access_denied",
+          "expired",
+          "approved"
+        ],
+        "title": "PairingStatus",
+        "type": "string"
+      },
+      "PairingTokenRequest": {
+        "properties": {
+          "device_code": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Device Code",
+            "type": "string"
+          },
+          "pairing_id": {
+            "format": "uuid",
+            "title": "Pairing Id",
+            "type": "string"
+          }
+        },
+        "required": ["pairing_id", "device_code"],
+        "title": "PairingTokenRequest",
+        "type": "object"
+      },
+      "PairingTokenResponse": {
+        "description": "Always returned with HTTP 200 - the status is the payload.\n\nThe platform error envelope replaces ``HTTPException.detail`` with a fixed\npublic string, so a machine-readable protocol state cannot survive a non-2xx\nresponse.",
+        "properties": {
+          "account_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Email"
+          },
+          "device_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Id"
+          },
+          "device_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Token"
+          },
+          "interval_seconds": {
+            "title": "Interval Seconds",
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PairingStatus"
+          },
+          "token_expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token Expires At"
+          }
+        },
+        "required": ["status", "interval_seconds"],
+        "title": "PairingTokenResponse",
         "type": "object"
       },
       "ProjectCreateRequest": {
@@ -2091,12 +2650,28 @@
             "title": "Blocks",
             "type": "array"
           },
+          "blocks_truncated": {
+            "default": false,
+            "title": "Blocks Truncated",
+            "type": "boolean"
+          },
           "lines": {
             "items": {
               "$ref": "#/components/schemas/PublicLineResponse"
             },
             "title": "Lines",
             "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
           }
         },
         "title": "PublicLayoutResponse",
@@ -2139,6 +2714,12 @@
         "required": ["id", "part_id", "order", "points"],
         "title": "PublicLineResponse",
         "type": "object"
+      },
+      "PublicThumbnailWidth": {
+        "description": "Widths the *unauthenticated* route will render.\n\nEvery distinct width is a separate decode plus LANCZOS resize of a full manuscript\nscan and a separate cache entry, so a free-form range hands an anonymous caller 2048\nways to miss every cache for one image. A closed set caps that at three renders per\npage. The frontend only asks for 200 (the part list); the larger two leave room for\ndenser displays without reopening the range.\n\nThe authenticated route keeps the continuous range up to ``MAX_THUMBNAIL_WIDTH``:\nthe same work there is attributable to an account that is already a project member.\n\nAn ``IntEnum`` rather than a ``Literal``: FastAPI coerces a query string into an enum\nmember but not into a literal int, and it publishes the members as an OpenAPI enum.",
+        "enum": [200, 400, 800],
+        "title": "PublicThumbnailWidth",
+        "type": "integer"
       },
       "PublicTranscriptionLayerResponse": {
         "properties": {
@@ -2190,6 +2771,7 @@
               "format": "uuid",
               "type": "string"
             },
+            "maxItems": 10000,
             "minItems": 1,
             "title": "Part Ids",
             "type": "array"
@@ -2391,7 +2973,7 @@
           "target_max_points": {
             "default": 80,
             "exclusiveMinimum": 3.0,
-            "maximum": 500.0,
+            "maximum": 256.0,
             "title": "Target Max Points",
             "type": "integer"
           },
@@ -2455,6 +3037,17 @@
       },
       "TranscribeBatchLineResult": {
         "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
           "line_id": {
             "anyOf": [
               {
@@ -2472,10 +3065,17 @@
             "type": "integer"
           },
           "output": {
-            "$ref": "#/components/schemas/TranscribeRunResponse"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TranscribeRunResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
-        "required": ["line_index", "output"],
+        "required": ["line_index"],
         "title": "TranscribeBatchLineResult",
         "type": "object"
       },
@@ -2518,6 +3118,7 @@
                   "format": "uuid",
                   "type": "string"
                 },
+                "maxItems": 10000,
                 "type": "array"
               },
               {
@@ -2635,6 +3236,11 @@
             "title": "Id",
             "type": "string"
           },
+          "prefer_local_inference": {
+            "default": false,
+            "title": "Prefer Local Inference",
+            "type": "boolean"
+          },
           "username": {
             "title": "Username",
             "type": "string"
@@ -2647,8 +3253,15 @@
       "WelcomeResponse": {
         "properties": {
           "docs_url": {
-            "title": "Docs Url",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Docs Url"
           },
           "health_url": {
             "title": "Health Url",
@@ -2667,7 +3280,7 @@
             "type": "string"
           }
         },
-        "required": ["service", "message", "version", "docs_url", "health_url"],
+        "required": ["service", "message", "version", "health_url"],
         "title": "WelcomeResponse",
         "type": "object"
       }
@@ -2773,6 +3386,203 @@
         },
         "summary": "Welcome",
         "tags": ["root"]
+      }
+    },
+    "/account/execution-target": {
+      "get": {
+        "operationId": "read_execution_preference_account_execution_target_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecutionPreferenceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict with current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read Execution Preference",
+        "tags": ["ml"]
+      },
+      "put": {
+        "description": "Change the preference. Jobs already submitted keep the host they were given.\n\nThe setting selects the *next* job's preferred host and nothing else - an\n**execution target** is fixed at submission, so changing this can never move\nwork that is already queued.",
+        "operationId": "set_execution_preference_account_execution_target_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecutionPreferenceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecutionPreferenceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict with current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set Execution Preference",
+        "tags": ["ml"]
       }
     },
     "/auth/login": {
@@ -3243,6 +4053,1268 @@
         "tags": ["observability"]
       }
     },
+    "/device/v1/agent/version": {
+      "get": {
+        "description": "The version verdict on its own, with no page attached.\n\nThe whole endpoint is its dependency. An agent below the floor never reaches\nthis body - it gets the same 426 the claim path would have given it, from the\nsame comparison - and one that is served gets the same notice the claim\nresponse would have carried.\n\nThis is what makes ADR 0002's launch check possible. An agent that had to\nclaim in order to learn it was stale would be holding a page at the exact\nmoment it decided to replace its own code, which is the thing that must never\nhappen: the launch moment is the only safe one because nothing is in flight\nduring it.",
+        "operationId": "read_agent_version_device_v1_agent_version_get",
+        "parameters": [
+          {
+            "description": "Agent version, MAJOR.MINOR.PATCH. Required: an agent that does not say what it is cannot claim.",
+            "in": "header",
+            "name": "X-Nomicous-Agent-Version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Agent version, MAJOR.MINOR.PATCH. Required: an agent that does not say what it is cannot claim.",
+              "title": "X-Nomicous-Agent-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentVersionNotice"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict with current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "426": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentVersionRefusalResponse"
+                }
+              }
+            },
+            "description": "The agent is below the version floor, or did not say what version it is. It must upgrade before it claims; retrying the same build cannot succeed."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Read Agent Version",
+        "tags": ["device-jobs"]
+      }
+    },
+    "/device/v1/jobs/claim": {
+      "post": {
+        "description": "Claim at most one page of work.\n\nThe credential decides the **execution target**, and the caller cannot ask for\na different one: a device token claims ``local`` work on its own account, a\nservice credential claims ``cloud`` work for the platform.\n\n``agent_version`` is resolved before this body runs, so an agent below the\nfloor is refused without a session being opened and without its\n``last_seen_at`` being touched - it stops reporting **capacity**, and\nsubmission announces \"no host available\" rather than creating pages it may\nnot claim.",
+        "operationId": "claim_job_device_v1_jobs_claim_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Nomicous-Device-Token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Nomicous-Device-Token"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Nomicous-Service-Token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Nomicous-Service-Token"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Nomicous-Worker-Name",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Nomicous-Worker-Name"
+            }
+          },
+          {
+            "description": "Agent version, MAJOR.MINOR.PATCH. Required: an agent that does not say what it is cannot claim.",
+            "in": "header",
+            "name": "X-Nomicous-Agent-Version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Agent version, MAJOR.MINOR.PATCH. Required: an agent that does not say what it is cannot claim.",
+              "title": "X-Nomicous-Agent-Version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/JobClaimRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobClaimResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict with current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "426": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentVersionRefusalResponse"
+                }
+              }
+            },
+            "description": "The agent is below the version floor, or did not say what version it is. It must upgrade; retrying the same build cannot succeed."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Claim Job",
+        "tags": ["device-jobs"]
+      }
+    },
+    "/device/v1/pairings": {
+      "post": {
+        "description": "Create a pairing request and hand the helper its two one-time secrets.\n\nUnder its own throttle, not the shared auth one. The body carries no account\nidentity, so under ``throttle_auth_attempts`` this route had no per-caller\ndimension at all and every honest pairing was charged to the coarse\n``unattributable:<path>`` bucket - one bucket shared by every researcher, so\nfilling it locked all of them out of `nomicous pair`.\n``throttle_device_pairing_starts`` charges a per-client bucket where the\naddress identifies one client and charges nothing where it does not, leaving\nthe platform-wide live-pairing ceiling below as the bound on table growth.",
+        "operationId": "start_device_pairing_device_v1_pairings_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PairingStartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PairingStartResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict with current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Start Device Pairing",
+        "tags": ["devices"]
+      }
+    },
+    "/device/v1/pairings/token": {
+      "post": {
+        "description": "Poll for the browser's decision; return the device token exactly once.\n\nDeliberately **not** under ``throttle_auth_attempts``: that limiter is\n10 requests / 60s / (ip + path), and a compliant 5 second poll is 12 per\nminute, so a well-behaved helper would throttle itself at poll 11. Cadence\nis enforced on the pairing row instead (``slow_down`` with a doubling\ninterval), and wrong ``device_code`` presentations burn the row after\n``DEVICE_PAIRING_MAX_ATTEMPTS``.\n\nAlways HTTP 200 - see :class:`PairingTokenResponse`.",
+        "operationId": "collect_device_token_device_v1_pairings_token_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PairingTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PairingTokenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict with current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Collect Device Token",
+        "tags": ["devices"]
+      }
+    },
+    "/device/v1/self": {
+      "get": {
+        "description": "Confirm the credential and record liveness.\n\n``server_time`` is returned so a laptop with a wrong clock still behaves,\nand ``token_expires_at`` is what tells the helper when to renew.",
+        "operationId": "read_device_self_device_v1_self_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Nomicous-Device-Token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Nomicous-Device-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceSelfResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict with current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Read Device Self",
+        "tags": ["devices"]
+      }
+    },
+    "/device/v1/token/renew": {
+      "post": {
+        "description": "Replace this device's token, keeping the previous one valid for an overlap.\n\nA helper with no UI cannot be told that a lost rotation response has bricked\nit, so the predecessor stays valid for ``DEVICE_TOKEN_RENEW_OVERLAP_HOURS``.",
+        "operationId": "renew_device_token_device_v1_token_renew_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Nomicous-Device-Token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Nomicous-Device-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceTokenRenewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict with current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Renew Device Token",
+        "tags": ["devices"]
+      }
+    },
+    "/devices": {
+      "get": {
+        "operationId": "list_devices_devices_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "include_revoked",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Revoked",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DeviceResponse"
+                  },
+                  "title": "Response List Devices Devices Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict with current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Devices",
+        "tags": ["devices"]
+      }
+    },
+    "/devices/pairings/lookup": {
+      "post": {
+        "description": "Resolve the fragment token into the consent screen's contents.\n\nUnknown, expired, consumed, and denied all return one indistinguishable 404.\n\nThere is deliberately no companion \"list my live pairing requests\" route.\nThe one that existed filtered solely on the observed client address - a\npairing has no owner before consent, so there was no user to filter on - and\nbehind a proxy the platform does not allowlist that address is the same for\neverybody, which made it a list of *every* user's pending pairing requests,\n``pairing_id`` included. Recovering a closed consent tab now means starting a\nnew pairing from the helper, which costs one click.",
+        "operationId": "lookup_device_pairing_devices_pairings_lookup_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PairingLookupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PairingRequestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict with current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Lookup Device Pairing",
+        "tags": ["devices"]
+      }
+    },
+    "/devices/pairings/{pairing_id}/approve": {
+      "post": {
+        "description": "Grant this computer permission to run the caller's jobs.\n\nThe click is the entire anti-phishing control, so this must never be reached\nfrom page load. ``verification_token`` is re-verified server-side: possession\nof the fragment, not knowledge of a pairing id, is what authorises the grant.\n\nPossession of the fragment is *all* it proves. Nothing binds this approval to\nthe computer that asked for it, so a consent link forwarded to a researcher\nand clicked mints a token on that researcher's account for someone else's\ndevice. The confirmation code on the consent screen is what gives the\nresearcher a chance to notice; it is a mitigation, not a barrier. See ADR\n0001, \"Pairing phishing\".",
+        "operationId": "approve_device_pairing_devices_pairings__pairing_id__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pairing_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Pairing Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PairingConsentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict with current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Approve Device Pairing",
+        "tags": ["devices"]
+      }
+    },
+    "/devices/pairings/{pairing_id}/deny": {
+      "post": {
+        "operationId": "deny_device_pairing_devices_pairings__pairing_id__deny_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pairing_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Pairing Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PairingConsentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict with current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Deny Device Pairing",
+        "tags": ["devices"]
+      }
+    },
+    "/devices/{device_id}": {
+      "delete": {
+        "description": "Remove a computer's access. Works from a phone; the helper is not consulted.\n\nTakes effect on that device's next request - every device call re-reads the\nrow, so there is no cache expiry to wait out.",
+        "operationId": "revoke_device_devices__device_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Device Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict with current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Revoke Device",
+        "tags": ["devices"]
+      }
+    },
     "/health": {
       "get": {
         "description": "Liveness/readiness: SELECT 1 only. Dev-user seeding lives in app lifespan.",
@@ -3548,6 +5620,54 @@
               ],
               "title": "X-Inference-Webhook-Secret"
             }
+          },
+          {
+            "in": "header",
+            "name": "X-Nomicous-Device-Token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Nomicous-Device-Token"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Nomicous-Service-Token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Nomicous-Service-Token"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Nomicous-Worker-Name",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Nomicous-Worker-Name"
+            }
           }
         ],
         "requestBody": {
@@ -3637,6 +5757,113 @@
         },
         "summary": "Complete Inference Job",
         "tags": ["internal-inference"]
+      }
+    },
+    "/jobs/history": {
+      "delete": {
+        "description": "Delete finished jobs of a project. Active jobs are left running.",
+        "operationId": "clear_job_history_jobs_history_delete",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClearJobHistoryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict with current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Clear Job History",
+        "tags": ["jobs"]
       }
     },
     "/jobs/test": {
@@ -4320,6 +6547,149 @@
           }
         ],
         "summary": "Get Part Image",
+        "tags": ["media"]
+      }
+    },
+    "/media/signed/{image_key}": {
+      "get": {
+        "operationId": "get_signed_object_media_signed__image_key__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "image_key",
+            "required": true,
+            "schema": {
+              "title": "Image Key",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Unix seconds after which the link is dead.",
+            "in": "query",
+            "name": "expires",
+            "required": true,
+            "schema": {
+              "description": "Unix seconds after which the link is dead.",
+              "title": "Expires",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "HMAC over the object key and expiry.",
+            "in": "query",
+            "name": "signature",
+            "required": true,
+            "schema": {
+              "description": "HMAC over the object key and expiry.",
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Signature",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "image/jpeg": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "image/webp": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Page image bytes"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Missing, forged, or expired signature"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "No such object"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict with current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Get Signed Object",
         "tags": ["media"]
       }
     },
@@ -8092,278 +10462,6 @@
         "tags": ["documents"]
       }
     },
-    "/projects/{project_id}/documents/{document_id}/parts/{part_id}/local-inference/segment": {
-      "post": {
-        "operationId": "persist_local_segment_projects__project_id__documents__document_id__parts__part_id__local_inference_segment_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "project_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Project Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "document_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Document Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "part_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Part Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LocalSegmentPersistRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LocalSegmentPersistResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
-            "description": "Not authenticated"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
-            "description": "Not authorized"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
-            "description": "Resource not found"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
-            "description": "Conflict with current state"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
-            "description": "Validation error"
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
-            "description": "Rate limit exceeded"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
-            "description": "Internal server error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Persist Local Segment",
-        "tags": ["documents"]
-      }
-    },
-    "/projects/{project_id}/documents/{document_id}/parts/{part_id}/local-inference/transcribe": {
-      "post": {
-        "operationId": "persist_local_transcribe_projects__project_id__documents__document_id__parts__part_id__local_inference_transcribe_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "project_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Project Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "document_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Document Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "part_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Part Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LocalTranscribePersistRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LocalTranscribePersistResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
-            "description": "Not authenticated"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
-            "description": "Not authorized"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
-            "description": "Resource not found"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
-            "description": "Conflict with current state"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
-            "description": "Validation error"
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
-            "description": "Rate limit exceeded"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
-            "description": "Internal server error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Persist Local Transcribe",
-        "tags": ["documents"]
-      }
-    },
     "/projects/{project_id}/documents/{document_id}/parts/{part_id}/model-bindings": {
       "get": {
         "operationId": "list_part_model_bindings_projects__project_id__documents__document_id__parts__part_id__model_bindings_get",
@@ -11057,9 +13155,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "maximum": 2048,
-                  "minimum": 1,
-                  "type": "integer"
+                  "$ref": "#/components/schemas/PublicThumbnailWidth"
                 },
                 {
                   "type": "null"
@@ -11175,14 +13271,7 @@
             "description": "Validation error"
           },
           "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
-            "description": "Rate limit exceeded"
+            "description": "Thumbnail rate limit exceeded"
           },
           "500": {
             "content": {
@@ -11286,13 +13375,6 @@
             "description": "Validation error"
           },
           "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
             "description": "Rate limit exceeded"
           },
           "500": {
@@ -11332,6 +13414,35 @@
               "format": "uuid",
               "title": "Document Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 500,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 1024,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
             }
           }
         ],
@@ -11397,13 +13508,6 @@
             "description": "Validation error"
           },
           "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
             "description": "Rate limit exceeded"
           },
           "500": {
@@ -11519,13 +13623,6 @@
             "description": "Validation error"
           },
           "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
             "description": "Rate limit exceeded"
           },
           "500": {
@@ -11641,13 +13738,6 @@
             "description": "Validation error"
           },
           "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
             "description": "Rate limit exceeded"
           },
           "500": {
@@ -11756,13 +13846,6 @@
             "description": "Validation error"
           },
           "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
             "description": "Rate limit exceeded"
           },
           "500": {

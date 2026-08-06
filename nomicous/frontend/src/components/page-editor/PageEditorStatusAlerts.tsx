@@ -1,11 +1,32 @@
 import { useEffect } from "react";
 import { toast } from "../ui/toast";
+import type { StatusMessage } from "./statusMessage";
+
+/**
+ * One toast per message *raised*, not per distinct sentence.
+ *
+ * The effect is keyed on the message's token rather than its text, because
+ * several of these sentences are constants and two saves in a row would
+ * otherwise be one dependency that never changed - see `statusMessage`.
+ */
+function useSuccessToast(message: StatusMessage | null) {
+  useEffect(() => {
+    if (message) toast.success(message.text);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the token is the identity of this message
+  }, [message?.at]);
+}
 
 type PageEditorStatusAlertsProps = {
-  saveMessage: string | null;
-  transcriptionSaveMessage: string | null;
-  ocrMessage: string | null;
-  segmentMessage: string | null;
+  /**
+   * "No inference host had capacity", as the platform explained it when it
+   * refused the submission. Deliberately not routed through a toast: it names
+   * something the researcher can fix, so it stays on screen until the next run.
+   */
+  submissionRefusal: string | null;
+  saveMessage: StatusMessage | null;
+  transcriptionSaveMessage: StatusMessage | null;
+  ocrMessage: StatusMessage | null;
+  segmentMessage: StatusMessage | null;
   mutationError: string | null;
   pairingError: string | null;
   layoutError: string | null;
@@ -30,6 +51,7 @@ function StatusItem({
 
 /** Success/completion feedback uses auto-dismiss toasts; only errors stay sticky. */
 export function PageEditorStatusAlerts({
+  submissionRefusal,
   saveMessage,
   transcriptionSaveMessage,
   ocrMessage,
@@ -39,18 +61,10 @@ export function PageEditorStatusAlerts({
   layoutError,
   lineError,
 }: PageEditorStatusAlertsProps) {
-  useEffect(() => {
-    if (saveMessage) toast.success(saveMessage);
-  }, [saveMessage]);
-  useEffect(() => {
-    if (transcriptionSaveMessage) toast.success(transcriptionSaveMessage);
-  }, [transcriptionSaveMessage]);
-  useEffect(() => {
-    if (ocrMessage) toast.success(ocrMessage);
-  }, [ocrMessage]);
-  useEffect(() => {
-    if (segmentMessage) toast.success(segmentMessage);
-  }, [segmentMessage]);
+  useSuccessToast(saveMessage);
+  useSuccessToast(transcriptionSaveMessage);
+  useSuccessToast(ocrMessage);
+  useSuccessToast(segmentMessage);
   useEffect(() => {
     if (mutationError) toast.error(mutationError);
   }, [mutationError]);
@@ -64,11 +78,19 @@ export function PageEditorStatusAlerts({
     if (lineError) toast.error(`Segment API unavailable: ${lineError}`);
   }, [lineError]);
 
-  const showSticky = mutationError || pairingError || layoutError || lineError;
+  const showSticky =
+    submissionRefusal ||
+    mutationError ||
+    pairingError ||
+    layoutError ||
+    lineError;
   if (!showSticky) return null;
 
   return (
     <div className="pe-status-alerts">
+      {submissionRefusal && (
+        <StatusItem message={submissionRefusal} variant="warning" />
+      )}
       {mutationError && <StatusItem message={mutationError} variant="error" />}
       {pairingError && <StatusItem message={pairingError} variant="warning" />}
       {layoutError && (
@@ -91,6 +113,7 @@ export function hasPageEditorStatusAlerts(
   props: PageEditorStatusAlertsProps,
 ): boolean {
   return Boolean(
+    props.submissionRefusal ||
     props.mutationError ||
     props.pairingError ||
     props.layoutError ||

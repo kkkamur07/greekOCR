@@ -1,36 +1,44 @@
 type PageEditorInferenceStatusProps = {
-  probing: boolean;
-  helperAvailable: boolean;
-  preferCloud: boolean;
+  loading: boolean;
+  /** **Capacity** for this account's own computer, as the platform reports it. */
+  hasLocalCapacity: boolean;
+  /** The account-level **host preference**: "use my computer when available". */
+  preferLocalInference: boolean;
 };
 
 type StatusVariant = "checking" | "connected" | "cloud" | "unavailable";
 
 function resolveVariant({
-  probing,
-  helperAvailable,
-  preferCloud,
+  loading,
+  hasLocalCapacity,
+  preferLocalInference,
 }: PageEditorInferenceStatusProps): StatusVariant {
-  if (probing) return "checking";
-  if (preferCloud) return "cloud";
-  if (helperAvailable) return "connected";
+  if (!preferLocalInference) return "cloud";
+  if (loading) return "checking";
+  if (hasLocalCapacity) return "connected";
   return "unavailable";
 }
 
 const LABELS: Record<StatusVariant, string> = {
   checking: "checking…",
-  connected: "connected",
+  connected: "ready",
   cloud: "using cloud",
-  unavailable: "not installed",
+  unavailable: "not running",
 };
 
+/**
+ * These read as **capacity**, not as a promise. Nothing here claims where a
+ * given job ran - the job says that itself, which is the whole point of the
+ * announcement line.
+ */
 const TITLES: Record<StatusVariant, string> = {
-  checking: "Looking for the Nomicous Inference Helper on this machine…",
+  checking: "Reading whether the nomicous agent is running on this computer…",
   connected:
-    "Local inference helper is running on 127.0.0.1:8001. OCR and segmentation run on your CPU.",
-  cloud: "Cloud inference is selected. Jobs run on the server.",
+    "The nomicous agent is running on this computer, so jobs can run here.",
+  cloud:
+    "This account has not asked for its own computer, so jobs run in the cloud.",
   unavailable:
-    "No local helper detected. Install it to run OCR and segmentation on your CPU.",
+    "The nomicous agent is not running on this computer, so jobs go to the cloud.",
 };
 
 export function PageEditorInferenceStatus(

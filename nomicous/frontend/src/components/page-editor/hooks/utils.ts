@@ -5,13 +5,6 @@ import type {
   TranscriptionLayerResponse,
 } from "../../../api/client";
 
-/** Optional until OpenAPI types include text_source on LineTranscriptionResponse. */
-export type LineTranscriptionTextSource = "model" | "human_edited";
-
-export type LineTranscriptionWithTextSource = LineTranscriptionResponse & {
-  text_source?: LineTranscriptionTextSource | null;
-};
-
 export function approvedText(line: LineResponse): string | null {
   return (
     line.line_transcriptions.find(
@@ -70,11 +63,7 @@ export function modelTranscriptionForLine(
 export function showsModelSourceReview(
   transcription: LineTranscriptionResponse | null,
 ): boolean {
-  if (!transcription) return false;
-  if (transcription.transcription_kind === "model") return true;
-  return (
-    (transcription as LineTranscriptionWithTextSource).text_source === "model"
-  );
+  return transcription?.transcription_kind === "model";
 }
 
 export function transcriptionForOcrReview(

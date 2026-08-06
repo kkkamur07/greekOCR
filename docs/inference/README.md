@@ -1,6 +1,6 @@
 # Inference documentation
 
-Models, registry, Hub weights, and the local Inference Helper.
+Models, registry, Hub weights, and the **inference agent** that runs them.
 
 | Doc                                                      | When to read                                            |
 | -------------------------------------------------------- | ------------------------------------------------------- |
@@ -9,7 +9,7 @@ Models, registry, Hub weights, and the local Inference Helper.
 
 **Service implementation:** [`inference/README.md`](../../inference/README.md)  
 **Domain vocabulary:** [`inference/CONTEXT.md`](../../inference/CONTEXT.md)  
-**Helper installers:** [`packaging/helper/README.md`](../../packaging/helper/README.md)  
+**Install and release:** [`inference/README.md`](../../inference/README.md#install)  
 **Hub publish/fetch:** [`scripts/hf/README.md`](../../scripts/hf/README.md)
 
 Back to [docs index](../README.md).

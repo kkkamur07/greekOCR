@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "../components/ui/toast";
-import { api, type ProjectResponse } from "../api/client";
+import { api, type ProjectResponse, type UserResponse } from "../api/client";
 import { ApiError } from "../api/errors";
+import { resourceTags, invalidateAfter } from "../api/resources";
 import {
   hasAccessToken,
   isUnauthorized,
@@ -11,55 +12,59 @@ import {
 import { AppPageShell } from "../components/layout/AppPageShell";
 import { ProjectsTable } from "../components/projects/ProjectsTable";
 import { FormModal } from "../components/ui/FormModal";
+import { useServerQuery } from "../hooks/useServerQuery";
 import { slugify } from "../utils/slugify";
+
+type ProjectsPageData = {
+  me: UserResponse;
+  projects: ProjectResponse[];
+};
 
 export function ProjectsPage() {
   const router = useRouter();
-  const [projects, setProjects] = useState<ProjectResponse[]>([]);
-  const [userId, setUserId] = useState<string | null>(null);
-  const [username, setUsername] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [deletingProjectId, setDeletingProjectId] = useState<string | null>(
     null,
   );
-  const [error, setError] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
 
-  const load = useCallback(async () => {
-    if (!hasAccessToken()) {
-      navigateToLogin(router);
-      return;
-    }
+  // Redirecting before any request goes out leaves the page in its loading
+  // state rather than flashing an empty list on the way to login.
+  const signedIn = hasAccessToken();
+  useEffect(() => {
+    if (!signedIn) navigateToLogin(router);
+  }, [signedIn, router]);
 
-    setLoading(true);
-    setError(null);
-    try {
-      const [me, list] = await Promise.all([api.me(), api.listProjects()]);
-      setUserId(me.id);
-      setUsername(me.username);
-      setProjects(list);
-    } catch (err) {
+  const {
+    data,
+    loading,
+    error,
+    refetch: reloadProjects,
+  } = useServerQuery<ProjectsPageData>({
+    key: signedIn ? ["projects-page"] : null,
+    tags: [resourceTags.currentUser, resourceTags.projects],
+    read: async () => {
+      const [me, projects] = await Promise.all([api.me(), api.listProjects()]);
+      return { me, projects };
+    },
+    onError: (err) => {
       if (isUnauthorized(err)) {
         navigateToLogin(router);
-        return;
+        return null;
       }
+      // Unlike its sibling pages this one has no 403/404 rewrite: a project list
+      // is never "not yours to see", it is only ever empty.
       const msg =
         err instanceof ApiError ? err.message : "Failed to load projects";
-      setProjects([]);
-      setUserId(null);
-      setUsername(null);
-      setError(msg);
       toast.error(msg);
-    } finally {
-      setLoading(false);
-    }
-  }, [router]);
+      return msg;
+    },
+  });
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const projects = data?.projects ?? [];
+  const userId = data?.me.id ?? null;
+  const username = data?.me.username ?? null;
 
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -70,7 +75,8 @@ export function ProjectsPage() {
       toast.success("Project created");
       setCreateModalOpen(false);
       setNewName("");
-      await load();
+      invalidateAfter.projectCreated();
+      await reloadProjects();
     } catch (err) {
       const msg =
         err instanceof ApiError ? err.message : "Failed to create project";
@@ -95,7 +101,8 @@ export function ProjectsPage() {
     try {
       await api.deleteProject(projectId);
       toast.success("Project deleted");
-      await load();
+      invalidateAfter.projectDeleted(projectId);
+      await reloadProjects();
     } catch (err) {
       const msg =
         err instanceof ApiError ? err.message : "Failed to delete project";

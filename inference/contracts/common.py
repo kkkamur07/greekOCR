@@ -10,7 +10,7 @@ from typing import Annotated, Any
 from pydantic import PlainSerializer, PlainValidator
 
 from inference.admission import CLIENT_INPUT_ERROR, validate_encoded_image
-from inference.infrastructure.settings import get_inference_settings
+from inference.settings import get_inference_settings
 
 
 class InferenceTask(StrEnum):

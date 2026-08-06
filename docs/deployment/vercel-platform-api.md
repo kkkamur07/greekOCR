@@ -57,13 +57,14 @@ The platform API needs only:
 - `nomicous/VERSION`
 - `inference/registry.yaml`
 - `inference/admission.py`
+- `inference/settings.py`
 - `inference/contracts/`
-- `inference/infrastructure/__init__.py`
-- `inference/infrastructure/settings.py`
 - `inference/registry/`
 
 It does not bundle model weights, training code, inference runtimes, notebooks,
-or local media.
+or local media. Nothing under `inference/` that the API bundles serves HTTP:
+the platform never calls inference, and inference never listens (ADR 0002) - an
+**inference agent** claims work from this API and reports back to it.
 
 ## Runtime dependency rules
 
@@ -111,8 +112,9 @@ This change affects only approved line artifact export:
 - `nomicous/backend/annotation/application/export_service.py`
 - `POST /{document_id}/parts/{part_id}/export`
 
-It does not affect local helper inference, cloud inference preprocessing,
-Kraken segmentation, Calamari transcription, or training.
+It does not affect inference on any host: an **inference agent** runs from the
+**published package**, not from this bundle, so BLLA segmentation, Calamari
+transcription, and training are untouched by what the API may import.
 
 ## Serverless settings
 
@@ -131,8 +133,9 @@ STORAGE_BACKEND=supabase
 ENABLE_TEST_JOB_ROUTES=false
 ```
 
-Run the platform worker and inference workers on a persistent host if cloud
-inference is enabled.
+Run the platform worker on a persistent host, and a hosted inference agent
+there too if cloud inference is enabled. Neither is reachable from Vercel and
+neither needs to be: both call this API.
 
 Never use `FORWARDED_ALLOW_IPS=*`. The API accepts only explicit IP/CIDR
 allowlists and uses `X-Forwarded-For` for rate limiting only when the direct
@@ -221,19 +224,31 @@ were fixed in this order:
    Vercel project still contained the old `VITE_*` names. The public API,
    CSRF-cookie, test-job, and local-helper variables were corrected.
 
+Three of those variables no longer exist. `INFERENCE_SERVICE_SECRET` and
+`INFERENCE_URL` went with the loopback and synchronous inference services in
+#60, and `NEXT_PUBLIC_INFERENCE_HELPER_URL` went with the browser's side of the
+same path. Delete them from the Vercel projects if an environment still carries
+them; setting them configures nothing. `INFERENCE_WEBHOOK_SECRET` is unchanged
+and still required in production.
+
 The API function is pinned to Frankfurt with `"regions": ["fra1"]` in
 `deploy/platform/vercel.json`. The landing page and app remain globally served;
 only the API function is region-pinned.
 
-For the time being, local OCR uses the user's local helper:
+Local OCR needs nothing from this deployment. The **inference agent** runs on
+the researcher's machine and calls `api.nomicous.com`:
 
 ```text
-Browser on the user's machine → http://localhost:8001
+nomicous agent on the user's machine → https://api.nomicous.com
 ```
 
-This is configured as `NEXT_PUBLIC_INFERENCE_HELPER_URL` for the frontend, with
-IPv4, IPv6, and `localhost` loopback fallbacks, and is allowed by the frontend
-Content Security Policy. It must not replace the
-API's production `INFERENCE_URL`: `localhost` inside a Vercel function refers
-to that ephemeral function container, not the researcher's computer. Cloud
-inference remains disabled until a persistent inference host is enabled.
+That direction is what removed the whole class of problem this section used to
+document. A serverless function cannot reach a laptop - `localhost` inside a
+Vercel function is that ephemeral container, never the researcher's computer -
+so any design where the platform or a hosted page had to address the agent
+needed a loopback URL, a CSP entry, and a CORS allowlist to work at all. An
+agent that only calls out needs none of them, and the frontend holds no
+inference address (ADR 0002).
+
+Cloud inference remains disabled until a persistent host runs an agent with a
+**service credential**.

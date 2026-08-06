@@ -1,5 +1,6 @@
 """Register, login, and user lookup."""
 
+import logging
 from uuid import UUID
 
 from sqlalchemy.exc import IntegrityError
@@ -12,7 +13,14 @@ from backend.users.application.password import hash_password, verify_password
 from backend.users.infrastructure.orm_models import User
 from backend.users.infrastructure.user_repository import UserRepository
 
+logger = logging.getLogger(__name__)
+
 _DUMMY_PASSWORD_HASH = "$2b$12$t7YSQy5g4YoP4Bfr5DXh0eUg2kUE4qavr20ibunY9EEWibESvTARu"
+
+#: One message for every registration conflict. Distinct "email already
+#: registered" / "username already taken" responses let an anonymous caller
+#: enumerate which accounts exist; the specific reason stays in the log.
+REGISTRATION_CONFLICT_MESSAGE = "Registration could not be completed with those details"
 
 
 class AuthService:
@@ -36,9 +44,11 @@ class AuthService:
         password: str,
     ) -> tuple[User, str]:
         if await self._repo.get_by_email(session, email):
-            raise ConflictError("Email already registered")
+            logger.info("registration_conflict field=email")
+            raise ConflictError(REGISTRATION_CONFLICT_MESSAGE)
         if await self._repo.get_by_username(session, username):
-            raise ConflictError("Username already taken")
+            logger.info("registration_conflict field=username")
+            raise ConflictError(REGISTRATION_CONFLICT_MESSAGE)
         user = await self._repo.create(
             session,
             email=email,
@@ -49,8 +59,10 @@ class AuthService:
             await session.commit()
         except IntegrityError as exc:
             await session.rollback()
-            # Pre-checks above return precise feedback; this catches concurrent inserts safely.
-            raise ConflictError("Email or username already taken") from exc
+            # Concurrent insert lost the race; the response stays identical to the
+            # pre-checks above so timing is the only distinguishable signal.
+            logger.info("registration_conflict field=concurrent_insert")
+            raise ConflictError(REGISTRATION_CONFLICT_MESSAGE) from exc
         token = create_access_token(user.id, self._auth_settings)
         return user, token
 

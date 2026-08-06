@@ -1,5 +1,8 @@
 """Document and DocumentPart persistence."""
 
+from __future__ import annotations
+
+from collections.abc import Sequence
 from uuid import UUID
 
 from sqlalchemy import func, select, tuple_, update
@@ -19,6 +22,20 @@ from backend.document.infrastructure.orm_models import (
     Transcription,
     TranscriptionKind,
 )
+
+
+def temporary_reorder_offset(current_orders: Sequence[int], target_count: int) -> int:
+    """Offset that parks every row below the ``[0, target_count)`` range being written.
+
+    ``uq_document_parts_document_order`` is checked per statement, so the shift has to
+    clear both the orders still in the table and the orders about to be assigned.
+    Anchoring at ``min(minimum_order, 0)`` matters: when the surviving parts no longer
+    start at 0 (the first pages were deleted), anchoring at ``minimum_order`` leaves the
+    shifted rows inside the target range and the reorder collides with itself.
+    """
+    minimum_order = min(current_orders)
+    maximum_order = max(current_orders)
+    return min(minimum_order, 0) - maximum_order - target_count - 1
 
 
 class DocumentRepository:
@@ -180,27 +197,108 @@ class DocumentRepository:
         return list(result.scalars().all())
 
     async def list_blocks_for_document(
-        self, session: AsyncSession, document_id: UUID
+        self, session: AsyncSession, document_id: UUID, *, limit: int
     ) -> list[Block]:
         result = await session.execute(
             select(Block)
             .join(DocumentPart, Block.part_id == DocumentPart.id)
             .where(DocumentPart.document_id == document_id)
             .order_by(DocumentPart.order, Block.order, Block.created_at)
+            .limit(limit)
         )
         return list(result.scalars().all())
 
-    async def list_lines_for_document(self, session: AsyncSession, document_id: UUID) -> list[Line]:
-        result = await session.execute(
+    async def list_lines_for_document(
+        self,
+        session: AsyncSession,
+        document_id: UUID,
+        *,
+        limit: int,
+        cursor: PageCursor | None = None,
+    ) -> list[Line]:
+        """Keyset page over a document's lines.
+
+        Ordered by ``(created_at, id)`` so the shared ``PageCursor`` applies; clients
+        group by part and sort by ``order`` themselves.
+        """
+        stmt = (
             select(Line)
             .options(
                 selectinload(Line.transcriptions).selectinload(LineTranscription.transcription)
             )
             .join(DocumentPart, Line.part_id == DocumentPart.id)
             .where(DocumentPart.document_id == document_id)
-            .order_by(DocumentPart.order, Line.order, Line.created_at)
+            .order_by(Line.created_at, Line.id)
+        )
+        if cursor is not None:
+            stmt = stmt.where(tuple_(Line.created_at, Line.id) > (cursor.created_at, cursor.id))
+        result = await session.execute(stmt.limit(limit))
+        return list(result.scalars().all())
+
+    async def list_part_blocks(self, session: AsyncSession, part_id: UUID) -> list[Block]:
+        result = await session.execute(
+            select(Block).where(Block.part_id == part_id).order_by(Block.order, Block.created_at)
         )
         return list(result.scalars().all())
+
+    async def get_block_in_part(
+        self, session: AsyncSession, part_id: UUID, block_id: UUID
+    ) -> Block | None:
+        result = await session.execute(
+            select(Block).where(Block.id == block_id, Block.part_id == part_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_line_in_part(
+        self, session: AsyncSession, part_id: UUID, line_id: UUID
+    ) -> Line | None:
+        result = await session.execute(
+            select(Line)
+            .where(Line.id == line_id, Line.part_id == part_id)
+            .options(
+                selectinload(Line.transcriptions).selectinload(LineTranscription.transcription)
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def get_line_in_document(
+        self, session: AsyncSession, document_id: UUID, line_id: UUID
+    ) -> Line | None:
+        result = await session.execute(
+            select(Line)
+            .join(DocumentPart, Line.part_id == DocumentPart.id)
+            .where(Line.id == line_id, DocumentPart.document_id == document_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_transcription_in_document(
+        self, session: AsyncSession, document_id: UUID, transcription_id: UUID
+    ) -> Transcription | None:
+        transcription = await session.get(Transcription, transcription_id)
+        if transcription is None or transcription.document_id != document_id:
+            return None
+        return transcription
+
+    async def count_part_lines(self, session: AsyncSession, part_id: UUID) -> int:
+        result = await session.execute(
+            select(func.count()).select_from(Line).where(Line.part_id == part_id)
+        )
+        return int(result.scalar_one())
+
+    async def count_paired_ground_truth_lines(self, session: AsyncSession, part_id: UUID) -> int:
+        """Lines carrying non-blank ground-truth text — the denominator of pairing progress."""
+        result = await session.execute(
+            select(func.count(func.distinct(Line.id)))
+            .select_from(Line)
+            .join(LineTranscription, LineTranscription.line_id == Line.id)
+            .join(Transcription, LineTranscription.transcription_id == Transcription.id)
+            .where(
+                Line.part_id == part_id,
+                Transcription.kind == TranscriptionKind.ground_truth,
+                func.length(func.trim(LineTranscription.text)) > 0,
+            )
+        )
+        return int(result.scalar_one())
 
     async def list_page_transcription_lines(
         self, session: AsyncSession, part_id: UUID
@@ -211,6 +309,17 @@ class DocumentRepository:
             .order_by(PageTranscriptionLine.order, PageTranscriptionLine.created_at)
         )
         return list(result.scalars().all())
+
+    async def get_page_transcription_line(
+        self, session: AsyncSession, part_id: UUID, order: int
+    ) -> PageTranscriptionLine | None:
+        result = await session.execute(
+            select(PageTranscriptionLine).where(
+                PageTranscriptionLine.part_id == part_id,
+                PageTranscriptionLine.order == order,
+            )
+        )
+        return result.scalar_one_or_none()
 
     async def next_part_order(self, session: AsyncSession, document_id: UUID) -> int:
         await session.execute(
@@ -227,33 +336,22 @@ class DocumentRepository:
             return 0
         return current + 1
 
-    async def add_part(
-        self,
-        session: AsyncSession,
-        *,
-        document_id: UUID,
-        image_key: str,
-        order: int,
-        width: int | None = None,
-        height: int | None = None,
-    ) -> DocumentPart:
-        part = DocumentPart(
-            document_id=document_id,
-            image_key=image_key,
-            order=order,
-            width=width,
-            height=height,
-        )
-        session.add(part)
-        await session.commit()
-        await session.refresh(part)
-        return part
-
     async def reorder_parts(
         self, session: AsyncSession, document: Document, ordered_part_ids: list[UUID]
     ) -> list[DocumentPart]:
+        # ``populate_existing`` is what makes ``with_for_update`` mean anything here.
+        # The caller reached this through ``require_document``, which eager-loads
+        # ``Document.parts``, so every row is already in the session's identity map -
+        # and SQLAlchemy returns the mapped instance untouched rather than overwriting
+        # loaded attributes with the freshly locked values. The offset below is computed
+        # from ``part.order``, so without this it could be computed from orders a
+        # concurrent reorder had already superseded, land on the range that transaction
+        # wrote, and violate uq_document_parts_document_order - a 500 on a plain drag.
         result = await session.execute(
-            select(DocumentPart).where(DocumentPart.document_id == document.id).with_for_update()
+            select(DocumentPart)
+            .where(DocumentPart.document_id == document.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
         )
         current_parts = list(result.scalars().all())
         parts_by_id = {part.id: part for part in current_parts}
@@ -263,9 +361,9 @@ class DocumentRepository:
             return []
         if set(ordered_part_ids) != set(parts_by_id):
             return []
-        minimum_order = min(part.order for part in current_parts)
-        maximum_order = max(part.order for part in current_parts)
-        temporary_offset = minimum_order - maximum_order - len(current_parts) - 1
+        temporary_offset = temporary_reorder_offset(
+            [part.order for part in current_parts], len(ordered_part_ids)
+        )
         await session.execute(
             update(DocumentPart)
             .where(DocumentPart.document_id == document.id)

@@ -1,10 +1,12 @@
 "use client";
 
-import { ConfigProvider } from "antd";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { App, ConfigProvider } from "antd";
 import type { ReactNode } from "react";
+import { queryClient } from "../api/queryClient";
 import { AuthProvider } from "../auth/AuthProvider";
 import { BackgroundJobsPanel } from "../components/BackgroundJobsPanel";
-import { ToastProvider } from "../components/ui/ToastProvider";
+import { ToastBridge } from "../components/ui/ToastBridge";
 import { BackgroundJobsProvider } from "../context/BackgroundJobsContext";
 
 export function Providers({ children }: { children: ReactNode }) {
@@ -28,14 +30,18 @@ export function Providers({ children }: { children: ReactNode }) {
         },
       }}
     >
-      <AuthProvider>
-        <ToastProvider>
-          <BackgroundJobsProvider>
-            {children}
-            <BackgroundJobsPanel />
-          </BackgroundJobsProvider>
-        </ToastProvider>
-      </AuthProvider>
+      {/* `App` supplies the themed `message` instance the `toast` helper uses. */}
+      <App>
+        <ToastBridge />
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider>
+            <BackgroundJobsProvider>
+              {children}
+              <BackgroundJobsPanel />
+            </BackgroundJobsProvider>
+          </AuthProvider>
+        </QueryClientProvider>
+      </App>
     </ConfigProvider>
   );
 }

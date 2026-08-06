@@ -15,8 +15,10 @@ from inference.preprocessing.otsu_contours import (
 )
 from inference.preprocessing.segment_geometry import (
     MIN_VERTEX_SPACING_PX,
+    bbox,
+    bottom_edge_baseline,
     clean_polygon,
-    default_baseline,
+    clip_baseline_to_x_span,
     line_height,
     simplify_with_quality_gate,
 )
@@ -53,6 +55,29 @@ def _fallback_result(
     ]
 
 
+def _cluster_baseline(
+    contour: list[list[float]],
+    baseline: list[list[float]] | None,
+) -> tuple[list[list[float]], str]:
+    """The baseline belonging to one cluster of a ceiling Otsu split apart.
+
+    The decoder emitted one baseline for the whole ceiling, and the split bands
+    are stacked vertically, so that baseline belongs to at most one of them.
+    Clip it to the band's horizontal span and keep it when it also falls inside
+    the band vertically: that band is the line the decoder actually measured.
+
+    Every other band has no measured baseline. Deriving one from its own bottom
+    edge is at least a text baseline; the bounding-box mid-height this used to
+    return is a strike-through, and a transcriber who accepts the split line
+    inherits it.
+    """
+    x0, y0, x1, y1 = bbox(contour)
+    clipped = clip_baseline_to_x_span(baseline, x0, x1)
+    if clipped and all(y0 <= point[1] <= y1 for point in clipped):
+        return clipped, "decoder"
+    return bottom_edge_baseline(contour), "bottom_edge"
+
+
 def _refine_cluster(
     cluster: list[list[list[float]]],
     *,
@@ -71,6 +96,14 @@ def _refine_cluster(
 ) -> SegmentRefinementResult:
     width, height = image_size
     contour = combine_contours(cluster)
+    if split_count == 1:
+        # Nothing was split off, so the decoded baseline still describes the
+        # whole line and is passed through untouched.
+        cluster_baseline = baseline
+        baseline_source = "decoder" if baseline else "none"
+    else:
+        cluster_baseline, baseline_source = _cluster_baseline(contour, baseline)
+
     points, metrics = simplify_with_quality_gate(
         contour,
         width=width,
@@ -78,7 +111,11 @@ def _refine_cluster(
         target_max_points=target_max_points,
         min_iou=min_iou,
         min_area_ratio=min_area_ratio,
-        baseline=baseline if split_count == 1 else None,
+        # A baseline the decoder measured is independent evidence about where
+        # the text sits, so the gate must keep the mask around it. One derived
+        # from this cluster's own bottom edge is not - it moves with the mask -
+        # and holding the mask to it would only ever be circular.
+        baseline=cluster_baseline if baseline_source == "decoder" else None,
     )
     if len(points) < 3:
         points = fallback
@@ -86,8 +123,9 @@ def _refine_cluster(
 
     return SegmentRefinementResult(
         points=points,
-        baseline=baseline if split_count == 1 else default_baseline(points),
+        baseline=cluster_baseline,
         metadata={
+            "baseline_source": baseline_source,
             **metrics,
             "raw_point_count": raw_point_count,
             "otsu_contour_point_count": sum(len(contour) for contour in cluster),
@@ -100,29 +138,6 @@ def _refine_cluster(
             "split_count": split_count,
         },
     )
-
-
-def refine_segment(
-    image: Image.Image,
-    ceiling: list[list[float]],
-    *,
-    baseline: list[list[float]] | None = None,
-    margin_px: float = REFINEMENT_MARGIN_PX,
-    target_max_points: int = TARGET_MAX_POINTS,
-    min_iou: float = MIN_IOU,
-    min_area_ratio: float = MIN_AREA_RATIO,
-) -> SegmentRefinementResult:
-    """Refine one ceiling polygon without splitting it into multiple lines."""
-    return refine_segment_candidates(
-        image,
-        ceiling,
-        baseline=baseline,
-        margin_px=margin_px,
-        target_max_points=target_max_points,
-        min_iou=min_iou,
-        min_area_ratio=min_area_ratio,
-        split_large_lines=False,
-    )[0]
 
 
 def refine_segment_candidates(

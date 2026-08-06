@@ -11,14 +11,20 @@ from pathlib import Path
 
 import pytest
 from inference.weights import resolve_weights_source
-from src.hf.resolve import resolve_hf_weights_source, set_default_hub_client
-from src.hf.resolve.manifest import load_manifest
-from src.hf.resolve.uri import parse_hf_weights_uri
+from inference.hub import resolve_hf_weights_source, set_default_hub_client
+from inference.hub.manifest import load_manifest
+from inference.hub.uri import parse_hf_weights_uri
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-MOCK_WEIGHTS = REPO_ROOT / "src/hf/local/syriac/calamari/v1/stable/best.pt"
+MOCK_CHECKPOINT = REPO_ROOT / "src/hf/local/syriac/calamari/v1/stable/best.pt"
+# A stand-in for the graph, not a real one: nothing on this path opens a
+# session, it hashes bytes and moves files. What matters is that the mock
+# snapshot puts *both* formats in the cache directory, the way a real
+# `snapshot_download` of the whole revision does - so these tests exercise the
+# rule that resolution picks the `.onnx` and never the checkpoint beside it.
+MOCK_GRAPH = b"onnx graph bytes, published beside the checkpoint"
 HUB_REVISION = "a" * 40
-ARTIFACT_SHA256 = hashlib.sha256(MOCK_WEIGHTS.read_bytes()).hexdigest()
+ARTIFACT_SHA256 = hashlib.sha256(MOCK_GRAPH).hexdigest()
 
 
 @dataclass
@@ -31,7 +37,8 @@ class MockHubClient:
             raise self.download_error
         self.downloads.append((repo_id, revision, local_dir))
         local_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(MOCK_WEIGHTS, local_dir / "best.pt")
+        shutil.copy2(MOCK_CHECKPOINT, local_dir / "best.pt")
+        (local_dir / "best.onnx").write_bytes(MOCK_GRAPH)
 
 
 @pytest.fixture(autouse=True)
@@ -91,7 +98,8 @@ def test_resolve_replaces_tampered_cache_before_reuse(tmp_path: Path):
     repaired = resolve_hf_weights_source(**kwargs)
 
     assert repaired == artifact
-    assert repaired.read_bytes() == MOCK_WEIGHTS.read_bytes()
+    assert repaired.name == "best.onnx"  # never the .pt sitting beside it
+    assert repaired.read_bytes() == MOCK_GRAPH
     assert len(client.downloads) == 2
 
 
@@ -149,7 +157,30 @@ def test_inference_delegate_requires_hf_context():
 
 def test_fetch_model_warms_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     cache_root = tmp_path / "cache"
-    client = MockHubClient()
+    # Unlike the tests above, this one resolves against the *real* registry, so
+    # the bytes the mock serves have to hash to the pin in `registry.yaml` -
+    # `best.onnx` since ADR 0006. That is what makes this a check on the
+    # registry and the resolver agreeing, rather than on the mock agreeing with
+    # itself. The artifact is gitignored (`/src/hf/cache/`), so a checkout that
+    # has not fetched it exports an equivalent graph from the tracked
+    # checkpoint; both routes produce the pinned digest.
+    published = REPO_ROOT / "src/hf/cache/syriac-calamari-v1/stable/best.onnx"
+    if not published.is_file():
+        pytest.importorskip("torch", reason="no cached best.onnx and Torch is unavailable")
+        from src.model.inference_export.calamari import export_calamari_onnx
+
+        published = tmp_path / "best.onnx"
+        export_calamari_onnx(MOCK_CHECKPOINT, published)
+    graph_bytes = published.read_bytes()
+
+    class RealArtifactHubClient(MockHubClient):
+        def snapshot_download(self, repo_id: str, revision: str, local_dir: Path) -> None:
+            self.downloads.append((repo_id, revision, local_dir))
+            local_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(MOCK_CHECKPOINT, local_dir / "best.pt")
+            (local_dir / "best.onnx").write_bytes(graph_bytes)
+
+    client = RealArtifactHubClient()
     set_default_hub_client(client)
     monkeypatch.setenv("HF_CACHE_ROOT", str(cache_root))
 
@@ -166,4 +197,4 @@ def test_fetch_model_warms_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 
     assert module.main() == 0
     assert len(client.downloads) == 1
-    assert (cache_root / "syriac-calamari-v1" / "stable" / "best.pt").is_file()
+    assert (cache_root / "syriac-calamari-v1" / "stable" / "best.onnx").is_file()

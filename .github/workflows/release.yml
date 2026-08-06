@@ -1,0 +1,161 @@
+name: Release
+
+# Publishes the **published package** (`nomicous-inference`) to PyPI. This is
+# the whole release: one wheel and one sdist, built once, for every platform.
+#
+# It replaces a four-way per-OS installer matrix, a Developer ID notarization
+# pipeline, and an Authenticode signing pipeline. That was not a simplification
+# for its own sake. Frozen installers made this project the distributor of a
+# vendored dependency tree with no update channel: a CVE in `protobuf`,
+# `Pillow`, or `scipy` meant rebuilding on four runners, re-signing,
+# re-notarizing, and then having no way to make anyone install the result.
+# Here a CVE is a dependency bump plus a **version floor** bump - the platform
+# refuses claims from **inference agent**s below the floor (#55), so patching
+# no longer depends on anyone choosing to reinstall.
+#
+# There are no signing secrets. PyPI Trusted Publishing mints a short-lived
+# token from this workflow's OIDC identity, so there is no long-lived
+# credential in repository settings to leak or to rotate.
+#
+# Every third-party action is pinned to a full commit SHA: this job holds
+# `contents: write` and publishes the bytes researchers install, so a mutable
+# tag here is a direct code-execution path into a release.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to build and publish (e.g. v0.2.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build, scan, attest, and publish to PyPI
+    if: startsWith(github.event.inputs.tag || github.event.release.tag_name, 'v')
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: write
+      attestations: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.inputs.tag || github.event.release.tag_name }}
+
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+        with:
+          python-version: "3.11"
+          enable-cache: true
+
+      # A tag that disagrees with the version in the tree publishes bytes nobody
+      # asked for, and PyPI will not let the number be reused afterwards.
+      - name: Check the tag matches the packaged version
+        env:
+          RELEASE_TAG: ${{ github.event.inputs.tag || github.event.release.tag_name }}
+        run: |
+          python - <<'PY'
+          import os
+          import tomllib
+          from pathlib import Path
+
+          tag = os.environ["RELEASE_TAG"]
+          version = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))["project"][
+              "version"
+          ]
+          if tag != f"v{version}":
+              raise SystemExit(f"tag {tag} does not match pyproject version {version}")
+          print(f"releasing nomicous-inference {version}")
+          PY
+
+      - name: Build the wheel and sdist
+        run: |
+          uv build
+          ls -la dist
+
+      # The scan input is `[project].dependencies` resolved from the lockfile -
+      # exactly the closure that reaches a researcher's laptop, and nothing
+      # else. `--no-default-groups` drops dev, test, platform and inference,
+      # none of which ship.
+      - name: Export the published dependency closure
+        run: |
+          mkdir -p release-scan
+          uv export --locked --no-default-groups --no-hashes -o release-scan/requirements.txt
+          grep -c '^[a-zA-Z]' release-scan/requirements.txt
+
+      - name: Generate the release SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          path: release-scan
+          format: spdx-json
+          output-file: dist/nomicous-inference.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Verify the release SBOM is not empty
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          document = json.loads(
+              Path("dist/nomicous-inference.spdx.json").read_text(encoding="utf-8")
+          )
+          packages = document.get("packages", [])
+          names = {package.get("name") for package in packages}
+          print(f"SBOM packages: {len(packages)}")
+          if len(packages) < 30:
+              raise SystemExit(
+                  f"release SBOM has {len(packages)} packages; it is not describing the real package"
+              )
+          # ADR 0006: `onnxruntime` is the runtime. This list named `torch` until
+          # 2026-08-05, and it is a real gate - a wheel whose SBOM does not
+          # mention the inference runtime is not describing what ships.
+          for required in ("onnxruntime", "pillow", "huggingface-hub"):
+              if required not in names:
+                  raise SystemExit(f"release SBOM does not mention {required}")
+          PY
+
+      # The gate that used to require a four-platform rebuild. It now fails a
+      # release that would publish a known-vulnerable closure, and the fix is a
+      # dependency bump.
+      - name: Scan the published dependency closure
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: release-scan
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+
+      - name: Attest package provenance
+        uses: actions/attest-build-provenance@c074443f1aee8d4aeeae555aebba3282517141b2 # v2.2.3
+        with:
+          subject-path: |
+            dist/*.whl
+            dist/*.tar.gz
+
+      # Trusted Publishing: no API token, no secret. Configure the publisher
+      # once on PyPI against this repository, workflow file, and the `pypi`
+      # environment.
+      - name: Publish to PyPI
+        run: uv publish --trusted-publishing always dist/*.whl dist/*.tar.gz
+
+      - name: Attach the SBOM to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.inputs.tag || github.event.release.tag_name }}
+        run: |
+          gh release view "$RELEASE_TAG" >/dev/null
+          gh release upload "$RELEASE_TAG" dist/nomicous-inference.spdx.json

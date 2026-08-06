@@ -182,9 +182,10 @@
             <li class="feature">
               <h3 class="feature__title">Local or cloud inference</h3>
               <p class="feature__text">
-                Use the Inference Helper to run OCR and segmentation on your CPU with
-                models cached on disk. Optional hosted inference can be provisioned
-                separately.
+                Install the <code>nomicous-inference</code> agent, pair it with your
+                account, and run OCR and segmentation on your own CPU with weights
+                cached on disk. It opens no port &mdash; it takes pages from the queue
+                and reports back. Hosted inference runs the same program.
               </p>
             </li>
             <li class="feature">
@@ -236,8 +237,10 @@
           <h2 class="section-title">Open research tooling</h2>
           <p>
             Nomicous is the annotation platform behind the NOMOS project: a hosted editor,
-            open HTR models on Hugging Face, and an optional local inference helper. Weights
-            sync from the registry so new models do not require reinstalling the helper.
+            open HTR models on Hugging Face, and an optional command-line inference agent
+            you install with <code>uv tool install nomicous-inference</code>. Pair it once
+            with <code>nomicous pair</code>, then leave <code>nomicous run</code> working
+            through the queue. New models arrive as a new release of the package.
           </p>
         </section>
 

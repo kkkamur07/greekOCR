@@ -1,12 +1,15 @@
 """Document and part integration tests — real Postgres (kalamos)."""
 
 from concurrent.futures import ThreadPoolExecutor
+from io import BytesIO
 from threading import Barrier
 import uuid
 
 import pytest
+from PIL import Image
 from sqlalchemy.exc import IntegrityError
 
+from backend.document.api.schemas import MAX_LINE_GEOMETRY_POINTS
 from backend.document.infrastructure.orm_models import Document, DocumentPart
 from backend.project.infrastructure.orm_models import Project
 from infrastructure.db import sync_system_session
@@ -16,6 +19,12 @@ from tests.nomicous.integration.helpers import (
     documents_url,
     stored_minimal_page_bytes,
 )
+
+
+def _sized_png_bytes(width: int, height: int) -> bytes:
+    buffer = BytesIO()
+    Image.new("RGB", (width, height), "white").save(buffer, format="PNG")
+    return buffer.getvalue()
 
 
 def _create_document_with_part(client, owner_headers, owner_project) -> tuple[str, str, str]:
@@ -246,6 +255,145 @@ def test_reorder_rejects_duplicate_part_ids(client, owner_headers, owner_project
         json={"part_ids": [part_id, part_id]},
     )
     assert reorder.status_code == 422
+
+
+@pytest.mark.integration
+def test_uploaded_part_persists_page_dimensions(client, owner_headers, owner_project):
+    project_id = owner_project["id"]
+    base = documents_url(project_id)
+    create = client.post(base, headers=owner_headers, json={"name": "Sized pages"})
+    assert create.status_code == 201
+    document_id = create.json()["id"]
+
+    upload = client.post(
+        f"{base}/{document_id}/parts",
+        headers=owner_headers,
+        files={"file": ("page.png", _sized_png_bytes(37, 19), "image/png")},
+    )
+    assert upload.status_code == 201
+    assert upload.json()["width"] == 37
+    assert upload.json()["height"] == 19
+
+    reread = client.get(f"{base}/{document_id}", headers=owner_headers)
+    assert reread.status_code == 200
+    part = reread.json()["parts"][0]
+    assert (part["width"], part["height"]) == (37, 19)
+
+    with sync_system_session() as session:
+        stored = session.get(DocumentPart, uuid.UUID(part["id"]))
+        assert (stored.width, stored.height) == (37, 19)
+
+
+@pytest.mark.integration
+def test_reorder_after_deleting_the_leading_parts(client, owner_headers, owner_project):
+    """Surviving parts no longer start at order 0; the reorder must not self-collide."""
+    project_id = owner_project["id"]
+    base = documents_url(project_id)
+    create = client.post(base, headers=owner_headers, json={"name": "Trimmed codex"})
+    assert create.status_code == 201
+    document_id = create.json()["id"]
+
+    part_ids = []
+    for index in range(6):
+        upload = client.post(
+            f"{base}/{document_id}/parts",
+            headers=owner_headers,
+            files={"file": (f"page-{index}.png", MINIMAL_PNG, "image/png")},
+        )
+        assert upload.status_code == 201
+        part_ids.append(upload.json()["id"])
+
+    for part_id in part_ids[:5]:
+        deleted = client.delete(f"{base}/{document_id}/parts/{part_id}", headers=owner_headers)
+        assert deleted.status_code == 204
+
+    for index in range(2):
+        upload = client.post(
+            f"{base}/{document_id}/parts",
+            headers=owner_headers,
+            files={"file": (f"extra-{index}.png", MINIMAL_PNG, "image/png")},
+        )
+        assert upload.status_code == 201
+        part_ids.append(upload.json()["id"])
+
+    remaining = [part_ids[5], part_ids[6], part_ids[7]]
+    listed = client.get(f"{base}/{document_id}", headers=owner_headers)
+    assert [part["order"] for part in listed.json()["parts"]] == [5, 6, 7]
+
+    reorder = client.patch(
+        f"{base}/{document_id}/parts/reorder",
+        headers=owner_headers,
+        json={"part_ids": list(reversed(remaining))},
+    )
+    assert reorder.status_code == 200
+    assert [part["id"] for part in reorder.json()] == list(reversed(remaining))
+    assert [part["order"] for part in reorder.json()] == [0, 1, 2]
+
+
+@pytest.mark.integration
+def test_patch_line_clears_block_id_with_an_explicit_null(
+    client, owner_headers, owner_project
+) -> None:
+    project_id, document_id, part_id = _create_document_with_part(
+        client, owner_headers, owner_project
+    )
+    lines_url = f"{documents_url(project_id)}/{document_id}/parts/{part_id}"
+
+    block = client.post(
+        f"{lines_url}/blocks",
+        headers=owner_headers,
+        json={"order": 0, "box": {"x": 0, "y": 0, "width": 10, "height": 10}},
+    )
+    assert block.status_code == 201
+    block_id = block.json()["id"]
+
+    line = client.post(
+        f"{lines_url}/lines",
+        headers=owner_headers,
+        json={"order": 0, "points": [[0, 0], [1, 0], [1, 1], [0, 1]], "block_id": block_id},
+    )
+    assert line.status_code == 201
+    line_id = line.json()["id"]
+    assert line.json()["block_id"] == block_id
+
+    cleared = client.patch(
+        f"{lines_url}/lines/{line_id}",
+        headers=owner_headers,
+        json={"block_id": None},
+    )
+    assert cleared.status_code == 200
+    assert cleared.json()["block_id"] is None
+
+    untouched = client.patch(
+        f"{lines_url}/lines/{line_id}",
+        headers=owner_headers,
+        json={"order": 3},
+    )
+    assert untouched.status_code == 200
+    assert untouched.json()["order"] == 3
+
+    rejected = client.patch(
+        f"{lines_url}/lines/{line_id}",
+        headers=owner_headers,
+        json={"order": None},
+    )
+    assert rejected.status_code == 422
+
+
+@pytest.mark.integration
+def test_line_routes_reject_unbounded_geometry(client, owner_headers, owner_project) -> None:
+    project_id, document_id, part_id = _create_document_with_part(
+        client, owner_headers, owner_project
+    )
+    lines_url = f"{documents_url(project_id)}/{document_id}/parts/{part_id}/lines"
+    oversized = [[float(index), float(index)] for index in range(MAX_LINE_GEOMETRY_POINTS + 1)]
+
+    response = client.post(
+        lines_url,
+        headers=owner_headers,
+        json={"order": 0, "points": oversized},
+    )
+    assert response.status_code == 422
 
 
 @pytest.mark.integration

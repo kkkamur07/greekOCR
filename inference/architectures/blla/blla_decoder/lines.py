@@ -406,13 +406,3 @@ def reading_order_indices(
         else:
             ordered.extend(intra_region_order[int(value)])
     return ordered
-
-
-def apply_reading_order(
-    baselines: list[list[list[int]]],
-    regions: list[list[list[int]]] | None = None,
-) -> list[list[list[int]]]:
-    """Apply the default polygon-aware reading order to baselines."""
-
-    indices = reading_order_indices(baselines, regions)
-    return [baselines[index] for index in indices]

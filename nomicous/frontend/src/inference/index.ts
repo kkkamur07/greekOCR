@@ -1,32 +1,31 @@
+/**
+ * What the interface knows about **inference host**s.
+ *
+ * There is no client here, and there is deliberately nothing to add one to.
+ * Since ADR 0002 the browser never reaches an **inference agent**: it reads an
+ * account setting, it reads **capacity**, and it reads what each job says about
+ * where it ran. Everything else happens between the agent and the platform.
+ */
 export {
-  fetchHelperCatalog,
-  isModelLocalEligible,
-  isModelRemoteOnly,
-  shouldRunOnLocalHelper,
-} from "./catalog";
-export {
-  HELPER_BASE_URL,
-  HELPER_PROBE_INTERVAL_MS,
-  DEFAULT_SEGMENT_REGISTRY_MODEL_ID,
+  AGENT_INSTALL_COMMAND,
+  AGENT_INSTALL_COMMAND_PIP,
+  AGENT_PACKAGE_NAME,
+  AGENT_PAIR_COMMAND,
+  AGENT_RUN_COMMAND,
 } from "./constants";
-export { runLocalInference } from "./localClient";
-export { fetchLocalCacheStatus } from "./cacheStatus";
-export { modelDisplayName } from "./modelDisplayName";
-export { blobToBase64, registrySelectionFromArtifactRef } from "./registry";
 export {
-  loadInferencePreference,
-  preferCloudInference,
-  saveInferencePreference,
-} from "./preference";
-export { probeHelperHealth } from "./probe";
-export { isAbortError } from "./localInferenceCallbacks";
-export type { HelperCatalogModel } from "./catalog";
-export type { InferencePreference } from "./preference";
-export type { LocalInferenceCallbacks } from "./localInferenceCallbacks";
-export type {
-  InferenceRunResponse,
-  SegmentRunOutput,
-  TranscribeBatchRunOutput,
-  TranscribeRunOutput,
-} from "./types";
-export { useInferenceHost } from "./useInferenceHost";
+  HOST_PREFERENCE_HINT,
+  HOST_PREFERENCE_LABEL,
+  useHostPreference,
+} from "./hostPreference";
+export type { HostPreference } from "./hostPreference";
+export {
+  executionAnnouncement,
+  INFERENCE_HOST_LABEL,
+  INFERENCE_HOST_NOUN,
+  INFERENCE_HOST_PHRASE,
+  isSubmissionRefusal,
+  jobExecution,
+  submissionRefusalExplanation,
+} from "./executionTarget";
+export type { JobExecution } from "./executionTarget";

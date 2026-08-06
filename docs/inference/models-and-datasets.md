@@ -8,15 +8,14 @@ catalog in [`inference/registry.yaml`](../../inference/registry.yaml).
 
 ### BLLA segmentation
 
-`blla-segment` uses an inference-owned BLLA topology exported as ONNX to identify
+`blla-segment` runs an inference-owned BLLA topology on ONNX Runtime to identify
 line candidates on a page. Nomicous converts those candidates into editable
 geometry, preserves the legacy `kraken_ceiling` field, simplifies polygons,
 and can optionally refine or split candidates with Otsu-based processing.
 
 ### Calamari HTR
 
-`syriac-calamari-v1` uses the ONNX Runtime Calamari graph for line
-transcription:
+`syriac-calamari-v1` runs the Calamari graph on ONNX Runtime for line transcription:
 
 ```text
 CNN → max pooling → CNN → max pooling
@@ -24,11 +23,15 @@ CNN → max pooling → CNN → max pooling
    → greedy text decoding + character confidences
 ```
 
-The conversion path validates tensor-only `calamari-pytorch-v1` checkpoints,
-then exports the runtime artifact as ONNX. It uses safe `weights_only` loading
-and verifies the configured artifact digest.
-The vendored TensorFlow Calamari tree is used for training, not shipped in the
-inference image.
+The loader validates the graph's own `calamari-onnx-v1` metadata - codec, line
+height, blank index - and verifies the configured artifact digest before opening
+the file. The trained checkpoint is converted to the run artifact by
+`src/model/inference_export/`, and both are published at the same **Hub
+revision** ([ADR 0006](../adr/0006-onnx-runtime-is-the-inference-runtime.md),
+which supersedes 0004). `tests/export/` runs the graph and the artifact on real
+weights and compares them, because a conversion step is exactly where a model
+can drift from what was trained. The vendored TensorFlow Calamari tree is used
+for training, not shipped in the inference image.
 
 Calamari and BLLA are capable enough for the current manuscript workflow while
 remaining practical for CPU-first local execution. The helper does not require
@@ -42,8 +45,8 @@ the product.
 
 | ID                   | Task       | Architecture     | Artifact                                                                                         |
 | -------------------- | ---------- | ---------------- | ------------------------------------------------------------------------------------------------ |
-| `blla-segment`     | Segment    | BLLA ONNX       | `blla.onnx` from [segmentation repo](https://huggingface.co/kkkamur07/segmentation-blla) |
-| `syriac-calamari-v1` | Transcribe | Calamari ONNX | [Hugging Face checkpoint](https://huggingface.co/kkkamur07/syriac-htr-calamari), pinned revision |
+| `blla-segment`     | Segment    | BLLA (ONNX Runtime) | `blla.onnx` from [segmentation repo](https://huggingface.co/kkkamur07/segmentation-blla) |
+| `syriac-calamari-v1` | Transcribe | Calamari (ONNX Runtime) | `best.onnx` from the [Hugging Face checkpoint](https://huggingface.co/kkkamur07/syriac-htr-calamari), pinned revision |
 
 Greek Calamari is commented out because its Hub repository and verified
 artifact are unavailable. Coptic, Armenian, and additional Greek models are

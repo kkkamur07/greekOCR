@@ -11,7 +11,7 @@ from inference.admission import validate_job_payload
 from inference.contracts.common import ImageBytes, InferenceJobStatus, InferenceTask
 from inference.contracts.segment import SegmentRunResponse
 from inference.contracts.transcribe import TranscribeBatchRunResponse
-from inference.infrastructure.settings import get_inference_settings
+from inference.settings import get_inference_settings
 
 SUPPORTED_JOB_TASKS = frozenset({InferenceTask.segment, InferenceTask.transcribe})
 
@@ -34,10 +34,6 @@ class JobSubmitRequest(BaseModel):
                 raise ValueError("transcribe jobs require non-empty params.lines")
         validate_job_payload(self.image_bytes, self.params, get_inference_settings())
         return self
-
-
-class JobSubmitResponse(BaseModel):
-    inference_job_id: UUID
 
 
 class SegmentJobOutput(BaseModel):
@@ -93,7 +89,6 @@ __all__ = [
     "JobCallbackRequest",
     "JobOutput",
     "JobSubmitRequest",
-    "JobSubmitResponse",
     "SUPPORTED_JOB_TASKS",
     "SegmentJobOutput",
     "TranscribeJobOutput",

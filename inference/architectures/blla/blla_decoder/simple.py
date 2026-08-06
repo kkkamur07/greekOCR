@@ -71,20 +71,6 @@ def _orient_baseline(
     return baseline
 
 
-def _fallback_polygon(
-    baseline: list[list[float]],
-    *,
-    width: int,
-    height: int,
-    half_height: float,
-) -> list[list[float]]:
-    top = [[point[0], max(0.0, point[1] - half_height)] for point in baseline]
-    bottom = [
-        [point[0], min(float(height - 1), point[1] + half_height)] for point in reversed(baseline)
-    ]
-    return top + bottom
-
-
 def _polygon_for_baseline(
     baseline: list[list[float]],
     region_probability: np.ndarray,
@@ -159,13 +145,9 @@ def decode_simple_heatmaps(
         )
         if length < min_length:
             continue
+        # ``_polygon_for_baseline`` emits one ceiling and one floor point per
+        # baseline point, and only baselines of two or more points get here, so
+        # the result is always at least four points.
         polygon = _polygon_for_baseline(points, region, baseline_ys=baseline_ys)
-        if len(polygon) < 4:
-            polygon = _fallback_polygon(
-                points,
-                width=width,
-                height=height,
-                half_height=max(6.0, height * 0.03),
-            )
         decoded.append(DecodedBLLALine(baseline=points, polygon=polygon))
     return decoded

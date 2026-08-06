@@ -132,8 +132,9 @@ PYTHONPATH=. alembic -c infrastructure/alembic.ini downgrade -1
 
 | Revision | Domain | Main changes |
 |----------|--------|--------------|
-| `001_initial_schema` | application schema | All final ORM tables, enums, constraints, indexes, and the ML-owned `inference_jobs` queue |
+| `001_initial_schema` | application schema | All final ORM tables, enums, constraints, indexes, and the then ML-owned `inference_jobs` queue |
 | `002_service_roles` | service permissions | NOLOGIN service groups and default/table grants; provider-managed LOGIN membership remains external |
+| `006_drop_inference_jobs` | job queue | Drops `inference_jobs` and its enum; the platform owns the only queue (ADR 0003) |
 
 The history was squashed before production. The baseline represents the final
 post-021 behavior: FastAPI owns authorization and PostgreSQL RLS is disabled.

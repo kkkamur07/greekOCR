@@ -1,22 +1,154 @@
-"""Ground truth transcription copy and edit use cases."""
+"""The text of a page: imported page transcriptions, pairing, and ground truth.
+
+One responsibility — what a line *says*, as opposed to where it is. Three routes into the
+same place, and they are one module because they all write the same rows and have to agree
+about them:
+
+* ``import_page_transcription`` loads a plain-text page and drops the pairings it
+  invalidates, clearing the ground-truth text those pairings had produced;
+* ``pair_page_text_line`` binds one imported text line to one drawn segment, which is the
+  human decision that turns text into ground truth (see ``docs/architecture.md``);
+* ``copy_to_ground_truth`` and ``patch_ground_truth_line_text`` do the same from the
+  model-layer and single-line-edit directions.
+
+Splitting these would leave the "unpair means un-write the ground truth" rule spread
+across modules that would each have to remember it.
+"""
+
+from __future__ import annotations
 
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core.exceptions import ConflictError
+from backend.core.exceptions import ConflictError, NotFoundError, ValidationError
+from backend.document.application.document_access import DocumentAccess
+from backend.document.application.ground_truth import GroundTruthText
+from backend.document.infrastructure.document_repository import DocumentRepository
 from backend.document.infrastructure.orm_models import (
+    Document,
     DocumentPart,
     Line,
     LineTranscription,
+    PageTranscriptionLine,
+    Transcription,
     TranscriptionKind,
 )
-from backend.document.application.document_service_shared import DocumentServiceSharedMixin
+from backend.project.infrastructure.project_repository import ProjectRepository
 from backend.users.infrastructure.orm_models import User
 
+MAX_PAGE_TRANSCRIPTION_LINES = 10_000
 
-class TranscriptionServiceMixin(DocumentServiceSharedMixin):
+
+class TranscriptionService:
+    def __init__(
+        self,
+        documents: DocumentRepository | None = None,
+        projects: ProjectRepository | None = None,
+        access: DocumentAccess | None = None,
+        ground_truth: GroundTruthText | None = None,
+    ) -> None:
+        self._documents = documents or DocumentRepository()
+        self._projects = projects or ProjectRepository()
+        self._access = access or DocumentAccess(documents=self._documents, projects=self._projects)
+        self._ground_truth = ground_truth or GroundTruthText(documents=self._documents)
+
+    # --- Page transcription import and pairing ---
+
+    async def import_page_transcription(
+        self,
+        session: AsyncSession,
+        user: User,
+        project_id: UUID,
+        document_id: UUID,
+        part_id: UUID,
+        *,
+        text: str,
+    ) -> tuple[list[PageTranscriptionLine], dict[str, int]]:
+        context = await self._access.require_part(session, user, project_id, document_id, part_id)
+        part = context.part
+        text_lines = self._split_page_transcription(text)
+        if len(text_lines) > MAX_PAGE_TRANSCRIPTION_LINES:
+            raise ValidationError(
+                f"Page transcription cannot exceed {MAX_PAGE_TRANSCRIPTION_LINES} non-empty lines"
+            )
+        existing = await self._documents.list_page_transcription_lines(session, part.id)
+        paired_line_ids = {
+            text_line.paired_line_id for text_line in existing if text_line.paired_line_id
+        }
+        if paired_line_ids:
+            ground_truth = await self._documents.get_ground_truth_transcription(
+                session, context.document.id
+            )
+            if ground_truth is not None:
+                for paired_line_id in paired_line_ids:
+                    paired_line = await self._line_or_404(session, part.id, paired_line_id)
+                    await self._ground_truth.write(session, paired_line, ground_truth, None)
+        for text_line in existing:
+            await session.delete(text_line)
+        await session.flush()
+        for order, line_text in enumerate(text_lines):
+            session.add(PageTranscriptionLine(part_id=part.id, order=order, text=line_text))
+        await session.commit()
+        return await self.get_page_pairing(session, user, project_id, document_id, part_id)
+
+    async def get_page_pairing(
+        self,
+        session: AsyncSession,
+        user: User,
+        project_id: UUID,
+        document_id: UUID,
+        part_id: UUID,
+    ) -> tuple[list[PageTranscriptionLine], dict[str, int]]:
+        context = await self._access.require_part(session, user, project_id, document_id, part_id)
+        part = context.part
+        text_lines = await self._documents.list_page_transcription_lines(session, part.id)
+        total_lines = await self._documents.count_part_lines(session, part.id)
+        paired_lines = await self._documents.count_paired_ground_truth_lines(session, part.id)
+        percent = round((paired_lines / total_lines) * 100) if total_lines else 0
+        return text_lines, {
+            "paired_lines": paired_lines,
+            "total_lines": total_lines,
+            "percent": percent,
+        }
+
+    async def pair_page_text_line(
+        self,
+        session: AsyncSession,
+        user: User,
+        project_id: UUID,
+        document_id: UUID,
+        part_id: UUID,
+        *,
+        line_id: UUID,
+        text_line_order: int,
+    ) -> tuple[list[PageTranscriptionLine], dict[str, int]]:
+        context = await self._access.require_part(session, user, project_id, document_id, part_id)
+        part = context.part
+        line = await self._line_or_404(session, part.id, line_id)
+        text_line = await self._page_transcription_line_or_404(session, part.id, text_line_order)
+        ground_truth = await self._ground_truth.layer_for(session, context.document)
+
+        previous_paired_line_id = text_line.paired_line_id
+        if previous_paired_line_id is not None and previous_paired_line_id != line.id:
+            previous_line = await self._line_or_404(session, part.id, previous_paired_line_id)
+            await self._ground_truth.write(session, previous_line, ground_truth, None)
+        for candidate in await self._documents.list_page_transcription_lines(session, part.id):
+            if candidate.paired_line_id == line.id:
+                candidate.paired_line_id = None
+        text_line.paired_line_id = line.id
+        await self._ground_truth.write(session, line, ground_truth, text_line.text)
+        try:
+            await session.commit()
+        except IntegrityError as exc:
+            await session.rollback()
+            raise ConflictError("This segment is already paired to another text line") from exc
+        return await self.get_page_pairing(session, user, project_id, document_id, part_id)
+
+    # --- Ground truth layers ---
+
     async def copy_to_ground_truth(
         self,
         session: AsyncSession,
@@ -27,12 +159,13 @@ class TranscriptionServiceMixin(DocumentServiceSharedMixin):
         *,
         line_ids: list[UUID] | None = None,
     ) -> list[UUID]:
-        document = await self.get_document(session, user, project_id, document_id)
+        context = await self._access.require_document(session, user, project_id, document_id)
+        document = context.document
         source = await self._transcription_or_404(session, document, source_transcription_id)
         if source.kind != TranscriptionKind.model:
             raise ConflictError("Copy to ground truth requires a model transcription layer")
 
-        ground_truth = await self._ensure_ground_truth_transcription(session, document)
+        ground_truth = await self._ground_truth.layer_for(session, document)
         stmt = (
             select(LineTranscription)
             .join(Line, LineTranscription.line_id == Line.id)
@@ -88,7 +221,8 @@ class TranscriptionServiceMixin(DocumentServiceSharedMixin):
         *,
         text: str,
     ) -> LineTranscription:
-        document = await self.get_document(session, user, project_id, document_id)
+        context = await self._access.require_document(session, user, project_id, document_id)
+        document = context.document
         transcription = await self._transcription_or_404(session, document, transcription_id)
         if transcription.kind != TranscriptionKind.ground_truth:
             raise ConflictError("Only Ground truth transcription lines can be edited")
@@ -115,3 +249,40 @@ class TranscriptionServiceMixin(DocumentServiceSharedMixin):
         await session.commit()
         await session.refresh(line_transcription)
         return line_transcription
+
+    # --- Lookups ---
+
+    def _split_page_transcription(self, text: str) -> list[str]:
+        return [line.strip() for line in text.splitlines() if line.strip()]
+
+    async def _line_or_404(self, session: AsyncSession, part_id: UUID, line_id: UUID) -> Line:
+        line = await self._documents.get_line_in_part(session, part_id, line_id)
+        if line is None:
+            raise NotFoundError("Line not found")
+        return line
+
+    async def _page_transcription_line_or_404(
+        self, session: AsyncSession, part_id: UUID, order: int
+    ) -> PageTranscriptionLine:
+        text_line = await self._documents.get_page_transcription_line(session, part_id, order)
+        if text_line is None:
+            raise NotFoundError("Text line not found")
+        return text_line
+
+    async def _transcription_or_404(
+        self, session: AsyncSession, document: Document, transcription_id: UUID
+    ) -> Transcription:
+        transcription = await self._documents.get_transcription_in_document(
+            session, document.id, transcription_id
+        )
+        if transcription is None:
+            raise NotFoundError("Transcription layer not found")
+        return transcription
+
+    async def _line_in_document_or_404(
+        self, session: AsyncSession, document: Document, line_id: UUID
+    ) -> Line:
+        line = await self._documents.get_line_in_document(session, document.id, line_id)
+        if line is None:
+            raise NotFoundError("Line not found")
+        return line

@@ -1,20 +1,35 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-
-const { redirectToLogin } = vi.hoisted(() => ({
-  redirectToLogin: vi.fn(),
-}));
-
-vi.mock("../auth/session", () => ({
-  redirectToLogin,
-}));
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { apiRequest, fetchBinaryApi } from "./client";
 import { ApiError } from "./errors";
+import { clearLoginRedirectGuard } from "../auth/session";
 import {
   clearAccessToken,
   getAccessToken,
   setAccessToken,
 } from "../auth/storage";
+
+// `../auth/session` is no longer module-mocked. The real `redirectToLogin` clears the
+// token, consults the once-only redirect guard, and navigates -- behaviour a `vi.fn()`
+// replaced wholesale, so "did we redirect" was asserted against a stand-in rather than
+// against the thing that runs in production.
+//
+// jsdom's `location` is unforgeable, so the whole object is swapped rather than spied.
+const realLocation = Object.getOwnPropertyDescriptor(window, "location");
+let assign: ReturnType<typeof vi.fn>;
+
+function stubLocation(pathname = "/projects/project-1"): void {
+  assign = vi.fn();
+  Object.defineProperty(window, "location", {
+    configurable: true,
+    value: { pathname, search: "", hash: "", assign },
+  });
+}
+
+/** Where the real `redirectToLogin` sends the reader, if it ran. */
+function redirectTargets(): string[] {
+  return assign.mock.calls.map(([href]) => String(href));
+}
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -26,7 +41,15 @@ function jsonResponse(body: unknown, status = 200): Response {
 describe("API auth recovery", () => {
   beforeEach(() => {
     clearAccessToken();
-    redirectToLogin.mockReset();
+    // Module-level singleton: without this, the first test to redirect suppresses
+    // every later one and their assertions pass for the wrong reason.
+    clearLoginRedirectGuard();
+    stubLocation();
+  });
+
+  afterEach(() => {
+    clearLoginRedirectGuard();
+    if (realLocation) Object.defineProperty(window, "location", realLocation);
   });
 
   it("refreshes and retries a protected JSON request once", async () => {
@@ -117,7 +140,7 @@ describe("API auth recovery", () => {
     ).rejects.toBeInstanceOf(ApiError);
 
     expect(fetchMock).toHaveBeenCalledOnce();
-    expect(redirectToLogin).not.toHaveBeenCalled();
+    expect(redirectTargets()).toEqual([]);
   });
 
   it("keeps abortable GET requests independent", async () => {
@@ -174,6 +197,33 @@ describe("API auth recovery", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(3);
-    expect(redirectToLogin).toHaveBeenCalledOnce();
+    expect(redirectTargets()).toEqual([
+      "/login?callbackUrl=%2Fprojects%2Fproject-1",
+    ]);
+    // The real redirect also drops the dead token on its way out.
+    expect(getAccessToken()).toBeNull();
+  });
+
+  it("redirects when the refresh itself fails, not just when the retry 401s", async () => {
+    setAccessToken("expired-token");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 401 }))
+      // The refresh cookie is expired or revoked, so the refresh route itself refuses.
+      .mockResolvedValueOnce(new Response(null, { status: 401 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(apiRequest("/projects/one")).rejects.toMatchObject({
+      status: 401,
+    });
+
+    // Without this the reader sits on a dead page throwing 401s forever instead of
+    // being sent to sign in -- the branch that could be deleted with the whole suite
+    // still green.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(redirectTargets()).toEqual([
+      "/login?callbackUrl=%2Fprojects%2Fproject-1",
+    ]);
+    expect(getAccessToken()).toBeNull();
   });
 });

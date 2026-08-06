@@ -155,7 +155,6 @@ describe("PageEditorPlaceholderPage transcription", () => {
       transcription_kind: "ground_truth",
       text: "typed approved text",
       confidence: null,
-      text_source: "human_edited",
       character_confidences: null,
     });
 
@@ -210,7 +209,6 @@ describe("PageEditorPlaceholderPage transcription", () => {
             transcription_kind: "ground_truth",
             text: "old approved text",
             confidence: null,
-            text_source: "human_edited",
             character_confidences: null,
           },
           {
@@ -219,7 +217,6 @@ describe("PageEditorPlaceholderPage transcription", () => {
             transcription_kind: "model",
             text: "model suggestion",
             confidence: 0.91,
-            text_source: "model",
             character_confidences: null,
           },
         ],
@@ -287,7 +284,6 @@ describe("PageEditorPlaceholderPage transcription", () => {
   });
 
   it("re-runs OCR on the selected segment from the pairing strip", async () => {
-    localStorage.setItem("nomicous_inference_preference", "cloud");
     mockedApi.getDocument.mockResolvedValue(DOCUMENT);
     mockedApi.listInferenceModels.mockResolvedValue([
       {
@@ -360,7 +356,6 @@ describe("PageEditorPlaceholderPage transcription", () => {
           transcription_kind: "model" as const,
           text: "old ocr",
           confidence: 0.8,
-          text_source: "model" as const,
           character_confidences: null,
         },
       ],
@@ -378,7 +373,6 @@ describe("PageEditorPlaceholderPage transcription", () => {
               transcription_kind: "model" as const,
               text: "fresh ocr",
               confidence: 0.92,
-              text_source: "model" as const,
               character_confidences: null,
             },
           ],
@@ -453,7 +447,6 @@ describe("PageEditorPlaceholderPage transcription", () => {
             transcription_kind: "model",
             text: "model suggestion",
             confidence: 0.91,
-            text_source: "model",
             character_confidences: null,
           },
         ],
@@ -619,7 +612,6 @@ describe("PageEditorPlaceholderPage transcription", () => {
             transcription_kind: "ground_truth",
             text: "old approved text",
             confidence: null,
-            text_source: "human_edited",
             character_confidences: null,
           },
         ],

@@ -1,10 +1,9 @@
 """Background job worker settings."""
 
-from functools import lru_cache
-
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
+from backend.core.settings._cache import settings_cache
 from backend.core.settings._env import env_settings_config
 
 
@@ -34,8 +33,31 @@ class JobSettings(BaseSettings):
         default=1800.0,
         alias="JOB_WORKER_RUNNING_TIMEOUT_SECONDS",
     )
+    job_worker_waiting_timeout_seconds: float = Field(
+        default=240.0,
+        alias="JOB_WORKER_WAITING_TIMEOUT_SECONDS",
+        description="Fail a job dispatched to inference when no callback arrives in time.",
+    )
+    job_worker_callback_claim_timeout_seconds: float = Field(
+        default=300.0,
+        alias="JOB_WORKER_CALLBACK_CLAIM_TIMEOUT_SECONDS",
+        description="Release an abandoned callback claim so the job can be cancelled again.",
+    )
+    job_stale_sweep_on_read_enabled: bool = Field(
+        default=True,
+        alias="JOB_STALE_SWEEP_ON_READ_ENABLED",
+        description=(
+            "Run the stale-job sweeps from job read paths. Required on request/response "
+            "hosts where JOB_WORKER_ENABLED=false leaves no loop to run them."
+        ),
+    )
+    job_stale_sweep_min_interval_seconds: float = Field(
+        default=30.0,
+        alias="JOB_STALE_SWEEP_MIN_INTERVAL_SECONDS",
+        description="Per-process floor between opportunistic sweeps; caps the cost per request.",
+    )
 
 
-@lru_cache
+@settings_cache
 def get_job_settings() -> JobSettings:
     return JobSettings()

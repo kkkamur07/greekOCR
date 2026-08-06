@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "../components/ui/toast";
 import { api, type DocumentWithPartsResponse } from "../api/client";
 import { ApiError } from "../api/errors";
 import { invalidatePartImage } from "../api/imageCache";
+import { resourceTags, invalidateAfter } from "../api/resources";
 import {
   hasAccessToken,
   isUnauthorized,
@@ -16,6 +17,7 @@ import { AppPageShell } from "../components/layout/AppPageShell";
 import { ContentRegionLoading } from "../components/layout/ContentRegionLoading";
 import { DocumentLiveSharingPanel } from "../components/sharing/DocumentLiveSharingPanel";
 import { WorkflowBadge } from "../components/WorkflowBadge";
+import { useServerQuery } from "../hooks/useServerQuery";
 
 const ENABLE_TEST_JOBS = process.env.NEXT_PUBLIC_ENABLE_TEST_JOBS === "true";
 
@@ -27,63 +29,74 @@ function formatUpdated(iso: string): string {
   });
 }
 
+type DocumentDetailData = {
+  username: string;
+  projectName: string;
+  document: DocumentWithPartsResponse;
+};
+
 export function DocumentDetailPage() {
   const router = useRouter();
   const { projectId, documentId } =
     useParams<{ projectId: string; documentId: string }>() ?? {};
-  const [document, setDocument] = useState<DocumentWithPartsResponse | null>(
-    null,
-  );
-  const [projectName, setProjectName] = useState<string | null>(null);
-  const [username, setUsername] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [reordering, setReordering] = useState(false);
   const [reviewUpdatingPartId, setReviewUpdatingPartId] = useState<
     string | null
   >(null);
   const [titlePanelOpen, setTitlePanelOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    if (!projectId || !documentId) return;
-    if (!hasAccessToken()) {
-      navigateToLogin(router);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      const [me, proj, doc] = await Promise.all([
+  const signedIn = hasAccessToken();
+  useEffect(() => {
+    if (projectId && documentId && !signedIn) navigateToLogin(router);
+  }, [projectId, documentId, signedIn, router]);
+
+  const {
+    data,
+    loading,
+    error,
+    refetch: reloadDocument,
+    patch: patchDocument,
+  } = useServerQuery<DocumentDetailData>({
+    key:
+      projectId && documentId && signedIn
+        ? ["document-detail", projectId, documentId]
+        : null,
+    tags: [
+      resourceTags.currentUser,
+      resourceTags.project(projectId ?? ""),
+      resourceTags.document(projectId ?? "", documentId ?? ""),
+    ],
+    read: async () => {
+      const [me, project, doc] = await Promise.all([
         api.me(),
-        api.getProject(projectId),
-        api.getDocument(projectId, documentId),
+        api.getProject(projectId!),
+        api.getDocument(projectId!, documentId!),
       ]);
-      setUsername(me.username);
-      setProjectName(proj.name);
-      setDocument(doc);
-    } catch (err) {
+      return {
+        username: me.username,
+        projectName: project.name,
+        document: doc,
+      };
+    },
+    onError: (err) => {
       if (isUnauthorized(err)) {
         navigateToLogin(router);
-        return;
+        return null;
       }
       const msg =
         err instanceof ApiError ? err.message : "Failed to load document";
-      setDocument(null);
-      setError(
-        err instanceof ApiError && (err.status === 403 || err.status === 404)
-          ? "This document is not available to your account."
-          : msg,
-      );
       toast.error(msg);
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId, documentId, router]);
+      return err instanceof ApiError &&
+        (err.status === 403 || err.status === 404)
+        ? "This document is not available to your account."
+        : msg;
+    },
+  });
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const document = data?.document ?? null;
+  const projectName = data?.projectName ?? null;
+  const username = data?.username ?? null;
 
   const parts = [...(document?.parts ?? [])].sort((a, b) => a.order - b.order);
 
@@ -93,7 +106,8 @@ export function DocumentDetailPage() {
     try {
       await api.uploadPart(projectId, documentId, file);
       toast.success("Part uploaded");
-      await load();
+      invalidateAfter.documentPartsChanged(projectId, documentId);
+      await reloadDocument();
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Upload failed";
       toast.error(msg);
@@ -107,7 +121,8 @@ export function DocumentDetailPage() {
     setReordering(true);
     try {
       await api.reorderParts(projectId, documentId, { part_ids: partIds });
-      await load();
+      invalidateAfter.documentPartsChanged(projectId, documentId);
+      await reloadDocument();
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Reorder failed";
       toast.error(msg);
@@ -130,7 +145,8 @@ export function DocumentDetailPage() {
       await api.deletePart(projectId, documentId, partId);
       invalidatePartImage(partId);
       toast.success("Part removed");
-      await load();
+      invalidateAfter.documentPartsChanged(projectId, documentId);
+      await reloadDocument();
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Delete failed";
       toast.error(msg);
@@ -147,7 +163,8 @@ export function DocumentDetailPage() {
       toast.success(
         reviewed ? "Part marked reviewed" : "Part marked unreviewed",
       );
-      await load();
+      invalidateAfter.documentPartsChanged(projectId, documentId);
+      await reloadDocument();
     } catch (err) {
       const msg =
         err instanceof ApiError && err.status === 403
@@ -192,18 +209,21 @@ export function DocumentDetailPage() {
             documentId={documentId}
             name={document.name}
             workflow={document.workflow}
-            onUpdated={(patch) => {
-              setDocument((current) =>
-                current
-                  ? {
-                      ...current,
-                      ...(patch.name !== undefined ? { name: patch.name } : {}),
-                      ...(patch.workflow !== undefined
-                        ? { workflow: patch.workflow }
-                        : {}),
-                    }
-                  : current,
-              );
+            onUpdated={(updated) => {
+              patchDocument((current) => ({
+                ...current,
+                document: {
+                  ...current.document,
+                  ...(updated.name !== undefined ? { name: updated.name } : {}),
+                  ...(updated.workflow !== undefined
+                    ? { workflow: updated.workflow }
+                    : {}),
+                },
+              }));
+              // The document list, the public view and the copy the page
+              // editor fetches all carry these fields; the panel only wrote to
+              // the copy this page holds.
+              invalidateAfter.documentUpdated(projectId!, documentId!);
             }}
           />
         ) : null

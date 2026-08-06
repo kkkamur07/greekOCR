@@ -1091,8 +1091,10 @@
 }
 
 /* Per-character OCR confidence (high >90%, mid 51-90%, low ≤50%) */
-.pe-confidence-text,
-.pe-model-preview {
+/* `.pe-confidence-text` is the inline <span> wrapper around the per-character
+   markup. Its container `.pe-model-preview` is a block-level flex child and is
+   laid out further down; do not add it here. */
+.pe-confidence-text {
   display: inline;
 }
 
@@ -1511,6 +1513,16 @@
   display: block;
   font-size: 0.8125rem;
   color: var(--text);
+}
+/* Where the job ran. Standing text on the job, never a toast: a researcher who
+   looked away must still be able to read where their work went. */
+.pe-job-item__host {
+  margin: 4px 0 0;
+  font-size: 0.75rem;
+  color: var(--text-3);
+}
+.pe-job-item__host[data-execution-substituted="true"] {
+  color: #92400e;
 }
 .pe-job-item__error {
   margin: 4px 0 0;

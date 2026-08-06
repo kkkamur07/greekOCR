@@ -4,9 +4,18 @@ type CacheEntry = {
   references: number;
 };
 
+/** Insertion order doubles as LRU order - see `touch`. */
 const entries = new Map<string, CacheEntry>();
 const pending = new Map<string, Promise<CacheEntry>>();
 let cacheGeneration = 0;
+
+/**
+ * A manuscript page is megabytes of decoded image, so the cache is bounded:
+ * paging through a long document must not grow the tab's memory without limit.
+ * The bound covers a page plus its neighbours in both directions, at full size
+ * and as thumbnails, so ordinary back-and-forth reading still hits the cache.
+ */
+export const MAX_CACHED_PART_IMAGES = 12;
 
 const PART_IMAGE_PATH = /^\/(?:public\/)?media\/parts\/[^/]+$/;
 const apiBaseUrl =
@@ -54,9 +63,38 @@ export function normalizePartImagePath(src: string): string | null {
   }
 }
 
+/**
+ * Mark `path` as most recently used. `Map` iterates in insertion order, so
+ * re-inserting an entry at the end makes the eviction sweep read LRU order
+ * straight off the map instead of tracking timestamps alongside it.
+ */
+function touch(path: string, entry: CacheEntry): CacheEntry {
+  entries.delete(path);
+  entries.set(path, entry);
+  return entry;
+}
+
+/**
+ * Drop least-recently-used entries until the cache is back inside its bound.
+ *
+ * An entry the UI is still showing is never dropped: its object URL is the
+ * `src` of a live <img>, and revoking it would blank the image. The cache can
+ * therefore sit above its bound while many images are on screen at once, and
+ * shrinks again as they are released.
+ */
+function evictLeastRecentlyUsed(): void {
+  if (entries.size <= MAX_CACHED_PART_IMAGES) return;
+  for (const [path, entry] of entries) {
+    if (entries.size <= MAX_CACHED_PART_IMAGES) return;
+    if (entry.references > 0) continue;
+    URL.revokeObjectURL(entry.objectUrl);
+    entries.delete(path);
+  }
+}
+
 async function getEntry(path: string): Promise<CacheEntry> {
   const cached = entries.get(path);
-  if (cached) return cached;
+  if (cached) return touch(path, cached);
 
   let request = pending.get(path);
   if (!request) {
@@ -75,6 +113,7 @@ async function getEntry(path: string): Promise<CacheEntry> {
           references: 0,
         };
         entries.set(path, entry);
+        evictLeastRecentlyUsed();
         return entry;
       });
     pending.set(path, request);
@@ -104,6 +143,9 @@ export async function acquirePartImage(
       if (released) return;
       released = true;
       entry.references = Math.max(0, entry.references - 1);
+      // Releasing the last reference may be what lets the cache shrink back
+      // inside its bound.
+      evictLeastRecentlyUsed();
     },
   };
 }

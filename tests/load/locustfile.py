@@ -131,16 +131,9 @@ class PlatformApiUser(HttpUser):
 
     @task(4)
     def page_editor_reads(self) -> None:
-        if (
-            not self.access_token
-            or not self.project_id
-            or not self.document_id
-            or not self.part_id
-        ):
+        if not self.access_token or not self.project_id or not self.document_id or not self.part_id:
             return
-        prefix = (
-            f"/projects/{self.project_id}/documents/{self.document_id}/parts/{self.part_id}"
-        )
+        prefix = f"/projects/{self.project_id}/documents/{self.document_id}/parts/{self.part_id}"
         headers = self.auth_headers
         self.client.get(
             f"{prefix}/layout",
@@ -170,12 +163,7 @@ class PlatformApiUser(HttpUser):
 
     @task(1)
     def model_binding_resolution(self) -> None:
-        if (
-            not self.access_token
-            or not self.project_id
-            or not self.document_id
-            or not self.part_id
-        ):
+        if not self.access_token or not self.project_id or not self.document_id or not self.part_id:
             return
         path = (
             f"/projects/{self.project_id}/documents/{self.document_id}/parts/"
@@ -235,7 +223,11 @@ class PlatformApiUser(HttpUser):
         if not self.part_id:
             return
         self.client.get(
-            f"/public/media/parts/{self.part_id}?w=1200",
+            # Must be one of PublicThumbnailWidth; the public route allowlists
+            # widths so an unauthenticated caller cannot mint unbounded cache
+            # misses. 800 is the largest allowed, so this stays the heaviest
+            # thumbnail the load profile can ask for.
+            f"/public/media/parts/{self.part_id}?w=800",
             name="GET /public/media/parts/{part_id}",
         )
 
@@ -244,8 +236,7 @@ class PlatformApiUser(HttpUser):
         if not self.project_id or not self.document_id or not self.part_id:
             return
         prefix = (
-            f"/public/projects/{self.project_id}/documents/{self.document_id}/parts/"
-            f"{self.part_id}"
+            f"/public/projects/{self.project_id}/documents/{self.document_id}/parts/{self.part_id}"
         )
         self.client.get(
             f"{prefix}/page-xml",

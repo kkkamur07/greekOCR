@@ -1,10 +1,9 @@
 """Database and runtime environment settings."""
 
-from functools import lru_cache
-
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
+from backend.core.settings._cache import settings_cache
 from backend.core.settings._env import env_settings_config
 
 
@@ -28,7 +27,15 @@ class InfrastructureSettings(BaseSettings):
     db_max_overflow: int = Field(default=10, alias="DB_MAX_OVERFLOW")
     db_pool_recycle: int = Field(default=1800, alias="DB_POOL_RECYCLE")
 
+    @property
+    def is_production(self) -> bool:
+        return self.environment.casefold() == "production"
 
-@lru_cache
+    @property
+    def is_development(self) -> bool:
+        return self.environment.casefold() == "development"
+
+
+@settings_cache
 def get_infrastructure_settings() -> InfrastructureSettings:
     return InfrastructureSettings()

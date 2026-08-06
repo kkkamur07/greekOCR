@@ -2,132 +2,187 @@
 
 from __future__ import annotations
 
+import re
+import subprocess
 import tomllib
+
+import yaml
 
 from tests.fixtures.paths import REPO_ROOT
 
 
-def test_inference_image_reincludes_only_required_hub_resolver_sources() -> None:
-    dockerignore = (REPO_ROOT / ".dockerignore").read_text(encoding="utf-8")
-    dockerfile = (REPO_ROOT / "inference" / "Dockerfile").read_text(encoding="utf-8")
+def _workflow_body(name: str) -> str:
+    """Parse a workflow and render it back without comments.
 
-    assert "!src/" in dockerignore
-    assert "!src/hf/resolve/**" in dockerignore
-    assert ".docker-cache/" in dockerignore
-    assert "COPY src/hf/__init__.py src/hf/paths.py /app/src/hf/" in dockerfile
-    assert "COPY src/hf/resolve /app/src/hf/resolve" in dockerfile
-    assert "COPY src/hf /app/src/hf" not in dockerfile
+    Asserting on raw workflow text makes a comment *about* a deleted mechanism
+    indistinguishable from the mechanism itself. Round-tripping through the YAML
+    parser drops comments, and failing to parse is itself the assertion: a
+    workflow that does not load is a broken CI run nobody sees until release day.
+    """
+    document = yaml.safe_load((REPO_ROOT / ".github" / "workflows" / name).read_text("utf-8"))
+    assert isinstance(document, dict), f"{name} did not parse as a workflow document"
+    return yaml.safe_dump(document, default_flow_style=False)
 
 
-def test_helper_freeze_is_onnx_only() -> None:
-    spec = (REPO_ROOT / "packaging" / "helper" / "pyinstaller.spec").read_text(encoding="utf-8")
-    excludes = (REPO_ROOT / "packaging" / "helper" / "excludes.txt").read_text(encoding="utf-8")
+def _flatten_group(groups: dict[str, list], name: str) -> list[str]:
+    """Resolve a PEP 735 dependency group, following `include-group` entries."""
+    resolved: list[str] = []
+    for entry in groups[name]:
+        if isinstance(entry, dict):
+            resolved.extend(_flatten_group(groups, entry["include-group"]))
+        else:
+            resolved.append(entry)
+    return resolved
 
-    assert 'collect_submodules("kraken")' not in spec
-    assert '"kraken.blla"' not in spec
-    assert '"kraken.lib.vgsl"' not in spec
-    assert '"inference.architectures.blla.blla"' not in spec
-    assert '"inference.architectures.blla.blla_model"' not in spec
-    assert '"safetensors.torch"' not in spec
-    assert '"inference.architectures.blla.blla_decoder"' in spec
-    assert '"inference.architectures.blla.onnx"' in spec
-    for dependency in ("torch", "torchvision", "safetensors", "kraken"):
-        assert f"\n{dependency}\n" in excludes
+
+def test_published_package_ships_the_onnx_runtime_and_nothing_else() -> None:
+    """ADR 0006: one runtime, CPU only, and no training stack in the wheel.
+
+    This used to read `packaging/helper/pyinstaller.spec` and check its hidden
+    imports and excludes, because the frozen installer decided by hand what
+    reached a laptop. The **published package** decides it by construction:
+    `[project].dependencies` *is* the closure that reaches a researcher, so
+    that is what this holds.
+
+    ADR 0004 put Torch here and this test held it. ADR 0006 reversed that: the
+    runtime is ONNX Runtime again and Torch only builds the artifact, so Torch
+    and `safetensors` must now be *absent* from the published closure. That is
+    the whole point of #65 - a plain `pip install` pulling 4.8 GB of CUDA wheels
+    is unreachable if Torch is not in the closure at all.
+    """
+    pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    project_dependencies = pyproject["project"]["dependencies"]
+    assert any(dependency.startswith("onnxruntime") for dependency in project_dependencies)
+    assert not any(dependency.startswith("torch") for dependency in project_dependencies)
+    assert not any(dependency.startswith("safetensors") for dependency in project_dependencies)
+    # Nothing that trains a model is part of what runs one.
+    for forbidden in ("transformers", "accelerate", "torchvision", "kraken"):
+        assert not any(dependency.startswith(forbidden) for dependency in project_dependencies), (
+            f"{forbidden} reaches every researcher who installs the package"
+        )
+
+    groups = pyproject["dependency-groups"]
+    assert "parity" not in groups, "the kraken parity group outlived its second runtime"
+    # ADR 0006 keeps Torch on a maintainer's machine only, behind `--group export`,
+    # which is what exports the `.onnx` artifact the runtime then loads.
+    assert any(dependency.startswith("torch") for dependency in _flatten_group(groups, "export"))
+    assert not any(
+        "kraken" in dependency
+        for group in groups.values()
+        for dependency in group
+        if isinstance(dependency, str)
+    )
+    # The `helper` group died with `inference/api` and `inference/helper` (#60).
+    # It named what the loopback HTTP surfaces needed on top of the runtime, and
+    # there is no longer anything under `inference/` that serves HTTP.
+    assert "helper" not in groups
+    assert not any(
+        dependency.startswith("onnxruntime") for dependency in _flatten_group(groups, "inference")
+    )
+
+    # CUDA wheels must not be reachable: PyPI serves them on Linux and Windows.
+    sources = pyproject["tool"]["uv"]["sources"]["torch"]
+    markers = {entry["marker"] for entry in sources if entry["index"] == "pytorch-cpu"}
+    assert markers == {"sys_platform == 'linux' or sys_platform == 'win32'"}
+
+
+def test_no_tray_icon_library_is_reachable() -> None:
+    """A CLI has no business growing a tray icon.
+
+    ADR 0001 decision 5 justified this with "zero terminal use is the product
+    constraint"; ADR 0002 retired that constraint and kept the assertion
+    anyway. The **inference agent** is a foreground process a researcher starts
+    and stops - there is no window, no menu bar item, and no daemon to
+    represent in one.
+    """
+    pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    lockfile = (REPO_ROOT / "uv.lock").read_text(encoding="utf-8")
+
+    assert "pystray" not in pyproject
+    assert "pystray" not in lockfile
+
+
+def test_no_native_packaging_survives() -> None:
+    """A release is a PyPI publish; no per-OS artifact is built anywhere.
+
+    Frozen installers made this project the distributor of a vendored
+    dependency tree with no update channel: a CVE in `protobuf`, `Pillow`, or
+    `scipy` meant a four-platform rebuild, re-sign, and re-notarize, with no way
+    to make anyone install the result. Patching is now a dependency bump plus a
+    **version floor** bump, which the platform enforces on the claim path. If
+    any of this grows back, that property is gone with it.
+    """
+    # Tracked content, not directory existence: a checkout that once ran the
+    # PyInstaller build still has `packaging/helper/{build,dist}` on disk, and
+    # those are gitignored leftovers of the mechanism rather than the mechanism.
+    # Testing `.exists()` fails on a developer's machine while passing in CI,
+    # which is the wrong way round for a guard.
+    tracked = subprocess.run(
+        ["git", "ls-files", "packaging", ".github/workflows/release-helper.yml"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()
+    assert tracked == []
 
     pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    groups = pyproject["dependency-groups"]
-    assert not any(dependency.startswith(("torch", "safetensors")) for dependency in groups["inference"])
-    assert any(dependency.startswith("torch") for dependency in groups["export"])
-    assert any(dependency.startswith("safetensors") for dependency in groups["export"])
-
-
-def test_helper_packaging_uses_one_foreground_server() -> None:
-    launcher = (REPO_ROOT / "packaging" / "helper" / "tray_launcher.py").read_text(
-        encoding="utf-8"
-    )
-    pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    windows_build = (
-        REPO_ROOT / "packaging" / "helper" / "windows" / "build-installer.ps1"
-    ).read_text(encoding="utf-8")
-    shared_build = (
-        REPO_ROOT / "packaging" / "helper" / "scripts" / "build-pyinstaller.sh"
-    ).read_text(encoding="utf-8")
-    bundle_verifier = (
-        REPO_ROOT / "packaging" / "helper" / "scripts" / "verify-bundle.py"
-    ).read_text(encoding="utf-8")
-
-    assert "multiprocessing" not in launcher
-    assert "pystray" not in pyproject
-    for build in (shared_build, windows_build):
-        assert "--isolated --no-dev --group helper --group packaging" in build
-        assert "--group inference" not in build
-        assert "verify-bundle.py" in build
-    assert "& bash" not in windows_build
-    assert '"PYZ-00.toc"' in bundle_verifier
-    assert '"COLLECT-00.toc"' in bundle_verifier
-    assert '"src.model.inference_export"' in bundle_verifier
-
-
-def test_helper_installers_are_user_scoped_and_verify_startup() -> None:
-    linux_install = (
-        REPO_ROOT / "packaging" / "helper" / "linux" / "install-helper.sh"
-    ).read_text(encoding="utf-8")
-    mac_install = (
-        REPO_ROOT / "packaging" / "helper" / "macos" / "install-helper.sh"
-    ).read_text(encoding="utf-8")
-    windows_install = (
-        REPO_ROOT / "packaging" / "helper" / "windows" / "install-helper.ps1"
-    ).read_text(encoding="utf-8")
-    workflow = (REPO_ROOT / ".github" / "workflows" / "release-helper.yml").read_text(
-        encoding="utf-8"
+    assert "packaging" not in pyproject["dependency-groups"]
+    assert not any(
+        dependency.lower().startswith("pyinstaller")
+        for group in pyproject["dependency-groups"].values()
+        for dependency in group
+        if isinstance(dependency, str)
     )
 
-    # HELPER_REGISTRY_URL is templated into sed/heredoc content, so both shell
-    # installers must reject values that could escape those templates.
-    for installer in (linux_install, mac_install):
-        assert "HELPER_REGISTRY_URL must be https://" in installer
-        assert "tr -d 'A-Za-z0-9._~:/?#@%=+[]-'" in installer
-    assert "HELPER_CORS_ORIGINS" not in linux_install
-    assert "AUTOSTART_FILE" in linux_install
-    assert "RUNNER=" in linux_install
-    assert "STAGE_ROOT=" in linux_install
-    assert "BACKUP_ROOT=" in linux_install
-    assert "restore_previous_install" in linux_install
-    assert "curl --fail --silent --max-time 2 http://127.0.0.1:8001/health" in linux_install
-    assert 'APP_DST="$HOME/Applications/' in mac_install
-    assert 'cp -R "$APP_SRC" /Applications/' not in mac_install
-    assert "APP_STAGE=" in mac_install
-    assert "APP_BACKUP=" in mac_install
-    assert "restore_previous_install" in mac_install
-    assert 's|__INSTALL_DIR__|$INSTALL_DIR|g' in mac_install
-    assert 's|__INSTALL_DIR__|$INSTALL_DIR/nomicous-inference-helper|g' not in mac_install
-    assert 'launchctl bootstrap "gui/$(id -u)"' in mac_install
-    assert "Invoke-WebRequest" in windows_install
-    assert "Stop-ScheduledTask" in windows_install
-    assert '"HF_CACHE_ROOT" = $CacheDir' in windows_install
-    assert "$StageRoot" in windows_install
-    assert "$BackupRoot" in windows_install
-    assert "$PreviousTaskExisted" in windows_install
-    assert "$PreviousUserEnvironment" in windows_install
-    assert "Stop-HelperTaskAndWait" in windows_install
-    assert "Wait-InstallUnlocked" in windows_install
-    assert windows_install.index("Stop-ScheduledTask") < windows_install.index(
-        "Move-Item -LiteralPath $InstallRoot"
+    # No workflow may build, sign, or notarize a per-OS bundle again. Nor may
+    # one name a signing secret: they are being revoked, so a reference is a
+    # release that fails at the point of publishing.
+    forbidden = (
+        "pyinstaller",
+        "build-dmg",
+        "build-tarball",
+        "build-installer",
+        "codesign",
+        "notarytool",
+        "signtool",
+        "Get-AuthenticodeSignature",
+        "MACOS_CERTIFICATE_P12",
+        "MACOS_CERTIFICATE_PASSWORD",
+        "MACOS_CODESIGN_IDENTITY",
+        "MACOS_NOTARY_PROFILE",
+        "WINDOWS_SIGNING_CERT_BASE64",
+        "WINDOWS_SIGNING_CERT_PASSWORD",
+        "RELEASE_SIGNING_GPG_KEY",
+        "RELEASE_SIGNING_GPG_PASSPHRASE",
     )
-    assert "ubuntu-22.04" in workflow
+    workflows = sorted((REPO_ROOT / ".github" / "workflows").glob("*.yml"))
+    assert workflows
+    for workflow in workflows:
+        body = _workflow_body(workflow.name)
+        for token in forbidden:
+            assert token not in body, f"{workflow.name} still references {token}"
 
 
 def test_runtime_images_are_non_root_and_have_import_and_health_checks() -> None:
-    platform_dockerfile = (REPO_ROOT / "nomicous" / "Dockerfile").read_text(encoding="utf-8")
-    inference_dockerfile = (REPO_ROOT / "inference" / "Dockerfile").read_text(encoding="utf-8")
+    dockerfile = (REPO_ROOT / "nomicous" / "Dockerfile").read_text(encoding="utf-8")
 
-    for dockerfile, import_surface in (
-        (platform_dockerfile, "from backend.core.main import app"),
-        (inference_dockerfile, "from inference.api.main import app"),
-    ):
-        assert "USER appuser" in dockerfile
-        assert "HEALTHCHECK" in dockerfile
-        assert import_surface in dockerfile
+    assert "USER appuser" in dockerfile
+    assert "HEALTHCHECK" in dockerfile
+    assert "from backend.core.main import app" in dockerfile
+
+
+def test_no_inference_service_image_is_built() -> None:
+    """ADR 0003 removed the inference-api container; 050 ships a package instead."""
+    assert not (REPO_ROOT / "inference" / "Dockerfile").exists()
+
+    compose = (REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    supabase = (REPO_ROOT / "docker-compose.supabase.yml").read_text(encoding="utf-8")
+    bake = (REPO_ROOT / "docker-bake.hcl").read_text(encoding="utf-8")
+
+    for text in (compose, supabase, bake):
+        assert "inference-api" not in text
+        assert "inference-worker" not in text
 
 
 def test_development_compose_ports_are_loopback_only_and_secrets_are_interpolated() -> None:
@@ -136,22 +191,21 @@ def test_development_compose_ports_are_loopback_only_and_secrets_are_interpolate
     for mapping in (
         '"127.0.0.1:5433:5432"',
         '"127.0.0.1:8000:8000"',
-        '"127.0.0.1:8010:8001"',
         '"127.0.0.1:5173:5173"',
     ):
         assert mapping in compose
     assert "POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?" in compose
     assert "postgres:dev@" not in compose
     assert 'CLOUD_INFERENCE_ENABLED: "true"' in compose
-    assert compose.count("\n      INFERENCE_WEBHOOK_SECRET:") == 2
-    assert compose.count("\n      INFERENCE_SERVICE_SECRET:") == 2
+    assert compose.count("\n      INFERENCE_WEBHOOK_SECRET:") == 1
+    assert "INFERENCE_SERVICE_SECRET" not in compose
 
 
 def test_platform_bundle_includes_contract_dependencies() -> None:
     build_script = (REPO_ROOT / "deploy" / "platform" / "build.sh").read_text(encoding="utf-8")
 
     assert '"inference" / "admission.py"' in build_script
-    assert '"inference" / "infrastructure" / "settings.py"' in build_script
+    assert '"inference" / "settings.py"' in build_script
 
 
 def test_platform_backend_ships_bundled_unicode_pdf_font() -> None:
@@ -170,16 +224,41 @@ def test_platform_backend_ships_bundled_unicode_pdf_font() -> None:
     assert '"nomicous" / "backend"' in build_script
 
 
-def test_vercel_frontend_permits_helper_loopback_origins() -> None:
+def test_vercel_frontend_connect_src_permits_no_loopback_origin() -> None:
+    """`connect-src` reaches the app and the API, and nothing on the laptop.
+
+    ADR 0002 deleted the browser-to-loopback call (#60), so the entry that used
+    to permit `http://127.0.0.1:8001` permits nothing that exists. It is
+    asserted absent rather than merely narrowed: a hosted HTTPS page calling
+    `127.0.0.1` is the fragility the redesign removed, and a grant left behind
+    is the thing a future change would build on.
+    """
     vercel = (REPO_ROOT / "nomicous" / "frontend" / "vercel.json").read_text(encoding="utf-8")
 
-    assert "http://127.0.0.1:8001" in vercel
-    assert "http://127.0.0.1:*" in vercel
-    assert "http://localhost:8001" in vercel
-    assert "http://localhost:*" in vercel
-    assert "http://[::1]:8001" in vercel
-    assert "http://[::1]:*" in vercel
-    assert "connect-src" in vercel
+    assert "connect-src 'self' https://api.nomicous.com;" in vercel
+    for origin in (
+        "127.0.0.1",
+        "localhost",
+        "[::1]",
+    ):
+        assert origin not in vercel
+
+
+def test_vercel_frontend_csp_records_why_inline_scripts_are_still_allowed() -> None:
+    """`'unsafe-inline'` in script-src is a known gap; it must stay documented.
+
+    Next.js 16's App Router emits per-render inline `<script>` blocks carrying the
+    RSC flight payload, with no nonce attribute, so neither a hash allowlist nor
+    a static header can admit them. Removing the keyword here would ship a page
+    that renders but never hydrates. See docs/security/frontend-csp.md.
+    """
+    vercel = (REPO_ROOT / "nomicous" / "frontend" / "vercel.json").read_text(encoding="utf-8")
+    rationale = (REPO_ROOT / "docs" / "security" / "frontend-csp.md").read_text(encoding="utf-8")
+
+    assert "script-src 'self' 'unsafe-inline'" in vercel
+    assert "middleware" in rationale
+    assert "nonce" in rationale
+    assert "self.__next_f" in rationale
 
 
 def test_landing_csp_uses_json_ld_hash_instead_of_unsafe_inline() -> None:
@@ -197,9 +276,8 @@ def test_landing_csp_uses_json_ld_hash_instead_of_unsafe_inline() -> None:
 
 
 def test_runtime_images_uninstall_vulnerable_system_packaging_tools() -> None:
-    for relative in ("nomicous/Dockerfile", "inference/Dockerfile"):
-        dockerfile = (REPO_ROOT / relative).read_text(encoding="utf-8")
-        assert "pip uninstall -y pip setuptools wheel" in dockerfile
+    dockerfile = (REPO_ROOT / "nomicous" / "Dockerfile").read_text(encoding="utf-8")
+    assert "pip uninstall -y pip setuptools wheel" in dockerfile
 
 
 def test_role_migration_defines_service_boundaries_without_passwords() -> None:
@@ -216,25 +294,118 @@ def test_role_migration_defines_service_boundaries_without_passwords() -> None:
         assert role in migration
     assert "NOLOGIN" in migration
     assert "PASSWORD" not in migration
-    assert "GRANT SELECT, UPDATE ON TABLE inference_jobs TO nomicous_inference_worker" in migration
     assert "GRANT SELECT, UPDATE ON TABLE jobs TO nomicous_platform_worker" in migration
 
 
-def test_release_workflow_refuses_asset_replacement_and_generates_evidence() -> None:
-    workflow = (REPO_ROOT / ".github" / "workflows" / "release-helper.yml").read_text(
+def test_inference_worker_role_reaches_nothing_after_the_queue_collapse() -> None:
+    """ADR 0003 left the group with no table to read; 006 revokes what remains."""
+    drop = (
+        REPO_ROOT
+        / "nomicous"
+        / "infrastructure"
+        / "alembic"
+        / "versions"
+        / "006_drop_inference_jobs.py"
+    ).read_text(encoding="utf-8")
+    bootstrap = (REPO_ROOT / "scripts" / "platform" / "provision_database_roles.sql").read_text(
         encoding="utf-8"
     )
 
-    assert "--clobber" not in workflow
-    assert "SHA256SUMS" in workflow
-    assert "actions/attest-build-provenance@" in workflow
-    assert "anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610" in workflow
-    assert "aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1" in workflow
-    assert "overwrite: false" in workflow
-    assert "types: [published]" in workflow
-    assert 'gh release view "$RELEASE_TAG"' in workflow
-    assert "macos-15" in workflow
-    assert "macos-15-intel" in workflow
-    assert "nomicous-inference-helper-macos.dmg" in workflow
-    assert "nomicous-inference-helper-macos-intel.dmg" in workflow
-    assert "expected four installer assets" in workflow
+    assert 'op.drop_table("inference_jobs")' in drop
+    assert "REVOKE ALL ON SCHEMA public FROM nomicous_inference_worker" in drop
+    assert not [
+        line
+        for line in bootstrap.splitlines()
+        if "nomicous_inference_worker" in line and line.lstrip().startswith("GRANT")
+    ]
+
+
+def test_release_workflow_refuses_asset_replacement_and_generates_evidence() -> None:
+    document = yaml.safe_load(
+        (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    )
+    body = _workflow_body("release.yml")
+
+    assert "--clobber" not in body
+    assert "actions/attest-build-provenance@" in body
+    assert "anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610" in body
+    # 57a97c7e... was pinned with a `# v0.36.0` comment but is in fact the v0.35.0
+    # commit; ed142fd0... is the real v0.36.0.
+    assert "aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25" in body
+    assert document[True]["release"]["types"] == ["published"]
+    assert 'gh release view "$RELEASE_TAG"' in body
+
+    # One build, on one runner. There is no per-OS matrix: the wheel is
+    # pure-Python and the platform-specific bytes are PyPI's problem now.
+    jobs = document["jobs"]
+    assert list(jobs) == ["publish"]
+    assert jobs["publish"]["runs-on"] == "ubuntu-latest"
+    assert "strategy" not in jobs["publish"]
+
+
+def test_inference_group_carries_no_postgres_driver_or_orm() -> None:
+    """ADR 0003: nothing under `inference/` talks to a database."""
+    pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    inference = _flatten_group(pyproject["dependency-groups"], "inference")
+
+    forbidden = ("psycopg", "sqlalchemy", "asyncpg", "alembic")
+    assert not [dependency for dependency in inference if dependency.lower().startswith(forbidden)]
+
+    # ADR 0004: the runtime ships with the package, not with a container. The
+    # image-level Torch checks 049 wrote here went with inference/Dockerfile,
+    # which ADR 0003 deleted; this is the half that does not depend on an image.
+    # ADR 0006 then swapped which runtime that is: ONNX Runtime, not Torch.
+    assert any(
+        dependency.startswith("onnxruntime") for dependency in pyproject["project"]["dependencies"]
+    )
+
+
+def test_workflows_pin_every_action_to_a_commit_sha() -> None:
+    """A floating tag in a job holding `contents: write` is a release-signing risk."""
+    workflows = sorted((REPO_ROOT / ".github" / "workflows").glob("*.yml"))
+    assert workflows
+
+    floating: list[str] = []
+    for workflow in workflows:
+        for line in workflow.read_text(encoding="utf-8").splitlines():
+            match = re.search(r"uses:\s*([^\s@]+)@([^\s]+)", line)
+            if match and not re.fullmatch(r"[0-9a-f]{40}", match.group(2)):
+                floating.append(f"{workflow.name}: {match.group(0)}")
+    assert not floating, f"unpinned action references: {floating}"
+
+
+def test_release_publishes_with_no_long_lived_credential() -> None:
+    """Publishing must not reintroduce a secret that has to be rotated.
+
+    The signing pipelines this replaced held five repository secrets between
+    them plus a GPG manifest key, all long-lived, all revocable only by hand.
+    Trusted Publishing mints a token per run from the workflow's OIDC identity,
+    so there is nothing in repository settings to leak.
+    """
+    body = _workflow_body("release.yml")
+
+    assert "--trusted-publishing always" in body
+    assert "id-token: write" in body
+    assert "secrets." not in body, "the release path grew a long-lived credential again"
+
+    # Provenance attestation must not be skippable by flipping repo visibility.
+    assert "!github.event.repository.private" not in body
+
+    # The scan input must be the closure that actually reaches a researcher.
+    assert "scan-ref: release-scan" in body
+    assert "uv export --locked --no-default-groups --no-hashes" in body
+    assert re.search(r"^\s+path: release-scan\s*$", body, re.M) is not None
+
+
+def test_platform_requirements_are_gated_against_the_lockfile() -> None:
+    deployment = (REPO_ROOT / ".github" / "workflows" / "deployment.yml").read_text(
+        encoding="utf-8"
+    )
+    requirements = (REPO_ROOT / "deploy" / "platform" / "requirements.txt").read_text(
+        encoding="utf-8"
+    )
+
+    export = "uv export --locked --only-group platform-prod --no-hashes -o deploy/platform/requirements.txt"
+    assert export in requirements, "requirements.txt header no longer records its export command"
+    assert export in deployment
+    assert "git diff --exit-code -- deploy/platform/requirements.txt" in deployment

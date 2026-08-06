@@ -6,13 +6,18 @@ from concurrent.futures import ThreadPoolExecutor
 import uuid
 from datetime import UTC, datetime
 
+import pytest
+
 from backend.core.settings import get_inference_settings
 from backend.document.infrastructure.orm_models import (
     Document,
     DocumentPart,
     Line,
     LineGeometryKind,
+    Transcription,
 )
+from backend.jobs.application import job_callback_service
+from backend.jobs.application.job_callback_service import INFERENCE_FAILURE_ERROR
 from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
 from backend.project.infrastructure.orm_models import Project
 from fastapi.testclient import TestClient
@@ -241,7 +246,11 @@ def test_callback_wrong_secret_returns_403(client: TestClient):
 
 
 def test_callback_unconfigured_secret_returns_503(client: TestClient, monkeypatch):
-    monkeypatch.delenv("INFERENCE_WEBHOOK_SECRET", raising=False)
+    # Empty rather than deleted: settings also read `backend/core/.env`, falling
+    # back to `.env.supabase`, so removing the process variable leaves whatever
+    # the dotenv supplies and this asserts nothing in a configured checkout. An
+    # env var overrides the file, and the route treats empty as unconfigured.
+    monkeypatch.setenv("INFERENCE_WEBHOOK_SECRET", "")
     get_inference_settings.cache_clear()
     product_job_id, inference_job_id = _seed_waiting_job()
 
@@ -323,8 +332,25 @@ def test_callback_failure_marks_job_failed(client: TestClient):
 
     job = _get_job(product_job_id)
     assert job.status == JobStatus.failed
-    assert job.error == "Inference job failed"
+    # The inference service's own message is the only diagnostic it sends; it has
+    # to survive the hop, behind a stable prefix.
+    assert job.error == f"{INFERENCE_FAILURE_ERROR}: weights not found in cache"
     assert job.completed_at is not None
+
+
+def test_callback_failure_redacts_secret_shaped_detail(client: TestClient):
+    product_job_id, inference_job_id = _seed_waiting_job()
+    payload = _failed_payload(product_job_id=product_job_id, inference_job_id=inference_job_id)
+    payload["error"] = "download failed: https://weights.example/model?token=s3cr3ttokenvalue000"
+
+    response = client.post(CALLBACK_URL, headers=WEBHOOK_HEADERS, json=payload)
+    assert response.status_code == 204
+
+    job = _get_job(product_job_id)
+    assert job.error is not None
+    assert job.error.startswith(INFERENCE_FAILURE_ERROR)
+    assert "s3cr3ttokenvalue000" not in job.error
+    assert "weights.example" not in job.error
 
 
 # --- Idempotency and validation ---
@@ -489,6 +515,80 @@ def test_callback_claimed_replay_is_not_merged_twice(client: TestClient):
     job = _get_job(product_job_id)
     assert job.status == JobStatus.waiting
     assert job.result is None
+
+
+# --- Merge/finalize atomicity ---
+# Tests a raise after the document merge takes the merge down with it. Does not
+# test the claim, which commits in its own transaction by design.
+
+
+def test_finalize_failure_rolls_back_the_merged_lines(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    """Merge + finalize are one transaction: neither the lines nor a done job survive."""
+    product_job_id, inference_job_id = _seed_waiting_job()
+    part_id = _get_job(product_job_id).document_part_id
+    assert part_id is not None
+
+    def _boom(*_args, **_kwargs) -> None:
+        raise RuntimeError("finalize exploded")
+
+    monkeypatch.setattr(job_callback_service, "_mark_done_from_callback_sync", _boom)
+
+    with pytest.raises(RuntimeError, match="finalize exploded"):
+        client.post(
+            CALLBACK_URL,
+            headers=WEBHOOK_HEADERS,
+            json=_segment_done_payload(
+                product_job_id=product_job_id, inference_job_id=inference_job_id
+            ),
+        )
+
+    with sync_system_session() as session:
+        lines = list(session.execute(select(Line).where(Line.part_id == part_id)).scalars().all())
+    assert lines == []
+
+    job = _get_job(product_job_id)
+    assert job.status != JobStatus.done
+    assert job.result is None
+    # The claim committed separately, so it still needs a compensating write -
+    # otherwise the job hangs claimed until the stale-claim sweep notices.
+    assert job.status == JobStatus.failed
+    assert job.callback_claimed_at is None
+    assert job.completed_at is not None
+
+
+def test_transcribe_finalize_failure_rolls_back_the_transcription(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    product_job_id, inference_job_id, line_id = _seed_transcribe_waiting_job()
+
+    def _boom(*_args, **_kwargs) -> None:
+        raise RuntimeError("finalize exploded")
+
+    monkeypatch.setattr(job_callback_service, "_mark_done_from_callback_sync", _boom)
+
+    with pytest.raises(RuntimeError, match="finalize exploded"):
+        client.post(
+            CALLBACK_URL,
+            headers=WEBHOOK_HEADERS,
+            json=_transcribe_done_payload(
+                product_job_id=product_job_id,
+                inference_job_id=inference_job_id,
+                line_id=line_id,
+            ),
+        )
+
+    with sync_system_session() as session:
+        transcriptions = list(
+            session.execute(
+                select(Transcription).where(Transcription.created_by_job_id == product_job_id)
+            )
+            .scalars()
+            .all()
+        )
+    assert transcriptions == []
+    assert _get_job(product_job_id).status == JobStatus.failed
 
 
 def test_callback_unknown_job_returns_404(client: TestClient):

@@ -47,24 +47,21 @@ export type PublicTranscriptionLayerResponse =
 export type TranscriptionLayerResponse =
   components["schemas"]["TranscriptionLayerResponse"];
 export type LineTranscriptionResponse =
-  components["schemas"]["LineTranscriptionResponse"] & {
-    text_source?: string | null;
-    character_confidences?:
-      components["schemas"]["CharacterConfidence"][] | null;
-  };
+  components["schemas"]["LineTranscriptionResponse"];
 export type CharacterConfidence = components["schemas"]["CharacterConfidence"];
 export type JobResponse = components["schemas"]["JobResponse"];
 export type JobStatus = components["schemas"]["JobStatus"];
+/** The **inference host** one job runs on. Fixed at submission (ADR 0002). */
+export type ExecutionTarget = components["schemas"]["ExecutionTarget"];
+export type ExecutionPreferenceResponse =
+  components["schemas"]["ExecutionPreferenceResponse"];
 export type EnqueueJobResponse = components["schemas"]["EnqueueJobResponse"];
-export type SegmentPartRequest = {
-  use_otsu_refinement?: boolean;
-  otsu_sphere_radius?: number;
-  target_max_points?: number;
-  min_iou?: number;
-  min_area_ratio?: number;
-  split_large_lines?: boolean;
-  split_vertical_gap_px?: number;
-};
+/** Every tuning field is server-defaulted, so any subset is a valid body. */
+export type SegmentPartRequest = Partial<
+  components["schemas"]["SegmentPartRequest"]
+>;
+export type TranscribePartRequest =
+  components["schemas"]["TranscribePartRequest"];
 export type InferenceModelResponse =
   components["schemas"]["InferenceModelResponse"];
 export type InferenceTask = components["schemas"]["InferenceTask"];
@@ -74,7 +71,34 @@ export type EnqueueTestJobRequest =
   components["schemas"]["EnqueueTestJobRequest"];
 export type EnqueueTestJobResponse =
   components["schemas"]["EnqueueTestJobResponse"];
-export type LayoutPoint = [number, number];
+/**
+ * What a finished transcribe carries back. The server types it as a bare
+ * `dict` on the job (`JobResponse.result`), so the shape is the client's
+ * claim, made once here and read by `applyTranscribeResult`.
+ */
+export type TranscribeJobResult = {
+  transcription_id: string;
+  lines: Array<{ line_id: string; text: string; confidence: number }>;
+};
+/**
+ * The one place the generated wire types are narrowed by hand.
+ *
+ * The server types a geometry column as a bare `dict` and a point list as
+ * `list[list[float]]`, so the schema can only say "an object" and
+ * "number[][]". The canvas needs "an `[x, y]` pair" and "a point list, or an
+ * object wrapping one", and every helper in `canvasGeometry.ts` is written
+ * against those. The claim is checked where it is consumed rather than where
+ * it arrives: `normalizeGeometryPoints` unwraps the object forms and drops
+ * anything that is not a pair of numbers.
+ *
+ * Nothing else about these payloads is asserted here. Every field below comes
+ * from `schema.d.ts`, so a backend change reaches the frontend through
+ * `codegen:api` and fails the typecheck, rather than being shadowed by a
+ * second copy of the type.
+ */
+export type LinePoint = [number, number];
+/** The same pair, under the name the layout overlay uses. */
+export type LayoutPoint = LinePoint;
 export type GeometryValue =
   | LayoutPoint[]
   | {
@@ -82,103 +106,84 @@ export type GeometryValue =
       type?: string;
       coordinates?: LayoutPoint[];
     };
-export type LayoutBlockResponse = {
-  id: string;
-  box?: GeometryValue | null;
-  manual_geometry?: boolean | null;
+
+/** A geometry column as the schema renders it: an object with no shape. */
+type WireGeometry = { [key: string]: unknown };
+
+/** Applies the narrowing above to a generated shape, field by field. */
+type NarrowGeometry<T> = {
+  [K in keyof T]: K extends "points" | "kraken_ceiling"
+    ? Exclude<T[K], number[][]> | LinePoint[]
+    : K extends "baseline" | "mask" | "box"
+      ? Exclude<T[K], WireGeometry> | GeometryValue
+      : T[K];
 };
-export type LayoutLineResponse = {
-  id: string;
-  block_id?: string | null;
-  baseline?: GeometryValue | null;
-  mask?: GeometryValue | null;
-  manual_geometry?: boolean | null;
+
+type BlockResponse = NarrowGeometry<components["schemas"]["BlockResponse"]>;
+export type LineGeometryKind = components["schemas"]["LineGeometryKind"];
+export type LineSource = components["schemas"]["LineSource"];
+export type LineResponse = Omit<
+  NarrowGeometry<components["schemas"]["LineResponse"]>,
+  "line_transcriptions"
+> & {
+  /**
+   * Generated as optional only because the server field has a
+   * `default_factory` and so never reaches the schema's `required` list.
+   * FastAPI serializes it on every response.
+   */
+  line_transcriptions: LineTranscriptionResponse[];
 };
+export type LineCreateRequest = NarrowGeometry<
+  components["schemas"]["LineCreateRequest"]
+>;
+export type LinePatchRequest = NarrowGeometry<
+  components["schemas"]["LinePatchRequest"]
+>;
+export type LineUpsertRequest = NarrowGeometry<
+  components["schemas"]["LineUpsertRequest"]
+>;
+/** `LinesReplaceRequest`, with the narrowing carried into its lines. */
+export type LinesReplaceRequest = {
+  lines?: LineUpsertRequest[];
+};
+/** The geometry-only slice of `LinePatchRequest` a manual edit sends. */
+export type UpdateLineGeometryRequest = Pick<
+  LinePatchRequest,
+  "baseline" | "mask"
+>;
+export type ResetPartLayoutRequest =
+  components["schemas"]["LayoutResetRequest"];
+
+/**
+ * The editor's working copy of a layout, not a response shape.
+ *
+ * `GET .../layout` answers with whole blocks and lines, but the editor only
+ * ever reads and rewrites their geometry, and `syncLayoutLinesFromSegments`
+ * folds a segment edit back in as a line carrying geometry and nothing else.
+ * The field names and types are the generated ones; the optionality is the
+ * editor's own.
+ */
+export type LayoutBlockResponse = Pick<BlockResponse, "id"> &
+  Partial<Pick<BlockResponse, "box" | "manual_geometry">>;
+export type LayoutLineResponse = Pick<LineResponse, "id"> &
+  Partial<
+    Pick<LineResponse, "block_id" | "baseline" | "mask" | "manual_geometry">
+  >;
 export type PartLayoutResponse = {
   blocks: LayoutBlockResponse[];
   lines: LayoutLineResponse[];
 };
-export type LineGeometryKind = "polygon" | "rectangle";
-export type LineSource = "manual" | "kraken" | "model";
-export type LinePoint = [number, number];
-export type LineResponse = {
-  id: string;
-  part_id: string;
-  block_id: string | null;
-  order: number;
-  kind: LineGeometryKind;
-  points: LinePoint[];
-  baseline: GeometryValue;
-  mask: GeometryValue | null;
-  source: LineSource;
-  source_metadata: Record<string, unknown> | null;
-  kraken_ceiling: LinePoint[] | null;
-  manual_geometry: boolean;
-  line_transcriptions: LineTranscriptionResponse[];
-  created_at: string;
-};
-export type LineCreateRequest = {
-  order: number;
-  kind: LineGeometryKind;
-  points: LinePoint[];
-  block_id?: string | null;
-  baseline?: GeometryValue | null;
-  mask?: GeometryValue | null;
-};
-export type LinePatchRequest = {
-  order?: number;
-  block_id?: string | null;
-  baseline?: GeometryValue | null;
-  mask?: GeometryValue | null;
-  points?: LinePoint[];
-};
-export type LineUpsertRequest = {
-  id?: string;
-  order: number;
-  kind: LineGeometryKind;
-  points: LinePoint[];
-  block_id?: string | null;
-  source: LineSource;
-  source_metadata?: Record<string, unknown> | null;
-  kraken_ceiling?: LinePoint[] | null;
-  baseline?: GeometryValue | null;
-  mask?: GeometryValue | null;
-  approved_text?: string | null;
-};
-export type LinesReplaceRequest = {
-  lines: LineUpsertRequest[];
-};
-export type UpdateLineGeometryRequest = {
-  baseline?: GeometryValue | null;
-  mask?: GeometryValue | null;
-};
-export type ResetPartLayoutRequest = {
-  line_ids?: string[] | null;
-};
-export type PageTranscriptionTextLineResponse = {
-  order: number;
-  text: string;
-  paired_line_id: string | null;
-};
-export type PairingProgressResponse = {
-  paired_lines: number;
-  total_lines: number;
-  percent: number;
-};
-export type PagePairingResponse = {
-  text_lines: PageTranscriptionTextLineResponse[];
-  pairing_progress: PairingProgressResponse;
-};
-export type PageTranscriptionImportRequest = {
-  text: string;
-};
-export type PairTextLineRequest = {
-  line_id: string;
-  text_line_order: number;
-};
-export type LineTranscriptionPatchRequest = {
-  text: string;
-};
+
+export type PageTranscriptionTextLineResponse =
+  components["schemas"]["PageTranscriptionTextLineResponse"];
+export type PairingProgressResponse =
+  components["schemas"]["PairingProgressResponse"];
+export type PagePairingResponse = components["schemas"]["PagePairingResponse"];
+export type PageTranscriptionImportRequest =
+  components["schemas"]["PageTranscriptionImportRequest"];
+export type PairTextLineRequest = components["schemas"]["PairTextLineRequest"];
+export type LineTranscriptionPatchRequest =
+  components["schemas"]["LineTranscriptionPatchRequest"];
 export type CopyToGroundTruthRequest =
   components["schemas"]["CopyToGroundTruthRequest"];
 export type CopyToGroundTruthResponse =
@@ -371,11 +376,6 @@ export function publicPartMediaUrl(partId: string): string {
   return `${API_BASE_URL}/public/media/parts/${partId}`;
 }
 
-export type TranscribeJobResult = {
-  transcription_id: string;
-  lines: Array<{ line_id: string; text: string; confidence: number }>;
-};
-
 export const api = {
   login: (body: LoginRequest) =>
     apiRequest<TokenResponse>("/auth/login", {
@@ -397,6 +397,25 @@ export const api = {
     apiRequest<void>("/auth/logout", { method: "POST", skipAuth: true }),
 
   me: () => apiRequest<UserResponse>("/me"),
+
+  /**
+   * The account-level **host preference** - "use my computer when it is
+   * available" - plus what it resolves to right now.
+   *
+   * There is deliberately no per-job variant of either call: a researcher
+   * cannot know which host is faster for a given page, so the choice is made
+   * once for the account and announced on each job (ADR 0002).
+   */
+  getExecutionPreference: (options: { signal?: AbortSignal } = {}) =>
+    apiRequest<ExecutionPreferenceResponse>("/account/execution-target", {
+      signal: options.signal,
+    }),
+
+  setExecutionPreference: (preferLocalInference: boolean) =>
+    apiRequest<ExecutionPreferenceResponse>("/account/execution-target", {
+      method: "PUT",
+      body: { prefer_local_inference: preferLocalInference },
+    }),
 
   listProjectsPage: (options: ListPageOptions = {}) => {
     const query = cursorQuery(options);
@@ -654,57 +673,11 @@ export const api = {
     projectId: string,
     documentId: string,
     partId: string,
-    body?: { model_id?: string; line_ids?: string[] },
+    body?: TranscribePartRequest,
   ) =>
     apiRequest<EnqueueJobResponse>(
       `/projects/${projectId}/documents/${documentId}/parts/${partId}/transcribe`,
       { method: "POST", body: body ?? {} },
-    ),
-
-  persistLocalTranscribe: (
-    projectId: string,
-    documentId: string,
-    partId: string,
-    body: {
-      registry_model_id: string;
-      registry_tag?: string;
-      lines: Array<{
-        line_id: string;
-        text: string;
-        confidence: number;
-        character_confidences?: Array<{ char: string; confidence: number }>;
-      }>;
-    },
-  ) =>
-    apiRequest<{
-      job_id: string;
-      transcription_id: string;
-      lines: Array<{ line_id: string; text: string; confidence: number }>;
-    }>(
-      `/projects/${projectId}/documents/${documentId}/parts/${partId}/local-inference/transcribe`,
-      { method: "POST", body },
-    ),
-
-  persistLocalSegment: (
-    projectId: string,
-    documentId: string,
-    partId: string,
-    body: {
-      registry_model_id: string;
-      registry_tag?: string;
-      output: Record<string, unknown>;
-    },
-  ) =>
-    apiRequest<{
-      job_id: string;
-      blocks_count: number;
-      lines_count: number;
-      added_lines: number;
-      pruned_lines: number;
-      preserved_manual_lines: number;
-    }>(
-      `/projects/${projectId}/documents/${documentId}/parts/${partId}/local-inference/segment`,
-      { method: "POST", body },
     ),
 
   listInferenceModels: () =>
@@ -783,6 +756,16 @@ export const api = {
   getJob: (jobId: string) => apiRequest<JobResponse>(`/jobs/${jobId}`),
   cancelJob: (jobId: string) =>
     apiRequest<JobResponse>(`/jobs/${jobId}/cancel`, { method: "POST" }),
+
+  /**
+   * Remove finished jobs (done / failed / cancelled) from a project's history.
+   * Active jobs are left alone by the server.
+   */
+  clearProjectJobHistory: (projectId: string) =>
+    apiRequest<{ deleted: number }>(
+      `/jobs/history?project_id=${encodeURIComponent(projectId)}`,
+      { method: "DELETE" },
+    ),
 
   listProjectJobsPage: (projectId: string, options: ListPageOptions = {}) => {
     const query = cursorQuery(options);

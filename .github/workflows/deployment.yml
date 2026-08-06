@@ -14,44 +14,45 @@ jobs:
     name: Platform bundle, image, and supply-chain checks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
         with:
           python-version: "3.11"
           enable-cache: true
+      # deploy/platform/requirements.txt is what Vercel installs; uv.lock is what
+      # every other environment installs. Regenerate it with the exact command in
+      # its own header and fail if the committed copy differs.
+      - name: Verify deploy/platform/requirements.txt matches uv.lock
+        run: |
+          uv export --locked --only-group platform-prod --no-hashes -o deploy/platform/requirements.txt
+          if ! git diff --exit-code -- deploy/platform/requirements.txt; then
+            echo "::error file=deploy/platform/requirements.txt::Out of sync with uv.lock. Run: uv export --locked --only-group platform-prod --no-hashes -o deploy/platform/requirements.txt"
+            exit 1
+          fi
       - run: bash deploy/platform/build.sh
       - run: test -f deploy/platform/nomicous/backend/core/app.py
       - run: test -f deploy/platform/inference/contracts/__init__.py
       - run: test -f deploy/platform/inference/admission.py
-      - run: test -f deploy/platform/inference/infrastructure/settings.py
+      - run: test -f deploy/platform/inference/settings.py
       - name: Verify platform contract import surface
         run: |
           PYTHONPATH=deploy/platform uv run --locked --group platform python -c \
             "from inference.contracts.jobs import JobCallbackRequest; assert JobCallbackRequest"
       - run: docker build --target runtime --tag nomicous-api:ci -f nomicous/Dockerfile .
-      - run: docker build --target builder -f nomicous/frontend/Dockerfile nomicous
-      - run: docker build --target runtime --tag nomicous-inference:ci -f inference/Dockerfile .
+      # Build and tag the frontend `runner` stage (the image that actually ships)
+      # rather than only `builder`, so the scan steps below have a real artifact.
+      - run: docker build --target runner --tag nomicous-frontend:ci -f nomicous/frontend/Dockerfile nomicous
       - name: Verify runtime users and import surfaces
         run: |
           test "$(docker run --rm --entrypoint id nomicous-api:ci -u)" != "0"
-          test "$(docker run --rm --entrypoint id nomicous-inference:ci -u)" != "0"
           docker run --rm \
             -e JWT_SECRET=test-secret-not-for-production-at-least-32-bytes \
             -e ENVIRONMENT=development \
             --entrypoint python nomicous-api:ci \
             -c "from backend.core.main import app; assert app.title"
-          docker run --rm --entrypoint python nomicous-inference:ci -c "from inference.api.main import app; assert app.title"
-      - name: Verify health checks and minimal Hub resolver image content
+      - name: Verify health checks
         run: |
           docker image inspect nomicous-api:ci --format '{{json .Config.Healthcheck}}' | jq -e '.Test | length > 0'
-          docker image inspect nomicous-inference:ci --format '{{json .Config.Healthcheck}}' | jq -e '.Test | length > 0'
-          docker run --rm --entrypoint sh nomicous-inference:ci -c '
-            test -f /app/src/hf/resolve/cache.py
-            test ! -e /app/src/hf/cache/syriac-calamari-v1/stable/best.pt
-            test ! -d /app/src/hf/local
-            test ! -d /app/src/hf/staging
-            test ! -d /app/src/hf/publish
-          '
       - name: Prepare SBOM output directory
         run: mkdir -p sbom
       - name: Generate API image SBOM
@@ -62,16 +63,46 @@ jobs:
           output-file: sbom/nomicous-api.spdx.json
           artifact-name: nomicous-api-sbom
           upload-artifact: false
-      - name: Generate inference image SBOM
+      - name: Generate frontend image SBOM
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
         with:
-          image: nomicous-inference:ci
+          image: nomicous-frontend:ci
           format: spdx-json
-          output-file: sbom/nomicous-inference.spdx.json
-          artifact-name: nomicous-inference-sbom
+          output-file: sbom/nomicous-frontend.spdx.json
+          artifact-name: nomicous-frontend-sbom
           upload-artifact: false
+      # An SBOM pointed at the wrong path still produces a valid, empty document
+      # and every downstream gate then passes vacuously. Require real content,
+      # and require the runtime dependency we actually care about.
+      - name: Verify SBOMs are non-empty
+        run: |
+          python - <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          # A marker package per image: cheap, and it fails loudly if the SBOM was
+          # generated against the wrong reference rather than the built image.
+          expected = {
+              "sbom/nomicous-api.spdx.json": {"fastapi", "sqlalchemy", "supabase"},
+              "sbom/nomicous-frontend.spdx.json": {"next"},
+          }
+          failed = False
+          for relative, markers in expected.items():
+              document = json.loads(Path(relative).read_text(encoding="utf-8"))
+              packages = document.get("packages", [])
+              names = {package.get("name") for package in packages}
+              print(f"{relative}: {len(packages)} packages")
+              if len(packages) < 20:
+                  print(f"::error file={relative}::SBOM has only {len(packages)} packages")
+                  failed = True
+              for missing in sorted(markers - names):
+                  print(f"::error file={relative}::SBOM does not contain {missing}")
+                  failed = True
+          sys.exit(1 if failed else 0)
+          PY
       - name: Scan API image vulnerabilities
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: nomicous-api:ci
           format: table
@@ -79,17 +110,17 @@ jobs:
           ignore-unfixed: true
           vuln-type: os,library
           severity: CRITICAL,HIGH
-      - name: Scan inference image vulnerabilities
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.36.0
+      - name: Scan frontend image vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: nomicous-inference:ci
+          image-ref: nomicous-frontend:ci
           format: table
           exit-code: "1"
           ignore-unfixed: true
           vuln-type: os,library
           severity: CRITICAL,HIGH
       - name: Upload image SBOMs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: image-sboms-${{ github.sha }}
           path: sbom/*.spdx.json

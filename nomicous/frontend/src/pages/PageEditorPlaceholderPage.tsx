@@ -1,13 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { type LayoutPoint, type LinePoint, api } from "../api/client";
-import {
-  DEFAULT_SEGMENT_REGISTRY_MODEL_ID,
-  fetchLocalCacheStatus,
-  isModelRemoteOnly,
-  registrySelectionFromArtifactRef,
-  useInferenceHost,
-} from "../inference";
+import { type LayoutPoint, type LinePoint } from "../api/client";
+import { invalidateAfter } from "../api/resources";
+import { useHostPreference } from "../inference";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import { PageEditorCanvas } from "../components/page-editor/PageEditorCanvas";
 import { PageEditorTranscriptionStrip } from "../components/page-editor/PageEditorTranscriptionStrip";
@@ -21,12 +16,7 @@ import {
   hasPageEditorStatusAlerts,
 } from "../components/page-editor/PageEditorStatusAlerts";
 import { PageEditorInferenceBanner } from "../components/page-editor/PageEditorInferenceBanner";
-import { PageEditorLocalInferenceBanner } from "../components/page-editor/PageEditorLocalInferenceBanner";
 import { PageEditorToolbar } from "../components/page-editor/PageEditorToolbar";
-import {
-  getPageEditorProcessingLabel,
-  type PageEditorProcessingKind,
-} from "../components/page-editor/PageEditorProcessingBanner";
 import { PageEditorTranscriptionPdfWrap } from "../components/page-editor/PageEditorTranscriptionPdfWrap";
 import {
   rectanglePoints,
@@ -36,6 +26,7 @@ import {
   useLayoutMutations,
   usePageEditorData,
   usePageEditorJobQueue,
+  usePageEditorRunState,
   usePairingState,
 } from "../components/page-editor/hooks";
 import {
@@ -70,6 +61,11 @@ export function PageEditorPlaceholderPage() {
     null,
   );
   const [vertexCommitSignal, setVertexCommitSignal] = useState(0);
+  // The platform refused a submission because no **inference host** had
+  // capacity. Held on the page, not in a toast: it is an explanation to act on.
+  const [submissionRefusal, setSubmissionRefusal] = useState<string | null>(
+    null,
+  );
 
   const editorData = usePageEditorData(projectId, documentId, partId, () => {
     setEditorMode("layout");
@@ -108,107 +104,12 @@ export function PageEditorPlaceholderPage() {
   } = editorData;
 
   const jobQueue = usePageEditorJobQueue();
-  const inferenceHost = useInferenceHost();
-  const [segmentRegistryModelId, setSegmentRegistryModelId] = useState<
-    string | null
-  >(null);
-  const [localInferenceModelId, setLocalInferenceModelId] = useState<
-    string | null
-  >(null);
-  const localInferenceAbortRef = useRef<AbortController | null>(null);
-  const switchToCloudRef = useRef(false);
+  const hostPreference = useHostPreference();
 
-  const localInference = useMemo(
-    () => ({
-      onStart: async (registryModelId: string, registryTag = "stable") => {
-        localInferenceAbortRef.current?.abort();
-        localInferenceAbortRef.current = new AbortController();
-        // Only surface the download banner the first time a model is used on this
-        // machine. Once the weights are cached locally, the run proceeds silently.
-        const cached = await fetchLocalCacheStatus(
-          registryModelId,
-          registryTag,
-        );
-        setLocalInferenceModelId(cached === false ? registryModelId : null);
-      },
-      onEnd: () => {
-        setLocalInferenceModelId(null);
-        localInferenceAbortRef.current = null;
-      },
-      getSignal: () => localInferenceAbortRef.current?.signal,
-      shouldFallbackToCloud: () => switchToCloudRef.current,
-      clearFallbackToCloud: () => {
-        switchToCloudRef.current = false;
-      },
-    }),
-    [],
-  );
-
-  /** Abort the in-flight local run and fall through to cloud for this job only. */
-  function abortLocalRunToCloud() {
-    switchToCloudRef.current = true;
-    localInferenceAbortRef.current?.abort();
-    setLocalInferenceModelId(null);
-  }
-
-  /** Persist cloud as the default host (install banner / settings intent). */
+  /** Turn the account setting off, from the install prompt's escape hatch. */
   function preferCloudInferencePermanently() {
-    abortLocalRunToCloud();
-    inferenceHost.setInferencePreference("cloud");
+    void hostPreference.setPreferLocalInference(false);
   }
-
-  useEffect(() => {
-    if (!projectId || !documentId || !partId) {
-      setSegmentRegistryModelId(null);
-      return;
-    }
-    let cancelled = false;
-    void api
-      .resolvePartModelBinding(projectId, documentId, partId, "segment")
-      .then((resolved) => {
-        if (cancelled) return;
-        const { registryModelId } = registrySelectionFromArtifactRef(
-          resolved.model.artifact_ref,
-        );
-        setSegmentRegistryModelId(registryModelId);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setSegmentRegistryModelId(DEFAULT_SEGMENT_REGISTRY_MODEL_ID);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId, documentId, partId]);
-
-  const partImageUrl = part?.image_url ?? null;
-  const shouldUseLocalPath = useCallback(
-    (registryModelId: string) =>
-      inferenceHost.shouldUseLocalPath(registryModelId),
-    [inferenceHost],
-  );
-
-  const selectedModelHostEligibility = useMemo(() => {
-    const model = transcribeModels.find(
-      (entry) => entry.id === selectedTranscribeModelId,
-    );
-    if (!model) return null;
-    try {
-      const { registryModelId } = registrySelectionFromArtifactRef(
-        model.artifact_ref,
-      );
-      if (isModelRemoteOnly(inferenceHost.catalog, registryModelId)) {
-        return "remote" as const;
-      }
-      if (inferenceHost.shouldUseLocalPath(registryModelId)) {
-        return "local" as const;
-      }
-      return "any" as const;
-    } catch {
-      return null;
-    }
-  }, [inferenceHost, selectedTranscribeModelId, transcribeModels]);
 
   const pairing = usePairingState({
     projectId,
@@ -225,12 +126,8 @@ export function PageEditorPlaceholderPage() {
     setPairingProgress,
     setPairingError,
     selectedTranscribeModelId,
-    transcribeModels,
-    partImageUrl,
-    shouldUseLocalPath,
-    localInference,
+    setSubmissionRefusal,
     trackJobAndWait: jobQueue.trackAndWait,
-    trackLocalTask: jobQueue.trackLocalTask,
   });
 
   const layoutMutations = useLayoutMutations({
@@ -249,12 +146,8 @@ export function PageEditorPlaceholderPage() {
     setSelectedSegmentId: pairing.setSelectedSegmentId,
     setApprovedTextDraft: pairing.setApprovedTextDraft,
     onDrawComplete: () => setDrawMode("none"),
-    partImageUrl,
-    shouldUseLocalPath,
-    segmentRegistryModelId,
-    localInference,
+    setSubmissionRefusal,
     trackJobAndWait: jobQueue.trackAndWait,
-    trackLocalTask: jobQueue.trackLocalTask,
   });
 
   const {
@@ -325,16 +218,10 @@ export function PageEditorPlaceholderPage() {
     void updateSegmentPoints(selectedSegmentId, nextPoints);
   }
 
-  const processingKind: PageEditorProcessingKind = segmenting
-    ? "segmentation"
-    : ocrRunning
-      ? ocrScope === "page"
-        ? "transcription-page"
-        : "transcription-segment"
-      : null;
+  const runState = usePageEditorRunState({ segmenting, ocrRunning, ocrScope });
 
-  const canvasHint = processingKind
-    ? `${getPageEditorProcessingLabel(processingKind)}…`
+  const canvasHint = runState.processingLabel
+    ? `${runState.processingLabel}…`
     : editorMode === "layout" && drawMode === "polygon"
       ? draftPolygon.length === 0
         ? "Polygon: click to place the first corner"
@@ -419,6 +306,7 @@ export function PageEditorPlaceholderPage() {
   }
 
   const statusAlertProps = {
+    submissionRefusal,
     saveMessage,
     transcriptionSaveMessage,
     ocrMessage,
@@ -445,20 +333,14 @@ export function PageEditorPlaceholderPage() {
       }
       showStatusAlerts={hasPageEditorStatusAlerts(statusAlertProps)}
       statusAlerts={<PageEditorStatusAlerts {...statusAlertProps} />}
-      processingBanner={null}
       inferenceBanner={
-        <>
-          <PageEditorLocalInferenceBanner
-            registryModelId={localInferenceModelId}
-            onUseCloudInstead={abortLocalRunToCloud}
-          />
-          <PageEditorInferenceBanner
-            helperAvailable={inferenceHost.helperAvailable}
-            probing={inferenceHost.probing}
-            preferCloud={inferenceHost.preferCloud}
-            onUseCloudInstead={preferCloudInferencePermanently}
-          />
-        </>
+        <PageEditorInferenceBanner
+          hasLocalCapacity={hostPreference.hasLocalCapacity}
+          loading={hostPreference.loading}
+          preferLocalInference={hostPreference.preferLocalInference}
+          onRetry={() => void hostPreference.refresh()}
+          onUseCloudInstead={preferCloudInferencePermanently}
+        />
       }
       toolbar={
         document && part ? (
@@ -483,11 +365,18 @@ export function PageEditorPlaceholderPage() {
             selectedLineId={selectedLineId}
             textLines={textLines}
             onPairTextLine={pairTextLine}
-            onDocumentWorkflowChange={(workflow) =>
+            onDocumentWorkflowChange={(workflow) => {
               setDocument((current) =>
                 current ? { ...current, workflow } : current,
-              )
-            }
+              );
+              // Publishing is the one write in this editor that changes what a
+              // reader can reach at all. This handler used to stop at the local
+              // copy above, so the document list, the detail page and the
+              // public page went on showing the old status.
+              if (projectId && documentId) {
+                invalidateAfter.documentUpdated(projectId, documentId);
+              }
+            }}
             onDeleteSelectedSegment={deleteSelectedSegment}
             onResetSelectedLine={resetSelectedLine}
             actionsOpen={actionsOpen}
@@ -512,12 +401,13 @@ export function PageEditorPlaceholderPage() {
             onSettingsOpenChange={setSettingsOpen}
             canvasSettings={canvasSettings}
             onCanvasSettingsChange={handleCanvasSettingsChange}
-            inferencePreference={inferenceHost.preference}
-            onInferencePreferenceChange={inferenceHost.setInferencePreference}
-            helperAvailable={inferenceHost.helperAvailable}
-            helperProbing={inferenceHost.probing}
-            preferCloud={inferenceHost.preferCloud}
-            selectedModelHostEligibility={selectedModelHostEligibility}
+            preferLocalInference={hostPreference.preferLocalInference}
+            onPreferLocalInferenceChange={(preferLocal) =>
+              void hostPreference.setPreferLocalInference(preferLocal)
+            }
+            preferenceSaving={hostPreference.saving}
+            hasLocalCapacity={hostPreference.hasLocalCapacity}
+            hostPreferenceLoading={hostPreference.loading}
           />
         ) : null
       }
@@ -575,7 +465,7 @@ export function PageEditorPlaceholderPage() {
                 onSegmentPointsChange={updateSegmentPoints}
               />
               <p
-                className={`pe-canvas-hint${processingKind ? " pe-canvas-hint--processing" : ""}`}
+                className={`pe-canvas-hint${runState.processingKind ? " pe-canvas-hint--processing" : ""}`}
                 id="canvas-hint"
                 role="status"
               >
@@ -657,7 +547,7 @@ export function PageEditorPlaceholderPage() {
             onSelectedTranscribeModelIdChange={setSelectedTranscribeModelId}
             ocrRunning={ocrRunning}
             ocrScope={ocrScope}
-            backgroundJobsActive={jobQueue.activeCount > 0}
+            backgroundJobsActive={runState.backgroundJobsActive}
           />
         </div>
       )}

@@ -15,6 +15,13 @@ into ``MEDIA_ROOT``; structured data is written to Postgres.
 Idempotent: skips documents that already exist in the target project (by name).
 When a document is skipped, missing history snapshots are backfilled automatically.
 
+Development only: this refuses to run unless ``ENVIRONMENT=development`` (see
+``backend/dev/bootstrap.require_development_environment``). It creates the
+well-known dev account, so anywhere else it would be planting a backdoor.
+
+Set ``DEV_USER_PASSWORD`` if you need a known login; otherwise a throwaway
+password is generated and printed once when the account is created.
+
 Usage (from repository root):
 
   python scripts/platform/seed_dev_annotated_data.py
@@ -30,7 +37,7 @@ import json
 import logging
 import os
 import re
-import sys
+import secrets
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -38,10 +45,6 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any
 from uuid import UUID
-
-# Quiet SQL echo unless --verbose (engine is created at import time).
-if "--verbose" not in sys.argv and "-v" not in sys.argv:
-    os.environ.setdefault("ENVIRONMENT", "production")
 
 from PIL import Image
 from sqlalchemy import func, select
@@ -53,6 +56,7 @@ ensure_nomicous_on_path()
 
 from backend.annotation.infrastructure.orm_models import AnnotationHistorySnapshot
 from backend.core.settings._env import REPO_ROOT
+from backend.dev.bootstrap import DEV_EMAIL, DEV_USERNAME, require_development_environment
 from backend.document.application.document_service import DocumentService
 from backend.document.infrastructure.media_store import MediaStore, get_media_store
 from backend.document.infrastructure.orm_models import (
@@ -67,18 +71,16 @@ from backend.project.infrastructure.orm_models import Project
 from backend.users.application.auth_service import AuthService
 from backend.users.infrastructure.orm_models import User
 from infrastructure import models as _orm_models  # noqa: F401 - register all mappers
-from infrastructure.db import system_session
+from infrastructure.db import engine, system_session
 
 log = logging.getLogger("seed_dev_annotated_data")
-
-DEV_EMAIL = os.environ.get("DEV_USER_EMAIL", "dev@example.com")
-DEV_USERNAME = os.environ.get("DEV_USER_USERNAME", "dev")
-DEV_PASSWORD = os.environ.get("DEV_USER_PASSWORD", "dev-pass-123")
 
 PROJECT_SLUG = os.environ.get("DEV_ANNOTATED_PROJECT_SLUG", "byzantine-greek-manuscripts")
 PROJECT_NAME = os.environ.get("DEV_ANNOTATED_PROJECT_NAME", "Byzantine Greek Manuscripts")
 PROJECT_GUIDELINES = os.environ.get(
-    "Greek Data Given by professor chitwood",
+    # The prose used to sit here as the variable *name*, so the override could
+    # never fire; the default was the only reachable value.
+    "DEV_ANNOTATED_PROJECT_GUIDELINES",
     "This is annotated data given by professor chitwood for byzantine greek.",
 )
 
@@ -112,6 +114,25 @@ def _configure_logging(*, verbose: bool) -> None:
     level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(level=level, format="%(message)s")
     logging.getLogger("sqlalchemy.engine").setLevel(logging.DEBUG if verbose else logging.ERROR)
+    # infrastructure.db turns echo on for development, and echo bypasses the
+    # logger level above (it logs through an InstanceLogger with its own level).
+    # Flip it on the engine instead. The previous workaround was to claim
+    # ENVIRONMENT=production at import time, which also disarmed the dev guard.
+    engine.echo = verbose
+
+
+def _resolve_dev_password() -> tuple[str, bool]:
+    """Return (password, generated) for the dev account this seed may create.
+
+    Never falls back to a committed literal: a seed script that ships its own
+    password hands out a working login to anyone who reads the repository.
+    Callers that want a predictable account export DEV_USER_PASSWORD; otherwise
+    we mint a throwaway and print it once, since only the hash survives.
+    """
+    supplied = os.environ.get("DEV_USER_PASSWORD")
+    if supplied:
+        return supplied, False
+    return secrets.token_urlsafe(24), True
 
 
 def _page_sort_key(stem: str) -> tuple[str, int]:
@@ -274,16 +295,21 @@ def _image_dimensions(data: bytes) -> tuple[int | None, int | None]:
 
 
 async def _ensure_dev_user(session: AsyncSession) -> User:
+    password, generated = _resolve_dev_password()
     auth = AuthService()
     user, _token = await auth.register_if_absent(
         session,
         email=DEV_EMAIL,
         username=DEV_USERNAME,
-        password=DEV_PASSWORD,
+        password=password,
     )
     if user is None:
         result = await session.execute(select(User).where(User.email == DEV_EMAIL))
-        user = result.scalar_one()
+        return result.scalar_one()
+    if generated:
+        # Only reachable when this run created the account; the plaintext is gone
+        # after this line, so print it rather than leave an unloggable-into user.
+        log.warning("Created %s with a generated password: %s", DEV_EMAIL, password)
     return user
 
 
@@ -575,6 +601,12 @@ async def _import_document(
 
 
 async def run_seed(*, force: bool, import_history: bool) -> ImportStats:
+    # Before any filesystem or database work: this seed creates the well-known
+    # dev account and writes fixture corpus data, so it must never touch a
+    # non-development deployment. The guard lives with the other dev bootstrap
+    # helpers so scripts cannot each invent their own weaker version.
+    require_development_environment()
+
     if not ANNOTATED_DATA_ROOT.is_dir():
         raise SystemExit(f"Annotated data root not found: {ANNOTATED_DATA_ROOT}")
 

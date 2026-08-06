@@ -38,6 +38,16 @@ body {
 
 a { color: var(--navy); }
 
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.875em;
+  padding: 0.1em 0.35em;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  overflow-wrap: break-word;
+}
+
 img {
   display: block;
   max-width: 100%;
@@ -373,12 +383,6 @@ main {
   padding: 0 var(--pad-x);
 }
 
-.shots {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 1.25rem;
-}
-
 /* ─── Sections ────────────────────────────────────────────────── */
 .section {
   padding-top: var(--pad-section);
@@ -556,11 +560,6 @@ main {
   .header__logo img { height: 3rem; }
 
   .hero__logo img { height: 6.5rem; }
-
-  .shots {
-    grid-template-columns: 1fr 1fr;
-    gap: 1.25rem;
-  }
 }
 
 @media (min-width: 64rem) {

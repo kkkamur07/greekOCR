@@ -17,21 +17,16 @@ from backend.core.settings import (
     get_job_settings,
     get_ml_settings,
     get_storage_settings,
+    reset_settings_caches,
 )
-from backend.jobs.worker_main import validate_worker_settings
 from backend.users.api.rate_limit import _real_ip
 
 
 def _clear_platform_settings() -> None:
-    for get_settings in (
-        get_app_settings,
-        get_auth_settings,
-        get_infrastructure_settings,
-        get_job_settings,
-        get_ml_settings,
-        get_storage_settings,
-    ):
-        get_settings.cache_clear()
+    # Enumerating the accessors by hand is what let this list drift - it was
+    # missing the device accessor. The registry cannot go stale: an accessor is
+    # enrolled by the decorator that caches it.
+    reset_settings_caches()
 
 
 @pytest.fixture(autouse=True)
@@ -94,40 +89,21 @@ def test_rate_limit_ignores_malformed_forwarded_client(monkeypatch) -> None:
     assert _real_ip(_request(peer="10.1.2.3", forwarded_for="not-an-ip, 10.2.3.4")) == "10.1.2.3"
 
 
-@pytest.mark.parametrize(
-    ("url", "expected"),
-    [
-        ("https://inference.example.com", None),
-        ("http://localhost:8001", "must use HTTPS"),
-        ("http://127.0.0.1:8001", "must use HTTPS"),
-        ("http://inference-api:8001", "must use HTTPS"),
-        ("http://api:8000/internal/inference/job-complete", "must use HTTPS"),
-        ("http://inference.example.com", "must use HTTPS"),
-    ],
-)
-def test_platform_production_inference_url_requires_https(url: str, expected: str | None) -> None:
-    values = {
-        "ENVIRONMENT": "production",
-        "INFERENCE_URL": url,
-        "INFERENCE_WEBHOOK_SECRET": "webhook-secret",
-        "INFERENCE_SERVICE_SECRET": "service-secret",
-    }
-    if expected:
-        with pytest.raises(ValidationError, match=expected):
-            MLSettings(_env_file=None, **values)
-    else:
-        assert MLSettings(_env_file=None, **values).inference_url == url
+def test_platform_holds_no_outbound_inference_credentials() -> None:
+    """ADR 0003: nothing on the platform calls the inference service any more."""
+    field_names = set(MLSettings.model_fields)
+
+    assert "inference_url" not in field_names
+    assert "inference_service_secret" not in field_names
 
 
 def test_platform_local_inference_mode_needs_no_cloud_credentials(monkeypatch) -> None:
     # CI injects inference secrets for other jobs; isolate this local-mode check.
-    monkeypatch.delenv("INFERENCE_URL", raising=False)
     monkeypatch.delenv("INFERENCE_WEBHOOK_SECRET", raising=False)
-    monkeypatch.delenv("INFERENCE_SERVICE_SECRET", raising=False)
     settings = MLSettings(ENVIRONMENT="production", _env_file=None)
 
     assert settings.cloud_inference_enabled is False
-    assert settings.inference_service_secret is None
+    assert settings.inference_webhook_secret is None
 
 
 @pytest.mark.parametrize("secret", [None, "", "replace-me", "replace-with-a-secret"])
@@ -137,9 +113,7 @@ def test_platform_production_rejects_missing_or_placeholder_inference_secrets(
     with pytest.raises((ValidationError, ValueError), match="INFERENCE_WEBHOOK_SECRET"):
         MLSettings(
             ENVIRONMENT="production",
-            INFERENCE_URL="https://inference.example.com",
             INFERENCE_WEBHOOK_SECRET=secret,
-            INFERENCE_SERVICE_SECRET="service-secret",
             _env_file=None,
         ).require_callback_receiver_configuration()
 
@@ -152,22 +126,11 @@ def test_platform_rejects_placeholder_jwt_secret(secret: str) -> None:
 
 def test_platform_app_fails_fast_for_production_inference_configuration(monkeypatch) -> None:
     monkeypatch.setenv("ENVIRONMENT", "production")
-    monkeypatch.setenv("JWT_SECRET", "valid-production-jwt-secret")
-    monkeypatch.setenv("INFERENCE_URL", "https://inference.example.com")
+    # Must clear the production JWT_SECRET floor (>=32 bytes, high entropy) so
+    # that this test still fails on the inference secret it is actually about.
+    monkeypatch.setenv("JWT_SECRET", "xQ7v2Kd9RmZ4pB6wLt1yHs3nCf8jUa5eG0oV")
     monkeypatch.setenv("INFERENCE_WEBHOOK_SECRET", "replace-me")
-    monkeypatch.setenv("INFERENCE_SERVICE_SECRET", "service-secret")
     _clear_platform_settings()
 
     with pytest.raises(ValidationError, match="INFERENCE_WEBHOOK_SECRET"):
         create_app()
-
-
-def test_platform_worker_validates_production_inference_configuration(monkeypatch) -> None:
-    monkeypatch.setenv("ENVIRONMENT", "production")
-    monkeypatch.setenv("INFERENCE_URL", "https://inference.example.com")
-    monkeypatch.delenv("INFERENCE_WEBHOOK_SECRET", raising=False)
-    monkeypatch.delenv("INFERENCE_SERVICE_SECRET", raising=False)
-    _clear_platform_settings()
-
-    with pytest.raises(ValueError, match="INFERENCE_SERVICE_SECRET"):
-        validate_worker_settings()

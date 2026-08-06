@@ -3,11 +3,8 @@
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
 
-from inference.api.app import create_app
-from inference.infrastructure.settings import InferenceSettings, get_inference_settings
-from inference.jobs.worker import main
+from inference.settings import InferenceSettings, get_inference_settings
 
 
 @pytest.fixture(autouse=True)
@@ -17,85 +14,23 @@ def clear_inference_settings_cache() -> None:
     get_inference_settings.cache_clear()
 
 
-@pytest.mark.parametrize(
-    ("url", "expected"),
-    [
-        ("https://api.example.com/internal/inference/job-complete", None),
-        ("http://localhost:8000/internal/inference/job-complete", "must use HTTPS"),
-        ("http://127.0.0.1:8000/internal/inference/job-complete", "must use HTTPS"),
-        ("http://api:8000/internal/inference/job-complete", "must use HTTPS"),
-        ("http://inference-api:8001/internal/inference/job-complete", "must use HTTPS"),
-        ("http://api.example.com/internal/inference/job-complete", "must use HTTPS"),
-    ],
-)
-def test_production_callback_url_requires_https(url: str, expected: str | None) -> None:
-    values = {
-        "ENVIRONMENT": "production",
-        "INFERENCE_CALLBACK_URL": url,
-        "INFERENCE_WEBHOOK_SECRET": "webhook-secret",
-        "INFERENCE_SERVICE_SECRET": "service-secret",
-    }
-    if expected:
-        with pytest.raises(ValidationError, match=expected):
-            InferenceSettings(_env_file=None, **values)
-    else:
-        assert InferenceSettings(_env_file=None, **values).inference_callback_url == url
+def test_settings_carry_no_database_configuration() -> None:
+    """ADR 0003: the inference service owns no queue, so it owns no database."""
+    field_names = set(InferenceSettings.model_fields)
+
+    assert not [name for name in field_names if "database" in name or name.startswith("db_")]
+    assert "worker_notify_channel" not in field_names
 
 
-@pytest.mark.parametrize("secret", [None, "", "replace-me", "replace-with-a-secret"])
-def test_production_worker_rejects_missing_or_placeholder_callback_secret(
-    secret: str | None,
-) -> None:
-    with pytest.raises((ValidationError, ValueError), match="INFERENCE_WEBHOOK_SECRET"):
-        InferenceSettings(
-            ENVIRONMENT="production",
-            INFERENCE_CALLBACK_URL="https://api.example.com/internal/inference/job-complete",
-            INFERENCE_WEBHOOK_SECRET=secret,
-            INFERENCE_SERVICE_SECRET="service-secret",
-            _env_file=None,
-        ).require_callback_configuration()
+def test_settings_carry_no_listening_service_configuration() -> None:
+    """ADR 0002: nothing here serves HTTP, so nothing here configures a server.
 
+    The service secret and its production placeholder check existed only to
+    authenticate callers of ``POST /inference/v1/run``. With that front door
+    gone, a surviving knob would be the first foothold for growing it back.
+    """
+    field_names = set(InferenceSettings.model_fields)
 
-def test_production_requires_callback_url() -> None:
-    with pytest.raises(ValueError, match="INFERENCE_CALLBACK_URL"):
-        InferenceSettings(
-            ENVIRONMENT="production",
-            INFERENCE_WEBHOOK_SECRET="webhook-secret",
-            INFERENCE_SERVICE_SECRET="service-secret",
-            _env_file=None,
-        ).require_callback_configuration()
-
-
-def test_production_inference_api_requires_explicit_database_url() -> None:
-    with pytest.raises(ValueError, match="INFERENCE_DATABASE_URL"):
-        InferenceSettings(
-            ENVIRONMENT="production",
-            INFERENCE_SERVICE_SECRET="service-secret",
-            _env_file=None,
-        ).require_service_endpoint_configuration()
-
-
-def test_inference_api_fails_fast_for_production_placeholder_secret(monkeypatch) -> None:
-    monkeypatch.setenv("ENVIRONMENT", "production")
-    monkeypatch.setenv(
-        "INFERENCE_CALLBACK_URL", "https://api.example.com/internal/inference/job-complete"
-    )
-    monkeypatch.setenv("INFERENCE_WEBHOOK_SECRET", "webhook-secret")
-    monkeypatch.setenv("INFERENCE_SERVICE_SECRET", "replace-me")
-    get_inference_settings.cache_clear()
-
-    with pytest.raises(ValidationError, match="INFERENCE_SERVICE_SECRET"):
-        create_app()
-
-
-def test_inference_worker_validates_before_waiting_for_schema(monkeypatch) -> None:
-    monkeypatch.setenv("ENVIRONMENT", "production")
-    monkeypatch.setenv(
-        "INFERENCE_CALLBACK_URL", "https://api.example.com/internal/inference/job-complete"
-    )
-    monkeypatch.setenv("INFERENCE_WEBHOOK_SECRET", "replace-me")
-    monkeypatch.setenv("INFERENCE_SERVICE_SECRET", "service-secret")
-    get_inference_settings.cache_clear()
-
-    with pytest.raises(ValidationError, match="INFERENCE_WEBHOOK_SECRET"):
-        main()
+    assert "inference_service_secret" not in field_names
+    assert not [name for name in field_names if "host" in name or "port" in name]
+    assert not hasattr(InferenceSettings, "require_service_endpoint_configuration")

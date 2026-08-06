@@ -20,12 +20,13 @@ def resize_heatmaps_nearest(
     height: int,
     width: int,
 ) -> np.ndarray:
-    """Resize channels with the nearest-neighbour rule used by Torch.
+    """Resize channels with the nearest-neighbour rule the reference uses.
 
-    BLLA's reference decoder uses ``torch.nn.functional.interpolate`` without
-    a mode, which is nearest-neighbour interpolation for a 4D tensor. Keeping
-    this small operation in NumPy removes Torch from the decoder's runtime
-    dependency without changing the reference operation.
+    Restored by ADR 0006.
+    BLLA's reference decoder calls ``torch.nn.functional.interpolate`` with no
+    mode, which is nearest-neighbour for a 4D tensor. Doing it here in NumPy is
+    what removes Torch from the decoder without changing the operation: index
+    arithmetic, not resampling, so there is no interpolation kernel to differ.
     """
 
     if height <= 0 or width <= 0:

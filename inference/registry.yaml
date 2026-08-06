@@ -8,6 +8,11 @@ models:
       stable:
         weights_source: hf://kkkamur07/syriac-htr-calamari@stable
         hub_revision: 5ff715e873f1ae3f325ebea4d2c4a95eb5094601
+        # best.onnx at that revision. The digest has now moved back from the
+        # native checkpoint to the graph (ADR 0006); the revision has never
+        # moved, because both artifacts were published together and both are
+        # still there. Verified against the Hub's own LFS metadata, not against
+        # a local copy.
         artifact_sha256: 3cb01b58be5809032318c717c079a5b681a87074a372ea4334b9767c67ce301c
 
   # greek-calamari-v1 is NOT shippable yet: Hub repo kkkamur07/greek-htr-calamari
@@ -32,5 +37,12 @@ models:
     versions:
       stable:
         weights_source: hf://kkkamur07/segmentation-blla@stable
-        hub_revision: 444d51dd7b34cd2012b1ffe1c9c9442c875d8230
-        artifact_sha256: 5871e3755d414c00380794bafd570c1bb3d6a3255cdfb11b1bbe99dcec084d5e
+        # A NEW revision, unlike Calamari's. The blla.onnx published at
+        # 444d51dd predated the exporter's staged GroupNorm reduction, so it
+        # carried onnxruntime's flat group reduction and drifted the logits by
+        # up to 1.5e-01 against the Torch graph - enough to restructure the
+        # polygons of the shortest lines on a page (min IoU 0.73). Re-exported
+        # and re-published 2026-08-05; the same page now agrees on 34/34
+        # baselines at min IoU 1.00. See ADR 0006.
+        hub_revision: 5c20a584b39988a25dfc682f9fe634ac1b4a42dd
+        artifact_sha256: d3e9c086541157a2f55209bc4802206478231e7637c12ee4884504f94d6c4ed3

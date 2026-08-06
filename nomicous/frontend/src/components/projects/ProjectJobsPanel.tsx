@@ -1,12 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { Popconfirm } from "antd";
 import { api, type DocumentResponse, type JobResponse } from "../../api/client";
 import { ApiError } from "../../api/errors";
 import { useJobPolling } from "../../hooks/useJobPolling";
+import { toast } from "../ui/toast";
 import {
   isTerminalJobStatus,
   jobStatusLabel,
 } from "../page-editor/jobProgress";
+import {
+  executionAnnouncement,
+  INFERENCE_HOST_LABEL,
+  jobExecution,
+} from "../../inference/executionTarget";
 
 type ProjectJobsPanelProps = {
   projectId: string;
@@ -39,14 +46,10 @@ function formatWhen(iso: string): string {
   });
 }
 
-function formatExecution(execution: JobResponse["execution"]): string {
-  if (execution === "local") return "Local";
-  return "Cloud";
-}
-
-function executionClass(execution: JobResponse["execution"]): string {
-  if (execution === "local") return "project-jobs-panel__host--local";
-  return "project-jobs-panel__host--cloud";
+function executionClass(job: JobResponse): string {
+  return job.execution_target === "local"
+    ? "project-jobs-panel__host--local"
+    : "project-jobs-panel__host--cloud";
 }
 
 function statusClass(status: JobResponse["status"]): string {
@@ -68,6 +71,7 @@ export function ProjectJobsPanel({
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const loadMoreControllerRef = useRef<AbortController | null>(null);
 
   const documentNames = useMemo(
@@ -157,6 +161,30 @@ export function ProjectJobsPanel({
         ? `${jobs.length} recent`
         : "No jobs yet";
 
+  const finishedCount = jobs.length - activeCount;
+
+  const clearHistory = async () => {
+    if (clearing) return;
+    setClearing(true);
+    try {
+      const { deleted } = await api.clearProjectJobHistory(projectId);
+      toast.success(
+        deleted === 1
+          ? "1 finished job removed"
+          : `${deleted} finished jobs removed`,
+      );
+      setNextCursor(null);
+      const controller = new AbortController();
+      await load(null, controller.signal);
+    } catch (err) {
+      toast.error(
+        err instanceof ApiError ? err.message : "Could not clear job history",
+      );
+    } finally {
+      setClearing(false);
+    }
+  };
+
   const loadMore = () => {
     if (!nextCursor || loadingMore) return;
     const controller = new AbortController();
@@ -212,6 +240,24 @@ export function ProjectJobsPanel({
             {expanded ? "▴" : "▾"}
           </span>
         </button>
+        {finishedCount > 0 && (
+          <Popconfirm
+            title="Clear job history?"
+            description="Only finished jobs (done, failed and cancelled) are removed. Jobs that are still running stay in the list."
+            okText="Clear history"
+            cancelText="Keep"
+            okButtonProps={{ loading: clearing }}
+            onConfirm={() => clearHistory()}
+          >
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              disabled={clearing}
+            >
+              {clearing ? "Clearing…" : "Clear history"}
+            </button>
+          </Popconfirm>
+        )}
       </div>
 
       {error && (
@@ -250,9 +296,15 @@ export function ProjectJobsPanel({
                       </td>
                       <td>
                         <span
-                          className={`project-jobs-panel__host ${executionClass(job.execution)}`}
+                          className={`project-jobs-panel__host ${executionClass(job)}`}
                         >
-                          {formatExecution(job.execution)}
+                          {INFERENCE_HOST_LABEL[job.execution_target]}
+                        </span>
+                        {/* The host is stated in full on the row itself, not
+                            only as a badge: a substituted host has to be
+                            readable long after the submission that caused it. */}
+                        <span className="row-sub">
+                          {executionAnnouncement(jobExecution(job))}
                         </span>
                       </td>
                       <td className="col-muted">

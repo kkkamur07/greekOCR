@@ -14,15 +14,9 @@ import {
   type LineResponse,
   type PartLayoutResponse,
 } from "../../../api/client";
-import { fetchPartImage } from "../../../api/imageCache";
-import { ApiError } from "../../../api/errors";
-import {
-  blobToBase64,
-  DEFAULT_SEGMENT_REGISTRY_MODEL_ID,
-  runLocalInference,
-  type LocalInferenceCallbacks,
-  isAbortError,
-} from "../../../inference";
+import { ApiError, isAbortError } from "../../../api/errors";
+import { invalidateAfter } from "../../../api/resources";
+import { submissionRefusalExplanation } from "../../../inference";
 import { cleanPolygonPoints, offsetGeometry } from "../canvasGeometry";
 import {
   applyCanvasEdit,
@@ -31,6 +25,8 @@ import {
   type CanvasEdit,
 } from "../editUndo";
 import { SEGMENT_JOB_TIMEOUT_MS, type PageEditorJobKind } from "../jobProgress";
+import { nextSegmentOrder } from "../segmentNumbering";
+import { statusMessage, type StatusMessage } from "../statusMessage";
 import {
   applyLayoutLineGeometryToSegments,
   mergeSavedLine,
@@ -70,19 +66,17 @@ type LayoutMutationsInput = {
   setSelectedSegmentId: Dispatch<SetStateAction<string | null>>;
   setApprovedTextDraft: Dispatch<SetStateAction<string>>;
   onDrawComplete: () => void;
-  partImageUrl: string | null;
-  shouldUseLocalPath: (registryModelId: string) => boolean;
-  segmentRegistryModelId?: string | null;
-  localInference: LocalInferenceCallbacks;
+  /**
+   * Where a refused submission is explained. It is a standing line rather than
+   * the error toast, because "no inference host had capacity" is something the
+   * researcher has to act on, and a toast is gone before they can.
+   */
+  setSubmissionRefusal: Dispatch<SetStateAction<string | null>>;
   trackJobAndWait: (
     jobId: string,
     meta: { label: string; kind: PageEditorJobKind },
     options?: { timeoutMs?: number },
   ) => Promise<JobResponse>;
-  trackLocalTask: <T>(
-    meta: { label: string; kind: PageEditorJobKind },
-    run: (signal: AbortSignal) => Promise<T>,
-  ) => Promise<T>;
 };
 
 export function useLayoutMutations({
@@ -101,24 +95,25 @@ export function useLayoutMutations({
   setSelectedSegmentId,
   setApprovedTextDraft,
   onDrawComplete,
-  partImageUrl,
-  shouldUseLocalPath,
-  segmentRegistryModelId,
-  localInference,
+  setSubmissionRefusal,
   trackJobAndWait,
-  trackLocalTask,
 }: LayoutMutationsInput) {
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
   const [selectedLineSnapshot, setSelectedLineSnapshot] = useState<{
     baseline?: LayoutLineResponse["baseline"];
     mask?: LayoutLineResponse["mask"];
   } | null>(null);
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [saveMessage, setSaveMessage] = useState<StatusMessage | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
-  const [segmenting, setSegmenting] = useState(false);
+  // A count, not a flag: a superseded run unwinds while its successor is still
+  // going, and must not report the page as idle on the way out.
+  const [segmentRunCount, setSegmentRunCount] = useState(0);
+  const segmenting = segmentRunCount > 0;
   const [useOtsuRefinement, setUseOtsuRefinement] = useState(false);
   const [otsuSphereRadius, setOtsuSphereRadius] = useState(4);
-  const [segmentMessage, setSegmentMessage] = useState<string | null>(null);
+  const [segmentMessage, setSegmentMessage] = useState<StatusMessage | null>(
+    null,
+  );
   const undoStackRef = useRef<CanvasEdit[]>([]);
   const redoStackRef = useRef<CanvasEdit[]>([]);
   const [editUndoRevision, setEditUndoRevision] = useState(0);
@@ -136,6 +131,18 @@ export function useLayoutMutations({
     setEditUndoRevision((value) => value + 1);
   }, [projectId, documentId, partId]);
 
+  /**
+   * Called once per committed write, after the server has taken it.
+   *
+   * The editor keeps its own copies of the Segments and layout, so a write here
+   * is visible on the page without any cache doing anything - which is exactly
+   * why the two reads that are *also* copies of it were being left behind.
+   */
+  const notePartContentChanged = useCallback(() => {
+    if (!projectId || !documentId) return;
+    invalidateAfter.partContentChanged(projectId, documentId);
+  }, [projectId, documentId]);
+
   const recordEdit = useCallback((edit: CanvasEdit) => {
     undoStackRef.current = pushEditOntoStack(undoStackRef.current, edit);
     redoStackRef.current = [];
@@ -149,8 +156,6 @@ export function useLayoutMutations({
     },
     [setLines, setLayout],
   );
-
-  const sortedLines = [...lines].sort((a, b) => a.order - b.order);
 
   function moveSelectedBaseline(deltaY: number) {
     if (!selectedLineId) return;
@@ -210,8 +215,9 @@ export function useLayoutMutations({
             : line,
         ),
       );
+      notePartContentChanged();
       setMutationError(null);
-      setSaveMessage("Manual geometry saved");
+      setSaveMessage(statusMessage("Manual geometry saved"));
       setSelectedLineSnapshot({
         baseline: selectedLine.baseline,
         mask: selectedLine.mask,
@@ -247,21 +253,30 @@ export function useLayoutMutations({
 
   async function resetSelectedLine() {
     if (!projectId || !documentId || !partId || !selectedLineId) return;
-    const resetLayout = await api.resetPartLayout(
-      projectId,
-      documentId,
-      partId,
-      {
-        line_ids: [selectedLineId],
-      },
-    );
-    const nextLayout = resetLayout ?? { blocks: [], lines: [] };
-    setLayout(nextLayout);
-    setLines((current) =>
-      applyLayoutLineGeometryToSegments(current, nextLayout.lines),
-    );
-    setSelectedLineSnapshot(null);
-    setSaveMessage("Layout reset");
+    try {
+      const resetLayout = await api.resetPartLayout(
+        projectId,
+        documentId,
+        partId,
+        {
+          line_ids: [selectedLineId],
+        },
+      );
+      const nextLayout = resetLayout ?? { blocks: [], lines: [] };
+      setLayout(nextLayout);
+      setLines((current) =>
+        applyLayoutLineGeometryToSegments(current, nextLayout.lines),
+      );
+      setSelectedLineSnapshot(null);
+      notePartContentChanged();
+      setSaveMessage(statusMessage("Layout reset"));
+    } catch (err) {
+      // Both call sites - the Delete key and the Reset layout button - drop the
+      // returned promise, so a rejection that got this far said nothing at all:
+      // a reader without write access pressed Reset and the page did not move.
+      setSaveMessage(null);
+      setLineError(layoutMutationMessage(err));
+    }
   }
 
   async function replaceWithManualLine(
@@ -270,14 +285,20 @@ export function useLayoutMutations({
   ) {
     if (!projectId || !documentId || !partId) return;
     try {
+      // Past every Segment on the Page as it stands now. The count would collide
+      // with a survivor of a delete: the backend leaves the freed order behind.
       const saved = await api.createPartLine(projectId, documentId, partId, {
-        order: sortedLines.length,
+        order: nextSegmentOrder(linesRef.current),
         kind,
         points,
       });
-      const nextLines = mergeSavedLine(lines, saved);
+      // Merge into the segments as they are *now*, not as they were when the
+      // request went out: an edit that landed while it was in flight must
+      // survive, the way undo/redo already reads `linesRef`.
+      const nextLines = mergeSavedLine(linesRef.current, saved);
       applyLocalLines(nextLines);
       recordEdit({ kind: "create", line: saved });
+      notePartContentChanged();
       setLineError(null);
       onDrawComplete();
     } catch (err) {
@@ -323,7 +344,9 @@ export function useLayoutMutations({
           points: cleanedPoints,
         },
       );
-      const nextLines = mergeSavedLine(optimisticLines, saved);
+      // `optimisticLines` is the snapshot from before the request; merging into
+      // it would revert any edit made while the patch was in flight.
+      const nextLines = mergeSavedLine(linesRef.current, saved);
       applyLocalLines(nextLines);
       recordEdit({
         kind: "points",
@@ -331,6 +354,7 @@ export function useLayoutMutations({
         before,
         after: cleanedPoints,
       });
+      notePartContentChanged();
       setLineError(null);
     } catch (err) {
       applyLocalLines(previousLines);
@@ -368,6 +392,7 @@ export function useLayoutMutations({
     try {
       await api.deletePartLine(projectId, documentId, partId, deletedId);
       recordEdit({ kind: "delete", line: deletedLine });
+      notePartContentChanged();
       setLineError(null);
       const pairing = await api.getPagePairing(projectId, documentId, partId);
       setTextLines(pairing.text_lines);
@@ -411,6 +436,7 @@ export function useLayoutMutations({
           restored,
         );
       }
+      notePartContentChanged();
       setLineError(null);
       setEditUndoRevision((value) => value + 1);
       const pairing = await api.getPagePairing(projectId, documentId, partId);
@@ -453,6 +479,7 @@ export function useLayoutMutations({
         if (selectedSegmentId === edit.line.id) setSelectedSegmentId(null);
         undoStackRef.current = pushEditOntoStack(undoStackRef.current, edit);
       }
+      notePartContentChanged();
       setLineError(null);
       setEditUndoRevision((value) => value + 1);
       const pairing = await api.getPagePairing(projectId, documentId, partId);
@@ -466,6 +493,44 @@ export function useLayoutMutations({
     }
   }
 
+  /**
+   * The page state that follows a finished segmentation, local or cloud: both
+   * paths replace the same Segments, layout and pairing, and only the sentence
+   * they report differs. Returns the Segment count for that sentence.
+   *
+   * Callers reach this only after the `projectId`/`documentId`/`partId` guard in
+   * `runAutoSegment`.
+   */
+  async function reloadAfterSegmentation(): Promise<number> {
+    const [reloadedLines, reloadedLayout, pairing] = await Promise.all([
+      api.listPartLines(projectId!, documentId!, partId!),
+      api.getPartLayout(projectId!, documentId!, partId!),
+      api.getPagePairing(projectId!, documentId!, partId!),
+    ]);
+    setLines(reloadedLines);
+    setLayout(reloadedLayout ?? { blocks: [], lines: [] });
+    setSelectedLineId(null);
+    setSelectedSegmentId(null);
+    setSelectedLineSnapshot(null);
+    setApprovedTextDraft("");
+    setTextLines(pairing.text_lines);
+    setPairingProgress(pairing.pairing_progress);
+    return reloadedLines.length;
+  }
+
+  /**
+   * The sentence a finished segmentation reports.
+   *
+   * It no longer names a host: the job does that itself, on the job, which is
+   * the entire user interface for **execution target** (ADR 0002). Saying it
+   * twice, in two places, with two sources, is how they come to disagree.
+   */
+  function segmentationMessage(segmentCount: number): string {
+    return useOtsuRefinement
+      ? `Kraken segmentation completed with Otsu refinement (${otsuSphereRadius}px sphere, ${segmentCount} Segment(s)).`
+      : `Kraken segmentation completed using raw Kraken boundaries (${segmentCount} Segment(s)).`;
+  }
+
   async function runAutoSegment() {
     if (!projectId || !documentId || !partId) return;
     if (
@@ -476,124 +541,46 @@ export function useLayoutMutations({
     ) {
       return;
     }
-    setSegmenting(true);
+    setSegmentRunCount((count) => count + 1);
     setSegmentMessage(null);
     setPairingError(null);
-    try {
-      const resolvedSegmentModelId =
-        segmentRegistryModelId ?? DEFAULT_SEGMENT_REGISTRY_MODEL_ID;
-      if (shouldUseLocalPath(resolvedSegmentModelId)) {
-        try {
-          await trackLocalTask(
-            {
-              label: "Kraken line segmentation",
-              kind: "segmentation",
-            },
-            async (signal) => {
-              if (!partImageUrl) {
-                throw new Error(
-                  "Page image is not available for local segmentation.",
-                );
-              }
-              await localInference.onStart(resolvedSegmentModelId);
-              try {
-                const imageBytes = await blobToBase64(
-                  await fetchPartImage(partImageUrl),
-                );
-                signal.throwIfAborted();
-                const cloudSwitchSignal = localInference.getSignal();
-                const combinedSignal = cloudSwitchSignal
-                  ? AbortSignal.any([signal, cloudSwitchSignal])
-                  : signal;
-                const response = await runLocalInference({
-                  task: "segment",
-                  registry_model_id: resolvedSegmentModelId,
-                  image_bytes: imageBytes,
-                  signal: combinedSignal,
-                  params: {
-                    use_otsu_refinement: useOtsuRefinement,
-                    otsu_sphere_radius: otsuSphereRadius,
-                  },
-                });
-                signal.throwIfAborted();
-                cloudSwitchSignal?.throwIfAborted();
-                if (response.task !== "segment") {
-                  throw new Error(
-                    "Local segment returned an unexpected response.",
-                  );
-                }
-                await api.persistLocalSegment(projectId, documentId, partId, {
-                  registry_model_id: resolvedSegmentModelId,
-                  output: response.output,
-                });
-              } finally {
-                localInference.onEnd();
-              }
-            },
-          );
-          const [reloadedLines, reloadedLayout, pairing] = await Promise.all([
-            api.listPartLines(projectId, documentId, partId),
-            api.getPartLayout(projectId, documentId, partId),
-            api.getPagePairing(projectId, documentId, partId),
-          ]);
-          setLines(reloadedLines);
-          setLayout(reloadedLayout ?? { blocks: [], lines: [] });
-          setSelectedLineId(null);
-          setSelectedSegmentId(null);
-          setSelectedLineSnapshot(null);
-          setApprovedTextDraft("");
-          setTextLines(pairing.text_lines);
-          setPairingProgress(pairing.pairing_progress);
-          setSegmentMessage(
-            useOtsuRefinement
-              ? `Kraken segmentation completed locally with Otsu refinement (${otsuSphereRadius}px sphere, ${reloadedLines.length} Segment(s)).`
-              : `Kraken segmentation completed locally using raw Kraken boundaries (${reloadedLines.length} Segment(s)).`,
-          );
-          return;
-        } catch (err) {
-          if (!(isAbortError(err) && localInference.shouldFallbackToCloud())) {
-            throw err;
-          }
-          localInference.clearFallbackToCloud();
-        }
-      }
+    setSubmissionRefusal(null);
 
+    const jobMeta = {
+      label: "Kraken line segmentation",
+      kind: "segmentation" as const,
+    };
+
+    try {
       const enqueued = await api.segmentPart(projectId, documentId, partId, {
         use_otsu_refinement: useOtsuRefinement,
         otsu_sphere_radius: otsuSphereRadius,
       });
-      await trackJobAndWait(
-        enqueued.job_id,
-        {
-          label: "Kraken line segmentation",
-          kind: "segmentation",
-        },
-        { timeoutMs: SEGMENT_JOB_TIMEOUT_MS },
-      );
-      const [reloadedLines, reloadedLayout, pairing] = await Promise.all([
-        api.listPartLines(projectId, documentId, partId),
-        api.getPartLayout(projectId, documentId, partId),
-        api.getPagePairing(projectId, documentId, partId),
-      ]);
-      setLines(reloadedLines);
-      setLayout(reloadedLayout ?? { blocks: [], lines: [] });
-      setSelectedLineId(null);
-      setSelectedSegmentId(null);
-      setSelectedLineSnapshot(null);
-      setApprovedTextDraft("");
-      setTextLines(pairing.text_lines);
-      setPairingProgress(pairing.pairing_progress);
+      await trackJobAndWait(enqueued.job_id, jobMeta, {
+        timeoutMs: SEGMENT_JOB_TIMEOUT_MS,
+      });
+      notePartContentChanged();
+
+      // The segmentation is stored by now and only the reload is left. A
+      // failure here is a stale view of saved Segments, so it surfaces as an
+      // error banner and stops: the write is already finished, and there is
+      // nothing left for it to re-run.
       setSegmentMessage(
-        useOtsuRefinement
-          ? `Kraken segmentation completed with Otsu refinement (${otsuSphereRadius}px sphere, ${reloadedLines.length} Segment(s)).`
-          : `Kraken segmentation completed using raw Kraken boundaries (${reloadedLines.length} Segment(s)).`,
+        statusMessage(segmentationMessage(await reloadAfterSegmentation())),
       );
     } catch (err) {
+      // The jobs panel already reports a user cancellation.
+      if (isAbortError(err)) return;
+      const refusal = submissionRefusalExplanation(err);
+      if (refusal) {
+        setSubmissionRefusal(refusal);
+        return;
+      }
       setPairingError(
         err instanceof Error ? err.message : "Auto segment failed.",
       );
     } finally {
-      setSegmenting(false);
+      setSegmentRunCount((count) => Math.max(0, count - 1));
     }
   }
 

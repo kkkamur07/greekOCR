@@ -1,15 +1,20 @@
 """Public read-only routes for published documents."""
 
+from __future__ import annotations
+
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.annotation.application.page_xml_export_service import PageXmlExportService
 from backend.annotation.application.transcription_pdf_service import TranscriptionPdfService
+from backend.core.api.pagination import MAX_CURSOR_LENGTH, decode_cursor, paginate_rows
 from backend.document.api.responses import document_with_parts_response
 from backend.document.api.schemas import (
+    DEFAULT_PUBLIC_LAYOUT_LINES,
+    MAX_PUBLIC_LAYOUT_LINES,
     DocumentWithPartsResponse,
     LineTranscriptionResponse,
     PublicBlockResponse,
@@ -17,11 +22,20 @@ from backend.document.api.schemas import (
     PublicLineResponse,
     PublicTranscriptionLayerResponse,
 )
-from backend.document.application.document_service import DocumentService
+from backend.document.api.public_rate_limit import throttle_public_export, throttle_public_read
+from backend.document.application.document_catalog import DocumentCatalog
 from infrastructure.db import get_db
 
-router = APIRouter(prefix="/public", tags=["public"])
-_service = DocumentService()
+#: Every route here answers an unauthenticated caller, so the per-client read budget is
+#: mounted on the router rather than route by route: a route added later is metered by
+#: existing, not by whoever adds it remembering to.
+router = APIRouter(
+    prefix="/public",
+    tags=["public"],
+    dependencies=[Depends(throttle_public_read)],
+    responses={429: {"description": "Rate limit exceeded"}},
+)
+_service = DocumentCatalog()
 _transcription_pdf_service = TranscriptionPdfService()
 _page_xml_export_service = PageXmlExportService()
 
@@ -67,6 +81,12 @@ async def get_published_document(
     document_id: UUID,
     db: AsyncSession = Depends(get_db),
 ) -> DocumentWithPartsResponse:
+    # No dimension backfill here, deliberately. It is a *write* - up to 25 blob
+    # downloads and a `session.commit()` - and this route answers anyone with the URL.
+    # Parts uploaded since migration 004 carry their dimensions already; the legacy ones
+    # are filled by the member read of the same document (`GET .../documents/{id}`),
+    # which is the path that has a caller to attribute the work to. Until then the
+    # response carries `width: null`, which its schema has always allowed.
     document = await _service.get_document_public(db, project_id, document_id)
     return document_with_parts_response(document, public=True)
 
@@ -79,8 +99,25 @@ async def get_published_layout(
     project_id: UUID,
     document_id: UUID,
     db: AsyncSession = Depends(get_db),
+    limit: int = Query(default=DEFAULT_PUBLIC_LAYOUT_LINES, ge=1, le=MAX_PUBLIC_LAYOUT_LINES),
+    cursor: str | None = Query(default=None, max_length=MAX_CURSOR_LENGTH),
 ) -> PublicLayoutResponse:
-    blocks, lines = await _service.list_document_layout_public(db, project_id, document_id)
+    page_cursor = decode_cursor(cursor) if cursor else None
+    # The catalog probes one row past ``limit`` on both axes: for lines the extra row
+    # becomes the cursor below, for blocks it becomes ``blocks_truncated``.
+    layout = await _service.list_document_layout_public(
+        db,
+        project_id,
+        document_id,
+        limit=limit,
+        cursor=page_cursor,
+    )
+    page, next_cursor = paginate_rows(
+        layout.lines,
+        limit=limit,
+        created_at_getter=lambda line: line.created_at,
+        id_getter=lambda line: line.id,
+    )
     return PublicLayoutResponse(
         blocks=[
             PublicBlockResponse(
@@ -89,9 +126,11 @@ async def get_published_layout(
                 order=block.order,
                 box=block.box,
             )
-            for block in blocks
+            for block in layout.blocks
         ],
-        lines=[_public_line_response(line) for line in lines],
+        blocks_truncated=layout.blocks_truncated,
+        lines=[_public_line_response(line) for line in page],
+        next_cursor=next_cursor,
     )
 
 
@@ -112,6 +151,9 @@ async def list_published_transcriptions(
     "/projects/{project_id}/documents/{document_id}/parts/{part_id}/transcription-pdf",
     response_class=Response,
     responses=PDF_RESPONSE,
+    # Charged on top of the router's read budget: this is a full reportlab render over
+    # every line on the page, not a row read.
+    dependencies=[Depends(throttle_public_export)],
 )
 async def get_published_transcription_pdf(
     project_id: UUID,
@@ -136,6 +178,7 @@ async def get_published_transcription_pdf(
     "/projects/{project_id}/documents/{document_id}/parts/{part_id}/page-xml",
     response_class=Response,
     responses=XML_RESPONSE,
+    dependencies=[Depends(throttle_public_export)],
 )
 async def get_published_page_xml(
     project_id: UUID,

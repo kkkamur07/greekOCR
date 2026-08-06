@@ -1,17 +1,83 @@
+# The one published distribution (ADR 0002). It carries the inference library,
+# `hf://` weight resolution, and the `nomicous` console entry point; a hosted
+# worker installs the same wheel a researcher does, so there is no
+# version-compatibility matrix between components that always ship together.
+#
+# The repository root is the project because the package it publishes lives at
+# `inference/`, and a build backend cannot reach outside its own project root.
+# `tool.uv.package = false` below keeps development running from the tree: the
+# wheel is built explicitly (`uv build`), not installed into every dev venv.
 [project]
-name = "greekocr"
-version = "0.1.0"
-description = "OCR and processing for Greek documents"
+name = "nomicous-inference"
+version = "0.2.0"
+description = "Manuscript segmentation and transcription runtime for the nomicous platform"
+readme = "inference/README.md"
 requires-python = ">=3.11,<3.13"
+# [project].dependencies is the closure that reaches a researcher's laptop.
+# Anything added here is downloaded by every `uv tool install nomicous-inference`,
+# so it is the runtime imports of the shipped modules and nothing else. There is
+# no FastAPI, uvicorn or httpx because since #60 there is nothing under
+# `inference/` that serves HTTP: the wheel is now the whole package, with no
+# excluded subtree, because the loopback surfaces that had to be excluded are
+# gone (ADR 0002).
 dependencies = [
+    "huggingface-hub>=0.27.0",
     "numpy>=1.24.4,<2",
-    # 1.24+ no longer publishes Intel macOS wheels; the helper still ships an
-    # x86_64 macOS artifact and PyInstaller cannot cross-compile it.
-    "onnxruntime>=1.23.2,<1.24",
+    # ADR 0006: ONNX Runtime is the inference runtime for both architectures,
+    # CPU only. The wheel is self-contained - no CUDA variant is resolved for
+    # `onnxruntime`, which is why the `--torch-backend=cpu` install ceremony
+    # ADR 0004 needed is gone with it.
+    "onnxruntime>=1.23.2",
     "opencv-python-headless>=4.8,<4.13",
+    "pillow>=12.3.0",
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.6.0",
+    "pyyaml>=6.0.2",
+    # The CLI's terminal output (#56). Pure Python, two small dependencies
+    # (markdown-it-py, pygments), no compiled extension. It earns its place on
+    # the pairing screen: the URL must survive being printed at any width, and
+    # the **confirmation code** has to be the most prominent thing on it or ADR
+    # 0001's anti-phishing mitigation is decoration again.
+    "rich>=13.9.0",
+    "scikit-image>=0.25.0",
+    "scipy>=1.15.0",
+    "shapely>=2.1.0",
 ]
 
-[project.optional-dependencies]
+[project.scripts]
+# ADR 0002: local inference is a CLI, not a loopback service. `pair` and
+# `version` shipped in #56, the `run` claim loop in #57; self-upgrade is #58.
+nomicous = "inference.cli:main"
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["inference"]
+# Nothing is excluded for being a web server any more: #60 deleted
+# `inference/api` and `inference/helper` outright, so "the published closure
+# holds no web server" is now true by construction rather than by an exclude
+# list somebody has to keep correct.
+exclude = [
+    "/inference/CONTEXT.md",
+    # Empty placeholder tree from the pre-Hub weights layout. Weights come from
+    # the Hub now and are cached under the researcher's home directory.
+    "**/.gitkeep",
+]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/inference",
+    "/pyproject.toml",
+]
+
+[dependency-groups]
+# Training stack. A PEP 735 group rather than an optional-dependency extra: the
+# root project now publishes `nomicous-inference`, and an extra would make
+# `pip install nomicous-inference[train]` a supported way to pull transformers,
+# accelerate and torchvision onto a researcher's laptop. Nothing that trains a
+# model is part of what runs one. Use `uv run --group train`.
 train = [
     "accelerate>=1.13.0",
     "jiwer>=4.0.0",
@@ -20,114 +86,129 @@ train = [
     "torchvision>=0.25.0",
     "transformers>=5.11.0",
 ]
-
-[dependency-groups]
-dev = [
-    "pip-audit>=2.10.1",
-    "poethepoet>=0.48.0",
-    "pre-commit>=4.6.0",
-    "ruff>=0.15.21",
-]
-parity = ["kraken>=7.0.2"]
+# Artifact production, not artifact execution (ADR 0006).
+# `src/model/inference_export/` traces the
+# trained PyTorch graph into the `.onnx` the runtime loads, so this is where
+# Torch lives now: on a maintainer's machine, at the moment weights are
+# published, and nowhere near `[project].dependencies`. `safetensors` is here
+# for the same reason - it is the native BLLA checkpoint format the exporter
+# reads, and nothing under `inference/` opens it any more.
 export = [
     "onnx>=1.17.0",
     "safetensors>=0.5.0",
     "torch>=2.10.0",
 ]
-# Inference service API (separate container; contracts importable from nomicous)
-inference = [
-    "fastapi>=0.115.0",
-    "httpx>=0.28.0",
-    "opencv-python-headless>=4.8,<4.13",
-    "pillow>=12.3.0",
-    # Floor clears CVE-2025-4565 / CVE-2026-0994.
-    "protobuf>=5.29.6",
-    "pydantic>=2.10.0",
-    "pydantic-settings>=2.6.0",
-    "psycopg2-binary>=2.9.10",
-    "pyyaml>=6.0.2",
-    "scikit-image>=0.25.0",
-    "sqlalchemy>=2.0.36",
-    "shapely>=2.1.0",
-    "scipy>=1.15.0",
-    "uvicorn[standard]>=0.32.0",
-    "huggingface-hub>=0.27.0",
+dev = [
+    "mypy>=2.3.0",
+    "nbstripout>=0.8.1",
+    "pip-audit>=2.10.1",
+    "poethepoet>=0.48.0",
+    "pre-commit>=4.6.0",
+    "ruff>=0.15.21",
 ]
-helper = [
+# Test runner only. Kept separate (PEP 735 include-group) so a service group can
+# pull in the runner without every service group re-declaring pytest, and so the
+# production groups can leave it out.
+test = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    # Coverage measurement, configured in [tool.coverage] below. Deliberately
+    # not wired into CI and deliberately not gated on a threshold: the CI budget
+    # does not have room for a second full run of a suite that stands up
+    # Postgres and loads real Torch weights, and a number nobody can afford to
+    # measure is a number nobody should be blocked on. It is here so that
+    # "which branch of this is untested?" is a question with an answer:
+    #
+    #   uv run --group test --group platform --group inference \
+    #     pytest tests/nomicous --cov --cov-report=term-missing
+    "pytest-cov>=6.0.0",
+]
+# Shared FastAPI/pydantic surface of every Python service in the repo.
+service-core = [
     "fastapi>=0.115.0",
     "httpx>=0.28.0",
-    "huggingface-hub>=0.27.0",
-    "pillow>=12.3.0",
-    # Floor clears CVE-2025-4565 / CVE-2026-0994.
-    "protobuf>=5.29.6",
     "pydantic>=2.10.0",
     "pydantic-settings>=2.6.0",
     "pyyaml>=6.0.2",
-    "scikit-image>=0.25.0",
-    "scipy>=1.15.0",
-    "shapely>=2.1.0",
-    "uvicorn>=0.32.0",
+]
+# The `helper` group is gone with the modules it existed for (#60). It named
+# what the loopback HTTP surfaces needed on top of the published runtime, and
+# there is no longer anything under `inference/` that serves HTTP.
+#
+# What is left is what `tests/inference` needs in order to have a *platform* to
+# drive the CLI against: the integration tests stand up a real uvicorn process
+# on the platform's own `create_app()` and point `nomicous pair` / `nomicous
+# run` at it. None of it reaches a researcher - that is [project].dependencies,
+# which is now the single statement of what does.
+#
+# NOTE: the model runtime itself (numpy / onnxruntime / pillow / scikit-image /
+# scipy / shapely / opencv-python-headless / huggingface-hub) lives in
+# [project].dependencies, so this group must be installed with
+# `--group inference`, never `--only-group`.
+inference = [
+    { include-group = "service-core" },
+    # Floor clears CVE-2025-4565 / CVE-2026-0994.
+    "protobuf>=5.29.6",
+    "uvicorn[standard]>=0.32.0",
 ]
 load-testing = [
     "locust>=2.45.0",
 ]
-# Inference Helper native packaging (PyInstaller freeze)
-packaging = [
-    "pyinstaller>=6.21.0",
+# Production platform image / Vercel bundle (no test runner, no server, no OpenCV)
+platform-prod = [
+    { include-group = "service-core" },
+    "asyncpg>=0.30.0",
+    "bcrypt>=4.2.0",
+    "email-validator>=2.2.0",
+    "psycopg2-binary>=2.9.10",
+    "PyJWT>=2.10.0",
+    "python-multipart>=0.0.18",
+    # Secret-strength estimation for JWT_SECRET. Dropbox's zxcvbn, the Python port
+    # the upstream authors point at. MIT, ~880 KB, and it runs once at settings
+    # load, so it costs the Vercel bundle size but no request latency.
+    "zxcvbn>=4.5.0",
+    "sqlalchemy[asyncio]>=2.0.36",
     "pillow>=12.3.0",
+    "reportlab>=5.0.0",
+    "supabase>=2.13.0",
 ]
 # Nomicous platform API + Postgres + tests (deps only — repo is not installed as a package)
 platform = [
+    { include-group = "platform-prod" },
+    { include-group = "test" },
     "alembic>=1.14.0",
-    "asyncpg>=0.30.0",
-    "fastapi>=0.115.0",
-    "httpx>=0.28.0",
-    "bcrypt>=4.2.0",
-    "email-validator>=2.2.0",
-    "psycopg2-binary>=2.9.10",
-    "pydantic-settings>=2.6.0",
-    "pydantic>=2.10.0",
-    "PyJWT>=2.10.0",
-    "PyYAML>=6.0",
-    "python-multipart>=0.0.18",
-    "sqlalchemy[asyncio]>=2.0.36",
-    "uvicorn[standard]>=0.32.0",
-    "pytest>=8.3.0",
-    "pytest-asyncio>=0.24.0",
-    "pypdf>=6.13.2",
-    "pillow>=12.3.0",
     "opencv-python-headless>=4.8,<4.13",
-    "reportlab>=5.0.0",
-    "supabase>=2.13.0",
-]
-# Production platform image (no test runner deps)
-platform-prod = [
-    "asyncpg>=0.30.0",
-    "fastapi>=0.115.0",
-    "httpx>=0.28.0",
-    "bcrypt>=4.2.0",
-    "email-validator>=2.2.0",
-    "psycopg2-binary>=2.9.10",
-    "pydantic-settings>=2.6.0",
-    "pydantic>=2.10.0",
-    "PyJWT>=2.10.0",
-    "PyYAML>=6.0",
-    "python-multipart>=0.0.18",
-    "sqlalchemy[asyncio]>=2.0.36",
-    "pillow>=12.3.0",
-    "reportlab>=5.0.0",
-    "supabase>=2.13.0",
+    "pypdf>=6.13.2",
+    "uvicorn[standard]>=0.32.0",
 ]
 
 [tool.uv]
 package = false
 
+# The CPU-only Torch build, for the `train` and `export` groups. CUDA wheels
+# dominate the download and are useless for tracing a graph on a maintainer's
+# laptop; PyPI's macOS wheels are already CPU only, so the explicit index is
+# pinned on the platforms where they are not.
+#
+# Under ADR 0004 this same pin had to be re-stated by the *user*, because Torch
+# was in `[project].dependencies` and `tool.uv.sources` is ignored when a
+# package is consumed from a registry - hence the documented
+# `uv tool install nomicous-inference --torch-backend=cpu`, and a uv >= 0.10
+# floor to go with it, because 0.7.x accepts `UV_TORCH_BACKEND=cpu` and then
+# ignores it. ADR 0006 deletes that whole problem rather than documenting it
+# better: `onnxruntime` publishes one CPU wheel per platform, there is no CUDA
+# variant to accidentally resolve, and the install command is now just
+#
+#     uv tool install nomicous-inference
+#
+# This block now pins only *this repository's* lock, which is the scope
+# `tool.uv.sources` could ever actually enforce.
 [tool.uv.sources]
 torch = [
-    { index = "pytorch-cpu", marker = "sys_platform == 'linux'" },
+    { index = "pytorch-cpu", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
 torchvision = [
-    { index = "pytorch-cpu", marker = "sys_platform == 'linux'" },
+    { index = "pytorch-cpu", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
 
 [[tool.uv.index]]
@@ -139,40 +220,188 @@ explicit = true
 migrate = { shell = "cd ${NOMICOUS_APP_ROOT:-nomicous} && alembic -c infrastructure/alembic.ini upgrade head" }
 serve = { shell = "cd ${NOMICOUS_APP_ROOT:-nomicous} && uvicorn backend.core.main:app --host 0.0.0.0 --port 8000 --workers 1" }
 api = { sequence = ["migrate", "serve"] }
-inference-api = "uvicorn inference.api.main:app --host 0.0.0.0 --port 8001 --workers 1"
-inference-helper = "python -m inference.helper"
-inference-worker = "python -m inference.jobs.worker"
-test-fast = { shell = "uv run --group platform --group inference pytest tests/nomicous/unit" }
-test-integration = { shell = "uv run --group platform --group inference pytest tests/nomicous -m integration" }
-test-ml = { shell = "uv run --group platform --group inference pytest tests/nomicous -m ml" }
-test-inference = { shell = "uv run --group platform --group inference --group export pytest tests/inference" }
-test-hf = { shell = "uv run --group inference --group export pytest tests/hf" }
+# `--group test` is named explicitly on every task: the inference group carries
+# no pytest, so omitting it silently falls back to whatever `pytest` is on PATH
+# (unpinned) or fails outright.
+test-fast = { shell = "uv run --group test --group platform --group inference pytest tests/nomicous/unit" }
+test-integration = { shell = "uv run --group test --group platform --group inference pytest tests/nomicous -m integration" }
+# The ml lane lives entirely under tests/inference now: the platform no longer
+# runs a model, it hands a page to an agent that does.
+test-ml = { shell = "uv run --group test --group platform --group inference pytest tests/inference -m ml" }
+test-inference = { shell = "uv run --group test --group platform --group inference pytest tests/inference" }
+# The export tree is the only thing in this repository that still needs Torch
+# (ADR 0006), so it is the only task that names the `export` group.
+test-export = { shell = "uv run --group test --group inference --group export pytest tests/export" }
+test-hf = { shell = "uv run --group test --group inference pytest tests/hf" }
 
 [tool.pytest.ini_options]
-addopts = ["--import-mode=importlib"]
+# `--strict-markers` turns an unknown marker into a collection error instead of
+# a warning nobody reads. Without it `@pytest.mark.integraton` registers as
+# nothing at all, and the test it decorates is no longer excluded from the unit
+# lane - it runs there, against no database, and fails for a reason that looks
+# nothing like the typo that caused it.
+addopts = ["--import-mode=importlib", "--strict-markers"]
 pythonpath = ["nomicous", "."]
 asyncio_mode = "auto"
-testpaths = ["tests/nomicous", "tests/inference", "tests/hf"]
+testpaths = ["tests/nomicous", "tests/inference", "tests/export", "tests/hf"]
 filterwarnings = [
     "ignore:Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.:starlette.exceptions.StarletteDeprecationWarning",
-    "ignore:`TorchVGSLModel\\.load_model` is deprecated.*:DeprecationWarning:kraken\\.lib\\.vgsl\\.model",
-    "ignore:You will not be able to run predict\\(\\) on this Core ML model.*:RuntimeWarning:coremltools\\.models\\.model",
-    "ignore:`blla\\.segment\\(\\)` is deprecated.*:DeprecationWarning:kraken\\.blla",
 ]
 markers = [
     "integration: requires Postgres",
-    "ml: runs real Kraken/Calamari weights (slow)",
+    "ml: runs real BLLA/Calamari weights (slow)",
+]
+
+# ---------------------------------------------------------------------------
+# Coverage. Configuration only - no `--cov` in `addopts`, and no threshold
+# anywhere, so nothing here changes what any existing command does. Turn it on
+# per run:
+#
+#   pytest tests/nomicous --cov --cov-report=term-missing
+#
+# Scope is the two trees that ship, matching [tool.mypy].files. `src/` is
+# vendored research code that is not linted or type-checked either, `scripts/`
+# is operator tooling, and `tests/` covering itself is a tautology.
+# ---------------------------------------------------------------------------
+[tool.coverage.run]
+source = ["nomicous/backend", "inference"]
+branch = true
+# The integration suite runs the app in a TestClient thread and the platform job
+# worker in the lifespan task; without this, everything either of them executes
+# reads as uncovered.
+concurrency = ["thread"]
+parallel = true
+omit = [
+    "*/__init__.py",
+    # Alembic revisions are executed by `alembic upgrade`, not by pytest, and
+    # `test_migrations.py` asserts on the schema they produce rather than on
+    # their statements.
+    "nomicous/infrastructure/migrations/*",
+]
+
+[tool.coverage.paths]
+# `parallel = true` writes one data file per process; these have to be collapsed
+# onto one set of names before a report can be produced.
+backend = ["nomicous/backend", "*/nomicous/backend"]
+inference = ["inference", "*/inference"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@overload",
 ]
 
 [tool.ruff]
 line-length = 100
 target-version = "py311"
 src = ["nomicous/backend", "inference"]
+# CI and pre-commit invoke `ruff check .` so new top-level directories are linted
+# by default instead of silently escaping an explicit path list. These trees are
+# vendored, generated, or build output. (.venv, dist, and node_modules are
+# already in ruff's default excludes.)
+extend-exclude = [
+    ".lgraph",
+    # Retired subsystems, kept readable as they were. See archive/*/README.md.
+    "archive",
+    "data",
+    "deploy/platform/inference",
+    "deploy/platform/nomicous",
+    # The whole research tree, not `src/experiments` alone. It is vendored code
+    # nobody is maintaining to a lint standard, and it carried 555 findings that
+    # said nothing about the application. Excluding it here rather than listing
+    # per-directory ignores means a new subdirectory under `src/` is covered the
+    # day it appears - the previous list named `src/model` (singular) and silently
+    # missed `src/models` (plural) for exactly that reason.
+    #
+    # This is a suppression and only a suppression. The findings are real; they
+    # are recorded in docs/resume-inference-redesign.md. Everything outside `src/`
+    # is linted with no exemptions beyond the per-file-ignores below.
+    "src",
+]
 
 [tool.ruff.lint]
-# Start with correctness failures across the existing mixed-age codebase.
-# Formatting and style rules can be adopted incrementally without blocking CI.
-select = ["F"]
+# F: correctness. I: import sorting. UP: pyupgrade. B: bugbear. SIM: simplify.
+select = ["F", "I", "UP", "B", "SIM"]
+
+# ---------------------------------------------------------------------------
+# Widening `select` and moving CI to `ruff check .` surfaced pre-existing
+# violations across the application trees, none of them newly introduced. They
+# are suppressed here per tree and per rule so the new rules are enforced on all
+# new and already-clean code instead of the whole ruleset being held back.
+#
+# This block is debt, not policy: every entry should be fixed and deleted. It
+# covers only the trees that ship - `inference`, `nomicous`, `scripts`, `tests`.
+# The research tree is not here because it is not linted at all; see
+# `extend-exclude` above for why that is an exclusion rather than a row in this
+# table.
+#
+# Do not add a rule here to make a new violation pass. Deliberately no per-tree
+# counts: the previous version of this comment carried them, and they were wrong
+# within one merge of being written.
+# ---------------------------------------------------------------------------
+[tool.ruff.lint.per-file-ignores]
+"inference/**" = ["B905", "I001", "SIM109", "SIM114", "UP037"]
+"nomicous/backend/**" = ["B008", "B009", "I001", "SIM105", "UP037", "UP042"]
+"nomicous/infrastructure/**" = ["I001"]
+"scripts/**" = ["I001", "SIM112"]
+"tests/**" = ["B007", "B905", "F401", "I001", "SIM117"]
 
 [tool.ruff.format]
 quote-style = "double"
+
+# ---------------------------------------------------------------------------
+# Type checking. The frontend has run `tsc --noEmit` in CI since day one; the
+# Python side had nothing, which meant the `# type: ignore` comments scattered
+# through the backend were verified by exactly nothing.
+#
+# This is deliberately NOT `strict = true`, and the CI step deliberately runs
+# with `continue-on-error: true`. A checker that turns the build red on day one
+# against an untyped codebase gets switched off within a week; one that prints a
+# shrinking number every build gets adopted. Tighten the knobs below (and drop
+# the continue-on-error) as the count comes down, not before.
+#
+# Scope is `nomicous/backend` and `inference` only: the service code that ships.
+# `src/` (research + vendored Calamari), `scripts/`, and `tests/` are out.
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.11"
+# Bare `mypy` checks the same tree CI does. CI still names the paths explicitly.
+files = ["nomicous/backend", "inference"]
+# Runtime resolves `backend.*` with `nomicous` on sys.path (see
+# tool.pytest.ini_options.pythonpath); mypy needs the same two roots or every
+# first-party import inside nomicous/backend reads as missing.
+mypy_path = ["nomicous", "."]
+namespace_packages = true
+explicit_package_bases = true
+# Imported-but-unchecked modules are analysed for their types but never report
+# errors of their own. This is what keeps the scope above honest: importing the
+# vendored tree cannot dump its errors into this build.
+follow_imports = "silent"
+# Blunt, and intentionally so for the first pass: most runtime deps here ship no
+# stubs, and several hundred `import-untyped` lines would bury the real signal.
+# Replace with per-module overrides once the baseline is down.
+ignore_missing_imports = true
+# The one non-default that earns its noise: without it, mypy skips the body of
+# every unannotated function, which is most of them, and reports almost nothing.
+check_untyped_defs = true
+warn_redundant_casts = true
+# The point of the exercise: prove the existing `# type: ignore` comments still
+# suppress something real.
+warn_unused_ignores = true
+no_implicit_optional = true
+strict_equality = true
+# Off for now. These are the next knobs to turn on, roughly in this order.
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+warn_return_any = false
+# Vendored upstream Calamari fork. Excluded explicitly so a future widening of
+# `files` cannot pull it in.
+exclude = ["^src/model/"]
+
+[[tool.mypy.overrides]]
+module = ["src.model.*"]
+follow_imports = "skip"
+ignore_errors = true

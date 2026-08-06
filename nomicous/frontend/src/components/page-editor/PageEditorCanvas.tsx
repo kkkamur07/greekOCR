@@ -29,6 +29,7 @@ import {
   removePolygonVertex,
 } from "./canvasGeometry";
 import type { PageEditorCanvasSettings } from "./pageEditorSettings";
+import { segmentNumbersById, segmentsInNumberOrder } from "./segmentNumbering";
 
 const ZOOM_ANIMATION_MS = 220;
 const ZOOM_BUTTON_STEP = 0.12;
@@ -163,10 +164,8 @@ function CanvasSurfaceInner({
       : null;
   const isDraggingVertex = draggedVertexIndex !== null;
   const isVertexInteracting = pendingVertexIndex !== null || isDraggingVertex;
-  const orderedLines = useMemo(
-    () => [...lines].sort((left, right) => left.order - right.order),
-    [lines],
-  );
+  const orderedLines = useMemo(() => segmentsInNumberOrder(lines), [lines]);
+  const segmentNumbers = useMemo(() => segmentNumbersById(lines), [lines]);
   const activateWithKeyboard = (
     event: KeyboardEvent<SVGElement>,
     activate: () => void,
@@ -292,7 +291,7 @@ function CanvasSurfaceInner({
               className="pe-segment-shape"
               role="button"
               tabIndex={0}
-              aria-label={`Segment ${line.order + 1}${paired ? ", paired" : ""}`}
+              aria-label={`Segment ${segmentNumbers.get(line.id)}${paired ? ", paired" : ""}`}
               aria-current={selected ? "true" : undefined}
               onClick={(event) => {
                 event.stopPropagation();
@@ -485,7 +484,6 @@ type PageEditorCanvasProps = Omit<
   | "onRemoveVertex"
   | "draftPolygonCursor"
   | "onDraftPolygonCursor"
-  | "suppressBaselineSegmentId"
   | "onSelectVertex"
 > & {
   selectedVertexIndex: number | null;

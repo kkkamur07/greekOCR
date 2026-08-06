@@ -1,26 +1,28 @@
-import type { InferencePreference } from "../../inference/preference";
-import type { HostEligibility } from "../../inference/types";
+import {
+  HOST_PREFERENCE_HINT,
+  HOST_PREFERENCE_LABEL,
+} from "../../inference/hostPreference";
 import type { PageEditorCanvasSettings } from "./pageEditorSettings";
 
 type PageEditorSettingsPanelProps = {
   settings: PageEditorCanvasSettings;
   onSettingsChange: (settings: PageEditorCanvasSettings) => void;
-  inferencePreference: InferencePreference;
-  onInferencePreferenceChange: (preference: InferencePreference) => void;
-  helperAvailable: boolean;
-  selectedModelHostEligibility: HostEligibility | null;
+  /** The account-level **host preference**, not a per-job choice. */
+  preferLocalInference: boolean;
+  onPreferLocalInferenceChange: (preferLocal: boolean) => void;
+  preferenceSaving: boolean;
+  /** **Capacity** for this account's own computer, as the platform reports it. */
+  hasLocalCapacity: boolean;
 };
 
 export function PageEditorSettingsPanel({
   settings,
   onSettingsChange,
-  inferencePreference,
-  onInferencePreferenceChange,
-  helperAvailable,
-  selectedModelHostEligibility,
+  preferLocalInference,
+  onPreferLocalInferenceChange,
+  preferenceSaving,
+  hasLocalCapacity,
 }: PageEditorSettingsPanelProps) {
-  const remoteOnly = selectedModelHostEligibility === "remote";
-
   return (
     <div
       className="pe-dropdown pe-dropdown--settings"
@@ -28,26 +30,28 @@ export function PageEditorSettingsPanel({
       aria-label="Editor settings"
     >
       <div className="pe-dd-section">Inference</div>
-      <label className="pe-dd-field pe-dd-field--checkbox">
+      {/* One account-level setting, and no per-job toggle: a researcher cannot
+          know which host is faster for a given page, so the choice is made once
+          and each job then says which host ran it (ADR 0002). */}
+      <label className="pe-dd-check">
         <input
+          id="pe-prefer-local-inference"
           type="checkbox"
-          checked={remoteOnly || inferencePreference === "cloud"}
-          disabled={remoteOnly}
+          checked={preferLocalInference}
+          disabled={preferenceSaving}
           onChange={(event) =>
-            onInferencePreferenceChange(
-              event.target.checked ? "cloud" : "local",
-            )
+            onPreferLocalInferenceChange(event.target.checked)
           }
           onClick={(event) => event.stopPropagation()}
         />
-        <span>Use cloud inference</span>
+        {HOST_PREFERENCE_LABEL}
       </label>
       <p className="pe-dd-model">
-        {remoteOnly
-          ? "The selected model runs on the server only."
-          : helperAvailable
-            ? "Local inference uses the Nomicous helper on this machine when available."
-            : "Install the Inference Helper to run OCR and segmentation on your CPU."}
+        {`${HOST_PREFERENCE_HINT}${
+          !preferLocalInference || hasLocalCapacity
+            ? ""
+            : " Nothing is running on this computer right now, so jobs go to the cloud."
+        }`}
       </p>
 
       <div className="pe-dd-section">Canvas overlays</div>

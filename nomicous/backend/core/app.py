@@ -32,8 +32,10 @@ from backend.core.settings import (
     get_ml_settings,
     get_storage_settings,
 )
+from backend.core.settings.device import get_device_settings
 from backend.core.settings.job import get_job_settings
 from backend.core.version import get_version
+from backend.jobs.api.device_claim import router as device_claim_router
 from backend.jobs.api.internal_inference import router as internal_inference_router
 from backend.jobs.api.jobs import router as jobs_router
 from backend.jobs.infrastructure.notifications import platform_job_notification_loop
@@ -42,7 +44,17 @@ from backend.document.api.documents import router as documents_router
 from backend.document.api.media import router as media_router
 from backend.document.api.public import router as public_router
 from backend.document.api.public_media import router as public_media_router
+from backend.document.api.signed_media import router as signed_media_router
 from backend.document.infrastructure.media_gc import media_gc_loop
+from backend.ml.api.agent_version import (
+    AGENT_VERSION_REFUSED_STATUS,
+    AgentVersionRefusedError,
+)
+from backend.ml.api.agent_version import router as agent_version_router
+from backend.ml.api.device_pairing import router as device_pairing_router
+from backend.ml.api.device_self import router as device_self_router
+from backend.ml.api.execution_preference import router as execution_preference_router
+from backend.ml.api.devices import router as devices_router
 from backend.ml.api.models import router as ml_models_router
 from backend.ml.api.registry import router as ml_registry_router
 from backend.project.api.projects import router as projects_router
@@ -201,6 +213,32 @@ def _register_exception_handlers(app: FastAPI) -> None:
             exc=exc,
         )
 
+    @app.exception_handler(AgentVersionRefusedError)
+    async def agent_version_refused_handler(
+        request: Request, exc: AgentVersionRefusedError
+    ) -> JSONResponse:
+        """The one error on this platform that keeps its detail.
+
+        Every other handler above substitutes a fixed public message, because a
+        browser client has a human behind it and a leaked internal string helps
+        nobody. This response has a *program* behind it: an agent that cannot
+        read which version it needs cannot upgrade itself, and ADR 0002 makes
+        self-upgrade the mechanism that keeps stale agents off the claim path.
+        Nothing here is secret - the floor is a published number, and the CLI
+        must be able to learn it.
+        """
+        logger.info(
+            "agent_version_refused reason=%s presented=%r minimum=%s path=%s",
+            exc.refusal.reason,
+            exc.refusal.agent_version,
+            exc.refusal.minimum_version,
+            request.url.path,
+        )
+        return JSONResponse(
+            status_code=AGENT_VERSION_REFUSED_STATUS,
+            content=jsonable_encoder({"error": exc.refusal.model_dump()}),
+        )
+
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
         return _correlated_error(
@@ -289,22 +327,30 @@ async def _lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     # Resolve every API runtime setting before registering routes so a production
     # deployment cannot serve traffic with missing or placeholder credentials.
-    get_infrastructure_settings()
+    infrastructure_settings = get_infrastructure_settings()
     get_auth_settings()
+    # Refuses to start when a production deployment would key device tokens off
+    # JWT_SECRET, which would make a routine JWT rotation unpair every helper.
+    get_device_settings()
     app_settings = get_app_settings()
     job_settings = get_job_settings()
     ml_settings = get_ml_settings()
     if ml_settings.cloud_inference_enabled or job_settings.job_worker_enabled:
         ml_settings.require_callback_receiver_configuration()
-    if job_settings.job_worker_enabled:
-        ml_settings.require_job_dispatcher_configuration()
     get_storage_settings()
+    # The interactive docs and the OpenAPI document enumerate every route, body
+    # schema, and auth requirement. That is a development aid, not something an
+    # unauthenticated caller needs in production.
+    docs_enabled = not infrastructure_settings.is_production
     app = FastAPI(
         title="greekOCR Platform",
         version=get_version(),
         description="Greek manuscript OCR and annotation platform",
         lifespan=_lifespan,
         responses=COMMON_ERROR_RESPONSES,
+        docs_url="/docs" if docs_enabled else None,
+        redoc_url="/redoc" if docs_enabled else None,
+        openapi_url="/openapi.json" if docs_enabled else None,
     )
 
     @app.middleware("http")
@@ -331,8 +377,28 @@ def create_app() -> FastAPI:
     app.include_router(media_router)
     app.include_router(public_router)
     app.include_router(public_media_router)
+    # The signed page image link's landing site on the local storage backend. It
+    # carries no authentication dependency on purpose: the signature *is* the
+    # authorization (ADR 0002), and it refuses to answer at all unless
+    # STORAGE_BACKEND=local.
+    app.include_router(signed_media_router)
     app.include_router(ml_models_router)
     app.include_router(ml_registry_router)
+    app.include_router(execution_preference_router)
+    # Always mounted; each device router carries require_device_pairing_enabled,
+    # so DEVICE_PAIRING_ENABLED turns the surface off per request rather than at
+    # boot. Off by default in production until the /pair consent page exists.
+    app.include_router(device_pairing_router)
+    app.include_router(devices_router)
+    app.include_router(device_self_router)
+    # The claim endpoint. It is a device route by credential and a job route by
+    # subject, and it carries the same DEVICE_PAIRING_ENABLED gate as the rest of
+    # the device surface - one switch turns the whole outbound agent layer on.
+    app.include_router(device_claim_router)
+    # The version floor on its own, so an agent can learn it is too old at launch
+    # instead of finding out by claiming a page it would then have to hold while
+    # it upgraded (ADR 0002, issue 058).
+    app.include_router(agent_version_router)
     app.include_router(jobs_router)
     app.include_router(internal_inference_router)
     return app

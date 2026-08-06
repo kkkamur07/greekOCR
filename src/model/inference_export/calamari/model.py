@@ -1,10 +1,8 @@
-"""Forward pass for the reference Calamari graph."""
+"""Forward pass for the Calamari inference graph."""
 
 from __future__ import annotations
 
 import torch
-from torch import Tensor, nn
-
 from src.model.inference_export.calamari.config import CalamariTorchConfig, require_int
 from src.model.inference_export.calamari.layers import (
     LazyBiLSTM,
@@ -12,6 +10,7 @@ from src.model.inference_export.calamari.layers import (
     SameMaxPool2d,
     cnn_to_sequence,
 )
+from torch import Tensor, nn
 
 
 class CalamariTorchModel(nn.Module):
@@ -65,9 +64,11 @@ class CalamariTorchModel(nn.Module):
         logits = torch.roll(blank_last_logits, shifts=1, dims=-1)
         if self.config.temperature > 0:
             logits = logits / self.config.temperature
+        # No ``blank_last_softmax``: the decoder reads ``softmax``, and the
+        # blank-last variant is a second full softmax over every timestep of
+        # every line of every page that nothing has ever read.
         return {
             "blank_last_logits": blank_last_logits,
-            "blank_last_softmax": torch.softmax(blank_last_logits, dim=-1),
             "out_len": self.config.downscaled_sequence_lengths(image_lengths),
             "logits": logits,
             "softmax": torch.softmax(logits, dim=-1),

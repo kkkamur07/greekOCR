@@ -439,4 +439,76 @@ describe("PageEditorPlaceholderPage layout", () => {
       screen.getByLabelText("Line line-1 baseline").getAttribute("points"),
     ).toBe("60,140 300,150");
   });
+
+  it("shows a member-only error when the layout reset API rejects access", async () => {
+    mockedApi.getDocument.mockResolvedValue(DOCUMENT);
+    mockedApi.listPartLines.mockResolvedValue([
+      {
+        id: "line-1",
+        part_id: "part-1",
+        block_id: null,
+        order: 0,
+        kind: "polygon",
+        points: [
+          [55, 110],
+          [305, 118],
+          [300, 178],
+          [50, 168],
+        ],
+        baseline: [
+          [60, 140],
+          [300, 150],
+        ],
+        mask: [
+          [55, 110],
+          [305, 118],
+          [300, 178],
+          [50, 168],
+        ],
+        source: "kraken",
+        source_metadata: null,
+        kraken_ceiling: null,
+        manual_geometry: true,
+        line_transcriptions: [],
+        created_at: "2026-06-16T10:00:00Z",
+      },
+    ]);
+    mockedApi.getPartLayout.mockResolvedValue({
+      blocks: [],
+      lines: [
+        {
+          id: "line-1",
+          baseline: [
+            [60, 140],
+            [300, 150],
+          ],
+          mask: [
+            [55, 110],
+            [305, 118],
+            [300, 178],
+            [50, 168],
+          ],
+          manual_geometry: true,
+        },
+      ],
+    });
+    mockedApi.resetPartLayout.mockRejectedValue(new ApiError("Forbidden", 403));
+
+    renderPageEditor();
+
+    await enableBaselinesOnCanvas();
+
+    fireEvent.click(await screen.findByLabelText("Line line-1 baseline"));
+    const toastSuccess = vi.spyOn(toast, "success");
+    fireEvent.click(screen.getByRole("button", { name: /reset layout/i }));
+
+    // Both call sites drop the returned promise, so this rejection used to
+    // leave the page saying nothing whatsoever.
+    expect(
+      await screen.findByText(
+        "Segment API unavailable: Only project members can edit layout.",
+      ),
+    ).toBeTruthy();
+    expect(toastSuccess).not.toHaveBeenCalledWith("Layout reset");
+  });
 });

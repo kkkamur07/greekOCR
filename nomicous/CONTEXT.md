@@ -271,17 +271,13 @@ _Avoid_: Client-side (ambiguous with browser), on-device (mobile jargon)
 Running segment or transcribe models on a hosted inference service the platform calls when local inference is off, unavailable, or too slow.
 _Avoid_: Cloud OCR (too narrow), server-side ML (too generic)
 
-**Inference sidecar**:
-A native process on the researcher's machine that runs the inference service (health, job runner, model load) and is called over localhost.
-_Avoid_: Browser inference, embedded WASM model
+**Inference agent**:
+The program that runs models on a machine and takes its work from this platform's queue - `nomicous run`, from the **Published package**, started by the researcher in a terminal. It reaches the platform outbound and accepts no connections, so nothing in the browser addresses it and nothing on the researcher's machine is exposed. Defined in [`inference/CONTEXT.md`](../inference/CONTEXT.md). The same program runs on a hosted worker, differing only by the credential it presents.
+_Avoid_: Inference helper / Inference sidecar (loopback-era, meant a process listening on localhost), browser inference, embedded WASM model, one-click installer (retired by ADR 0002)
 
-**Inference helper**:
-The installable app that runs the **Inference sidecar** on a researcher's machine - one-click install, auto-starts on login, no Docker or terminal. Required for **local inference** when the platform is hosted in the browser.
-_Avoid_: Docker Compose (developer-only), manual setup
-
-**Inference preference**:
-Whether OCR and segment jobs use **local inference** (via **Inference helper**) or **remote inference** (hosted server). Researchers toggle with a single setting; default follows **registry host eligibility** for the selected model.
-_Avoid_: Sync vs async (execution mode, not host)
+**Host preference**:
+The account-level setting "use my computer when it is available" - the only researcher input to which **inference host** a job runs on. Combined with **host eligibility** and **capacity** it fixes one **execution target** at submission; there is no per-job toggle. Defined in [`inference/CONTEXT.md`](../inference/CONTEXT.md); the interface renders it in editor settings and announces the resulting host on every job.
+_Avoid_: Inference preference (retired name), per-job execution mode, `local_only` (retired by ADR 0002), sync vs async (execution mode, not host)
 
 **Product job status delivery (browser)**:
 The frontend opens `GET /jobs/{id}/events` (SSE) and receives `JobResponse` JSON on each status change. Postgres `NOTIFY` on `platform_jobs` wakes API listeners after commit; the API fans out to local SSE subscribers. HTTP polling (`GET /jobs/{id}`) remains as fallback when SSE is unavailable. See [technical architecture](../docs/architecture.md) and [`nomicous/backend/README.md`](backend/README.md#job-status-notifications).
@@ -294,7 +290,7 @@ The frontend opens `GET /jobs/{id}/events` (SSE) and receives `JobResponse` JSON
 - "line" alone is ambiguous - use **Segment** (image) or **Text line** (transcription).
 - "page transcription" vs canonical transcription - resolved: Page transcription is an import/pairing helper; approved per-line **Line transcription** is canonical.
 - frontend stack - resolved: port the platform frontend into `nomicous/frontend` and keep annote's editor theme.
-- OCR prediction execution - resolved: job-backed via inference; one **Product job** per user action, one callback, one completion. **Local inference** uses **Inference helper** + browser-orchestrated `/inference/v1/run`; **remote inference** uses the same job path on hosted servers. Researchers choose via **Inference preference** (default local when helper is present).
+- OCR prediction execution - resolved: job-backed via inference; one **Product job** per user action, one callback, one completion. Both **local inference** and **remote inference** use the one job path: an **Inference agent** claims a page from the platform's queue and reports through the same callback, wherever it is running. The browser-orchestrated `/inference/v1/run` that local inference once used is deleted (ADR 0002, #60). Researchers express a **Host preference** on the account; the platform fixes one **execution target** at submission and the job announces which **inference host** ran it. `local_only` is retired (ADR 0002) - its claim that nothing left the machine was never true, since page images live in the media store and the browser downloads them from there.
 - Segment model selection UI - deferred; backend uses the same model-resolution path as transcribe with a Kraken default until the picker ships.
 - Transcribe job progress UI - resolved: keep batched Calamari inference; banner may show total segment count and "Processing…" until the product job completes. No live per-line counter (1/10, 2/10).
 - Inference naming - resolved: rename Python types (`MLJob` → `InferenceJob`, etc.) in code; internal callbacks now use `/internal/inference` and `X-Inference-Webhook-Secret`.

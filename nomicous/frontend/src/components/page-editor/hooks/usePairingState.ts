@@ -7,22 +7,17 @@ import {
 } from "react";
 import {
   api,
-  type InferenceModelResponse,
   type JobResponse,
   type LineResponse,
   type TranscribeJobResult,
   type TranscriptionLayerResponse,
 } from "../../../api/client";
-import { fetchPartImage } from "../../../api/imageCache";
-import {
-  blobToBase64,
-  registrySelectionFromArtifactRef,
-  runLocalInference,
-  type LocalInferenceCallbacks,
-  type TranscribeBatchRunOutput,
-  isAbortError,
-} from "../../../inference";
+import { isAbortError } from "../../../api/errors";
+import { invalidateAfter } from "../../../api/resources";
+import { submissionRefusalExplanation } from "../../../inference";
 import type { PageEditorJobKind } from "../jobProgress";
+import { segmentNumberFor, segmentsInNumberOrder } from "../segmentNumbering";
+import { statusMessage, type StatusMessage } from "../statusMessage";
 import {
   lineTextForLayer,
   modelLayerIdForPromotion,
@@ -56,18 +51,16 @@ type PairingStateInput = {
   >;
   setPairingError: Dispatch<SetStateAction<string | null>>;
   selectedTranscribeModelId: string | null;
-  transcribeModels: InferenceModelResponse[];
-  partImageUrl: string | null;
-  shouldUseLocalPath: (registryModelId: string) => boolean;
-  localInference: LocalInferenceCallbacks;
+  /**
+   * Where a refused submission is explained. It is a standing line rather than
+   * the error toast, because "no inference host had capacity" is something the
+   * researcher has to act on, and a toast is gone before they can.
+   */
+  setSubmissionRefusal: Dispatch<SetStateAction<string | null>>;
   trackJobAndWait: (
     jobId: string,
     meta: { label: string; kind: PageEditorJobKind },
   ) => Promise<JobResponse>;
-  trackLocalTask: <T>(
-    meta: { label: string; kind: PageEditorJobKind },
-    run: (signal: AbortSignal) => Promise<T>,
-  ) => Promise<T>;
 };
 
 export function usePairingState({
@@ -85,23 +78,18 @@ export function usePairingState({
   setPairingProgress,
   setPairingError,
   selectedTranscribeModelId,
-  transcribeModels,
-  partImageUrl,
-  shouldUseLocalPath,
-  localInference,
+  setSubmissionRefusal,
   trackJobAndWait,
-  trackLocalTask,
 }: PairingStateInput) {
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(
     null,
   );
   const [approvedTextDraft, setApprovedTextDraft] = useState("");
-  const [transcriptionSaveMessage, setTranscriptionSaveMessage] = useState<
-    string | null
-  >(null);
+  const [transcriptionSaveMessage, setTranscriptionSaveMessage] =
+    useState<StatusMessage | null>(null);
   const [ocrRunning, setOcrRunning] = useState(false);
   const [ocrScope, setOcrScope] = useState<"segment" | "page" | null>(null);
-  const [ocrMessage, setOcrMessage] = useState<string | null>(null);
+  const [ocrMessage, setOcrMessage] = useState<StatusMessage | null>(null);
 
   useEffect(() => {
     setSelectedSegmentId(null);
@@ -110,17 +98,19 @@ export function usePairingState({
     setOcrMessage(null);
   }, [projectId, documentId, partId]);
 
-  const selectedSegmentIndex =
-    selectedSegmentId === null
-      ? null
-      : [...lines]
-          .sort((a, b) => a.order - b.order)
-          .findIndex((line) => line.id === selectedSegmentId);
+  /**
+   * Called once per committed write, after the server has taken it.
+   *
+   * Text written here shows up on the page from this hook's own state, so the
+   * two cached reads that are also copies of it - the document, and the
+   * published page a reader sees - had nothing telling them they were stale.
+   */
+  function notePartContentChanged() {
+    if (!projectId || !documentId) return;
+    invalidateAfter.partContentChanged(projectId, documentId);
+  }
 
-  const selectedSegmentNumber =
-    selectedSegmentIndex === null || selectedSegmentIndex < 0
-      ? null
-      : selectedSegmentIndex + 1;
+  const selectedSegmentNumber = segmentNumberFor(lines, selectedSegmentId);
 
   const selectedTranscriptionLayer =
     selectedTranscriptionLayerId === null
@@ -145,9 +135,11 @@ export function usePairingState({
         (textLine) => textLine.order === order,
       );
       if (candidate) {
-        setLines(
+        // Read-modify-write after an await: fold into the current segments, not
+        // into the render-time snapshot, or a concurrent edit is reverted.
+        setLines((current) =>
           withLocalGroundTruth(
-            lines,
+            current,
             groundTruthTranscriptionId,
             selectedSegmentId,
             candidate.text,
@@ -157,6 +149,7 @@ export function usePairingState({
       }
       setTextLines(pairing.text_lines);
       setPairingProgress(pairing.pairing_progress);
+      notePartContentChanged();
       setPairingError(null);
     } catch (err) {
       setPairingError(
@@ -179,9 +172,11 @@ export function usePairingState({
         selectedSegmentId,
         { text: approvedTextDraft },
       );
-      setLines(
+      // Read-modify-write after an await: fold into the current segments, not
+      // into the render-time snapshot, or a concurrent edit is reverted.
+      setLines((current) =>
         withLocalGroundTruth(
-          lines,
+          current,
           groundTruthTranscriptionId,
           selectedSegmentId,
           updated.text,
@@ -190,6 +185,7 @@ export function usePairingState({
       const pairing = await api.getPagePairing(projectId, documentId, partId);
       setTextLines(pairing.text_lines);
       setPairingProgress(pairing.pairing_progress);
+      notePartContentChanged();
       setPairingError(null);
     } catch (err) {
       setPairingError(
@@ -225,9 +221,11 @@ export function usePairingState({
         selectedSegmentId,
         { text: approvedTextDraft },
       );
-      setLines(
+      // Read-modify-write after an await: fold into the current segments, not
+      // into the render-time snapshot, or a concurrent edit is reverted.
+      setLines((current) =>
         withLocalGroundTruth(
-          lines,
+          current,
           groundTruthTranscriptionId,
           selectedSegmentId,
           updated.text,
@@ -236,8 +234,9 @@ export function usePairingState({
       const pairing = await api.getPagePairing(projectId, documentId, partId);
       setTextLines(pairing.text_lines);
       setPairingProgress(pairing.pairing_progress);
+      notePartContentChanged();
       setPairingError(null);
-      setTranscriptionSaveMessage("Ground truth text saved");
+      setTranscriptionSaveMessage(statusMessage("Ground truth text saved"));
     } catch (err) {
       setTranscriptionSaveMessage(null);
       setPairingError(
@@ -245,6 +244,18 @@ export function usePairingState({
           ? err.message
           : "Failed to save Ground truth text.",
       );
+    }
+  }
+
+  /** Keeps the draft box on the open segment showing the layer just written. */
+  function syncApprovedTextDraft(
+    reloadedLines: LineResponse[],
+    layerId: string,
+  ) {
+    if (!selectedSegmentId) return;
+    const segment = reloadedLines.find((line) => line.id === selectedSegmentId);
+    if (segment) {
+      setApprovedTextDraft(lineTextForLayer(segment, layerId));
     }
   }
 
@@ -257,21 +268,15 @@ export function usePairingState({
     setLines(reloadedLines);
     setTranscriptionLayers(layers);
     setSelectedTranscriptionLayerId(modelLayerId);
-    if (selectedSegmentId) {
-      const segment = reloadedLines.find(
-        (line) => line.id === selectedSegmentId,
-      );
-      if (segment) {
-        setApprovedTextDraft(lineTextForLayer(segment, modelLayerId));
-      }
-    }
+    syncApprovedTextDraft(reloadedLines, modelLayerId);
   }
 
-  async function applyTranscribeResult(job: JobResponse) {
-    const result = job.result as TranscribeJobResult | null;
-    if (!result?.transcription_id) {
-      throw new Error("Transcribe job returned no result.");
-    }
+  /**
+   * The page state a finished transcription leaves behind, wherever it was
+   * produced: the new layer is folded into the segments already on screen, then
+   * the page reloads to pick up what the server actually stored.
+   */
+  async function applyTranscribeResult(result: TranscribeJobResult) {
     setLines((current) =>
       current.map((line) => {
         const output = result.lines.find((entry) => entry.line_id === line.id);
@@ -296,155 +301,20 @@ export function usePairingState({
       }),
     );
     await refreshAfterOcr(result.transcription_id);
+    notePartContentChanged();
     return result;
   }
 
-  async function applyLocalTranscribeResult(
-    transcriptionId: string,
-    resultLines: TranscribeJobResult["lines"],
-  ) {
-    setLines((current) =>
-      current.map((line) => {
-        const output = resultLines.find((entry) => entry.line_id === line.id);
-        if (!output) return line;
-        const withoutLayer = line.line_transcriptions.filter(
-          (transcription) => transcription.transcription_id !== transcriptionId,
-        );
-        return {
-          ...line,
-          line_transcriptions: [
-            ...withoutLayer,
-            {
-              id: `ocr-${line.id}-${transcriptionId}`,
-              transcription_id: transcriptionId,
-              transcription_kind: "model" as const,
-              text: output.text,
-              confidence: output.confidence,
-            },
-          ],
-        };
-      }),
-    );
-    await refreshAfterOcr(transcriptionId);
-    return { transcription_id: transcriptionId, lines: resultLines };
+  function transcribeJobResult(job: JobResponse): TranscribeJobResult {
+    const result = job.result as TranscribeJobResult | null;
+    if (!result?.transcription_id) {
+      throw new Error("Transcribe job returned no result.");
+    }
+    return result;
   }
 
-  function selectedTranscribeModel(): InferenceModelResponse | null {
-    if (!selectedTranscribeModelId) return null;
-    return (
-      transcribeModels.find(
-        (model) => model.id === selectedTranscribeModelId,
-      ) ?? null
-    );
-  }
-
-  async function loadPartImageBase64(): Promise<string> {
-    if (!partImageUrl) {
-      throw new Error("Page image is not available for local inference.");
-    }
-    const blob = await fetchPartImage(partImageUrl);
-    return blobToBase64(blob);
-  }
-
-  async function runLocalTranscribe(lineIds: string[], signal: AbortSignal) {
-    const model = selectedTranscribeModel();
-    if (!model) {
-      throw new Error("Select an HTR model before running OCR.");
-    }
-    const { registryModelId, registryTag } = registrySelectionFromArtifactRef(
-      model.artifact_ref,
-    );
-    if (!shouldUseLocalPath(registryModelId)) {
-      throw new Error("Selected model is not eligible for local inference.");
-    }
-
-    const targetLines = lines
-      .filter((line) => lineIds.includes(line.id))
-      .sort((a, b) => a.order - b.order);
-    if (targetLines.length === 0) {
-      throw new Error("No matching segments to transcribe.");
-    }
-
-    const imageBytes = await loadPartImageBase64();
-    signal.throwIfAborted();
-    await localInference.onStart(registryModelId, registryTag);
-    try {
-      const cloudSwitchSignal = localInference.getSignal();
-      const combinedSignal = cloudSwitchSignal
-        ? AbortSignal.any([signal, cloudSwitchSignal])
-        : signal;
-      const response = await runLocalInference({
-        task: "transcribe",
-        registry_model_id: registryModelId,
-        registry_tag: registryTag,
-        image_bytes: imageBytes,
-        signal: combinedSignal,
-        params: {
-          lines: targetLines.map((line, index) => ({
-            line_id: line.id,
-            line_index: index,
-            points: line.points,
-          })),
-        },
-      });
-      signal.throwIfAborted();
-      cloudSwitchSignal?.throwIfAborted();
-
-      if (response.task !== "transcribe" || !("lines" in response.output)) {
-        throw new Error("Local transcribe returned an unexpected response.");
-      }
-      const batch = response.output as TranscribeBatchRunOutput;
-      const persisted = await api.persistLocalTranscribe(
-        projectId!,
-        documentId!,
-        partId!,
-        {
-          registry_model_id: registryModelId,
-          registry_tag: registryTag,
-          lines: batch.lines.map((entry) => ({
-            line_id: entry.line_id ?? targetLines[entry.line_index]?.id ?? "",
-            text: entry.output.text,
-            confidence: entry.output.confidence,
-            character_confidences: entry.output.character_confidences,
-          })),
-        },
-      );
-      return applyLocalTranscribeResult(
-        persisted.transcription_id,
-        persisted.lines,
-      );
-    } finally {
-      localInference.onEnd();
-    }
-  }
-
-  async function runLocalTranscribeWithFallback(
-    lineIds: string[],
-    jobMeta: { label: string; kind: PageEditorJobKind },
-  ) {
-    try {
-      return await trackLocalTask(jobMeta, (signal) =>
-        runLocalTranscribe(lineIds, signal),
-      );
-    } catch (err) {
-      if (isAbortError(err) && localInference.shouldFallbackToCloud()) {
-        localInference.clearFallbackToCloud();
-      } else {
-        throw err;
-      }
-    }
-
-    const enqueued = await api.enqueueTranscribePart(
-      projectId!,
-      documentId!,
-      partId!,
-      {
-        model_id: selectedTranscribeModelId!,
-        line_ids: lineIds.length === lines.length ? undefined : lineIds,
-      },
-    );
-    const job = await trackJobAndWait(enqueued.job_id, jobMeta);
-    return applyTranscribeResult(job);
+  async function applyTranscribeJob(job: JobResponse) {
+    return applyTranscribeResult(transcribeJobResult(job));
   }
 
   async function runSegmentOcr() {
@@ -464,30 +334,8 @@ export function usePairingState({
     setOcrScope("segment");
     setOcrMessage(null);
     setPairingError(null);
+    setSubmissionRefusal(null);
     try {
-      const model = selectedTranscribeModel();
-      const registryModelId = model
-        ? registrySelectionFromArtifactRef(model.artifact_ref).registryModelId
-        : null;
-      if (model && registryModelId && shouldUseLocalPath(registryModelId)) {
-        const result = await runLocalTranscribeWithFallback(
-          [selectedSegmentId],
-          {
-            label: selectedSegmentNumber
-              ? `Segment ${selectedSegmentNumber}`
-              : "Selected segment",
-            kind: "transcription-segment",
-          },
-        );
-        const hasAnyText = result.lines.some((line) => line.text?.trim());
-        setOcrMessage(
-          hasAnyText
-            ? "OCR prediction completed for selected Segment (local)."
-            : "OCR finished with no text for this segment.",
-        );
-        return;
-      }
-
       const enqueued = await api.enqueueTranscribePart(
         projectId,
         documentId,
@@ -503,14 +351,23 @@ export function usePairingState({
           : "Selected segment",
         kind: "transcription-segment",
       });
-      const result = await applyTranscribeResult(job);
+      const result = await applyTranscribeJob(job);
       const hasAnyText = result.lines.some((line) => line.text?.trim());
       setOcrMessage(
-        hasAnyText
-          ? "OCR prediction completed for selected Segment."
-          : "OCR finished with no text for this segment.",
+        statusMessage(
+          hasAnyText
+            ? "OCR prediction completed for selected Segment."
+            : "OCR finished with no text for this segment.",
+        ),
       );
     } catch (err) {
+      // The jobs panel already reports a user cancellation.
+      if (isAbortError(err)) return;
+      const refusal = submissionRefusalExplanation(err);
+      if (refusal) {
+        setSubmissionRefusal(refusal);
+        return;
+      }
       setPairingError(
         err instanceof Error ? err.message : "Segment OCR failed.",
       );
@@ -533,30 +390,8 @@ export function usePairingState({
     setOcrScope("page");
     setOcrMessage(null);
     setPairingError(null);
+    setSubmissionRefusal(null);
     try {
-      const model = selectedTranscribeModel();
-      const registryModelId = model
-        ? registrySelectionFromArtifactRef(model.artifact_ref).registryModelId
-        : null;
-      if (model && registryModelId && shouldUseLocalPath(registryModelId)) {
-        const result = await runLocalTranscribeWithFallback(
-          lines.map((line) => line.id),
-          {
-            label: "Full page",
-            kind: "transcription-page",
-          },
-        );
-        const withText = result.lines.filter((line) =>
-          line.text?.trim(),
-        ).length;
-        setOcrMessage(
-          withText > 0
-            ? `OCR prediction completed for ${withText} Segment(s) (local).`
-            : "OCR finished with no text for the selected segments.",
-        );
-        return;
-      }
-
       const enqueued = await api.enqueueTranscribePart(
         projectId,
         documentId,
@@ -569,14 +404,23 @@ export function usePairingState({
         label: "Full page",
         kind: "transcription-page",
       });
-      const result = await applyTranscribeResult(job);
+      const result = await applyTranscribeJob(job);
       const withText = result.lines.filter((line) => line.text?.trim()).length;
       setOcrMessage(
-        withText > 0
-          ? `OCR prediction completed for ${withText} Segment(s).`
-          : "OCR finished with no text for the selected segments.",
+        statusMessage(
+          withText > 0
+            ? `OCR prediction completed for ${withText} Segment(s).`
+            : "OCR finished with no text for the selected segments.",
+        ),
       );
     } catch (err) {
+      // The jobs panel already reports a user cancellation.
+      if (isAbortError(err)) return;
+      const refusal = submissionRefusalExplanation(err);
+      if (refusal) {
+        setSubmissionRefusal(refusal);
+        return;
+      }
       setPairingError(err instanceof Error ? err.message : "Page OCR failed.");
     } finally {
       setOcrRunning(false);
@@ -614,19 +458,13 @@ export function usePairingState({
       setLines(reloadedLines);
       setTextLines(pairing.text_lines);
       setPairingProgress(pairing.pairing_progress);
+      notePartContentChanged();
       setPairingError(null);
       if (groundTruthTranscriptionId) {
         setSelectedTranscriptionLayerId(groundTruthTranscriptionId);
-        const refreshedSegment = reloadedLines.find(
-          (line) => line.id === selectedSegmentId,
-        );
-        if (refreshedSegment) {
-          setApprovedTextDraft(
-            lineTextForLayer(refreshedSegment, groundTruthTranscriptionId),
-          );
-        }
+        syncApprovedTextDraft(reloadedLines, groundTruthTranscriptionId);
       }
-      setTranscriptionSaveMessage("Saved to Ground truth");
+      setTranscriptionSaveMessage(statusMessage("Saved to Ground truth"));
     } catch (err) {
       setTranscriptionSaveMessage(null);
       setPairingError(
@@ -645,7 +483,7 @@ export function usePairingState({
   }
 
   function navigateSegment(direction: -1 | 1) {
-    const sorted = [...lines].sort((a, b) => a.order - b.order);
+    const sorted = segmentsInNumberOrder(lines);
     if (sorted.length === 0) return;
 
     const currentIndex = selectedSegmentId

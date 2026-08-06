@@ -71,3 +71,40 @@ lerna-debug.log*
 data/
 .vercel
 .lgraph/
+
+# Hugging Face resolver cache. The default cache root moved to
+# ~/.nomicous/hf/cache when hf:// resolution moved into the published package,
+# but HF_CACHE_ROOT can still point here and older checkouts have one.
+# inference/hub/cache.py shutil.rmtree()s the model directories under it
+# whenever a cached artifact fails verification, so a tracked file in this tree
+# is deleted by the application at runtime. Weights are resolved from the Hub
+# on demand and must never be committed.
+/src/hf/cache/
+
+# Build output of the published `nomicous-inference` wheel.
+/dist/
+
+# Frozen-installer residue. #061 deleted the PyInstaller pipeline, but a checkout
+# that ever ran it keeps `packaging/helper/{build,dist}` — around 1.3 GB of
+# .app/.dmg output. Until now that was ignored only *incidentally*, by the
+# generic `build/` and `dist/` rules above; the wheel `dist` is already scoped to
+# `/dist/`, so narrowing the other two would silently expose a gigabyte of
+# binaries to `git add`. This line makes the exclusion deliberate.
+# `tests/nomicous/unit/test_deployment_hardening.py::test_no_native_packaging_survives`
+# checks tracked content, not directory existence, for the same reason.
+/packaging/
+# Local agent tooling state. `worktrees/` in particular holds full checkouts of
+# this repo, so committing one would nest the tree inside itself and make
+# `ruff check .` lint every copy. Nothing here is authored by hand or shared.
+/.claude/
+
+# Local tool cache (graphify) — build artefact, never source.
+graphify-out/
+
+# Exported ONNX artifacts in the Hub staging tree (ADR 0006). Derived, not
+# source: `src/model/inference_export/` produces them from the tracked `.pt` /
+# `.safetensors` beside them, and the published bytes live on the Hub at a
+# pinned revision + digest. Committing a copy would create a third version that
+# can drift from both - which is the exact defect ADR 0006 had to fix, where the
+# published blla.onnx no longer matched what the exporter produced.
+src/hf/staging/**/*.onnx

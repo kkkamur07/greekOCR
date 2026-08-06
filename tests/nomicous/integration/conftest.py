@@ -1,8 +1,4 @@
-"""Shared pytest fixtures — light integration tests (Postgres + TestClient only).
-
-ML-heavy tests under ``tests/nomicous/integration/ml/`` use a separate conftest that
-boots the platform and inference services over real HTTP.
-"""
+"""Shared pytest fixtures — integration tests against live Postgres and the real app."""
 
 import os
 import time
@@ -13,8 +9,12 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 
+# Safe above the environment setup below: `helpers` imports nothing from the
+# backend at module scope, precisely so that this line cannot resolve a settings
+# object before the environment it reads has been set.
+from tests.nomicous.integration.helpers import DEVICE_SERVICE_TOKEN
+
 os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production-at-least-32-bytes")
-os.environ.setdefault("INFERENCE_URL", "http://localhost:8001")
 os.environ.setdefault(
     "DATABASE_URL",
     "postgresql+asyncpg://postgres:dev@localhost:5433/kalamos",
@@ -23,15 +23,13 @@ os.environ.setdefault(
     "SYNC_DATABASE_URL",
     "postgresql://postgres:dev@localhost:5433/kalamos",
 )
-os.environ.setdefault(
-    "INFERENCE_DATABASE_URL",
-    "postgresql://postgres:dev@localhost:5433/kalamos",
-)
 os.environ.setdefault("AUTH_RATE_LIMIT_REQUESTS", "1000")
 os.environ.setdefault("ENABLE_TEST_JOB_ROUTES", "true")
 os.environ.setdefault("JOB_WORKER_ENABLED", "true")
 os.environ.setdefault("INFERENCE_WEBHOOK_SECRET", "test-inference-webhook-secret")
-os.environ.setdefault("INFERENCE_SERVICE_SECRET", "test-inference-webhook-secret")
+# The hosted worker's claim credential. Held to the same 32-character floor as the
+# device HMAC key, because unlike a device token it is scoped to no account.
+os.environ.setdefault("INFERENCE_WORKER_SERVICE_TOKEN", DEVICE_SERVICE_TOKEN)
 os.environ.setdefault(
     "MIGRATOR_DATABASE_URL",
     os.environ.get(
@@ -43,16 +41,29 @@ os.environ.setdefault(
     "INFERENCE_REGISTRY_PATH",
     os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../inference/registry.yaml")),
 )
+# The device routers construct their service at import time, so the pairing poll
+# cadence has to be collapsed before ``backend.core.app`` is imported below - the
+# real 5s interval makes every back-to-back poll in test_device_pairing.py return
+# ``slow_down``. It lives here rather than in that module because a test module is
+# imported *after* this conftest, which is too late to matter.
+#
+# Setting it here is also what lets that module use the session-scoped client
+# instead of assembling a second app. A second TestClient means a second event
+# loop, and the asyncpg pool is bound to the loop that created it - which is what
+# made four of these tests fail with "attached to a different loop" (issue #63).
+# The cadence itself is covered by unit tests with an explicit clock.
+os.environ.setdefault("DEVICE_PAIRING_POLL_INTERVAL_SECONDS", "1")
+os.environ.setdefault("DEVICE_PAIRING_APP_ORIGIN", "https://app.nomicous.test")
 
 import infrastructure.models  # noqa: F401 — register all mappers
 from backend.core.app import create_app
-from backend.core.settings import (
-    get_app_settings,
-    get_auth_settings,
-    get_infrastructure_settings,
-    get_job_settings,
-    get_ml_settings,
-)
+
+# Only `reset_settings_caches` is used, and deliberately so: the five individual
+# accessors that used to be imported alongside it were the hand-written list it
+# replaced, left behind after the switch. Naming them here again suggested this
+# module still cared which caches there were, when the whole point of
+# `reset_settings_caches` is that it does not have to.
+from backend.core.settings import reset_settings_caches
 from backend.users.api.rate_limit import clear_auth_rate_limit_state
 
 from infrastructure.db import Base, sync_engine
@@ -83,7 +94,6 @@ def _truncate_database() -> None:
                     connection.execute(
                         text(f"TRUNCATE TABLE {', '.join(table_names)} RESTART IDENTITY CASCADE")
                     )
-                connection.execute(text("TRUNCATE TABLE inference_jobs RESTART IDENTITY CASCADE"))
             return
         except OperationalError as exc:
             if "deadlock" not in str(exc).lower() or attempt == 7:
@@ -101,21 +111,16 @@ def client() -> TestClient:
 
 @pytest.fixture(autouse=True)
 def isolated_platform_state(client: TestClient):
-    from backend.jobs.infrastructure import worker as worker_module
-
-    get_app_settings.cache_clear()
-    get_auth_settings.cache_clear()
-    get_infrastructure_settings.cache_clear()
-    get_job_settings.cache_clear()
-    get_ml_settings.cache_clear()
+    # Every settings accessor at once. The hand-written list this replaces omitted
+    # the storage and device accessors, so a test that repointed STORAGE_BACKEND or
+    # any DEVICE_* value leaked it into whichever test ran next.
+    reset_settings_caches()
     clear_auth_rate_limit_state()
 
-    worker_module._inference_client = None
     _truncate_database()
 
     yield
     clear_auth_rate_limit_state()
-    worker_module._inference_client = None
 
 
 @pytest.fixture

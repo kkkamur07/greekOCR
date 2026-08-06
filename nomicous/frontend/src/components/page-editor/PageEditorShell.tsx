@@ -7,7 +7,6 @@ type PageEditorShellProps = {
   unavailableDescription: string | null;
   backHref: string;
   toolbar: ReactNode;
-  processingBanner?: ReactNode;
   inferenceBanner?: ReactNode;
   statusAlerts?: ReactNode;
   showStatusAlerts?: boolean;
@@ -19,7 +18,6 @@ export function PageEditorShell({
   unavailableDescription,
   backHref,
   toolbar,
-  processingBanner,
   inferenceBanner,
   statusAlerts,
   showStatusAlerts = false,
@@ -56,8 +54,6 @@ export function PageEditorShell({
       {toolbar}
 
       {inferenceBanner}
-
-      {processingBanner}
 
       {/* Always mount statusAlerts under a stable wrapper so toast effects do not remount. */}
       {statusAlerts && (

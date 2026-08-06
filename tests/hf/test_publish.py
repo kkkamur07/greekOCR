@@ -35,6 +35,10 @@ def _seed_model_staging(staging_root: Path) -> None:
     staging_dir = model_staging_dir(ref, staging_root=staging_root)
     staging_dir.mkdir(parents=True, exist_ok=True)
     (staging_dir / "best.pt").write_bytes(b"mock-checkpoint")
+    # The runtime **Hub artifact** since ADR 0006. `validate_model_staging` uses
+    # `find_hub_artifact`, which names only `.onnx`, so a staging leaf holding
+    # just the checkpoint is refused before anything is uploaded.
+    (staging_dir / "best.onnx").write_bytes(b"mock-graph")
 
 
 def _seed_dataset_staging(staging_root: Path) -> Path:

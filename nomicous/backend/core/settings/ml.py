@@ -1,13 +1,12 @@
 """ML service integration settings."""
 
 import os
-from functools import lru_cache
 from pathlib import Path
-from urllib.parse import urlparse
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings
 
+from backend.core.settings._cache import settings_cache
 from backend.core.settings._env import REPO_ROOT, env_settings_config
 
 _PLACEHOLDER_SECRET_VALUES = {
@@ -32,32 +31,17 @@ def _is_placeholder_secret(value: str | None) -> bool:
     )
 
 
-def _validate_service_url(*, value: str, name: str, environment: str) -> None:
-    parsed = urlparse(value)
-    if (
-        parsed.scheme not in {"http", "https"}
-        or not parsed.hostname
-        or parsed.username
-        or parsed.password
-        or parsed.params
-        or parsed.query
-        or parsed.fragment
-    ):
-        raise ValueError(
-            f"{name} must be an absolute http(s) URL without credentials, query, or fragment"
-        )
-    if environment.casefold() == "production" and parsed.scheme != "https":
-        raise ValueError(f"{name} must use HTTPS in production")
-
-
 class MLSettings(BaseSettings):
     model_config = env_settings_config()
 
     environment: str = Field(default="development", alias="ENVIRONMENT")
     cloud_inference_enabled: bool = Field(default=False, alias="CLOUD_INFERENCE_ENABLED")
-    inference_url: str = Field(default="http://localhost:8001", alias="INFERENCE_URL")
+    # There is no inference service URL to hold. The platform does not call out
+    # to inference at all any more: an agent claims work from the platform and
+    # reports back through the job callback contract (ADR 0003), so the only
+    # inference credential an API process needs is the one that authenticates
+    # that inbound callback.
     inference_webhook_secret: str | None = Field(default=None, alias="INFERENCE_WEBHOOK_SECRET")
-    inference_service_secret: str | None = Field(default=None, alias="INFERENCE_SERVICE_SECRET")
     inference_registry_path: Path = Field(
         default_factory=_default_inference_registry_path,
         alias="INFERENCE_REGISTRY_PATH",
@@ -65,30 +49,14 @@ class MLSettings(BaseSettings):
 
     @model_validator(mode="after")
     def _validate_production_runtime(self) -> "MLSettings":
-        if (
-            self.environment.casefold() != "production"
-            or self.cloud_inference_enabled
-            or self.inference_service_secret is not None
-        ):
-            _validate_service_url(
-                value=self.inference_url,
-                name="INFERENCE_URL",
-                environment=self.environment,
-            )
         if self.environment.casefold() != "production":
             return self
 
-        invalid = [
-            name
-            for name, value in (
-                ("INFERENCE_WEBHOOK_SECRET", self.inference_webhook_secret),
-                ("INFERENCE_SERVICE_SECRET", self.inference_service_secret),
-            )
-            if value is not None and _is_placeholder_secret(value)
-        ]
-        if invalid:
+        if self.inference_webhook_secret is not None and _is_placeholder_secret(
+            self.inference_webhook_secret
+        ):
             raise ValueError(
-                f"{', '.join(invalid)} must be set to non-placeholder secrets in production"
+                "INFERENCE_WEBHOOK_SECRET must be set to a non-placeholder secret in production"
             )
         return self
 
@@ -101,17 +69,8 @@ class MLSettings(BaseSettings):
                 "INFERENCE_WEBHOOK_SECRET must be set to a non-placeholder secret in production"
             )
 
-    def require_job_dispatcher_configuration(self) -> None:
-        """Fail closed when a worker process submits jobs to inference."""
-        if self.environment.casefold() != "production":
-            return
-        if _is_placeholder_secret(self.inference_service_secret):
-            raise ValueError(
-                "INFERENCE_SERVICE_SECRET must be set to a non-placeholder secret in production"
-            )
 
-
-@lru_cache
+@settings_cache
 def get_inference_settings() -> MLSettings:
     return MLSettings()
 

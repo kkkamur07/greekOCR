@@ -142,7 +142,18 @@ def test_anonymous_gets_layout_and_transcriptions(client, published_document):
 
     layout = client.get(f"{base}/layout")
     assert layout.status_code == 200
-    assert layout.json() == {"blocks": [], "lines": []}
+    # `blocks_truncated` is part of the public layout contract as of ce74fdc: an
+    # anonymous caller is told when the block list was cut short rather than
+    # silently receiving a partial page. False here because this document has none.
+    assert layout.json() == {
+        "blocks": [],
+        "blocks_truncated": False,
+        "lines": [],
+        "next_cursor": None,
+    }
+
+    over_limit = client.get(f"{base}/layout", params={"limit": 10_001})
+    assert over_limit.status_code == 422
 
     layers = client.get(f"{base}/transcriptions")
     assert layers.status_code == 200

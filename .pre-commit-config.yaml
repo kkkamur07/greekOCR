@@ -4,17 +4,29 @@ repos:
     hooks:
       - id: ruff-check
         name: Ruff correctness checks
-        entry: uv run --locked --group dev ruff check nomicous/backend inference scripts/platform tests/nomicous tests/inference tests/hf
+        # `ruff check .` rather than a path list, so a new top-level package is
+        # linted by default. Vendored and generated trees are excluded in
+        # pyproject.toml (tool.ruff.extend-exclude).
+        entry: uv run --locked --group dev ruff check . src/model/inference_export
         language: system
         types_or: [python, pyi]
         pass_filenames: false
+
+      # src/experiments/trOCR.ipynb once carried ~42 MB of committed cell
+      # outputs. Strip outputs before they reach a commit; code cells are
+      # untouched.
+      - id: nbstripout
+        name: Strip Jupyter notebook outputs
+        entry: uv run --locked --group dev nbstripout
+        language: system
+        types: [jupyter]
 
       - id: ruff-format
         name: Ruff formatting
         entry: uv run --locked --group dev ruff format
         language: system
         types_or: [python, pyi]
-        files: ^(nomicous/backend|inference|scripts/platform|tests/nomicous|tests/inference|tests/hf)/
+        files: ^(nomicous/backend|inference|scripts/platform|tests/nomicous|tests/inference|tests/export|tests/hf|src/model/inference_export)/
 
       - id: frontend-eslint
         name: Frontend ESLint checks
@@ -38,7 +50,6 @@ repos:
           env
           JWT_SECRET=test-secret-not-for-production-at-least-32-bytes
           INFERENCE_WEBHOOK_SECRET=test-inference-webhook-secret
-          INFERENCE_SERVICE_SECRET=test-inference-webhook-secret
           npm --prefix nomicous/frontend run generate:api
         language: system
         files: ^(nomicous/backend/.*\.py|scripts/platform/export_openapi\.py)$

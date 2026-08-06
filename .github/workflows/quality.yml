@@ -4,6 +4,10 @@ on:
   pull_request:
   push:
     branches: [main]
+  schedule:
+    # Nightly, for the ML parity job only - it loads real weights and is far too
+    # slow to gate every pull request.
+    - cron: "0 3 * * *"
   workflow_dispatch:
 
 permissions:
@@ -17,8 +21,8 @@ jobs:
       run:
         working-directory: nomicous/frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "20"
           cache: npm
@@ -35,13 +39,35 @@ jobs:
     env:
       JWT_SECRET: test-secret-not-for-production-at-least-32-bytes
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
         with:
           python-version: "3.11"
           enable-cache: true
-      - run: uv run --locked --group dev ruff check nomicous/backend inference scripts/platform tests/nomicous tests/inference tests/hf
-      - run: uv run --locked --group platform --group inference --group export pytest tests/nomicous/unit tests/inference/unit tests/hf
+      # `ruff check .` (not an explicit path list) so a new top-level package is
+      # linted by default; vendored/generated trees are in tool.ruff.extend-exclude.
+      - run: uv run --locked --group dev ruff check .
+      # `src/` is excluded wholesale (research + vendored Calamari), but ADR 0006
+      # put code we own inside it: the Torch graphs and the ONNX exporters. Naming
+      # the path explicitly overrides the exclusion, so that tree stays linted
+      # without reopening the whole research tree.
+      - run: uv run --locked --group dev ruff check src/model/inference_export
+      # Formatting is a gate, not a suggestion. Without this, `ruff format` drift
+      # accumulates silently and every unrelated diff picks up reformatting noise.
+      # The path list is not `.`: it must stay identical to the `files:` pattern on
+      # the ruff-format pre-commit hook, which deliberately leaves `src/` alone
+      # (vendored Calamari fork - reformatting it would fork it from upstream).
+      # If the two ever disagree, CI rejects what the hook just produced.
+      - run: uv run --locked --group dev ruff format --check nomicous/backend inference scripts/platform tests/nomicous tests/inference tests/export tests/hf src/model/inference_export
+      # Types. Non-blocking on purpose - mypy was introduced against an untyped
+      # codebase, so this reports the error count on every pull request without
+      # gating merges. The runtime groups are installed so the check runs against
+      # real pydantic/SQLAlchemy/FastAPI types rather than `Any`. Drop
+      # `continue-on-error` once the count reaches zero; see [tool.mypy] in
+      # pyproject.toml for the order the strictness knobs get turned on.
+      - run: uv run --locked --group dev --group platform --group inference mypy nomicous/backend inference
+        continue-on-error: true
+      - run: uv run --locked --group test --group platform --group inference pytest tests/nomicous/unit tests/inference/unit tests/hf
 
   postgres-integration:
     name: Postgres integration tests
@@ -64,18 +90,58 @@ jobs:
       DATABASE_URL: postgresql+asyncpg://postgres:${{ github.run_id }}-${{ github.run_attempt }}@localhost:5432/kalamos
       SYNC_DATABASE_URL: postgresql://postgres:${{ github.run_id }}-${{ github.run_attempt }}@localhost:5432/kalamos
       MIGRATOR_DATABASE_URL: postgresql://postgres:${{ github.run_id }}-${{ github.run_attempt }}@localhost:5432/kalamos
-      INFERENCE_DATABASE_URL: postgresql://postgres:${{ github.run_id }}-${{ github.run_attempt }}@localhost:5432/kalamos
       JWT_SECRET: test-secret-not-for-production-at-least-32-bytes
       INFERENCE_WEBHOOK_SECRET: test-inference-webhook-secret
-      INFERENCE_SERVICE_SECRET: test-inference-webhook-secret
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
         with:
           python-version: "3.11"
           enable-cache: true
       - run: PYTHONPATH=nomicous uv run --locked --group platform alembic -c nomicous/infrastructure/alembic.ini upgrade head
-      - run: uv run --locked --group platform --group inference --group export pytest tests/nomicous/integration tests/inference/integration -m "not ml"
+      - run: uv run --locked --group test --group platform --group inference pytest tests/nomicous/integration tests/inference/integration -m "not ml"
+
+  ml-real-weights:
+    name: ML real weights
+    # The `-m "not ml"` exclusion above is what keeps the integration job fast, but
+    # it also means nothing in CI ever exercised the real Calamari/BLLA path - a
+    # train/serve preprocessing skew could regress indefinitely without a red build.
+    # This job closes that hole. It is deliberately kept off pull requests: it
+    # loads the checkpoints under src/hf/staging, which is minutes, not seconds.
+    #
+    # This used to be the ONNX-vs-Kraken parity job. ADR 0004 left one runtime,
+    # so there is nothing to be at parity with; what remains worth running on a
+    # schedule is the real graph on the real weights.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: kalamos
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d kalamos"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql+asyncpg://postgres:${{ github.run_id }}-${{ github.run_attempt }}@localhost:5432/kalamos
+      SYNC_DATABASE_URL: postgresql://postgres:${{ github.run_id }}-${{ github.run_attempt }}@localhost:5432/kalamos
+      MIGRATOR_DATABASE_URL: postgresql://postgres:${{ github.run_id }}-${{ github.run_attempt }}@localhost:5432/kalamos
+      JWT_SECRET: test-secret-not-for-production-at-least-32-bytes
+      INFERENCE_WEBHOOK_SECRET: test-inference-webhook-secret
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+        with:
+          python-version: "3.11"
+          enable-cache: true
+      - run: PYTHONPATH=nomicous uv run --locked --group platform alembic -c nomicous/infrastructure/alembic.ini upgrade head
+      - run: uv run --locked --group test --group platform --group inference pytest tests/nomicous tests/inference -m ml
 
   api-contracts:
     name: API contract artifacts
@@ -83,18 +149,19 @@ jobs:
     env:
       JWT_SECRET: test-secret-not-for-production-at-least-32-bytes
       INFERENCE_WEBHOOK_SECRET: test-inference-webhook-secret
-      INFERENCE_SERVICE_SECRET: test-inference-webhook-secret
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
         with:
           python-version: "3.11"
           enable-cache: true
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "20"
           cache: npm
           cache-dependency-path: nomicous/frontend/package-lock.json
       - run: npm ci --prefix nomicous/frontend
       - run: npm run check:api --prefix nomicous/frontend
-      - run: uv run --locked --group inference pytest tests/inference/unit/test_contracts_roundtrip.py
+      # `--group test` is required: the inference group has no pytest, so without
+      # it `pytest` resolves from the runner PATH (unpinned, or absent).
+      - run: uv run --locked --group test --group inference pytest tests/inference/unit/test_contracts_roundtrip.py

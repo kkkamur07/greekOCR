@@ -1,56 +1,32 @@
-"""Focused tests for the inference-owned BLLA runtime."""
+"""Focused tests for the BLLA preprocessing, decoder and runner path.
+
+The graph itself, and the Kraken-oracle comparisons that used it, moved to
+``tests/export`` with the Torch modules under ADR 0006. What is left here is
+what a researcher's install actually contains: NumPy preprocessing, the
+Torch-free decoder, and the runner that ties them to the ONNX session.
+"""
 
 from __future__ import annotations
 
-import base64
-from importlib import resources
 from pathlib import Path
 
 import numpy as np
 import pytest
-import torch
-import torch.nn.functional as F
-from fastapi.testclient import TestClient
 from PIL import Image
 
-from inference.architectures.blla.blla import _load_blla_model
 from inference.architectures.blla.blla_decoder import decode_blla_heatmaps
-from inference.architectures.blla.blla_model import BLLATorchModel
-from inference.architectures.blla.blla_preprocessing import preprocess_blla_image
-from inference.helper.app import create_helper_app
-from inference.helper.settings import get_helper_settings
-from inference.infrastructure.settings import get_inference_settings
-
-REPO_ROOT = Path(__file__).resolve().parents[3]
-SEGMENT_PAGE = REPO_ROOT / "tests" / "fixtures" / "manuscripts" / "greek" / "segment_page.jpeg"
-BLLA_ARTIFACT = (
-    REPO_ROOT
-    / "src"
-    / "hf"
-    / "staging"
-    / "models"
-    / "segmentation"
-    / "blla"
-    / "v1"
-    / "stable"
-    / "blla.safetensors"
+from inference.architectures.blla.blla_decoder.common import resize_heatmaps_nearest
+from inference.architectures.blla.blla_preprocessing import (
+    MAX_WIDTH_TO_HEIGHT_RATIO,
+    preprocess_blla_image,
 )
-BLLA_ONNX_ARTIFACT = BLLA_ARTIFACT.with_name("blla.onnx")
+from inference.contracts.common import InferenceTask
+from inference.contracts.segment import SegmentRunResponse
+from inference.jobs.runner import run_model
+from inference.settings import get_inference_settings
+from tests.fixtures.paths import REPO_ROOT, SEGMENT_PAGE
 
-
-def test_blla_model_has_fixed_topology_and_expected_output_shape() -> None:
-    model = BLLATorchModel().eval()
-    output = model(torch.zeros((1, 3, 1800, 20)))
-
-    assert output.shape == (1, 4, 450, 5)
-    assert list(model.state_dict())[:4] == [
-        "C_0.co.weight",
-        "C_0.co.bias",
-        "Gn_1.layer.weight",
-        "Gn_1.layer.bias",
-    ]
-    assert model.state_dict()["L_10.layer.weight_ih_l0"].shape == (128, 256)
-    assert model.state_dict()["L_11.layer.weight_ih_l0"].shape == (128, 64)
+BLLA_ARTIFACT = REPO_ROOT / "src/hf/cache/blla-segment/stable/blla.onnx"
 
 
 def test_blla_preprocessing_matches_fixed_height_rgb_inversion() -> None:
@@ -58,11 +34,34 @@ def test_blla_preprocessing_matches_fixed_height_rgb_inversion() -> None:
 
     prepared = preprocess_blla_image(image)
 
-    assert prepared.tensor.shape == (3, 1800, 3600)
-    assert prepared.tensor.dtype == torch.float32
-    assert torch.allclose(prepared.tensor[:, 0, 0], torch.tensor([1.0, 0.7490196, 0.0]))
+    assert prepared.array.shape == (3, 1800, 3600)
+    assert prepared.array.dtype == np.float32
+    np.testing.assert_allclose(
+        prepared.array[:, 0, 0], np.array([1.0, 0.7490196, 0.0], dtype=np.float32), atol=1e-6
+    )
     assert prepared.scaled_gray.shape == (1800, 3600)
     assert prepared.scale_xy == pytest.approx((20 / 3600, 10 / 1800))
+
+
+def test_blla_preprocessing_caps_extreme_aspect_ratio_width() -> None:
+    """A panorama within the pixel admission cap must not produce an unbounded array."""
+    input_height = 90
+    capped_width = input_height * MAX_WIDTH_TO_HEIGHT_RATIO
+    image = Image.new("RGB", (4000, 10), (255, 255, 255))
+
+    prepared = preprocess_blla_image(image, input_height=input_height)
+
+    assert prepared.array.shape == (3, input_height, capped_width)
+    # Coordinates still map back to source space through scale_xy.
+    assert prepared.scale_xy == pytest.approx((4000 / capped_width, 10 / input_height))
+
+
+def test_blla_preprocessing_is_proportional_below_the_width_cap() -> None:
+    image = Image.new("RGB", (20, 10), (255, 255, 255))
+
+    prepared = preprocess_blla_image(image, input_height=90)
+
+    assert prepared.array.shape == (3, 90, 180)
 
 
 def test_blla_decoder_turns_separator_ridge_into_line_polygon() -> None:
@@ -82,103 +81,53 @@ def test_blla_decoder_turns_separator_ridge_into_line_polygon() -> None:
     assert max(ys) == pytest.approx(50.0)
 
 
-@pytest.fixture(scope="module")
-def real_blla_outputs() -> tuple[torch.Tensor, torch.Tensor, tuple[int, int]]:
-    """Run the staged checkpoint once on the real manuscript fixture."""
-    with Image.open(SEGMENT_PAGE) as image:
-        prepared = preprocess_blla_image(image)
-    model = _load_blla_model(str(BLLA_ARTIFACT))
-    with torch.inference_mode():
-        logits = model(prepared.tensor.unsqueeze(0))
-    heatmaps = F.interpolate(
-        torch.sigmoid(logits),
-        size=prepared.scaled_gray.shape,
-    )
-    return logits, heatmaps, prepared.scaled_gray.shape
+def test_nearest_resize_repeats_source_pixels_rather_than_blending() -> None:
+    """The decoder's upsample is index arithmetic, so no new values may appear.
+
+    This replaced ``torch.nn.functional.interpolate`` when Torch left the
+    runtime. Interpolation with any other mode would invent intermediate
+    probabilities and move the 0.17 threshold's boundary.
+    """
+    heatmaps = np.arange(4 * 2 * 2, dtype=np.float32).reshape(4, 2, 2)
+
+    resized = resize_heatmaps_nearest(heatmaps, height=4, width=6)
+
+    assert resized.shape == (4, 4, 6)
+    assert set(np.unique(resized)) <= set(np.unique(heatmaps))
+    # Row 0 of channel 0 is its two source pixels, each repeated three times.
+    np.testing.assert_array_equal(resized[0, 0], np.array([0, 0, 0, 1, 1, 1], dtype=np.float32))
 
 
-@pytest.fixture(scope="module")
-def kraken_blla_outputs() -> tuple[torch.Tensor, torch.Tensor]:
-    """Load Kraken's optional bundled reference and run the same input."""
-    pytest.importorskip("kraken")
-    from kraken.lib import vgsl
-
-    with Image.open(SEGMENT_PAGE) as image:
-        prepared = preprocess_blla_image(image)
-    reference = vgsl.TorchVGSLModel.load_model(resources.files("kraken").joinpath("blla.mlmodel"))
-    with torch.inference_mode():
-        output = reference.nn(prepared.tensor.unsqueeze(0))
-    reference_logits = output[0] if isinstance(output, tuple) else output
-    reference_heatmaps = F.interpolate(
-        torch.sigmoid(reference_logits),
-        size=prepared.scaled_gray.shape,
-    )
-    return reference_logits, reference_heatmaps
-
-
-def test_blla_real_manuscript_produces_segment_candidates(
-    real_blla_outputs: tuple[torch.Tensor, torch.Tensor, tuple[int, int]],
-) -> None:
-    logits, heatmaps, scaled_size = real_blla_outputs
-
-    assert logits.shape[0:2] == (1, 4)
-    assert heatmaps.shape == (1, 4, *scaled_size)
-    assert torch.isfinite(logits).all()
-    assert torch.all((heatmaps >= 0) & (heatmaps <= 1))
-
-
-def test_blla_raw_logits_match_optional_kraken_reference(
-    real_blla_outputs: tuple[torch.Tensor, torch.Tensor, tuple[int, int]],
-    kraken_blla_outputs: tuple[torch.Tensor, torch.Tensor],
-) -> None:
-    native_logits, _, _ = real_blla_outputs
-    reference_logits, _ = kraken_blla_outputs
-
-    torch.testing.assert_close(native_logits, reference_logits, rtol=1e-5, atol=1e-5)
-
-
-def test_blla_sigmoid_interpolated_heatmaps_match_optional_kraken_reference(
-    real_blla_outputs: tuple[torch.Tensor, torch.Tensor, tuple[int, int]],
-    kraken_blla_outputs: tuple[torch.Tensor, torch.Tensor],
-) -> None:
-    _, native_heatmaps, _ = real_blla_outputs
-    _, reference_heatmaps = kraken_blla_outputs
-
-    torch.testing.assert_close(native_heatmaps, reference_heatmaps, rtol=1e-5, atol=1e-5)
-
-
-def test_standalone_helper_returns_onnx_blla_response_for_real_image(
+def test_run_model_returns_a_blla_response_for_a_real_image(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """Exercise HTTP validation, ONNX runner dispatch, and response serialization."""
+    """Exercise admission, registry resolution, runner dispatch and the response.
+
+    This is the whole entry point now: an **inference agent** calls `run_model`
+    in its own process, so there is no serialization step between the decoder
+    and the caller and nothing to POST it to (ADR 0002).
+    """
+    if not BLLA_ARTIFACT.is_file():
+        pytest.skip("published BLLA artifact is not cached locally")
+
     registry = REPO_ROOT / "inference" / "registry.yaml"
     monkeypatch.setenv("INFERENCE_REGISTRY_PATH", str(registry))
-    monkeypatch.setenv("HELPER_BUNDLED_REGISTRY_PATH", str(registry))
-    monkeypatch.setenv("HELPER_CACHED_REGISTRY_PATH", str(tmp_path / "registry.yaml"))
-    monkeypatch.setenv("HELPER_CACHED_REGISTRY_ETAG_PATH", str(tmp_path / "registry.etag"))
     monkeypatch.setenv("HF_CACHE_ROOT", str(tmp_path / "hf-cache"))
-    get_helper_settings.cache_clear()
     get_inference_settings.cache_clear()
     monkeypatch.setattr(
         "inference.jobs.runner.resolve_weights_source",
-        lambda *_args, **_kwargs: BLLA_ONNX_ARTIFACT,
+        lambda *_args, **_kwargs: BLLA_ARTIFACT,
     )
 
-    with TestClient(create_helper_app()) as client:
-        response = client.post(
-            "/inference/v1/run",
-            json={
-                "task": "segment",
-                "registry_model_id": "blla-segment",
-                "registry_tag": "stable",
-                "image_bytes": base64.b64encode(SEGMENT_PAGE.read_bytes()).decode(),
-            },
-        )
+    output = run_model(
+        task=InferenceTask.segment,
+        registry_model_id="blla-segment",
+        registry_tag="stable",
+        image_bytes=SEGMENT_PAGE.read_bytes(),
+    )
 
-    assert response.status_code == 200
-    body = response.json()
-    assert body["task"] == "segment"
-    assert len(body["output"]["blocks"]) == 1
-    assert len(body["output"]["lines"]) > 10
-    assert all(line["source_metadata"]["adapter"] == "blla" for line in body["output"]["lines"])
+    assert isinstance(output, SegmentRunResponse)
+    assert len(output.blocks) == 1
+    assert len(output.lines) > 10
+    assert all(line.source_metadata["adapter"] == "blla" for line in output.lines)

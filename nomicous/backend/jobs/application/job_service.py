@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.exceptions import NotFoundError
 from backend.jobs.infrastructure.job_repository import JobRepository, cancel_job_async
 from backend.jobs.infrastructure.orm_models import Job
+from backend.jobs.infrastructure.stale_sweep import sweep_stale_jobs_on_read
 
 
 class JobService:
@@ -34,7 +35,14 @@ class JobService:
         limit: int = 50,
         cursor=None,
     ) -> list[Job]:
+        # Hooked here rather than in the route: ``GET /projects/{id}/jobs`` lives in
+        # the project package, and this is the job-owned entry point it calls.
+        await sweep_stale_jobs_on_read()
         return await self._repo.list_for_project(project_id, limit=limit, cursor=cursor)
+
+    async def clear_project_job_history(self, project_id: uuid.UUID) -> int:
+        """Delete a project's finished jobs; active jobs keep running."""
+        return await self._repo.delete_terminal_jobs_for_project(project_id)
 
     async def cancel_job(self, job_id: uuid.UUID) -> Job:
         job = await cancel_job_async(self._session, job_id)

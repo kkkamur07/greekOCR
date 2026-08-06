@@ -14,17 +14,17 @@ jobs:
     name: Secret and dependency scans
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
+      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
         with:
           python-version: "3.11"
           enable-cache: true
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "20"
           cache: npm
@@ -37,10 +37,15 @@ jobs:
       #   docs/security/vex-click-pysec-2026-2132.md
       # - PYSEC-2026-139 / CVE-2025-3000 (torch 2.10.0, local-only, no fix yet):
       #   docs/security/vex-torch-pysec-2026-139-cve-2025-3000.md
+      #   NOTE (ADR 0006): Torch left `[project].dependencies` on 2026-08-05, so
+      #   this audit's groups no longer resolve it at all and the ignore is inert
+      #   here. It is kept because `--group export` still installs Torch on a
+      #   maintainer's machine, and the VEX record is what says why that is
+      #   acceptable. Drop both only when nothing in the repository needs Torch.
       # protobuf CVE-2025-4565 / CVE-2026-0994 are fixed via protobuf>=5.29.6
       # in the inference group (no ignore).
       - run: >-
-          uv run --locked --group dev --group platform --group inference --group export pip-audit
+          uv run --locked --group dev --group platform --group inference pip-audit
           --ignore-vuln PYSEC-2026-139
           --ignore-vuln CVE-2025-3000
           --ignore-vuln PYSEC-2026-2132
