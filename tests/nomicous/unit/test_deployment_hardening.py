@@ -35,20 +35,26 @@ def _flatten_group(groups: dict[str, list], name: str) -> list[str]:
     return resolved
 
 
-def test_published_package_ships_the_torch_runtime_and_nothing_else() -> None:
-    """ADR 0004: one runtime, CPU only, and no training stack in the wheel.
+def test_published_package_ships_the_onnx_runtime_and_nothing_else() -> None:
+    """ADR 0006: one runtime, CPU only, and no training stack in the wheel.
 
     This used to read `packaging/helper/pyinstaller.spec` and check its hidden
     imports and excludes, because the frozen installer decided by hand what
     reached a laptop. The **published package** decides it by construction:
     `[project].dependencies` *is* the closure that reaches a researcher, so
     that is what this holds.
+
+    ADR 0004 put Torch here and this test held it. ADR 0006 reversed that: the
+    runtime is ONNX Runtime again and Torch only builds the artifact, so Torch
+    and `safetensors` must now be *absent* from the published closure. That is
+    the whole point of #65 - a plain `pip install` pulling 4.8 GB of CUDA wheels
+    is unreachable if Torch is not in the closure at all.
     """
     pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     project_dependencies = pyproject["project"]["dependencies"]
-    assert any(dependency.startswith("torch") for dependency in project_dependencies)
-    assert any(dependency.startswith("safetensors") for dependency in project_dependencies)
-    assert not any(dependency.startswith("onnxruntime") for dependency in project_dependencies)
+    assert any(dependency.startswith("onnxruntime") for dependency in project_dependencies)
+    assert not any(dependency.startswith("torch") for dependency in project_dependencies)
+    assert not any(dependency.startswith("safetensors") for dependency in project_dependencies)
     # Nothing that trains a model is part of what runs one.
     for forbidden in ("transformers", "accelerate", "torchvision", "kraken"):
         assert not any(dependency.startswith(forbidden) for dependency in project_dependencies), (
@@ -57,7 +63,9 @@ def test_published_package_ships_the_torch_runtime_and_nothing_else() -> None:
 
     groups = pyproject["dependency-groups"]
     assert "parity" not in groups, "the kraken parity group outlived its second runtime"
-    assert "export" not in groups
+    # ADR 0006 keeps Torch on a maintainer's machine only, behind `--group export`,
+    # which is what exports the `.onnx` artifact the runtime then loads.
+    assert any(dependency.startswith("torch") for dependency in _flatten_group(groups, "export"))
     assert not any(
         "kraken" in dependency
         for group in groups.values()
@@ -346,8 +354,9 @@ def test_inference_group_carries_no_postgres_driver_or_orm() -> None:
     # ADR 0004: the runtime ships with the package, not with a container. The
     # image-level Torch checks 049 wrote here went with inference/Dockerfile,
     # which ADR 0003 deleted; this is the half that does not depend on an image.
+    # ADR 0006 then swapped which runtime that is: ONNX Runtime, not Torch.
     assert any(
-        dependency.startswith("torch") for dependency in pyproject["project"]["dependencies"]
+        dependency.startswith("onnxruntime") for dependency in pyproject["project"]["dependencies"]
     )
 
 

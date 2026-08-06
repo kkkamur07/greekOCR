@@ -255,7 +255,8 @@
         "type": "object"
       },
       "BlockPatchRequest": {
-        "description": "Partial block update.\n\n``order``/``box`` back NOT NULL columns, so an explicit ``null`` is rejected rather\nthan silently ignored. Routes send ``model_dump(exclude_unset=True)``, which is what\nseparates \"field omitted\" from \"field explicitly set\".",
+        "additionalProperties": false,
+        "description": "Partial block update.\n\n``order``/``box`` back NOT NULL columns, so an explicit ``null`` is rejected rather\nthan silently ignored. Routes send ``model_dump(exclude_unset=True)``, which is what\nseparates \"field omitted\" from \"field explicitly set\". An unrecognised key is\nrefused for the same reason a null is: it cannot be written, so accepting the\nrequest would report a write that did not happen.",
         "properties": {
           "box": {
             "additionalProperties": true,
@@ -344,8 +345,40 @@
         "title": "CharacterConfidence",
         "type": "object"
       },
+      "ClaimedPageRequest": {
+        "description": "What to run on the claimed page.\n\nThere is no image field, deliberately: the page arrives by signed link\n(``ClaimedPageResponse.page_image_url``), which is the only mechanism, not\none of two. An agent that reads these four fields and fetches that link has\neverything it needs.",
+        "properties": {
+          "params": {
+            "additionalProperties": true,
+            "title": "Params",
+            "type": "object"
+          },
+          "product_job_id": {
+            "format": "uuid",
+            "title": "Product Job Id",
+            "type": "string"
+          },
+          "registry_model_id": {
+            "minLength": 1,
+            "title": "Registry Model Id",
+            "type": "string"
+          },
+          "registry_tag": {
+            "default": "stable",
+            "minLength": 1,
+            "title": "Registry Tag",
+            "type": "string"
+          },
+          "task": {
+            "$ref": "#/components/schemas/InferenceTask"
+          }
+        },
+        "required": ["task", "registry_model_id", "product_job_id"],
+        "title": "ClaimedPageRequest",
+        "type": "object"
+      },
       "ClaimedPageResponse": {
-        "description": "One page of work, and the short-lived link to its image.\n\nThe link is not authenticated by anything the agent presents: the signature\nin it *is* the authorization, and it reaches exactly one object (ADR 0002).\nAn authenticated ``GET /device/v1/jobs/{id}/image`` was rejected because the\nproduction API is serverless - streaming manuscript scans through it costs\nmoney for nothing - and because it would put a route on the device credential\nthat must independently re-derive job ownership.",
+        "description": "One page of work, and the short-lived link to its image.\n\nThe link is not authenticated by anything the agent presents: the signature\nin it *is* the authorization, and it reaches exactly one object (ADR 0002).\nAn authenticated ``GET /device/v1/jobs/{id}/image`` was rejected because the\nproduction API is serverless - streaming manuscript scans through it costs\nmoney for nothing - and because it would put a route on the device credential\nthat must independently re-derive job ownership. The same reasoning is why\n``request`` below carries no image: this response used to stream the scan\nthrough the API *as well as* hand out the link.",
         "properties": {
           "execution_target": {
             "$ref": "#/components/schemas/ExecutionTarget"
@@ -380,7 +413,7 @@
             "type": "string"
           },
           "request": {
-            "$ref": "#/components/schemas/JobSubmitRequest"
+            "$ref": "#/components/schemas/ClaimedPageRequest"
           }
         },
         "required": [
@@ -494,6 +527,7 @@
                   "format": "uuid",
                   "type": "string"
                 },
+                "maxItems": 10000,
                 "type": "array"
               },
               {
@@ -844,6 +878,8 @@
         "type": "object"
       },
       "DocumentUpdateRequest": {
+        "additionalProperties": false,
+        "description": "Partial document update.\n\n``extra=\"forbid\"`` because the handler applies ``model_dump(exclude_unset=True)``\nverbatim with ``setattr``: a key it does not recognise cannot be written, so\ndropping it silently would let a client believe it had.",
         "properties": {
           "name": {
             "maxLength": 512,
@@ -1463,46 +1499,6 @@
         "title": "JobStatus",
         "type": "string"
       },
-      "JobSubmitRequest": {
-        "properties": {
-          "image_bytes": {
-            "title": "Image Bytes",
-            "type": "string"
-          },
-          "params": {
-            "additionalProperties": true,
-            "title": "Params",
-            "type": "object"
-          },
-          "product_job_id": {
-            "format": "uuid",
-            "title": "Product Job Id",
-            "type": "string"
-          },
-          "registry_model_id": {
-            "minLength": 1,
-            "title": "Registry Model Id",
-            "type": "string"
-          },
-          "registry_tag": {
-            "default": "stable",
-            "minLength": 1,
-            "title": "Registry Tag",
-            "type": "string"
-          },
-          "task": {
-            "$ref": "#/components/schemas/InferenceTask"
-          }
-        },
-        "required": [
-          "task",
-          "registry_model_id",
-          "product_job_id",
-          "image_bytes"
-        ],
-        "title": "JobSubmitRequest",
-        "type": "object"
-      },
       "JobType": {
         "enum": ["segment", "transcribe", "binarize", "pipeline"],
         "title": "JobType",
@@ -1517,6 +1513,7 @@
                   "format": "uuid",
                   "type": "string"
                 },
+                "maxItems": 10000,
                 "type": "array"
               },
               {
@@ -1620,7 +1617,8 @@
         "type": "string"
       },
       "LinePatchRequest": {
-        "description": "Partial line update.\n\n``block_id`` and ``mask`` back nullable columns, so an explicit ``null`` clears them.\n``order``/``baseline``/``points`` back NOT NULL columns and reject an explicit null.",
+        "additionalProperties": false,
+        "description": "Partial line update.\n\n``block_id`` and ``mask`` back nullable columns, so an explicit ``null`` clears them.\n``order``/``baseline``/``points`` back NOT NULL columns and reject an explicit null.\nAn unrecognised key is refused rather than dropped, so a client is never told it\nwrote a field the handler ignored.",
         "properties": {
           "baseline": {
             "additionalProperties": true,
@@ -1811,6 +1809,7 @@
       "LineTranscriptionPatchRequest": {
         "properties": {
           "text": {
+            "maxLength": 10000,
             "title": "Text",
             "type": "string"
           }
@@ -2651,6 +2650,11 @@
             "title": "Blocks",
             "type": "array"
           },
+          "blocks_truncated": {
+            "default": false,
+            "title": "Blocks Truncated",
+            "type": "boolean"
+          },
           "lines": {
             "items": {
               "$ref": "#/components/schemas/PublicLineResponse"
@@ -2767,6 +2771,7 @@
               "format": "uuid",
               "type": "string"
             },
+            "maxItems": 10000,
             "minItems": 1,
             "title": "Part Ids",
             "type": "array"
@@ -3113,6 +3118,7 @@
                   "format": "uuid",
                   "type": "string"
                 },
+                "maxItems": 10000,
                 "type": "array"
               },
               {
@@ -4354,7 +4360,7 @@
     },
     "/device/v1/pairings": {
       "post": {
-        "description": "Create a pairing request and hand the helper its two one-time secrets.\n\nUnder the shared auth throttle, which is the right limiter for a route\ncalled once per installation. Note which bucket this route actually lands\nin: the body carries no account identity, so where the observed address is a\nproxy the platform does not allowlist, there is no per-caller dimension at\nall. Such requests are charged to the coarse ``unattributable:<path>``\nbucket, which is path-scoped and far looser than the per-caller limit\n(``UNATTRIBUTABLE_AUTH_RATE_LIMIT`` per window, not the per-caller\n``auth_rate_limit_requests``). It bounds free database work rather than\nidentifying an abuser, and it is the reason no second IP-keyed cap sits\nbehind it.",
+        "description": "Create a pairing request and hand the helper its two one-time secrets.\n\nUnder its own throttle, not the shared auth one. The body carries no account\nidentity, so under ``throttle_auth_attempts`` this route had no per-caller\ndimension at all and every honest pairing was charged to the coarse\n``unattributable:<path>`` bucket - one bucket shared by every researcher, so\nfilling it locked all of them out of `nomicous pair`.\n``throttle_device_pairing_starts`` charges a per-client bucket where the\naddress identifies one client and charges nothing where it does not, leaving\nthe platform-wide live-pairing ceiling below as the bound on table growth.",
         "operationId": "start_device_pairing_device_v1_pairings_post",
         "requestBody": {
           "content": {
@@ -13369,13 +13375,6 @@
             "description": "Validation error"
           },
           "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
             "description": "Rate limit exceeded"
           },
           "500": {
@@ -13422,8 +13421,8 @@
             "name": "limit",
             "required": false,
             "schema": {
-              "default": 2000,
-              "maximum": 10000,
+              "default": 500,
+              "maximum": 500,
               "minimum": 1,
               "title": "Limit",
               "type": "integer"
@@ -13509,13 +13508,6 @@
             "description": "Validation error"
           },
           "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
             "description": "Rate limit exceeded"
           },
           "500": {
@@ -13631,13 +13623,6 @@
             "description": "Validation error"
           },
           "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
             "description": "Rate limit exceeded"
           },
           "500": {
@@ -13753,13 +13738,6 @@
             "description": "Validation error"
           },
           "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
             "description": "Rate limit exceeded"
           },
           "500": {
@@ -13868,13 +13846,6 @@
             "description": "Validation error"
           },
           "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            },
             "description": "Rate limit exceeded"
           },
           "500": {

@@ -205,16 +205,14 @@ export interface paths {
      * Start Device Pairing
      * @description Create a pairing request and hand the helper its two one-time secrets.
      *
-     *     Under the shared auth throttle, which is the right limiter for a route
-     *     called once per installation. Note which bucket this route actually lands
-     *     in: the body carries no account identity, so where the observed address is a
-     *     proxy the platform does not allowlist, there is no per-caller dimension at
-     *     all. Such requests are charged to the coarse ``unattributable:<path>``
-     *     bucket, which is path-scoped and far looser than the per-caller limit
-     *     (``UNATTRIBUTABLE_AUTH_RATE_LIMIT`` per window, not the per-caller
-     *     ``auth_rate_limit_requests``). It bounds free database work rather than
-     *     identifying an abuser, and it is the reason no second IP-keyed cap sits
-     *     behind it.
+     *     Under its own throttle, not the shared auth one. The body carries no account
+     *     identity, so under ``throttle_auth_attempts`` this route had no per-caller
+     *     dimension at all and every honest pairing was charged to the coarse
+     *     ``unattributable:<path>`` bucket - one bucket shared by every researcher, so
+     *     filling it locked all of them out of `nomicous pair`.
+     *     ``throttle_device_pairing_starts`` charges a per-client bucket where the
+     *     address identifies one client and charges nothing where it does not, leaving
+     *     the platform-wide live-pairing ceiling below as the bound on table growth.
      */
     post: operations["start_device_pairing_device_v1_pairings_post"];
     delete?: never;
@@ -1502,7 +1500,9 @@ export interface components {
      *
      *     ``order``/``box`` back NOT NULL columns, so an explicit ``null`` is rejected rather
      *     than silently ignored. Routes send ``model_dump(exclude_unset=True)``, which is what
-     *     separates "field omitted" from "field explicitly set".
+     *     separates "field omitted" from "field explicitly set". An unrecognised key is
+     *     refused for the same reason a null is: it cannot be written, so accepting the
+     *     request would report a write that did not happen.
      */
     BlockPatchRequest: {
       /** Box */
@@ -1551,6 +1551,34 @@ export interface components {
       confidence: number;
     };
     /**
+     * ClaimedPageRequest
+     * @description What to run on the claimed page.
+     *
+     *     There is no image field, deliberately: the page arrives by signed link
+     *     (``ClaimedPageResponse.page_image_url``), which is the only mechanism, not
+     *     one of two. An agent that reads these four fields and fetches that link has
+     *     everything it needs.
+     */
+    ClaimedPageRequest: {
+      /** Params */
+      params?: {
+        [key: string]: unknown;
+      };
+      /**
+       * Product Job Id
+       * Format: uuid
+       */
+      product_job_id: string;
+      /** Registry Model Id */
+      registry_model_id: string;
+      /**
+       * Registry Tag
+       * @default stable
+       */
+      registry_tag: string;
+      task: components["schemas"]["InferenceTask"];
+    };
+    /**
      * ClaimedPageResponse
      * @description One page of work, and the short-lived link to its image.
      *
@@ -1559,7 +1587,9 @@ export interface components {
      *     An authenticated ``GET /device/v1/jobs/{id}/image`` was rejected because the
      *     production API is serverless - streaming manuscript scans through it costs
      *     money for nothing - and because it would put a route on the device credential
-     *     that must independently re-derive job ownership.
+     *     that must independently re-derive job ownership. The same reasoning is why
+     *     ``request`` below carries no image: this response used to stream the scan
+     *     through the API *as well as* hand out the link.
      */
     ClaimedPageResponse: {
       execution_target: components["schemas"]["ExecutionTarget"];
@@ -1590,7 +1620,7 @@ export interface components {
        * Format: uuid
        */
       product_job_id: string;
-      request: components["schemas"]["JobSubmitRequest"];
+      request: components["schemas"]["ClaimedPageRequest"];
     };
     /** ClearJobHistoryResponse */
     ClearJobHistoryResponse: {
@@ -1776,7 +1806,14 @@ export interface components {
       updated_at: string;
       workflow: components["schemas"]["DocumentWorkflow"];
     };
-    /** DocumentUpdateRequest */
+    /**
+     * DocumentUpdateRequest
+     * @description Partial document update.
+     *
+     *     ``extra="forbid"`` because the handler applies ``model_dump(exclude_unset=True)``
+     *     verbatim with ``setattr``: a key it does not recognise cannot be written, so
+     *     dropping it silently would let a client believe it had.
+     */
     DocumentUpdateRequest: {
       /** Name */
       name?: string;
@@ -2080,28 +2117,6 @@ export interface components {
      */
     JobStatus:
       "pending" | "waiting" | "running" | "done" | "failed" | "cancelled";
-    /** JobSubmitRequest */
-    JobSubmitRequest: {
-      /** Image Bytes */
-      image_bytes: string;
-      /** Params */
-      params?: {
-        [key: string]: unknown;
-      };
-      /**
-       * Product Job Id
-       * Format: uuid
-       */
-      product_job_id: string;
-      /** Registry Model Id */
-      registry_model_id: string;
-      /**
-       * Registry Tag
-       * @default stable
-       */
-      registry_tag: string;
-      task: components["schemas"]["InferenceTask"];
-    };
     /**
      * JobType
      * @enum {string}
@@ -2149,6 +2164,8 @@ export interface components {
      *
      *     ``block_id`` and ``mask`` back nullable columns, so an explicit ``null`` clears them.
      *     ``order``/``baseline``/``points`` back NOT NULL columns and reject an explicit null.
+     *     An unrecognised key is refused rather than dropped, so a client is never told it
+     *     wrote a field the handler ignored.
      */
     LinePatchRequest: {
       /** Baseline */
@@ -2582,6 +2599,11 @@ export interface components {
     PublicLayoutResponse: {
       /** Blocks */
       blocks?: components["schemas"]["PublicBlockResponse"][];
+      /**
+       * Blocks Truncated
+       * @default false
+       */
+      blocks_truncated: boolean;
       /** Lines */
       lines?: components["schemas"]["PublicLineResponse"][];
       /** Next Cursor */
@@ -10255,9 +10277,7 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
+        content?: never;
       };
       /** @description Internal server error */
       500: {
@@ -10344,9 +10364,7 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
+        content?: never;
       };
       /** @description Internal server error */
       500: {
@@ -10431,9 +10449,7 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
+        content?: never;
       };
       /** @description Internal server error */
       500: {
@@ -10518,9 +10534,7 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
+        content?: never;
       };
       /** @description Internal server error */
       500: {
@@ -10604,9 +10618,7 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content: {
-          "application/json": components["schemas"]["ApiErrorResponse"];
-        };
+        content?: never;
       };
       /** @description Internal server error */
       500: {

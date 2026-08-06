@@ -9,7 +9,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from backend.document.api import public_media
+from backend.document.api import public_media, public_rate_limit
 from backend.document.api.media_responses import PUBLIC_THUMBNAIL_WIDTHS
 from infrastructure.db import get_db
 
@@ -42,7 +42,9 @@ def charges(monkeypatch) -> list[list[str]]:
     async def record(keys, *, limit, window_seconds, detail):
         recorded.append(list(keys))
 
-    monkeypatch.setattr(public_media, "consume_rate_limit", record)
+    # The throttle moved out of `public_media` into the shared
+    # `public_rate_limit` module, so that is where the name now resolves.
+    monkeypatch.setattr(public_rate_limit, "consume_rate_limit", record)
     return recorded
 
 
