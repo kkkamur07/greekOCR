@@ -76,7 +76,10 @@ def process_one_job() -> bool:
         running_timeout_seconds=settings.job_worker_running_timeout_seconds
     )
     if reclaimed:
-        logger.warning("reclaimed %s stale platform job(s)", reclaimed)
+        # "released", not "reclaimed": a job whose claim has been abandoned to the
+        # ceiling is failed here rather than re-pended, and the repository logs
+        # each of those by id.
+        logger.warning("released %s stale platform job claim(s)", reclaimed)
     # Sweep waiting before releasing claims: releasing touches the row and would
     # otherwise push the waiting deadline out by another timeout window.
     timed_out = fail_stale_waiting_jobs(
@@ -92,7 +95,7 @@ def process_one_job() -> bool:
         lease_seconds=get_device_settings().device_lease_seconds
     )
     if re_pended:
-        logger.warning("re-pended %s page(s) whose device lease expired", re_pended)
+        logger.warning("released %s page(s) whose device lease expired", re_pended)
     released = clear_stale_callback_claims(
         claim_timeout_seconds=settings.job_worker_callback_claim_timeout_seconds
     )

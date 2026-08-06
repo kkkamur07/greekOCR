@@ -333,13 +333,20 @@ class _SweepSession:
                 and matches_claim
                 and job.updated_at <= values["updated_at_1"]
             )
-            return _FakeResult(rows=[job.id] if stale else [])
+            if not stale:
+                return _FakeResult(rows=[])
+            # The lease sweep reads the claim budget with the id, because it has
+            # to decide per row whether to re-pend or fail; the waiting timeout
+            # only ever fails, so it selects the id alone.
+            return _FakeResult(rows=[(job.id, job.claim_attempts) if wants_agent else job.id])
 
         if "status" in values:  # fail_stale_waiting_jobs / release_expired_device_leases
             if job.status != JobStatus.waiting or not matches_claim:
                 return _FakeResult(rowcount=0)
             job.status = values["status"]
             job.callback_claimed_at = None
+            if "claim_attempts" in _sql(statement):
+                job.claim_attempts = (job.claim_attempts or 0) + 1
             if values["status"] == JobStatus.pending:  # the lease went back to the queue
                 job.claimed_by = None
                 job.inference_job_id = None
@@ -673,15 +680,43 @@ def test_claim_records_the_worker_identity(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_reclaim_releases_worker_ownership(monkeypatch: pytest.MonkeyPatch):
-    session = _FakeSession([_FakeResult(rowcount=1)])
+    session = _FakeSession([_FakeResult(rows=[(uuid.uuid4(), 0)]), _FakeResult(rowcount=1)])
     _use_session(monkeypatch, session)
+    _record_notifications(monkeypatch)
 
     assert reclaim_stale_running_jobs(running_timeout_seconds=1800.0) == 1
 
-    values = _params(session.statements[0])
+    # The claim budget is read under the same lock the release takes, so a second
+    # sweeper cannot decide from a stale count.
+    assert "FOR UPDATE SKIP LOCKED" in _sql(session.statements[0])
+    values = _params(session.statements[1])
     assert values["status"] == JobStatus.pending
     assert values["claimed_by"] is None
     assert values["heartbeat_at"] is None
+    # The lap is recorded, or a page that kills every worker cycles forever.
+    assert "claim_attempts=(jobs.claim_attempts + " in _sql(session.statements[1])
+
+
+def test_reclaim_fails_a_job_that_exhausted_its_claim_budget(monkeypatch: pytest.MonkeyPatch):
+    job_id = uuid.uuid4()
+    session = _FakeSession(
+        [
+            _FakeResult(rows=[(job_id, job_repository.MAX_CLAIM_ATTEMPTS - 1)]),
+            _FakeResult(rowcount=1),
+        ]
+    )
+    _use_session(monkeypatch, session)
+    notified = _record_notifications(monkeypatch)
+
+    assert reclaim_stale_running_jobs(running_timeout_seconds=1800.0) == 1
+
+    values = _params(session.statements[1])
+    assert values["status"] == JobStatus.failed
+    assert values["error"] == job_repository.poison_page_error(job_repository.MAX_CLAIM_ATTEMPTS)
+    assert values["completed_at"] is not None
+    # Terminal, so a browser watching this job has to be told; a re-pend is not
+    # announced because pending is not a state the UI renders differently.
+    assert notified == [(job_id, JobStatus.failed)]
 
 
 def test_mark_job_done_is_scoped_to_the_owning_claim(monkeypatch: pytest.MonkeyPatch):
@@ -898,3 +933,60 @@ def test_job_model_exposes_worker_ownership_columns():
     columns = Job.__table__.columns
     assert columns["claimed_by"].nullable
     assert columns["heartbeat_at"].nullable
+
+
+# --- Poison-page ceiling ---
+# Tests a page that is abandoned over and over eventually reaches a terminal
+# status. Does not test the lease duration, which decides *when* a claim is
+# considered abandoned.
+
+
+async def test_a_repeatedly_abandoned_page_is_finally_failed(
+    monkeypatch: pytest.MonkeyPatch, job_env
+):
+    """Re-pending is right until the page itself is the reason.
+
+    Before the counter this loop had no exit: an image the model crashes on took
+    down every agent that claimed it, so the lease sweep re-pended it forever.
+    The job never reached a terminal status, so nothing ever told the researcher,
+    and it held one claim slot on every lap.
+    """
+    job_env(JOB_WORKER_ENABLED="false")
+    job = _readable_job(
+        claimed_by=f"{AGENT_CLAIM_PREFIX}{uuid.uuid4()}",
+        claim_attempts=0,
+    )
+    _record_notifications(monkeypatch)
+    store = _install_sweep_store(monkeypatch, job)
+
+    for lap in range(job_repository.MAX_CLAIM_ATTEMPTS):
+        # What the next agent's claim writes: the sweep cleared the claim, so
+        # without this the row falls into the *other* half of ``waiting`` and the
+        # inference timeout fails it for the wrong reason.
+        job.status = JobStatus.waiting
+        job.claimed_by = f"{AGENT_CLAIM_PREFIX}{uuid.uuid4()}"
+        job.updated_at = datetime.now(UTC) - timedelta(days=1)
+        stale_sweep_module.reset_stale_sweep_throttle()
+        await stale_sweep_module.sweep_stale_jobs_on_read()
+        if lap < job_repository.MAX_CLAIM_ATTEMPTS - 1:
+            assert job.status == JobStatus.pending, f"lap {lap} should still be retried"
+
+    assert store.lease_selects == job_repository.MAX_CLAIM_ATTEMPTS
+    assert job.status == JobStatus.failed
+    assert job.error == job_repository.poison_page_error(job_repository.MAX_CLAIM_ATTEMPTS)
+
+
+def test_a_finished_job_starts_over_with_a_full_claim_budget(monkeypatch: pytest.MonkeyPatch):
+    """Success is what resets the counter, on both paths that can produce it."""
+    session = _FakeSession([_FakeResult(rowcount=1)])
+    _use_session(monkeypatch, session)
+    _record_notifications(monkeypatch)
+
+    mark_job_done(uuid.uuid4(), {"ok": True}, claimed_by="host:1")
+    assert _params(session.statements[0])["claim_attempts"] == 0
+
+    from backend.jobs.application.job_callback_service import _mark_done_from_callback_sync
+
+    job = _readable_job(claim_attempts=3)
+    _mark_done_from_callback_sync(job, object(), {"ok": True})
+    assert job.claim_attempts == 0

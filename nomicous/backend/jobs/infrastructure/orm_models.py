@@ -6,7 +6,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from infrastructure.db import Base
-from sqlalchemy import DateTime, Enum, ForeignKey, Index, Text, event, func
+from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, Text, event, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.orm.base import NEVER_SET, NO_VALUE
@@ -100,6 +100,18 @@ class Job(Base):
     )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     claimed_by: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # How many claims on this page have been abandoned. Incremented by whichever
+    # sweep takes the claim back, reset by a successful terminal write. Without
+    # it a page that reliably kills whatever runs it cycles pending -> waiting ->
+    # pending forever and never reaches a terminal status; see
+    # ``job_repository.MAX_CLAIM_ATTEMPTS``.
+    claim_attempts: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0", default=0
+    )
+    # Write-only today: the claim and the platform worker both stamp it, nothing
+    # reads it. It is kept because the two lease timeouts are sized on the
+    # assumption that a stalled run is invisible, and this is the column a
+    # heartbeat would land in. Do not treat it as liveness - nothing checks it.
     heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     callback_claimed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

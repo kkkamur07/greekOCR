@@ -105,13 +105,15 @@ def run_stale_job_sweep() -> int:
             )
         # The other half of the waiting population: pages an **inference agent**
         # holds. These go back to the queue rather than failing, because a closed
-        # laptop lid is not a failed job - see release_expired_device_leases.
+        # laptop lid is not a failed job - until a page has been abandoned
+        # MAX_CLAIM_ATTEMPTS times, at which point the page is the problem and it
+        # is failed. See release_expired_device_leases.
         re_pended = release_expired_device_leases(
             lease_seconds=device_settings.device_lease_seconds
         )
         if re_pended:
             logger.warning(
-                "on-read sweep re-pended %s page(s) whose device lease expired", re_pended
+                "on-read sweep released %s page(s) whose device lease expired", re_pended
             )
         released = clear_stale_callback_claims(
             claim_timeout_seconds=settings.job_worker_callback_claim_timeout_seconds

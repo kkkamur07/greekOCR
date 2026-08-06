@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import socket
 import uuid
@@ -19,10 +20,44 @@ from backend.document.infrastructure.orm_models import Document
 from backend.jobs.infrastructure.notifications import notify_platform_job_status_changed
 from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
 
+logger = logging.getLogger(__name__)
+
 _TERMINAL_STATUSES = (JobStatus.done, JobStatus.failed, JobStatus.cancelled)
 _NON_TERMINAL_STATUSES = (JobStatus.pending, JobStatus.running, JobStatus.waiting)
 
 WAITING_TIMEOUT_ERROR = "Inference timed out with no response"
+
+POISON_PAGE_ERROR = "This page could not be completed by any inference agent"
+
+MAX_CLAIM_ATTEMPTS = 5
+"""How many abandoned claims a page survives before it is failed.
+
+Both stale sweeps return an abandoned job to ``pending`` rather than failing it,
+and that is the right default: a closed laptop lid is not a failed job. But a
+page that reliably kills whatever runs it - a corrupt scan, an image the model
+crashes on - is abandoned for the same reason every time, so re-pending it is an
+infinite loop that never tells the researcher anything and burns one agent slot
+per lap. ``jobs.claim_attempts`` counts the laps and this is where they stop.
+
+A constant rather than an environment dial, unlike the two timeouts next to it.
+Those are operational: how long to wait before believing an agent is gone
+depends on the deployment. This is not - "a page that has already killed five
+agents will not be run by a sixth" is a property of the queue, and an operator
+who raises it is choosing a longer infinite loop.
+"""
+
+
+def poison_page_error(max_claim_attempts: int) -> str:
+    """Reason recorded when a page exhausted its claim budget.
+
+    Allowlisted static text, same rule as ``waiting_timeout_error``: nothing the
+    page itself produced reaches the client, because the whole reason this fires
+    is that no agent ever got far enough to report anything. Naming the count is
+    what separates "five agents took this page and none came back" from a
+    generic failure, so the UI can tell a researcher the page is the problem
+    rather than the platform.
+    """
+    return f"{POISON_PAGE_ERROR} (abandoned {max_claim_attempts} times)"
 
 
 def waiting_timeout_error(waiting_timeout_seconds: float) -> str:
@@ -175,25 +210,98 @@ def count_active_jobs(*, test_payload: bool | None = None) -> int:
         return session.execute(query).scalar_one()
 
 
-def reclaim_stale_running_jobs(*, running_timeout_seconds: float) -> int:
-    """Move crashed-worker jobs back to pending after their running lease expires."""
+def _split_by_claim_budget(
+    rows: list, max_claim_attempts: int
+) -> tuple[list[uuid.UUID], list[uuid.UUID]]:
+    """Split ``(id, claim_attempts)`` rows into (retryable, exhausted).
+
+    The comparison is against ``attempts + 1`` because the caller is about to
+    record *this* abandonment: a row already at the ceiling would otherwise be
+    re-pended one last time and only fail on the lap after.
+    """
+    retryable: list[uuid.UUID] = []
+    exhausted: list[uuid.UUID] = []
+    for job_id, attempts in rows:
+        target = exhausted if (attempts or 0) + 1 >= max_claim_attempts else retryable
+        target.append(job_id)
+    return retryable, exhausted
+
+
+def reclaim_stale_running_jobs(
+    *, running_timeout_seconds: float, max_claim_attempts: int = MAX_CLAIM_ATTEMPTS
+) -> int:
+    """Take back a crashed worker's claim once its running lease expires.
+
+    Almost always that means re-pending, so another worker runs the job. A job
+    whose claim has been abandoned ``max_claim_attempts`` times is failed
+    instead: see ``MAX_CLAIM_ATTEMPTS`` for why re-pending forever is not the
+    kinder option.
+
+    ``FOR UPDATE SKIP LOCKED`` on the select, the same primitive the other two
+    sweeps use. It is not only concurrency control here - the split below needs
+    each row's ``claim_attempts``, and reading it unlocked would let a second
+    sweeper decide from the same stale count.
+    """
     now = datetime.now(UTC)
     stale_before = now - timedelta(seconds=running_timeout_seconds)
     with sync_system_session() as session:
-        result = session.execute(
-            update(Job)
-            .where(Job.status == JobStatus.running)
-            .where(Job.started_at <= stale_before)
-            .values(
-                status=JobStatus.pending,
-                started_at=None,
-                claimed_by=None,
-                heartbeat_at=None,
-                updated_at=now,
+        rows = list(
+            session.execute(
+                select(Job.id, Job.claim_attempts)
+                .where(Job.status == JobStatus.running)
+                .where(Job.started_at <= stale_before)
+                .with_for_update(skip_locked=True)
             )
         )
+        if not rows:
+            return 0
+        retryable, exhausted = _split_by_claim_budget(rows, max_claim_attempts)
+        moved = 0
+        if retryable:
+            moved += (
+                session.execute(
+                    update(Job)
+                    .where(Job.id.in_(retryable))
+                    .where(Job.status == JobStatus.running)
+                    .values(
+                        status=JobStatus.pending,
+                        started_at=None,
+                        claimed_by=None,
+                        heartbeat_at=None,
+                        claim_attempts=Job.claim_attempts + 1,
+                        updated_at=now,
+                    )
+                ).rowcount
+                or 0
+            )
+        if exhausted:
+            moved += (
+                session.execute(
+                    update(Job)
+                    .where(Job.id.in_(exhausted))
+                    .where(Job.status == JobStatus.running)
+                    .values(
+                        status=JobStatus.failed,
+                        error=poison_page_error(max_claim_attempts),
+                        claimed_by=None,
+                        heartbeat_at=None,
+                        claim_attempts=Job.claim_attempts + 1,
+                        callback_claimed_at=None,
+                        completed_at=now,
+                        updated_at=now,
+                    )
+                ).rowcount
+                or 0
+            )
         session.commit()
-        return result.rowcount or 0
+        # A bulk update emits no per-job NOTIFY, so an SSE subscriber would sit on
+        # a job that just died. The re-pended rows are deliberately not announced:
+        # this sweep has never announced them, and pending is not a state anything
+        # renders differently from the running it replaces.
+        for job_id in exhausted:
+            logger.warning("failing job %s: claim abandoned %s times", job_id, max_claim_attempts)
+            notify_platform_job_status_changed(job_id, JobStatus.failed)
+        return moved
 
 
 def fail_stale_waiting_jobs(*, waiting_timeout_seconds: float) -> int:
@@ -246,7 +354,9 @@ def fail_stale_waiting_jobs(*, waiting_timeout_seconds: float) -> int:
         return result.rowcount or 0
 
 
-def release_expired_device_leases(*, lease_seconds: float) -> int:
+def release_expired_device_leases(
+    *, lease_seconds: float, max_claim_attempts: int = MAX_CLAIM_ATTEMPTS
+) -> int:
     """Return pages whose **lease** expired to the queue, so another agent can take them.
 
     A crash, a killed process, or a closed laptop lid leaves a page held by an
@@ -261,6 +371,14 @@ def release_expired_device_leases(*, lease_seconds: float) -> int:
     agent, not see it permanently failed and have to resubmit. Nothing was
     dispatched to a third party, so there is no duplicate work to fear: the page
     is still exactly where it started, in the platform's own queue.
+
+    **Except after ``max_claim_attempts`` laps.** Re-pending is right when the
+    agent is why the page came back; it is a loop when the *page* is. A scan the
+    model crashes on takes down every agent that claims it, so with no counter it
+    cycled ``pending -> waiting -> pending`` forever: never terminal, so never
+    reported to the researcher, and holding one claim slot on every lap. The
+    counter lives on the row (``jobs.claim_attempts``) so this bulk statement can
+    read and bump it without a per-row round trip. See ``MAX_CLAIM_ATTEMPTS``.
 
     The claim is cleared with it - ``claimed_by``, ``inference_job_id``,
     ``started_at``, ``heartbeat_at`` - so that *any* agent may take the page next,
@@ -277,38 +395,74 @@ def release_expired_device_leases(*, lease_seconds: float) -> int:
     now = datetime.now(UTC)
     stale_before = now - timedelta(seconds=lease_seconds)
     with sync_system_session() as session:
-        expired_ids = list(
+        rows = list(
             session.execute(
-                select(Job.id)
+                select(Job.id, Job.claim_attempts)
                 .where(Job.status == JobStatus.waiting)
                 .where(_held_by_agent())
                 .where(Job.updated_at <= stale_before)
                 .with_for_update(skip_locked=True)
-            ).scalars()
-        )
-        if not expired_ids:
-            return 0
-        result = session.execute(
-            update(Job)
-            .where(Job.id.in_(expired_ids))
-            .where(Job.status == JobStatus.waiting)
-            .where(_held_by_agent())
-            .values(
-                status=JobStatus.pending,
-                claimed_by=None,
-                inference_job_id=None,
-                started_at=None,
-                heartbeat_at=None,
-                callback_claimed_at=None,
-                updated_at=now,
             )
         )
+        if not rows:
+            return 0
+        retryable, exhausted = _split_by_claim_budget(rows, max_claim_attempts)
+        moved = 0
+        if retryable:
+            moved += (
+                session.execute(
+                    update(Job)
+                    .where(Job.id.in_(retryable))
+                    .where(Job.status == JobStatus.waiting)
+                    .where(_held_by_agent())
+                    .values(
+                        status=JobStatus.pending,
+                        claimed_by=None,
+                        inference_job_id=None,
+                        started_at=None,
+                        heartbeat_at=None,
+                        claim_attempts=Job.claim_attempts + 1,
+                        callback_claimed_at=None,
+                        updated_at=now,
+                    )
+                ).rowcount
+                or 0
+            )
+        if exhausted:
+            # The claim is cleared here too, for the same reason it is cleared on a
+            # re-pend: a woken zombie must not be able to report on the page. A
+            # terminal status alone would not stop it, because the callback path
+            # matches ``inference_job_id``, not ``status``.
+            moved += (
+                session.execute(
+                    update(Job)
+                    .where(Job.id.in_(exhausted))
+                    .where(Job.status == JobStatus.waiting)
+                    .where(_held_by_agent())
+                    .values(
+                        status=JobStatus.failed,
+                        error=poison_page_error(max_claim_attempts),
+                        claimed_by=None,
+                        inference_job_id=None,
+                        started_at=None,
+                        heartbeat_at=None,
+                        claim_attempts=Job.claim_attempts + 1,
+                        callback_claimed_at=None,
+                        completed_at=now,
+                        updated_at=now,
+                    )
+                ).rowcount
+                or 0
+            )
         session.commit()
         # A bulk update emits no per-job NOTIFY, so a browser watching the job
         # would sit on "waiting" until something else touched the row.
-        for job_id in expired_ids:
+        for job_id in retryable:
             notify_platform_job_status_changed(job_id, JobStatus.pending)
-        return result.rowcount or 0
+        for job_id in exhausted:
+            logger.warning("failing job %s: claim abandoned %s times", job_id, max_claim_attempts)
+            notify_platform_job_status_changed(job_id, JobStatus.failed)
+        return moved
 
 
 def clear_stale_callback_claims(*, claim_timeout_seconds: float) -> int:
@@ -441,6 +595,11 @@ def mark_job_done(job_id: uuid.UUID, result: dict | None = None, *, claimed_by: 
                 status=JobStatus.done,
                 result=result or {},
                 error=None,
+                # A page that finished is not a page anything struggled with. The
+                # counter is reset rather than left standing so a job that took
+                # four tries and then succeeded does not carry a one-lap budget
+                # into whatever re-pends it next.
+                claim_attempts=0,
                 completed_at=now,
                 updated_at=now,
             )
