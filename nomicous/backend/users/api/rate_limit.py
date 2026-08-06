@@ -410,6 +410,10 @@ async def throttle_auth_attempts(request: Request) -> AsyncIterator[None]:
 #: window per client is generous. The bucket exists to stop one machine looping
 #: the route, not to bound the platform - that is the live-pairing ceiling in
 #: ``DevicePairingService.start_pairing``.
+#:
+#: The default lives in ``AuthSettings.device_pairing_rate_limit_requests``; this
+#: name is kept as the documented default so a reader of this module still sees
+#: the number, and so nothing that imported it breaks.
 DEVICE_PAIRING_RATE_LIMIT_REQUESTS = 10
 
 
@@ -436,7 +440,7 @@ async def throttle_device_pairing_starts(request: Request) -> None:
     settings = get_auth_settings()
     await consume_rate_limit(
         [f"device-pairing:{client_ip}"],
-        limit=DEVICE_PAIRING_RATE_LIMIT_REQUESTS,
+        limit=settings.device_pairing_rate_limit_requests,
         window_seconds=settings.auth_rate_limit_window_seconds,
         detail="Too many pairing requests; try again later",
     )

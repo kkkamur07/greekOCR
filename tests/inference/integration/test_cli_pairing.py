@@ -126,6 +126,11 @@ def platform_url(migrated_database: str, tmp_path_factory: pytest.TempPathFactor
             "DEVICE_PAIRING_APP_ORIGIN": APP_ORIGIN,
             "DEVICE_PAIRING_POLL_INTERVAL_SECONDS": POLL_INTERVAL_SECONDS,
             "AUTH_RATE_LIMIT_REQUESTS": "1000",
+            # Every test in this module pairs from 127.0.0.1, so they all charge
+            # one per-client bucket. At the default of 10 the module exhausts it
+            # partway through and the remaining tests fail on a 429 that has
+            # nothing to do with what they assert.
+            "DEVICE_PAIRING_RATE_LIMIT_REQUESTS": "1000",
             "JOB_WORKER_ENABLED": "false",
             "ENVIRONMENT": "development",
             # The platform imports `inference.contracts`, so the repository root

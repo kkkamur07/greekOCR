@@ -76,6 +76,15 @@ class AuthSettings(BaseSettings):
         default=60,
         alias="AUTH_RATE_LIMIT_WINDOW_SECONDS",
     )
+    # `POST /device/v1/pairings` is capped per client address on its own budget:
+    # a researcher pairing a second laptop must not spend the sign-in budget, and
+    # a deployment that pairs many machines from one office NAT has to be able to
+    # raise this without also raising what online password guessing gets. It is a
+    # setting rather than a constant for the same reason every limit beside it is.
+    device_pairing_rate_limit_requests: int = Field(
+        default=10,
+        alias="DEVICE_PAIRING_RATE_LIMIT_REQUESTS",
+    )
 
     @model_validator(mode="after")
     def _validate_secret(self) -> "AuthSettings":
