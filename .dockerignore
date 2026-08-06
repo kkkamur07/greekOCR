@@ -24,7 +24,9 @@ data/
 # Tests and docs are not shipped in production images
 tests/
 docs/
-configs/
+# Training configuration. Renamed from `configs/` by 4b1262f; no COPY in either
+# Dockerfile reads it, so this only keeps it out of the build context.
+config/
 
 # Model weights are mounted at runtime, not baked into images. Keep the Python
 # package initializer so `from inference.weights import ...` works in the image.

@@ -1,5 +1,10 @@
 # Nomicous documentation
 
+**Picking the work back up?** Read
+[`resume-inference-redesign.md`](resume-inference-redesign.md) first. It is the entry point
+for the 2026-08-04/05 inference redesign: where the trunk is, what was built, what red is
+supposed to look like, and which actions are the owner's rather than an agent's.
+
 Start with the audience-appropriate guide:
 
 | Doc                                                     | Use it when                                                                              |
@@ -31,7 +36,7 @@ Start with the audience-appropriate guide:
 
 | Doc                                                             | Scope                                                             |
 | --------------------------------------------------------------- | ----------------------------------------------------------------- |
-| [Adding inference models](inference/adding-inference-models.md) | Registry, weights, catalog, helper sync, and deployment checklist |
+| [Adding inference models](inference/adding-inference-models.md) | Registry, weights, platform catalog, and deployment checklist     |
 | [Inference service](../inference/README.md)                     | Install from PyPI, releasing, contracts, limits, and runtime reference |
 | [Hugging Face publishing](../scripts/hf/README.md)              | Model and dataset staging, validation, and upload workflow        |
 
@@ -46,14 +51,17 @@ Start with the audience-appropriate guide:
 - [`nomicous/frontend/README.md`](../nomicous/frontend/README.md) — editor
   development and generated API client
 
-## Reviews
+## Status, handoff, and reviews
 
-Point-in-time reviews of the codebase. They carry file paths and line numbers that
-drift, so read them alongside the code rather than as current reference.
+Point-in-time documents. They carry file paths and line numbers that drift — and, in the
+review's case, paths that have since been deleted — so read them alongside the code rather
+than as current reference.
 
-| Doc                                                  | Scope                                                                       |
-| ---------------------------------------------------- | --------------------------------------------------------------------------- |
-| [Codebase review, 2026-08-04](codebase-review-2026-08-04.md) | Cleanup backlog, simplification findings, and ranked architectural candidates |
+| Doc                                                                             | Scope                                                                        |
+| ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| [Resume: inference redesign](resume-inference-redesign.md)                       | **Current.** Trunk state, what was built, known gaps, and the owner's actions |
+| [Merge handoff: inference redesign](merge-handoff-inference-redesign.md)         | History. Executed 2026-08-05; kept for *why* each conflict was resolved as it was |
+| [Codebase review, 2026-08-04](codebase-review-2026-08-04.md)                     | Stale. Cleanup backlog and architectural candidates as believed that day      |
 
 ## Security
 
@@ -62,5 +70,5 @@ dependency vulnerability exceptions and their remediation plans.
 
 ## Internal backlog
 
-Deferred work lives in [`todo.md`](todo.md). It is an internal backlog, not a
-product capability list.
+Deferred work lives in the repository-root [`todo.md`](../todo.md) — P0/P1/P2, one
+backlog, no second copy. It is an internal backlog, not a product capability list.

@@ -1,6 +1,6 @@
 # Testing
 
-Pytest layout and commands for the platform, inference service, and Hugging Face helpers.
+Pytest layout and commands for the platform, the inference package, and the Hugging Face scripts.
 
 ---
 
@@ -83,7 +83,7 @@ Defined in `pyproject.toml`:
 
 ## Full Docker suite
 
-With Compose running (`docker compose up`), hit the live API at `http://localhost:8000` and inference at `http://localhost:8010`. Integration tests use their own DB sessions and do not require the API container unless noted in a specific test.
+With Compose running (`docker compose up`), hit the live API at `http://localhost:8000`. Compose publishes only 8000 (API), 5173 (frontend) and 5433 (Postgres); inference has no port, because it runs in the agent process rather than behind an HTTP surface. Integration tests use their own DB sessions and do not require the API container unless noted in a specific test.
 
 For Supabase-backed local testing, see [deployment/supabase.md](../deployment/supabase.md) - same pytest commands; set `DATABASE_URL` / `SYNC_DATABASE_URL` in env or `conftest.py` overrides.
 

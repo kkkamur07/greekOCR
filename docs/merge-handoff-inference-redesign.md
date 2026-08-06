@@ -5,7 +5,8 @@
 > read [`resume-inference-redesign.md`](./resume-inference-redesign.md) instead; come back
 > here only for *why* a particular conflict was resolved the way it was.
 
-**Read this alongside [`merge-handoff.md`](./merge-handoff.md), which it supersedes in part.**
+**It supersedes the earlier `merge-handoff.md`, which has been deleted: its instructions
+named a branch that no longer exists and a verification block that can no longer be run.**
 That document's branch table is now wrong in ways that matter: it directs a merge of
 `feat/048-collapse-second-job-queue`, a branch that **no longer exists**. See §2.
 

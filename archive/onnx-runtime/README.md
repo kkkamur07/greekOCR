@@ -5,6 +5,33 @@ implemented in issue 049. Nothing here is imported by the running system. It is
 kept because the conversion work was non-trivial and rediscovering it from git
 history is far harder than reading it here.
 
+> **This tree does not import, and is not expected to.** It is prose with syntax
+> highlighting: a snapshot of the code as it stood at retirement, frozen against a
+> repository that has moved on. Do not try to run it, and do not file its import
+> errors as bugs.
+>
+> Concretely, every entry point here is broken at module scope:
+>
+> - `export/blla/__init__.py`, `scripts/export_blla_onnx.py`,
+>   `scripts/convert_calamari.py` and `tests/test_calamari_onnx.py` import
+>   `src.model.inference_export.*`. That package is gone — ADR 0004 moved the graph
+>   modules into `inference/architectures/`, as the table below records.
+> - `tests/test_blla_onnx.py` imports `inference.architectures.blla.onnx`,
+>   `preprocess_blla_image_numpy` and
+>   `inference.architectures.blla.blla_decoder.common.resize_heatmaps_nearest`.
+>   All three were deleted with the ONNX path; the first is archived here, the
+>   other two no longer exist under either name.
+> - `inference/architectures/blla/numpy_support.py` reaches into *live* code for a
+>   private name: `from inference.architectures.blla.blla_preprocessing import
+>   _scaled_blla_width`. That name still exists today, but it is private and
+>   nothing outside the archive depends on it, so it is free to change or vanish
+>   without notice.
+>
+> Reviving any of this means rewriting the imports, not just reinstalling
+> `onnxruntime` — see "Reviving this" below. The archived code is deliberately
+> left as it was rather than patched to import cleanly, because a snapshot that
+> half-works invites someone to trust it.
+
 ## Why it existed, and why it stopped
 
 Local inference used to ship as a frozen native application: a four-platform
@@ -163,9 +190,12 @@ You would need, roughly:
    `onnxruntime>=1.23.2,<1.24` in `[project].dependencies` and `onnx>=1.17.0`
    in an `export` dependency group).
 2. `kraken>=7.0.2` back, if you want the parity harness — it is the oracle.
-3. The graph modules above are imported from their new locations by the
-   archived exporters; `numpy_support.py` here holds the pieces that were
-   removed from `inference/architectures/blla/`.
+3. Every import rewritten. The archived exporters still name
+   `src.model.inference_export.*`, which no longer exists; point them at the new
+   locations in the table above. `tests/test_blla_onnx.py` additionally needs
+   `preprocess_blla_image_numpy` and `resize_heatmaps_nearest` restored — they
+   were deleted, not moved. `numpy_support.py` here holds the rest of the
+   Torch-free pieces that were removed from `inference/architectures/blla/`.
 4. Re-export the artifacts and re-pin `artifact_sha256` in
    `inference/registry.yaml`, which now points at the native `.pt` and
    `.safetensors` files at the same **Hub revision**.

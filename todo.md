@@ -6,7 +6,9 @@ what is **not** done. Ordered by what blocks what.
 
 Current tree: committed on `feat/inference-cli-redesign`. The 2026-08-04 inference
 redesign (ADRs 0002-0005, issues #48-#66) is layered on top; see
-`docs/merge-handoff-inference-redesign.md` before merging anything into it.
+`docs/resume-inference-redesign.md` for where that work stands.
+(`docs/merge-handoff-inference-redesign.md` is history — its own line 3 says so — and
+is worth opening only to find out *why* a particular conflict was resolved as it was.)
 
 ---
 
@@ -90,9 +92,17 @@ numbers that made the original argument and they are the wrong unit.
 The pass is committed on `feat/inference-cli-redesign`, split into logical commits.
 The inference redesign (issues #48-#61) landed on top of it in per-issue lanes.
 
-### 6. Release signing secrets
+### 6. ~~Release signing secrets~~ - inverted by issues 050 and 061
 
-Six secrets are still unset; the release workflow stays red **by design** until they exist.
+There is nothing to create. `.github/workflows/release.yml:16-18`: "There are no signing
+secrets. PyPI Trusted Publishing mints a short-lived token from this workflow's OIDC
+identity." The six unset secrets this item asked for belonged to the native installer
+pipeline, which #061 deleted.
+
+The remaining work runs the other way — **eight existing** secrets should be revoked,
+credential and all. See §8 of [`docs/resume-inference-redesign.md`](docs/resume-inference-redesign.md),
+"Revoke eight CI secrets", and its "Before the first release can be cut" section. Both
+are owner actions, not agent work.
 
 ---
 
@@ -152,7 +162,7 @@ live pooler. Worth adding a local `.env` so nothing defaults to production.
 ### 12. Integration suite unverified
 
 Deferred by request. Needs a throwaway Postgres (local or a scratch Supabase project) before it
-can run — see the hazard in #10.
+can run — see the `TRUNCATE TABLE` hazard in #11.
 
 ### 13. 519 ruff violations behind a per-file-ignores allowlist
 
@@ -166,7 +176,30 @@ Backend is complete and tested; the feature flag is off. Frontend is the remaini
 
 Stale after the device-pairing routers and the job-lifecycle schema changes.
 
-### 16. ~~Docs: stale `/inference/v1/catalog` references~~ - done in issue 061
+### 16. Safari: session reload returns 403 on `/auth/refresh`
+
+Arc and Chrome keep the session across a reload; Safari often returns CSRF `403`. The cause
+is cross-subdomain cookie auth: the session cookie is `__Host-` on `api.nomicous.com`, while
+the CSRF cookie (`greekocr-csrf`, `Domain=.nomicous.com`) has to be readable by JS on
+`app.nomicous.com` to populate `X-CSRF-Token`. Safari's ITP is stricter about that
+sibling-subdomain cookie than Chromium is. The durable fix is a same-origin BFF or proxy on
+`app.nomicous.com`, so the cookies are first-party to the app host.
+
+To verify in Safari Web Inspector: Storage → cookies on both hosts, and Network → the
+`/auth/refresh` request (cookies plus `X-CSRF-Token`).
+
+### 17. Safari: transcription PDF inline preview
+
+Safari frequently cannot embed `blob:` PDFs in `<object>`/`<iframe>`; Chrome and Arc usually
+can. The longer-term option is PDF.js, for one consistent in-app viewer.
+
+### 18. Retire the two VEX statements when their floors move
+
+Remove `docs/security/vex-click-pysec-2026-2132.md` once the inference dependency graph
+resolves Click >= 8.3.3, and `docs/security/vex-torch-pysec-2026-139-cve-2025-3000.md` once
+its remaining PyTorch floor no longer requires it.
+
+### 19. ~~Docs: stale `/inference/v1/catalog` references~~ - done in issue 061
 
 Corrected to `/inference/v1/info` in the root README, the hosting guide, and the
 model checklist. `tests/inference/unit/test_helper_app.py` asserts the old route
