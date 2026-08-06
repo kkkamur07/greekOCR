@@ -20,8 +20,19 @@ def resolved_env_file() -> Path:
 
 
 def env_settings_config() -> SettingsConfigDict:
+    """The env-loading contract shared by every settings class.
+
+    ``env_ignore_empty`` is what makes ``KNOB=`` mean "not set" rather than the
+    empty string. Without it, an entry left blank in a .env file - the ordinary
+    way to write down a knob you are not using - reaches pydantic as ``''`` and
+    fails every field that is not a string. The shipped ``.env.example`` carried
+    exactly that for ``JOB_WORKER_CLAIM_TEST_ONLY`` (a ``bool | None``), so the
+    template four documents tell readers to copy raised ``ValidationError``
+    inside ``create_app()`` and the API never came up.
+    """
     return SettingsConfigDict(
         env_file=resolved_env_file(),
         env_file_encoding="utf-8",
+        env_ignore_empty=True,
         extra="ignore",
     )
