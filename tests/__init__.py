@@ -1,7 +1,7 @@
 """
 Repository for tests
 
-The folder structure is 
+The folder structure is
 
 tests/
     inference/
@@ -11,4 +11,3 @@ tests/
         unit/
         integeration/
 """
-
