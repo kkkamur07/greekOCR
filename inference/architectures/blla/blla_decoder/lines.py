@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections import defaultdict
 
 import numpy as np
@@ -13,6 +14,8 @@ from skimage import filters
 from skimage.graph import MCP_Connect
 from skimage.measure import approximate_polygon, label, regionprops
 from skimage.morphology import skeletonize
+
+logger = logging.getLogger(__name__)
 
 
 class _LineMCP(MCP_Connect):
@@ -118,7 +121,12 @@ def _extend_boundaries(
             boundary = _boundary_tracing(region)
             if len(boundary) > 3:
                 boundaries.append(geom.Polygon(boundary).simplify(0.01).buffer(0))
-        except Exception:
+        except Exception as error:  # noqa: BLE001 - one bad region is not a bad page
+            # Skipped, not raised: a region shapely cannot close costs this line
+            # its boundary, not the page its segmentation. Logged because the
+            # silent version made a systematic tracing failure look like a page
+            # that simply had no extendable baselines.
+            logger.debug("boundary tracing skipped a region: %s", error)
             continue
 
     for baseline in baselines:
@@ -198,7 +206,9 @@ def vectorize_lines(
         skeleton_labels = label(line_skeleton)
         extrema_components = skeleton_labels[extrema[:, 0], extrema[:, 1]]
         component_ids, component_counts = np.unique(extrema_components, return_counts=True)
-        endpoint_counts = dict(zip(component_ids.tolist(), component_counts.tolist()))
+        # `np.unique(..., return_counts=True)` returns the two arrays paired
+        # element-for-element, so a length mismatch here would mean numpy broke.
+        endpoint_counts = dict(zip(component_ids.tolist(), component_counts.tolist(), strict=True))
         valid_components = {
             component_id for component_id, count in endpoint_counts.items() if count <= 10
         }
@@ -301,7 +311,7 @@ def _reading_order(
         first: tuple[slice, slice],
         second: tuple[slice, slice],
     ) -> bool:
-        if middle == first or middle == second:
+        if middle in (first, second):
             return False
         if middle[0].stop < min(first[0].start, second[0].start):
             return False

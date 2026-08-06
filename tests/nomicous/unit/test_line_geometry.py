@@ -7,7 +7,6 @@ from backend.annotation.application.line_geometry import (
     resolve_line_baseline_and_mask,
 )
 
-
 # --- Default baseline ---
 # Tests bottom-edge baseline from polygon points. Does not hit the database.
 

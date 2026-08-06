@@ -6,12 +6,10 @@ import logging
 
 import numpy as np
 from scipy.ndimage import gaussian_filter
+from shapely import geometry as geom
 from skimage import filters
 
 from inference.architectures.blla.blla_decoder.common import resize_heatmaps_nearest
-from shapely import geometry as geom
-
-from inference.architectures.isolation import reraise_if_none_survived
 from inference.architectures.blla.blla_decoder.lines import (
     is_in_region,
     reading_order_indices,
@@ -21,6 +19,7 @@ from inference.architectures.blla.blla_decoder.lines import (
 from inference.architectures.blla.blla_decoder.polygon import calculate_polygonal_environment
 from inference.architectures.blla.blla_decoder.simple import decode_simple_heatmaps
 from inference.architectures.blla.blla_decoder.types import DecodedBLLALine
+from inference.architectures.isolation import reraise_if_none_survived
 
 logger = logging.getLogger(__name__)
 

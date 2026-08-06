@@ -11,12 +11,9 @@ from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 
-import numpy as np
 import pytest
 from PIL import Image
 from pydantic import ValidationError
-
-from tests.fixtures.paths import TRANSCRIBE_LINE
 
 from inference.architectures.calamari import adapter
 from inference.architectures.calamari.adapter import TranscribeLineFailure
@@ -29,6 +26,7 @@ from inference.contracts.transcribe import (
     TranscribeRunResponse,
 )
 from inference.jobs.runner import run_model
+from tests.fixtures.paths import TRANSCRIBE_LINE
 
 # The published graph, from the Hub revision the registry pins. Gitignored, so
 # these two real-weights cases skip in a checkout that has not fetched it; every

@@ -7,6 +7,7 @@ import uuid
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
+from sqlalchemy.engine import Engine
 from sqlalchemy.exc import OperationalError
 
 # Safe above the environment setup below: `helpers` imports nothing from the
@@ -65,20 +66,70 @@ from backend.core.app import create_app
 # `reset_settings_caches` is that it does not have to.
 from backend.core.settings import reset_settings_caches
 from backend.users.api.rate_limit import clear_auth_rate_limit_state
-
 from infrastructure.db import Base, sync_engine
 
 _truncate_engine = sync_engine
 _TRUNCATE_ADVISORY_LOCK_ID = 73450123
 
+#: The only hosts this suite is allowed to wipe. Loopback, and nothing else.
+LOCAL_DATABASE_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
+
+def require_local_database(engine: Engine) -> None:
+    """Refuse to touch a database that is not on this machine.
+
+    Everything below TRUNCATEs every mapped table before every test, so the only
+    thing separating this suite from a real database is which host
+    ``SYNC_DATABASE_URL`` happens to name. The ``os.environ.setdefault`` above is
+    not that separation: ``setdefault`` yields to a value already exported in the
+    caller's shell, and this repo hands developers a Supabase env file whose
+    ``SYNC_DATABASE_URL`` is meant to be exported (see
+    ``scripts/platform/migrate_supabase.sh``). Sourcing it and then running
+    pytest in the same shell was enough to truncate that database.
+
+    Fails closed: a URL with no readable host is refused too, because a host that
+    cannot be identified cannot be shown to be local.
+    """
+    host = engine.url.host
+    normalized = (host or "").strip().strip("[]").casefold()
+    if normalized in LOCAL_DATABASE_HOSTS:
+        return
+
+    target = engine.url.render_as_string(hide_password=True)
+    where = f"host {host!r}" if host else "a URL with no host in it"
+    raise RuntimeError(
+        f"Refusing to wipe the database at {where}.\n"
+        f"  resolved target: {target}\n"
+        f"  allowed hosts:   {', '.join(sorted(LOCAL_DATABASE_HOSTS))}\n"
+        "The integration suite TRUNCATEs every table before every test, so it "
+        "only ever runs against a local Postgres. Something has pointed "
+        "SYNC_DATABASE_URL somewhere else - most likely an export still live in "
+        "this shell from a Supabase env file (scripts/platform/migrate_supabase.sh "
+        "sources one). Run `unset SYNC_DATABASE_URL DATABASE_URL "
+        "MIGRATOR_DATABASE_URL` or open a new shell, then re-run: the suite "
+        "defaults to postgresql://postgres:dev@localhost:5433/kalamos.\n"
+        "If you believe that target IS local, note that only loopback names are "
+        "accepted - a hostname or container alias that resolves to 127.0.0.1 is "
+        "not, on purpose, because this check must not depend on name resolution."
+    )
+
+
+# Checked once at import so a misdirected suite fails at collection, before any
+# fixture has run, rather than at the first test. `_truncate_database` re-checks
+# rather than trusting this, so the guard cannot be skipped by calling it
+# directly, and so a test that repoints the engine mid-session is still caught.
+require_local_database(_truncate_engine)
+
 
 def _ensure_job_status_cancelled() -> None:
     """Dev/test DBs created before cancelled existed need the enum value."""
+    require_local_database(_truncate_engine)
     with _truncate_engine.begin() as connection:
         connection.execute(text("ALTER TYPE job_status ADD VALUE IF NOT EXISTS 'cancelled'"))
 
 
 def _truncate_database() -> None:
+    require_local_database(_truncate_engine)
     table_names = [
         sync_engine.dialect.identifier_preparer.quote(table.name)
         for table in reversed(Base.metadata.sorted_tables)

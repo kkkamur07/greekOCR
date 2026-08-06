@@ -21,6 +21,15 @@ repos:
         language: system
         types: [jupyter]
 
+      # `protect --staged`, not `detect`: `detect` rescans the whole working
+      # tree (~578 MB here), which would make every commit unusably slow.
+      # `.gitleaks.toml` is the same config CI's gitleaks-action reads.
+      - id: gitleaks
+        name: Scan staged changes for secrets
+        entry: gitleaks protect --staged --config .gitleaks.toml
+        language: system
+        pass_filenames: false
+
       - id: ruff-format
         name: Ruff formatting
         entry: uv run --locked --group dev ruff format

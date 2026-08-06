@@ -83,9 +83,12 @@ def _calc_seam(
     r_min, r_max = int(polygon[:, 1].min()), int(polygon[:, 1].max())
     patch = image_features[r_min : r_max + 2, c_min : c_max + 2].copy()
     mask = np.ones_like(patch)
+    # A sliding pair over one array: `[:-1]` and `[1:]` are the same length by
+    # construction, so `strict` guards the slicing rather than the data.
     for line_start, line_end in zip(
         baseline[:-1] - (c_min, r_min),
         baseline[1:] - (c_min, r_min),
+        strict=True,
     ):
         line_locations = draw.line(
             line_start[1],
@@ -286,10 +289,13 @@ def _calc_roi(
 
     env_up = []
     env_bottom = []
+    # Both intersection lists are comprehensions over `interpolated_array`, so
+    # all three are the same length unless that stops being true above.
     for point, upper, bottom in zip(
         interpolated_array,
         upper_intersections,
         bottom_intersections,
+        strict=True,
     ):
         env_up.append(
             closest(point, geom.LineString([point, upper]).intersection(side_a)).coords[0]

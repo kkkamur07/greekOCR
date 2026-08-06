@@ -9,16 +9,16 @@ import socket
 import uuid
 from datetime import UTC, datetime, timedelta
 
-import infrastructure.models  # noqa: F401 - register all ORM mappers
-from infrastructure.db import sync_system_session
 from sqlalchemy import delete, func, or_, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import infrastructure.models  # noqa: F401 - register all ORM mappers
 from backend.core.api.pagination import PageCursor
 from backend.core.exceptions import ConflictError
 from backend.document.infrastructure.orm_models import Document
 from backend.jobs.infrastructure.notifications import notify_platform_job_status_changed
 from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
+from infrastructure.db import sync_system_session
 
 logger = logging.getLogger(__name__)
 
@@ -89,9 +89,15 @@ AGENT_CLAIM_PREFIX = "agent:"
 # construction rather than by a rule about what machines may be called.
 _WORKER_IDENTITY = f"worker:{socket.gethostname()}/{os.getpid()}"
 
-assert not _WORKER_IDENTITY.startswith(AGENT_CLAIM_PREFIX), (
-    "the platform worker's identity must never look like an agent claim"
-)
+# Checked with a raise rather than an `assert`: `python -O` strips asserts, and
+# this one is the only thing standing between a badly-named host and a page
+# governed by the wrong timeout. A self-check worth writing is worth keeping in
+# an optimised interpreter.
+if _WORKER_IDENTITY.startswith(AGENT_CLAIM_PREFIX):
+    raise RuntimeError(
+        f"the platform worker's identity {_WORKER_IDENTITY!r} collides with the "
+        f"{AGENT_CLAIM_PREFIX!r} claim namespace reserved for inference agents"
+    )
 
 
 def worker_identity() -> str:
@@ -138,6 +144,42 @@ class JobRepository:
         query = query.limit(limit)
         result = await self._session.execute(query)
         return list(result.scalars().all())
+
+    async def seconds_since_oldest_pending_job(self) -> float | None:
+        """How long the head of the pending queue has waited; ``None`` if nothing pends.
+
+        The one observable that says "something is claiming this queue". Nothing
+        in the API deployment claims a pending job: the platform worker runs only
+        under ``JOB_WORKER_ENABLED`` on a separate host, and ``segment`` and
+        ``transcribe`` are claimed over HTTP by an inference agent. The on-read
+        stale sweep reaps timeouts and never claims. So if no consumer is up,
+        pending rows accumulate and every other signal stays green - see
+        ``backend.core.api.health``, the only caller.
+
+        **Every pending row counts, agent-claimed types included.** Restricting
+        this to ``claim_next_pending_job``'s population would make it permanently
+        ``None`` in production: the only job types anything enqueues are
+        ``transcribe`` and ``segment`` (``document_job_enqueue``), and both are
+        excluded from that claim by ``AGENT_CLAIMED_JOB_TYPES``. A number that is
+        structurally always ``None`` is worse than no number.
+
+        Measured from ``created_at`` rather than ``updated_at``: it is the queue's
+        own ordering key, so ``min()`` reads the head of the
+        ``ix_jobs_claim_pending`` partial index, and it cannot be reset. A page
+        cycling through lease expiry (``release_expired_device_leases``) keeps its
+        full age here, which is intended - a page pending for an hour is stuck
+        whether it was ignored for an hour or claimed and abandoned six times.
+        """
+        oldest_created_at = (
+            await self._session.execute(
+                select(func.min(Job.created_at)).where(Job.status == JobStatus.pending)
+            )
+        ).scalar_one_or_none()
+        if oldest_created_at is None:
+            return None
+        # Floored at zero: ``created_at`` is a server default, so a DB clock a
+        # little ahead of this host's would otherwise report a negative age.
+        return max((datetime.now(UTC) - oldest_created_at).total_seconds(), 0.0)
 
     async def delete_terminal_jobs_for_project(self, project_id: uuid.UUID) -> int:
         """Delete finished jobs of a project; pending/running/waiting rows are kept."""

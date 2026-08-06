@@ -6,7 +6,6 @@ import pytest
 
 from tests.nomicous.integration.helpers import assert_api_error
 
-
 # --- Project list and CRUD ---
 # Tests owner create/read/update/delete. Does not test documents or sharing.
 

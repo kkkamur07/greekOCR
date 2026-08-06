@@ -32,7 +32,6 @@ from backend.jobs.infrastructure.job_repository import (
     mark_job_done,
     mark_job_failed,
     reclaim_stale_running_jobs,
-    release_expired_device_leases,
     waiting_timeout_error,
     worker_identity,
 )
@@ -864,9 +863,8 @@ def test_clear_job_history_route_contract():
 
 
 def test_stream_job_events_takes_no_request_session():
-    from infrastructure.db import get_db
-
     from backend.jobs.api.jobs import stream_job_events
+    from infrastructure.db import get_db
 
     parameters = inspect.signature(stream_job_events).parameters
     assert "service" not in parameters

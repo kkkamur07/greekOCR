@@ -10,9 +10,8 @@ default so script-specific models are attached per project when available.
 import asyncio
 import os
 
-from sqlalchemy import select
-
 from _bootstrap import ensure_nomicous_on_path
+from sqlalchemy import select
 
 ensure_nomicous_on_path()
 
@@ -22,7 +21,6 @@ from backend.ml.infrastructure.orm_models import (  # noqa: E402
     ModelBinding,
 )
 from backend.project.infrastructure.orm_models import Project  # noqa: E402
-
 from infrastructure import models as _orm_models  # noqa: E402, F401 - register all mappers
 from infrastructure.db import system_session  # noqa: E402
 

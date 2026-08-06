@@ -184,7 +184,9 @@ def test_member_exports_page_xml_with_transcription_polygon_and_baseline(
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("application/xml")
-    root = ElementTree.fromstring(response.content)
+    # S314: the document being parsed is the response this test just asked the
+    # app to render, in-process. There is no untrusted producer to defend against.
+    root = ElementTree.fromstring(response.content)  # noqa: S314
     ns = {"page": "http://schema.primaresearch.org/PAGE/gts/pagecontent/2019-07-15"}
     text_line = root.find(".//page:TextLine", ns)
     assert text_line is not None

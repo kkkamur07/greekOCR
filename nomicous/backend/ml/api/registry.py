@@ -6,9 +6,9 @@ import hashlib
 
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import PlainTextResponse
-from inference.registry import load_registry
 
 from backend.core.settings.ml import get_ml_settings
+from inference.registry import load_registry
 
 router = APIRouter(tags=["ml"])
 

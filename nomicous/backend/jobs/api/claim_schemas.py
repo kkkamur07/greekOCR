@@ -19,12 +19,12 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from inference.contracts.common import InferenceTask
 from pydantic import BaseModel, Field
 
 from backend.jobs.infrastructure.orm_models import JobType
 from backend.ml.api.agent_version import AgentVersionNotice
 from backend.ml.domain.execution import ExecutionTarget
+from inference.contracts.common import InferenceTask
 
 
 class JobClaimRequest(BaseModel):

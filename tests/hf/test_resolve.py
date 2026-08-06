@@ -10,10 +10,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
-from inference.weights import resolve_weights_source
+
 from inference.hub import resolve_hf_weights_source, set_default_hub_client
 from inference.hub.manifest import load_manifest
 from inference.hub.uri import parse_hf_weights_uri
+from inference.weights import resolve_weights_source
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MOCK_CHECKPOINT = REPO_ROOT / "src/hf/local/syriac/calamari/v1/stable/best.pt"

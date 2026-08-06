@@ -31,7 +31,6 @@ import asyncio
 import logging
 import time
 
-from infrastructure.db import sync_system_session
 from sqlalchemy import text
 
 from backend.core.settings.device import get_device_settings
@@ -41,6 +40,7 @@ from backend.jobs.infrastructure.job_repository import (
     fail_stale_waiting_jobs,
     release_expired_device_leases,
 )
+from infrastructure.db import sync_system_session
 
 logger = logging.getLogger(__name__)
 

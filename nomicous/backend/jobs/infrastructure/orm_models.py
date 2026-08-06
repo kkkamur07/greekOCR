@@ -5,7 +5,6 @@ from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from infrastructure.db import Base
 from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, Text, event, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -13,6 +12,7 @@ from sqlalchemy.orm.base import NEVER_SET, NO_VALUE
 
 from backend.core.exceptions import ConflictError
 from backend.ml.domain.execution import ExecutionTarget
+from infrastructure.db import Base
 
 if TYPE_CHECKING:
     from backend.ml.infrastructure.orm_models import InferenceModel, ModelBinding

@@ -56,6 +56,20 @@ class JobSettings(BaseSettings):
         alias="JOB_STALE_SWEEP_MIN_INTERVAL_SECONDS",
         description="Per-process floor between opportunistic sweeps; caps the cost per request.",
     )
+    job_queue_stall_warning_seconds: float = Field(
+        default=900.0,
+        alias="JOB_QUEUE_STALL_WARNING_SECONDS",
+        description=(
+            "Age at which /health logs a WARNING about the oldest pending job. Nothing "
+            "claims pending work unless a platform worker (JOB_WORKER_ENABLED, a "
+            "separate host) or an inference agent is running, and neither is part of "
+            "the API deployment - so this is the only signal that the queue has no "
+            "consumer. Default 900s: above one full DEVICE_LEASE_SECONDS (600) so a "
+            "single abandoned lease cannot trip it, below "
+            "JOB_WORKER_RUNNING_TIMEOUT_SECONDS (1800) so a stalled queue is named "
+            "before an in-flight job is even reclaimed."
+        ),
+    )
 
 
 @settings_cache

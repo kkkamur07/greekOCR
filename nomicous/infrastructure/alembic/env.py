@@ -6,8 +6,8 @@ from alembic import context
 from sqlalchemy import create_engine, pool
 
 from backend.core.settings import get_infrastructure_settings
-from infrastructure.db import Base
 from infrastructure import models  # noqa: F401 - register all ORM tables
+from infrastructure.db import Base
 
 config = context.config
 

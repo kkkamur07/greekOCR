@@ -46,11 +46,10 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
+from _bootstrap import ensure_nomicous_on_path
 from PIL import Image
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from _bootstrap import ensure_nomicous_on_path
 
 ensure_nomicous_on_path()
 

@@ -66,7 +66,7 @@ from backend.users.infrastructure.orm_models import User
 
 logger = logging.getLogger(__name__)
 
-SERVICE_TOKEN_HEADER = "X-Nomicous-Service-Token"
+SERVICE_TOKEN_HEADER = "X-Nomicous-Service-Token"  # noqa: S105 - a header name, not a token
 """Hosted-worker credential. A separate header from the device token for the same
 reason the device token is separate from ``Authorization``: two credentials that
 resolve to different scopes must not be interchangeable by accident."""

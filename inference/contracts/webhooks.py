@@ -7,4 +7,4 @@ of the loopback service's ``POST /inference/v1/run`` and died with it (ADR
 **device credential**, and is never called at all.
 """
 
-INFERENCE_WEBHOOK_SECRET_HEADER = "X-Inference-Webhook-Secret"
+INFERENCE_WEBHOOK_SECRET_HEADER = "X-Inference-Webhook-Secret"  # noqa: S105 - a header name

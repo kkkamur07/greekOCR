@@ -26,12 +26,7 @@ from backend.core.exceptions import AccessDeniedError, ConflictError, InvalidCre
 from backend.core.settings import (
     AppSettings,
     AuthSettings,
-    get_app_settings,
     get_auth_settings,
-    get_infrastructure_settings,
-    get_job_settings,
-    get_ml_settings,
-    get_storage_settings,
     reset_settings_caches,
 )
 from backend.core.settings.auth import (
@@ -39,13 +34,12 @@ from backend.core.settings.auth import (
     MIN_JWT_SECRET_GUESSES_LOG10,
     secret_guesses_log10,
 )
-from backend.core.settings.device import get_device_settings
 from backend.users.api import rate_limit
 from backend.users.api.dependencies import get_current_user
 from backend.users.api.rate_limit import (
+    _real_ip,
     attributable_client_ip,
     auth_rate_limit_keys,
-    _real_ip,
 )
 
 

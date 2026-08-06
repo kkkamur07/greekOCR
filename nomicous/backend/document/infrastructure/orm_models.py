@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import enum
 import uuid
 from datetime import datetime
+from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
@@ -28,23 +28,23 @@ if TYPE_CHECKING:
     from backend.project.infrastructure.orm_models import Project
 
 
-class DocumentWorkflow(str, enum.Enum):
+class DocumentWorkflow(StrEnum):
     draft = "draft"
     published = "published"
     archived = "archived"
 
 
-class TranscriptionKind(str, enum.Enum):
+class TranscriptionKind(StrEnum):
     ground_truth = "ground_truth"
     model = "model"
 
 
-class LineGeometryKind(str, enum.Enum):
+class LineGeometryKind(StrEnum):
     polygon = "polygon"
     rectangle = "rectangle"
 
 
-class LineSource(str, enum.Enum):
+class LineSource(StrEnum):
     manual = "manual"
     kraken = "kraken"
     model = "model"

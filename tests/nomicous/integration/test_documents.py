@@ -1,9 +1,9 @@
 """Document and part integration tests — real Postgres (kalamos)."""
 
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 from threading import Barrier
-import uuid
 
 import pytest
 from PIL import Image

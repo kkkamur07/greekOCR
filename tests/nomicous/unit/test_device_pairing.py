@@ -1061,7 +1061,6 @@ def test_migration_005_grants_the_runtime_role_access() -> None:
 def test_orm_models_are_registered_for_alembic_metadata() -> None:
     """Without this import, the next autogenerate emits drop_table for both."""
     import infrastructure.models as models
-
     from infrastructure.db import Base
 
     assert models.HelperDevice is HelperDevice

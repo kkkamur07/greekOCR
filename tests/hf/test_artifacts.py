@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 
 import pytest
+
 from inference.hub import artifacts
 from inference.hub.artifacts import ArtifactIntegrityError, verify_artifact_sha256
 

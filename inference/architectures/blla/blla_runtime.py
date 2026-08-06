@@ -10,6 +10,7 @@ import numpy as np
 from PIL import Image
 
 from inference.architectures.blla.blla_decoder import decode_blla_heatmaps
+from inference.architectures.blla.blla_preprocessing import BLLAInput
 from inference.architectures.isolation import reraise_if_none_survived
 from inference.contracts.segment import SegmentBlock, SegmentLine, SegmentRunResponse
 from inference.preprocessing.segment_geometry import simplify_blla_boundary
@@ -21,7 +22,6 @@ from inference.preprocessing.segment_refinement import (
     SegmentRefinementResult,
     refine_segment_candidates,
 )
-from inference.architectures.blla.blla_preprocessing import BLLAInput
 
 logger = logging.getLogger(__name__)
 

@@ -24,7 +24,55 @@ from PIL import Image
 # clamp the scaled width to this multiple of the input height. Capped images
 # lose horizontal resolution but still decode correctly because coordinates
 # are mapped back through ``scale_xy``.
-MAX_WIDTH_TO_HEIGHT_RATIO = 8
+#
+# The bound was 8 (a 14400-pixel-wide input) while memory was the only thing it had
+# to buy. Under ADR 0006 it also bounds *numerics*: the ONNX graph's agreement
+# with the Torch oracle decays with the scaled width, and it is the width that
+# is the free axis. Measured on the ``segment_page.jpeg`` fixture tiled to each
+# width, ONNX against Torch on the raw logits:
+#
+#   width   rms |d|   p99.9 |d|   max |d|   logits crossing sigmoid 0.5
+#    2471   1.7e-05     1.4e-04   1.5e-03   0        <- a real page, ADR 0006
+#    3600   2.2e-05     1.5e-04   1.1e-03   0
+#    5400   3.6e-05     2.5e-04   2.3e-03   0
+#    7200   7.5e-05     4.7e-04   1.2e-02   1
+#    9000   9.1e-05     6.1e-04   2.1e-02   1
+#   14400   1.9e-04     1.9e-03   2.4e-02   3
+#
+# Read the RMS column, not the maximum and not the flip count: the maximum is an
+# extreme-value statistic that swings 5x between neighbouring widths on the same
+# page, and the flips are single-digit integers that move with the content (a
+# panorama squeezed *into* 5400 rather than tiled to it produces one). The RMS
+# tracks the width almost linearly, and that is the quantity three keeps within
+# about three times the page ADR 0006 validated, where eight put it at eleven.
+# What the flips say, over all the content measured, is only where they start
+# being routine: nowhere below 5400, every width from 7200 up. They matter
+# because the decoder is discontinuous at 0.5 - that is the mechanism ADR 0006
+# documents, where a handful of pixels restructure a line polygon.
+#
+# This costs resolution, and the cost is not hypothetical: a source wider than
+# 3:1 is now squeezed horizontally where 8:1 was allowed before, up to 2.67x for
+# a true panorama. Codex material is unaffected (a single leaf is near 0.7:1, a
+# two-page spread reaches about 2.5:1); what pays is the stitched scroll.
+#
+# The bound is the *only* lever, which is why it is the one being pulled. The
+# growth was traced to ``Gn_13`` - the one GroupNorm whose channels-per-group is
+# 1, so its reduction is dominated by the width - and then re-measured with that
+# layer exported twice, once with the shipped float32 staged reduction and once
+# with the moments accumulated in float64:
+#
+#   feature width   staged rel |d|   float64 rel |d|
+#     618 (page  2471)   2.16e-06        2.14e-06
+#    1350 (page  5400)   5.23e-06        5.21e-06
+#    2250 (page  9000)   1.41e-05        1.41e-05
+#    3600 (page 14400)   4.63e-05        4.63e-05
+#
+# The two agree to six figures, so the reduction ONNX Runtime performs is not
+# what is drifting - an exactly-accumulated graph disagrees with Torch by the
+# same amount. The gap is Torch's own float32 ``group_norm`` at that reduction
+# size. No change to ``src/model/inference_export/blla/export.py`` can close it;
+# only a shorter width can.
+MAX_WIDTH_TO_HEIGHT_RATIO = 3
 
 
 def _scaled_blla_width(source_width: int, source_height: int, input_height: int) -> int:

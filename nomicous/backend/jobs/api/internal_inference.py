@@ -41,8 +41,6 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
-from inference.contracts.jobs import JobCallbackRequest
-from inference.contracts.webhooks import INFERENCE_WEBHOOK_SECRET_HEADER
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -58,6 +56,8 @@ from backend.ml.application.agent_credentials import (
     resolve_inference_agent,
 )
 from backend.ml.application.device_auth import DEVICE_TOKEN_HEADER
+from inference.contracts.jobs import JobCallbackRequest
+from inference.contracts.webhooks import INFERENCE_WEBHOOK_SECRET_HEADER
 from infrastructure.db import get_db
 
 router = APIRouter(prefix="/internal/inference", tags=["internal-inference"])

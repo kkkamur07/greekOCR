@@ -3,9 +3,9 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from backend.core.settings.auth import get_auth_settings
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.settings.auth import get_auth_settings
 from backend.users.api.dependencies import get_current_user
 from backend.users.api.rate_limit import throttle_auth_attempts
 from backend.users.api.schemas import LoginRequest, RegisterRequest, TokenResponse, UserResponse
@@ -42,6 +42,17 @@ def _set_session_cookies(response: Response, tokens: BrowserSessionTokens) -> No
     )
 
 
+def _issue_session(response: Response, tokens: BrowserSessionTokens) -> TokenResponse:
+    """Hand a freshly issued session to the browser, by cookie and by body.
+
+    The two deliveries are made together, in one place, so that a future route
+    cannot set the cookies and forget the body copy of the CSRF token (or the
+    reverse). See ``TokenResponse.csrf_token`` for why there are two.
+    """
+    _set_session_cookies(response, tokens)
+    return TokenResponse(access_token=tokens.access_token, csrf_token=tokens.csrf_token)
+
+
 def _clear_session_cookies(response: Response) -> None:
     settings = get_auth_settings()
     response.delete_cookie(
@@ -75,8 +86,7 @@ async def register(
         password=body.password,
     )
     tokens = await BrowserSessionService(get_auth_settings()).create(db, user)
-    _set_session_cookies(response, tokens)
-    return TokenResponse(access_token=tokens.access_token)
+    return _issue_session(response, tokens)
 
 
 @router.post("/auth/login", response_model=TokenResponse)
@@ -88,8 +98,7 @@ async def login(
 ) -> TokenResponse:
     user, _token = await _auth.login(db, email=body.email, password=body.password)
     tokens = await BrowserSessionService(get_auth_settings()).create(db, user)
-    _set_session_cookies(response, tokens)
-    return TokenResponse(access_token=tokens.access_token)
+    return _issue_session(response, tokens)
 
 
 @router.post("/auth/refresh", response_model=TokenResponse)
@@ -100,14 +109,12 @@ async def refresh(
     tokens = await BrowserSessionService(settings).rotate(
         db,
         session_cookie=request.cookies.get(settings.session_cookie_name),
-        csrf_cookie=request.cookies.get(settings.csrf_cookie_name),
         csrf_header=request.headers.get("X-CSRF-Token"),
     )
     if tokens is None:
         _clear_session_cookies(response)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired")
-    _set_session_cookies(response, tokens)
-    return TokenResponse(access_token=tokens.access_token)
+    return _issue_session(response, tokens)
 
 
 @router.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
@@ -118,7 +125,6 @@ async def logout(
     await BrowserSessionService(settings).revoke(
         db,
         session_cookie=request.cookies.get(settings.session_cookie_name),
-        csrf_cookie=request.cookies.get(settings.csrf_cookie_name),
         csrf_header=request.headers.get("X-CSRF-Token"),
     )
     _clear_session_cookies(response)

@@ -2,18 +2,15 @@
 
 from __future__ import annotations
 
-import infrastructure.models  # noqa: F401 — register all ORM mappers
-
 import time
 import uuid
-
 from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
-
 from sqlalchemy import update
 
+import infrastructure.models  # noqa: F401 — register all ORM mappers
 from backend.jobs.application.inference_dispatcher import build_page_run_request
 from backend.jobs.infrastructure.job_repository import (
     WAITING_TIMEOUT_ERROR,

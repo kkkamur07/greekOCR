@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 
 import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 from backend.core.settings import get_inference_settings
 from backend.document.infrastructure.orm_models import (
@@ -20,10 +22,7 @@ from backend.jobs.application import job_callback_service
 from backend.jobs.application.job_callback_service import INFERENCE_FAILURE_ERROR
 from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
 from backend.project.infrastructure.orm_models import Project
-from fastapi.testclient import TestClient
 from inference.contracts.webhooks import INFERENCE_WEBHOOK_SECRET_HEADER
-from sqlalchemy import select
-
 from infrastructure.db import sync_system_session
 
 CALLBACK_URL = "/internal/inference/job-complete"

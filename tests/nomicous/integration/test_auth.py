@@ -6,13 +6,14 @@ import psycopg2
 import pytest
 from pydantic import ValidationError
 
-from backend.core.settings.auth import AuthSettings, get_auth_settings
 from backend.core.settings import get_app_settings, get_infrastructure_settings
+from backend.core.settings.auth import AuthSettings, get_auth_settings
 from backend.users.api.rate_limit import clear_auth_rate_limit_state
 from tests.nomicous.integration.helpers import assert_api_error
 
 
 def _session_headers(response) -> dict[str, str]:
+    """What a browser that can read the CSRF cookie sends: both cookies, plus the header."""
     settings = get_auth_settings()
     session_cookie = response.cookies.get(settings.session_cookie_name)
     csrf_cookie = response.cookies.get(settings.csrf_cookie_name)
@@ -25,6 +26,38 @@ def _session_headers(response) -> dict[str, str]:
         ),
         "X-CSRF-Token": csrf_cookie,
     }
+
+
+def _headers_without_the_csrf_cookie(response) -> dict[str, str]:
+    """What a browser that will not let script read that cookie can still send.
+
+    The header comes from the response *body* instead. The CSRF cookie is left
+    out of the request entirely, which is the strongest form of the failure:
+    whatever a cookie policy does to it - hides it from script, partitions it,
+    drops it - the request still has to work.
+    """
+    settings = get_auth_settings()
+    session_cookie = response.cookies.get(settings.session_cookie_name)
+    body_token = response.json()["csrf_token"]
+    assert session_cookie
+    assert body_token
+    return {
+        "Cookie": f"{settings.session_cookie_name}={session_cookie}",
+        "X-CSRF-Token": body_token,
+    }
+
+
+def _register(client, unique_user):
+    response = client.post(
+        "/auth/register",
+        json={
+            "email": unique_user["email"],
+            "username": unique_user["username"],
+            "password": unique_user["password"],
+        },
+    )
+    assert response.status_code == 201
+    return response
 
 
 # --- Register, login, and /me ---
@@ -78,12 +111,9 @@ def test_register_stores_bcrypt_hash(client, unique_user):
     assert response.status_code == 201
 
     settings = get_infrastructure_settings()
-    with psycopg2.connect(settings.sync_database_url) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT hashed_password FROM users WHERE email = %s", (unique_user["email"],)
-            )
-            hashed = cur.fetchone()[0]
+    with psycopg2.connect(settings.sync_database_url) as conn, conn.cursor() as cur:
+        cur.execute("SELECT hashed_password FROM users WHERE email = %s", (unique_user["email"],))
+        hashed = cur.fetchone()[0]
     assert hashed != unique_user["password"]
     assert hashed.startswith("$2b$") or hashed.startswith("$2a$")
     assert "$12$" in hashed  # bcrypt cost factor 12 (see password.BCRYPT_ROUNDS)
@@ -136,6 +166,101 @@ def test_login_sets_secure_http_only_session_and_csrf_cookies(client, unique_use
     assert "SameSite=lax" in cookies
     assert "Secure" in cookies
     assert "greekocr-csrf=" in cookies
+
+
+def test_auth_responses_hand_back_the_csrf_token_as_well_as_the_cookie(client, unique_user):
+    """Two delivery channels for one value.
+
+    The cookie is set on the API host for ``.nomicous.com`` so that script on
+    ``app.nomicous.com`` can read it back into ``X-CSRF-Token``; where a browser
+    declines that read, the body copy is the only way the client can build the
+    header at all. Both are asserted here, because the body copy is an addition
+    and the cookie must keep working exactly as it did.
+    """
+    settings = get_auth_settings()
+    register = _register(client, unique_user)
+
+    login = client.post(
+        "/auth/login",
+        json={"email": unique_user["email"], "password": unique_user["password"]},
+    )
+    refresh = client.post("/auth/refresh", headers=_session_headers(login))
+
+    assert refresh.status_code == 200
+    for response in (register, login, refresh):
+        body_token = response.json()["csrf_token"]
+        assert body_token
+        assert body_token == response.cookies.get(settings.csrf_cookie_name)
+        assert f"{settings.csrf_cookie_name}=" in "\n".join(response.headers.get_list("set-cookie"))
+    # And every response carries its own freshly rotated token.
+    assert len({r.json()["csrf_token"] for r in (register, login, refresh)}) == 3
+
+
+def test_refresh_authorises_on_the_body_token_with_no_csrf_cookie_sent(client, unique_user):
+    """The candidate fix for the Safari 403, exercised end to end.
+
+    A client that cannot read the CSRF cookie echoes the token the body gave it.
+    The server checks that header against the hash it stored when it issued the
+    session, which is proof of possession on its own - so the cookie's absence
+    from the request is not a reason to refuse.
+    """
+    login = _register(client, unique_user)
+
+    refresh = client.post("/auth/refresh", headers=_headers_without_the_csrf_cookie(login))
+
+    assert refresh.status_code == 200
+    assert refresh.json()["access_token"]
+    # The rotated session is a real one: it refreshes again the same way.
+    assert (
+        client.post("/auth/refresh", headers=_headers_without_the_csrf_cookie(refresh)).status_code
+        == 200
+    )
+
+
+def test_a_csrf_cookie_alone_still_authorises_nothing(client, unique_user):
+    """What the header check buys that the old cookie-equality check did not.
+
+    A caller who can plant a matching cookie pair but does not hold this
+    session's token is refused - which is why dropping the cookie-equality check
+    costs nothing. The value below is a well-formed token from a *different*
+    session, presented in both places at once.
+    """
+    login = _register(client, unique_user)
+    settings = get_auth_settings()
+    other_session = client.post(
+        "/auth/login",
+        json={"email": unique_user["email"], "password": unique_user["password"]},
+    )
+    someone_elses_token = other_session.json()["csrf_token"]
+
+    forged = client.post(
+        "/auth/refresh",
+        headers={
+            "Cookie": (
+                f"{settings.session_cookie_name}="
+                f"{login.cookies.get(settings.session_cookie_name)}; "
+                f"{settings.csrf_cookie_name}={someone_elses_token}"
+            ),
+            "X-CSRF-Token": someone_elses_token,
+        },
+    )
+
+    assert forged.status_code == 403
+    assert forged.json()["error"]["code"] == "FORBIDDEN"
+
+
+def test_logout_revokes_on_the_body_token_with_no_csrf_cookie_sent(client, unique_user):
+    """Signing out is CSRF-checked too, so it needs the same second channel.
+
+    A browser that could not present the cookie would otherwise be unable to
+    revoke its session server-side - it would only forget its own credentials.
+    """
+    login = _register(client, unique_user)
+
+    logout = client.post("/auth/logout", headers=_headers_without_the_csrf_cookie(login))
+
+    assert logout.status_code == 204
+    assert client.post("/auth/refresh", headers=_session_headers(login)).status_code == 401
 
 
 def test_refresh_requires_csrf_and_rotates_single_use_session(client, unique_user):

@@ -11,7 +11,6 @@ from backend.ml.infrastructure.orm_models import (
     ModelBinding,
 )
 from infrastructure.db import sync_system_session
-
 from tests.fixtures.paths import MINIMAL_PNG
 
 

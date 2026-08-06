@@ -1,6 +1,7 @@
 """registry.yaml validation and inference-local weight path helpers."""
 
 import pytest
+
 from inference.contracts import ComputeDevice, InferenceTask, RegistryArchitecture
 from inference.registry import RegistryVersionEntry, get_model_entry, load_registry
 from inference.weights import DEFAULT_WEIGHTS_ROOT, resolve_weights_source

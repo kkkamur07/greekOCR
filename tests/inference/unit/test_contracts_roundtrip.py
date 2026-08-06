@@ -13,6 +13,8 @@ import json
 from uuid import UUID, uuid4
 
 import pytest
+from pydantic import ValidationError
+
 from inference.contracts import (
     CharacterConfidence,
     InferenceJobStatus,
@@ -28,7 +30,6 @@ from inference.contracts import (
     TranscribeRunResponse,
 )
 from inference.contracts.segment import SegmentGeometryKind
-from pydantic import ValidationError
 
 
 # Checks whether the payload survives the round trip.

@@ -20,10 +20,6 @@ from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-from inference.admission import validate_request_params
-from inference.contracts.common import InferenceTask as WireInferenceTask
-from inference.settings import get_inference_settings
-
 from backend.document.application.transcribe_merge_service import (
     TranscribeJobHandlerError,
     TranscribeMergeService,
@@ -31,6 +27,9 @@ from backend.document.application.transcribe_merge_service import (
 from backend.document.infrastructure.orm_models import DocumentPart
 from backend.jobs.infrastructure.orm_models import Job, JobType
 from backend.ml.infrastructure.orm_models import InferenceModel, InferenceTask
+from inference.admission import validate_request_params
+from inference.contracts.common import InferenceTask as WireInferenceTask
+from inference.settings import get_inference_settings
 from infrastructure.db import sync_system_session
 
 _DEFAULT_SEGMENT_REGISTRY_MODEL = "blla-segment"

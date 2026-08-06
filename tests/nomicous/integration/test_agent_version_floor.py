@@ -15,7 +15,6 @@ be stopped without shipping anything.
 
 from __future__ import annotations
 
-
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -31,6 +30,8 @@ from backend.ml.api.agent_version import (
 from backend.ml.application.agent_credentials import SERVICE_TOKEN_HEADER, WORKER_NAME_HEADER
 from backend.ml.domain.agent_version import MAX_AGENT_VERSION_LENGTH
 from infrastructure.db import sync_system_session
+
+# Module-scoped autouse; see its docstring in `helpers.py` for issue #63.
 from tests.nomicous.integration.helpers import (
     CLAIM_URL,
     DEVICE_SERVICE_TOKEN,
@@ -38,11 +39,9 @@ from tests.nomicous.integration.helpers import (
     claim_page,
     documents_url,
     pair_device_over_http,
+    return_pooled_connections_before_leaving,  # noqa: F401
 )
 from tests.nomicous.integration.helpers import device_headers as _headers
-
-# Module-scoped autouse; see its docstring in `helpers.py` for issue #63.
-from tests.nomicous.integration.helpers import return_pooled_connections_before_leaving  # noqa: F401
 from tests.nomicous.integration.helpers import stored_job as _stored_job
 
 pytestmark = pytest.mark.integration

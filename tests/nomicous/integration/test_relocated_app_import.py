@@ -2,7 +2,6 @@
 
 from backend.core.app import create_app
 
-
 # --- App import smoke test ---
 # Tests create_app exposes core routes. Does not start the server or connect to Postgres.
 

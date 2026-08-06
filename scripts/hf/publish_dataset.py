@@ -42,9 +42,13 @@ def _parse_args() -> argparse.Namespace:
 def main() -> int:
     args = _parse_args()
 
-    from src.hf.publish import get_default_publish_client, upload_enabled
-    from src.hf.publish import plan_dataset_publish, publish_dataset
-    from src.hf.publish import build_dataset_readme
+    from src.hf.publish import (
+        build_dataset_readme,
+        get_default_publish_client,
+        plan_dataset_publish,
+        publish_dataset,
+        upload_enabled,
+    )
 
     dry_run = not upload_enabled(upload_flag=args.upload)
     try:

@@ -24,7 +24,7 @@ import hmac
 import secrets
 from uuid import UUID
 
-DEVICE_TOKEN_PREFIX = "nmd1"
+DEVICE_TOKEN_PREFIX = "nmd1"  # noqa: S105 - a format version tag, not a secret
 """Version tag; bump when the token construction changes."""
 
 SECRET_BYTES = 32

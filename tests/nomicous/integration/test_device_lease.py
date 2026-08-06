@@ -46,19 +46,19 @@ from backend.jobs.infrastructure.stale_sweep import (
 from backend.ml.api.agent_version import AGENT_VERSION_HEADER
 from backend.ml.application.agent_credentials import SERVICE_TOKEN_HEADER, WORKER_NAME_HEADER
 from infrastructure.db import sync_system_session
+
+# Module-scoped autouse; see its docstring in `helpers.py` for issue #63.
 from tests.nomicous.integration.helpers import (
     CALLBACK_URL,
     CLAIM_URL,
     CURRENT_AGENT_VERSION,
     DEVICE_SERVICE_TOKEN,
     claim_page,
+    return_pooled_connections_before_leaving,  # noqa: F401
 )
 from tests.nomicous.integration.helpers import device_headers as _device_headers
 from tests.nomicous.integration.helpers import make_part as _make_part
 from tests.nomicous.integration.helpers import prefer_local as _prefer_local
-
-# Module-scoped autouse; see its docstring in `helpers.py` for issue #63.
-from tests.nomicous.integration.helpers import return_pooled_connections_before_leaving  # noqa: F401
 from tests.nomicous.integration.helpers import running_agent as _running_agent
 from tests.nomicous.integration.helpers import stored_job as _stored_job
 from tests.nomicous.integration.helpers import submit_segment as _submit_segment

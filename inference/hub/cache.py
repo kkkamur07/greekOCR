@@ -52,13 +52,23 @@ def cache_dir_for(
     return root / registry_model_id / registry_tag
 
 
-def _validate_provenance(*, hub_revision: str | None, artifact_sha256: str | None) -> None:
+def _validate_provenance(
+    *, hub_revision: str | None, artifact_sha256: str | None
+) -> tuple[str, str]:
+    """Both pins, proven present and well-formed, or ``ValueError``.
+
+    Returns them rather than returning ``None`` so the caller gets the narrowing
+    from the signature. It used to return ``None`` and the caller re-stated the
+    same facts as two ``assert`` statements, which `python -O` strips - leaving
+    the download to run against whatever unpinned revision was passed.
+    """
     if not hub_revision or not _COMMIT_SHA_PATTERN.fullmatch(hub_revision):
         raise ValueError(
             "hf weights source requires an immutable 40-character lowercase Hub commit in hub_revision"
         )
     if not artifact_sha256 or not _SHA256_PATTERN.fullmatch(artifact_sha256):
         raise ValueError("hf weights source requires a 64-character lowercase artifact_sha256")
+    return hub_revision, artifact_sha256
 
 
 def _snapshot_download(
@@ -92,12 +102,10 @@ def resolve_hf_weights_source(
             f"hf weights source registry tag {parsed.registry_tag!r} "
             f"does not match requested registry tag {registry_tag!r}"
         )
-    _validate_provenance(
+    hub_revision, artifact_sha256 = _validate_provenance(
         hub_revision=hub_revision,
         artifact_sha256=artifact_sha256,
     )
-    assert hub_revision is not None
-    assert artifact_sha256 is not None
 
     client = hub_client or get_default_hub_client()
     resolved_cache_root = cache_root or default_cache_root()
