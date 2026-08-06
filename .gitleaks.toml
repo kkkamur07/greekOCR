@@ -1,0 +1,27 @@
+# Gitleaks configuration.
+#
+# Without this file the action runs gitleaks' default ruleset, which flags one
+# value twice and fails the whole `Secret and dependency scans` job on it. The
+# value is a test fixture, and it is high-entropy *on purpose*:
+# `AuthSettings._validate_secret` rejects short and placeholder secrets outright,
+# so a unit test covering the accept path cannot use "secret" or "changeme" - it
+# has to supply something that looks exactly like a real key. That is what trips
+# the `generic-api-key` rule.
+#
+# Allowlisting is by the literal, not by path. A blanket `tests/` exemption would
+# also hide a genuine credential pasted into a test, which is a normal way for one
+# to leak; naming the value keeps every other secret in those files in scope.
+#
+# Both hits are the same string, in:
+#   tests/nomicous/unit/test_auth_hardening.py                (STRONG_SECRET)
+#   tests/nomicous/unit/test_runtime_configuration_security.py (JWT_SECRET setenv)
+#
+# It has never been a live credential: JWT_SECRET is supplied per environment and
+# the settings validator refuses to start on a value shipped in the repository.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Shared JWT test fixture; strong by construction so the settings validator accepts it"
+regexes = ['''xQ7v2Kd9RmZ4pB6wLt1yHs3nCf8jUa5eG0oV''']

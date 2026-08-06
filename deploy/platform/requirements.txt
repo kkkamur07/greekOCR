@@ -121,3 +121,4 @@ yarl==1.24.2
     #   storage3
     #   supabase
     #   supabase-functions
+zxcvbn==4.5.0
