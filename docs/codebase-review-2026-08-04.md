@@ -6,7 +6,15 @@ documentation prose, source comments, and four simplification passes), followed 
 architectural depth passes framed against `nomicous/CONTEXT.md` and `inference/CONTEXT.md`.
 
 Line numbers are accurate as of commit `21c24b2` with the working tree as it stood on
-2026-08-04. They will drift. Treat file paths as durable and line numbers as hints.
+2026-08-04. Neither the line numbers nor the file paths survived: roughly ten findings
+below cite files that have since been deleted, among them `inference/helper/routes/info.py`,
+`inference/api/jobs.py`, `nomicous/frontend/src/inference/helperInfo.ts`,
+`packaging/helper/excludes.txt` and `tests/inference/unit/test_helper_app.py`. The header
+used to call file paths durable; that was true when it was written and is not true now.
+
+**This document is stale.** It predates ADR 0004 and the `src/` constraint. Treat it as a
+record of what was believed on 2026-08-04, not as a work list. For the current state of
+the redesign read [`resume-inference-redesign.md`](./resume-inference-redesign.md).
 
 Claims are marked **[verified]** where they were re-checked directly against the working
 tree, and **[reported]** where they come from an audit pass and have not been independently
