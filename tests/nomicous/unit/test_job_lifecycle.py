@@ -898,37 +898,57 @@ async def test_job_event_stream_ends_cleanly_when_access_is_lost(
     assert "Job stream closed" in chunks[0]
 
 
-# --- Migration 003 ---
-# Tests the lifecycle migration chains onto the service-roles revision.
+# --- Baseline schema ---
+# The lifecycle columns used to be their own revision chained onto the
+# service-roles one. The squash folds them into the baseline, so what is left to
+# guard is that the baseline still builds every queue column the worker needs.
 
 
-def test_job_lifecycle_migration_chains_and_reverses():
+def test_baseline_migration_builds_the_job_queue_columns(monkeypatch):
     import importlib.util
     from pathlib import Path
+
+    import sqlalchemy as sa
 
     versions = (
         Path(__file__).resolve().parents[3] / "nomicous" / "infrastructure" / "alembic" / "versions"
     )
     spec = importlib.util.spec_from_file_location(
-        "migration_003", versions / "003_job_lifecycle.py"
+        "migration_001", versions / "001_initial_schema.py"
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
 
-    service_roles = importlib.util.spec_from_file_location(
-        "migration_002", versions / "002_service_roles.py"
-    )
-    parent = importlib.util.module_from_spec(service_roles)
-    service_roles.loader.exec_module(parent)
-
-    assert module.revision == "003_job_lifecycle"
-    assert module.down_revision == parent.revision
+    assert module.revision == "001_initial_schema"
+    assert module.down_revision is None
 
     source = inspect.getsource(module)
-    assert "claimed_by" in source
-    assert "heartbeat_at" in source
-    assert "DROP COLUMN IF EXISTS heartbeat_at" in source
-    assert "DROP COLUMN IF EXISTS claimed_by" in source
+    # The trigger that makes "a job never changes host" true against bulk UPDATEs.
+    assert "jobs_execution_target_is_fixed" in source
+
+    columns: dict[str, sa.Column] = {}
+
+    def _capture(name, *args, **kwargs):
+        if name == "jobs":
+            columns.update({arg.name: arg for arg in args if isinstance(arg, sa.Column)})
+
+    monkeypatch.setattr(module.op, "create_table", _capture)
+    monkeypatch.setattr(module.op, "create_index", lambda *args, **kwargs: None)
+    monkeypatch.setattr(module.op, "execute", lambda *args, **kwargs: None)
+    monkeypatch.setattr(module.op, "f", lambda name: name)
+    module._create_jobs()
+
+    for name in (
+        "claimed_by",
+        "heartbeat_at",
+        "execution_target",
+        "preferred_execution_target",
+        "claim_attempts",
+    ):
+        assert name in columns, name
+    assert columns["claimed_by"].nullable
+    assert columns["heartbeat_at"].nullable
+    assert not columns["claim_attempts"].nullable
 
 
 def test_job_model_exposes_worker_ownership_columns():

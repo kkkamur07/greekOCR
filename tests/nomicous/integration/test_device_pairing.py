@@ -17,7 +17,7 @@ how this phase once shipped with its routers unmounted and a green suite.
 ``test_device_routes_are_mounted_on_the_real_app`` in the unit suite hold that
 line; now the rest of the module does too.
 
-Requires migration ``005_helper_devices``.
+Requires migration ``003_helper_devices``.
 """
 
 from __future__ import annotations

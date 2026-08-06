@@ -958,16 +958,16 @@ def test_device_dependency_uses_a_dedicated_header_and_type() -> None:
     assert "x_nomicous_device_token" not in inspect.signature(get_current_user).parameters
 
 
-def test_migration_005_matches_the_orm_models(monkeypatch) -> None:
+def test_device_migration_matches_the_orm_models(monkeypatch) -> None:
     """Guard against the migration and the ORM drifting apart.
 
-    Integration tests cannot catch this without Postgres, and a missing column
-    in 005 is an outage on the first deploy rather than a test failure.
+    Integration tests cannot catch this without Postgres, and a missing column in
+    the device revision is an outage on the first deploy rather than a test
+    failure.
 
-    Columns added to these tables by *later* revisions are folded in here rather
-    than excluded, so the guard keeps meaning "the chain builds the ORM" instead
-    of decaying into "005 built what 005 built". ``helper_devices.inference_host``
-    arrives in 006.
+    ``inference_host`` used to arrive in a later revision and be folded in here by
+    the test; the squash puts it in the CREATE TABLE, so there is one source to
+    compare against.
     """
     import importlib.util
     from pathlib import Path
@@ -984,10 +984,10 @@ def test_migration_005_matches_the_orm_models(monkeypatch) -> None:
         spec.loader.exec_module(module)
         return module
 
-    module = _load("005_helper_devices")
+    module = _load("003_helper_devices")
 
-    assert module.revision == "005_helper_devices"
-    assert module.down_revision == "004_document_part_dimensions"
+    assert module.revision == "003_helper_devices"
+    assert module.down_revision == "002_service_roles"
 
     tables: dict[str, tuple] = {}
     indexes: list[tuple] = []
@@ -1000,20 +1000,10 @@ def test_migration_005_matches_the_orm_models(monkeypatch) -> None:
     module._create_helper_devices()
     module._create_helper_pairings()
 
-    later = _load("007_execution_target")
-    added: list[tuple[str, sa.Column]] = []
-    monkeypatch.setattr(later.op, "get_bind", lambda: None)
-    monkeypatch.setattr(later.op, "execute", lambda *args, **kw: None)
-    monkeypatch.setattr(later.op, "add_column", lambda table, column: added.append((table, column)))
-    monkeypatch.setattr(later._EXECUTION_TARGET, "create", lambda *args, **kw: None)
-    # 007 skips a column that is already present, which needs a live connection to
-    # decide. There is no database here and the subject is which columns it adds,
-    # not whether it tolerates finding them: answer "none present".
-    monkeypatch.setattr(later, "_has_column", lambda _table, _column: False)
-    later.upgrade()
-    for table_name, column in added:
-        if table_name in tables:
-            tables[table_name] = tables[table_name] + (column,)
+    assert any(
+        isinstance(arg, sa.Column) and arg.name == "inference_host"
+        for arg in tables["helper_devices"]
+    )
 
     for table_name, model in (
         ("helper_devices", HelperDevice),
@@ -1039,7 +1029,7 @@ def test_migration_005_matches_the_orm_models(monkeypatch) -> None:
     assert not any("ip" in name for name, _ in indexes)
 
 
-def test_migration_005_grants_the_runtime_role_access() -> None:
+def test_device_migration_grants_the_runtime_role_access() -> None:
     """A table the API role cannot write is an outage on the first request."""
     from pathlib import Path
 
@@ -1049,7 +1039,7 @@ def test_migration_005_grants_the_runtime_role_access() -> None:
         / "infrastructure"
         / "alembic"
         / "versions"
-        / "005_helper_devices.py"
+        / "003_helper_devices.py"
     ).read_text()
 
     assert "nomicous_api" in migration

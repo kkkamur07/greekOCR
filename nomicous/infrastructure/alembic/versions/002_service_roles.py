@@ -4,6 +4,17 @@ Provider-managed LOGIN principals and their memberships remain outside this
 migration. On providers that do not grant CREATEROLE to the migrator, the
 operator should run scripts/platform/provision_database_roles.sql after the
 schema migration.
+
+``nomicous_inference_worker`` is created and granted nothing. ADR 0003 collapsed
+the inference service's own queue into ``jobs``, so the group has no table to
+reach; it is retained only until no login principal is a member of it, and both
+this migration and the bootstrap script expect to find all four groups. What the
+squashed history used to express as "002 grants it the queue, 006 revokes
+everything" is now simply an absence.
+
+Ordering: this runs *before* ``003_helper_devices`` deliberately, matching the
+history it replaces. ``GRANT ... ON ALL TABLES`` is point-in-time, so the tables
+003 creates are granted by 003 itself rather than here.
 """
 
 from collections.abc import Sequence
@@ -81,8 +92,8 @@ def upgrade() -> None:
           GRANT SELECT ON TABLE documents, document_parts, blocks, lines,
             model_bindings, inference_models TO nomicous_platform_worker;
 
-          GRANT USAGE ON SCHEMA public TO nomicous_inference_worker;
-          GRANT SELECT, UPDATE ON TABLE inference_jobs TO nomicous_inference_worker;
+          -- nomicous_inference_worker is deliberately granted nothing; see the
+          -- module docstring.
 
           ALTER DEFAULT PRIVILEGES IN SCHEMA public
             GRANT ALL PRIVILEGES ON TABLES TO nomicous_migrator;

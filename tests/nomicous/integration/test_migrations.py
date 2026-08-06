@@ -3,9 +3,11 @@
 This is the ``alembic check`` the project was missing. 001_initial_schema used to
 build the baseline with ``Base.metadata.create_all``, which made a missing
 migration structurally undetectable: a fresh database migrated to head always
-matched the ORM because head *was* the ORM. 003_job_lifecycle and
-004_document_part_dimensions are what that cost us - schema changes that reached
-production before anyone noticed they had no migration.
+matched the ORM because head *was* the ORM. The revisions that had to be written
+afterwards to add ``jobs.claimed_by`` and ``document_parts.width`` are what that
+cost us - schema changes that reached production before anyone noticed they had
+no migration. They are folded back into the baseline now, but only because this
+test exists to catch the next one.
 
 So this test migrates a *scratch* database from empty to head and asserts that
 alembic's autogenerate comparison against ``Base.metadata`` finds nothing. Add a
@@ -44,8 +46,9 @@ _ALEMBIC_INI = os.path.join(
 
 # Tables the chain creates that are deliberately absent from ``Base.metadata``.
 # ``alembic_version`` is alembic's own bookkeeping. ``inference_jobs`` used to be
-# listed here because the inference service owned its own mapper; 006 drops the
-# table, so the chain no longer ends with it and the exemption is gone.
+# listed here because the inference service owned its own mapper; ADR 0003
+# collapsed that queue into ``jobs`` and the squashed baseline never creates the
+# table, so the exemption is gone.
 _UNMANAGED_TABLES = frozenset({"alembic_version"})
 
 
