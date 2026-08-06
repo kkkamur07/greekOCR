@@ -457,15 +457,39 @@ async def test_first_page_carries_blocks_capped_at_the_same_bound_as_lines() -> 
         workflow=DocumentWorkflow.published, blocks=blocks, lines=lines
     )
 
-    returned_blocks, returned_lines = await catalog.list_document_layout_public(
-        _Session(), project.id, document.id, limit=2
-    )
+    page = await catalog.list_document_layout_public(_Session(), project.id, document.id, limit=2)
 
-    assert len(returned_blocks) == 2
-    assert len(returned_lines) == 2
+    assert len(page.blocks) == 2
+    assert len(page.lines) == 3, "the probe row the router turns into a cursor"
     # Blocks are not paginated, so the only thing standing between an anonymous caller and
     # every block in the manuscript is that they share the line bound.
-    assert repo.block_limits == [2]
+    assert repo.block_limits == [3], "one row past the page, to see the overflow"
+
+
+async def test_dropped_blocks_are_reported_rather_than_silently_lost() -> None:
+    """A bare LIMIT made a truncated page look exactly like a complete one.
+
+    Only lines have a cursor, so a client had nothing in the response telling it that
+    the document held regions the page did not carry.
+    """
+    base = datetime(2026, 1, 1, tzinfo=UTC)
+    blocks = [Block(id=uuid.uuid4(), part_id=uuid.uuid4(), order=index) for index in range(5)]
+    catalog, project, document, _repo = _fixture(
+        workflow=DocumentWorkflow.published, blocks=blocks, lines=[_line(base)]
+    )
+
+    truncated = await catalog.list_document_layout_public(
+        _Session(), project.id, document.id, limit=2
+    )
+    complete = await catalog.list_document_layout_public(
+        _Session(), project.id, document.id, limit=5
+    )
+
+    assert truncated.blocks_truncated is True
+    assert len(truncated.blocks) == 2
+    # Exactly `limit` blocks and no more is the case a bare LIMIT could not distinguish.
+    assert complete.blocks_truncated is False
+    assert len(complete.blocks) == 5
 
 
 async def test_a_resumed_page_carries_lines_only() -> None:
@@ -478,13 +502,14 @@ async def test_a_resumed_page_carries_lines_only() -> None:
     )
     cursor = PageCursor(created_at=base, id=uuid.UUID(int=0))
 
-    returned_blocks, _returned_lines = await catalog.list_document_layout_public(
+    page = await catalog.list_document_layout_public(
         _Session(), project.id, document.id, limit=10, cursor=cursor
     )
 
-    assert returned_blocks == []
+    assert page.blocks == []
+    assert page.blocks_truncated is False
     assert "list_blocks_for_document" not in repo.calls
-    assert repo.line_reads == [{"limit": 10, "cursor": cursor}]
+    assert repo.line_reads == [{"limit": 11, "cursor": cursor}]
 
 
 async def test_layout_of_a_draft_is_not_found_and_no_geometry_is_read() -> None:

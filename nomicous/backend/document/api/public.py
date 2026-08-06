@@ -93,15 +93,17 @@ async def get_published_layout(
     cursor: str | None = Query(default=None, max_length=MAX_CURSOR_LENGTH),
 ) -> PublicLayoutResponse:
     page_cursor = decode_cursor(cursor) if cursor else None
-    blocks, lines = await _service.list_document_layout_public(
+    # The catalog probes one row past ``limit`` on both axes: for lines the extra row
+    # becomes the cursor below, for blocks it becomes ``blocks_truncated``.
+    layout = await _service.list_document_layout_public(
         db,
         project_id,
         document_id,
-        limit=limit + 1,
+        limit=limit,
         cursor=page_cursor,
     )
     page, next_cursor = paginate_rows(
-        lines,
+        layout.lines,
         limit=limit,
         created_at_getter=lambda line: line.created_at,
         id_getter=lambda line: line.id,
@@ -114,8 +116,9 @@ async def get_published_layout(
                 order=block.order,
                 box=block.box,
             )
-            for block in blocks
+            for block in layout.blocks
         ],
+        blocks_truncated=layout.blocks_truncated,
         lines=[_public_line_response(line) for line in page],
         next_cursor=next_cursor,
     )

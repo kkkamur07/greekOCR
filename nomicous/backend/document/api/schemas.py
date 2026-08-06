@@ -377,6 +377,10 @@ class PublicLineResponse(BaseModel):
 
 class PublicLayoutResponse(BaseModel):
     blocks: list[PublicBlockResponse] = Field(default_factory=list)
+    #: ``next_cursor`` paginates lines only, so blocks report their overflow as a flag.
+    #: Without it a page holding exactly ``limit`` blocks is indistinguishable from a
+    #: document that has more, and the rest are simply gone with nothing to notice.
+    blocks_truncated: bool = False
     lines: list[PublicLineResponse] = Field(default_factory=list)
     next_cursor: str | None = None
 

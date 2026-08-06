@@ -20,6 +20,7 @@ from pydantic import ValidationError as PydanticValidationError
 
 from backend.core.api.pagination import decode_cursor
 from backend.document.api import public as public_api
+from backend.document.application.document_catalog import PublicLayoutPage
 from backend.document.api.schemas import (
     DEFAULT_PUBLIC_LAYOUT_LINES,
     MAX_LINE_GEOMETRY_POINTS,
@@ -174,7 +175,8 @@ class _FakeLayoutService:
             rows = [
                 line for line in rows if (line.created_at, line.id) > (cursor.created_at, cursor.id)
             ]
-        return [], rows[:limit]
+        # Mirrors the catalog contract: it probes one row past the page size itself.
+        return PublicLayoutPage(blocks=[], blocks_truncated=False, lines=rows[: limit + 1])
 
 
 @pytest.mark.asyncio
@@ -190,7 +192,7 @@ async def test_public_layout_truncates_and_emits_a_cursor(monkeypatch) -> None:
 
     assert len(response.lines) == 2
     assert response.next_cursor is not None
-    assert fake.calls[0]["limit"] == 3  # limit + 1 probe row
+    assert fake.calls[0]["limit"] == 2  # the page size; the catalog probes past it
     resumed = decode_cursor(response.next_cursor)
     assert resumed.id == lines[1].id
 
