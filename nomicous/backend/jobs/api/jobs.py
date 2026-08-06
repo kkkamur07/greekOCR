@@ -21,7 +21,7 @@ from backend.jobs.api.schemas import (
 )
 from backend.jobs.application.job_service import JobService
 from backend.jobs.infrastructure.notifications import job_status_broadcaster
-from backend.jobs.infrastructure.orm_models import JobStatus
+from backend.jobs.infrastructure.orm_models import Job, JobStatus
 from backend.jobs.infrastructure.stale_sweep import sweep_stale_jobs_on_read
 from backend.project.application.project_service import ProjectService
 from backend.users.api.dependencies import get_current_user
@@ -44,8 +44,8 @@ def _require_test_routes_enabled() -> None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
 
 
-def _assert_job_access(job: object, current_user: User) -> None:
-    if getattr(job, "user_id") != current_user.id:
+def _assert_job_access(job: Job, current_user: User) -> None:
+    if job.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
 

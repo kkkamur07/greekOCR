@@ -57,7 +57,7 @@ from inference.cli.api import (
 from inference.cli.credentials import CredentialError, credential_path, load_credential
 from inference.cli.version import installed_version
 
-SERVICE_TOKEN_ENV = "NOMICOUS_SERVICE_TOKEN"
+SERVICE_TOKEN_ENV = "NOMICOUS_SERVICE_TOKEN"  # noqa: S105 - an env var name, not a token
 """A hosted worker's **service credential**, read from the environment and never
 from a flag. A token passed on the command line is a token in `ps` output and in
 shell history, and this one is not bounded by a single account the way a device

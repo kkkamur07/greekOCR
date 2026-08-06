@@ -23,7 +23,6 @@ from backend.ml.domain.agent_version import (
     evaluate_agent_version,
 )
 
-
 # ---------------------------------------------------------------------------
 # Ordering: the trap this whole module exists to avoid
 # ---------------------------------------------------------------------------

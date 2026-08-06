@@ -7,12 +7,14 @@ type PublicCanvasPdfViewProps = {
   projectId: string;
   documentId: string;
   partId: string;
+  downloadFilename?: string;
 };
 
 export function PublicCanvasPdfView({
   projectId,
   documentId,
   partId,
+  downloadFilename = "transcription.pdf",
 }: PublicCanvasPdfViewProps) {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -82,20 +84,46 @@ export function PublicCanvasPdfView({
   }
 
   return (
-    <PublicZoomSurface ariaLabel="Transcription PDF viewer">
-      <div className="pub-pdf-view__frame-wrap">
-        <object
-          data={pdfUrl}
-          type="application/pdf"
-          title="Transcription PDF"
-          className="pub-pdf-view__frame"
+    <div
+      className="pub-pdf-view"
+      style={{ display: "flex", flexDirection: "column", flex: 1 }}
+    >
+      <div
+        className="pub-pdf-view__actions"
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 8,
+          justifyContent: "center",
+          padding: 8,
+          flexShrink: 0,
+        }}
+      >
+        <a
+          className="btn btn-outline btn-sm"
+          href={pdfUrl}
+          target="_blank"
+          rel="noopener noreferrer"
         >
-          <p className="text-sm text-muted">
-            Your browser cannot display PDFs inline. Use Export → Transcription
-            PDF to download.
-          </p>
-        </object>
+          Open PDF in new tab
+        </a>
+        <a
+          className="btn btn-outline btn-sm"
+          href={pdfUrl}
+          download={downloadFilename}
+        >
+          Download PDF
+        </a>
       </div>
-    </PublicZoomSurface>
+      <PublicZoomSurface ariaLabel="Transcription PDF viewer">
+        <div className="pub-pdf-view__frame-wrap">
+          <iframe
+            src={pdfUrl}
+            title="Transcription PDF"
+            className="pub-pdf-view__frame"
+          />
+        </div>
+      </PublicZoomSurface>
+    </div>
   );
 }

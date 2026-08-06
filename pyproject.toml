@@ -297,7 +297,15 @@ exclude_also = [
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-src = ["nomicous/backend", "inference"]
+# The import roots, matching `tool.pytest.ini_options.pythonpath` and
+# `tool.mypy.mypy_path` exactly. These are what `backend.*`, `infrastructure.*`,
+# `inference.*`, `scripts.*`, and `tests.*` resolve against at runtime, so they
+# are what isort must resolve against to call an import first-party. The
+# previous value named the packages (`nomicous/backend`, `inference`) rather
+# than the roots that contain them, so nothing resolved: `inference` and
+# `infrastructure` were classified third-party and sorted in among `PIL` and
+# `sqlalchemy`. The I001 suppression below hid that for as long as it existed.
+src = ["nomicous", "."]
 # CI and pre-commit invoke `ruff check .` so new top-level directories are linted
 # by default instead of silently escaping an explicit path list. These trees are
 # vendored, generated, or build output. (.venv, dist, and node_modules are
@@ -324,30 +332,59 @@ extend-exclude = [
 
 [tool.ruff.lint]
 # F: correctness. I: import sorting. UP: pyupgrade. B: bugbear. SIM: simplify.
-select = ["F", "I", "UP", "B", "SIM"]
+# S: flake8-bandit, i.e. bandit's checks running inside the linter that already
+# hard-gates pre-commit and CI. A separate SAST job is a job somebody has to
+# remember to look at; this fails the same build as a syntax error.
+select = ["F", "I", "UP", "B", "SIM", "S"]
+
+# B008 flags a function call in an argument default because the call runs once,
+# at def time, and every caller then shares the one object. FastAPI's whole
+# dependency-injection protocol is built on exactly that: `Depends(...)`,
+# `Query(...)` and `File(...)` are markers the framework reads off the signature,
+# never mutable state. Naming them here keeps B008 live for a real
+# `def f(x=[])`, which a blanket per-tree `B008` ignore would not.
+#
+# Exactly the three that appear in an argument default today. Anything else -
+# `Body`, `Form`, `Header`, `Cookie`, `Security` - is either unused or already
+# written `Annotated[T, Header(...)]`, which B008 does not flag at all. Add to
+# this list only after checking the callable really is a FastAPI marker.
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.File", "fastapi.Query"]
 
 # ---------------------------------------------------------------------------
-# Widening `select` and moving CI to `ruff check .` surfaced pre-existing
-# violations across the application trees, none of them newly introduced. They
-# are suppressed here per tree and per rule so the new rules are enforced on all
-# new and already-clean code instead of the whole ruleset being held back.
+# This table used to hold a per-tree debt block - B905, I001, SIM*, UP*, F401,
+# B008 suppressed across `inference`, `nomicous`, `scripts` and `tests` - with a
+# comment saying every entry should be fixed and deleted. Those entries are now
+# fixed and deleted. What is left is policy, and each row says why it is right
+# rather than why it is temporary.
 #
-# This block is debt, not policy: every entry should be fixed and deleted. It
-# covers only the trees that ship - `inference`, `nomicous`, `scripts`, `tests`.
-# The research tree is not here because it is not linted at all; see
-# `extend-exclude` above for why that is an exclusion rather than a row in this
-# table.
-#
-# Do not add a rule here to make a new violation pass. Deliberately no per-tree
-# counts: the previous version of this comment carried them, and they were wrong
-# within one merge of being written.
+# The bar for a new row: the rule is wrong *for every file the pattern matches*,
+# for a reason you can write in one sentence. A rule that is wrong at three
+# specific sites gets three `# noqa: RULE - reason` comments instead, so that a
+# fourth site still has to justify itself. Everything outside these rows is
+# linted with no exemptions; `src/` is not linted at all, see `extend-exclude`.
 # ---------------------------------------------------------------------------
 [tool.ruff.lint.per-file-ignores]
-"inference/**" = ["B905", "I001", "SIM109", "SIM114", "UP037"]
-"nomicous/backend/**" = ["B008", "B009", "I001", "SIM105", "UP037", "UP042"]
-"nomicous/infrastructure/**" = ["I001"]
-"scripts/**" = ["I001", "SIM112"]
-"tests/**" = ["B007", "B905", "F401", "I001", "SIM117"]
+# S101 (assert): a test is a program made of assertions. `python -O` strips
+# them, and running a test suite under `-O` is not a thing anybody does - which
+# is exactly why the four asserts this rule found in *shipping* code were real
+# bugs and were rewritten as explicit raises rather than added to a list.
+#
+# S105/S106 (hardcoded password): every match is a fixture credential - a test
+# JWT secret, a fake device token, a login password the test itself just
+# registered. The rule matches on identifier names, not entropy, so it cannot
+# tell a fixture from a leak either way; real leaked-secret detection is a
+# secret scanner's job, not this rule's.
+#
+# S603/S607 (subprocess, partial path): the CLI integration tests exist to run
+# the CLI as a real process. `[sys.executable, "-m", "inference.cli", ...]` is
+# the thing under test, and the "untrusted input" is the test's own argv.
+#
+# S310 (URL open): these drive a loopback stub HTTP server the test started, on
+# a URL the test built. The production `urlopen` calls in `inference/cli/api.py`
+# stay covered - they carry per-site `# noqa: S310` naming the scheme check that
+# makes them safe.
+"tests/**" = ["S101", "S105", "S106", "S310", "S603", "S607"]
 
 [tool.ruff.format]
 quote-style = "double"

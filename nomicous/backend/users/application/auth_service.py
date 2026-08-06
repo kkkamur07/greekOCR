@@ -15,7 +15,10 @@ from backend.users.infrastructure.user_repository import UserRepository
 
 logger = logging.getLogger(__name__)
 
-_DUMMY_PASSWORD_HASH = "$2b$12$t7YSQy5g4YoP4Bfr5DXh0eUg2kUE4qavr20ibunY9EEWibESvTARu"
+#: A bcrypt hash of nothing, verified against when the email does not exist so a
+#: login for an unknown account costs the same as one for a known account. It is
+#: a decoy, not a credential: no password produces it and nothing accepts it.
+_DUMMY_PASSWORD_HASH = "$2b$12$t7YSQy5g4YoP4Bfr5DXh0eUg2kUE4qavr20ibunY9EEWibESvTARu"  # noqa: S105
 
 #: One message for every registration conflict. Distinct "email already
 #: registered" / "username already taken" responses let an anonymous caller

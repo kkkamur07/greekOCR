@@ -5,9 +5,9 @@ from __future__ import annotations
 import secrets
 
 from fastapi import Header, HTTPException, status
-from inference.contracts.webhooks import INFERENCE_WEBHOOK_SECRET_HEADER
 
 from backend.core.settings.ml import get_inference_settings
+from inference.contracts.webhooks import INFERENCE_WEBHOOK_SECRET_HEADER
 
 __all__ = ["INFERENCE_WEBHOOK_SECRET_HEADER", "require_inference_webhook_secret"]
 

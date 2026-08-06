@@ -423,7 +423,26 @@ export interface paths {
     };
     /**
      * Health
-     * @description Liveness/readiness: SELECT 1 only. Dev-user seeding lives in app lifespan.
+     * @description Liveness/readiness (``SELECT 1``) plus the age of the oldest pending job.
+     *
+     *     Dev-user seeding lives in app lifespan.
+     *
+     *     **The queue age never changes the status code.** A pending job piles up
+     *     because a *different* host stopped claiming - the platform worker
+     *     (``JOB_WORKER_ENABLED``, which the API deployment sets false) or a
+     *     researcher's inference agent. Returning 503 for that would pull a perfectly
+     *     healthy API out of rotation, or restart it, and neither brings the missing
+     *     consumer back. The status code answers "can this process serve requests";
+     *     the queue age is reported next to it, and the WARNING in
+     *     ``_oldest_pending_job_seconds`` is what pages someone.
+     *
+     *     It rides on ``/health`` rather than a separate ``/health/jobs`` because the
+     *     thing that has to happen on a schedule is the threshold check, and ``/health``
+     *     is the only route infrastructure already polls on a schedule. A route nobody
+     *     is configured to call would put the queue's one alarm behind another manual
+     *     deployment step - the same class of gap that leaves the queue unclaimed in
+     *     the first place. The cost is one ``min(created_at)`` against the
+     *     ``ix_jobs_claim_pending`` partial index per probe.
      */
     get: operations["health_health_get"];
     put?: never;
@@ -1946,6 +1965,11 @@ export interface components {
        * @enum {string}
        */
       database: "ok" | "error";
+      /**
+       * Oldest Pending Job Seconds
+       * @description Age of the oldest job still in `pending`, in seconds. `null` means the queue is empty, or - on a 503 - that it could not be read. Reported, never gated on: see the route docstring.
+       */
+      oldest_pending_job_seconds?: number | null;
       /** Status */
       status: string;
     };
@@ -2791,6 +2815,8 @@ export interface components {
     TokenResponse: {
       /** Access Token */
       access_token: string;
+      /** Csrf Token */
+      csrf_token?: string | null;
       /**
        * Token Type
        * @default bearer

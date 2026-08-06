@@ -13,13 +13,14 @@ import math
 
 import torch
 import torch.nn.functional as F
+from torch import Tensor, nn
+
 from src.model.inference_export.calamari.config import (
     CalamariTorchLayerConfig,
     maxpool_strides,
     require_int,
     require_tuple,
 )
-from torch import Tensor, nn
 
 
 class SameConv2d(nn.Module):

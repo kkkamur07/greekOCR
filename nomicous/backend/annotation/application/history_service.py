@@ -18,7 +18,6 @@ from backend.document.infrastructure.orm_models import (
 )
 from backend.users.infrastructure.orm_models import User
 
-
 HISTORY_RETENTION_LIMIT = 5
 
 

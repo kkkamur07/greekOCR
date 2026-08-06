@@ -20,7 +20,6 @@ from pydantic import ValidationError as PydanticValidationError
 
 from backend.core.api.pagination import decode_cursor
 from backend.document.api import public as public_api
-from backend.document.application.document_catalog import PublicLayoutPage
 from backend.document.api.schemas import (
     DEFAULT_PUBLIC_LAYOUT_LINES,
     MAX_LINE_GEOMETRY_POINTS,
@@ -37,6 +36,7 @@ from backend.document.api.schemas import (
     SegmentPartRequest,
     TranscribePartRequest,
 )
+from backend.document.application.document_catalog import PublicLayoutPage
 from backend.document.infrastructure.orm_models import Line
 
 

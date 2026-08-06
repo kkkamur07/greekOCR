@@ -12,9 +12,10 @@ import hashlib
 from pathlib import Path
 
 import torch
+from torch import Tensor, nn
+
 from src.model.inference_export.blla.checkpoint import load_blla_model
 from src.model.inference_export.blla.model import BLLATorchModel, _GroupNorm
-from torch import Tensor, nn
 
 
 class _ExportGroupNorm(nn.Module):
@@ -42,6 +43,17 @@ class _ExportGroupNorm(nn.Module):
     ``nn.GroupNorm`` at runtime, because the staged reduction perturbs the native
     float32 logits by up to 1.8e-03 -- harmless numerically, but enough to break
     the native decoder's bit-exact agreement with the Kraken oracle.
+
+    Two stages is enough, and a third would buy nothing. The residual ONNX/Torch
+    disagreement does grow with the scaled width, but it is not this reduction
+    that drifts: exporting ``Gn_13`` -- the layer whose channels-per-group is 1,
+    so the width is what dominates its reduction -- with the moments accumulated
+    in float64 instead of float32 reproduces the *same* disagreement to six
+    figures (4.63e-05 relative at a 3600-wide feature map, either way). An
+    exactly-accumulated graph is no closer to Torch than this one, because the
+    gap is Torch's own float32 ``group_norm`` at that reduction size. The lever
+    that does work is the scaled width itself, and it lives in
+    ``inference/architectures/blla/blla_preprocessing.py``.
     """
 
     def __init__(self, layer: nn.GroupNorm) -> None:

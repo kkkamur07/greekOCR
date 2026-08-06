@@ -20,10 +20,10 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 from fastapi.testclient import TestClient
-from inference.contracts.webhooks import INFERENCE_WEBHOOK_SECRET_HEADER
 from sqlalchemy import select
 
 import infrastructure.models  # noqa: F401 - register all ORM mappers
+from backend.core.settings import get_inference_settings
 from backend.jobs.application.job_claim_service import agent_claim_owner
 from backend.jobs.infrastructure.orm_models import Job, JobStatus
 from backend.ml.api.agent_version import AGENT_VERSION_HEADER
@@ -35,23 +35,24 @@ from backend.ml.application.agent_credentials import (
 from backend.ml.application.device_auth import DEVICE_TOKEN_HEADER
 from backend.ml.domain.execution import ExecutionTarget
 from backend.ml.infrastructure.device_orm_models import HelperDevice
+from inference.contracts.webhooks import INFERENCE_WEBHOOK_SECRET_HEADER
 from infrastructure.db import sync_system_session
+
+# An autouse fixture imported into a module is scoped to that module: this closes
+# the asyncpg connections the concurrent claims below open, on the loop that owns
+# them. See its docstring in `helpers.py` for issue #63.
 from tests.nomicous.integration.helpers import (
     CALLBACK_URL,
     CLAIM_URL,
     CURRENT_AGENT_VERSION,
     DEVICE_SERVICE_TOKEN,
     pair_device_over_http,
+    return_pooled_connections_before_leaving,  # noqa: F401
 )
 from tests.nomicous.integration.helpers import claim_page as _claim
 from tests.nomicous.integration.helpers import device_headers as _device_headers
 from tests.nomicous.integration.helpers import make_part as _make_part
 from tests.nomicous.integration.helpers import prefer_local as _prefer_local
-
-# An autouse fixture imported into a module is scoped to that module: this closes
-# the asyncpg connections the concurrent claims below open, on the loop that owns
-# them. See its docstring in `helpers.py` for issue #63.
-from tests.nomicous.integration.helpers import return_pooled_connections_before_leaving  # noqa: F401
 from tests.nomicous.integration.helpers import running_agent as _running_agent
 from tests.nomicous.integration.helpers import stored_job as _stored_job
 from tests.nomicous.integration.helpers import submit_segment as _submit_segment
@@ -597,14 +598,40 @@ def test_the_platform_webhook_credential_cannot_take_a_leased_page(
     discarding that run, and leaving the agent's own callback to be rejected as a
     duplicate. The agent credentials are narrowed to the page they hold; this one
     is now narrowed to the pages no agent holds.
+
+    The credential has to be a genuinely valid one, and this test has to be able
+    to say so. It used to send the string literal from the conftest default,
+    which is only the configured secret while nobody has
+    ``INFERENCE_WEBHOOK_SECRET`` exported already - ``setdefault`` yields to an
+    existing value. With one exported, the header became a *wrong* secret, which
+    the endpoint also refuses with 403, and whose detail the error handler
+    redacts to the same "Access denied" body. The test stayed green while proving
+    only that bad credentials are rejected, which is a different test's job.
+
+    So the secret is read from settings rather than retyped, and the probe below
+    shows the credential really is accepted before the leased page refuses it.
     """
     _agent, page = _claimed_page(client, owner_headers, owner_project)
+    # `isolated_platform_state` reset the settings caches for this test, so this
+    # is the same object the endpoint's dependency will compare against.
+    configured_secret = get_inference_settings().inference_webhook_secret
+    assert configured_secret, "INFERENCE_WEBHOOK_SECRET must be configured for this test"
+    webhook_headers = {INFERENCE_WEBHOOK_SECRET_HEADER: configured_secret}
 
-    response = client.post(
+    # Positive control, and the thing that makes the 403 below mean what it says:
+    # a request whose only fault is an unknown job gets *past* the credential
+    # check and lands on 404. A wrong secret never reaches that far - it is 403,
+    # with a body indistinguishable from the refusal being asserted below.
+    accepted = client.post(
         CALLBACK_URL,
-        headers={INFERENCE_WEBHOOK_SECRET_HEADER: "test-inference-webhook-secret"},
-        json=_segment_done_body(page),
+        headers=webhook_headers,
+        json=_segment_done_body(
+            {"inference_job_id": str(uuid.uuid4()), "product_job_id": str(uuid.uuid4())}
+        ),
     )
+    assert accepted.status_code == 404, accepted.text
+
+    response = client.post(CALLBACK_URL, headers=webhook_headers, json=_segment_done_body(page))
 
     assert response.status_code == 403, response.text
     # Still leased, and still the agent's to report on.

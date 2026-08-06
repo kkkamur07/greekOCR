@@ -14,23 +14,18 @@ from typing import Annotated
 
 import pytest
 from fastapi import Depends, FastAPI, HTTPException
-from jwt import InvalidTokenError
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 from fastapi.security import HTTPAuthorizationCredentials
 from fastapi.testclient import TestClient
+from jwt import InvalidTokenError
 from pydantic import BaseModel, ValidationError
 from starlette.requests import Request
 
 from backend.core.exceptions import AccessDeniedError, ConflictError, InvalidCredentialsError
 from backend.core.settings import (
     AuthSettings,
-    get_app_settings,
     get_auth_settings,
-    get_infrastructure_settings,
-    get_job_settings,
-    get_ml_settings,
-    get_storage_settings,
     reset_settings_caches,
 )
 from backend.core.settings.auth import (
@@ -38,13 +33,12 @@ from backend.core.settings.auth import (
     MIN_JWT_SECRET_GUESSES_LOG10,
     secret_guesses_log10,
 )
-from backend.core.settings.device import get_device_settings
 from backend.users.api import rate_limit
 from backend.users.api.dependencies import get_current_user
 from backend.users.api.rate_limit import (
+    _real_ip,
     attributable_client_ip,
     auth_rate_limit_keys,
-    _real_ip,
 )
 
 

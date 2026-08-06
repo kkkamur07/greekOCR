@@ -100,13 +100,12 @@ class BrowserSessionService:
         db: AsyncSession,
         *,
         session_cookie: str | None,
-        csrf_cookie: str | None,
         csrf_header: str | None,
     ) -> BrowserSessionTokens | None:
         session = await self._valid_session(db, session_cookie)
         if session is None:
             return None
-        self._require_csrf(session, csrf_cookie, csrf_header)
+        self._require_csrf(session, csrf_header)
         tokens = self._issue(session.user, session)
         await db.commit()
         return tokens
@@ -116,13 +115,12 @@ class BrowserSessionService:
         db: AsyncSession,
         *,
         session_cookie: str | None,
-        csrf_cookie: str | None,
         csrf_header: str | None,
     ) -> bool:
         session = await self._valid_session(db, session_cookie)
         if session is None:
             return False
-        self._require_csrf(session, csrf_cookie, csrf_header)
+        self._require_csrf(session, csrf_header)
         session.revoked_at = datetime.now(UTC)
         await db.commit()
         return True
@@ -147,13 +145,43 @@ class BrowserSessionService:
             return None
         return session
 
-    def _require_csrf(
-        self, session: AuthSession, csrf_cookie: str | None, csrf_header: str | None
-    ) -> None:
-        if (
-            not csrf_cookie
-            or not csrf_header
-            or not hmac.compare_digest(csrf_cookie, csrf_header)
-            or not hmac.compare_digest(session.csrf_token_hash, _hash(csrf_header, self._settings))
+    def _require_csrf(self, session: AuthSession, csrf_header: str | None) -> None:
+        """Prove the caller holds *this session's* CSRF secret.
+
+        The proof is the header alone, checked against the per-session hash this
+        server stored when it issued the token. That is the synchronizer-token
+        pattern: a cross-site page cannot read the secret (the response that
+        carries it is CORS-protected, and so is the cookie that carries it), and
+        it cannot set ``X-CSRF-Token`` on a form post at all, so it cannot
+        produce a header that hashes to ``csrf_token_hash``.
+
+        The CSRF *cookie* is deliberately not read here any more, and the
+        reasoning is worth keeping because deleting a check is the kind of
+        change that looks like a regression:
+
+        * The pair of checks it used to satisfy - cookie present, cookie equal
+          to header - is the unsigned double-submit pattern. Double submit is a
+          *substitute* for a server-side secret, for servers that keep no
+          per-session state. This one keeps that state, so the two stack rather
+          than compose: an attacker who cannot produce the header is already
+          stopped, and an attacker who can produce it can trivially also let the
+          browser attach the matching cookie. There is no attacker that the
+          equality check stops and the hash check does not.
+        * Requiring the cookie *costs* something real. The cookie is what the
+          client reads to build the header, and it is shared across the whole
+          registrable domain; the value a browser lets script read on
+          ``app.nomicous.com`` and the value it attaches to a request to
+          ``api.nomicous.com`` are not guaranteed to be the same one under a
+          cookie policy that partitions or blocks the sibling-subdomain read.
+          When they diverge, equality fails on a request that is completely
+          legitimate - which is the shape of the Safari 403 this change is a
+          candidate fix for.
+
+        The cookie is still set, and a client that can read it still sends it;
+        nothing about the wire format changes. Only the server's willingness to
+        insist on it does.
+        """
+        if not csrf_header or not hmac.compare_digest(
+            session.csrf_token_hash, _hash(csrf_header, self._settings)
         ):
             raise AccessDeniedError("CSRF validation failed")

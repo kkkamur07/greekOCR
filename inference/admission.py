@@ -177,10 +177,14 @@ def _validate_param_structure(value: Any, settings: AdmissionSettings) -> int:
         elif isinstance(current, list):
             for nested in current:
                 visit(nested, depth + 1)
-        elif isinstance(current, float) and not math.isfinite(current):
-            raise ValueError(CLIENT_INPUT_ERROR)
-        elif not isinstance(current, str | int | float | bool | type(None)):
-            raise ValueError(CLIENT_INPUT_ERROR)
+        else:
+            # Two ways a leaf fails, both of them "this cannot be serialised":
+            # a type the wire format does not carry, or a float JSON cannot
+            # represent (NaN, +-Infinity).
+            unsupported_type = not isinstance(current, str | int | float | bool | type(None))
+            non_finite_float = isinstance(current, float) and not math.isfinite(current)
+            if unsupported_type or non_finite_float:
+                raise ValueError(CLIENT_INPUT_ERROR)
 
     visit(value, 0)
     return item_count

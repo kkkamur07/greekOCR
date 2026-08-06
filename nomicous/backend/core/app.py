@@ -4,14 +4,13 @@ import logging
 import uuid
 from contextlib import asynccontextmanager, suppress
 
-import infrastructure.models  # noqa: F401 - register all ORM mappers before first query
-
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+import infrastructure.models  # noqa: F401 - register all ORM mappers before first query
 from backend.annotation.api.history import router as annotation_history_router
 from backend.core.api.client_failures import router as client_failures_router
 from backend.core.api.health import router as health_router
@@ -35,17 +34,17 @@ from backend.core.settings import (
 from backend.core.settings.device import get_device_settings
 from backend.core.settings.job import get_job_settings
 from backend.core.version import get_version
-from backend.jobs.api.device_claim import router as device_claim_router
-from backend.jobs.api.internal_inference import router as internal_inference_router
-from backend.jobs.api.jobs import router as jobs_router
-from backend.jobs.infrastructure.notifications import platform_job_notification_loop
-from backend.jobs.infrastructure.worker import worker_loop
 from backend.document.api.documents import router as documents_router
 from backend.document.api.media import router as media_router
 from backend.document.api.public import router as public_router
 from backend.document.api.public_media import router as public_media_router
 from backend.document.api.signed_media import router as signed_media_router
 from backend.document.infrastructure.media_gc import media_gc_loop
+from backend.jobs.api.device_claim import router as device_claim_router
+from backend.jobs.api.internal_inference import router as internal_inference_router
+from backend.jobs.api.jobs import router as jobs_router
+from backend.jobs.infrastructure.notifications import platform_job_notification_loop
+from backend.jobs.infrastructure.worker import worker_loop
 from backend.ml.api.agent_version import (
     AGENT_VERSION_REFUSED_STATUS,
     AgentVersionRefusedError,
@@ -53,8 +52,8 @@ from backend.ml.api.agent_version import (
 from backend.ml.api.agent_version import router as agent_version_router
 from backend.ml.api.device_pairing import router as device_pairing_router
 from backend.ml.api.device_self import router as device_self_router
-from backend.ml.api.execution_preference import router as execution_preference_router
 from backend.ml.api.devices import router as devices_router
+from backend.ml.api.execution_preference import router as execution_preference_router
 from backend.ml.api.models import router as ml_models_router
 from backend.ml.api.registry import router as ml_registry_router
 from backend.project.api.projects import router as projects_router

@@ -29,7 +29,7 @@ from backend.ml.infrastructure.device_orm_models import HelperDevice
 from backend.ml.infrastructure.device_repository import HelperDeviceRepository
 from backend.users.infrastructure.orm_models import User
 
-DEVICE_TOKEN_HEADER = "X-Nomicous-Device-Token"
+DEVICE_TOKEN_HEADER = "X-Nomicous-Device-Token"  # noqa: S105 - a header name, not a token
 
 logger = logging.getLogger(__name__)
 

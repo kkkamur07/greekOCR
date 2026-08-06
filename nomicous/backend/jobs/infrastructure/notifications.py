@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import re
@@ -135,10 +136,10 @@ async def platform_job_notification_loop(
             raise
         except Exception:
             logger.exception("platform job notification listener failed")
-            try:
+            # Back off for a second before reconnecting. Timing out is the
+            # normal path; an early wake means shutdown was requested.
+            with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(stop_event.wait(), timeout=1.0)
-            except TimeoutError:
-                pass
         finally:
             if connection is not None:
                 try:

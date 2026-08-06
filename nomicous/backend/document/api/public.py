@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.annotation.application.page_xml_export_service import PageXmlExportService
 from backend.annotation.application.transcription_pdf_service import TranscriptionPdfService
 from backend.core.api.pagination import MAX_CURSOR_LENGTH, decode_cursor, paginate_rows
+from backend.document.api.public_rate_limit import throttle_public_export, throttle_public_read
 from backend.document.api.responses import document_with_parts_response
 from backend.document.api.schemas import (
     DEFAULT_PUBLIC_LAYOUT_LINES,
@@ -22,7 +23,6 @@ from backend.document.api.schemas import (
     PublicLineResponse,
     PublicTranscriptionLayerResponse,
 )
-from backend.document.api.public_rate_limit import throttle_public_export, throttle_public_read
 from backend.document.application.document_catalog import DocumentCatalog
 from infrastructure.db import get_db
 

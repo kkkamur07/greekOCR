@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
+
 from inference.hub import resolve_hf_weights_source, set_default_hub_client
 from inference.hub.manifest import load_manifest
 from inference.hub.uri import parse_hf_weights_uri

@@ -270,7 +270,7 @@ def test_history_snapshot_retention_keeps_only_latest_five(
     history_url = f"{base}/{document_id}/parts/{part_id}/history"
 
     snapshot_ids = []
-    for index in range(6):
+    for _ in range(6):
         created = client.post(history_url, headers=owner_headers)
         assert created.status_code == 201
         snapshot_ids.append(created.json()["id"])

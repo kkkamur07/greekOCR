@@ -815,6 +815,65 @@ async def test_read_dto_exposes_no_secret_material(service, session, repo, owner
 # ---------------------------------------------------------------------------
 
 
+def test_device_dependency_uses_a_dedicated_header_and_type() -> None:
+    """A device token must be structurally unable to satisfy get_current_user.
+
+    Restored after a test-suite reduction pass cut it. The integration suite
+    covers the *reverse* direction - ``test_device_claim.py`` presents a browser
+    bearer as an agent credential and gets 401 - but nothing anywhere presents a
+    device token as a user credential. This is the only record of that direction,
+    and it is the dangerous one: a device token is long-lived, sits on a
+    researcher's laptop and is scoped to claiming pages, so a fallback added to
+    ``get_current_user`` would quietly promote every agent to a full session.
+    """
+    from backend.ml.application.device_auth import DEVICE_TOKEN_HEADER, AuthenticatedDevice
+    from backend.users.api.dependencies import get_current_device, get_current_user
+
+    assert DEVICE_TOKEN_HEADER == "X-Nomicous-Device-Token"
+    signature = inspect.signature(get_current_device)
+    assert "x_nomicous_device_token" in signature.parameters
+    assert signature.return_annotation is AuthenticatedDevice
+
+    # get_current_user is untouched: still HTTPBearer -> User.
+    assert inspect.signature(get_current_user).return_annotation is User
+    assert "x_nomicous_device_token" not in inspect.signature(get_current_user).parameters
+
+
+# ``test_migration_005_matches_the_orm_models`` and
+# ``test_orm_models_are_registered_for_alembic_metadata`` stood here. Both are
+# subsumed by ``integration/test_migrations.py::test_migration_chain_matches_orm_metadata``,
+# which migrates a scratch database from empty to head and asserts alembic's
+# autogenerate finds no difference against ``Base.metadata`` - every table, not
+# just these two, against a real Postgres rather than a monkeypatched ``op``, and
+# without naming a revision, so it survives the chain being renumbered.
+
+
+def test_migration_grants_the_runtime_role_access() -> None:
+    """A table the API role cannot write is an outage on the first request.
+
+    Restored after a test-suite reduction pass cut it: nothing else in the suite
+    asserts the helper-device tables are reachable by ``nomicous_api``. The
+    chain-vs-ORM check above covers *shape*, not *privilege* - it migrates as a
+    superuser, so a chain that creates both tables and grants nothing passes it
+    and then 500s on the first pairing request in production.
+    """
+    from pathlib import Path
+
+    migration = (
+        Path(__file__).resolve().parents[3]
+        / "nomicous"
+        / "infrastructure"
+        / "alembic"
+        / "versions"
+        / "005_helper_devices.py"
+    ).read_text()
+
+    assert "nomicous_api" in migration
+    assert "GRANT SELECT, INSERT, UPDATE, DELETE" in migration
+    for table in ("helper_devices", "helper_pairings"):
+        assert table in migration.split("_grant_runtime_privileges")[1]
+
+
 async def test_touch_device_records_liveness(service, session, repo, owner) -> None:
     now = datetime.now(UTC)
     pairing, device_code = await _pair(service, session, owner, now=now)

@@ -7,7 +7,6 @@ from typing import Any
 
 import numpy as np
 
-
 MIN_VERTEX_SPACING_PX = 3.0
 
 
@@ -85,7 +84,10 @@ def clip_baseline_to_x_span(
         return []
 
     clipped: list[list[float]] = []
-    for start, end in zip(baseline, baseline[1:]):
+    # Deliberately not strict: this is the pairwise-window idiom, where the two
+    # operands differ in length by exactly one and the last point of `baseline`
+    # has no successor to pair with. `strict=True` would raise on every call.
+    for start, end in zip(baseline, baseline[1:], strict=False):
         if len(start) != 2 or len(end) != 2:
             continue
         for point in _clip_segment_to_x_span(start, end, x0, x1):

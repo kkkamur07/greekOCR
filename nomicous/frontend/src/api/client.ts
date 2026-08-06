@@ -3,7 +3,13 @@
  * Regenerate types: `npm run codegen:api` (after `python scripts/platform/export_openapi.py`).
  */
 import { redirectToLogin } from "../auth/session";
-import { getAccessToken, setAccessToken } from "../auth/storage";
+import {
+  clearCsrfToken,
+  getAccessToken,
+  getCsrfToken,
+  setAccessToken,
+  setCsrfToken,
+} from "../auth/storage";
 import { JOB_WAIT_POLL_INTERVAL_MS } from "../utils/jobPolling";
 import { waitForSubscribedJob } from "../utils/jobSubscription";
 import {
@@ -220,7 +226,8 @@ type RequestOptions = Omit<RequestInit, "body"> & {
 
 let refreshPromise: Promise<TokenResponse> | null = null;
 
-function csrfToken(): string | null {
+/** The CSRF token as `document.cookie` exposes it, or null if it is not there. */
+function csrfCookieToken(): string | null {
   if (typeof document === "undefined") return null;
   const encodedName = `${encodeURIComponent(CSRF_COOKIE_NAME)}=`;
   const cookie = document.cookie
@@ -234,10 +241,63 @@ function csrfToken(): string | null {
   }
 }
 
+/**
+ * The CSRF token to echo back, from whichever channel has it.
+ *
+ * The server sends the same value twice: in the `TokenResponse` body and in the
+ * `greekocr-csrf` cookie. The body copy is preferred because it is the one a
+ * cookie policy cannot take away - the cookie is set on `api.nomicous.com` for
+ * `.nomicous.com` purely so that script on `app.nomicous.com` can read it, and
+ * that sibling-subdomain read is what a stricter browser interferes with. The
+ * cookie remains the fallback, which is what keeps a session established before
+ * this code shipped - and a page that never called an auth route in this tab -
+ * working exactly as it did.
+ */
+function csrfToken(): string | null {
+  return getCsrfToken() ?? csrfCookieToken();
+}
+
 function addCsrfHeader(headers: Headers, method: string): void {
   if (!["POST", "PUT", "PATCH", "DELETE"].includes(method)) return;
   const token = csrfToken();
   if (token) headers.set("X-CSRF-Token", token);
+}
+
+/** Record the CSRF token an auth response carried, if it carried one. */
+function rememberCsrfToken(token: TokenResponse): TokenResponse {
+  // Optional on the wire: this client can be talking to an API deployed before
+  // the field existed, in which case the cookie is still the only channel.
+  if (token.csrf_token) setCsrfToken(token.csrf_token);
+  return token;
+}
+
+/**
+ * POST one of the two routes that check CSRF, retrying once from the cookie.
+ *
+ * The in-memory token belongs to a single tab, and `/auth/refresh` rotates the
+ * session's token for every tab at once - so a second tab's copy goes stale the
+ * moment the first one refreshes, and would be answered 403. The cookie is
+ * shared by every tab and is always the current one, so where the browser lets
+ * script read it, one retry restores exactly the behaviour of reading the
+ * cookie on every request. It is skipped when the cookie is unreadable or
+ * already says what memory says, so the Safari case costs no extra request.
+ */
+async function postCsrfProtected<T>(path: string): Promise<T> {
+  try {
+    return await apiRequest<T>(path, { method: "POST", skipAuth: true });
+  } catch (error) {
+    const cookieToken = csrfCookieToken();
+    if (
+      !(error instanceof ApiError) ||
+      error.status !== 403 ||
+      cookieToken === null ||
+      cookieToken === getCsrfToken()
+    ) {
+      throw error;
+    }
+    clearCsrfToken();
+    return apiRequest<T>(path, { method: "POST", skipAuth: true });
+  }
 }
 
 /**
@@ -245,10 +305,8 @@ function addCsrfHeader(headers: Headers, method: string): void {
  * The refresh route deliberately bypasses auth recovery to avoid recursion.
  */
 export function refreshAccessToken(): Promise<TokenResponse> {
-  refreshPromise ??= apiRequest<TokenResponse>("/auth/refresh", {
-    method: "POST",
-    skipAuth: true,
-  })
+  refreshPromise ??= postCsrfProtected<TokenResponse>("/auth/refresh")
+    .then(rememberCsrfToken)
     .then((token) => {
       setAccessToken(token.access_token);
       return token;
@@ -382,19 +440,21 @@ export const api = {
       method: "POST",
       body,
       skipAuth: true,
-    }),
+    }).then(rememberCsrfToken),
 
   register: (body: RegisterRequest) =>
     apiRequest<TokenResponse>("/auth/register", {
       method: "POST",
       body,
       skipAuth: true,
-    }),
+    }).then(rememberCsrfToken),
 
   refresh: refreshAccessToken,
 
-  logout: () =>
-    apiRequest<void>("/auth/logout", { method: "POST", skipAuth: true }),
+  // Revoking the session server-side is CSRF-checked too, so it gets the same
+  // cookie retry: a tab whose token another tab rotated must still be able to
+  // sign out for real, not just forget its own copy of the credentials.
+  logout: () => postCsrfProtected<void>("/auth/logout"),
 
   me: () => apiRequest<UserResponse>("/me"),
 

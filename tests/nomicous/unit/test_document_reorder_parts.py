@@ -10,7 +10,6 @@ from __future__ import annotations
 import uuid
 
 import pytest
-from sqlalchemy import update
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql.dml import Update

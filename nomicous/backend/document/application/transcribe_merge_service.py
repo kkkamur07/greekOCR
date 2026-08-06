@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from inference.contracts.transcribe import TranscribeRunResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -15,6 +14,7 @@ from backend.document.infrastructure.orm_models import (
     Transcription,
     TranscriptionKind,
 )
+from inference.contracts.transcribe import TranscribeRunResponse
 
 
 class TranscribeJobHandlerError(Exception):

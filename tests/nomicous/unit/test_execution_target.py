@@ -28,7 +28,6 @@ future reader is most likely to add back, and the reason it is gone is a decisio
 from __future__ import annotations
 
 import pytest
-from inference.contracts.common import HostEligibility
 
 from backend.core.exceptions import ConflictError
 from backend.ml.application.model_hosts import (
@@ -44,6 +43,7 @@ from backend.ml.domain.execution import (
     choose_execution_target,
 )
 from backend.ml.infrastructure.orm_models import InferenceModel, InferenceTask
+from inference.contracts.common import HostEligibility
 
 LOCAL = ExecutionTarget.local
 CLOUD = ExecutionTarget.cloud

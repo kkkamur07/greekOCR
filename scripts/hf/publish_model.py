@@ -55,9 +55,13 @@ def _parse_args() -> argparse.Namespace:
 def main() -> int:
     args = _parse_args()
 
-    from src.hf.publish import get_default_publish_client, upload_enabled
-    from src.hf.publish import plan_model_publish, publish_model
-    from src.hf.publish import build_model_card
+    from src.hf.publish import (
+        build_model_card,
+        get_default_publish_client,
+        plan_model_publish,
+        publish_model,
+        upload_enabled,
+    )
 
     dry_run = not upload_enabled(upload_flag=args.upload)
     try:

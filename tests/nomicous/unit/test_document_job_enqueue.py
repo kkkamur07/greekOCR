@@ -48,7 +48,6 @@ from backend.ml.infrastructure.orm_models import InferenceModel, InferenceTask, 
 from backend.project.infrastructure.orm_models import Project
 from backend.users.infrastructure.orm_models import User
 
-
 # Capacity is an input to submission, not a collaborator of it: the route reads it
 # once and hands it down as data. These tests are about model resolution and the
 # composed row, so they pass the one reading that keeps every case on the cloud -

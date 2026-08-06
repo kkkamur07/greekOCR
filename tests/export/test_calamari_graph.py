@@ -24,8 +24,8 @@ def test_the_published_graph_and_artifact_decode_the_same_line() -> None:
     researcher reads. Text must match exactly - a CTC decode that agrees only
     approximately has already changed a character somewhere.
     """
-    from src.model.inference_export.calamari import load_calamari_checkpoint
     from inference.architectures.calamari.adapter import _decode_greedy
+    from src.model.inference_export.calamari import load_calamari_checkpoint
 
     checkpoint = REPO_ROOT / "src/hf/cache/syriac-calamari-v1/stable/best.pt"
     artifact = REPO_ROOT / "src/hf/cache/syriac-calamari-v1/stable/best.onnx"

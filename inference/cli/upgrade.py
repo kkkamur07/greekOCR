@@ -366,7 +366,13 @@ def _installer_command(requirement: str) -> list[str] | None:
 
 def _install(command: list[str]) -> subprocess.CompletedProcess:
     try:
-        return subprocess.run(
+        # S603: `command` is built by `_install_command` as a fixed argv list -
+        # no shell, no interpolation. Its only variable part is `requirement`,
+        # whose package half is pinned to `DISTRIBUTION_NAME` and whose version
+        # half must match `_FLOOR_VERSION_PATTERN` under `MAX_FLOOR_VERSION_LENGTH`
+        # (see `_refuses_floor`), so the platform cannot smuggle a second
+        # argument such as `--index-url` through it.
+        return subprocess.run(  # noqa: S603
             command,
             capture_output=True,
             text=True,
@@ -411,6 +417,9 @@ def _re_exec(previous_version: str) -> None:
     sys.stdout.flush()
     sys.stderr.flush()
     try:
-        os.execve(script, arguments, environment)
+        # S606: no shell and no `$PATH` lookup - `script` is either this
+        # process's own `argv[0]`, checked to be an executable file just above,
+        # or `sys.executable`. `arguments` is this process's own argv.
+        os.execve(script, arguments, environment)  # noqa: S606
     except OSError:
         return

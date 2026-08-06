@@ -27,11 +27,11 @@ from __future__ import annotations
 
 import uuid
 
-import infrastructure.models  # noqa: F401 — register all ORM mappers
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select, text
 
+import infrastructure.models  # noqa: F401 — register all ORM mappers
 from backend.core.settings.device import get_device_settings
 from backend.jobs.infrastructure.job_repository import mark_job_failed
 from backend.jobs.infrastructure.orm_models import Job, JobStatus

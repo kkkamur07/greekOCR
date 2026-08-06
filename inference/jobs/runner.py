@@ -7,13 +7,15 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any
 
+from PIL import Image
+
 from inference.admission import validate_image_bytes, validate_request_params
+from inference.architectures.blla import run_blla_segment
 from inference.architectures.calamari import (
     TranscribeLineFailure,
     run_calamari_transcribe,
     run_calamari_transcribe_many,
 )
-from inference.architectures.blla import run_blla_segment
 from inference.contracts.common import InferenceTask, RegistryArchitecture
 from inference.contracts.segment import SegmentRunResponse
 from inference.contracts.transcribe import (
@@ -23,10 +25,8 @@ from inference.contracts.transcribe import (
     TranscribeLineRegion,
     TranscribeRunResponse,
 )
-from inference.settings import get_inference_settings
-from PIL import Image
-
 from inference.registry.resolve import resolve_registry_entry
+from inference.settings import get_inference_settings
 from inference.weights import resolve_weights_source
 
 logger = logging.getLogger(__name__)

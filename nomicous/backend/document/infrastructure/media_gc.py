@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-import infrastructure.models  # noqa: F401 - register MediaDeletionIntent mapper
 from sqlalchemy import select
 
+import infrastructure.models  # noqa: F401 - register MediaDeletionIntent mapper
 from backend.document.infrastructure.media_store import get_media_store
 from backend.document.infrastructure.orm_models import MediaDeletionIntent
 from infrastructure.db import sync_system_session
@@ -63,7 +64,7 @@ async def media_gc_loop(stop_event: Event, *, interval_seconds: float = 60.0) ->
             await asyncio.to_thread(process_media_deletion_intents)
         except Exception:
             logger.exception("media deletion GC pass failed")
-        try:
+        # Timing out is the normal path: it means no shutdown was requested and
+        # the next sweep is due.
+        with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(stop_event.wait(), timeout=interval_seconds)
-        except TimeoutError:
-            pass

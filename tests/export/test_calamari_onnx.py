@@ -24,7 +24,6 @@ from src.model.inference_export.calamari import (  # noqa: E402
     load_calamari_checkpoint,
 )
 
-
 CHECKPOINT = REPO_ROOT / "src/hf/local/syriac/calamari/v1/stable/best.pt"
 
 

@@ -140,30 +140,39 @@ export function PageEditorTranscriptionPdfPane({
           </span>
         )}
         {blobUrl && !loading && !error && (
-          <object
-            key={blobUrl}
-            data={blobUrl}
-            type="application/pdf"
-            title="Transcription PDF preview"
-            aria-label="Transcription PDF preview"
-            style={{
-              minHeight: 0,
-              flex: 1,
-              border: "1px solid var(--border)",
-              borderRadius: 6,
-              background: "#fff",
-            }}
-          >
+          <>
             <p
               style={{
-                padding: 16,
-                textAlign: "center",
+                flexShrink: 0,
+                margin: 0,
+                padding: "0 4px 6px",
                 color: "var(--text-3)",
               }}
             >
-              Your browser cannot display PDFs inline. Use Download instead.
+              If the preview stays blank,{" "}
+              <a
+                href={blobUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: "inherit" }}
+              >
+                open the PDF in a new tab
+              </a>{" "}
+              or use Download.
             </p>
-          </object>
+            <iframe
+              key={blobUrl}
+              src={blobUrl}
+              title="Transcription PDF preview"
+              style={{
+                minHeight: 0,
+                flex: 1,
+                border: "1px solid var(--border)",
+                borderRadius: 6,
+                background: "#fff",
+              }}
+            />
+          </>
         )}
       </div>
     </aside>

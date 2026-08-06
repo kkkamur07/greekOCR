@@ -22,6 +22,68 @@
 [extend]
 useDefault = true
 
+# The default ruleset has no rule for a database URI with an inline password, and
+# that gap is not theoretical here: `infrastructure/.env` was committed in
+# e81a50c (2026-05-21) carrying DATABASE_URL, SYNC_DATABASE_URL and JWT_SECRET,
+# and neither the working-tree scan nor the history scan flagged it. The file was
+# deleted with the rest of that tree in 784df29 and `.gitignore` covers the path
+# now, so the same mistake cannot recur *there* - but nothing was stopping it
+# recurring anywhere else.
+#
+# Scoped deliberately: it fires only when a password is actually present between
+# the scheme and the host. `postgresql://localhost/db` and
+# `postgresql://postgres@localhost` carry no credential and are not findings; a
+# URI is only a leak once it embeds one.
+[[rules]]
+id = "database-uri-with-password"
+description = "Database connection URI with an inline password"
+regex = '''(?i)\b(?:postgres(?:ql)?|mysql|mariadb|mongodb(?:\+srv)?|redis|rediss|amqps?|clickhouse|cockroachdb)(?:\+\w+)?://[^\s:/@]+:[^\s/@]+@[^\s/]+'''
+keywords = [
+  "postgres",
+  "postgresql",
+  "mysql",
+  "mariadb",
+  "mongodb",
+  "redis",
+  "rediss",
+  "amqp",
+  "amqps",
+  "clickhouse",
+  "cockroachdb",
+]
+
+[[rules.allowlists]]
+description = """
+Three shapes that match the pattern without carrying a credential.
+
+1. Template placeholders. The `.env.*.example` files interpolate
+   `${NOMICOUS_DATABASE_PASSWORD}` where the password goes; a `${...}` in that
+   position is the absence of a secret, not one.
+2. Angle-bracket and obvious-word placeholders, the other way the same files and
+   the deployment docs spell "put yours here".
+3. Local throwaway credentials published on purpose - the integration suite and
+   docker-compose both hard-code postgres/dev on 127.0.0.1:5433. Since
+   tests/nomicous/integration/conftest.py now refuses any host that is not
+   loopback, these strings cannot name a real database.
+
+Matched by the literal shape, never by path, so a genuine credential pasted into
+any of those same files is still a finding.
+"""
+regexes = [
+  '''://[^\s:/@]+:\$\{[^}]*\}@''',
+  '''://[^\s:/@]+:\$[A-Za-z_][A-Za-z0-9_]*@''',
+  '''://[^\s:/@]+:<[^>]*>@''',
+  '''(?i)://[^\s:/@]+:(?:password|changeme|placeholder|your[-_]?password|replace[-_a-z]*)@''',
+  # Loopback. A credential that only works from this machine is not a leak, and
+  # the guard tests need real-looking local URLs to assert the accept path.
+  '''://[^\s:/@]+:[^\s/@]+@(?:localhost|127\.0\.0\.1|\[::1\])''',
+  # Fabricated remote hosts, used by the guard tests to assert the *refuse*
+  # path. They have to look like the real thing or the tests prove nothing.
+  # Named individually: an alphabet-run subdomain is not a host anyone owns.
+  '''://[^\s:/@]+:[^\s/@]+@db\.abcdefghijk[a-z]*\.supabase\.co''',
+  '''://[^\s:/@]+:[^\s/@]+@db\.internal(?:[:/]|\b)''',
+]
+
 [allowlist]
 description = "Shared JWT test fixture; strong by construction so the settings validator accepts it"
 regexes = ['''xQ7v2Kd9RmZ4pB6wLt1yHs3nCf8jUa5eG0oV''']

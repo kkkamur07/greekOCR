@@ -7,6 +7,8 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from PIL import Image
+
 from inference.architectures.blla import blla
 from inference.architectures.blla.blla_decoder import DecodedBLLALine
 from inference.preprocessing.segment_geometry import (
@@ -16,7 +18,6 @@ from inference.preprocessing.segment_geometry import (
     distance,
 )
 from inference.preprocessing.segment_refinement import refine_segment_candidates
-from PIL import Image
 
 
 def _synthetic_ink_fixture() -> tuple[Image.Image, list[list[float]]]:

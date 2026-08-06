@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import torch
+from torch import Tensor, nn
+
 from src.model.inference_export.calamari.config import CalamariTorchConfig, require_int
 from src.model.inference_export.calamari.layers import (
     LazyBiLSTM,
@@ -10,7 +12,6 @@ from src.model.inference_export.calamari.layers import (
     SameMaxPool2d,
     cnn_to_sequence,
 )
-from torch import Tensor, nn
 
 
 class CalamariTorchModel(nn.Module):

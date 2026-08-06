@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import enum
 import uuid
 from datetime import datetime
+from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, Enum, ForeignKey, String, func
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from backend.project.infrastructure.orm_models import Project
 
 
-class InferenceTask(str, enum.Enum):
+class InferenceTask(StrEnum):
     segment = "segment"
     transcribe = "transcribe"
     binarize = "binarize"
@@ -34,8 +34,8 @@ class InferenceModel(Base):
     default_params: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    bindings: Mapped[list["ModelBinding"]] = relationship("ModelBinding", back_populates="model")
-    jobs: Mapped[list["Job"]] = relationship("Job", back_populates="model")
+    bindings: Mapped[list[ModelBinding]] = relationship("ModelBinding", back_populates="model")
+    jobs: Mapped[list[Job]] = relationship("Job", back_populates="model")
 
 
 class ModelBinding(Base):
@@ -64,10 +64,10 @@ class ModelBinding(Base):
     overrides: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    model: Mapped["InferenceModel"] = relationship("InferenceModel", back_populates="bindings")
-    project: Mapped["Project | None"] = relationship("Project", back_populates="model_bindings")
-    document: Mapped["Document | None"] = relationship("Document", back_populates="model_bindings")
-    document_part: Mapped["DocumentPart | None"] = relationship(
+    model: Mapped[InferenceModel] = relationship("InferenceModel", back_populates="bindings")
+    project: Mapped[Project | None] = relationship("Project", back_populates="model_bindings")
+    document: Mapped[Document | None] = relationship("Document", back_populates="model_bindings")
+    document_part: Mapped[DocumentPart | None] = relationship(
         "DocumentPart", back_populates="model_bindings"
     )
-    jobs: Mapped[list["Job"]] = relationship("Job", back_populates="binding")
+    jobs: Mapped[list[Job]] = relationship("Job", back_populates="binding")

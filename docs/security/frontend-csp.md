@@ -77,3 +77,68 @@ hydration, which belongs with a frontend change rather than a header change.
 Until then, `'unsafe-inline'` in `script-src` is an accepted, documented risk.
 `object-src 'none'`, `base-uri 'self'`, and `frame-ancestors 'none'` remain in
 place and limit what an injected inline script can escalate to.
+
+## `frame-src 'self' blob:` - why the inline PDF preview needs it
+
+The transcription PDF preview
+([`PageEditorTranscriptionPdfPane`](../../nomicous/frontend/src/components/page-editor/PageEditorTranscriptionPdfPane.tsx)
+and [`PublicCanvasPdfView`](../../nomicous/frontend/src/components/public/PublicCanvasPdfView.tsx))
+fetches the PDF over the API, wraps the response in `URL.createObjectURL`, and
+embeds the resulting `blob:` URL. Both components used to embed it with
+`<object data={blobUrl} type="application/pdf">`, which `object-src 'none'`
+blocks outright. The pane rendered empty.
+
+This was previously filed as a Safari quirk. It is not: `object-src 'none'` is
+honoured by every CSP-conforming browser, so the preview was blank everywhere the
+header was served. It was not caught earlier because the local dev server does
+not serve `vercel.json`'s headers - only the deployed app does.
+
+Two things changed:
+
+1. Both components now embed the PDF with `<iframe src={blobUrl}>` instead of
+   `<object>`. `object-src 'none'` stays exactly as it was; nothing re-enables
+   plugin content. Re-permitting `<object>` would have been the larger
+   concession, because `<object>`/`<embed>` is the classic sink for
+   plugin-handled content types and `object-src` is the only directive that
+   governs it.
+2. The policy gained `frame-src 'self' blob:`.
+
+`blob:` has to be named explicitly. It is a distinct scheme, so it is **not**
+covered by `'self'` and it is **not** covered by the `default-src 'self'`
+fallback that `frame-src` would otherwise inherit - the same reason this policy
+already spells it out in `img-src 'self' data: blob:` and `worker-src 'self'
+blob:`. An `<iframe>` pointed at a `blob:` URL under the old policy was blocked
+just as the `<object>` was.
+
+### What this permits, honestly
+
+`frame-src 'self' blob:` lets the page frame two things: documents from the app's
+own origin, and blob URLs. A blob URL only exists because script running on this
+origin called `URL.createObjectURL`, and it is scoped to that origin - it cannot
+name a remote document, and no third-party origin becomes frameable. So the
+grant does not widen the set of *remote* content the app can pull in; it widens
+the set of *locally minted* documents the app can frame.
+
+The residual risk is real but bounded, and it is downstream of the
+`'unsafe-inline'` gap above rather than independent of it: script that is already
+executing on this origin can now mint a blob and frame it, which gives it a
+same-origin document to render attacker-chosen markup into. Script that has
+reached that point can already write into the live DOM, so this is not a new
+capability so much as a second route to one it holds. `frame-ancestors 'none'`
+still prevents anyone framing *us*, and `X-Frame-Options: DENY` backs it up.
+
+The alternative - rendering the PDF with PDF.js and no frame at all - was
+rejected as disproportionate: `pdfjs-dist` is not a dependency, and adding a full
+PDF renderer to remove one narrowly-scoped directive is a worse trade than the
+directive.
+
+### The embed can still fail, so it is no longer the only way out
+
+Neither `<object>` fallback children nor `<iframe>` fallback content fires
+reliably when a blob embed is refused, which is why the original symptom was a
+blank pane rather than the fallback text both components had written for exactly
+this case. Both components now render an always-visible "open in a new tab"
+link - and, in the editor pane, the existing Download button - *outside* the
+embed, so a user is never dependent on the embed reporting its own failure. A
+top-level navigation to a `blob:` URL is not governed by `frame-src` or
+`object-src`, so that route stays open even if a browser refuses the frame.

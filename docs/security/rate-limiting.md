@@ -102,17 +102,29 @@ can, and nothing keyed on the peer address can either while the peer is shared.
 Closing that gap requires either a verified trusted-proxy configuration (above)
 or a platform-level WAF rule. It is an open risk, not a solved one.
 
-### Effect on other consumers of `throttle_auth_attempts`
+### Device pairing has its own throttle, not `throttle_auth_attempts`
 
-`nomicous/backend/ml/api/device_pairing.py` reuses this dependency. Its bodies
-carry no `email`, so on a deployment with `TRUST_PEER_IP=false` neither dimension
-applies and every pairing start shares the one `unattributable:/device/v1/pairings`
-bucket. That is still not per-caller, but it is strictly better than the global
-IP bucket the route documents itself as accepting, and
-`DEVICE_PAIRING_ENABLED=false` in production. The device layer's owner should
-still decide what identity a pairing attempt is charged against (the pair code,
-or the authenticated user redeeming it) rather than inherit a key that means
-nothing there.
+`POST /device/v1/pairings` (`nomicous/backend/ml/api/device_pairing.py`) used to
+sit under `throttle_auth_attempts`. Its body carries no `email`, so it had no
+account dimension to fall back on: every honest pairing start shared the one
+`unattributable:/device/v1/pairings` bucket, and one attacker filling that
+bucket locked every researcher out of `nomicous pair`.
+
+It is now charged against a dedicated dependency,
+`throttle_device_pairing_starts` (`nomicous/backend/users/api/rate_limit.py`).
+That dependency keys on `attributable_client_ip(request)`: when the address
+identifies one client, it charges a per-client bucket
+(`device-pairing:<addr>`, `device_pairing_rate_limit_requests` per window);
+when the address is not attributable (e.g. `TRUST_PEER_IP=false` with no
+trusted forwarded header), nothing is charged, for the same reason IP-keyed
+buckets are skipped elsewhere in this module - a global bucket on this route
+is the outage. The backstop against an unattributable flood is the
+platform-wide live-pairing ceiling in `DevicePairingService.start_pairing`,
+not a rate-limit bucket.
+
+`POST /device/v1/pairings/token` remains deliberately outside
+`throttle_auth_attempts` as well; see its own docstring for why (poll cadence
+is enforced on the pairing row instead).
 
 ## Client-failure beacon
 

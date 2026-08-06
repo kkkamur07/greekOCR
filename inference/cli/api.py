@@ -33,14 +33,14 @@ from inference.cli.version import installed_version
 DEFAULT_PLATFORM_URL = "https://api.nomicous.com"
 PLATFORM_URL_ENV = "NOMICOUS_API_URL"
 
-DEVICE_TOKEN_HEADER = "X-Nomicous-Device-Token"
+DEVICE_TOKEN_HEADER = "X-Nomicous-Device-Token"  # noqa: S105 - a header name, not a token
 AGENT_VERSION_HEADER = "X-Nomicous-Agent-Version"
 """Which build of the agent is calling. The **version floor** judges it on the
 **claim** path and on `GET /device/v1/agent/version`
 (`backend/ml/api/agent_version.py`); the constant lives here so the run loop and
 the launch check both state the same version this CLI reports."""
 
-SERVICE_TOKEN_HEADER = "X-Nomicous-Service-Token"
+SERVICE_TOKEN_HEADER = "X-Nomicous-Service-Token"  # noqa: S105 - a header name, not a token
 """A hosted worker's **service credential**. A separate header from the device
 token because the two resolve to different scopes (ADR 0005, decision 1): a
 device token claims `local` work on one account, this claims `cloud` work for the
@@ -390,7 +390,10 @@ class PlatformClient:
         deadline = self.timeout if timeout is None else timeout
         url = f"{self.base_url}{path}"
         payload = None if body is None else json.dumps(body).encode("utf-8")
-        request = urllib.request.Request(url, data=payload, method=method)
+        # S310 (here and on the `urlopen` below): `url` is `base_url` + a
+        # literal path, and `base_url` passed `require_secure_platform_url`
+        # in `__init__` - https, or http to loopback for the integration suite.
+        request = urllib.request.Request(url, data=payload, method=method)  # noqa: S310
         request.add_header("Accept", "application/json")
         # Recorded on `helper_pairings.user_agent` for support correlation.
         request.add_header("User-Agent", f"nomicous-inference/{installed_version()}")
@@ -400,7 +403,7 @@ class PlatformClient:
             request.add_header(name, value)
 
         try:
-            with urllib.request.urlopen(request, timeout=deadline) as response:
+            with urllib.request.urlopen(request, timeout=deadline) as response:  # noqa: S310
                 return response.status, _decode(response.read())
         except urllib.error.HTTPError as exc:
             return exc.code, _decode(exc.read())
@@ -565,10 +568,13 @@ class PlatformClient:
         into a read of any path the researcher's account can open.
         """
         self._require_fetchable(url)
-        request = urllib.request.Request(url, method="GET")
+        # S310 (here and on the `urlopen` below): `_require_fetchable` above
+        # rejects every scheme but https, which is what stops a server-chosen
+        # `file:` URL from reading this machine. See its docstring.
+        request = urllib.request.Request(url, method="GET")  # noqa: S310
         request.add_header("User-Agent", f"nomicous-inference/{installed_version()}")
         try:
-            with urllib.request.urlopen(request, timeout=IMAGE_TIMEOUT_SECONDS) as response:
+            with urllib.request.urlopen(request, timeout=IMAGE_TIMEOUT_SECONDS) as response:  # noqa: S310
                 return response.read()
         except urllib.error.HTTPError as exc:
             if exc.code == 403:

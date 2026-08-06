@@ -255,7 +255,14 @@ class InferenceModelService:
         document_id: UUID | None = None,
     ) -> None:
         if scope.document_part_id is not None:
-            assert document_id is not None
+            # The part check is the access check: it is what proves the part
+            # belongs to a document the caller may reach. Without a document to
+            # check it against there is nothing to authorise, so refuse rather
+            # than continue - and refuse with a raise, because an `assert` here
+            # would vanish under `python -O` and pass `None` straight into the
+            # scope check.
+            if document_id is None:
+                raise ValidationError("A part-scoped binding requires a document id")
             await self._require_part_in_document(
                 session, user, project_id, document_id, scope.document_part_id
             )
