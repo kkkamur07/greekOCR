@@ -258,25 +258,20 @@ extend-exclude = [
 select = ["F", "I", "UP", "B", "SIM"]
 
 # ---------------------------------------------------------------------------
-# Widening `select` and moving CI to `ruff check .` surfaced 519 pre-existing
-# violations, none of them newly introduced. They are recorded here per tree and
-# per rule so the new rules are enforced on all new and already-clean code
-# instead of the whole ruleset being held back by legacy trees.
+# Widening `select` and moving CI to `ruff check .` surfaced pre-existing
+# violations across the application trees, none of them newly introduced. They
+# are suppressed here per tree and per rule so the new rules are enforced on all
+# new and already-clean code instead of the whole ruleset being held back.
 #
-# This block is debt, not policy: each entry should be fixed and deleted -- with
-# one exception. Roughly 385 of the ~533 suppressed violations are in
-# `src/model/calamari/`, a VENDORED copy of an upstream package. That debt is
-# upstream's, not this project's: fixing it forks us from upstream for no gain.
-# Only the remaining ~148 are worth paying down. Do not add rules to this block
-# to make a new violation pass. Counts at time of writing:
-#   src/model                  385   (also never linted before: F401/F403/F541/F841/F901)
-#   nomicous/backend            54
-#   tests                       41
-#   inference                   12
-#   scripts                      9
-#   src/preprocessing_data       8
-#   nomicous/infrastructure      4
-#   src/hf                       4
+# This block is debt, not policy: every entry should be fixed and deleted. It
+# covers only the trees that ship - `inference`, `nomicous`, `scripts`, `tests`.
+# The research tree is not here because it is not linted at all; see
+# `extend-exclude` above for why that is an exclusion rather than a row in this
+# table.
+#
+# Do not add a rule here to make a new violation pass. Deliberately no per-tree
+# counts: the previous version of this comment carried them, and they were wrong
+# within one merge of being written.
 # ---------------------------------------------------------------------------
 [tool.ruff.lint.per-file-ignores]
 "inference/**" = ["B905", "I001", "SIM109", "SIM114", "UP037"]
