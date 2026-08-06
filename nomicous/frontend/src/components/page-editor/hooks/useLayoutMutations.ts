@@ -250,22 +250,30 @@ export function useLayoutMutations({
 
   async function resetSelectedLine() {
     if (!projectId || !documentId || !partId || !selectedLineId) return;
-    const resetLayout = await api.resetPartLayout(
-      projectId,
-      documentId,
-      partId,
-      {
-        line_ids: [selectedLineId],
-      },
-    );
-    const nextLayout = resetLayout ?? { blocks: [], lines: [] };
-    setLayout(nextLayout);
-    setLines((current) =>
-      applyLayoutLineGeometryToSegments(current, nextLayout.lines),
-    );
-    setSelectedLineSnapshot(null);
-    notePartContentChanged();
-    setSaveMessage("Layout reset");
+    try {
+      const resetLayout = await api.resetPartLayout(
+        projectId,
+        documentId,
+        partId,
+        {
+          line_ids: [selectedLineId],
+        },
+      );
+      const nextLayout = resetLayout ?? { blocks: [], lines: [] };
+      setLayout(nextLayout);
+      setLines((current) =>
+        applyLayoutLineGeometryToSegments(current, nextLayout.lines),
+      );
+      setSelectedLineSnapshot(null);
+      notePartContentChanged();
+      setSaveMessage("Layout reset");
+    } catch (err) {
+      // Both call sites - the Delete key and the Reset layout button - drop the
+      // returned promise, so a rejection that got this far said nothing at all:
+      // a reader without write access pressed Reset and the page did not move.
+      setSaveMessage(null);
+      setLineError(layoutMutationMessage(err));
+    }
   }
 
   async function replaceWithManualLine(
