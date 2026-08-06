@@ -72,9 +72,26 @@ reason the device token is separate from ``Authorization``: two credentials that
 resolve to different scopes must not be interchangeable by accident."""
 
 WORKER_NAME_HEADER = "X-Nomicous-Worker-Name"
-"""Which hosted worker is calling. Names its ``helper_devices`` row; not a secret."""
+"""Which hosted worker is calling. Names its ``helper_devices`` row; not a secret.
 
-DEFAULT_WORKER_NAME = "cloud-worker"
+**Required**, with no default. It used to fall back to ``"cloud-worker"``, which
+meant every hosted worker that did not send it resolved to the *same*
+``helper_devices`` row - and therefore the same ``device.id``, and therefore the
+same ``agent_claim_owner(device_id)`` written to ``jobs.claimed_by``. Two cloud
+workers were then indistinguishable to ``job_is_held_by``, so either one could
+complete or fail the page the other was running, and the claim service's promise
+that "which agent holds this page is answerable from the row alone" was false for
+the whole hosted fleet.
+
+It is not a secret and it is not authentication - the service token is both. It
+is an identity, and the reason it is now mandatory is that a missing identity
+silently became a shared one. A worker that cannot name itself is refused with
+the same 401 as a bad token, because the platform cannot tell it apart from the
+one already running."""
+
+MISSING_WORKER_NAME_ERROR = (
+    f"{WORKER_NAME_HEADER} is required: a hosted worker must identify itself"
+)
 
 # Fixed, so the row is addressed by primary key rather than by an address someone
 # else could claim first. Derived rather than random so it is the same value in
@@ -236,11 +253,18 @@ async def _resolve_service_worker(
 
 
 def _clean_worker_name(worker_name: str | None) -> str:
+    """The worker's own name, or a refusal. Never a shared default.
+
+    Stripping unprintables can empty an otherwise non-blank header, so that case
+    is refused too - falling back would put the caller back on a shared row,
+    which is the whole failure this exists to prevent.
+    """
     candidate = (worker_name or "").strip()
-    if not candidate:
-        return DEFAULT_WORKER_NAME
     printable = "".join(char for char in candidate if char.isprintable())
-    return printable[:MAX_DEVICE_NAME_LENGTH] or DEFAULT_WORKER_NAME
+    if not printable:
+        logger.warning("inference_worker_service_auth_rejected reason=missing_worker_name")
+        raise InvalidCredentialsError(MISSING_WORKER_NAME_ERROR)
+    return printable[:MAX_DEVICE_NAME_LENGTH]
 
 
 async def _ensure_service_account(session: AsyncSession, *, now: datetime) -> User:

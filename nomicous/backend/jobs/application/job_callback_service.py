@@ -250,6 +250,11 @@ def _mark_done_from_callback_sync(
     job.status = JobStatus.done
     job.result = result
     job.error = None
+    # The agent's claim was not abandoned, it was honoured. Clearing the counter
+    # keeps the two success paths - this one and ``mark_job_done`` - writing the
+    # same row, so ``jobs.claim_attempts`` means "abandoned since the last
+    # success" whichever of them finished the job.
+    job.claim_attempts = 0
     job.callback_claimed_at = None
     job.completed_at = now
     job.updated_at = now

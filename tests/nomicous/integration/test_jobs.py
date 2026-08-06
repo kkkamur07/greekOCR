@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 
 from sqlalchemy import update
 
-from backend.jobs.application.inference_dispatcher import build_inference_submit_request
+from backend.jobs.application.inference_dispatcher import build_page_run_request
 from backend.jobs.infrastructure.job_repository import (
     WAITING_TIMEOUT_ERROR,
     claim_next_pending_job,
@@ -435,7 +435,7 @@ def test_transcribe_job_payload_batches_every_selected_line(
     with sync_system_session() as session:
         job = session.get(Job, uuid.UUID(response.json()["job_id"]))
         assert job is not None
-        request = build_inference_submit_request(job)
+        request = build_page_run_request(job)
 
     assert request.task.value == "transcribe"
     assert [line["line_id"] for line in request.params["lines"]] == [line["id"] for line in lines]

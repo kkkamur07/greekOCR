@@ -1,17 +1,25 @@
 """Wire shapes for the claim endpoint.
 
-The claimed page carries a whole ``JobSubmitRequest`` rather than a
-platform-shaped DTO of its own. That is the contract the inference runtime
-already takes, so local and cloud stay literally the same program with different
-credentials - which is the property ADR 0003 exists to buy.
+The claimed page carries an instruction, not a payload. It used to carry a whole
+``inference.contracts.jobs.JobSubmitRequest`` - the body the platform once POSTed
+into a second inference queue - so that local and cloud agents took literally the
+same object. Since ADR 0003 there is no second queue and no POST: the agent
+claims from the platform's own table and fetches the scan from the signed link in
+this same response. What reusing the submit contract bought was one field,
+``image_bytes``, which no agent has ever read and which base64-encoded a whole
+manuscript page into every claim at about 1.33x its stored size.
+
+So the claim has its own shape, holding exactly the fields the agent reads. The
+submit contract stays where it belongs, describing a submission.
 """
 
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
-from inference.contracts.jobs import JobSubmitRequest
+from inference.contracts.common import InferenceTask
 from pydantic import BaseModel, Field
 
 from backend.jobs.infrastructure.orm_models import JobType
@@ -40,6 +48,22 @@ class JobClaimRequest(BaseModel):
     )
 
 
+class ClaimedPageRequest(BaseModel):
+    """What to run on the claimed page.
+
+    There is no image field, deliberately: the page arrives by signed link
+    (``ClaimedPageResponse.page_image_url``), which is the only mechanism, not
+    one of two. An agent that reads these four fields and fetches that link has
+    everything it needs.
+    """
+
+    task: InferenceTask
+    registry_model_id: str = Field(min_length=1)
+    registry_tag: str = Field(default="stable", min_length=1)
+    product_job_id: UUID
+    params: dict[str, Any] = Field(default_factory=dict)
+
+
 class ClaimedPageResponse(BaseModel):
     """One page of work, and the short-lived link to its image.
 
@@ -48,7 +72,9 @@ class ClaimedPageResponse(BaseModel):
     An authenticated ``GET /device/v1/jobs/{id}/image`` was rejected because the
     production API is serverless - streaming manuscript scans through it costs
     money for nothing - and because it would put a route on the device credential
-    that must independently re-derive job ownership.
+    that must independently re-derive job ownership. The same reasoning is why
+    ``request`` below carries no image: this response used to stream the scan
+    through the API *as well as* hand out the link.
     """
 
     product_job_id: UUID
@@ -56,7 +82,7 @@ class ClaimedPageResponse(BaseModel):
     job_type: JobType
     execution_target: ExecutionTarget
     lease_expires_at: datetime
-    request: JobSubmitRequest
+    request: ClaimedPageRequest
     page_image_url: str = Field(
         description=(
             "Signed link to this page's image, and to nothing else. Carries its own "

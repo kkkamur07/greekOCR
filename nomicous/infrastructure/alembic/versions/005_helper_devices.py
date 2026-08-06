@@ -5,11 +5,18 @@ outbound with an opaque device token. These two tables hold the credential
 *hashes* and the short-lived pairing requests that mint them. No raw secret is
 ever stored.
 
-``001_initial_schema`` builds from live ORM metadata, so the statements below are
-written idempotently: on a database whose baseline already contains these tables
-(because a later change registers the models in ``infrastructure/models.py``)
-this migration is a no-op, and on every database stamped before them it is a
-real change.
+This is a real change on every database, including a fresh one. It did not used
+to be: ``001_initial_schema`` was regenerated from live ORM metadata, so once
+these models were registered in ``infrastructure/models.py`` the baseline built
+both tables and this revision was a no-op there. The squash froze 001 to stop
+precisely that, and 001 now names ``helper_devices`` and ``helper_pairings`` as
+deliberately absent from the baseline.
+
+The ``_has_table`` guards stay, and their only remaining subject is a database
+stamped during the period 001 was still being regenerated: those already have the
+tables and must not fail on a second ``CREATE TABLE``. On any database created
+since the freeze, the guards never fire. ``_grant_runtime_privileges`` is outside
+them either way - a database that already had the tables still needs the grants.
 """
 
 from collections.abc import Sequence
@@ -173,8 +180,8 @@ def upgrade() -> None:
         _create_helper_devices()
     if not _has_table("helper_pairings"):
         _create_helper_pairings()
-    # Outside the has_table guards: a database whose baseline already contained
-    # these tables still needs the grants.
+    # Outside the has_table guards: a database stamped while 001 still built these
+    # tables has them already and would otherwise never be granted anything.
     _grant_runtime_privileges()
 
 

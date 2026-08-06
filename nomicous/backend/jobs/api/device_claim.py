@@ -28,6 +28,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from backend.core.exceptions import InvalidCredentialsError
 from backend.core.settings.device import get_device_settings
 from backend.jobs.api.claim_schemas import (
+    ClaimedPageRequest,
     ClaimedPageResponse,
     JobClaimRequest,
     JobClaimResponse,
@@ -87,7 +88,13 @@ def _page_response(page: ClaimedPage) -> ClaimedPageResponse:
         job_type=page.job_type,
         execution_target=page.execution_target,
         lease_expires_at=page.lease_expires_at,
-        request=page.request,
+        request=ClaimedPageRequest(
+            task=page.request.task,
+            registry_model_id=page.request.registry_model_id,
+            registry_tag=page.request.registry_tag,
+            product_job_id=page.request.product_job_id,
+            params=page.request.params,
+        ),
         page_image_url=page.page_image_url,
         page_image_expires_at=page.page_image_expires_at,
     )
@@ -149,6 +156,14 @@ async def claim_job(
     interval = settings.device_claim_poll_interval_seconds
 
     while True:
+        # Checked before the claim, not only after it. A long-poller that hung up
+        # mid-wait would otherwise take a page on its way out the door, and
+        # nothing would notice until the lease expired minutes later - the agent
+        # is gone, so it will never report, and the page is unclaimable until the
+        # sweep releases it. There is no cost to asking: an agent that is still
+        # there answers False immediately.
+        if await request.is_disconnected():
+            break
         page = await asyncio.to_thread(
             claim_one_page,
             agent,

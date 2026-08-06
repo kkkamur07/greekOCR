@@ -76,7 +76,10 @@ def process_one_job() -> bool:
         running_timeout_seconds=settings.job_worker_running_timeout_seconds
     )
     if reclaimed:
-        logger.warning("reclaimed %s stale platform job(s)", reclaimed)
+        # "released", not "reclaimed": a job whose claim has been abandoned to the
+        # ceiling is failed here rather than re-pended, and the repository logs
+        # each of those by id.
+        logger.warning("released %s stale platform job claim(s)", reclaimed)
     # Sweep waiting before releasing claims: releasing touches the row and would
     # otherwise push the waiting deadline out by another timeout window.
     timed_out = fail_stale_waiting_jobs(
@@ -92,7 +95,7 @@ def process_one_job() -> bool:
         lease_seconds=get_device_settings().device_lease_seconds
     )
     if re_pended:
-        logger.warning("re-pended %s page(s) whose device lease expired", re_pended)
+        logger.warning("released %s page(s) whose device lease expired", re_pended)
     released = clear_stale_callback_claims(
         claim_timeout_seconds=settings.job_worker_callback_claim_timeout_seconds
     )
@@ -106,7 +109,17 @@ def process_one_job() -> bool:
 
 
 async def _idle_wait_seconds(settings: JobSettings, idle_interval: float) -> float:
-    """Cap the idle backoff so it can never sleep past a waiting job's deadline."""
+    """Cap the idle backoff so it can never sleep past a waiting job's deadline.
+
+    The deadline being respected is the inference-dispatch timeout, whose
+    population is empty today - nothing calls ``mark_job_waiting`` any more, so
+    ``fail_stale_waiting_jobs`` has no rows. The cap still fires whenever *any*
+    job is waiting, agent-held ones included, because the query does not
+    discriminate. The effect is a worker that wakes sooner than it needs to,
+    which is the harmless direction; it is not the lease's mechanism. Pages an
+    agent holds are recovered by ``release_expired_device_leases``, from this same
+    tick and from the on-read sweep.
+    """
     waiting_deadline = await asyncio.to_thread(
         seconds_until_next_stale_waiting_job,
         waiting_timeout_seconds=settings.job_worker_waiting_timeout_seconds,
