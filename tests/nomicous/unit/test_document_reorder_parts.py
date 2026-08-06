@@ -14,6 +14,7 @@ from sqlalchemy import update
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql.dml import Update
+from sqlalchemy.sql.selectable import Select
 
 from backend.document.infrastructure.document_repository import (
     DocumentRepository,
@@ -39,6 +40,7 @@ class _UniqueOrderSession:
     def __init__(self, parts: list[DocumentPart]) -> None:
         self.parts = parts
         self.commits = 0
+        self.selects: list[Select] = []
 
     def _assign(self, part: DocumentPart, order: int) -> None:
         clash = next(
@@ -56,6 +58,8 @@ class _UniqueOrderSession:
         part.order = order
 
     async def execute(self, statement):
+        if isinstance(statement, Select):
+            self.selects.append(statement)
         if isinstance(statement, Update):
             params = statement.compile(dialect=postgresql.dialect()).params
             if "id_1" in params:
@@ -140,3 +144,30 @@ async def test_reorder_parts_rejects_a_mismatched_id_set() -> None:
 
 def test_repository_no_longer_exposes_the_dead_add_part_writer() -> None:
     assert not hasattr(DocumentRepository, "add_part")
+
+
+@pytest.mark.asyncio
+async def test_the_locking_read_refreshes_the_rows_it_locked() -> None:
+    """The row lock decided nothing while the orders came from the identity map.
+
+    `reorder_parts` is reached through `require_document`, which eager-loads
+    `Document.parts`, so by the time the `SELECT ... FOR UPDATE` runs every row is
+    already a mapped instance. SQLAlchemy returns those instances as they stand and
+    does not overwrite loaded attributes with what it just read, so `part.order` could
+    still hold a value a concurrent reorder had committed away - and the temporary
+    offset computed from it could land on the range that transaction wrote, violating
+    uq_document_parts_document_order.
+
+    Asserted on the statement rather than on two racing sessions: the divergence only
+    exists inside a real identity map, and a fake that modelled one would be asserting
+    this test's own idea of SQLAlchemy rather than SQLAlchemy.
+    """
+    document = Document(id=uuid.uuid4(), name="codex")
+    parts = _parts([0, 1, 2], document.id)
+    session = _UniqueOrderSession(parts)
+
+    await DocumentRepository().reorder_parts(session, document, [part.id for part in parts])
+
+    locking_read = session.selects[0]
+    assert locking_read._for_update_arg is not None, "the read must still take the row lock"
+    assert locking_read.get_execution_options().get("populate_existing") is True

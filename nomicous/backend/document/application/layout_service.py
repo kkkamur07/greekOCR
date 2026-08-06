@@ -35,6 +35,21 @@ from backend.users.infrastructure.orm_models import User
 MAX_REPLACE_PART_LINES = 10_000
 
 
+def _preserved(data: dict, field: str, prior: Line | None, default: object) -> object:
+    """Read an optional field from a bulk-replace payload.
+
+    ``model_dump(exclude_unset=True)`` strips any field the client did not send,
+    including ones with a schema default, so presence in ``data`` is the only
+    signal of intent. Absent means keep what the row already had; the default is
+    for rows that do not exist yet.
+    """
+    if field in data:
+        return data[field]
+    if prior is not None:
+        return getattr(prior, field)
+    return default
+
+
 class LayoutService:
     def __init__(
         self,
@@ -284,9 +299,16 @@ class LayoutService:
                 line.block_id = prior.block_id
             # ``order`` and ``points`` are required by the request schema, so they are
             # always present. ``kind`` and ``source`` are optional and carry schema
-            # defaults, which ``exclude_unset`` strips from an omitting client's payload.
+            # defaults, which ``exclude_unset`` strips from an omitting client's payload -
+            # so an absent key means "leave it alone", exactly as it does for
+            # ``block_id``, ``source_metadata`` and ``kraken_ceiling`` below. Falling back
+            # to the schema default instead flipped every pre-existing Kraken line on the
+            # page to ``source=manual`` while keeping its ``kraken_ceiling``: a row that
+            # claims a human drew it and that a model measured it. The editor sends the
+            # whole page on every save, so redrawing one line rewrote the provenance of
+            # all of them.
             line.order = data["order"]
-            line.kind = data.get("kind", LineGeometryKind.polygon)
+            line.kind = _preserved(data, "kind", prior, LineGeometryKind.polygon)
             line.points = points
             line.baseline, line.mask = resolve_line_baseline_and_mask(
                 points=points,
@@ -295,7 +317,7 @@ class LayoutService:
                 existing_baseline=prior.baseline if prior is not None else None,
                 existing_mask=prior.mask if prior is not None else None,
             )
-            source = data.get("source", LineSource.manual)
+            source = _preserved(data, "source", prior, LineSource.manual)
             line.source = source
             if "source_metadata" in data:
                 line.source_metadata = data["source_metadata"]

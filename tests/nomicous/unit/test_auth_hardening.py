@@ -10,15 +10,19 @@ from __future__ import annotations
 import hashlib
 import secrets
 import uuid
+from typing import Annotated
 
 import pytest
-from fastapi import HTTPException
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute
 from fastapi.security import HTTPAuthorizationCredentials
+from fastapi.testclient import TestClient
 from jwt import InvalidTokenError
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 from starlette.requests import Request
 
-from backend.core.exceptions import AccessDeniedError, ConflictError
+from backend.core.exceptions import AccessDeniedError, ConflictError, InvalidCredentialsError
 from backend.core.settings import (
     AppSettings,
     AuthSettings,
@@ -36,12 +40,44 @@ from backend.core.settings.auth import (
     secret_guesses_log10,
 )
 from backend.core.settings.device import get_device_settings
+from backend.users.api import rate_limit
 from backend.users.api.dependencies import get_current_user
 from backend.users.api.rate_limit import (
     attributable_client_ip,
     auth_rate_limit_keys,
     _real_ip,
 )
+
+
+async def _drain(dependency) -> None:
+    """Run a dependency-with-yield to completion, as FastAPI does on a clean response."""
+    async for _ in dependency:
+        pass
+
+
+def _dependency_calls(dependant) -> set:
+    found = {dependant.call} if dependant.call is not None else set()
+    for sub in dependant.dependencies:
+        found |= _dependency_calls(sub)
+    return found
+
+
+def _route(app, path: str, method: str) -> APIRoute:
+    for route in app.routes:
+        if isinstance(route, APIRoute) and route.path == path and method in route.methods:
+            return route
+    raise AssertionError(f"{method} {path} is not mounted on the real application")
+
+
+def _charged(keys) -> list[str]:
+    """The dimensions that apply, in the order they are charged.
+
+    ``auth_rate_limit_keys`` keeps the two apart because they are charged at
+    different moments; these tests only care about which ones resolved.
+    """
+    return [key for key in keys if key is not None]
+
+
 from backend.users.application.auth_service import REGISTRATION_CONFLICT_MESSAGE, AuthService
 from backend.users.application.jwt_tokens import create_access_token, decode_access_token
 from tests.fixtures.paths import REPO_ROOT
@@ -490,7 +526,7 @@ async def test_auth_throttle_falls_back_to_a_per_account_bucket(monkeypatch) -> 
         _request(peer="10.0.0.1", body=b'{"email":"Victim@Example.com ","password":"x"}')
     )
 
-    assert keys == [f"account:{digest}:/auth/login"]
+    assert _charged(keys) == [f"account:{digest}:/auth/login"]
 
 
 async def test_auth_throttle_charges_both_dimensions_when_the_ip_is_usable(monkeypatch) -> None:
@@ -503,7 +539,7 @@ async def test_auth_throttle_charges_both_dimensions_when_the_ip_is_usable(monke
         _request(peer="203.0.113.7", body=b'{"email":"victim@example.com","password":"x"}')
     )
 
-    assert keys == ["ip:203.0.113.7:/auth/login", f"account:{digest}:/auth/login"]
+    assert _charged(keys) == ["ip:203.0.113.7:/auth/login", f"account:{digest}:/auth/login"]
 
 
 async def test_account_bucket_never_stores_the_plain_email(monkeypatch) -> None:
@@ -514,8 +550,8 @@ async def test_account_bucket_never_stores_the_plain_email(monkeypatch) -> None:
         _request(peer="10.0.0.1", body=b'{"email":"victim@example.com","password":"x"}')
     )
 
-    assert keys
-    assert all("victim@example.com" not in key for key in keys)
+    assert _charged(keys)
+    assert all("victim@example.com" not in key for key in _charged(keys))
 
 
 @pytest.mark.parametrize(
@@ -548,7 +584,7 @@ async def test_account_bucket_ignores_how_the_body_is_labelled(monkeypatch, cont
         _request(peer="10.0.0.1", body=body, content_type=content_type)
     )
 
-    assert lowercase == [f"account:{digest}:/auth/login"]
+    assert _charged(lowercase) == [f"account:{digest}:/auth/login"]
     assert relabelled == lowercase
 
 
@@ -575,14 +611,138 @@ async def test_non_json_and_empty_bodies_produce_no_account_key(monkeypatch) -> 
     monkeypatch.setenv("TRUST_PEER_IP", "false")
     _clear_platform_settings()
 
-    assert await auth_rate_limit_keys(_request(peer="10.0.0.1")) == []
+    assert _charged(await auth_rate_limit_keys(_request(peer="10.0.0.1"))) == []
     assert (
-        await auth_rate_limit_keys(
-            _request(peer="10.0.0.1", body=b"email=victim%40example.com&password=x")
+        _charged(
+            await auth_rate_limit_keys(
+                _request(peer="10.0.0.1", body=b"email=victim%40example.com&password=x")
+            )
         )
         == []
     )
-    assert await auth_rate_limit_keys(_request(peer="10.0.0.1", body=b"[" * 5000)) == []
+    assert _charged(await auth_rate_limit_keys(_request(peer="10.0.0.1", body=b"[" * 5000))) == []
+
+
+# --- What each dimension is charged for, seen through a route ---
+# These drive the real dependency from a mounted route with an in-memory bucket
+# store, because the defect they cover is about *when* a bucket is charged, which
+# is invisible to a test that calls the limiter once and inspects its arguments.
+
+
+class _Buckets:
+    """An in-memory stand-in for the Postgres attempt table."""
+
+    def __init__(self, limit: int) -> None:
+        self.limit = limit
+        self.counts: dict[str, int] = {}
+
+    async def check(self, keys, *, limit, window_seconds, detail) -> None:
+        if any(self.counts.get(key, 0) >= self.limit for key in keys):
+            raise HTTPException(status_code=429, detail=detail)
+
+    async def charge(self, keys, *, window_seconds) -> None:
+        for key in keys:
+            self.counts[key] = self.counts.get(key, 0) + 1
+
+    async def consume(self, keys, *, limit, window_seconds, detail) -> None:
+        await self.check(keys, limit=limit, window_seconds=window_seconds, detail=detail)
+        await self.charge(keys, window_seconds=window_seconds)
+
+
+VALID_PASSWORD = "correct-horse-battery-staple"
+
+
+class _LoginBody(BaseModel):
+    """Module level so the postponed annotation on the test route still resolves."""
+
+    email: str
+    password: str
+
+
+def _login_client(monkeypatch) -> tuple[TestClient, _Buckets]:
+    """Mount the real throttle on a route that fails the way `/auth/login` fails."""
+    buckets = _Buckets(get_auth_settings().auth_rate_limit_requests)
+    monkeypatch.setattr(rate_limit, "consume_rate_limit", buckets.consume)
+    monkeypatch.setattr(rate_limit, "check_rate_limit", buckets.check)
+    monkeypatch.setattr(rate_limit, "charge_rate_limit", buckets.charge)
+
+    app = FastAPI()
+
+    @app.exception_handler(InvalidCredentialsError)
+    async def _invalid(_request, _exc):
+        return JSONResponse({"error": "invalid"}, status_code=401)
+
+    @app.post("/auth/login")
+    async def _login(
+        body: _LoginBody,
+        _rate_limit: Annotated[None, Depends(rate_limit.throttle_auth_attempts)],
+    ) -> dict:
+        if body.password != VALID_PASSWORD:
+            raise InvalidCredentialsError("Invalid email or password")
+        return {"ok": True}
+
+    return TestClient(app), buckets
+
+
+def _login(client: TestClient, password: str):
+    return client.post("/auth/login", json={"email": "victim@example.com", "password": password})
+
+
+def test_a_stranger_cannot_lock_an_account_out_by_guessing_its_password(monkeypatch) -> None:
+    """Regression: the account bucket used to be charged before the handler ran.
+
+    It is keyed on the email the request names, which is public. Charging it on
+    every attempt meant an anonymous caller posting garbage passwords held the
+    owner at HTTP 429 for as long as they cared to - and with TRUST_PEER_IP=false
+    there is no IP dimension to spread that across. The bucket still has to cap
+    guessing, so the owner's own attempts must survive an exhausted bucket only
+    while they succeed.
+    """
+    monkeypatch.setenv("TRUST_PEER_IP", "false")
+    monkeypatch.setenv("BEHIND_PROXY", "false")
+    monkeypatch.setenv("JWT_SECRET", STRONG_SECRET)
+    _clear_platform_settings()
+    client, buckets = _login_client(monkeypatch)
+
+    for _ in range(buckets.limit * 3):
+        assert _login(client, VALID_PASSWORD).status_code == 200
+
+    # Guessing still runs out of budget, which is the whole point of the bucket.
+    for _ in range(buckets.limit):
+        assert _login(client, "guess").status_code == 401
+    assert _login(client, "guess").status_code == 429
+    # And now the owner is locked out too, which is why only failures are charged:
+    # an attacker has to spend the budget to take it away.
+    assert _login(client, VALID_PASSWORD).status_code == 429
+
+
+def test_a_successful_sign_in_spends_no_account_budget(monkeypatch) -> None:
+    monkeypatch.setenv("TRUST_PEER_IP", "false")
+    monkeypatch.setenv("BEHIND_PROXY", "false")
+    monkeypatch.setenv("JWT_SECRET", STRONG_SECRET)
+    _clear_platform_settings()
+    client, buckets = _login_client(monkeypatch)
+    digest = hashlib.sha256(b"victim@example.com").hexdigest()
+
+    assert _login(client, VALID_PASSWORD).status_code == 200
+    assert buckets.counts == {}
+
+    assert _login(client, "guess").status_code == 401
+    assert buckets.counts == {f"account:{digest}:/auth/login": 1}
+
+
+def test_a_usable_address_is_still_charged_on_every_attempt(monkeypatch) -> None:
+    """The IP dimension is not the victim's, so an attacker's budget must shrink."""
+    monkeypatch.setenv("TRUST_PEER_IP", "true")
+    monkeypatch.setenv("BEHIND_PROXY", "false")
+    monkeypatch.setenv("JWT_SECRET", STRONG_SECRET)
+    _clear_platform_settings()
+    client, buckets = _login_client(monkeypatch)
+
+    for _ in range(buckets.limit):
+        assert _login(client, VALID_PASSWORD).status_code == 200
+    assert _login(client, VALID_PASSWORD).status_code == 429
+    assert buckets.counts == {"ip:testclient:/auth/login": buckets.limit}
 
 
 async def test_unattributable_request_is_charged_not_waved_through(monkeypatch) -> None:
@@ -591,8 +751,6 @@ async def test_unattributable_request_is_charged_not_waved_through(monkeypatch) 
     A coarse shared bucket is safe *here* only because no real sign-in lands in
     it - a body with no `email` never reaches password verification.
     """
-    from backend.users.api import rate_limit
-
     monkeypatch.setenv("TRUST_PEER_IP", "false")
     monkeypatch.setenv("BEHIND_PROXY", "false")
     monkeypatch.setenv("JWT_SECRET", STRONG_SECRET)
@@ -603,40 +761,103 @@ async def test_unattributable_request_is_charged_not_waved_through(monkeypatch) 
         calls.append((list(keys), limit))
 
     monkeypatch.setattr(rate_limit, "consume_rate_limit", _record)
-    await rate_limit.throttle_auth_attempts(
-        _request(peer="10.0.0.1", path="/device/v1/pairings", body=b'{"device_name":"x"}')
+    await _drain(
+        rate_limit.throttle_auth_attempts(
+            _request(peer="10.0.0.1", body=b'{"username":"no-email-here"}')
+        )
     )
 
-    assert calls == [
-        (["unattributable:/device/v1/pairings"], rate_limit.UNATTRIBUTABLE_AUTH_RATE_LIMIT)
-    ]
+    assert calls == [(["unattributable:/auth/login"], rate_limit.UNATTRIBUTABLE_AUTH_RATE_LIMIT)]
 
 
 async def test_attributable_attempt_never_touches_the_shared_bucket(monkeypatch) -> None:
     """The generous ceiling must not become the limit a real login is charged to."""
-    from backend.users.api import rate_limit
-
     monkeypatch.setenv("TRUST_PEER_IP", "false")
     monkeypatch.setenv("BEHIND_PROXY", "false")
     monkeypatch.setenv("JWT_SECRET", STRONG_SECRET)
     _clear_platform_settings()
     digest = hashlib.sha256(b"victim@example.com").hexdigest()
+    checked: list[tuple[list[str], int]] = []
+    consumed: list[list[str]] = []
+
+    async def _record_check(keys, *, limit, window_seconds, detail):
+        checked.append((list(keys), limit))
+
+    async def _record_consume(keys, *, limit, window_seconds, detail):
+        consumed.append(list(keys))
+
+    monkeypatch.setattr(rate_limit, "check_rate_limit", _record_check)
+    monkeypatch.setattr(rate_limit, "consume_rate_limit", _record_consume)
+    await _drain(
+        rate_limit.throttle_auth_attempts(
+            _request(
+                peer="10.0.0.1",
+                body=b'{"email":"victim@example.com","password":"x"}',
+                content_type="Application/JSON",
+            )
+        )
+    )
+
+    assert checked == [
+        ([f"account:{digest}:/auth/login"], get_auth_settings().auth_rate_limit_requests)
+    ]
+    assert consumed == []
+
+
+# --- Device pairing carries its own limiter ---
+
+
+def test_pairing_start_is_not_mounted_on_the_shared_auth_throttle() -> None:
+    """`POST /device/v1/pairings` names no account, so it had no per-caller bucket.
+
+    Every honest pairing therefore landed in the coarse `unattributable:<path>`
+    bucket, which one attacker at a few requests a second can hold full - locking
+    every researcher out of `nomicous pair`.
+    """
+    from backend.core.app import create_app
+
+    dependencies = _dependency_calls(_route(create_app(), "/device/v1/pairings", "POST").dependant)
+
+    assert rate_limit.throttle_device_pairing_starts in dependencies
+    assert rate_limit.throttle_auth_attempts not in dependencies
+
+
+async def test_pairing_throttle_charges_nothing_when_no_address_identifies_a_client(
+    monkeypatch,
+) -> None:
+    """A bucket keyed on a shared proxy address is a global bucket, which is the outage."""
+    monkeypatch.setenv("TRUST_PEER_IP", "false")
+    monkeypatch.setenv("BEHIND_PROXY", "false")
+    _clear_platform_settings()
+    calls: list[list[str]] = []
+
+    async def _record(keys, *, limit, window_seconds, detail):
+        calls.append(list(keys))
+
+    monkeypatch.setattr(rate_limit, "consume_rate_limit", _record)
+    await rate_limit.throttle_device_pairing_starts(
+        _request(peer="10.0.0.1", path="/device/v1/pairings", body=b'{"device_name":"x"}')
+    )
+
+    assert calls == []
+
+
+async def test_pairing_throttle_charges_a_per_client_bucket_when_it_can(monkeypatch) -> None:
+    monkeypatch.setenv("TRUST_PEER_IP", "true")
+    monkeypatch.setenv("BEHIND_PROXY", "false")
+    _clear_platform_settings()
     calls: list[tuple[list[str], int]] = []
 
     async def _record(keys, *, limit, window_seconds, detail):
         calls.append((list(keys), limit))
 
     monkeypatch.setattr(rate_limit, "consume_rate_limit", _record)
-    await rate_limit.throttle_auth_attempts(
-        _request(
-            peer="10.0.0.1",
-            body=b'{"email":"victim@example.com","password":"x"}',
-            content_type="Application/JSON",
-        )
+    await rate_limit.throttle_device_pairing_starts(
+        _request(peer="203.0.113.7", path="/device/v1/pairings", body=b'{"device_name":"x"}')
     )
 
     assert calls == [
-        ([f"account:{digest}:/auth/login"], get_auth_settings().auth_rate_limit_requests)
+        (["device-pairing:203.0.113.7"], rate_limit.DEVICE_PAIRING_RATE_LIMIT_REQUESTS)
     ]
 
 

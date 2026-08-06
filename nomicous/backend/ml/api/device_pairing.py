@@ -21,7 +21,7 @@ from backend.ml.api.device_schemas import (
     PairingTokenResponse,
 )
 from backend.ml.application.device_service import DevicePairingService
-from backend.users.api.rate_limit import client_ip_for_request, throttle_auth_attempts
+from backend.users.api.rate_limit import client_ip_for_request, throttle_device_pairing_starts
 from infrastructure.db import get_db
 
 router = APIRouter(tags=["devices"], dependencies=[Depends(require_device_pairing_enabled)])
@@ -38,21 +38,19 @@ _USER_AGENT_LIMIT = 255
 async def start_device_pairing(
     body: PairingStartRequest,
     request: Request,
-    _rate_limit: Annotated[None, Depends(throttle_auth_attempts)],
+    _rate_limit: Annotated[None, Depends(throttle_device_pairing_starts)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PairingStartResponse:
     """Create a pairing request and hand the helper its two one-time secrets.
 
-    Under the shared auth throttle, which is the right limiter for a route
-    called once per installation. Note which bucket this route actually lands
-    in: the body carries no account identity, so where the observed address is a
-    proxy the platform does not allowlist, there is no per-caller dimension at
-    all. Such requests are charged to the coarse ``unattributable:<path>``
-    bucket, which is path-scoped and far looser than the per-caller limit
-    (``UNATTRIBUTABLE_AUTH_RATE_LIMIT`` per window, not the per-caller
-    ``auth_rate_limit_requests``). It bounds free database work rather than
-    identifying an abuser, and it is the reason no second IP-keyed cap sits
-    behind it.
+    Under its own throttle, not the shared auth one. The body carries no account
+    identity, so under ``throttle_auth_attempts`` this route had no per-caller
+    dimension at all and every honest pairing was charged to the coarse
+    ``unattributable:<path>`` bucket - one bucket shared by every researcher, so
+    filling it locked all of them out of `nomicous pair`.
+    ``throttle_device_pairing_starts`` charges a per-client bucket where the
+    address identifies one client and charges nothing where it does not, leaving
+    the platform-wide live-pairing ceiling below as the bound on table growth.
     """
     request_ip = client_ip_for_request(request)
     try:

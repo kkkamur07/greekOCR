@@ -12,6 +12,7 @@ published-workflow rule in two places again.
 
 from __future__ import annotations
 
+from typing import NamedTuple
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,6 +36,19 @@ from backend.document.infrastructure.orm_models import (
 from backend.project.domain.access import is_owner
 from backend.project.infrastructure.project_repository import ProjectRepository
 from backend.users.infrastructure.orm_models import User
+
+
+class PublicLayoutPage(NamedTuple):
+    """One page of anonymous layout, and whether the blocks on it are all of them.
+
+    ``lines`` carries the probe row the caller needs to build a continuation cursor.
+    Blocks have no cursor, so their overflow is reported as a flag instead - a client
+    that cannot see it has no way to tell a truncated page from a complete one.
+    """
+
+    blocks: list[Block]
+    blocks_truncated: bool
+    lines: list[Line]
 
 
 class DocumentCatalog:
@@ -171,20 +185,30 @@ class DocumentCatalog:
         *,
         limit: int,
         cursor: PageCursor | None = None,
-    ) -> tuple[list[Block], list[Line]]:
+    ) -> PublicLayoutPage:
         """Bounded layout read for anonymous callers.
 
-        Lines are keyset paginated; blocks accompany the first page only, capped at the
-        same bound, so a single unauthenticated request can never fan out to an entire
-        manuscript's geometry.
+        ``limit`` is the page size. Both reads fetch one row beyond it, which is what
+        lets the caller tell "this is everything" from "there is more": for lines the
+        extra row becomes the continuation cursor, and for blocks - which have no cursor
+        - it becomes ``blocks_truncated``.
+
+        Blocks accompany the first page only, so repeating them per page cannot unbound
+        the read. Reporting the truncation matters because a bare ``LIMIT`` returning
+        exactly ``limit`` rows is indistinguishable from a document that has exactly
+        that many blocks: a published page silently lost the rest of its regions with
+        nothing in the response a client could notice.
         """
         document = await self.get_document_public(session, project_id, document_id)
         blocks: list[Block] = []
+        blocks_truncated = False
         if cursor is None:
-            blocks = await self._documents.list_blocks_for_document(
-                session, document.id, limit=limit
+            probed = await self._documents.list_blocks_for_document(
+                session, document.id, limit=limit + 1
             )
+            blocks_truncated = len(probed) > limit
+            blocks = probed[:limit]
         lines = await self._documents.list_lines_for_document(
-            session, document.id, limit=limit, cursor=cursor
+            session, document.id, limit=limit + 1, cursor=cursor
         )
-        return blocks, lines
+        return PublicLayoutPage(blocks=blocks, blocks_truncated=blocks_truncated, lines=lines)

@@ -108,13 +108,16 @@ class DocumentPartService:
             filename_stem=filename_stem,
         )
         try:
-            self._media.write(image_key, encoded.data)
+            # Both store calls are synchronous HTTPS round trips on the Supabase backend,
+            # uploading up to a 100 MiB WebP. Running either inline would park the event
+            # loop - and with it every other in-flight request - for the whole upload.
+            await asyncio.to_thread(self._media.write, image_key, encoded.data)
             part.image_key = image_key
             await session.commit()
         except Exception:
             await session.rollback()
             try:
-                self._media.delete(image_key)
+                await asyncio.to_thread(self._media.delete, image_key)
             except Exception:
                 try:
                     await self._documents.enqueue_media_deletion_intent(session, image_key)

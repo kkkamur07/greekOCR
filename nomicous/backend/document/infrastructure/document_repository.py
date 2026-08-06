@@ -339,8 +339,19 @@ class DocumentRepository:
     async def reorder_parts(
         self, session: AsyncSession, document: Document, ordered_part_ids: list[UUID]
     ) -> list[DocumentPart]:
+        # ``populate_existing`` is what makes ``with_for_update`` mean anything here.
+        # The caller reached this through ``require_document``, which eager-loads
+        # ``Document.parts``, so every row is already in the session's identity map -
+        # and SQLAlchemy returns the mapped instance untouched rather than overwriting
+        # loaded attributes with the freshly locked values. The offset below is computed
+        # from ``part.order``, so without this it could be computed from orders a
+        # concurrent reorder had already superseded, land on the range that transaction
+        # wrote, and violate uq_document_parts_document_order - a 500 on a plain drag.
         result = await session.execute(
-            select(DocumentPart).where(DocumentPart.document_id == document.id).with_for_update()
+            select(DocumentPart)
+            .where(DocumentPart.document_id == document.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
         )
         current_parts = list(result.scalars().all())
         parts_by_id = {part.id: part for part in current_parts}
