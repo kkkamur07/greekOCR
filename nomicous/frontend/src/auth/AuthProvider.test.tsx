@@ -142,8 +142,10 @@ describe("AuthProvider session lifecycle", () => {
   it("logout calls the API, clears the token, and ends anonymous", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === "string" ? input : input.toString();
-      if (url.endsWith("/auth/refresh")) return new Response(null, { status: 401 });
-      if (url.endsWith("/auth/logout")) return new Response(null, { status: 204 });
+      if (url.endsWith("/auth/refresh"))
+        return new Response(null, { status: 401 });
+      if (url.endsWith("/auth/logout"))
+        return new Response(null, { status: 204 });
       throw new Error(`unexpected request: ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -158,7 +160,9 @@ describe("AuthProvider session lifecycle", () => {
     // next page load silently restores the session the user just ended.
     expect(
       fetchMock.mock.calls.filter(([url]) =>
-        (typeof url === "string" ? url : url.toString()).endsWith("/auth/logout"),
+        (typeof url === "string" ? url : url.toString()).endsWith(
+          "/auth/logout",
+        ),
       ),
     ).toHaveLength(1);
   });
@@ -166,7 +170,8 @@ describe("AuthProvider session lifecycle", () => {
   it("logout still clears the token when the API call fails", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === "string" ? input : input.toString();
-      if (url.endsWith("/auth/refresh")) return new Response(null, { status: 401 });
+      if (url.endsWith("/auth/refresh"))
+        return new Response(null, { status: 401 });
       throw new Error("network down");
     });
     vi.stubGlobal("fetch", fetchMock);

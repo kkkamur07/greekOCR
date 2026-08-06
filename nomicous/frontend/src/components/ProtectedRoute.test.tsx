@@ -99,7 +99,9 @@ describe("ProtectedRoute", () => {
 
   it("renders children immediately for a reader who already holds a token", () => {
     setAccessToken("existing-token");
-    const fetchMock = stubRefresh(async () => new Response(null, { status: 401 }));
+    const fetchMock = stubRefresh(
+      async () => new Response(null, { status: 401 }),
+    );
 
     renderProtected();
 

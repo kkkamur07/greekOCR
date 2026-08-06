@@ -19,13 +19,15 @@ vi.mock("../components/ui/toast", () => ({
 type Route = (init: RequestInit | undefined) => Promise<Response> | Response;
 
 function stubApi(routes: Record<string, Route>) {
-  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = typeof input === "string" ? input : input.toString();
-    for (const [suffix, route] of Object.entries(routes)) {
-      if (url.endsWith(suffix)) return route(init);
-    }
-    throw new Error(`unexpected request: ${url}`);
-  });
+  const fetchMock = vi.fn(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      for (const [suffix, route] of Object.entries(routes)) {
+        if (url.endsWith(suffix)) return route(init);
+      }
+      throw new Error(`unexpected request: ${url}`);
+    },
+  );
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
 }
@@ -80,7 +82,11 @@ describe("LoginPage", () => {
       "/auth/refresh": () =>
         Response.json({ access_token: "restored", token_type: "bearer" }),
     });
-    window.history.replaceState({}, "", "/login?callbackUrl=%2Fprojects%2Fproject-1");
+    window.history.replaceState(
+      {},
+      "",
+      "/login?callbackUrl=%2Fprojects%2Fproject-1",
+    );
 
     renderLogin();
 
@@ -144,7 +150,9 @@ describe("LoginPage", () => {
     // Without this, a wrong password produces no visible feedback at all and the form
     // simply sits there.
     await waitFor(() => expect(toast.error).toHaveBeenCalled());
-    expect(vi.mocked(toast.error).mock.calls[0]?.[0]).toMatch(/incorrect|failed/i);
+    expect(vi.mocked(toast.error).mock.calls[0]?.[0]).toMatch(
+      /incorrect|failed/i,
+    );
     expect(getAccessToken()).toBeNull();
     expect(testRouter().replace).not.toHaveBeenCalled();
     // The button must come back so the reader can try again.

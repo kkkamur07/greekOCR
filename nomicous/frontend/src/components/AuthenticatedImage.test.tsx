@@ -32,7 +32,9 @@ describe("resolveProtectedMediaUrl", () => {
   it("rejects a width that is not a plain positive integer", () => {
     expect(resolveProtectedMediaUrl("/media/parts/part-1?w=0")).toBeNull();
     expect(resolveProtectedMediaUrl("/media/parts/part-1?w=-5")).toBeNull();
-    expect(resolveProtectedMediaUrl("/media/parts/part-1?w=200&x=1")).toBeNull();
+    expect(
+      resolveProtectedMediaUrl("/media/parts/part-1?w=200&x=1"),
+    ).toBeNull();
     expect(resolveProtectedMediaUrl("/media/parts/part-1?other=1")).toBeNull();
   });
 });
