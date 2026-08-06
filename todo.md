@@ -6,11 +6,44 @@ what is **not** done. Ordered by what blocks what.
 
 Current tree: committed on `feat/inference-cli-redesign`. The 2026-08-04 inference
 redesign (ADRs 0002-0005, issues #48-#66) is layered on top; see
-`docs/resume-inference-redesign.md` before merging anything into it.
+`docs/resume-inference-redesign.md` before merging anything into it. The ONNX
+migration (ADR 0006) sits on `onnx-migration`, pushed, four commits ahead of it.
 
 ---
 
 ## P0 — Blocks shipping
+
+### 0. Run the inference suites end to end, once, on a quiet machine
+
+**Not done, and it is the one claim about ADR 0006 that has not been verified as a
+whole.** Every part has passed on its own, each run to completion:
+
+| suite | result |
+|---|---|
+| `pytest tests/inference/unit` | 119 passed |
+| `pytest tests/export` | 16 passed |
+| `pytest tests/inference/integration/test_published_package.py` | 15 passed |
+| `pytest tests/hf` | 29 passed |
+| `ruff check . src/model/inference_export` | clean |
+
+What has never finished is the three together:
+
+```bash
+uv run --group test --group platform --group inference --group export \
+  pytest tests/inference tests/export tests/hf
+```
+
+Three attempts, none conclusive. Two were competing with another agent's suite on
+the same machine and one Postgres, which is exactly the contention the notes in
+`docs/resume-inference-redesign.md` §3 warn produces phantom failures; the third
+was killed before it reported. The one combined run that *did* finish caught five
+real `tests/hf` failures (fixed in `23bbb88`) plus
+`test_cli_run.py::test_only_one_page_is_ever_in_flight`, which passes alone in 62 s
+and is contention, not a defect.
+
+So run it once with nothing else running. Expect green. If it is red, measure again
+on an idle database before believing it - and if it is still red, that is a real
+regression in ADR 0006 and it gets fixed rather than explained.
 
 ### 1. ~~Bump the pinned `blla.onnx` digest~~ - done 2026-08-05 (ADR 0006)
 
