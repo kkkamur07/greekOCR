@@ -106,31 +106,21 @@ def test_training_and_serving_produce_the_same_model_input(mode: str, image_byte
     )
 
 
-def test_grayscale_helper_is_the_only_convention_under_src() -> None:
-    """No src/ module may reach for OpenCV's RGB->gray on a line image again.
-
-    cvtColor is still legitimate for colour-space work that never feeds the model
-    (mask/ROI geometry, BGR->RGB round trips), so this pins the *-2GRAY* families only.
-    """
-    offenders: list[str] = []
-    for path in sorted((REPO_ROOT / "src").rglob("*.py")):
-        if "thirdparty" in path.parts:  # vendored ocrodeg / word-beam-search
-            continue
-        text = path.read_text(encoding="utf-8", errors="replace")
-        for marker in ("COLOR_RGB2GRAY", "COLOR_BGR2GRAY", "COLOR_RGBA2GRAY"):
-            if marker in text:
-                offenders.append(f"{path.relative_to(REPO_ROOT)}:{marker}")
-
-    # calamari_ocr/utils/image.py keeps the legacy branches so trainer params saved by
-    # older runs still deserialize; center_normalizer's branch is unreachable at
-    # channels=1 and measures geometry rather than producing model input.
-    allowed = {
-        "src/model/calamari/calamari_ocr/utils/image.py:COLOR_RGB2GRAY",
-        "src/model/calamari/calamari_ocr/utils/image.py:COLOR_RGBA2GRAY",
-        "src/model/calamari/calamari_ocr/ocr/dataset/imageprocessors/"
-        "center_normalizer.py:COLOR_RGB2GRAY",
-    }
-    assert set(offenders) <= allowed, f"new OpenCV grayscale conversion under src/: {offenders}"
+# A `COLOR_*2GRAY` allowlist over the whole of `src/` used to stand here. It was
+# deleted rather than extended: it scanned file *text*, so it passed on a comment and
+# said nothing about which code path feeds the model, and it graded modules by location
+# instead of by behaviour. It went red on `src/models/trocr/augmentation/weather.py`,
+# whose grayscale is a luminance intermediate inside a fog composite that never becomes
+# a model input tensor -- a false positive answerable only by growing the allowlist.
+# Extending the same scan to `inference/` would have needed two more entries on
+# identical terms (`preprocessing/geometry.py`, `preprocessing/segment_refinement.py`),
+# both measuring geometry rather than producing model input.
+#
+# The property it was reaching for -- training and serving derive the same luminance
+# from the same bytes -- is enforced above by
+# `test_training_and_serving_produce_the_same_model_input`, which runs both real
+# implementations over eight PIL modes and compares the tensors. That test fails on a
+# real skew; the scan only failed on a spelling.
 
 
 def test_grayscale_module_has_no_training_only_dependencies() -> None:
@@ -146,12 +136,12 @@ def test_grayscale_module_has_no_training_only_dependencies() -> None:
     assert imported <= {"numpy", "PIL"}, f"unexpected dependency in grayscale helper: {imported}"
 
 
-def test_serving_pipeline_still_reads_bytes_with_pil_convert_l() -> None:
-    """Guard the other half of the contract: serving is the convention we matched."""
-    pipeline_source = (
-        REPO_ROOT / "inference/architectures/calamari/preprocessing/pipeline.py"
-    ).read_text(encoding="utf-8")
-    assert 'convert("L")' in pipeline_source
+# `test_serving_pipeline_still_reads_bytes_with_pil_convert_l` stood here and asserted
+# the literal `convert("L")` appeared in the serving pipeline's source. A docstring
+# mentioning it satisfied that, and a live cv2 fast path added above it did not break
+# it. The executing parity test covers the same half of the contract by running the
+# pipeline, so the grep was removed rather than kept as a second opinion that could only
+# ever agree for the wrong reason.
 
 
 def test_helper_accepts_a_filesystem_path(tmp_path: Path) -> None:

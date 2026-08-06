@@ -54,6 +54,7 @@ drift, so read them alongside the code rather than as current reference.
 | Doc                                                  | Scope                                                                       |
 | ---------------------------------------------------- | --------------------------------------------------------------------------- |
 | [Codebase review, 2026-08-04](codebase-review-2026-08-04.md) | Cleanup backlog, simplification findings, and ranked architectural candidates |
+| [Test suite review, 2026-08-05](test-suite-review-2026-08-05.md) | Which tests would fail if the behaviour they name broke — CI blind spots, tests that cannot fail, and coverage gaps |
 
 ## Security
 

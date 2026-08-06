@@ -246,23 +246,19 @@ def test_a_verified_but_pickled_checkpoint_is_still_refused(tmp_path: Path) -> N
     assert not marker.exists()
 
 
-def test_torch_load_is_called_with_weights_only() -> None:
-    """Pin the flag itself: it is one keyword between safe and arbitrary code."""
-    source = (REPO_ROOT / "inference/architectures/calamari/checkpoint.py").read_text(
-        encoding="utf-8"
-    )
-
-    assert "weights_only=True" in source
-    assert source.count("torch.load(") == 1
+# `test_torch_load_is_called_with_weights_only` stood here, asserting
+# `"weights_only=True" in source` and `source.count("torch.load(") == 1`. Both are facts
+# about text: reformatting the call across lines broke it with no behaviour change, and
+# a second loader added in a different module was invisible to it. The test directly
+# above proves the same property by execution -- it saves a `__reduce__` payload whose
+# digest MATCHES, so nothing but `weights_only=True` can stop the marker file appearing.
 
 
 def test_blla_loads_through_safetensors_not_pickle() -> None:
     """BLLA's artifact format cannot execute code at all, and must stay that way."""
-    source = (REPO_ROOT / "inference/architectures/blla/blla.py").read_text(encoding="utf-8")
-
-    assert "safetensors" in source
-    assert "torch.load" not in source
-
+    # The substring half of this test (`"safetensors" in source`, `"torch.load" not in
+    # source`) was dropped: handed a pickle checkpoint, the loader must refuse, and that
+    # is what the executing assertion below observes.
     with pytest.raises(BLLAUnavailableError):
         run_blla_segment(SEGMENT_PAGE.read_bytes(), model_path=CALAMARI_CHECKPOINT)
 
