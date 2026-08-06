@@ -18,7 +18,7 @@ cffi==2.1.0 ; platform_python_implementation != 'PyPy'
     # via cryptography
 charset-normalizer==3.4.7
     # via reportlab
-cryptography==49.0.0
+cryptography==50.0.0
     # via pyjwt
 deprecation==2.1.0
     # via
