@@ -29,7 +29,8 @@ Every lane branch (`feat/048-…` … `feat/061-…`, plus `feat/deep-cleanup` a
 ## 2. What was built
 
 All 14 merged, each as its own `merge:` commit whose body records the conflicts it resolved.
-See [`issues/kanban.md`](../issues/kanban.md) for the per-lane table.
+The per-lane table lived in `issues/kanban.md`, deleted once the board was fully consumed;
+`git log --merges` carries the same per-lane record.
 
 The shape of the change: a browser talked to a loopback HTTP server on the researcher's own
 machine; now a CLI installed from PyPI pairs with the platform and **pulls** work outbound.

@@ -186,6 +186,27 @@ CI was audited and none of them can pass while failing.
   `.env.supabase` (the live pooler) by default. The truncate guard now makes the dangerous
   half of this safe, but the fallback itself is still surprising.
 
+### B5. Grep-style assertions that could execute instead
+
+Carried forward from `docs/test-hardening-handoff.md`, deleted once `test/suite-hardening`
+merged. **Partly overtaken**: the suite-reduction pass deleted a number of these greps
+outright rather than converting them, on the grounds that an integration test already
+proved the property. Re-check each against the tree before working it — the handoff's line
+numbers are dead, and `test_device_pairing.py` and `test_job_lifecycle.py` were both
+rewritten since.
+
+What it proposed making executable, where the property is still only asserted by substring
+search: reset-script guards via a stubbed `psql`; role grants via `pg_roles` /
+`role_table_grants`; the advisory try-lock across two sessions; an `asyncio.to_thread`
+thread-id spy; `build.sh DEST="/"`; font-resolver equality and Greek `_render_pdf`;
+pip-uninstalled as a CI step. Migration columns are **done** —
+`integration/test_migrations.py` diffs the migrated schema against `Base.metadata`.
+
+Also unresolved from that branch: one full-lane run showed
+`test_device_lease.py::test_a_platform_dispatched_page_still_fails_on_the_waiting_timeout`
+red, and re-running that file passed 17/17 twice. Suspected ordering/loop interaction,
+never root-caused. Related to the known asyncpg "attached to a different loop" issue (#63).
+
 ---
 
 ## C — Closed by this sweep, kept so it is not re-litigated
