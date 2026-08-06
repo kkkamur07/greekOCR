@@ -227,8 +227,10 @@ def installed_cli(tmp_path_factory: pytest.TempPathFactory) -> dict[str, object]
             capture_output=True,
             text=True,
         )
-        if installed.returncode != 0:
-            pytest.skip(f"cannot install the CLI: {installed.stderr.strip()}")
+        # A wheel that builds and will not install is a real defect, not an
+        # environmental one: skipping here would turn it green. `uv` being
+        # absent from the machine is the only excuse, and it is handled above.
+        assert installed.returncode == 0, installed.stderr
 
     executable = scripts / ("nomicous.exe" if os.name == "nt" else "nomicous")
     assert executable.is_file(), "the wheel did not install a `nomicous` console script"

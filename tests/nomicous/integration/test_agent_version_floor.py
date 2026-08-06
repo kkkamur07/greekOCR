@@ -15,7 +15,6 @@ be stopped without shipping anything.
 
 from __future__ import annotations
 
-import uuid
 
 import pytest
 from fastapi.testclient import TestClient
@@ -23,39 +22,32 @@ from sqlalchemy import select
 
 import infrastructure.models  # noqa: F401 - register all ORM mappers
 from backend.core.settings import get_device_settings, reset_settings_caches
-from backend.jobs.infrastructure.orm_models import Job, JobStatus
+from backend.jobs.infrastructure.orm_models import JobStatus
 from backend.ml.api.agent_version import (
     AGENT_VERSION_HEADER,
     AGENT_VERSION_REFUSED_STATUS,
     AGENT_VERSION_UNSUPPORTED,
 )
 from backend.ml.application.agent_credentials import SERVICE_TOKEN_HEADER
-from backend.ml.application.device_auth import DEVICE_TOKEN_HEADER
-from infrastructure.db import engine, sync_system_session
+from backend.ml.domain.agent_version import MAX_AGENT_VERSION_LENGTH
+from infrastructure.db import sync_system_session
 from tests.nomicous.integration.helpers import (
+    CLAIM_URL,
+    DEVICE_SERVICE_TOKEN,
     MINIMAL_PNG,
+    claim_page,
     documents_url,
     pair_device_over_http,
 )
+from tests.nomicous.integration.helpers import device_headers as _headers
+
+# Module-scoped autouse; see its docstring in `helpers.py` for issue #63.
+from tests.nomicous.integration.helpers import return_pooled_connections_before_leaving  # noqa: F401
+from tests.nomicous.integration.helpers import stored_job as _stored_job
 
 pytestmark = pytest.mark.integration
 
-CLAIM_URL = "/device/v1/jobs/claim"
-SERVICE_HEADERS = {SERVICE_TOKEN_HEADER: "test-inference-worker-service-token-not-for-production"}
-
-
-@pytest.fixture(scope="module", autouse=True)
-def return_pooled_connections_before_leaving(client: TestClient):
-    """Same guard ``test_device_claim.py`` carries, for the same reason.
-
-    This module opens claim connections on the session client's event loop;
-    ``test_device_pairing.py`` starts a second app on its own loop and inherits
-    them, which is the asyncpg collision tracked as issue #63. Disposing through
-    ``client.portal`` runs teardown on the loop that owns them. It does not fix
-    #63; it stops this module feeding it.
-    """
-    yield
-    client.portal.call(engine.dispose)
+SERVICE_HEADERS = {SERVICE_TOKEN_HEADER: DEVICE_SERVICE_TOKEN}
 
 
 @pytest.fixture
@@ -93,15 +85,10 @@ def version_policy(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def _headers(token: str, version: str | None) -> dict[str, str]:
-    headers = {DEVICE_TOKEN_HEADER: token}
-    if version is not None:
-        headers[AGENT_VERSION_HEADER] = version
-    return headers
-
-
 def _claim(client: TestClient, token: str, version: str | None):
-    return client.post(CLAIM_URL, headers=_headers(token, version), json={"wait_seconds": 0})
+    """Unlike every other module, this one states the version explicitly on every
+    call - including ``None``, which is a header that was never sent."""
+    return claim_page(client, _headers(token, version=version))
 
 
 def _paired_agent(client: TestClient, owner_headers, name: str = "Laptop") -> str:
@@ -135,11 +122,6 @@ def _submitted_page(client: TestClient, owner_headers, owner_project) -> str:
     )
     assert submitted.status_code == 202, submitted.text
     return submitted.json()["job_id"]
-
-
-def _stored_job(job_id: str) -> Job:
-    with sync_system_session() as session:
-        return session.execute(select(Job).where(Job.id == uuid.UUID(job_id))).scalar_one()
 
 
 def _refusal(response) -> dict:
@@ -197,7 +179,12 @@ def test_a_refused_agent_is_told_apart_from_every_other_failure(
     assert empty_queue.status_code == 200
 
     assert stale.json()["error"]["code"] == AGENT_VERSION_UNSUPPORTED
-    assert bad_credential.json()["error"]["code"] != AGENT_VERSION_UNSUPPORTED
+    # Pinned, not merely "not the version code". `!=` is satisfied by an empty
+    # string, a typo, or any other code in the platform - none of which a claim
+    # loop could branch on, which is the whole subject of this test. A bad
+    # credential is UNAUTHORIZED, the same code every other 401 uses, so an
+    # agent can reuse the re-pair branch it already has.
+    assert bad_credential.json()["error"]["code"] == "UNAUTHORIZED"
     assert empty_queue.json()["page"] is None
     assert "error" not in empty_queue.json()
 
@@ -305,20 +292,47 @@ def test_an_agent_that_does_not_say_what_it_is_is_refused(
 
 
 @pytest.mark.parametrize(
-    "presented", ["latest", "0.4", "0.4.0.1", "v0.4.0-nightly", "", "   ", "9" * 200]
+    ("presented", "expected_reason", "expected_echo"),
+    [
+        ("latest", "malformed", "latest"),
+        ("0.4", "malformed", "0.4"),
+        ("0.4.0.1", "malformed", "0.4.0.1"),
+        ("v0.4.0-nightly", "malformed", "v0.4.0-nightly"),
+        # A header that is present but says nothing is the same state as no
+        # header at all, and the sibling above pins ``missing`` exactly. Left as
+        # a set of two, these two rows could not tell a correct classification
+        # from one that called everything malformed.
+        ("", "missing", None),
+        ("   ", "missing", None),
+        # Echoed back truncated to MAX_AGENT_VERSION_LENGTH - the refusal must
+        # not become a way to get 200 bytes of attacker text into a log line or
+        # a terminal.
+        ("9" * 200, "malformed", "9" * MAX_AGENT_VERSION_LENGTH),
+    ],
 )
 def test_a_version_the_platform_cannot_compare_is_refused(
-    client: TestClient, owner_headers, version_policy, presented: str
+    client: TestClient,
+    owner_headers,
+    version_policy,
+    presented: str,
+    expected_reason: str,
+    expected_echo: str | None,
 ) -> None:
     """Refused rather than guessed at. A version we cannot order against the
-    floor tells us nothing about whether this agent is one we want claiming."""
+    floor tells us nothing about whether this agent is one we want claiming.
+
+    Each case names the reason it expects. The two are not interchangeable: an
+    agent that sent nothing has to be told to *set* the header, and one that
+    sent nonsense has to be told to fix it.
+    """
     token = _paired_agent(client, owner_headers)
     version_policy(minimum="0.4.0", latest="0.4.0")
 
     error = _refusal(_claim(client, token, presented))
 
     assert error["code"] == AGENT_VERSION_UNSUPPORTED
-    assert error["reason"] in {"malformed", "missing"}
+    assert error["reason"] == expected_reason
+    assert error["agent_version"] == expected_echo
     assert error["retryable"] is False
 
 

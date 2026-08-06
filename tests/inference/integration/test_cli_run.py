@@ -323,8 +323,12 @@ def installed_cli(tmp_path_factory: pytest.TempPathFactory) -> dict[str, object]
         capture_output=True,
         text=True,
     )
-    if installed.returncode != 0:
-        pytest.skip(f"cannot install the CLI: {installed.stderr.strip()}")
+    # A failed install is a failure, never a skip. The docstring above says the
+    # run loop's dependency closure is part of what is under test, and a wheel
+    # that builds but will not install is exactly the defect this fixture is
+    # positioned to catch. The only environmental excuse is `uv` being absent,
+    # which is handled at the top.
+    assert installed.returncode == 0, installed.stderr
 
     executable = scripts / ("nomicous.exe" if os.name == "nt" else "nomicous")
     assert executable.is_file(), "the wheel did not install a `nomicous` console script"

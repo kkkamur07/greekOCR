@@ -101,6 +101,16 @@ dev = [
 test = [
     "pytest>=8.3.0",
     "pytest-asyncio>=0.24.0",
+    # Coverage measurement, configured in [tool.coverage] below. Deliberately
+    # not wired into CI and deliberately not gated on a threshold: the CI budget
+    # does not have room for a second full run of a suite that stands up
+    # Postgres and loads real Torch weights, and a number nobody can afford to
+    # measure is a number nobody should be blocked on. It is here so that
+    # "which branch of this is untested?" is a question with an answer:
+    #
+    #   uv run --group test --group platform --group inference \
+    #     pytest tests/nomicous --cov --cov-report=term-missing
+    "pytest-cov>=6.0.0",
 ]
 # Shared FastAPI/pydantic surface of every Python service in the repo.
 service-core = [
@@ -213,7 +223,12 @@ test-inference = { shell = "uv run --group test --group platform --group inferen
 test-hf = { shell = "uv run --group test --group inference pytest tests/hf" }
 
 [tool.pytest.ini_options]
-addopts = ["--import-mode=importlib"]
+# `--strict-markers` turns an unknown marker into a collection error instead of
+# a warning nobody reads. Without it `@pytest.mark.integraton` registers as
+# nothing at all, and the test it decorates is no longer excluded from the unit
+# lane - it runs there, against no database, and fails for a reason that looks
+# nothing like the typo that caused it.
+addopts = ["--import-mode=importlib", "--strict-markers"]
 pythonpath = ["nomicous", "."]
 asyncio_mode = "auto"
 testpaths = ["tests/nomicous", "tests/inference", "tests/hf"]
@@ -223,6 +238,48 @@ filterwarnings = [
 markers = [
     "integration: requires Postgres",
     "ml: runs real BLLA/Calamari weights (slow)",
+]
+
+# ---------------------------------------------------------------------------
+# Coverage. Configuration only - no `--cov` in `addopts`, and no threshold
+# anywhere, so nothing here changes what any existing command does. Turn it on
+# per run:
+#
+#   pytest tests/nomicous --cov --cov-report=term-missing
+#
+# Scope is the two trees that ship, matching [tool.mypy].files. `src/` is
+# vendored research code that is not linted or type-checked either, `scripts/`
+# is operator tooling, and `tests/` covering itself is a tautology.
+# ---------------------------------------------------------------------------
+[tool.coverage.run]
+source = ["nomicous/backend", "inference"]
+branch = true
+# The integration suite runs the app in a TestClient thread and the platform job
+# worker in the lifespan task; without this, everything either of them executes
+# reads as uncovered.
+concurrency = ["thread"]
+parallel = true
+omit = [
+    "*/__init__.py",
+    # Alembic revisions are executed by `alembic upgrade`, not by pytest, and
+    # `test_migrations.py` asserts on the schema they produce rather than on
+    # their statements.
+    "nomicous/infrastructure/migrations/*",
+]
+
+[tool.coverage.paths]
+# `parallel = true` writes one data file per process; these have to be collapsed
+# onto one set of names before a report can be produced.
+backend = ["nomicous/backend", "*/nomicous/backend"]
+inference = ["inference", "*/inference"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@overload",
 ]
 
 [tool.ruff]

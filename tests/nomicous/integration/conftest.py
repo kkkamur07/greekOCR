@@ -9,6 +9,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 
+# Safe above the environment setup below: `helpers` imports nothing from the
+# backend at module scope, precisely so that this line cannot resolve a settings
+# object before the environment it reads has been set.
+from tests.nomicous.integration.helpers import DEVICE_SERVICE_TOKEN
+
 os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production-at-least-32-bytes")
 os.environ.setdefault(
     "DATABASE_URL",
@@ -24,9 +29,7 @@ os.environ.setdefault("JOB_WORKER_ENABLED", "true")
 os.environ.setdefault("INFERENCE_WEBHOOK_SECRET", "test-inference-webhook-secret")
 # The hosted worker's claim credential. Held to the same 32-character floor as the
 # device HMAC key, because unlike a device token it is scoped to no account.
-os.environ.setdefault(
-    "INFERENCE_WORKER_SERVICE_TOKEN", "test-inference-worker-service-token-not-for-production"
-)
+os.environ.setdefault("INFERENCE_WORKER_SERVICE_TOKEN", DEVICE_SERVICE_TOKEN)
 os.environ.setdefault(
     "MIGRATOR_DATABASE_URL",
     os.environ.get(
@@ -54,14 +57,13 @@ os.environ.setdefault("DEVICE_PAIRING_APP_ORIGIN", "https://app.nomicous.test")
 
 import infrastructure.models  # noqa: F401 — register all mappers
 from backend.core.app import create_app
-from backend.core.settings import (
-    get_app_settings,
-    get_auth_settings,
-    get_infrastructure_settings,
-    get_job_settings,
-    get_ml_settings,
-    reset_settings_caches,
-)
+
+# Only `reset_settings_caches` is used, and deliberately so: the five individual
+# accessors that used to be imported alongside it were the hand-written list it
+# replaced, left behind after the switch. Naming them here again suggested this
+# module still cared which caches there were, when the whole point of
+# `reset_settings_caches` is that it does not have to.
+from backend.core.settings import reset_settings_caches
 from backend.users.api.rate_limit import clear_auth_rate_limit_state
 
 from infrastructure.db import Base, sync_engine

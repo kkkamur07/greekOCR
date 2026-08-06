@@ -246,23 +246,72 @@ def test_a_verified_but_pickled_checkpoint_is_still_refused(tmp_path: Path) -> N
     assert not marker.exists()
 
 
-def test_torch_load_is_called_with_weights_only() -> None:
-    """Pin the flag itself: it is one keyword between safe and arbitrary code."""
+def test_torch_load_is_called_with_weights_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin the flag itself: it is one keyword between safe and arbitrary code.
+
+    Observed at the call, not read out of the file. The module docstring at the
+    top of ``checkpoint.py`` contains the phrase ``weights_only=True`` in prose,
+    so a source-substring assertion stayed green with the keyword removed from
+    the call two dozen lines below it - the single mutation this test exists to
+    catch.
+    """
+    real_load = torch.load
+    calls: list[dict[str, object]] = []
+
+    def spy(*args: object, **kwargs: object):
+        calls.append(kwargs)
+        return real_load(*args, **kwargs)
+
+    # `checkpoint.py` does `import torch` and resolves the attribute at call
+    # time, so the module's `torch` *is* this one.
+    monkeypatch.setattr(torch, "load", spy)
+
+    model, metadata = load_calamari_checkpoint(CALAMARI_CHECKPOINT)
+
+    assert metadata.classes == 47
+    assert model is not None
+    assert len(calls) == 1, f"expected exactly one torch.load, saw {len(calls)}"
+    assert calls[0].get("weights_only") is True
+    # CPU only, for the same reason as `test_the_runtime_never_selects_an_accelerator`.
+    assert calls[0].get("map_location") == "cpu"
+
+    # One call site, so the observation above covers the module rather than one
+    # branch of it. This is the only claim here the source can answer.
     source = (REPO_ROOT / "inference/architectures/calamari/checkpoint.py").read_text(
         encoding="utf-8"
     )
-
-    assert "weights_only=True" in source
     assert source.count("torch.load(") == 1
 
 
-def test_blla_loads_through_safetensors_not_pickle() -> None:
-    """BLLA's artifact format cannot execute code at all, and must stay that way."""
-    source = (REPO_ROOT / "inference/architectures/blla/blla.py").read_text(encoding="utf-8")
+def test_blla_never_unpickles_during_a_real_segment_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    """BLLA's artifact format cannot execute code at all, and must stay that way.
 
-    assert "safetensors" in source
-    assert "torch.load" not in source
+    ``"torch.load" not in source`` was the old form of this, and moving the load
+    one module over defeated it while changing nothing about what runs. So a
+    whole page is segmented for real with ``torch.load`` replaced by something
+    that cannot succeed: wherever the load lives now, this notices it.
+    """
+    from inference.architectures.blla.blla import _load_blla_model
 
+    reached: list[tuple[object, ...]] = []
+
+    def refuse(*args: object, **kwargs: object):
+        reached.append(args)
+        raise AssertionError("BLLA segmentation reached torch.load")
+
+    # The model is cached per path; a warm cache would skip the load entirely
+    # and make this pass without proving anything.
+    _load_blla_model.cache_clear()
+    monkeypatch.setattr(torch, "load", refuse)
+
+    response = run_blla_segment(SEGMENT_PAGE.read_bytes(), model_path=BLLA_CHECKPOINT)
+
+    assert reached == []
+    assert len(response.lines) > 10, "the run has to actually load and execute the model"
+
+
+def test_blla_refuses_a_pickled_checkpoint_outright() -> None:
+    """Not merely "does not need pickle": will not open one when handed one."""
     with pytest.raises(BLLAUnavailableError):
         run_blla_segment(SEGMENT_PAGE.read_bytes(), model_path=CALAMARI_CHECKPOINT)
 

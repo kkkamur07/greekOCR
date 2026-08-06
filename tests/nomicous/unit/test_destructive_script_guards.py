@@ -10,8 +10,11 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+import os
+import subprocess
 import sys
 from collections.abc import Iterator
+from pathlib import Path
 from types import ModuleType
 
 import pytest
@@ -68,26 +71,217 @@ def test_seed_never_falls_back_to_a_committed_password(
     assert "require_development_environment" in source
 
 
-def test_reset_guards_run_before_the_env_file_is_merged() -> None:
-    script = RESET_SCRIPT.read_text(encoding="utf-8")
-    guards, marker, remainder = script.partition("\nset -a\n")
-    assert marker, "expected the env-file merge to still be present"
+# ---------------------------------------------------------------------------
+# The reset script's guards, run rather than read
+# ---------------------------------------------------------------------------
+#
+# These used to be substring assertions over the script's source. Every one of
+# them was satisfied by the text appearing anywhere above `set -a` - in a
+# comment, in a function nothing calls, or in a branch whose `exit 1` had been
+# deleted - so the guards could stop guarding with the test still green. The
+# script is executed instead, against a throwaway env file, with a stub `psql`
+# first on PATH standing in for the irreversible statement. What is asserted is
+# the only thing that matters at a shell prompt: it exits non-zero, and `psql`
+# was never reached.
+#
+# Deliberately nothing here touches the DROP lists. Those change as the schema
+# does; the guards do not.
 
-    # Every value a guard decides on is parsed out of the named file, before the
-    # merge, so an exported SUPABASE_NON_PRODUCTION cannot satisfy a check whose
-    # error message points at the file.
-    assert 'CONFIRM_INPUT="${CONFIRM_SUPABASE_RESET:-}"' in guards
-    assert (
-        'FILE_NON_PRODUCTION="$(lowercase "$(env_file_value SUPABASE_NON_PRODUCTION)")"' in guards
+#: A database the guards must never let the script reach.
+SCRATCH_URL = "postgresql://postgres:pw@localhost:5432/scratch"
+#: What ``database_target`` makes of it - the string an operator has to type.
+SCRATCH_TARGET = "localhost:5432/scratch"
+
+
+@pytest.fixture
+def psql_stub(tmp_path: Path) -> tuple[Path, Path]:
+    """A `psql` that records having been called and then fails.
+
+    Recording is what makes "the guard stopped it" checkable. Failing is what
+    keeps a *broken* guard from carrying the run onwards into
+    ``migrate_supabase.sh`` and the dev seed against whatever database the env
+    file named: with ``set -e``, a non-zero psql ends the script right there.
+    """
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    sentinel = tmp_path / "psql-was-called"
+    stub = bin_dir / "psql"
+    stub.write_text(
+        f'#!/usr/bin/env bash\nprintf "%s\\n" "$@" >"{sentinel}"\nexit 1\n',
+        encoding="utf-8",
     )
-    assert 'FILE_ENVIRONMENT="$(lowercase "$(env_file_value ENVIRONMENT)")"' in guards
-    assert '[[ "$FILE_NON_PRODUCTION" != "true" ]]' in guards
-    assert '[[ "$FILE_ENVIRONMENT" == "production" ]]' in guards
-    assert '[[ "$CONFIRM_INPUT" != "$TARGET" ]]' in guards
+    stub.chmod(0o755)
+    # `uv` and `alembic` are only reachable past psql, but a stub that cannot be
+    # found would fall through to the real one if psql ever stopped failing.
+    for name in ("uv", "alembic"):
+        fallback = bin_dir / name
+        fallback.write_text("#!/usr/bin/env bash\nexit 1\n", encoding="utf-8")
+        fallback.chmod(0o755)
+    return bin_dir, sentinel
 
-    # The destructive statement uses the parsed URL, not the merged environment.
-    assert 'psql "$FILE_MIGRATOR_URL"' in remainder
 
-    # The exact bypassed forms must not come back.
+def _run_reset(
+    env_file: Path,
+    *,
+    bin_dir: Path,
+    environment: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    child = dict(os.environ)
+    # The guards exist to be immune to ambient shell state, so the ambient state
+    # a developer's profile might carry is cleared and then set explicitly.
+    for inherited in (
+        "SUPABASE_NON_PRODUCTION",
+        "ENVIRONMENT",
+        "MIGRATOR_DATABASE_URL",
+        "SUPABASE_URL",
+        "CONFIRM_SUPABASE_RESET",
+        "SUPABASE_PRODUCTION_PROJECT_REFS",
+        "SUPABASE_RESET_ASSUME_YES",
+    ):
+        child.pop(inherited, None)
+    child["SUPABASE_ENV_FILE"] = str(env_file)
+    child["PATH"] = f"{bin_dir}{os.pathsep}{child.get('PATH', '')}"
+    child.update(environment or {})
+    return subprocess.run(
+        ["bash", str(RESET_SCRIPT), "--yes"],
+        capture_output=True,
+        text=True,
+        stdin=subprocess.DEVNULL,
+        cwd=REPO_ROOT,
+        env=child,
+        timeout=120,
+    )
+
+
+def _env_file(tmp_path: Path, body: str) -> Path:
+    path = tmp_path / ".env.supabase"
+    path.write_text(body, encoding="utf-8")
+    return path
+
+
+def test_reset_reaches_psql_when_every_guard_is_satisfied(
+    tmp_path: Path, psql_stub: tuple[Path, Path]
+) -> None:
+    """The positive control, and the reason the refusals below mean anything.
+
+    Without it, "psql was never called" would also be satisfied by a harness
+    that could never call psql at all - which is the shape of failure this whole
+    file was rewritten to stop believing.
+    """
+    bin_dir, sentinel = psql_stub
+    env_file = _env_file(
+        tmp_path,
+        "SUPABASE_NON_PRODUCTION=true\n"
+        "ENVIRONMENT=development\n"
+        f"MIGRATOR_DATABASE_URL={SCRATCH_URL}\n",
+    )
+
+    result = _run_reset(
+        env_file,
+        bin_dir=bin_dir,
+        environment={"CONFIRM_SUPABASE_RESET": SCRATCH_TARGET},
+    )
+
+    assert sentinel.exists(), f"the run never reached psql: {result.stderr}"
+    assert "Guard failed" not in result.stderr, result.stderr
+
+
+@pytest.mark.parametrize(
+    ("name", "body", "environment", "expected"),
+    [
+        (
+            "the env file declares production",
+            "SUPABASE_NON_PRODUCTION=true\n"
+            "ENVIRONMENT=production\n"
+            f"MIGRATOR_DATABASE_URL={SCRATCH_URL}\n",
+            {"CONFIRM_SUPABASE_RESET": SCRATCH_TARGET},
+            "ENVIRONMENT=production",
+        ),
+        (
+            # The regression this script was rewritten for: an export in a shell
+            # profile satisfying a guard whose message points at the file.
+            "an exported flag cannot stand in for the file's",
+            f"ENVIRONMENT=development\nMIGRATOR_DATABASE_URL={SCRATCH_URL}\n",
+            {
+                "SUPABASE_NON_PRODUCTION": "true",
+                "CONFIRM_SUPABASE_RESET": SCRATCH_TARGET,
+            },
+            "SUPABASE_NON_PRODUCTION is not 'true'",
+        ),
+        (
+            "the environment is missing entirely",
+            f"SUPABASE_NON_PRODUCTION=true\nMIGRATOR_DATABASE_URL={SCRATCH_URL}\n",
+            {"CONFIRM_SUPABASE_RESET": SCRATCH_TARGET},
+            "ENVIRONMENT is not set",
+        ),
+        (
+            "the confirmation names a different target",
+            "SUPABASE_NON_PRODUCTION=true\n"
+            "ENVIRONMENT=development\n"
+            f"MIGRATOR_DATABASE_URL={SCRATCH_URL}\n",
+            {"CONFIRM_SUPABASE_RESET": "some-other-database"},
+            "confirmation did not match",
+        ),
+        (
+            # An env file confirming its own destruction. CONFIRM_INPUT is read
+            # before the merge precisely so this cannot work.
+            "the env file tries to confirm itself",
+            "SUPABASE_NON_PRODUCTION=true\n"
+            "ENVIRONMENT=development\n"
+            f"MIGRATOR_DATABASE_URL={SCRATCH_URL}\n"
+            f"CONFIRM_SUPABASE_RESET={SCRATCH_TARGET}\n",
+            {},
+            "confirmation did not match",
+        ),
+        (
+            "the operator denylist names the target",
+            "SUPABASE_NON_PRODUCTION=true\n"
+            "ENVIRONMENT=staging\n"
+            "MIGRATOR_DATABASE_URL="
+            "postgresql://postgres:pw@db.abcdefghijklmnop.supabase.co:5432/postgres\n",
+            {
+                "CONFIRM_SUPABASE_RESET": "abcdefghijklmnop",
+                "SUPABASE_PRODUCTION_PROJECT_REFS": "zzz,abcdefghijklmnop",
+            },
+            "SUPABASE_PRODUCTION_PROJECT_REFS",
+        ),
+        (
+            "the file mixes two Supabase projects",
+            "SUPABASE_NON_PRODUCTION=true\n"
+            "ENVIRONMENT=staging\n"
+            "MIGRATOR_DATABASE_URL="
+            "postgresql://postgres:pw@db.abcdefghijklmnop.supabase.co:5432/postgres\n"
+            "SUPABASE_URL=https://qrstuvwxyzabcdef.supabase.co\n",
+            {"CONFIRM_SUPABASE_RESET": "abcdefghijklmnop"},
+            "mixes Supabase projects",
+        ),
+    ],
+    ids=lambda value: value if isinstance(value, str) and " " in value else None,
+)
+def test_reset_refuses_before_it_can_drop_anything(
+    tmp_path: Path,
+    psql_stub: tuple[Path, Path],
+    name: str,
+    body: str,
+    environment: dict[str, str],
+    expected: str,
+) -> None:
+    bin_dir, sentinel = psql_stub
+    env_file = _env_file(tmp_path, body)
+
+    result = _run_reset(env_file, bin_dir=bin_dir, environment=environment)
+
+    assert result.returncode != 0, f"{name}: the reset was allowed to proceed"
+    assert "Guard failed" in result.stderr, result.stderr
+    assert expected in result.stderr, result.stderr
+    assert not sentinel.exists(), f"{name}: psql ran anyway - {sentinel.read_text()}"
+
+
+def test_reset_never_reintroduces_the_bypassable_guard_forms() -> None:
+    """The one claim that is genuinely about the text and not about behaviour:
+    the two exact expressions that made the old guards bypassable are gone. An
+    absence cannot be executed, so it is asserted here rather than pretended
+    away."""
+    script = RESET_SCRIPT.read_text(encoding="utf-8")
     assert '"${SUPABASE_NON_PRODUCTION:-}"' not in script
     assert '"${CONFIRM_SUPABASE_RESET:-}" != "RESET"' not in script
