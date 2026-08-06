@@ -29,7 +29,7 @@ from backend.ml.api.agent_version import (
     AGENT_VERSION_REFUSED_STATUS,
     AGENT_VERSION_UNSUPPORTED,
 )
-from backend.ml.application.agent_credentials import SERVICE_TOKEN_HEADER
+from backend.ml.application.agent_credentials import SERVICE_TOKEN_HEADER, WORKER_NAME_HEADER
 from backend.ml.application.device_auth import DEVICE_TOKEN_HEADER
 from infrastructure.db import engine, sync_system_session
 from tests.nomicous.integration.helpers import (
@@ -41,7 +41,11 @@ from tests.nomicous.integration.helpers import (
 pytestmark = pytest.mark.integration
 
 CLAIM_URL = "/device/v1/jobs/claim"
-SERVICE_HEADERS = {SERVICE_TOKEN_HEADER: "test-inference-worker-service-token-not-for-production"}
+SERVICE_HEADERS = {
+    SERVICE_TOKEN_HEADER: "test-inference-worker-service-token-not-for-production",
+    # Required on the service credential; see agent_credentials.WORKER_NAME_HEADER.
+    WORKER_NAME_HEADER: "cloud-worker",
+}
 
 
 @pytest.fixture(scope="module", autouse=True)

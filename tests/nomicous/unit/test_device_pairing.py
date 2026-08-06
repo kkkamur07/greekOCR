@@ -1006,6 +1006,10 @@ def test_migration_005_matches_the_orm_models(monkeypatch) -> None:
     monkeypatch.setattr(later.op, "execute", lambda *args, **kw: None)
     monkeypatch.setattr(later.op, "add_column", lambda table, column: added.append((table, column)))
     monkeypatch.setattr(later._EXECUTION_TARGET, "create", lambda *args, **kw: None)
+    # 007 skips a column that is already present, which needs a live connection to
+    # decide. There is no database here and the subject is which columns it adds,
+    # not whether it tolerates finding them: answer "none present".
+    monkeypatch.setattr(later, "_has_column", lambda _table, _column: False)
     later.upgrade()
     for table_name, column in added:
         if table_name in tables:

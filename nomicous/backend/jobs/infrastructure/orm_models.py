@@ -38,8 +38,27 @@ class Job(Base):
     __tablename__ = "jobs"
     __table_args__ = (
         Index("ix_jobs_payload_gin", "payload", postgresql_using="gin"),
+        # The platform worker's claim: ordered by age over the pending rows.
         Index(
             "ix_jobs_claim_pending",
+            "created_at",
+            "id",
+            postgresql_where="status = 'pending'",
+        ),
+        # The **agent** claim (``job_claim_service._claimable_job_query``), which
+        # the one above does not serve. That query adds ``execution_target`` and,
+        # for a device token, ``user_id`` - both far more selective than the
+        # partial predicate - so with only the index above every long poll scanned
+        # the whole pending queue in ``created_at`` order and discarded rows for
+        # other hosts and other accounts. Every connected agent runs this once a
+        # second, so it is the hottest query in the schema.
+        #
+        # Column order is the two equality predicates first, then the sort key, so
+        # one index range answers both the filter and the ORDER BY without a sort.
+        Index(
+            "ix_jobs_claim_target_pending",
+            "execution_target",
+            "user_id",
             "created_at",
             "id",
             postgresql_where="status = 'pending'",

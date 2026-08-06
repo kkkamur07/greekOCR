@@ -1,19 +1,33 @@
-"""Translate Product jobs into inference job submissions."""
+"""Translate Product jobs into the run instruction an agent claims.
+
+**No page image is read here.** The claim response carries a signed link to the
+one page object (``page_image_url``) and the agent fetches it directly from
+storage; putting the scan in the response as well meant every claim streamed a
+manuscript page through the API, base64-encoded at about 1.33x its stored size,
+for a field no client has ever read. ADR 0002 rejected an authenticated image
+route on exactly that reasoning - the production API is serverless, so streaming
+scans through it costs money for nothing - and the claim response was doing the
+same thing by another name.
+
+So what a claim carries is the instruction: which task, which registry model and
+tag, and the parameters. Everything here is small and derived from Postgres.
+"""
 
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+from inference.admission import validate_request_params
 from inference.contracts.common import InferenceTask as WireInferenceTask
-from inference.contracts.jobs import JobSubmitRequest
+from inference.settings import get_inference_settings
 
 from backend.document.application.transcribe_merge_service import (
     TranscribeJobHandlerError,
     TranscribeMergeService,
 )
-from backend.document.infrastructure.media_store import get_media_store
 from backend.document.infrastructure.orm_models import DocumentPart
 from backend.jobs.infrastructure.orm_models import Job, JobType
 from backend.ml.infrastructure.orm_models import InferenceModel, InferenceTask
@@ -23,6 +37,41 @@ _DEFAULT_SEGMENT_REGISTRY_MODEL = "blla-segment"
 _DEFAULT_SEGMENT_REGISTRY_TAG = "stable"
 _DEFAULT_TRANSCRIBE_REGISTRY_MODEL = "syriac-calamari-v1"
 _DEFAULT_TRANSCRIBE_REGISTRY_TAG = "stable"
+
+
+@dataclass(frozen=True)
+class PageRunRequest:
+    """What to run on one page - and deliberately not the page itself.
+
+    This used to be ``inference.contracts.jobs.JobSubmitRequest``, which carries
+    ``image_bytes``, because the platform once POSTed that body into a second
+    queue and the image had to travel with it. Since ADR 0003 there is no second
+    queue: the agent claims from the platform's own table and fetches the scan
+    from the signed link beside this object. Reusing the submit contract kept the
+    image field alive with nothing to put in it but the whole page.
+
+    The fields are the ones the shipped agent actually reads off ``request``.
+    """
+
+    task: WireInferenceTask
+    registry_model_id: str
+    registry_tag: str
+    product_job_id: uuid.UUID
+    params: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        """The two checks ``JobSubmitRequest`` made that still have a subject.
+
+        Its third was an admission bound on ``image_bytes`` plus ``params``
+        together; with the image gone, ``params`` is the entire body, so it is
+        bounded on its own. A transcribe page carries one entry per line and is
+        the only thing here that can grow without limit.
+        """
+        if self.task not in (WireInferenceTask.segment, WireInferenceTask.transcribe):
+            raise ValueError(f"unsupported job task: {self.task.value}")
+        if self.task == WireInferenceTask.transcribe and not self.params.get("lines"):
+            raise ValueError("transcribe jobs require non-empty params.lines")
+        validate_request_params(self.params, get_inference_settings())
 
 
 @dataclass(frozen=True)
@@ -63,7 +112,7 @@ def _job_registry_selection(
     return _registry_selection_from_artifact_ref(model.artifact_ref)
 
 
-def _build_segment_request(job: Job) -> JobSubmitRequest:
+def _build_segment_request(job: Job) -> PageRunRequest:
     with sync_system_session() as session:
         if job.document_part_id is None:
             raise ValueError("Segment job is missing its target document part")
@@ -77,19 +126,17 @@ def _build_segment_request(job: Job) -> JobSubmitRequest:
             fallback_model_id=_DEFAULT_SEGMENT_REGISTRY_MODEL,
             fallback_tag=_DEFAULT_SEGMENT_REGISTRY_TAG,
         )
-        image_bytes = get_media_store().read(part.image_key)
         params = dict((job.payload or {}).get("ml_params") or {})
-        return JobSubmitRequest(
+        return PageRunRequest(
             task=WireInferenceTask.segment,
             registry_model_id=selection.model_id,
             registry_tag=selection.tag,
             product_job_id=job.id,
-            image_bytes=image_bytes,
             params=params,
         )
 
 
-def _build_transcribe_request(job: Job) -> JobSubmitRequest:
+def _build_transcribe_request(job: Job) -> PageRunRequest:
     if job.document_id is None or job.document_part_id is None:
         raise TranscribeJobHandlerError("Transcribe job is missing its target document part")
 
@@ -113,7 +160,6 @@ def _build_transcribe_request(job: Job) -> JobSubmitRequest:
             if not lines:
                 raise TranscribeJobHandlerError("No matching lines to transcribe")
 
-        image_bytes = get_media_store().read(part.image_key)
         base_params = dict((job.payload or {}).get("ml_params") or {})
         line_regions = [
             {
@@ -123,12 +169,11 @@ def _build_transcribe_request(job: Job) -> JobSubmitRequest:
             }
             for index, line in enumerate(lines)
         ]
-        return JobSubmitRequest(
+        return PageRunRequest(
             task=WireInferenceTask.transcribe,
             registry_model_id=selection.model_id,
             registry_tag=selection.tag,
             product_job_id=job.id,
-            image_bytes=image_bytes,
             params={**base_params, "lines": line_regions},
         )
 
@@ -150,9 +195,9 @@ def page_image_key_for_job(job: Job) -> str:
         return part.image_key
 
 
-def build_inference_submit_request(job: Job) -> JobSubmitRequest:
+def build_page_run_request(job: Job) -> PageRunRequest:
     if job.type == JobType.segment:
         return _build_segment_request(job)
     if job.type == JobType.transcribe:
         return _build_transcribe_request(job)
-    raise ValueError(f"No inference submission for job type {job.type.value}")
+    raise ValueError(f"No inference run instruction for job type {job.type.value}")

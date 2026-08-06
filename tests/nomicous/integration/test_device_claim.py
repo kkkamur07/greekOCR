@@ -56,6 +56,9 @@ CURRENT_AGENT_VERSION = "1.0.0"
 SERVICE_HEADERS = {
     SERVICE_TOKEN_HEADER: SERVICE_TOKEN,
     AGENT_VERSION_HEADER: CURRENT_AGENT_VERSION,
+    # Required: without it two hosted workers resolve to one helper_devices row
+    # and neither can be told from the other on a claim.
+    WORKER_NAME_HEADER: "cloud-worker",
 }
 
 
@@ -175,11 +178,14 @@ def test_one_claim_hands_over_exactly_one_page(
     assert page["product_job_id"] == first, "the oldest pending page goes first"
     assert page["job_type"] == "segment"
     assert page["execution_target"] == "local"
-    # The claim carries the contract the inference runtime already takes, so the
-    # agent runs the same code locally and in the cloud.
+    # The claim carries the instruction, and the scan comes from the signed link
+    # beside it. Shipping both meant every claim streamed a base64 manuscript page
+    # through a serverless API for a field no agent reads.
     assert page["request"]["product_job_id"] == first
     assert page["request"]["task"] == "segment"
-    assert page["request"]["image_bytes"]
+    assert "image_bytes" not in page["request"]
+    assert "signature=" in page["page_image_url"], "the scan comes from the signed link only"
+    assert page["page_image_expires_at"]
     assert page["inference_job_id"] == str(_stored_job(first).inference_job_id)
     assert body["poll_after_seconds"] == 0
     assert body["lease_seconds"] > 0
@@ -317,6 +323,26 @@ def test_an_unauthenticated_or_wrong_credential_never_reaches_the_queue(
                 **version,
                 SERVICE_TOKEN_HEADER: "wrong-service-token-but-long-enough-to-pass",
             },
+            json={"wait_seconds": 0},
+        ).status_code
+        == 401
+    )
+    # A valid service token with no worker name is refused as well. It used to be
+    # accepted and silently resolved to a shared "cloud-worker" row, which made
+    # every anonymous hosted worker the same device: whichever one claimed a page,
+    # any of the others could complete it.
+    assert (
+        client.post(
+            CLAIM_URL,
+            headers={**version, SERVICE_TOKEN_HEADER: SERVICE_TOKEN},
+            json={"wait_seconds": 0},
+        ).status_code
+        == 401
+    )
+    assert (
+        client.post(
+            CLAIM_URL,
+            headers={**version, SERVICE_TOKEN_HEADER: SERVICE_TOKEN, WORKER_NAME_HEADER: "   "},
             json={"wait_seconds": 0},
         ).status_code
         == 401
@@ -633,11 +659,18 @@ def test_a_hosted_worker_reports_its_own_cloud_page(
     assert _stored_job(page["product_job_id"]).status is JobStatus.done
 
 
-def test_the_platform_webhook_credential_still_works_unchanged(
+def test_the_platform_webhook_credential_cannot_take_a_leased_page(
     client: TestClient, owner_user, owner_headers, owner_project
 ) -> None:
-    """The internal callback path keeps its own credential and its own outcomes;
-    the agent credentials are additions to it, not a replacement."""
+    """The platform secret authenticates the platform, not a claim on this page.
+
+    This used to return 204 and mark the job done. The webhook branch checked the
+    secret and nothing else, so a holder of INFERENCE_WEBHOOK_SECRET could
+    complete or fail a page a researcher's laptop was in the middle of running -
+    discarding that run, and leaving the agent's own callback to be rejected as a
+    duplicate. The agent credentials are narrowed to the page they hold; this one
+    is now narrowed to the pages no agent holds.
+    """
     _agent, page = _claimed_page(client, owner_headers, owner_project)
 
     response = client.post(
@@ -646,5 +679,6 @@ def test_the_platform_webhook_credential_still_works_unchanged(
         json=_segment_done_body(page),
     )
 
-    assert response.status_code == 204, response.text
-    assert _stored_job(page["product_job_id"]).status is JobStatus.done
+    assert response.status_code == 403, response.text
+    # Still leased, and still the agent's to report on.
+    assert _stored_job(page["product_job_id"]).status is JobStatus.waiting

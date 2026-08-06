@@ -190,6 +190,11 @@ set +a
 
 # Use the parsed value, not the merged environment: the merge only overrides
 # ambient state for keys the file actually declares.
+# Every table the chain creates has to be named here. CASCADE drops dependent FK
+# *constraints*, not dependent tables - so leaving helper_pairings/helper_devices
+# off this list left them standing with `inference_host` intact while
+# alembic_version went, and the replay of 007 then failed with "column already
+# exists". A second reset is the case that finds it; the first one always worked.
 psql "$FILE_MIGRATOR_URL" -v ON_ERROR_STOP=1 <<'SQL'
 DROP TABLE IF EXISTS
   auth_sessions,
@@ -209,6 +214,8 @@ DROP TABLE IF EXISTS
   documents,
   project_shared_users,
   projects,
+  helper_pairings,  -- holds the FK to helper_devices, so it goes first
+  helper_devices,
   users,
   alembic_version
 CASCADE;
@@ -222,9 +229,13 @@ DROP TYPE IF EXISTS
   line_source,
   line_geometry_kind,
   document_workflow,
+  execution_target,
   inference_task
 CASCADE;
 
+-- Created by 007 alongside the trigger on jobs. Dropping the table takes the
+-- trigger, but a function is schema-level and survives every table drop above.
+DROP FUNCTION IF EXISTS jobs_execution_target_is_fixed();
 DROP FUNCTION IF EXISTS app_user_can_access_binding(uuid, uuid, uuid);
 DROP FUNCTION IF EXISTS app_user_can_access_part(uuid);
 DROP FUNCTION IF EXISTS app_user_can_access_document(uuid);

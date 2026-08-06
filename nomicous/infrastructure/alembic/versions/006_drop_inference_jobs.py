@@ -59,14 +59,45 @@ def upgrade() -> None:
     )
 
 
+def _restore_inference_worker_grants() -> None:
+    """Give ``nomicous_inference_worker`` back exactly what 002 gave it.
+
+    ``upgrade()`` revokes the schema grant, and dropping the table takes the
+    table grants with it. Recreating the table does not bring either back, so
+    without this a downgraded database has the role, has the table, and has a
+    role that cannot reach it - which is not the state 006 was applied to, and
+    is a worse failure than not reversing at all because it looks reversed.
+
+    Guarded by the same ``pg_roles`` check ``upgrade()`` uses: these are
+    provider-managed group roles that live outside migrations (see
+    ``002_service_roles``), so a deployment that never created them must not
+    fail here.
+    """
+    op.execute(
+        """
+        DO $$
+        BEGIN
+          IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nomicous_inference_worker') THEN
+            GRANT USAGE ON SCHEMA public TO nomicous_inference_worker;
+            GRANT SELECT, UPDATE ON TABLE inference_jobs TO nomicous_inference_worker;
+          END IF;
+        END
+        $$;
+        """
+    )
+
+
 def downgrade() -> None:
-    """Recreate the queue table as ``001_initial_schema`` built it.
+    """Recreate the queue table as ``001_initial_schema`` built it, and its grants.
 
     Restoring the table does not restore the second queue: the code that read
     and wrote it is gone. This exists so the chain is reversible on a disposable
     database, not as a rollback plan.
     """
     if _has_table("inference_jobs"):
+        # The table survived, but ``upgrade()`` revoked the schema grant whether
+        # or not it dropped anything, so the grants still have to be reissued.
+        _restore_inference_worker_grants()
         return
 
     bind = op.get_bind()
@@ -115,3 +146,4 @@ def downgrade() -> None:
         "inference_jobs",
         ["status", "created_at", "id"],
     )
+    _restore_inference_worker_grants()

@@ -57,11 +57,32 @@ $$ LANGUAGE plpgsql;
 """
 
 
+def _has_column(table: str, column: str) -> bool:
+    inspector = sa.inspect(op.get_bind())
+    return any(existing["name"] == column for existing in inspector.get_columns(table))
+
+
+def _add_column_if_missing(table: str, column: sa.Column) -> None:
+    """Add a column, tolerating one that is already there.
+
+    Guarded independently of whatever put it there, the way ``005`` guards its
+    ``CREATE TABLE``. The case that found this was a second run of
+    ``reset_supabase_nonprod.sh``: the reset dropped ``alembic_version`` but not
+    ``helper_devices``, so the chain replayed against a database that still had
+    ``inference_host`` and this revision died on "column already exists" - after
+    005 had skipped cleanly, which made it look like a 007 bug rather than a
+    reset-script one. The reset script now drops those tables, and this no longer
+    depends on it doing so.
+    """
+    if not _has_column(table, column.name):
+        op.add_column(table, column)
+
+
 def upgrade() -> None:
     bind = op.get_bind()
     _EXECUTION_TARGET.create(bind, checkfirst=True)
 
-    op.add_column(
+    _add_column_if_missing(
         "jobs",
         sa.Column(
             "execution_target",
@@ -70,7 +91,7 @@ def upgrade() -> None:
             nullable=False,
         ),
     )
-    op.add_column(
+    _add_column_if_missing(
         "jobs",
         sa.Column(
             "preferred_execution_target",
@@ -79,7 +100,7 @@ def upgrade() -> None:
             nullable=False,
         ),
     )
-    op.add_column(
+    _add_column_if_missing(
         "helper_devices",
         sa.Column(
             "inference_host",
@@ -88,7 +109,7 @@ def upgrade() -> None:
             nullable=False,
         ),
     )
-    op.add_column(
+    _add_column_if_missing(
         "users",
         sa.Column(
             "prefer_local_inference",
@@ -99,6 +120,10 @@ def upgrade() -> None:
     )
 
     op.execute(_FIX_TRIGGER_FUNCTION)
+    # DROP first: CREATE TRIGGER has no IF NOT EXISTS, and a replay against a
+    # database that kept the jobs table would otherwise fail here for the same
+    # reason the add_column calls above used to.
+    op.execute("DROP TRIGGER IF EXISTS jobs_execution_target_is_fixed ON jobs")
     op.execute(
         "CREATE TRIGGER jobs_execution_target_is_fixed "
         "BEFORE UPDATE ON jobs FOR EACH ROW "

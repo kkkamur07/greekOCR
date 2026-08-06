@@ -109,7 +109,17 @@ def process_one_job() -> bool:
 
 
 async def _idle_wait_seconds(settings: JobSettings, idle_interval: float) -> float:
-    """Cap the idle backoff so it can never sleep past a waiting job's deadline."""
+    """Cap the idle backoff so it can never sleep past a waiting job's deadline.
+
+    The deadline being respected is the inference-dispatch timeout, whose
+    population is empty today - nothing calls ``mark_job_waiting`` any more, so
+    ``fail_stale_waiting_jobs`` has no rows. The cap still fires whenever *any*
+    job is waiting, agent-held ones included, because the query does not
+    discriminate. The effect is a worker that wakes sooner than it needs to,
+    which is the harmless direction; it is not the lease's mechanism. Pages an
+    agent holds are recovered by ``release_expired_device_leases``, from this same
+    tick and from the on-read sweep.
+    """
     waiting_deadline = await asyncio.to_thread(
         seconds_until_next_stale_waiting_job,
         waiting_timeout_seconds=settings.job_worker_waiting_timeout_seconds,

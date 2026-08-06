@@ -30,8 +30,8 @@ Two agents never receive the same page
 takes the next one, or finds nothing; it never waits on the first and never sees
 the same id.
 
-The page image arrives by signed link, not by an authenticated route
--------------------------------------------------------------------
+The page image arrives by signed link, and by nothing else
+----------------------------------------------------------
 The claim carries a link to the one page image, good for about a minute. An
 authenticated ``GET /device/v1/jobs/{id}/image`` was rejected (ADR 0002): the
 production API is serverless, so streaming manuscript scans through it costs
@@ -39,7 +39,15 @@ money for nothing, and it would put a route on the device credential that has to
 independently re-derive job ownership. The signature *is* the authorization, and
 it covers exactly one object key.
 
-Its lifetime is not the lease's. The agent fetches once, immediately after
+The response used to violate that anyway. ``request`` was an
+``inference.contracts.jobs.JobSubmitRequest`` - the body the platform once POSTed
+into the second queue - so it carried ``image_bytes``, and the claim shipped the
+whole scan base64-encoded at about 1.33x its stored size *next to* the link. No
+agent has ever read that field. It is gone: the claim payload is now
+``PageRunRequest``, which holds the instruction and not the page, and nothing on
+this path reads an image out of storage at all.
+
+The link's lifetime is not the lease's. The agent fetches once, immediately after
 claiming, so the link only has to outlive one download on a bad connection;
 tying it to the 600 second lease would keep a bearer token in a URL alive ten
 times longer to buy nothing.
@@ -53,12 +61,12 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urljoin
 
-from inference.contracts.jobs import JobSubmitRequest
 from sqlalchemy import select
 
 from backend.document.infrastructure.media_store import get_media_store
 from backend.jobs.application.inference_dispatcher import (
-    build_inference_submit_request,
+    PageRunRequest,
+    build_page_run_request,
     page_image_key_for_job,
 )
 from backend.jobs.infrastructure.job_repository import (
@@ -79,11 +87,16 @@ UNBUILDABLE_PAYLOAD_ERROR = "This page could not be prepared for inference"
 def agent_claim_owner(device_id: uuid.UUID) -> str:
     """The value written to ``jobs.claimed_by`` for an agent-held page.
 
-    Prefixed so it can never collide with ``worker_identity()``'s ``host:pid``,
-    and so "which agent holds this page" is answerable from the row alone - which
-    is what lets the callback authorise a device without a second table, and what
-    lets the stale sweep tell a leased page from a dispatched one without joining
-    anything.
+    Prefixed so "which agent holds this page" is answerable from the row alone -
+    which is what lets the callback authorise a device without a second table,
+    and what lets the stale sweep tell a leased page from a dispatched one
+    without joining anything.
+
+    The collision with ``worker_identity()`` is prevented on the *other* side:
+    that value is namespaced ``worker:host/pid``, so it cannot begin with this
+    prefix whatever the machine is called. It used to be a bare ``host:pid``,
+    which meant a machine whose hostname happened to be the prefix's own word
+    produced a claim id every sweep read as agent-held.
     """
     return f"{AGENT_CLAIM_PREFIX}{device_id}"
 
@@ -97,7 +110,7 @@ class ClaimedPage:
     job_type: JobType
     execution_target: ExecutionTarget
     lease_expires_at: datetime
-    request: JobSubmitRequest
+    request: PageRunRequest
     #: Signed link to the one page image, and the moment it stops working. Two
     #: separate fields rather than one, because an agent has to be able to tell
     #: whether its link is still worth using without parsing a URL.
@@ -160,16 +173,16 @@ def claim_one_page(
         job_id = job.id
         job_type = job.type
         execution_target = job.execution_target
-        # Detached but usable: ``expire_on_commit=False``, and the payload build
-        # below deliberately runs outside this transaction so a large image read
-        # never happens while a queue row is locked.
+        # Detached but usable: ``expire_on_commit=False``. The build below still
+        # runs outside this transaction - it reads the part and its lines - so a
+        # queue row is never locked across it.
         detached_job = job
 
     notify_platform_job_status_changed(job_id, JobStatus.waiting)
 
     page_image_expires_at = now + timedelta(seconds=page_image_ttl_seconds)
     try:
-        request = build_inference_submit_request(detached_job)
+        request = build_page_run_request(detached_job)
         page_image_url = urljoin(
             base_url,
             get_media_store().signed_object_url(

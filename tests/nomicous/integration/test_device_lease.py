@@ -65,6 +65,9 @@ CURRENT_AGENT_VERSION = "1.0.0"
 SERVICE_HEADERS = {
     SERVICE_TOKEN_HEADER: "test-inference-worker-service-token-not-for-production",
     AGENT_VERSION_HEADER: CURRENT_AGENT_VERSION,
+    # Required: without it two hosted workers resolve to one helper_devices row
+    # and neither can be told from the other on a claim.
+    WORKER_NAME_HEADER: "cloud-worker",
 }
 
 
