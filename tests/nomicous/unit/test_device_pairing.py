@@ -839,7 +839,7 @@ def test_device_dependency_uses_a_dedicated_header_and_type() -> None:
     assert "x_nomicous_device_token" not in inspect.signature(get_current_user).parameters
 
 
-# ``test_migration_005_matches_the_orm_models`` and
+# ``test_device_migration_matches_the_orm_models`` and
 # ``test_orm_models_are_registered_for_alembic_metadata`` stood here. Both are
 # subsumed by ``integration/test_migrations.py::test_migration_chain_matches_orm_metadata``,
 # which migrates a scratch database from empty to head and asserts alembic's
@@ -848,14 +848,14 @@ def test_device_dependency_uses_a_dedicated_header_and_type() -> None:
 # without naming a revision, so it survives the chain being renumbered.
 
 
-def test_migration_grants_the_runtime_role_access() -> None:
+def test_device_migration_grants_the_runtime_role_access() -> None:
     """A table the API role cannot write is an outage on the first request.
 
     Restored after a test-suite reduction pass cut it: nothing else in the suite
     asserts the helper-device tables are reachable by ``nomicous_api``. The
-    chain-vs-ORM check above covers *shape*, not *privilege* - it migrates as a
-    superuser, so a chain that creates both tables and grants nothing passes it
-    and then 500s on the first pairing request in production.
+    chain-vs-ORM check named above covers *shape*, not *privilege* - it migrates
+    as a superuser, so a chain that creates both tables and grants nothing passes
+    it and then 500s on the first pairing request in production.
     """
     from pathlib import Path
 
@@ -865,7 +865,7 @@ def test_migration_grants_the_runtime_role_access() -> None:
         / "infrastructure"
         / "alembic"
         / "versions"
-        / "005_helper_devices.py"
+        / "003_helper_devices.py"
     ).read_text()
 
     assert "nomicous_api" in migration

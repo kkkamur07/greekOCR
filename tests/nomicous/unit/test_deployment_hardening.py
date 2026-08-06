@@ -138,26 +138,27 @@ def test_role_migration_defines_service_boundaries_without_passwords() -> None:
 
 
 def test_inference_worker_role_reaches_nothing_after_the_queue_collapse() -> None:
-    """ADR 0003 left the group with no table to read; 006 revokes what remains."""
-    drop = (
-        REPO_ROOT
-        / "nomicous"
-        / "infrastructure"
-        / "alembic"
-        / "versions"
-        / "006_drop_inference_jobs.py"
+    """ADR 0003 left the group with no table to read.
+
+    The squashed chain expresses that as an absence rather than as a grant that a
+    later revision revokes: the group is still created so 002 and the bootstrap
+    script find all four, and nothing is ever granted to it.
+    """
+    migration = (
+        REPO_ROOT / "nomicous" / "infrastructure" / "alembic" / "versions" / "002_service_roles.py"
     ).read_text(encoding="utf-8")
     bootstrap = (REPO_ROOT / "scripts" / "platform" / "provision_database_roles.sql").read_text(
         encoding="utf-8"
     )
 
-    assert 'op.drop_table("inference_jobs")' in drop
-    assert "REVOKE ALL ON SCHEMA public FROM nomicous_inference_worker" in drop
-    assert not [
-        line
-        for line in bootstrap.splitlines()
-        if "nomicous_inference_worker" in line and line.lstrip().startswith("GRANT")
-    ]
+    # Created, so the "all four groups exist" check in 002 passes.
+    assert "nomicous_inference_worker" in migration
+    for source in (migration, bootstrap):
+        assert not [
+            line
+            for line in source.splitlines()
+            if "nomicous_inference_worker" in line and line.lstrip().startswith("GRANT")
+        ]
 
 
 def test_platform_backend_ships_bundled_unicode_pdf_font() -> None:

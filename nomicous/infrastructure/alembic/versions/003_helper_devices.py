@@ -1,22 +1,19 @@
 """Create helper_devices and helper_pairings for outbound device pairing.
 
-The inference helper stops listening on loopback and instead authenticates
-outbound with an opaque device token. These two tables hold the credential
-*hashes* and the short-lived pairing requests that mint them. No raw secret is
-ever stored.
+The inference helper does not listen on loopback; it authenticates outbound with
+an opaque device token. These two tables hold the credential *hashes* and the
+short-lived pairing requests that mint them. No raw secret is ever stored.
 
-This is a real change on every database, including a fresh one. It did not used
-to be: ``001_initial_schema`` was regenerated from live ORM metadata, so once
-these models were registered in ``infrastructure/models.py`` the baseline built
-both tables and this revision was a no-op there. The squash froze 001 to stop
-precisely that, and 001 now names ``helper_devices`` and ``helper_pairings`` as
-deliberately absent from the baseline.
+``helper_devices.inference_host`` is folded in from what used to be
+``007_execution_target``: a hosted worker is a device like any other (ADR 0003),
+so capacity is one query over one table instead of a device check plus a separate
+notion of cloud uptime. ``local`` is the right default - every device paired
+before the column existed was a researcher's own computer paired from a browser.
 
-The ``_has_table`` guards stay, and their only remaining subject is a database
-stamped during the period 001 was still being regenerated: those already have the
-tables and must not fail on a second ``CREATE TABLE``. On any database created
-since the freeze, the guards never fire. ``_grant_runtime_privileges`` is outside
-them either way - a database that already had the tables still needs the grants.
+The ``_has_table`` guards the pre-squash version carried are gone. They existed
+for databases stamped while 001 was still regenerated from ORM metadata, and no
+such database is left; a partial replay would now fail in 001's unguarded
+``CREATE TABLE`` long before reaching this revision anyway.
 """
 
 from collections.abc import Sequence
@@ -25,14 +22,13 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "005_helper_devices"
-down_revision: str | None = "004_document_part_dimensions"
+revision: str = "003_helper_devices"
+down_revision: str | None = "002_service_roles"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-
-def _has_table(name: str) -> bool:
-    return sa.inspect(op.get_bind()).has_table(name)
+# Created by 001; this revision only references it.
+EXECUTION_TARGET = postgresql.ENUM("local", "cloud", name="execution_target", create_type=False)
 
 
 def _create_helper_devices() -> None:
@@ -72,6 +68,14 @@ def _create_helper_devices() -> None:
             server_default=sa.text("now()"),
             nullable=False,
         ),
+        # Which host a paired device *is*. Last, matching the column order the
+        # nine-revision chain produced when 007 added it with ALTER TABLE.
+        sa.Column(
+            "inference_host",
+            EXECUTION_TARGET,
+            server_default="local",
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(
             ["user_id"],
             ["users.id"],
@@ -88,6 +92,7 @@ def _create_helper_devices() -> None:
         ["user_id"],
         postgresql_where=sa.text("revoked_at IS NULL"),
     )
+    # Capacity reads this too, rather than growing a second liveness mechanism.
     op.create_index("ix_helper_devices_last_seen_at", "helper_devices", ["last_seen_at"])
 
 
@@ -176,21 +181,15 @@ def _grant_runtime_privileges() -> None:
 
 
 def upgrade() -> None:
-    if not _has_table("helper_devices"):
-        _create_helper_devices()
-    if not _has_table("helper_pairings"):
-        _create_helper_pairings()
-    # Outside the has_table guards: a database stamped while 001 still built these
-    # tables has them already and would otherwise never be granted anything.
+    _create_helper_devices()
+    _create_helper_pairings()
     _grant_runtime_privileges()
 
 
 def downgrade() -> None:
     # helper_pairings holds the FK to helper_devices, so it goes first.
-    if _has_table("helper_pairings"):
-        op.drop_index("ix_helper_pairings_expires_at", table_name="helper_pairings")
-        op.drop_table("helper_pairings")
-    if _has_table("helper_devices"):
-        op.drop_index("ix_helper_devices_last_seen_at", table_name="helper_devices")
-        op.drop_index("ix_helper_devices_user_live", table_name="helper_devices")
-        op.drop_table("helper_devices")
+    op.drop_index("ix_helper_pairings_expires_at", table_name="helper_pairings")
+    op.drop_table("helper_pairings")
+    op.drop_index("ix_helper_devices_last_seen_at", table_name="helper_devices")
+    op.drop_index("ix_helper_devices_user_live", table_name="helper_devices")
+    op.drop_table("helper_devices")

@@ -770,6 +770,20 @@ async def test_job_event_stream_ends_cleanly_when_access_is_lost(
     assert "Job stream closed" in chunks[0]
 
 
+# --- Baseline schema ---
+# ``test_baseline_migration_builds_the_job_queue_columns`` and
+# ``test_job_model_exposes_worker_ownership_columns`` stood here. Column presence
+# and nullability are settled by
+# ``integration/test_migrations.py::test_migration_chain_matches_orm_metadata``,
+# which diffs the whole migrated schema against ``Base.metadata`` on a real
+# Postgres instead of a monkeypatched ``op``. The one claim that check cannot
+# make - autogenerate does not compare triggers - is
+# ``jobs_execution_target_is_fixed``, and that is covered far better than by the
+# substring search that stood here: ``integration/test_execution_target.py``
+# issues a raw ``UPDATE jobs SET execution_target`` against Postgres and asserts
+# it is refused, with a sibling confirming every other column stays writable.
+
+
 # --- Poison-page ceiling ---
 # Tests a page that is abandoned over and over eventually reaches a terminal
 # status. Does not test the lease duration, which decides *when* a claim is

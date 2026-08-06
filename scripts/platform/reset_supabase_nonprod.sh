@@ -193,8 +193,10 @@ set +a
 # Every table the chain creates has to be named here. CASCADE drops dependent FK
 # *constraints*, not dependent tables - so leaving helper_pairings/helper_devices
 # off this list left them standing with `inference_host` intact while
-# alembic_version went, and the replay of 007 then failed with "column already
-# exists". A second reset is the case that finds it; the first one always worked.
+# alembic_version went, and the replay then failed with "column already exists".
+# A second reset is the case that finds it; the first one always worked. The
+# squashed chain has no guarded CREATE TABLE left to paper over a partial drop,
+# so this list is now the only thing making a reset repeatable.
 psql "$FILE_MIGRATOR_URL" -v ON_ERROR_STOP=1 <<'SQL'
 DROP TABLE IF EXISTS
   auth_sessions,
@@ -233,7 +235,7 @@ DROP TYPE IF EXISTS
   inference_task
 CASCADE;
 
--- Created by 007 alongside the trigger on jobs. Dropping the table takes the
+-- Created by 001 alongside the trigger on jobs. Dropping the table takes the
 -- trigger, but a function is schema-level and survives every table drop above.
 DROP FUNCTION IF EXISTS jobs_execution_target_is_fixed();
 DROP FUNCTION IF EXISTS app_user_can_access_binding(uuid, uuid, uuid);

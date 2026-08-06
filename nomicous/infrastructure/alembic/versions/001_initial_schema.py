@@ -1,29 +1,44 @@
 """Create the baseline application schema.
 
-This is the squashed replacement for the pre-production migration history.
-Application authorization remains in FastAPI; this schema intentionally does not
-enable PostgreSQL row-level security.
+This is the squashed replacement for the pre-production migration history. It
+folds in what used to be nine revisions:
 
-Service role grants live in 002_service_roles.
+* ``003_job_lifecycle`` - ``jobs.claimed_by`` / ``jobs.heartbeat_at``
+* ``004_document_part_dimensions`` - ``document_parts.width`` / ``height``
+* ``006_drop_inference_jobs`` - the ML-owned queue is simply never created, and
+  neither is its ``inference_job_status`` enum (ADR 0003: the platform owns the
+  only queue)
+* ``007_execution_target`` - the ``execution_target`` enum, the two ``jobs``
+  columns, ``users.prefer_local_inference``, and the trigger that fixes a job's
+  host at submission
+* ``008_job_claim_attempts`` - ``jobs.claim_attempts``
+* ``009_jobs_claim_target_index`` - ``ix_jobs_claim_target_pending``
+
+Application authorization remains in FastAPI; this schema intentionally does not
+enable PostgreSQL row-level security. Service role grants live in
+``002_service_roles``, and device pairing in ``003_helper_devices``.
+
+Columns that a folded-in revision added with ``ALTER TABLE`` are appended at the
+end of their table rather than slotted in beside related columns. That keeps the
+physical column order identical to what the nine-revision chain produced, so a
+database built by the old chain and one built by this file are the same database
+- which is what let the existing deployments be stamped at this head instead of
+rebuilt.
 
 THE DDL BELOW IS FROZEN. It is a historical record of the schema as it stood
 immediately before 002, and it must never be regenerated from live ORM metadata
-(``Base.metadata.create_all``) again. It previously was, and that cost us two
-things:
+(``Base.metadata.create_all``). It previously was, and that cost us two things:
 
 * the migration stopped being replayable - running 001 produced *today's* ORM
   schema rather than the schema this revision actually created, so migration
   history could not be audited or replayed to any point in time; and
 * it made a missing migration structurally undetectable - a fresh database
   migrated to head always matched the ORM because head *was* the ORM, so an
-  ``alembic check`` style diff could never fail. 003_job_lifecycle and
-  004_document_part_dimensions are the scar tissue from schema changes that
-  slipped through and had to be patched after the fact.
+  ``alembic check`` style diff could never fail. The former 003 and 004 were the
+  scar tissue from schema changes that slipped through and had to be patched
+  after the fact.
 
-So: every schema change after this revision gets its own migration. Columns and
-tables that later revisions add are deliberately absent here - jobs.claimed_by /
-jobs.heartbeat_at (003), document_parts.width / height (004), and
-helper_devices / helper_pairings (005).
+So: every schema change after this revision gets its own migration.
 
 ``tests/nomicous/integration/test_migrations.py`` is what keeps this honest: it
 migrates a scratch database to head and asserts the autogenerate diff against
@@ -45,8 +60,8 @@ depends_on: str | Sequence[str] | None = None
 # Enum types are declared with ``create_type=False`` and created explicitly, once,
 # by ``_create_enum_types``. Left to itself SQLAlchemy emits a CREATE TYPE from
 # whichever CREATE TABLE happens to mention the type first, which breaks the
-# moment two tables share one (inference_task is used by inference_models and by
-# inference_jobs) and makes the drop order in downgrade() guesswork.
+# moment two tables share one (execution_target is used by jobs here and by
+# helper_devices in 003) and makes the drop order in downgrade() guesswork.
 def _enum(name: str, *values: str) -> postgresql.ENUM:
     return postgresql.ENUM(*values, name=name, create_type=False)
 
@@ -59,7 +74,9 @@ LINE_GEOMETRY_KIND = _enum("line_geometry_kind", "polygon", "rectangle")
 LINE_SOURCE = _enum("line_source", "manual", "kraken", "model")
 JOB_TYPE = _enum("job_type", "segment", "transcribe", "binarize", "pipeline")
 JOB_STATUS = _enum("job_status", "pending", "waiting", "running", "done", "failed", "cancelled")
-INFERENCE_JOB_STATUS = _enum("inference_job_status", "pending", "running", "done", "failed")
+# ``local_only`` is not a value of this enum and never was one in this database.
+# See ADR 0002 for why it is not coming back.
+EXECUTION_TARGET = _enum("execution_target", "local", "cloud")
 
 _ENUM_TYPES = (
     INFERENCE_TASK,
@@ -70,7 +87,27 @@ _ENUM_TYPES = (
     LINE_SOURCE,
     JOB_TYPE,
     JOB_STATUS,
+    EXECUTION_TARGET,
 )
+
+# The ORM raises on any attempt to move a job between hosts, but an application
+# guard only binds statements that go through that mapper - and the platform
+# issues bulk ``UPDATE`` statements against ``jobs`` from the stale sweep and the
+# callback path. "Never changed afterwards" is a property the whole of ADR 0002
+# rests on, so it is also enforced where nothing can route around it.
+_FIX_TRIGGER_FUNCTION = """
+CREATE OR REPLACE FUNCTION jobs_execution_target_is_fixed() RETURNS trigger AS $$
+BEGIN
+    IF NEW.execution_target IS DISTINCT FROM OLD.execution_target THEN
+        RAISE EXCEPTION
+            'jobs.execution_target is fixed at submission (job %: % -> %)',
+            OLD.id, OLD.execution_target, NEW.execution_target
+            USING ERRCODE = 'check_violation';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+"""
 
 
 def _create_enum_types() -> None:
@@ -90,6 +127,15 @@ def _create_users() -> None:
             "created_at",
             sa.DateTime(timezone=True),
             server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        # "Use my computer when it is available." The whole of execution target
+        # selection, chosen once at the account level - there is deliberately no
+        # per-job toggle (ADR 0002).
+        sa.Column(
+            "prefer_local_inference",
+            sa.Boolean(),
+            server_default=sa.text("false"),
             nullable=False,
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_users")),
@@ -226,7 +272,6 @@ def _create_documents() -> None:
     )
     op.create_index(op.f("ix_documents_project_id"), "documents", ["project_id"])
 
-    # width/height are NOT here - they arrive in 004_document_part_dimensions.
     op.create_table(
         "document_parts",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
@@ -240,6 +285,12 @@ def _create_documents() -> None:
             server_default=sa.text("now()"),
             nullable=False,
         ),
+        # Nullable, and never backfilled: the dimensions of an already-uploaded
+        # page live only inside the stored object, and a migration must not reach
+        # into object storage. The read paths decode each legacy image once and
+        # persist what they recover - see ``PartServiceMixin.backfill_part_dimensions``.
+        sa.Column("width", sa.Integer(), nullable=True),
+        sa.Column("height", sa.Integer(), nullable=True),
         sa.ForeignKeyConstraint(
             ["document_id"],
             ["documents.id"],
@@ -462,12 +513,11 @@ def _create_ml() -> None:
 
 
 def _create_jobs() -> None:
-    # claimed_by/heartbeat_at are NOT here - they arrive in 003_job_lifecycle.
     op.create_table(
         "jobs",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
-        # Deliberately not an FK: inference_jobs lives in the inference service's
-        # own schema and may be a different database entirely.
+        # Deliberately not an FK, and now vestigial: the queue it pointed into was
+        # the inference service's own, which ADR 0003 collapsed into this table.
         sa.Column("inference_job_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("type", JOB_TYPE, nullable=False),
         sa.Column("status", JOB_STATUS, nullable=False),
@@ -501,6 +551,34 @@ def _create_jobs() -> None:
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("callback_claimed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
+        # Worker ownership. ``claimed_by`` records the worker process that owns a
+        # running job, so a job reclaimed after its lease expired cannot be
+        # completed by the zombie worker that lost it.
+        sa.Column("claimed_by", sa.Text(), nullable=True),
+        sa.Column("heartbeat_at", sa.DateTime(timezone=True), nullable=True),
+        # Where the job runs, and where the account setting asked for it to run.
+        # They differ exactly when the preferred inference host had no capacity at
+        # submission, which is the substitution the researcher has to be told
+        # about. ``cloud`` is the correct default for rows that predate the
+        # column: every one of them was dispatched to the hosted service.
+        sa.Column(
+            "execution_target",
+            EXECUTION_TARGET,
+            server_default="cloud",
+            nullable=False,
+        ),
+        sa.Column(
+            "preferred_execution_target",
+            EXECUTION_TARGET,
+            server_default="cloud",
+            nullable=False,
+        ),
+        # How often a claim on this job was abandoned. On ``jobs`` rather than in
+        # ``payload`` because the sweeps are bulk UPDATEs over the queue and have
+        # to increment and compare it in SQL without reading a JSON document per
+        # row. Without it a page that reliably kills whatever runs it cycled
+        # pending -> waiting -> pending forever, never reaching a terminal status.
+        sa.Column("claim_attempts", sa.Integer(), server_default="0", nullable=False),
         sa.ForeignKeyConstraint(
             ["binding_id"],
             ["model_bindings.id"],
@@ -539,11 +617,32 @@ def _create_jobs() -> None:
     # GIN: the worker filters jobs by keys *inside* payload.
     op.create_index("ix_jobs_payload_gin", "jobs", ["payload"], postgresql_using="gin")
     # Partial: the claim query only ever looks at the pending head of the queue.
+    # This one serves the *platform worker's* claim.
     op.create_index(
         "ix_jobs_claim_pending",
         "jobs",
         ["created_at", "id"],
         postgresql_where=sa.text("status = 'pending'"),
+    )
+    # The agent's claim adds two selective equality predicates the index above
+    # answers neither of, so every claim walked the pending queue oldest-first
+    # discarding rows belonging to another inference host or account. Leading with
+    # the equalities and ending with the sort key answers the filter and the
+    # ordering in one range scan. ``type`` is deliberately absent: it is an IN over
+    # two of four values, not selective enough to earn a place ahead of the sort
+    # key.
+    op.create_index(
+        "ix_jobs_claim_target_pending",
+        "jobs",
+        ["execution_target", "user_id", "created_at", "id"],
+        postgresql_where=sa.text("status = 'pending'"),
+    )
+
+    op.execute(_FIX_TRIGGER_FUNCTION)
+    op.execute(
+        "CREATE TRIGGER jobs_execution_target_is_fixed "
+        "BEFORE UPDATE ON jobs FOR EACH ROW "
+        "EXECUTE FUNCTION jobs_execution_target_is_fixed()"
     )
 
 
@@ -660,63 +759,6 @@ def _create_transcriptions() -> None:
     )
 
 
-def _create_inference_jobs() -> None:
-    bind = op.get_bind()
-    inference_task = postgresql.ENUM(
-        "segment",
-        "transcribe",
-        "binarize",
-        name="inference_task",
-        create_type=False,
-    )
-    inference_job_status = postgresql.ENUM(
-        "pending",
-        "running",
-        "done",
-        "failed",
-        name="inference_job_status",
-        create_type=False,
-    )
-    inference_job_status.create(bind, checkfirst=True)
-    op.create_table(
-        "inference_jobs",
-        sa.Column("id", sa.UUID(), nullable=False),
-        sa.Column("product_job_id", sa.UUID(), nullable=False),
-        sa.Column("task", inference_task, nullable=False),
-        sa.Column("registry_model_id", sa.Text(), nullable=False),
-        sa.Column("registry_tag", sa.Text(), nullable=False),
-        sa.Column("status", inference_job_status, nullable=False),
-        sa.Column("image_bytes", sa.LargeBinary(), nullable=False),
-        sa.Column(
-            "params", postgresql.JSONB(astext_type=sa.Text()), server_default="{}", nullable=False
-        ),
-        sa.Column("output", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-        sa.Column("error", sa.Text(), nullable=True),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.Column(
-            "updated_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
-        sa.PrimaryKeyConstraint("id", name=op.f("pk_inference_jobs")),
-    )
-    op.create_index(op.f("ix_inference_jobs_product_job_id"), "inference_jobs", ["product_job_id"])
-    op.create_index(op.f("ix_inference_jobs_status"), "inference_jobs", ["status"])
-    op.create_index(
-        "ix_inference_jobs_claim_order",
-        "inference_jobs",
-        ["status", "created_at", "id"],
-    )
-
-
 def upgrade() -> None:
     _create_enum_types()
     _create_users()
@@ -726,14 +768,15 @@ def upgrade() -> None:
     _create_ml()
     _create_jobs()
     _create_transcriptions()
-    _create_inference_jobs()
 
 
 def downgrade() -> None:
     bind = op.get_bind()
+    # Dropping ``jobs`` takes its trigger, but a function is schema-level and
+    # survives every table drop below.
+    op.execute("DROP TRIGGER IF EXISTS jobs_execution_target_is_fixed ON jobs")
     # Reverse dependency order; indexes go with their table.
     for table in (
-        "inference_jobs",
         "page_transcription_lines",
         "line_transcriptions",
         "transcriptions",
@@ -753,5 +796,6 @@ def downgrade() -> None:
         "users",
     ):
         op.drop_table(table)
-    for enum_type in (*_ENUM_TYPES, INFERENCE_JOB_STATUS):
+    op.execute("DROP FUNCTION IF EXISTS jobs_execution_target_is_fixed()")
+    for enum_type in _ENUM_TYPES:
         enum_type.drop(bind, checkfirst=True)

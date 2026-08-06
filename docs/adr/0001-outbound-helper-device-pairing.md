@@ -405,10 +405,9 @@ log.
 - Both models are registered in `infrastructure/models.py`. They previously reached
   `Base.metadata` only transitively through `users/api/dependencies.py`, which meant the next
   `alembic autogenerate` would have emitted `drop_table` for both.
-- Migration `005_helper_devices` chains from `004_document_part_dimensions` and has a working
-  `downgrade()`. It is written idempotently, so it stays a no-op on a database whose baseline
-  already contains the tables. It issues its own `GRANT` to `nomicous_api`, because
-  `002_service_roles` grants `ON ALL TABLES`, which is point-in-time, and
+- Migration `003_helper_devices` (`005_helper_devices` before the second squash) chains from
+  `002_service_roles` and has a working `downgrade()`. It issues its own `GRANT` to
+  `nomicous_api`, because `002_service_roles` grants `ON ALL TABLES`, which is point-in-time, and
   `ALTER DEFAULT PRIVILEGES`, which only covers tables created by the role that ran it. Neither
   is guaranteed to reach a table created here, and the failure mode is a permission error on the
   first pairing request.

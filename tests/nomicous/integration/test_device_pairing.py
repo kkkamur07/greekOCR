@@ -17,7 +17,7 @@ how this phase once shipped with its routers unmounted and a green suite.
 line over the full route set; every test here reaches those routes on the app
 the deployment builds, so the module carries it too.
 
-Requires migration ``005_helper_devices``.
+Requires migration ``003_helper_devices``.
 """
 
 from __future__ import annotations

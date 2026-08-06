@@ -132,13 +132,24 @@ PYTHONPATH=. alembic -c infrastructure/alembic.ini downgrade -1
 
 | Revision | Domain | Main changes |
 |----------|--------|--------------|
-| `001_initial_schema` | application schema | All final ORM tables, enums, constraints, indexes, and the then ML-owned `inference_jobs` queue |
+| `001_initial_schema` | application schema | All final ORM tables bar device pairing: enums, constraints, indexes, the single `jobs` queue with its execution-target columns and the trigger that fixes a job's host at submission |
 | `002_service_roles` | service permissions | NOLOGIN service groups and default/table grants; provider-managed LOGIN membership remains external |
-| `006_drop_inference_jobs` | job queue | Drops `inference_jobs` and its enum; the platform owns the only queue (ADR 0003) |
+| `003_helper_devices` | device pairing | `helper_devices` and `helper_pairings`, plus the explicit runtime grants `002` cannot issue for a table that does not exist yet |
 
-The history was squashed before production. The baseline represents the final
-post-021 behavior: FastAPI owns authorization and PostgreSQL RLS is disabled.
-The baseline downgrade is intended for disposable databases only.
+The history was squashed twice, both times before production. The second squash
+folded nine revisions into these three; the retired ones were `003_job_lifecycle`,
+`004_document_part_dimensions`, `005_helper_devices`, `006_drop_inference_jobs`,
+`007_execution_target`, `008_job_claim_attempts` and `009_jobs_claim_target_index`.
+The chain the squash replaced produced a byte-identical schema, so the databases
+that were already deployed were stamped at `003_helper_devices` rather than
+rebuilt.
+
+`inference_jobs` is gone entirely: the ML service's own queue was collapsed into
+`jobs` by ADR 0003, and the baseline never creates it.
+
+The baseline represents the final post-021 behavior: FastAPI owns authorization
+and PostgreSQL RLS is disabled. The baseline downgrade is intended for disposable
+databases only.
 
 ## Database Structure
 
