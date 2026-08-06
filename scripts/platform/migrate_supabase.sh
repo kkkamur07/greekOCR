@@ -23,8 +23,22 @@ if [[ -z "${MIGRATOR_DATABASE_URL:-}" ]]; then
   exit 1
 fi
 
+# Resolve the project venv's alembic explicitly. A bare `alembic` picks up
+# whichever shim is first on PATH - pyenv's usually is - and that interpreter
+# has neither our revisions nor the project's SQLAlchemy, so the upgrade fails
+# in a way that reads like a broken migration chain.
+ALEMBIC="$ROOT/.venv/bin/alembic"
+if [[ ! -x "$ALEMBIC" ]]; then
+  ALEMBIC="$(command -v alembic || true)"
+fi
+if [[ -z "$ALEMBIC" ]]; then
+  echo "No alembic found. Run 'uv sync' to create $ROOT/.venv." >&2
+  exit 1
+fi
+
 cd "$ROOT/nomicous"
 echo "Running Alembic against Supabase (migrator URL)…"
-PYTHONPATH=. alembic -c infrastructure/alembic.ini upgrade head
+echo "  alembic: $ALEMBIC"
+PYTHONPATH=. "$ALEMBIC" -c infrastructure/alembic.ini upgrade head
 echo "Done. Current revision:"
-PYTHONPATH=. alembic -c infrastructure/alembic.ini current
+PYTHONPATH=. "$ALEMBIC" -c infrastructure/alembic.ini current
