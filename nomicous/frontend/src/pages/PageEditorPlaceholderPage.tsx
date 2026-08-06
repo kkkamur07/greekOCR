@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { type LayoutPoint, type LinePoint } from "../api/client";
+import { invalidateAfter } from "../api/resources";
 import { useHostPreference } from "../inference";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import { PageEditorCanvas } from "../components/page-editor/PageEditorCanvas";
@@ -364,11 +365,18 @@ export function PageEditorPlaceholderPage() {
             selectedLineId={selectedLineId}
             textLines={textLines}
             onPairTextLine={pairTextLine}
-            onDocumentWorkflowChange={(workflow) =>
+            onDocumentWorkflowChange={(workflow) => {
               setDocument((current) =>
                 current ? { ...current, workflow } : current,
-              )
-            }
+              );
+              // Publishing is the one write in this editor that changes what a
+              // reader can reach at all. This handler used to stop at the local
+              // copy above, so the document list, the detail page and the
+              // public page went on showing the old status.
+              if (projectId && documentId) {
+                invalidateAfter.documentUpdated(projectId, documentId);
+              }
+            }}
             onDeleteSelectedSegment={deleteSelectedSegment}
             onResetSelectedLine={resetSelectedLine}
             actionsOpen={actionsOpen}

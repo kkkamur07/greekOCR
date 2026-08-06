@@ -35,20 +35,21 @@ export const resourceTags = {
  * document makes the project list stale too. That relationship is written down
  * here once rather than being rediscovered at each call site that creates or
  * deletes a document.
+ *
+ * A caller that already folded the server's response into its own view with
+ * `ServerQuery.patch` still declares the whole write. There used to be a
+ * narrower `…InPlace` pair for that case, on the reasoning that invalidating a
+ * view you just wrote to replaces it with an older value - it does not, because
+ * the refetch reads the same server the response came from. What the narrower
+ * pair did do was skip a tag, and the reads carrying that tag - the other
+ * `includeArchived` variant of the dashboard, the copy of the document the page
+ * editor holds - were left showing the value from before the write.
  */
 export const invalidateAfter = {
   projectCreated: (): void => invalidateTags([resourceTags.projects]),
 
   projectUpdated: (projectId: string): void =>
     invalidateTags([resourceTags.projects, resourceTags.project(projectId)]),
-
-  /**
-   * Same write, by a caller that already folded the server's response into its
-   * own view with `ServerQuery.patch`. Dropping that view would replace the
-   * value just written with an older one, so only the reads that copy the
-   * project's fields elsewhere - the project list - are invalidated.
-   */
-  projectUpdatedInPlace: (): void => invalidateTags([resourceTags.projects]),
 
   projectDeleted: (projectId: string): void =>
     invalidateTags([resourceTags.projects, resourceTags.project(projectId)]),
@@ -60,13 +61,6 @@ export const invalidateAfter = {
     invalidateTags([
       resourceTags.documents(projectId),
       resourceTags.document(projectId, documentId),
-      resourceTags.publicDocument(projectId, documentId),
-    ]),
-
-  /** As `documentUpdated`, for a caller that holds the response - see `projectUpdatedInPlace`. */
-  documentUpdatedInPlace: (projectId: string, documentId: string): void =>
-    invalidateTags([
-      resourceTags.documents(projectId),
       resourceTags.publicDocument(projectId, documentId),
     ]),
 

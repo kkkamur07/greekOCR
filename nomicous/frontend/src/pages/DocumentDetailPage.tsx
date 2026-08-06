@@ -87,7 +87,8 @@ export function DocumentDetailPage() {
       const msg =
         err instanceof ApiError ? err.message : "Failed to load document";
       toast.error(msg);
-      return err instanceof ApiError && (err.status === 403 || err.status === 404)
+      return err instanceof ApiError &&
+        (err.status === 403 || err.status === 404)
         ? "This document is not available to your account."
         : msg;
     },
@@ -213,17 +214,16 @@ export function DocumentDetailPage() {
                 ...current,
                 document: {
                   ...current.document,
-                  ...(updated.name !== undefined
-                    ? { name: updated.name }
-                    : {}),
+                  ...(updated.name !== undefined ? { name: updated.name } : {}),
                   ...(updated.workflow !== undefined
                     ? { workflow: updated.workflow }
                     : {}),
                 },
               }));
-              // The document list and the public view copy these fields; the
-              // panel only wrote to the copy this page holds.
-              invalidateAfter.documentUpdatedInPlace(projectId!, documentId!);
+              // The document list, the public view and the copy the page
+              // editor fetches all carry these fields; the panel only wrote to
+              // the copy this page holds.
+              invalidateAfter.documentUpdated(projectId!, documentId!);
             }}
           />
         ) : null
