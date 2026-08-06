@@ -15,6 +15,7 @@ import {
   type PartLayoutResponse,
 } from "../../../api/client";
 import { ApiError, isAbortError } from "../../../api/errors";
+import { invalidateAfter } from "../../../api/resources";
 import { submissionRefusalExplanation } from "../../../inference";
 import { cleanPolygonPoints, offsetGeometry } from "../canvasGeometry";
 import {
@@ -127,6 +128,18 @@ export function useLayoutMutations({
     setEditUndoRevision((value) => value + 1);
   }, [projectId, documentId, partId]);
 
+  /**
+   * Called once per committed write, after the server has taken it.
+   *
+   * The editor keeps its own copies of the Segments and layout, so a write here
+   * is visible on the page without any cache doing anything - which is exactly
+   * why the two reads that are *also* copies of it were being left behind.
+   */
+  const notePartContentChanged = useCallback(() => {
+    if (!projectId || !documentId) return;
+    invalidateAfter.partContentChanged(projectId, documentId);
+  }, [projectId, documentId]);
+
   const recordEdit = useCallback((edit: CanvasEdit) => {
     undoStackRef.current = pushEditOntoStack(undoStackRef.current, edit);
     redoStackRef.current = [];
@@ -199,6 +212,7 @@ export function useLayoutMutations({
             : line,
         ),
       );
+      notePartContentChanged();
       setMutationError(null);
       setSaveMessage("Manual geometry saved");
       setSelectedLineSnapshot({
@@ -250,6 +264,7 @@ export function useLayoutMutations({
       applyLayoutLineGeometryToSegments(current, nextLayout.lines),
     );
     setSelectedLineSnapshot(null);
+    notePartContentChanged();
     setSaveMessage("Layout reset");
   }
 
@@ -272,6 +287,7 @@ export function useLayoutMutations({
       const nextLines = mergeSavedLine(linesRef.current, saved);
       applyLocalLines(nextLines);
       recordEdit({ kind: "create", line: saved });
+      notePartContentChanged();
       setLineError(null);
       onDrawComplete();
     } catch (err) {
@@ -327,6 +343,7 @@ export function useLayoutMutations({
         before,
         after: cleanedPoints,
       });
+      notePartContentChanged();
       setLineError(null);
     } catch (err) {
       applyLocalLines(previousLines);
@@ -364,6 +381,7 @@ export function useLayoutMutations({
     try {
       await api.deletePartLine(projectId, documentId, partId, deletedId);
       recordEdit({ kind: "delete", line: deletedLine });
+      notePartContentChanged();
       setLineError(null);
       const pairing = await api.getPagePairing(projectId, documentId, partId);
       setTextLines(pairing.text_lines);
@@ -407,6 +425,7 @@ export function useLayoutMutations({
           restored,
         );
       }
+      notePartContentChanged();
       setLineError(null);
       setEditUndoRevision((value) => value + 1);
       const pairing = await api.getPagePairing(projectId, documentId, partId);
@@ -449,6 +468,7 @@ export function useLayoutMutations({
         if (selectedSegmentId === edit.line.id) setSelectedSegmentId(null);
         undoStackRef.current = pushEditOntoStack(undoStackRef.current, edit);
       }
+      notePartContentChanged();
       setLineError(null);
       setEditUndoRevision((value) => value + 1);
       const pairing = await api.getPagePairing(projectId, documentId, partId);
@@ -528,6 +548,7 @@ export function useLayoutMutations({
       await trackJobAndWait(enqueued.job_id, jobMeta, {
         timeoutMs: SEGMENT_JOB_TIMEOUT_MS,
       });
+      notePartContentChanged();
 
       // The segmentation is stored by now and only the reload is left. A
       // failure here is a stale view of saved Segments, so it surfaces as an

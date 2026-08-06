@@ -12,7 +12,10 @@
  * declare its tags. The old failure mode, where a mutation quietly forgot to
  * refresh a list and the UI showed stale data, has nowhere left to live.
  */
-import { invalidateResourceTags as invalidateTags, type ResourceTag } from "./queryClient";
+import {
+  invalidateResourceTags as invalidateTags,
+  type ResourceTag,
+} from "./queryClient";
 
 export type { ResourceTag };
 
@@ -61,10 +64,7 @@ export const invalidateAfter = {
     ]),
 
   /** As `documentUpdated`, for a caller that holds the response - see `projectUpdatedInPlace`. */
-  documentUpdatedInPlace: (
-    projectId: string,
-    documentId: string,
-  ): void =>
+  documentUpdatedInPlace: (projectId: string, documentId: string): void =>
     invalidateTags([
       resourceTags.documents(projectId),
       resourceTags.publicDocument(projectId, documentId),
@@ -82,6 +82,24 @@ export const invalidateAfter = {
   documentPartsChanged: (projectId: string, documentId: string): void =>
     invalidateTags([
       resourceTags.documents(projectId),
+      resourceTags.document(projectId, documentId),
+      resourceTags.publicDocument(projectId, documentId),
+    ]),
+
+  /**
+   * Segments, layout or transcriptions on one page changed.
+   *
+   * The page editor holds its own copies of those and writes them straight
+   * back, so it is easy to forget that two cached reads are copies of the same
+   * thing: the document the editor and the detail page share, and the published
+   * page a reader sees. Neither is in the editor's own state, and neither
+   * refreshes on its own inside the freshness window.
+   *
+   * The project's document list is not touched: nothing in it changes when a
+   * line is redrawn.
+   */
+  partContentChanged: (projectId: string, documentId: string): void =>
+    invalidateTags([
       resourceTags.document(projectId, documentId),
       resourceTags.publicDocument(projectId, documentId),
     ]),

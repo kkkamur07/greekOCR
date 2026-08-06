@@ -13,6 +13,7 @@ import {
   type TranscriptionLayerResponse,
 } from "../../../api/client";
 import { isAbortError } from "../../../api/errors";
+import { invalidateAfter } from "../../../api/resources";
 import { submissionRefusalExplanation } from "../../../inference";
 import type { PageEditorJobKind } from "../jobProgress";
 import { segmentNumberFor, segmentsInNumberOrder } from "../segmentNumbering";
@@ -97,6 +98,18 @@ export function usePairingState({
     setOcrMessage(null);
   }, [projectId, documentId, partId]);
 
+  /**
+   * Called once per committed write, after the server has taken it.
+   *
+   * Text written here shows up on the page from this hook's own state, so the
+   * two cached reads that are also copies of it - the document, and the
+   * published page a reader sees - had nothing telling them they were stale.
+   */
+  function notePartContentChanged() {
+    if (!projectId || !documentId) return;
+    invalidateAfter.partContentChanged(projectId, documentId);
+  }
+
   const selectedSegmentNumber = segmentNumberFor(lines, selectedSegmentId);
 
   const selectedTranscriptionLayer =
@@ -136,6 +149,7 @@ export function usePairingState({
       }
       setTextLines(pairing.text_lines);
       setPairingProgress(pairing.pairing_progress);
+      notePartContentChanged();
       setPairingError(null);
     } catch (err) {
       setPairingError(
@@ -171,6 +185,7 @@ export function usePairingState({
       const pairing = await api.getPagePairing(projectId, documentId, partId);
       setTextLines(pairing.text_lines);
       setPairingProgress(pairing.pairing_progress);
+      notePartContentChanged();
       setPairingError(null);
     } catch (err) {
       setPairingError(
@@ -219,6 +234,7 @@ export function usePairingState({
       const pairing = await api.getPagePairing(projectId, documentId, partId);
       setTextLines(pairing.text_lines);
       setPairingProgress(pairing.pairing_progress);
+      notePartContentChanged();
       setPairingError(null);
       setTranscriptionSaveMessage("Ground truth text saved");
     } catch (err) {
@@ -285,6 +301,7 @@ export function usePairingState({
       }),
     );
     await refreshAfterOcr(result.transcription_id);
+    notePartContentChanged();
     return result;
   }
 
@@ -437,6 +454,7 @@ export function usePairingState({
       setLines(reloadedLines);
       setTextLines(pairing.text_lines);
       setPairingProgress(pairing.pairing_progress);
+      notePartContentChanged();
       setPairingError(null);
       if (groundTruthTranscriptionId) {
         setSelectedTranscriptionLayerId(groundTruthTranscriptionId);
