@@ -37,8 +37,10 @@ jobs:
       #   docs/security/vex-click-pysec-2026-2132.md
       # - PYSEC-2026-139 / CVE-2025-3000 (torch 2.10.0, local-only, no fix yet):
       #   docs/security/vex-torch-pysec-2026-139-cve-2025-3000.md
-      # protobuf CVE-2025-4565 / CVE-2026-0994 are fixed via protobuf>=5.29.6
-      # in the inference group (no ignore).
+      # protobuf is not in the lock at all - it entered through the ONNX
+      # exporter, and that tree is archived. Nothing pins it and nothing
+      # resolves it, so CVE-2025-4565 / CVE-2026-0994 cannot apply. If a
+      # dependency ever pulls protobuf back in, this audit will say so.
       - run: >-
           uv run --locked --group dev --group platform --group inference pip-audit
           --ignore-vuln PYSEC-2026-139
