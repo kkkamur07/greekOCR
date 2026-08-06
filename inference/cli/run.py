@@ -47,6 +47,8 @@ from inference.cli.api import (
     AgentNotice,
     AgentVersionRefused,
     ClaimedPage,
+    CredentialRefused,
+    PageLeaseLost,
     PlatformClient,
     PlatformError,
     default_platform_url,
@@ -79,9 +81,40 @@ MAX_REASON_CHARS = 160
 truncates at 200. Staying well inside that is what keeps a reason readable
 instead of ending in a placeholder."""
 
+CLAIM_RETRY_SECONDS = 2.0
+CLAIM_RETRY_CAP_SECONDS = 60.0
+MAX_CLAIM_FAILURES = 8
+"""How many *consecutive* failed claims end the loop.
+
+A gateway restarting, a deploy, a laptop's wifi dropping in a lift: every one of
+those is a `PlatformError` and none of them means "stop working". The loop backs
+off instead, doubling to a cap so an agent left running overnight against a dead
+platform is not a load generator, and gives up only once the platform has failed
+this many times in a row - which is no longer a blip. One success resets it.
+"""
+
+REPORT_RETRY_SECONDS = 1.0
+REPORT_RETRY_CAP_SECONDS = 8.0
+MAX_REPORT_ATTEMPTS = 4
+"""How many times the terminal callback is posted before the page is let go.
+
+Shorter and more insistent than the claim backoff, because the stakes are not
+symmetric: a failed claim costs nothing, and a failed report throws away a page
+that has already been transcribed. Bounded anyway - past the **lease** the
+platform has re-queued the page, and posting into that is not persistence.
+"""
+
 
 class RunSetupError(RuntimeError):
     """This machine cannot start claiming, and says why."""
+
+
+class PageOutputError(RuntimeError):
+    """One page's result cannot be made into a callback the platform will take.
+
+    A property of that page, not of this machine - so it fails the page and the
+    loop moves on, which is the opposite of what `RunSetupError` means.
+    """
 
 
 @dataclass(frozen=True)
@@ -131,15 +164,18 @@ def run(args: argparse.Namespace) -> int:
 
     base_url = (args.api_url or default_platform_url()).rstrip("/")
     try:
+        client = PlatformClient(base_url)
         identity = _resolve_identity(base_url)
     except RunSetupError as exc:
+        errors.print(f"[red]{exc}[/red]")
+        return ui.EXIT_FAILED
+    except PlatformError as exc:
         errors.print(f"[red]{exc}[/red]")
         return ui.EXIT_FAILED
 
     wait_seconds = (
         identity.default_wait_seconds if args.wait_seconds is None else max(0, args.wait_seconds)
     )
-    client = PlatformClient(base_url)
     _announce(console, identity, base_url)
 
     try:
@@ -242,6 +278,8 @@ def _claim_loop(
     claimed = 0
     told_outdated = False
     waiting_announced = False
+    failures = 0
+    retry_seconds = CLAIM_RETRY_SECONDS
 
     while True:
         try:
@@ -252,6 +290,41 @@ def _claim_loop(
             console.print()
             _summarise(console, done, failed, "Stopped.")
             return ui.EXIT_INTERRUPTED
+        except (AgentVersionRefused, CredentialRefused):
+            # Neither is a blip. The floor is an instruction and a refused
+            # credential answers the same way however long this waits, so both
+            # leave the loop rather than being retried into a spin.
+            raise
+        except PlatformError as exc:
+            # Everything else on this path is transient by construction: a
+            # timeout, an unreachable host, a gateway's 502. `--exit-when-empty`
+            # promises the loop keeps running without it, and one bad response is
+            # not an empty queue.
+            failures += 1
+            if failures >= MAX_CLAIM_FAILURES:
+                errors.print(f"[red]{exc}[/red]")
+                errors.print(
+                    f"[red]Giving up after {failures} claims in a row failed.[/red] "
+                    "Nothing is in flight; run this again when the platform is back."
+                )
+                _summarise(console, done, failed, "Stopped.")
+                return ui.EXIT_FAILED
+            errors.print(
+                f"[yellow]{exc}[/yellow] Retrying in {retry_seconds:g}s "
+                f"({failures}/{MAX_CLAIM_FAILURES})."
+            )
+            waiting_announced = False
+            try:
+                time.sleep(retry_seconds)
+            except KeyboardInterrupt:
+                console.print()
+                _summarise(console, done, failed, "Stopped.")
+                return ui.EXIT_INTERRUPTED
+            retry_seconds = min(retry_seconds * 2, CLAIM_RETRY_CAP_SECONDS)
+            continue
+
+        failures = 0
+        retry_seconds = CLAIM_RETRY_SECONDS
 
         if claim.agent is not None and claim.agent.outdated and not told_outdated:
             told_outdated = True
@@ -276,10 +349,12 @@ def _claim_loop(
         try:
             outcome = _handle_page(console, errors, client, identity, claim.page, claimed + 1)
         except KeyboardInterrupt:
-            # Reachable only in the handful of bytecodes between the claim
-            # returning and `_handle_page` taking responsibility for the page -
-            # it does not raise this itself. Reporting here is what closes the
-            # one window in which a page could be claimed and never ended.
+            # Reachable only before `_handle_page` has computed anything: it
+            # takes responsibility for the page on entry and reports whatever it
+            # has, so an interrupt that escapes it is one that arrived with no
+            # output to lose. Reporting failed here is therefore true, and it
+            # closes the one window in which a page could be claimed and never
+            # ended.
             console.print()
             _report(
                 console,
@@ -328,6 +403,15 @@ def _handle_page(
     the *last* thing that must survive an interrupt, so an exception that skips
     past the callback would be the one bug this whole design exists to prevent -
     a researcher left watching a page nobody is running any more.
+
+    The reporting call is therefore inside that protection rather than after it.
+    It used to sit outside, on the reading that the gap was a handful of
+    bytecodes; it is not. Between the model returning and the callback going out
+    there is a timing calculation and two console writes, and rich rendering to a
+    terminal is long enough to catch a Ctrl-C easily. An interrupt landing there
+    escaped to `_claim_loop`, which cannot see `output` and reports the page
+    *failed* - terminally, with the transcription already computed and sitting on
+    a stack frame about to be discarded.
     """
     output: dict | None = None
     reason: str | None = None
@@ -339,6 +423,10 @@ def _handle_page(
             f"[bold][{index}][/bold] {page.task} [cyan]{page.registry_model_id}[/cyan] "
             f"job {_short(page.product_job_id)}"
         )
+        if page.image_link_expired():
+            raise PageOutputError(
+                "the link to this page's image expired before it could be fetched"
+            )
         image = client.fetch_page_image(page.page_image_url)
         console.print(f"    fetched {_bytes(len(image))}")
         output = _job_output(page, _execute(page, image))
@@ -348,13 +436,23 @@ def _handle_page(
     except Exception as exc:  # noqa: BLE001 - one bad page is not a bad loop
         reason = _reason(exc)
 
-    elapsed = time.monotonic() - started
-    if reason is None:
-        console.print(f"    ran in {elapsed:.1f}s")
-    else:
-        console.print(f"    [red]failed after {elapsed:.1f}s:[/red] {reason}")
+    # Past this point the page's fate is decided and only saying so is left. An
+    # interrupt here is recorded and swallowed rather than obeyed: `_report` has
+    # its own two-Ctrl-C bargain with the researcher, and reaching it is the
+    # whole point.
+    for first_pass in (True, False):
+        try:
+            if first_pass:
+                elapsed = time.monotonic() - started
+                if reason is None:
+                    console.print(f"    ran in {elapsed:.1f}s")
+                else:
+                    console.print(f"    [red]failed after {elapsed:.1f}s:[/red] {reason}")
+            _report(console, errors, client, identity, page, output=output, reason=reason)
+            break
+        except KeyboardInterrupt:
+            interrupted = True
 
-    _report(console, errors, client, identity, page, output=output, reason=reason)
     return PageOutcome(finished=reason is None, stopped=interrupted)
 
 
@@ -368,32 +466,72 @@ def _report(
     output: dict | None,
     reason: str | None,
 ) -> None:
-    """Post the terminal callback, absorbing one Ctrl-C while it is in flight.
+    """Post the terminal callback, absorbing one Ctrl-C and retrying a bad hop.
 
     The first extra interrupt is swallowed and explained, because a researcher
     pressing Ctrl-C twice in a second means "stop", not "leave that page
     half-reported". The second is honoured: at that point the **lease** is the
     right mechanism, and it re-queues the page rather than failing it.
+
+    A `PlatformError` used to end this the same way, printed once and dropped.
+    That was the reverse of the trade the lease makes: the page was *finished*,
+    the only thing between a researcher and their transcription was one HTTP
+    request, and a 502 from a gateway threw the result away and waited for the
+    lease to expire. So a failed post is retried, backing off, up to
+    `MAX_REPORT_ATTEMPTS`.
+
+    `PageLeaseLost` is the exception to the exception. A 403 means the platform
+    has already given the page to someone else, and there is nothing left here to
+    deliver it to.
     """
-    for last_attempt in (False, True):
+    attempts = 0
+    retry_seconds = REPORT_RETRY_SECONDS
+    interrupted_once = False
+
+    while True:
         try:
             client.report_page(
                 credential=identity.credential, page=page, output=output, error=reason
             )
         except KeyboardInterrupt:
-            if last_attempt:
+            if interrupted_once:
                 errors.print(
                     "    [yellow]Abandoned while reporting.[/yellow] The platform releases "
                     "this page when its lease expires, and another agent may take it."
                 )
                 return
+            interrupted_once = True
             console.print(
                 "    [dim]still reporting this page - press Ctrl-C again to abandon it[/dim]"
             )
             continue
-        except PlatformError as exc:
+        except PageLeaseLost as exc:
             errors.print(f"    [red]{exc}[/red]")
             return
+        except PlatformError as exc:
+            attempts += 1
+            if attempts >= MAX_REPORT_ATTEMPTS:
+                errors.print(f"    [red]{exc}[/red]")
+                errors.print(
+                    f"    [red]This page could not be reported after {attempts} "
+                    "attempts.[/red] Its lease will expire and the platform will "
+                    "hand it to another agent."
+                )
+                return
+            errors.print(
+                f"    [yellow]{exc}[/yellow] Retrying in {retry_seconds:g}s "
+                f"({attempts}/{MAX_REPORT_ATTEMPTS})."
+            )
+            try:
+                time.sleep(retry_seconds)
+            except KeyboardInterrupt:
+                errors.print(
+                    "    [yellow]Abandoned while reporting.[/yellow] The platform releases "
+                    "this page when its lease expires, and another agent may take it."
+                )
+                return
+            retry_seconds = min(retry_seconds * 2, REPORT_RETRY_CAP_SECONDS)
+            continue
         console.print(f"    reported {'done' if reason is None else 'failed'}")
         return
 
@@ -429,7 +567,7 @@ def _job_output(page: ClaimedPage, result) -> dict:
     """
     data = result.model_dump(mode="json")
     if page.task == "transcribe" and "lines" not in data:
-        raise RunSetupError("this page carried no line regions to transcribe")
+        raise PageOutputError("this page carried no line regions to transcribe")
     return {"kind": page.task, "data": data}
 
 
