@@ -14,6 +14,7 @@ would fail for reasons that are not defects.
 
 from __future__ import annotations
 
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 
@@ -34,27 +35,35 @@ from backend.ml.application.agent_credentials import (
 from backend.ml.application.device_auth import DEVICE_TOKEN_HEADER
 from backend.ml.domain.execution import ExecutionTarget
 from backend.ml.infrastructure.device_orm_models import HelperDevice
-from infrastructure.db import engine, sync_system_session
+from infrastructure.db import sync_system_session
 from tests.nomicous.integration.helpers import (
-    MINIMAL_PNG,
-    documents_url,
+    CALLBACK_URL,
+    CLAIM_URL,
+    CURRENT_AGENT_VERSION,
+    DEVICE_SERVICE_TOKEN,
     pair_device_over_http,
-    user_id_for_email,
 )
+from tests.nomicous.integration.helpers import claim_page as _claim
+from tests.nomicous.integration.helpers import device_headers as _device_headers
+from tests.nomicous.integration.helpers import make_part as _make_part
+from tests.nomicous.integration.helpers import prefer_local as _prefer_local
+
+# An autouse fixture imported into a module is scoped to that module: this closes
+# the asyncpg connections the concurrent claims below open, on the loop that owns
+# them. See its docstring in `helpers.py` for issue #63.
+from tests.nomicous.integration.helpers import return_pooled_connections_before_leaving  # noqa: F401
+from tests.nomicous.integration.helpers import running_agent as _running_agent
+from tests.nomicous.integration.helpers import stored_job as _stored_job
+from tests.nomicous.integration.helpers import submit_segment as _submit_segment
 
 pytestmark = pytest.mark.integration
 
-CLAIM_URL = "/device/v1/jobs/claim"
-CALLBACK_URL = "/internal/inference/job-complete"
-SERVICE_TOKEN = "test-inference-worker-service-token-not-for-production"
-
 # Every claim states which agent is calling (issue 055): one that does not is
-# refused rather than assumed current. Comfortably above the configured floor, so
-# nothing in this file is testing the floor - that is
-# ``test_agent_version_floor.py``.
-CURRENT_AGENT_VERSION = "1.0.0"
+# refused rather than assumed current. `CURRENT_AGENT_VERSION` is comfortably
+# above the configured floor, so nothing in this file is testing the floor -
+# that is ``test_agent_version_floor.py``.
 SERVICE_HEADERS = {
-    SERVICE_TOKEN_HEADER: SERVICE_TOKEN,
+    SERVICE_TOKEN_HEADER: DEVICE_SERVICE_TOKEN,
     AGENT_VERSION_HEADER: CURRENT_AGENT_VERSION,
     # Required: without it two hosted workers resolve to one helper_devices row
     # and neither can be told from the other on a claim.
@@ -62,46 +71,9 @@ SERVICE_HEADERS = {
 }
 
 
-@pytest.fixture(scope="module", autouse=True)
-def return_pooled_connections_before_leaving(client: TestClient):
-    """Empty the async pool on the way out, on the loop that filled it.
-
-    The concurrent claims below are the first thing in this suite to open more
-    than a connection or two at once, so this module leaves an async pool full of
-    live ``asyncpg`` connections bound to the session client's event loop.
-    ``test_device_pairing.py`` then starts a *second* app on its own loop and
-    inherits them, which is the collision tracked as issue #63 - a pre-existing
-    bug, but one this file would otherwise widen from four tests to eleven.
-
-    Disposing through ``client.portal`` runs the teardown on the loop that owns
-    those connections, so they are closed rather than orphaned. It does not fix
-    #63; it stops this module feeding it.
-    """
-    yield
-    client.portal.call(engine.dispose)
-
-
 # ---------------------------------------------------------------------------
 # Live fixtures: real pairing, real capacity, real jobs
 # ---------------------------------------------------------------------------
-
-
-def _device_headers(token: str) -> dict[str, str]:
-    return {DEVICE_TOKEN_HEADER: token, AGENT_VERSION_HEADER: CURRENT_AGENT_VERSION}
-
-
-def _claim(client: TestClient, headers: dict[str, str], *, wait_seconds: int = 0):
-    return client.post(CLAIM_URL, headers=headers, json={"wait_seconds": wait_seconds})
-
-
-def _running_agent(client: TestClient, headers: dict[str, str], name: str = "Laptop") -> dict:
-    """Pair a laptop and let it announce itself the way the agent does: by asking
-    for work. That first empty claim is what gives ``local`` **capacity**."""
-    paired = pair_device_over_http(client, headers, name=name)
-    empty = _claim(client, _device_headers(paired["device_token"]))
-    assert empty.status_code == 200, empty.text
-    assert empty.json()["page"] is None
-    return paired
 
 
 def _running_cloud_worker(client: TestClient, *, worker_name: str = "cloud-worker") -> dict:
@@ -114,44 +86,6 @@ def _running_cloud_worker(client: TestClient, *, worker_name: str = "cloud-worke
     )
     assert response.status_code == 200, response.text
     return response.json()
-
-
-def _make_part(client: TestClient, headers: dict[str, str], project: dict) -> tuple[str, str]:
-    base = documents_url(project["id"])
-    created = client.post(base, headers=headers, json={"name": "Claimable page"})
-    assert created.status_code == 201, created.text
-    document_id = created.json()["id"]
-    upload = client.post(
-        f"{base}/{document_id}/parts",
-        headers=headers,
-        files={"file": ("page.png", MINIMAL_PNG, "image/png")},
-    )
-    assert upload.status_code == 201, upload.text
-    return document_id, upload.json()["id"]
-
-
-def _submit_segment(
-    client: TestClient, headers: dict[str, str], project: dict, ids: tuple[str, str]
-) -> str:
-    document_id, part_id = ids
-    response = client.post(
-        f"{documents_url(project['id'])}/{document_id}/parts/{part_id}/segment",
-        headers=headers,
-    )
-    assert response.status_code == 202, response.text
-    return response.json()["job_id"]
-
-
-def _prefer_local(client: TestClient, headers: dict[str, str]) -> None:
-    response = client.put(
-        "/account/execution-target", headers=headers, json={"prefer_local_inference": True}
-    )
-    assert response.status_code == 200, response.text
-
-
-def _stored_job(job_id: str) -> Job:
-    with sync_system_session() as session:
-        return session.execute(select(Job).where(Job.id == uuid.UUID(job_id))).scalar_one()
 
 
 # ---------------------------------------------------------------------------
@@ -334,7 +268,7 @@ def test_an_unauthenticated_or_wrong_credential_never_reaches_the_queue(
     assert (
         client.post(
             CLAIM_URL,
-            headers={**version, SERVICE_TOKEN_HEADER: SERVICE_TOKEN},
+            headers={**version, SERVICE_TOKEN_HEADER: DEVICE_SERVICE_TOKEN},
             json={"wait_seconds": 0},
         ).status_code
         == 401
@@ -342,7 +276,11 @@ def test_an_unauthenticated_or_wrong_credential_never_reaches_the_queue(
     assert (
         client.post(
             CLAIM_URL,
-            headers={**version, SERVICE_TOKEN_HEADER: SERVICE_TOKEN, WORKER_NAME_HEADER: "   "},
+            headers={
+                **version,
+                SERVICE_TOKEN_HEADER: DEVICE_SERVICE_TOKEN,
+                WORKER_NAME_HEADER: "   ",
+            },
             json={"wait_seconds": 0},
         ).status_code
         == 401
@@ -461,15 +399,29 @@ def test_the_wait_is_clamped_rather_than_refused(client: TestClient, owner_heade
     agent = _running_agent(client, owner_headers)
     from backend.core.settings.device import get_device_settings
 
-    assert get_device_settings().device_claim_max_wait_seconds <= 120
+    ceiling = get_device_settings().device_claim_max_wait_seconds
+
+    started = time.monotonic()
     response = client.post(
         CLAIM_URL,
         headers=_device_headers(agent["device_token"]),
         json={"wait_seconds": 3600},
     )
-    # It returns; the clamp is what stops it taking an hour. No timing assertion:
-    # the point is that an over-long request is served, not refused.
+    elapsed = time.monotonic() - started
+
     assert response.status_code == 200, response.text
+    # The clamp is the whole subject, so it is measured rather than read back out
+    # of the settings object that configures it. Asserting the pydantic default
+    # here would leave the test green with the clamp deleted - and then it would
+    # sit for an hour rather than fail. The slack absorbs app startup and the
+    # round trip; it is nowhere near the hour an unclamped wait would take.
+    assert elapsed < ceiling + 30, f"the wait was not clamped: {elapsed:.1f}s for a 3600s request"
+    body = response.json()
+    assert body["page"] is None
+    # And the answer still tells the agent when to come back, the way the
+    # ordinary empty-queue response does.
+    assert body["poll_after_seconds"] > 0
+    assert body["lease_seconds"] > 0
 
 
 # ---------------------------------------------------------------------------

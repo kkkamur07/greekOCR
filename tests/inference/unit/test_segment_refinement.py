@@ -107,6 +107,11 @@ def test_refine_segment_runs_otsu_inside_ceiling_and_simplifies_dense_contour() 
 
     assert len(result.points) <= 80
     assert len(result.points) < len(dense_ceiling)
+    # The point of simplification, and the only place it is checked. The helper
+    # was defined and never called, so the minimum-vertex-spacing invariant read
+    # as covered while nothing evaluated it - a one-pixel-apart contour would
+    # have satisfied every count assertion above.
+    _assert_adjacent_points_are_spaced(result.points)
     assert result.metadata["raw_point_count"] == len(dense_ceiling)
     assert result.metadata["simplified_point_count"] == len(result.points)
     assert result.metadata["simplification_status"] in {

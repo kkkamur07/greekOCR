@@ -1,4 +1,11 @@
-"""Shared helpers for nomicous integration tests."""
+"""Shared helpers for nomicous integration tests.
+
+Nothing here imports the backend at module scope. ``conftest.py`` sets the
+environment the settings objects read *before* it imports ``backend.core.app``,
+and it imports this module for the service-token constant, so a top-level
+backend import here would be resolved too early. The backend imports are inside
+the functions that need them, deliberately.
+"""
 
 from __future__ import annotations
 
@@ -7,21 +14,175 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from tests.fixtures.paths import MINIMAL_PNG
 
 __all__ = [
+    "CALLBACK_URL",
+    "CLAIM_URL",
+    "CURRENT_AGENT_VERSION",
+    "DEVICE_SERVICE_TOKEN",
     "MINIMAL_PNG",
     "assert_api_error",
+    "claim_page",
+    "device_headers",
     "documents_url",
+    "make_part",
     "pair_device_over_http",
     "pair_inference_device",
     "poll_job",
+    "prefer_local",
+    "return_pooled_connections_before_leaving",
+    "running_agent",
+    "service_headers",
+    "stored_job",
     "stored_minimal_page_bytes",
+    "submit_segment",
     "user_id_for_email",
 ]
+
+# ---------------------------------------------------------------------------
+# The device claim surface, in one place
+# ---------------------------------------------------------------------------
+#
+# `test_device_claim.py`, `test_device_lease.py`, `test_agent_version_floor.py`
+# and `test_signed_page_image_link.py` each used to carry their own copy of the
+# constants and helpers below. Four copies of "how an agent is paired and made
+# to report capacity" is four places to update when that changes, and three of
+# them re-declared the service token as a literal that only conftest is entitled
+# to define - so a token changed in one place would have failed in the other
+# three for a reason that looked nothing like the change.
+
+CLAIM_URL = "/device/v1/jobs/claim"
+CALLBACK_URL = "/internal/inference/job-complete"
+
+DEVICE_SERVICE_TOKEN = "test-inference-worker-service-token-not-for-production"
+"""The hosted worker's claim credential. ``conftest.py`` puts this in the
+environment the settings object reads, so this constant is the definition and
+every test that sends the header must take it from here rather than repeat it."""
+
+CURRENT_AGENT_VERSION = "1.0.0"
+"""What a claim states about itself when the version floor is not the subject.
+
+Comfortably above any floor these suites configure, so nothing outside
+``test_agent_version_floor.py`` is accidentally testing the floor."""
+
+
+def device_headers(token: str, *, version: str | None = CURRENT_AGENT_VERSION) -> dict[str, str]:
+    """Credentials for one paired laptop. ``version=None`` sends no version at
+    all, which is the state ``test_agent_version_floor.py`` refuses."""
+    from backend.ml.api.agent_version import AGENT_VERSION_HEADER
+    from backend.ml.application.device_auth import DEVICE_TOKEN_HEADER
+
+    headers = {DEVICE_TOKEN_HEADER: token}
+    if version is not None:
+        headers[AGENT_VERSION_HEADER] = version
+    return headers
+
+
+def service_headers(
+    *, version: str | None = CURRENT_AGENT_VERSION, worker_name: str | None = None
+) -> dict[str, str]:
+    """Credentials for the hosted worker - a service token, not a device one."""
+    from backend.ml.api.agent_version import AGENT_VERSION_HEADER
+    from backend.ml.application.agent_credentials import SERVICE_TOKEN_HEADER, WORKER_NAME_HEADER
+
+    headers = {SERVICE_TOKEN_HEADER: DEVICE_SERVICE_TOKEN}
+    if version is not None:
+        headers[AGENT_VERSION_HEADER] = version
+    if worker_name is not None:
+        headers[WORKER_NAME_HEADER] = worker_name
+    return headers
+
+
+def claim_page(client: TestClient, headers: dict[str, str], *, wait_seconds: int = 0):
+    """One claim, returned unasserted: the status code is often the subject."""
+    return client.post(CLAIM_URL, headers=headers, json={"wait_seconds": wait_seconds})
+
+
+def running_agent(client: TestClient, headers: dict[str, str], name: str = "Laptop") -> dict:
+    """Pair a laptop and let it announce itself the way the agent does: by asking
+    for work. That first empty claim is what gives ``local`` **capacity**."""
+    paired = pair_device_over_http(client, headers, name=name)
+    empty = claim_page(client, device_headers(paired["device_token"]))
+    assert empty.status_code == 200, empty.text
+    assert empty.json()["page"] is None
+    return paired
+
+
+def prefer_local(client: TestClient, headers: dict[str, str]) -> None:
+    """Send this account's work to its own laptop rather than to the cloud."""
+    response = client.put(
+        "/account/execution-target", headers=headers, json={"prefer_local_inference": True}
+    )
+    assert response.status_code == 200, response.text
+
+
+def make_part(
+    client: TestClient, headers: dict[str, str], project: dict, *, name: str = "Claimable page"
+) -> tuple[str, str]:
+    """A document with one uploaded page. Returns ``(document_id, part_id)``."""
+    base = documents_url(project["id"])
+    created = client.post(base, headers=headers, json={"name": name})
+    assert created.status_code == 201, created.text
+    document_id = created.json()["id"]
+    upload = client.post(
+        f"{base}/{document_id}/parts",
+        headers=headers,
+        files={"file": ("page.png", MINIMAL_PNG, "image/png")},
+    )
+    assert upload.status_code == 201, upload.text
+    return document_id, upload.json()["id"]
+
+
+def submit_segment(
+    client: TestClient, headers: dict[str, str], project: dict, ids: tuple[str, str]
+) -> str:
+    """Queue one page for segmentation. Returns the product job id."""
+    document_id, part_id = ids
+    response = client.post(
+        f"{documents_url(project['id'])}/{document_id}/parts/{part_id}/segment",
+        headers=headers,
+    )
+    assert response.status_code == 202, response.text
+    return response.json()["job_id"]
+
+
+def stored_job(job_id: str | uuid.UUID):
+    """The job row as Postgres holds it, not as the API renders it."""
+    from backend.jobs.infrastructure.orm_models import Job
+    from infrastructure.db import sync_system_session
+
+    key = job_id if isinstance(job_id, uuid.UUID) else uuid.UUID(job_id)
+    with sync_system_session() as session:
+        return session.execute(select(Job).where(Job.id == key)).scalar_one()
+
+
+@pytest.fixture(scope="module", autouse=True)
+def return_pooled_connections_before_leaving(client: TestClient):
+    """Empty the async pool on the way out, on the loop that filled it.
+
+    Import this into any module that opens more than a connection or two at
+    once. Those modules leave an async pool full of live ``asyncpg`` connections
+    bound to the session client's event loop; ``test_device_pairing.py`` then
+    starts a *second* app on its own loop and inherits them, which is the
+    collision tracked as issue #63.
+
+    Disposing through ``client.portal`` runs the teardown on the loop that owns
+    those connections, so they are closed rather than orphaned. It does not fix
+    #63; it stops these modules feeding it.
+
+    It is a fixture rather than a plain function so that importing the name is
+    the whole of the wiring - an autouse fixture imported into a test module is
+    scoped to that module, so this does not fire for the rest of the suite.
+    """
+    from infrastructure.db import engine
+
+    yield
+    client.portal.call(engine.dispose)
 
 
 def pair_device_over_http(

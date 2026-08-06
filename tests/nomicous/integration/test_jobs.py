@@ -253,17 +253,23 @@ def test_cancel_rejects_when_callback_already_claimed(
 
     rejected = client.post(f"/jobs/{job_id}/cancel", headers=auth_headers)
     assert rejected.status_code == 409, rejected.text
+    # *Which* conflict, not merely that there was one. A 409 is also what an
+    # already-terminal job returns, so the bare status code cannot tell the
+    # callback guard from the status guard - and this message is what a client
+    # shows the researcher who pressed Cancel.
+    error = rejected.json()["error"]
+    assert error["code"] == "CONFLICT"
+    assert "inference callback" in error["message"], error
 
     with sync_system_session() as session:
         row = session.get(Job, uuid.UUID(job_id))
         assert row is not None
+        # The refusal left the row exactly as it found it. `callback_claimed_at`
+        # is not re-asserted here: this test set it four lines above and nothing
+        # in between could clear it, so reading it back proves only that
+        # Postgres stores what it is given.
         assert row.status == JobStatus.waiting
-        assert row.callback_claimed_at is not None
-        # Leave no active row for later tests / workers.
-        row.status = JobStatus.failed
-        row.error = "test cleanup"
-        row.completed_at = datetime.now(UTC)
-        session.commit()
+        assert row.completed_at is None
 
 
 def test_job_events_streams_current_snapshot(client: TestClient, registered_user: dict[str, str]):
@@ -396,16 +402,28 @@ def test_transcribe_job_is_left_pending_for_an_inference_agent(
     assert response.status_code == 202
     job_id = uuid.UUID(response.json()["job_id"])
 
-    # The lifespan worker polls every 250ms; give it several chances to claim.
-    time.sleep(1.5)
+    # The lifespan worker polls every 250ms, so the job has to survive several
+    # of its cycles. A fixed `time.sleep(1.5)` used to stand in for that, which
+    # is unsound in precisely the direction under test: on a loaded runner 1.5s
+    # can be fewer than six poll cycles, and the test then passes because the
+    # worker never got a turn rather than because it declined to take one. So
+    # the row is re-read until the deadline and must be untouched at every look.
+    deadline = time.monotonic() + 3.0
+    while True:
+        with sync_system_session() as session:
+            job = session.get(Job, job_id)
+            assert job is not None
+            assert job.status == JobStatus.pending
+            assert job.claimed_by is None
+            assert job.inference_job_id is None
+        if time.monotonic() >= deadline:
+            break
+        time.sleep(0.1)
 
+    # The structural half, which needs no wait at all: asked directly, the
+    # platform's claim query declines this row. That is the guarantee; the loop
+    # above only confirms the running worker behaves the way the query says.
     assert claim_next_pending_job() is None
-    with sync_system_session() as session:
-        job = session.get(Job, job_id)
-        assert job is not None
-        assert job.status == JobStatus.pending
-        assert job.claimed_by is None
-        assert job.inference_job_id is None
 
 
 @pytest.mark.integration
@@ -554,9 +572,8 @@ def test_waiting_job_within_the_timeout_is_left_alone():
         row = session.get(Job, job_id)
         assert row is not None
         assert row.status == JobStatus.waiting
-        row.status = JobStatus.failed
-        row.completed_at = datetime.now(UTC)
-        session.commit()
+        assert row.error is None
+        assert row.completed_at is None
 
 
 # --- Stale callback claims ---
@@ -747,6 +764,12 @@ def test_reclaimed_job_rejects_the_zombie_workers_terminal_write():
         assert row.status == JobStatus.pending
         assert row.claimed_by is None
         assert row.result is None
+        # Unlike the other terminal writes in this file, this one is not dead
+        # code: the payload carries ``test: True``, so `_drain_active_test_jobs`
+        # would otherwise wait five seconds at teardown for the lifespan worker
+        # to finish a row this test deliberately left claimable. The parent
+        # conftest's truncate happens at the start of the *next* test, which is
+        # after that wait.
         row.status = JobStatus.failed
         row.completed_at = datetime.now(UTC)
         session.commit()
@@ -812,9 +835,6 @@ def test_clear_job_history_deletes_terminal_jobs_only(
         surviving = session.get(Job, active_id)
         assert surviving is not None
         assert surviving.status == JobStatus.waiting
-        surviving.status = JobStatus.failed
-        surviving.completed_at = datetime.now(UTC)
-        session.commit()
 
 
 @pytest.mark.integration

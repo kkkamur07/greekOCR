@@ -37,24 +37,19 @@ from backend.document.infrastructure.media_store import (
 )
 from backend.document.infrastructure.orm_models import DocumentPart
 from backend.jobs.infrastructure.orm_models import Job
-from backend.ml.api.agent_version import AGENT_VERSION_HEADER
 from backend.ml.application.device_auth import DEVICE_TOKEN_HEADER
 from infrastructure.db import sync_system_session
 from tests.nomicous.integration.helpers import (
     MINIMAL_PNG,
+    claim_page,
+    device_headers,
     documents_url,
-    pair_device_over_http,
     stored_minimal_page_bytes,
 )
+from tests.nomicous.integration.helpers import prefer_local as _prefer_local
+from tests.nomicous.integration.helpers import running_agent as _running_agent
 
 pytestmark = pytest.mark.integration
-
-CLAIM_URL = "/device/v1/jobs/claim"
-
-# Every claim states which agent is calling (issue 055); one that does not is
-# refused before it is authenticated. Comfortably above the configured floor -
-# the floor itself is tested in ``test_agent_version_floor.py``.
-CURRENT_AGENT_VERSION = "1.0.0"
 
 
 @pytest.fixture(autouse=True)
@@ -83,30 +78,11 @@ def serve_objects_from_the_local_filesystem(monkeypatch):
 
 
 def _claim(client: TestClient, device_token: str) -> dict:
-    response = client.post(
-        CLAIM_URL,
-        headers={
-            DEVICE_TOKEN_HEADER: device_token,
-            AGENT_VERSION_HEADER: CURRENT_AGENT_VERSION,
-        },
-        json={"wait_seconds": 0},
-    )
+    """The claim body, already asserted: no test in this file is about the status
+    code - they are all about the **signed link** that comes back on the page."""
+    response = claim_page(client, device_headers(device_token))
     assert response.status_code == 200, response.text
     return response.json()
-
-
-def _running_agent(client: TestClient, headers: dict[str, str]) -> dict:
-    """Pair a laptop and let it announce itself by asking for work."""
-    paired = pair_device_over_http(client, headers, name="Laptop")
-    assert _claim(client, paired["device_token"])["page"] is None
-    return paired
-
-
-def _prefer_local(client: TestClient, headers: dict[str, str]) -> None:
-    response = client.put(
-        "/account/execution-target", headers=headers, json={"prefer_local_inference": True}
-    )
-    assert response.status_code == 200, response.text
 
 
 def _document_with_parts(

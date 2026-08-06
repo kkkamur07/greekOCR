@@ -45,42 +45,37 @@ from backend.jobs.infrastructure.stale_sweep import (
 )
 from backend.ml.api.agent_version import AGENT_VERSION_HEADER
 from backend.ml.application.agent_credentials import SERVICE_TOKEN_HEADER, WORKER_NAME_HEADER
-from backend.ml.application.device_auth import DEVICE_TOKEN_HEADER
-from infrastructure.db import engine, sync_system_session
+from infrastructure.db import sync_system_session
 from tests.nomicous.integration.helpers import (
-    MINIMAL_PNG,
-    documents_url,
-    pair_device_over_http,
+    CALLBACK_URL,
+    CLAIM_URL,
+    CURRENT_AGENT_VERSION,
+    DEVICE_SERVICE_TOKEN,
+    claim_page,
 )
+from tests.nomicous.integration.helpers import device_headers as _device_headers
+from tests.nomicous.integration.helpers import make_part as _make_part
+from tests.nomicous.integration.helpers import prefer_local as _prefer_local
+
+# Module-scoped autouse; see its docstring in `helpers.py` for issue #63.
+from tests.nomicous.integration.helpers import return_pooled_connections_before_leaving  # noqa: F401
+from tests.nomicous.integration.helpers import running_agent as _running_agent
+from tests.nomicous.integration.helpers import stored_job as _stored_job
+from tests.nomicous.integration.helpers import submit_segment as _submit_segment
 
 pytestmark = pytest.mark.integration
 
-CLAIM_URL = "/device/v1/jobs/claim"
-CALLBACK_URL = "/internal/inference/job-complete"
-
 # Every claim states which agent is calling (issue 055); one that does not is
-# refused before it is authenticated. Comfortably above the configured floor -
-# the floor itself is tested in ``test_agent_version_floor.py``.
-CURRENT_AGENT_VERSION = "1.0.0"
+# refused before it is authenticated. `CURRENT_AGENT_VERSION` is comfortably
+# above the configured floor - the floor itself is tested in
+# ``test_agent_version_floor.py``.
 SERVICE_HEADERS = {
-    SERVICE_TOKEN_HEADER: "test-inference-worker-service-token-not-for-production",
+    SERVICE_TOKEN_HEADER: DEVICE_SERVICE_TOKEN,
     AGENT_VERSION_HEADER: CURRENT_AGENT_VERSION,
     # Required: without it two hosted workers resolve to one helper_devices row
     # and neither can be told from the other on a claim.
     WORKER_NAME_HEADER: "cloud-worker",
 }
-
-
-@pytest.fixture(scope="module", autouse=True)
-def return_pooled_connections_before_leaving(client: TestClient):
-    """Empty the async pool on the way out, on the loop that filled it.
-
-    Same reasoning as ``test_device_claim.py``: this module opens several
-    connections at once, and leaving them bound to the session client's loop
-    feeds the pre-existing asyncpg collision tracked as issue #63.
-    """
-    yield
-    client.portal.call(engine.dispose)
 
 
 @pytest.fixture(autouse=True)
@@ -96,12 +91,10 @@ def _clean_sweep_throttle():
 # ---------------------------------------------------------------------------
 
 
-def _device_headers(token: str) -> dict[str, str]:
-    return {DEVICE_TOKEN_HEADER: token, AGENT_VERSION_HEADER: CURRENT_AGENT_VERSION}
-
-
 def _claim(client: TestClient, token: str):
-    return client.post(CLAIM_URL, headers=_device_headers(token), json={"wait_seconds": 0})
+    """Claims in this module are written token-first: every test here is about
+    *which agent* holds a page, so the token is the interesting argument."""
+    return claim_page(client, _device_headers(token))
 
 
 def _claim_allowed_to_sweep(client: TestClient, token: str):
@@ -117,55 +110,6 @@ def _claim_allowed_to_sweep(client: TestClient, token: str):
     """
     reset_stale_sweep_throttle()
     return _claim(client, token)
-
-
-def _running_agent(client: TestClient, headers: dict[str, str], name: str) -> dict:
-    """Pair a laptop and let it announce itself the way the agent does: by asking
-    for work. That first empty claim is what gives ``local`` **capacity**."""
-    paired = pair_device_over_http(client, headers, name=name)
-    empty = _claim(client, paired["device_token"])
-    assert empty.status_code == 200, empty.text
-    assert empty.json()["page"] is None
-    return paired
-
-
-def _prefer_local(client: TestClient, headers: dict[str, str]) -> None:
-    response = client.put(
-        "/account/execution-target", headers=headers, json={"prefer_local_inference": True}
-    )
-    assert response.status_code == 200, response.text
-
-
-def _make_part(client: TestClient, headers: dict[str, str], project: dict) -> tuple[str, str]:
-    base = documents_url(project["id"])
-    created = client.post(base, headers=headers, json={"name": "Leased page"})
-    assert created.status_code == 201, created.text
-    document_id = created.json()["id"]
-    upload = client.post(
-        f"{base}/{document_id}/parts",
-        headers=headers,
-        files={"file": ("page.png", MINIMAL_PNG, "image/png")},
-    )
-    assert upload.status_code == 201, upload.text
-    return document_id, upload.json()["id"]
-
-
-def _submit_segment(
-    client: TestClient, headers: dict[str, str], project: dict, ids: tuple[str, str]
-) -> str:
-    document_id, part_id = ids
-    response = client.post(
-        f"{documents_url(project['id'])}/{document_id}/parts/{part_id}/segment",
-        headers=headers,
-    )
-    assert response.status_code == 202, response.text
-    return response.json()["job_id"]
-
-
-def _stored_job(job_id: str | uuid.UUID) -> Job:
-    key = job_id if isinstance(job_id, uuid.UUID) else uuid.UUID(job_id)
-    with sync_system_session() as session:
-        return session.execute(select(Job).where(Job.id == key)).scalar_one()
 
 
 def _age_by(job_id: str | uuid.UUID, seconds: float) -> None:
@@ -565,15 +509,48 @@ def test_concurrent_agents_racing_a_swept_queue_each_get_a_distinct_page(
         if response.json()["page"] is not None
     ]
     assert len(handed) == len(set(handed)), "the same page was handed to two agents"
+
+    # Distinctness on its own is satisfied by handing out *nothing*: an empty
+    # ``handed`` has no duplicates, every row still reads ``pending``, and
+    # ``claimed_by is None`` is not the stopped agent either - so a claim path
+    # that recovered no page at all would leave this test green. The property
+    # the name promises has a second half, and it is the load-bearing one.
+    #
+    # It cannot be asserted over the racing responses alone. The sweep runs
+    # inside the first claim to reach it; the other seven are already in flight
+    # against a queue it has not finished re-pending, so how many of the six
+    # pages the race itself hands out is a genuine race and not a contract.
+    # What *is* the contract is that none of them is lost: once the queue has
+    # settled, every swept page is claimable, and each exactly once. So the
+    # queue is drained to exhaustion afterwards and the two phases are counted
+    # together.
+    drained: list[str] = []
+    for _ in range(len(job_ids) + 1):
+        response = _claim_allowed_to_sweep(client, alpha["device_token"])
+        assert response.status_code == 200, response.text
+        page = response.json()["page"]
+        if page is None:
+            break
+        drained.append(page["product_job_id"])
+    else:  # pragma: no cover - only reached if the queue never empties
+        pytest.fail("the queue never emptied")
+
+    recovered = handed + drained
+    assert len(recovered) == len(set(recovered)), "a page was handed out twice"
+    assert set(recovered) == set(job_ids), "a swept page was never handed back out"
+
     with sync_system_session() as session:
         rows = (
             session.execute(select(Job).where(Job.id.in_([uuid.UUID(j) for j in job_ids])))
             .scalars()
             .all()
         )
-    # Nothing failed, and nothing is still held by the agent that stopped.
+    # Nothing failed, and nothing is still held by the agent that stopped. Every
+    # page is now leased to a live agent - the queue was drained above, so
+    # ``pending`` here would mean a page came back out of a lease it never had.
     stopped_owner = agent_claim_owner(uuid.UUID(stopped["device_id"]))
+    assert len(rows) == len(job_ids)
     for row in rows:
-        assert row.status in (JobStatus.pending, JobStatus.waiting)
-        assert row.status is not JobStatus.failed
+        assert row.status is JobStatus.waiting
         assert row.claimed_by != stopped_owner
+        assert row.claimed_by is not None
