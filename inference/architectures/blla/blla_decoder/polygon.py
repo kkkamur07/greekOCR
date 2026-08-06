@@ -102,7 +102,11 @@ def _calc_seam(
     patch[polygon_mask] = mask_value
     patch += distance_bias * (np.mean(patch[patch != mask_value]) / bias)
     extrema = baseline[(0, -1), :] - (c_min, r_min)
-    scale = min(1.0, 600 / (c_max - c_min))
+    # ``c_min``/``c_max`` are Python ints, so a vertical or one-pixel-wide line
+    # environment divides by zero here rather than producing a numpy infinity.
+    # Clamping the span to one pixel keeps the scale at its 1.0 ceiling, which
+    # is what any span below 600 already produces.
+    scale = min(1.0, 600 / max(c_max - c_min, 1))
     transform, rotated_patch = _rotate_array(patch, angle, scale)
     x_offsets = np.sort(np.around(transform.inverse(extrema)[:, 0]).astype(int))
     rotated_patch = rotated_patch[:, x_offsets[0] : x_offsets[1] + 1]
@@ -144,6 +148,33 @@ def _calc_seam(
     seam_array = seam_array[np.logical_and(in_bounds[0], in_bounds[1])]
     seam_array = seam_array[~polygon_mask[seam_array[:, 1], seam_array[:, 0]]]
     return seam_array + (c_min, r_min)
+
+
+def _intersection_ring(roi_polygon: object, polygon: object) -> np.ndarray:
+    """Reduce the ROI/polygon intersection to the ring of its largest part.
+
+    A well-behaved line intersects its ROI in one ``Polygon``, whose
+    ``.boundary`` is the single ``LineString`` the caller wants. A line pinched
+    in two - by a gap in the ink, or by a neighbouring baseline cutting across
+    the environment - intersects in a ``MultiPolygon`` (or a
+    ``GeometryCollection``), whose ``.boundary`` is a ``MultiLineString`` with
+    no ``.coords`` at all and would raise. Keeping the largest part keeps the
+    line and discards the slivers the pinch cut off, which is strictly better
+    than losing the line to an ``AttributeError``.
+    """
+    intersection = roi_polygon.intersection(polygon)
+    if intersection.is_empty:
+        # Preserved from the single-``Polygon`` path: an empty intersection
+        # yields no ring, and the caller drops the line as too short.
+        return np.zeros((0, 2), dtype=int)
+    if intersection.geom_type == "Polygon":
+        parts = [intersection]
+    else:
+        parts = [part for part in intersection.geoms if part.geom_type == "Polygon"]
+    if not parts:
+        raise ValueError(f"Bounding polygon intersection has no area: {intersection.wkt}")
+    largest = max(parts, key=lambda part: part.area)
+    return np.asarray(largest.exterior.coords, dtype=int)
 
 
 def _extract_polygon(
@@ -190,7 +221,7 @@ def _extract_polygon(
         )
     if not polygon.is_valid:
         raise ValueError(f"Invalid bounding polygon computed: {explain_validity(polygon)}")
-    return np.asarray(roi_polygon.intersection(polygon).boundary.coords, dtype=int)
+    return _intersection_ring(roi_polygon, polygon)
 
 
 def _calc_roi(

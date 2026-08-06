@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 import torch
 from scipy.ndimage import gaussian_filter
@@ -10,6 +12,7 @@ from skimage import filters
 from inference.architectures.blla.blla_decoder.common import as_heatmaps
 from shapely import geometry as geom
 
+from inference.architectures.isolation import reraise_if_none_survived
 from inference.architectures.blla.blla_decoder.lines import (
     is_in_region,
     reading_order_indices,
@@ -19,6 +22,8 @@ from inference.architectures.blla.blla_decoder.lines import (
 from inference.architectures.blla.blla_decoder.polygon import calculate_polygonal_environment
 from inference.architectures.blla.blla_decoder.simple import decode_simple_heatmaps
 from inference.architectures.blla.blla_decoder.types import DecodedBLLALine
+
+logger = logging.getLogger(__name__)
 
 __all__ = ["DecodedBLLALine", "decode_blla_heatmaps"]
 
@@ -102,21 +107,38 @@ def _decode_reference_pipeline(
     ]
 
     decoded: list[DecodedBLLALine] = []
+    # Polygonization is per-line geometry work and it raises by design: a
+    # baseline whose environment closes into an invalid polygon, or whose ray
+    # never meets a boundary, is a ``ValueError`` from ``polygon``. Under
+    # ``architectures.isolation`` that must cost its own line and not the other
+    # thirty-nine on the page, so the first failure is held for the all-failed
+    # verdict rather than propagated on the spot.
+    first_failure: Exception | None = None
     for index, baseline in enumerate(baselines):
-        supplementary_objects = baselines[:index] + baselines[index + 1 :]
-        baseline_line = geom.LineString(baseline)
-        supplementary_objects.extend(
-            region
-            for region in regions_for_polygonization
-            if is_in_region(baseline_line, geom.Polygon(region))
-        )
-        polygon = calculate_polygonal_environment(
-            baseline=baseline,
-            supplementary_objects=supplementary_objects,
-            image_features=image_features,
-            bounds=bounds,
-            topline=False,
-        )
+        try:
+            supplementary_objects = baselines[:index] + baselines[index + 1 :]
+            baseline_line = geom.LineString(baseline)
+            supplementary_objects.extend(
+                region
+                for region in regions_for_polygonization
+                if is_in_region(baseline_line, geom.Polygon(region))
+            )
+            polygon = calculate_polygonal_environment(
+                baseline=baseline,
+                supplementary_objects=supplementary_objects,
+                image_features=image_features,
+                bounds=bounds,
+                topline=False,
+            )
+        except Exception as error:  # noqa: BLE001 - one bad baseline is not a bad page
+            first_failure = first_failure or error
+            logger.warning(
+                "BLLA polygonization failed (baseline_index=%s, baseline_points=%s)",
+                index,
+                len(baseline),
+                exc_info=error,
+            )
+            continue
         scaled_baseline = (np.asarray(baseline) * scale_xy).astype("int").tolist()
         scaled_polygon = (np.asarray(polygon) * scale_xy).astype("int").tolist()
         decoded.append(
@@ -125,6 +147,12 @@ def _decode_reference_pipeline(
                 polygon=scaled_polygon,
             )
         )
+
+    # A page that polygonized nothing *and* failed at least once is a failed
+    # run, not a blank page; the rule and the reason live in
+    # ``architectures.isolation``.
+    reraise_if_none_survived(survivors=len(decoded), first_failure=first_failure)
+
     order = reading_order_indices(
         [line.baseline for line in decoded],
         regions_original,
