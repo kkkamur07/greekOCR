@@ -17,6 +17,7 @@ import { invalidateAfter } from "../../../api/resources";
 import { submissionRefusalExplanation } from "../../../inference";
 import type { PageEditorJobKind } from "../jobProgress";
 import { segmentNumberFor, segmentsInNumberOrder } from "../segmentNumbering";
+import { statusMessage, type StatusMessage } from "../statusMessage";
 import {
   lineTextForLayer,
   modelLayerIdForPromotion,
@@ -84,12 +85,11 @@ export function usePairingState({
     null,
   );
   const [approvedTextDraft, setApprovedTextDraft] = useState("");
-  const [transcriptionSaveMessage, setTranscriptionSaveMessage] = useState<
-    string | null
-  >(null);
+  const [transcriptionSaveMessage, setTranscriptionSaveMessage] =
+    useState<StatusMessage | null>(null);
   const [ocrRunning, setOcrRunning] = useState(false);
   const [ocrScope, setOcrScope] = useState<"segment" | "page" | null>(null);
-  const [ocrMessage, setOcrMessage] = useState<string | null>(null);
+  const [ocrMessage, setOcrMessage] = useState<StatusMessage | null>(null);
 
   useEffect(() => {
     setSelectedSegmentId(null);
@@ -236,7 +236,7 @@ export function usePairingState({
       setPairingProgress(pairing.pairing_progress);
       notePartContentChanged();
       setPairingError(null);
-      setTranscriptionSaveMessage("Ground truth text saved");
+      setTranscriptionSaveMessage(statusMessage("Ground truth text saved"));
     } catch (err) {
       setTranscriptionSaveMessage(null);
       setPairingError(
@@ -354,9 +354,11 @@ export function usePairingState({
       const result = await applyTranscribeJob(job);
       const hasAnyText = result.lines.some((line) => line.text?.trim());
       setOcrMessage(
-        hasAnyText
-          ? "OCR prediction completed for selected Segment."
-          : "OCR finished with no text for this segment.",
+        statusMessage(
+          hasAnyText
+            ? "OCR prediction completed for selected Segment."
+            : "OCR finished with no text for this segment.",
+        ),
       );
     } catch (err) {
       // The jobs panel already reports a user cancellation.
@@ -405,9 +407,11 @@ export function usePairingState({
       const result = await applyTranscribeJob(job);
       const withText = result.lines.filter((line) => line.text?.trim()).length;
       setOcrMessage(
-        withText > 0
-          ? `OCR prediction completed for ${withText} Segment(s).`
-          : "OCR finished with no text for the selected segments.",
+        statusMessage(
+          withText > 0
+            ? `OCR prediction completed for ${withText} Segment(s).`
+            : "OCR finished with no text for the selected segments.",
+        ),
       );
     } catch (err) {
       // The jobs panel already reports a user cancellation.
@@ -460,7 +464,7 @@ export function usePairingState({
         setSelectedTranscriptionLayerId(groundTruthTranscriptionId);
         syncApprovedTextDraft(reloadedLines, groundTruthTranscriptionId);
       }
-      setTranscriptionSaveMessage("Saved to Ground truth");
+      setTranscriptionSaveMessage(statusMessage("Saved to Ground truth"));
     } catch (err) {
       setTranscriptionSaveMessage(null);
       setPairingError(

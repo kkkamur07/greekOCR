@@ -26,6 +26,7 @@ import {
 } from "../editUndo";
 import { SEGMENT_JOB_TIMEOUT_MS, type PageEditorJobKind } from "../jobProgress";
 import { nextSegmentOrder } from "../segmentNumbering";
+import { statusMessage, type StatusMessage } from "../statusMessage";
 import {
   applyLayoutLineGeometryToSegments,
   mergeSavedLine,
@@ -102,7 +103,7 @@ export function useLayoutMutations({
     baseline?: LayoutLineResponse["baseline"];
     mask?: LayoutLineResponse["mask"];
   } | null>(null);
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [saveMessage, setSaveMessage] = useState<StatusMessage | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
   // A count, not a flag: a superseded run unwinds while its successor is still
   // going, and must not report the page as idle on the way out.
@@ -110,7 +111,9 @@ export function useLayoutMutations({
   const segmenting = segmentRunCount > 0;
   const [useOtsuRefinement, setUseOtsuRefinement] = useState(false);
   const [otsuSphereRadius, setOtsuSphereRadius] = useState(4);
-  const [segmentMessage, setSegmentMessage] = useState<string | null>(null);
+  const [segmentMessage, setSegmentMessage] = useState<StatusMessage | null>(
+    null,
+  );
   const undoStackRef = useRef<CanvasEdit[]>([]);
   const redoStackRef = useRef<CanvasEdit[]>([]);
   const [editUndoRevision, setEditUndoRevision] = useState(0);
@@ -214,7 +217,7 @@ export function useLayoutMutations({
       );
       notePartContentChanged();
       setMutationError(null);
-      setSaveMessage("Manual geometry saved");
+      setSaveMessage(statusMessage("Manual geometry saved"));
       setSelectedLineSnapshot({
         baseline: selectedLine.baseline,
         mask: selectedLine.mask,
@@ -266,7 +269,7 @@ export function useLayoutMutations({
       );
       setSelectedLineSnapshot(null);
       notePartContentChanged();
-      setSaveMessage("Layout reset");
+      setSaveMessage(statusMessage("Layout reset"));
     } catch (err) {
       // Both call sites - the Delete key and the Reset layout button - drop the
       // returned promise, so a rejection that got this far said nothing at all:
@@ -562,7 +565,9 @@ export function useLayoutMutations({
       // failure here is a stale view of saved Segments, so it surfaces as an
       // error banner and stops: the write is already finished, and there is
       // nothing left for it to re-run.
-      setSegmentMessage(segmentationMessage(await reloadAfterSegmentation()));
+      setSegmentMessage(
+        statusMessage(segmentationMessage(await reloadAfterSegmentation())),
+      );
     } catch (err) {
       // The jobs panel already reports a user cancellation.
       if (isAbortError(err)) return;

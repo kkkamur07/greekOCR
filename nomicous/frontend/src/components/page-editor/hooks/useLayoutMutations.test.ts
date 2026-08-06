@@ -129,7 +129,7 @@ describe("useLayoutMutations auto segment", () => {
 
     // The job announces its **execution target**; a second sentence here, from
     // a second source, is how the two come to disagree.
-    expect(view.result.current.segmentMessage).not.toMatch(
+    expect(view.result.current.segmentMessage?.text).not.toMatch(
       /locally|in the cloud|on your computer/i,
     );
   });

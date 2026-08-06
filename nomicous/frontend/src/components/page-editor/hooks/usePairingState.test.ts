@@ -189,7 +189,7 @@ describe("usePairingState OCR", () => {
       await view.result.current.runPageOcr();
     });
 
-    expect(view.result.current.ocrMessage).not.toMatch(
+    expect(view.result.current.ocrMessage?.text).not.toMatch(
       /\(local\)|locally|in the cloud/i,
     );
   });
