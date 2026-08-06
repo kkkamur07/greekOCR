@@ -16,6 +16,7 @@ from inference.architectures.calamari.adapter import (
     _load_session,
     _response_from_decoded,
     run_calamari_transcribe,
+    run_calamari_transcribe_many,
 )
 
 
@@ -69,3 +70,22 @@ def test_digest_is_verified_before_the_artifact_is_opened(tmp_path: Path) -> Non
             checkpoint_path=artifact,
             artifact_sha256="0" * 64,
         )
+
+
+def test_empty_batch_is_a_client_error_even_when_the_weights_are_missing(tmp_path: Path) -> None:
+    """422 beats 503: the request was unrunnable whatever is on disk.
+
+    Ported from ``fix/remediation-runtime``, which fixed this ordering against
+    the Torch adapter. ADR 0006 restored the ONNX adapter out of the archive and
+    reintroduced the original ordering with it, so the guard is re-asserted here
+    against the ONNX path rather than lost with the Torch one.
+    """
+    with pytest.raises(ValueError, match="at least one line image") as caught:
+        run_calamari_transcribe_many([], checkpoint_path=tmp_path / "absent.onnx")
+
+    assert not isinstance(caught.value, OSError)
+
+
+def test_a_real_batch_still_reports_a_missing_artifact_first(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError, match="Calamari model not found"):
+        run_calamari_transcribe_many([b"png"], checkpoint_path=tmp_path / "absent.onnx")

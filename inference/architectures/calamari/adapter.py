@@ -210,6 +210,15 @@ def run_calamari_transcribe_many(
     checkpoint_path: Path,
     artifact_sha256: str | None = None,
 ) -> list[TranscribeRunResponse | TranscribeLineFailure]:
+    # The request is checked before the artifact. ``architectures.artifact``
+    # spends a docstring on why its own three failures are ordered, and the same
+    # reasoning puts this ahead of them: an empty batch is a client error (422)
+    # whatever the state of the weights on disk, and running the preflight first
+    # would report a missing artifact (503) for a request that was never
+    # runnable in the first place.
+    if not line_images:
+        raise ValueError("at least one line image is required")
+
     handle = resolve_artifact(
         checkpoint_path,
         label="Calamari model",
@@ -218,9 +227,6 @@ def run_calamari_transcribe_many(
         unusable_message=(f"Calamari runtime requires an .onnx model: {checkpoint_path}"),
         artifact_sha256=artifact_sha256,
     )
-    if not line_images:
-        raise ValueError("at least one line image is required")
-
     return _reject_fully_failed_batch(_run_onnx_transcribe_many(line_images, handle=handle))
 
 

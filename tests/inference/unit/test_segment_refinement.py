@@ -9,8 +9,13 @@ import numpy as np
 import pytest
 from inference.architectures.blla import blla
 from inference.architectures.blla.blla_decoder import DecodedBLLALine
-from inference.preprocessing.segment_geometry import MIN_VERTEX_SPACING_PX, distance
-from inference.preprocessing.segment_refinement import refine_segment, refine_segment_candidates
+from inference.preprocessing.segment_geometry import (
+    MIN_VERTEX_SPACING_PX,
+    bottom_edge_baseline,
+    clip_baseline_to_x_span,
+    distance,
+)
+from inference.preprocessing.segment_refinement import refine_segment_candidates
 from PIL import Image
 
 
@@ -68,6 +73,11 @@ def _dense_rectangle(
     return points
 
 
+def _refine_one(image: Image.Image, ceiling: list[list[float]]):
+    """Refine a ceiling without splitting it, the way the runner does when asked not to."""
+    return refine_segment_candidates(image, ceiling, split_large_lines=False)[0]
+
+
 def _bbox(points: list[list[float]]) -> tuple[float, float, float, float]:
     xs = [point[0] for point in points]
     ys = [point[1] for point in points]
@@ -102,7 +112,7 @@ def test_refine_segment_runs_otsu_inside_ceiling_and_simplifies_dense_contour() 
     image, ceiling = _synthetic_ink_fixture()
     dense_ceiling = _dense_rectangle(20, 25, 200, 90)
 
-    result = refine_segment(image, dense_ceiling)
+    result = _refine_one(image, dense_ceiling)
     x0, y0, x1, y1 = _bbox(result.points)
 
     assert len(result.points) <= 80
@@ -133,7 +143,7 @@ def test_refine_segment_runs_otsu_inside_ceiling_and_simplifies_dense_contour() 
 def test_refine_segment_encloses_gapped_ink_components() -> None:
     image, ceiling = _gapped_character_line_fixture()
 
-    result = refine_segment(image, ceiling)
+    result = _refine_one(image, ceiling)
     x0, _, x1, _ = _bbox(result.points)
 
     assert x0 <= 40.0
@@ -166,6 +176,93 @@ def test_refine_segment_candidates_splits_merged_vertical_bands() -> None:
     assert second_bbox[3] >= 113.0
 
 
+def test_split_band_holding_the_decoded_baseline_keeps_it() -> None:
+    """The band the decoder measured must not be handed a substitute."""
+    image, ceiling = _merged_two_line_fixture()
+    baseline = [[40.0, 112.0], [180.0, 112.0]]
+
+    results = refine_segment_candidates(
+        image,
+        ceiling,
+        baseline=baseline,
+        split_large_lines=True,
+        split_vertical_gap_px=12,
+    )
+
+    lower = results[1]
+    assert lower.metadata["baseline_source"] == "decoder"
+    assert lower.baseline == baseline
+
+
+def test_split_band_without_a_decoded_baseline_gets_one_off_its_bottom_edge() -> None:
+    """A mid-height segment is a strike-through, not a text baseline."""
+    image, ceiling = _merged_two_line_fixture()
+
+    results = refine_segment_candidates(
+        image,
+        ceiling,
+        baseline=[[40.0, 112.0], [180.0, 112.0]],
+        split_large_lines=True,
+        split_vertical_gap_px=12,
+    )
+
+    upper = results[0]
+    _, y0, _, y1 = _bbox(upper.points)
+    assert upper.metadata["baseline_source"] == "bottom_edge"
+    assert upper.baseline is not None
+    assert all(point[1] == pytest.approx(y1) for point in upper.baseline)
+    assert y1 > (y0 + y1) / 2.0
+
+
+def test_decoded_baseline_is_clipped_to_the_band_that_holds_it() -> None:
+    image, ceiling = _merged_two_line_fixture()
+    # Runs the full page width; only the middle of it is over the lower band.
+    baseline = [[0.0, 112.0], [239.0, 112.0]]
+
+    results = refine_segment_candidates(
+        image,
+        ceiling,
+        baseline=baseline,
+        split_large_lines=True,
+        split_vertical_gap_px=12,
+    )
+
+    lower = results[1]
+    x0, _, x1, _ = _bbox(lower.points)
+    assert lower.metadata["baseline_source"] == "decoder"
+    assert lower.baseline is not None
+    assert min(point[0] for point in lower.baseline) >= x0
+    assert max(point[0] for point in lower.baseline) <= x1
+
+
+def test_clipping_a_baseline_follows_its_slope_instead_of_flattening_at_the_cut() -> None:
+    clipped = clip_baseline_to_x_span([[0.0, 0.0], [100.0, 100.0]], 20.0, 60.0)
+
+    assert clipped == [[20.0, 20.0], [60.0, 60.0]]
+
+
+def test_a_baseline_that_misses_the_span_clips_to_nothing() -> None:
+    assert clip_baseline_to_x_span([[0.0, 5.0], [10.0, 5.0]], 40.0, 80.0) == []
+
+
+def test_bottom_edge_baseline_sits_on_the_bottom_not_the_middle() -> None:
+    assert bottom_edge_baseline([[0.0, 0.0], [10.0, 0.0], [10.0, 8.0], [0.0, 8.0]]) == [
+        [0.0, 8.0],
+        [10.0, 8.0],
+    ]
+
+
+def test_unsplit_line_passes_the_decoded_baseline_through_untouched() -> None:
+    image, ceiling = _synthetic_ink_fixture()
+    baseline = [[55.0, 65.0], [165.0, 65.0]]
+
+    results = refine_segment_candidates(image, ceiling, baseline=baseline, split_large_lines=False)
+
+    assert len(results) == 1
+    assert results[0].baseline == baseline
+    assert results[0].metadata["baseline_source"] == "decoder"
+
+
 # --- No-ink fallback ---
 # Tests dense ceiling simplifies when Otsu finds no contour. Does not test real manuscript pages.
 
@@ -174,7 +271,7 @@ def test_refine_segment_falls_back_to_clean_ceiling_without_ink() -> None:
     image = Image.new("RGB", (120, 80), "white")
     dense_ceiling = _dense_rectangle(10, 10, 110, 70)
 
-    result = refine_segment(image, dense_ceiling)
+    result = _refine_one(image, dense_ceiling)
 
     assert len(result.points) < len(dense_ceiling)
     assert result.metadata["simplification_status"] == "no_otsu_contour"

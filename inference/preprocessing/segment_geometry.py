@@ -26,10 +26,72 @@ def line_height(points: list[list[float]]) -> float:
     return max(y1 - y0, 1.0)
 
 
-def default_baseline(points: list[list[float]]) -> list[list[float]]:
-    x0, y0, x1, y1 = bbox(points)
-    y = (y0 + y1) / 2.0
-    return [[x0, y], [x1, y]]
+def bottom_edge_baseline(points: list[list[float]]) -> list[list[float]]:
+    """Derive a text baseline from the bottom edge of a polygon.
+
+    Deliberately the same rule as the platform's own
+    ``annotation.application.line_geometry.default_baseline_from_polygon``,
+    because the two produce baselines an annotator sees side by side. A segment
+    through the bounding-box mid-height is not a baseline - it is a
+    strike-through - and a transcriber who accepts a split line inherits it.
+    """
+    if len(points) < 2:
+        return [[float(point[0]), float(point[1])] for point in points]
+
+    max_y = max(point[1] for point in points)
+    bottom = sorted(
+        ([float(point[0]), float(point[1])] for point in points if point[1] >= max_y - 1e-6),
+        key=lambda point: point[0],
+    )
+    if len(bottom) >= 2:
+        return [bottom[0], bottom[-1]]
+    x0, _, x1, _ = bbox(points)
+    return [[float(x0), float(max_y)], [float(x1), float(max_y)]]
+
+
+def _clip_segment_to_x_span(
+    start: list[float],
+    end: list[float],
+    x0: float,
+    x1: float,
+) -> list[list[float]]:
+    start_x, start_y = float(start[0]), float(start[1])
+    end_x, end_y = float(end[0]), float(end[1])
+    if max(start_x, end_x) < x0 or min(start_x, end_x) > x1:
+        return []
+    if abs(end_x - start_x) <= 1e-9:
+        return [[start_x, start_y], [end_x, end_y]]
+
+    def at(x: float) -> list[float]:
+        ratio = (x - start_x) / (end_x - start_x)
+        return [x, start_y + ratio * (end_y - start_y)]
+
+    return [at(min(max(start_x, x0), x1)), at(min(max(end_x, x0), x1))]
+
+
+def clip_baseline_to_x_span(
+    baseline: list[list[float]] | None,
+    x0: float,
+    x1: float,
+) -> list[list[float]]:
+    """The part of a baseline polyline that falls inside ``[x0, x1]``.
+
+    Endpoints are interpolated rather than snapped, so the clipped baseline
+    still follows the slope of the original instead of flattening at the cut.
+    Returns an empty list when nothing of the baseline reaches the span, which
+    the caller reads as "this piece of the line has no baseline of its own".
+    """
+    if not baseline or len(baseline) < 2 or x1 < x0:
+        return []
+
+    clipped: list[list[float]] = []
+    for start, end in zip(baseline, baseline[1:]):
+        if len(start) != 2 or len(end) != 2:
+            continue
+        for point in _clip_segment_to_x_span(start, end, x0, x1):
+            if not clipped or distance(clipped[-1], point) > 1e-9:
+                clipped.append(point)
+    return clipped if len(clipped) >= 2 else []
 
 
 def polygon_area(points: list[list[float]]) -> float:
@@ -74,13 +136,49 @@ def mask_from_polygon(
     *,
     width: int,
     height: int,
+    origin: tuple[int, int] = (0, 0),
 ) -> np.ndarray:
+    """Rasterize a polygon into a ``height x width`` mask.
+
+    ``origin`` shifts the polygon so the mask can cover a window of the page
+    rather than the page. It must be integral: vertices are rounded to whole
+    pixels before the shift, so an integer offset translates the raster exactly
+    and a fractional one would not.
+    """
     import cv2
 
     mask = np.zeros((height, width), dtype=np.uint8)
     contour = np.array(points, dtype=np.float32).reshape(-1, 1, 2)
-    cv2.fillPoly(mask, [np.rint(contour).astype(np.int32)], 255)
+    offset = np.array(origin, dtype=np.int32).reshape(1, 1, 2)
+    cv2.fillPoly(mask, [np.rint(contour).astype(np.int32) - offset], 255)
     return mask
+
+
+def mask_window(
+    polygons: tuple[list[list[float]], ...],
+    *,
+    width: int,
+    height: int,
+) -> tuple[int, int, int, int] | None:
+    """The page-clipped bounding window that holds every given polygon.
+
+    Comparing two line polygons only needs the pixels either of them can
+    occupy. Everything outside this window is zero in both masks, so it can
+    neither add to the intersection nor to the union. Returns ``None`` when the
+    window is empty - no points, or nothing of them on the page.
+    """
+    xs = [point[0] for polygon in polygons for point in polygon]
+    ys = [point[1] for polygon in polygons for point in polygon]
+    if not xs or not ys:
+        return None
+
+    x0 = max(0, int(math.floor(min(xs))))
+    y0 = max(0, int(math.floor(min(ys))))
+    x1 = min(width, int(math.ceil(max(xs))) + 1)
+    y1 = min(height, int(math.ceil(max(ys))) + 1)
+    if x1 <= x0 or y1 <= y0:
+        return None
+    return x0, y0, x1, y1
 
 
 def mask_iou(a: np.ndarray, b: np.ndarray) -> float:
@@ -134,9 +232,20 @@ def candidate_quality(
     reference_area = polygon_area(reference)
     area_ratio = candidate_area / reference_area if reference_area > 0 else 0.0
 
-    candidate_mask = mask_from_polygon(candidate, width=width, height=height)
-    reference_mask = mask_from_polygon(reference, width=width, height=height)
-    iou = mask_iou(candidate_mask, reference_mask)
+    # Rasterize into the window the two polygons share, not the page. This runs
+    # up to twenty times per line and forty-odd times per page: on a 4000x6000
+    # scan, page-sized masks meant sixteen hundred allocations of a 24 MB array
+    # to compare two shapes a few thousand pixels across. The window is
+    # page-clipped, so ``fillPoly``'s own clipping still decides what counts.
+    window = mask_window((candidate, reference), width=width, height=height)
+    if window is None:
+        iou = 0.0
+    else:
+        x0, y0, x1, y1 = window
+        origin = (x0, y0)
+        candidate_mask = mask_from_polygon(candidate, width=x1 - x0, height=y1 - y0, origin=origin)
+        reference_mask = mask_from_polygon(reference, width=x1 - x0, height=y1 - y0, origin=origin)
+        iou = mask_iou(candidate_mask, reference_mask)
 
     cx0, cy0, cx1, cy1 = bbox(candidate)
     rx0, ry0, rx1, ry1 = bbox(reference)

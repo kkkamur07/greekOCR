@@ -28,6 +28,32 @@ from src.model.inference_export.calamari.model import CalamariTorchModel
 from torch import Tensor
 
 
+class CalamariCheckpointError(ValueError):
+    """A checkpoint this runtime cannot use.
+
+    The three subclasses exist because the caller has to tell them apart, and
+    it used to do that by matching substrings of the message. That is a trap
+    here: "invalid Calamari checkpoint metadata or state dictionary" contains
+    the words "state dictionary" and was raised for a charset defect, so a
+    checkpoint whose codec did not match its class count was reported as an
+    incompatible state dictionary. The distinction is what a deployment reads
+    to know which half of the export to go and look at, so it is carried by
+    type from here on.
+    """
+
+
+class CalamariCheckpointUnreadableError(CalamariCheckpointError):
+    """The file could not be read as a tensor-only checkpoint at all."""
+
+
+class CalamariCheckpointMetadataError(CalamariCheckpointError):
+    """The checkpoint's declared shape, codec, or format is wrong."""
+
+
+class CalamariCheckpointStateDictError(CalamariCheckpointError):
+    """The weights are absent, malformed, or do not fit the runtime graph."""
+
+
 @dataclass(frozen=True)
 class CalamariCheckpointMetadata:
     """Everything the decoder needs from a checkpoint that is not a weight."""
@@ -46,10 +72,12 @@ def load_calamari_checkpoint(
     try:
         checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
     except Exception as error:
-        raise ValueError(f"unable to safely load Calamari checkpoint: {checkpoint_path}") from error
+        raise CalamariCheckpointUnreadableError(
+            f"unable to safely load Calamari checkpoint: {checkpoint_path}"
+        ) from error
 
     if not isinstance(checkpoint, Mapping) or checkpoint.get("format") != "calamari-pytorch-v1":
-        raise ValueError("unsupported Calamari checkpoint format")
+        raise CalamariCheckpointMetadataError("unsupported Calamari checkpoint format")
     classes = checkpoint.get("classes")
     line_height = checkpoint.get("line_height", 48)
     charset = checkpoint.get("charset")
@@ -64,14 +92,17 @@ def load_calamari_checkpoint(
         or not isinstance(charset, list)
         or len(charset) != classes
         or not all(isinstance(character, str) for character in charset)
-        or not isinstance(state_dict, Mapping)
+    ):
+        raise CalamariCheckpointMetadataError("invalid Calamari checkpoint metadata")
+    if (
+        not isinstance(state_dict, Mapping)
         or not state_dict
         or not all(
             isinstance(name, str) and isinstance(value, Tensor)
             for name, value in state_dict.items()
         )
     ):
-        raise ValueError("invalid Calamari checkpoint metadata or state dictionary")
+        raise CalamariCheckpointStateDictError("invalid Calamari checkpoint state dictionary")
 
     temperature = checkpoint.get("temperature", -1.0)
     if (
@@ -79,10 +110,12 @@ def load_calamari_checkpoint(
         or isinstance(temperature, bool)
         or not math.isfinite(float(temperature))
     ):
-        raise ValueError("invalid Calamari checkpoint temperature")
+        raise CalamariCheckpointMetadataError("invalid Calamari checkpoint temperature")
     blank_index = checkpoint.get("blank_index", 0)
     if not isinstance(blank_index, int) or isinstance(blank_index, bool) or blank_index != 0:
-        raise ValueError("only blank-index zero is supported by the Calamari runtime")
+        raise CalamariCheckpointMetadataError(
+            "only blank-index zero is supported by the Calamari runtime"
+        )
 
     metadata = CalamariCheckpointMetadata(
         classes=classes,
@@ -103,7 +136,9 @@ def load_calamari_checkpoint(
     try:
         model.load_state_dict(state_dict, strict=True)
     except (RuntimeError, TypeError, ValueError) as error:
-        raise ValueError("Calamari checkpoint state dictionary is incompatible") from error
+        raise CalamariCheckpointStateDictError(
+            "Calamari checkpoint state dictionary is incompatible"
+        ) from error
     # Second ``eval()``: materializing the lazy modules above ran a forward
     # pass, and dropout must be off for every inference call that follows.
     model.eval()
@@ -163,6 +198,10 @@ def _default_config(metadata: CalamariCheckpointMetadata) -> CalamariTorchConfig
 
 
 __all__ = [
+    "CalamariCheckpointError",
     "CalamariCheckpointMetadata",
+    "CalamariCheckpointMetadataError",
+    "CalamariCheckpointStateDictError",
+    "CalamariCheckpointUnreadableError",
     "load_calamari_checkpoint",
 ]
