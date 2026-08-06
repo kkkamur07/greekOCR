@@ -136,13 +136,49 @@ def mask_from_polygon(
     *,
     width: int,
     height: int,
+    origin: tuple[int, int] = (0, 0),
 ) -> np.ndarray:
+    """Rasterize a polygon into a ``height x width`` mask.
+
+    ``origin`` shifts the polygon so the mask can cover a window of the page
+    rather than the page. It must be integral: vertices are rounded to whole
+    pixels before the shift, so an integer offset translates the raster exactly
+    and a fractional one would not.
+    """
     import cv2
 
     mask = np.zeros((height, width), dtype=np.uint8)
     contour = np.array(points, dtype=np.float32).reshape(-1, 1, 2)
-    cv2.fillPoly(mask, [np.rint(contour).astype(np.int32)], 255)
+    offset = np.array(origin, dtype=np.int32).reshape(1, 1, 2)
+    cv2.fillPoly(mask, [np.rint(contour).astype(np.int32) - offset], 255)
     return mask
+
+
+def mask_window(
+    polygons: tuple[list[list[float]], ...],
+    *,
+    width: int,
+    height: int,
+) -> tuple[int, int, int, int] | None:
+    """The page-clipped bounding window that holds every given polygon.
+
+    Comparing two line polygons only needs the pixels either of them can
+    occupy. Everything outside this window is zero in both masks, so it can
+    neither add to the intersection nor to the union. Returns ``None`` when the
+    window is empty - no points, or nothing of them on the page.
+    """
+    xs = [point[0] for polygon in polygons for point in polygon]
+    ys = [point[1] for polygon in polygons for point in polygon]
+    if not xs or not ys:
+        return None
+
+    x0 = max(0, int(math.floor(min(xs))))
+    y0 = max(0, int(math.floor(min(ys))))
+    x1 = min(width, int(math.ceil(max(xs))) + 1)
+    y1 = min(height, int(math.ceil(max(ys))) + 1)
+    if x1 <= x0 or y1 <= y0:
+        return None
+    return x0, y0, x1, y1
 
 
 def mask_iou(a: np.ndarray, b: np.ndarray) -> float:
@@ -196,9 +232,20 @@ def candidate_quality(
     reference_area = polygon_area(reference)
     area_ratio = candidate_area / reference_area if reference_area > 0 else 0.0
 
-    candidate_mask = mask_from_polygon(candidate, width=width, height=height)
-    reference_mask = mask_from_polygon(reference, width=width, height=height)
-    iou = mask_iou(candidate_mask, reference_mask)
+    # Rasterize into the window the two polygons share, not the page. This runs
+    # up to twenty times per line and forty-odd times per page: on a 4000x6000
+    # scan, page-sized masks meant sixteen hundred allocations of a 24 MB array
+    # to compare two shapes a few thousand pixels across. The window is
+    # page-clipped, so ``fillPoly``'s own clipping still decides what counts.
+    window = mask_window((candidate, reference), width=width, height=height)
+    if window is None:
+        iou = 0.0
+    else:
+        x0, y0, x1, y1 = window
+        origin = (x0, y0)
+        candidate_mask = mask_from_polygon(candidate, width=x1 - x0, height=y1 - y0, origin=origin)
+        reference_mask = mask_from_polygon(reference, width=x1 - x0, height=y1 - y0, origin=origin)
+        iou = mask_iou(candidate_mask, reference_mask)
 
     cx0, cy0, cx1, cy1 = bbox(candidate)
     rx0, ry0, rx1, ry1 = bbox(reference)
