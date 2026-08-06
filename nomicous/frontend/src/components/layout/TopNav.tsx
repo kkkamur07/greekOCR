@@ -76,6 +76,9 @@ export function TopNav({
       <div className="topnav-actions">
         {actions}
         {username && <span className="topnav-user">{username}</span>}
+        <Link href="/settings" className="btn btn-ghost btn-sm">
+          Settings
+        </Link>
         <button
           type="button"
           className="btn btn-ghost btn-sm"

@@ -46,7 +46,7 @@ describe("PageEditorTranscriptionPdfPane", () => {
 
     await waitFor(() => {
       expect(screen.getByTitle("Transcription PDF preview")).toHaveAttribute(
-        "data",
+        "src",
         "blob:preview",
       );
     });
@@ -55,6 +55,89 @@ describe("PageEditorTranscriptionPdfPane", () => {
       "doc-1",
       "part-1",
     );
+
+    vi.unstubAllGlobals();
+  });
+
+  it("embeds with an iframe, never an object that object-src 'none' blocks", async () => {
+    vi.stubGlobal("URL", {
+      createObjectURL: vi.fn(() => "blob:preview"),
+      revokeObjectURL: vi.fn(),
+    });
+
+    const { container } = render(
+      <PageEditorTranscriptionPdfPane
+        projectId="project-1"
+        documentId="doc-1"
+        partId="part-1"
+        downloadFilename="page-1_transcription.pdf"
+        refreshKey={1}
+        onClose={vi.fn()}
+        onRefresh={vi.fn()}
+      />,
+    );
+
+    const embed = await screen.findByTitle("Transcription PDF preview");
+    expect(embed.tagName).toBe("IFRAME");
+    expect(container.querySelector("object")).toBeNull();
+    expect(container.querySelector("embed")).toBeNull();
+
+    vi.unstubAllGlobals();
+  });
+
+  it("offers an escape hatch outside the embed once the blob exists", async () => {
+    vi.stubGlobal("URL", {
+      createObjectURL: vi.fn(() => "blob:preview"),
+      revokeObjectURL: vi.fn(),
+    });
+
+    render(
+      <PageEditorTranscriptionPdfPane
+        projectId="project-1"
+        documentId="doc-1"
+        partId="part-1"
+        downloadFilename="page-1_transcription.pdf"
+        refreshKey={1}
+        onClose={vi.fn()}
+        onRefresh={vi.fn()}
+      />,
+    );
+
+    // The embed cannot report its own failure, so the way out must not be
+    // fallback content inside it.
+    const openLink = await screen.findByRole("link", {
+      name: /open the pdf in a new tab/i,
+    });
+    expect(openLink).toHaveAttribute("href", "blob:preview");
+    expect(openLink).toHaveAttribute("target", "_blank");
+    expect(openLink.closest("iframe")).toBeNull();
+
+    const download = screen.getByRole("button", { name: /download pdf/i });
+    expect(download).toBeEnabled();
+    expect(download.closest("iframe")).toBeNull();
+
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps Download reachable while the preview is still loading", () => {
+    vi.stubGlobal("URL", {
+      createObjectURL: vi.fn(() => "blob:preview"),
+      revokeObjectURL: vi.fn(),
+    });
+
+    render(
+      <PageEditorTranscriptionPdfPane
+        projectId="project-1"
+        documentId="doc-1"
+        partId="part-1"
+        downloadFilename="page-1_transcription.pdf"
+        refreshKey={1}
+        onClose={vi.fn()}
+        onRefresh={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /download pdf/i })).toBeEnabled();
 
     vi.unstubAllGlobals();
   });
@@ -108,17 +191,17 @@ describe("PageEditorTranscriptionPdfPane", () => {
       revokeObjectURL: vi.fn(),
     });
 
-    const anchor = {
-      click: vi.fn(),
-      href: "",
-      download: "",
-    } as unknown as HTMLAnchorElement;
-    const originalCreateElement = document.createElement.bind(document);
-    const createElement = vi
-      .spyOn(document, "createElement")
-      .mockImplementation((tagName, options) => {
-        if (tagName === "a") return anchor;
-        return originalCreateElement(tagName, options);
+    // Spy on the click rather than on document.createElement: the pane also
+    // renders a real <a> escape hatch, and a createElement stub that returns a
+    // plain object for every "a" breaks React's own rendering.
+    const clicked: { href: string | null; download: string }[] = [];
+    const clickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(function (this: HTMLAnchorElement) {
+        clicked.push({
+          href: this.getAttribute("href"),
+          download: this.download,
+        });
       });
 
     render(
@@ -139,11 +222,12 @@ describe("PageEditorTranscriptionPdfPane", () => {
 
     await waitFor(() => {
       expect(mockedGenerateTranscriptionPdf).toHaveBeenCalledTimes(2);
-      expect(anchor.download).toBe("page-1_transcription.pdf");
-      expect(anchor.click).toHaveBeenCalled();
+      expect(clicked).toEqual([
+        { href: "blob:download", download: "page-1_transcription.pdf" },
+      ]);
     });
 
-    createElement.mockRestore();
+    clickSpy.mockRestore();
     vi.unstubAllGlobals();
   });
 

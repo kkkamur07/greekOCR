@@ -12,15 +12,18 @@
  * declare its tags. The old failure mode, where a mutation quietly forgot to
  * refresh a list and the UI showed stale data, has nowhere left to live.
  */
+import { apiRequest } from "./client";
 import {
   invalidateResourceTags as invalidateTags,
   type ResourceTag,
 } from "./queryClient";
+import type { components } from "./schema";
 
 export type { ResourceTag };
 
 export const resourceTags = {
   currentUser: "current-user",
+  devices: "devices",
   projects: "projects",
   project: (projectId: string): ResourceTag => `project:${projectId}`,
   documents: (projectId: string): ResourceTag => `documents:${projectId}`,
@@ -97,4 +100,82 @@ export const invalidateAfter = {
       resourceTags.document(projectId, documentId),
       resourceTags.publicDocument(projectId, documentId),
     ]),
+
+  /**
+   * A pairing was approved, or a device was revoked.
+   *
+   * One tag covers both `include_revoked` variants of the device list. They are
+   * separate cache entries under the same tag, so the toggle cannot come back
+   * showing a device the researcher has already revoked in the other view.
+   */
+  deviceListChanged: (): void => invalidateTags([resourceTags.devices]),
+} as const;
+
+/**
+ * The browser's half of device pairing.
+ *
+ * Every route is Bearer-authenticated and none requires the CSRF header, which
+ * `apiRequest` adds anyway when the cookie is present and the server ignores.
+ *
+ * `verification_token` travels in a POST body on all three pairing routes,
+ * including the lookup, so the consent token never reaches a path, a query
+ * string or a server log. See `components/devices/pairingToken.ts` for the other
+ * end of that promise.
+ */
+export type DeviceResponse = components["schemas"]["DeviceResponse"];
+export type DeviceStatus = components["schemas"]["DeviceStatus"];
+export type PairingRequestResponse =
+  components["schemas"]["PairingRequestResponse"];
+type PairingLookupRequest = components["schemas"]["PairingLookupRequest"];
+type PairingConsentRequest = components["schemas"]["PairingConsentRequest"];
+
+export const devicesApi = {
+  /**
+   * Resolve the fragment token into the consent screen's contents.
+   *
+   * Unknown, expired, consumed and denied are one indistinguishable 404 by
+   * design; the caller must not try to tell them apart.
+   */
+  lookupPairing: (verificationToken: string): Promise<PairingRequestResponse> =>
+    apiRequest<PairingRequestResponse>("/devices/pairings/lookup", {
+      method: "POST",
+      body: {
+        verification_token: verificationToken,
+      } satisfies PairingLookupRequest,
+    }),
+
+  approvePairing: (
+    pairingId: string,
+    verificationToken: string,
+  ): Promise<DeviceResponse> =>
+    apiRequest<DeviceResponse>(
+      `/devices/pairings/${encodeURIComponent(pairingId)}/approve`,
+      {
+        method: "POST",
+        body: {
+          verification_token: verificationToken,
+        } satisfies PairingConsentRequest,
+      },
+    ),
+
+  denyPairing: (pairingId: string, verificationToken: string): Promise<void> =>
+    apiRequest<void>(
+      `/devices/pairings/${encodeURIComponent(pairingId)}/deny`,
+      {
+        method: "POST",
+        body: {
+          verification_token: verificationToken,
+        } satisfies PairingConsentRequest,
+      },
+    ),
+
+  listDevices: (includeRevoked: boolean): Promise<DeviceResponse[]> =>
+    apiRequest<DeviceResponse[]>(
+      includeRevoked ? "/devices?include_revoked=true" : "/devices",
+    ),
+
+  revokeDevice: (deviceId: string): Promise<void> =>
+    apiRequest<void>(`/devices/${encodeURIComponent(deviceId)}`, {
+      method: "DELETE",
+    }),
 } as const;

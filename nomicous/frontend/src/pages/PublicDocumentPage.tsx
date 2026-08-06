@@ -31,8 +31,7 @@ type PublicDocumentData = {
  * rather than collapsed into one message.
  */
 type PublicDocumentFailure =
-  | { kind: "not-found" }
-  | { kind: "message"; text: string };
+  { kind: "not-found" } | { kind: "message"; text: string };
 
 export function PublicDocumentPage() {
   const { projectId, documentId } =
@@ -192,20 +191,22 @@ export function PublicDocumentPage() {
         </div>
 
         <div className="pub-split">
-          <div
-            className="pub-canvas"
-            role="img"
-            aria-label={
-              activePart
-                ? `Manuscript page ${activePartIndex}`
-                : "Manuscript page"
-            }
-          >
+          {/*
+            No `role="img"` here. It made every descendant presentational, which
+            dropped the PDF pane's open/download links and the zoom controls out
+            of the accessibility tree entirely - and this container is not an
+            image in two of its three branches. The labelling it provided was
+            redundant anyway: PublicPageCanvas already names itself
+            ("Manuscript page viewer", and `alt` on the image), and
+            PublicCanvasPdfView names its own iframe.
+          */}
+          <div className="pub-canvas">
             {canvasView === "pdf" && projectId && documentId && activePart ? (
               <PublicCanvasPdfView
                 projectId={projectId}
                 documentId={documentId}
                 partId={activePart.id}
+                downloadFilename={`page-${activePartIndex}.pdf`}
               />
             ) : imageUrl && imageDimensions.width > 0 ? (
               <PublicPageCanvas
