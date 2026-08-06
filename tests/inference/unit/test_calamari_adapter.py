@@ -12,6 +12,7 @@ from inference.architectures.calamari.adapter import (  # noqa: E402
     CalamariUnavailableError,
     _load_checkpoint,
     _response_from_decoded,
+    run_calamari_transcribe_many,
 )
 
 
@@ -84,3 +85,37 @@ def test_load_checkpoint_rejects_incompatible_state_dictionary(tmp_path: Path) -
 
     with pytest.raises(CalamariUnavailableError, match="state dictionary is incompatible"):
         _load_checkpoint(str(checkpoint_path))
+
+
+def test_charset_that_does_not_match_the_class_count_is_a_metadata_error(tmp_path: Path) -> None:
+    """A codec defect must not be reported as a broken state dictionary."""
+    checkpoint_path = tmp_path / "short_charset.pt"
+    torch.save(
+        {
+            "format": "calamari-pytorch-v1",
+            "classes": 3,
+            "line_height": 48,
+            "charset": ["", "a"],
+            "state_dict": {"logits.weight": torch.zeros(3, 4)},
+        },
+        checkpoint_path,
+    )
+
+    with pytest.raises(CalamariUnavailableError) as caught:
+        _load_checkpoint(str(checkpoint_path))
+
+    assert "metadata" in str(caught.value)
+    assert "state dictionary" not in str(caught.value)
+
+
+def test_empty_batch_is_a_client_error_even_when_the_weights_are_missing(tmp_path: Path) -> None:
+    """422 beats 503: the request was unrunnable whatever is on disk."""
+    with pytest.raises(ValueError, match="at least one line image") as caught:
+        run_calamari_transcribe_many([], checkpoint_path=tmp_path / "absent.pt")
+
+    assert not isinstance(caught.value, OSError)
+
+
+def test_a_real_batch_still_reports_a_missing_artifact_first(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError, match="Calamari checkpoint not found"):
+        run_calamari_transcribe_many([b"png"], checkpoint_path=tmp_path / "absent.pt")

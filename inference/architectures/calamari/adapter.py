@@ -10,7 +10,12 @@ import numpy as np
 import torch
 
 from inference.architectures.artifact import ArtifactHandle, resolve_artifact
-from inference.architectures.calamari.checkpoint import load_calamari_checkpoint
+from inference.architectures.calamari.checkpoint import (
+    CalamariCheckpointMetadataError,
+    CalamariCheckpointStateDictError,
+    CalamariCheckpointUnreadableError,
+    load_calamari_checkpoint,
+)
 from inference.architectures.calamari.model import CalamariTorchModel
 from inference.architectures.calamari.preprocessing import (
     preprocess_line_image_bytes_to_calamari_tensor,
@@ -57,15 +62,14 @@ def _load_checkpoint(
     """
     try:
         model, metadata = load_calamari_checkpoint(Path(checkpoint_path))
-    except ValueError as error:
-        message = str(error)
-        if "safely load" in message:
-            raise CalamariUnavailableError("unable to safely load Calamari checkpoint") from error
-        if "state dictionary" in message:
-            raise CalamariUnavailableError(
-                "Calamari checkpoint state dictionary is incompatible with the runtime"
-            ) from error
-        raise CalamariUnavailableError(message) from error
+    except CalamariCheckpointUnreadableError as error:
+        raise CalamariUnavailableError("unable to safely load Calamari checkpoint") from error
+    except CalamariCheckpointStateDictError as error:
+        raise CalamariUnavailableError(
+            "Calamari checkpoint state dictionary is incompatible with the runtime"
+        ) from error
+    except CalamariCheckpointMetadataError as error:
+        raise CalamariUnavailableError(str(error)) from error
     except Exception as error:
         raise CalamariUnavailableError("unable to safely load Calamari checkpoint") from error
     return model, list(metadata.charset), metadata.line_height
@@ -148,6 +152,15 @@ def run_calamari_transcribe_many(
     checkpoint_path: Path,
     artifact_sha256: str | None = None,
 ) -> list[TranscribeRunResponse | TranscribeLineFailure]:
+    # The request is checked before the artifact. ``architectures.artifact``
+    # spends a docstring on why its own three failures are ordered, and the same
+    # reasoning puts this ahead of them: an empty batch is a client error (422)
+    # whatever the state of the weights on disk, and running the preflight first
+    # would report a missing artifact (503) for a request that was never
+    # runnable in the first place.
+    if not line_images:
+        raise ValueError("at least one line image is required")
+
     handle = resolve_artifact(
         checkpoint_path,
         label="Calamari checkpoint",
@@ -156,9 +169,6 @@ def run_calamari_transcribe_many(
         unusable_message=(f"Calamari runtime requires a native .pt checkpoint: {checkpoint_path}"),
         artifact_sha256=artifact_sha256,
     )
-    if not line_images:
-        raise ValueError("at least one line image is required")
-
     return _reject_fully_failed_batch(_run_torch_transcribe_many(line_images, handle=handle))
 
 
