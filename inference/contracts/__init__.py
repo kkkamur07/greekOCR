@@ -12,7 +12,6 @@ from inference.contracts.jobs import (
     JobCallbackRequest,
     JobOutput,
     JobSubmitRequest,
-    JobSubmitResponse,
     SegmentJobOutput,
     TranscribeJobOutput,
 )
@@ -40,7 +39,6 @@ __all__ = [
     "JobCallbackRequest",
     "JobOutput",
     "JobSubmitRequest",
-    "JobSubmitResponse",
     "InferenceJobStatus",
     "InferenceTask",
     "RegistryArchitecture",

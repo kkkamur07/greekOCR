@@ -7,10 +7,15 @@ mode bits - `0600` in a `0700` directory - so another account on a shared machin
 cannot claim jobs as them. Everything else (per-user scope, revocation on the
 next call) is enforced by the platform.
 
-The file is written through a temporary file in the same directory and renamed,
-so an interrupted write leaves the previous credential intact rather than a
-truncated one. `os.open` with `0o600` is not enough on its own: the process
-umask is subtracted from that mode, so an `fchmod` follows it.
+The file is written through a temporary file in the same directory, flushed and
+`fsync`ed, and only then renamed, so an interrupted write leaves the previous
+credential intact rather than a truncated one. Without the `fsync` that promise
+holds for a killed process and not for a lost power supply: `os.replace` orders
+the rename against the file's *metadata*, and a rename that reaches the disk
+before the bytes do leaves a zero-length `device.json` - which reads as a corrupt
+credential, not as an unpaired machine. `os.open` with `0o600` is not enough on
+its own either: the process umask is subtracted from that mode, so an `fchmod`
+follows it.
 """
 
 from __future__ import annotations
@@ -21,6 +26,8 @@ import stat
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+
+from inference.cli.api import InsecurePlatformURL, is_secure_platform_url
 
 # The same root the **Hub cache** uses (`inference/hub/cache.py`). One directory
 # in the researcher's home for everything the installed package writes, rather
@@ -151,7 +158,20 @@ def load_credential(path: Path | None = None) -> DeviceCredential | None:
 
 
 def save_credential(credential: DeviceCredential, path: Path | None = None) -> Path:
-    """Write the credential owner-only, and return where it landed."""
+    """Write the credential owner-only, and return where it landed.
+
+    Refuses to persist a token bound to a platform this CLI would not be allowed
+    to send it to. A stored credential is not a passive record - `nomicous run`
+    reads `platform_url` back and claims against it - so writing one for a
+    cleartext remote host would launder a URL that was rejected at pairing time
+    into one that is trusted on every run afterwards.
+    """
+    if not is_secure_platform_url(credential.platform_url):
+        raise InsecurePlatformURL(
+            f"Refusing to store a device token for {credential.platform_url}. "
+            "A stored credential is claimed with on every later run, so the "
+            "platform it names must be https (or http on localhost)."
+        )
     target = path or credential_path()
     directory = target.parent
     directory.mkdir(mode=CREDENTIAL_DIR_MODE, parents=True, exist_ok=True)
@@ -170,11 +190,36 @@ def save_credential(credential: DeviceCredential, path: Path | None = None) -> P
         with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
             json.dump(credential.to_json(), handle, indent=2, sort_keys=True)
             handle.write("\n")
+            # Before the `with` closes, and before the rename below: the bytes
+            # have to be on the disk for the rename to be the atomic swap this
+            # module advertises.
+            handle.flush()
+            os.fsync(handle.fileno())
     except BaseException:
         temporary.unlink(missing_ok=True)
         raise
     os.replace(temporary, target)
+    _fsync_directory(directory)
     return target
+
+
+def _fsync_directory(directory: Path) -> None:
+    """Persist the rename itself, where the platform supports it.
+
+    Best effort on purpose. Directory `fsync` is meaningless on Windows and can
+    be refused on some network filesystems, and neither is a reason to fail a
+    pairing that has already written a good file.
+    """
+    try:
+        descriptor = os.open(directory, os.O_RDONLY)
+    except OSError:  # pragma: no cover - platforms that cannot open a directory
+        return
+    try:
+        os.fsync(descriptor)
+    except OSError:  # pragma: no cover - filesystems that refuse it
+        pass
+    finally:
+        os.close(descriptor)
 
 
 def file_mode(path: Path) -> int:

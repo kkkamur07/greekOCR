@@ -19,7 +19,6 @@ from inference.contracts import (
     InferenceTask,
     JobCallbackRequest,
     JobSubmitRequest,
-    JobSubmitResponse,
     SegmentJobOutput,
     SegmentLine,
     SegmentRunResponse,
@@ -160,9 +159,6 @@ def test_job_submit_round_trip():
     )
     payload = _round_trip(request)
     assert payload["product_job_id"] == str(product_job_id)
-
-    response = JobSubmitResponse(inference_job_id=uuid4())
-    _round_trip(response)
 
 
 # --- Job submit validation rules ---

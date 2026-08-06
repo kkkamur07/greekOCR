@@ -32,6 +32,7 @@ from datetime import UTC, datetime
 
 from inference.cli import console as ui
 from inference.cli.api import (
+    DEVICE_NAME_LIMIT,
     STATUS_ACCESS_DENIED,
     STATUS_APPROVED,
     STATUS_AUTHORIZATION_PENDING,
@@ -97,7 +98,11 @@ def run(args: argparse.Namespace) -> int:
     errors = ui.err()
 
     base_url = (args.api_url or default_platform_url()).rstrip("/")
-    client = PlatformClient(base_url)
+    try:
+        client = PlatformClient(base_url)
+    except PlatformError as exc:
+        errors.print(f"[red]{exc}[/red]")
+        return ui.EXIT_FAILED
 
     try:
         existing = load_credential()
@@ -197,7 +202,13 @@ def _report_rejected(errors, credential: DeviceCredential) -> int:
 # The pairing itself
 # ---------------------------------------------------------------------------
 def _pair(console, errors, client: PlatformClient, args: argparse.Namespace) -> int:
-    device_name = (args.name or this_machine_name()).strip() or this_machine_name()
+    # Truncated after the choice, not inside `this_machine_name()`: the platform
+    # caps the field on the way in, and a `--name` over the cap is the same 422
+    # the cap exists to keep a long hostname from producing. Either source can be
+    # too long, so the limit belongs where the name is settled.
+    device_name = ((args.name or this_machine_name()).strip() or this_machine_name())[
+        :DEVICE_NAME_LIMIT
+    ]
     started = client.start_pairing(
         device_name=device_name,
         device_platform=this_machine_platform(),

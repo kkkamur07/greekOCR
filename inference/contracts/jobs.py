@@ -36,10 +36,6 @@ class JobSubmitRequest(BaseModel):
         return self
 
 
-class JobSubmitResponse(BaseModel):
-    inference_job_id: UUID
-
-
 class SegmentJobOutput(BaseModel):
     kind: Literal["segment"]
     data: SegmentRunResponse
@@ -93,7 +89,6 @@ __all__ = [
     "JobCallbackRequest",
     "JobOutput",
     "JobSubmitRequest",
-    "JobSubmitResponse",
     "SUPPORTED_JOB_TASKS",
     "SegmentJobOutput",
     "TranscribeJobOutput",

@@ -32,9 +32,10 @@ class TranscribeLineRegion(BaseModel):
     points: list[list[float]] | None = None
 
 
-# Client-visible text for a line the runtime could not transcribe. Static, like
-# every other client-facing failure string in this service: the real exception
-# goes to the log, never onto the wire.
+# Client-visible text for a line the runtime could not transcribe. Static on
+# purpose: this response travels to the platform as a job callback and on to a
+# researcher's browser, and the real exception belongs in the log of whichever
+# machine ran the page, never in a field somebody reads as transcribed text.
 TRANSCRIBE_LINE_ERROR = "Line could not be transcribed"
 
 

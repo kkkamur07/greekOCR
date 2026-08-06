@@ -1,4 +1,14 @@
-"""Weight source resolution and server-side cache layout."""
+"""Resolve a registry entry's **weights source** URI to a file on this machine.
+
+Four schemes, one answer: `hf://` through the **Hub cache**, `package://` out of
+an installed distribution, `file://local/...` from a source checkout's `src/hf/`,
+and `file://...` relative to the inference tree. Whichever it is, a pinned
+`artifact_sha256` is verified before the path is handed back.
+
+Nothing here is a cache layout of its own - `inference/hub/cache.py` owns the one
+directory that is written to, under the researcher's `~/.nomicous`. This module
+only decides which file the runtime should open.
+"""
 
 from __future__ import annotations
 

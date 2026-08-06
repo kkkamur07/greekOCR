@@ -26,6 +26,7 @@ import urllib.request
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import urlsplit
 
 from inference.cli.version import installed_version
 
@@ -85,8 +86,44 @@ STATUS_EXPIRED = "expired"
 STATUS_APPROVED = "approved"
 
 
+LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+"""The only hosts this CLI will talk to without TLS.
+
+Every request on this surface carries a bearer credential - the 180-day **device
+token**, or a **service credential** with wider scope than that - in a header.
+Over cleartext HTTP those are readable by anything on the path, so the scheme is
+checked once, where the client is built, rather than trusted per call. Loopback
+is the exception because nothing leaves the machine: it is what lets the
+integration suite stand up a platform on `http://127.0.0.1:<port>`.
+"""
+
+
 class PlatformError(RuntimeError):
     """The platform could not be reached, or answered something unusable."""
+
+
+class InsecurePlatformURL(PlatformError):
+    """A platform URL this CLI will not send a credential to."""
+
+
+class CredentialRefused(PlatformError):
+    """The platform will not accept this agent's credential (401).
+
+    Its own exception because it is the one **claim** failure that backing off
+    cannot fix. A revoked, expired, or unknown credential answers 401 forever, so
+    a loop that retried it would hammer the platform until someone noticed;
+    stopping and saying `nomicous pair` is the only useful response.
+    """
+
+
+class PageLeaseLost(PlatformError):
+    """The platform says this agent is no longer holding the page it is reporting.
+
+    Its own exception for the mirror of the reason above: a 403 on the callback
+    is terminal for *this* agent. The **lease** expired, the page went back to
+    the queue, and someone else may already own it - so retrying the report is
+    at best noise and at worst a race with the agent that now holds it.
+    """
 
 
 class AgentVersionRefused(PlatformError):
@@ -102,21 +139,15 @@ class AgentVersionRefused(PlatformError):
         self,
         *,
         message: str,
-        reason: str,
         agent_version: str | None,
         minimum_version: str,
         latest_version: str,
-        package: str,
         upgrade_command: str,
     ) -> None:
         super().__init__(message)
-        self.reason = reason
-        """`below_floor`, `missing`, or `malformed`. A source checkout reports
-        `0+unknown`, which lands here as `malformed` rather than as too old."""
         self.agent_version = agent_version
         self.minimum_version = minimum_version
         self.latest_version = latest_version
-        self.package = package
         self.upgrade_command = upgrade_command
 
 
@@ -168,8 +199,6 @@ class AgentFloor:
     outdated: bool
     """At or above the floor, behind the latest. Served, and told - a notice, not
     a refusal."""
-    reason: str = ""
-    """`below_floor` / `missing` / `malformed` on a refusal; empty when served."""
     message: str = ""
     """The platform's own sentence about it. Printed rather than reworded, so a
     researcher and the server logs say the same thing."""
@@ -199,10 +228,8 @@ class AgentNotice:
     """
 
     agent_version: str
-    minimum_version: str
     latest_version: str
     outdated: bool
-    package: str
     upgrade_command: str
 
 
@@ -217,9 +244,9 @@ class ClaimedPage:
 
     product_job_id: str
     inference_job_id: str
-    job_type: str
-    execution_target: str
     lease_expires_at: datetime | None
+    """When the platform stops considering this agent the owner of the page.
+    Read before reporting, to name the cause when the callback is refused."""
     task: str
     registry_model_id: str
     registry_tag: str
@@ -228,6 +255,28 @@ class ClaimedPage:
     page_image_expires_at: datetime | None
     """Two fields rather than one, so the agent can tell whether its link is
     still worth using without parsing a URL."""
+
+    def image_link_expired(self, *, now: datetime | None = None) -> bool:
+        """Whether the **signed page image link** is already dead.
+
+        Checked before the fetch rather than after the 403, so a page whose link
+        died - a lid closed mid-claim, a machine that swapped - fails with the
+        reason instead of with a status the route deliberately makes ambiguous.
+        """
+        if self.page_image_expires_at is None:
+            return False
+        return self.page_image_expires_at <= (now or datetime.now(UTC))
+
+    def lease_expired(self, *, now: datetime | None = None) -> bool:
+        """Whether this agent's **lease** has run out on the local clock.
+
+        Only ever used to *explain*, never to skip the callback: the platform is
+        the authority on who holds a page, and a laptop with a skewed clock must
+        not talk itself out of reporting work it actually finished.
+        """
+        if self.lease_expires_at is None:
+            return False
+        return self.lease_expires_at <= (now or datetime.now(UTC))
 
 
 @dataclass(frozen=True)
@@ -238,13 +287,45 @@ class Claim:
 
     page: ClaimedPage | None
     poll_after_seconds: float
-    lease_seconds: int
     agent: AgentNotice | None
 
 
 def default_platform_url(environ: dict[str, str] | None = None) -> str:
     source = environ if environ is not None else os.environ
     return (source.get(PLATFORM_URL_ENV) or DEFAULT_PLATFORM_URL).rstrip("/")
+
+
+def _is_loopback(host: str | None) -> bool:
+    """Whether a hostname names this machine. `urlsplit` has already lowercased
+    it and stripped the brackets off an IPv6 literal."""
+    return bool(host) and host in LOOPBACK_HOSTS
+
+
+def is_secure_platform_url(base_url: str) -> bool:
+    """Whether a bearer credential may be sent to `base_url`."""
+    parts = urlsplit(base_url)
+    if parts.scheme == "https":
+        return True
+    return parts.scheme == "http" and _is_loopback(parts.hostname)
+
+
+def require_secure_platform_url(base_url: str) -> str:
+    """The trimmed URL, or `InsecurePlatformURL` if it would leak a credential.
+
+    Enforced once, where a client is built, rather than at each call site that
+    supplies a URL - `--api-url`, `$NOMICOUS_API_URL`, and the stored credential
+    are three doors into the same room, and a check on one of them is a check on
+    none of them.
+    """
+    trimmed = base_url.rstrip("/")
+    if is_secure_platform_url(trimmed):
+        return trimmed
+    scheme = urlsplit(trimmed).scheme or "no"
+    raise InsecurePlatformURL(
+        f"Refusing to talk to {trimmed or 'an empty URL'} over {scheme} scheme. "
+        "Every request carries this machine's device token, so the platform URL "
+        "must be https (or http on localhost for a development platform)."
+    )
 
 
 def this_machine_name() -> str:
@@ -278,7 +359,10 @@ class PlatformClient:
     fetch, report."""
 
     def __init__(self, base_url: str, *, timeout: float = REQUEST_TIMEOUT_SECONDS) -> None:
-        self.base_url = base_url.rstrip("/")
+        self.base_url = require_secure_platform_url(base_url)
+        self.plaintext_loopback = urlsplit(self.base_url).scheme == "http"
+        """This client is pointed at a platform on this machine. The only state
+        in which it will fetch a page image over cleartext HTTP."""
         self.timeout = timeout
 
     # ------------------------------------------------------------------
@@ -291,13 +375,19 @@ class PlatformClient:
         *,
         body: dict | None = None,
         headers: dict[str, str] | None = None,
+        timeout: float | None = None,
     ) -> tuple[int, Any]:
         """Send one request; return `(status, decoded body)`.
 
         Non-2xx statuses are returned rather than raised, because on this surface
         they are answers: a 401 from `/device/v1/self` is how a revoked device
         finds out. Only a failure to reach the platform at all is an exception.
+
+        `timeout` overrides the client's default for the one call that needs it:
+        a long poll is *expected* to hold the socket open, so the deadline that
+        suits a JSON round trip would abort it every time.
         """
+        deadline = self.timeout if timeout is None else timeout
         url = f"{self.base_url}{path}"
         payload = None if body is None else json.dumps(body).encode("utf-8")
         request = urllib.request.Request(url, data=payload, method=method)
@@ -310,14 +400,14 @@ class PlatformClient:
             request.add_header(name, value)
 
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+            with urllib.request.urlopen(request, timeout=deadline) as response:
                 return response.status, _decode(response.read())
         except urllib.error.HTTPError as exc:
             return exc.code, _decode(exc.read())
         except urllib.error.URLError as exc:
             raise PlatformError(f"Cannot reach {self.base_url}: {exc.reason}") from exc
         except TimeoutError as exc:
-            raise PlatformError(f"{self.base_url} did not answer within {self.timeout:g}s") from exc
+            raise PlatformError(f"{self.base_url} did not answer within {deadline:g}s") from exc
         except OSError as exc:  # pragma: no cover - socket-level failures
             raise PlatformError(f"Cannot reach {self.base_url}: {exc}") from exc
 
@@ -420,17 +510,25 @@ class PlatformClient:
         agent is willing to wait. `wait_seconds` is clamped by the platform, not
         here: the ceiling is an operational dial and belongs to whoever is
         running it.
+
+        The socket deadline is therefore the *requested* wait plus the ordinary
+        request budget, not the ordinary budget alone. A long poll that asks the
+        platform to hold the connection for its own ceiling and then hangs up
+        first would time out every claim it made, and the flag that asked for it
+        would read as broken rather than as unsupported.
         """
+        wait = max(0, int(wait_seconds))
         status, body = self._request(
             "POST",
             CLAIM_PATH,
-            body={"wait_seconds": max(0, int(wait_seconds))},
+            body={"wait_seconds": wait},
             headers=credential,
+            timeout=wait + self.timeout,
         )
         if status == AGENT_VERSION_REFUSED_STATUS:
             raise _version_refusal(body, self.base_url)
         if status == 401:
-            raise PlatformError(
+            raise CredentialRefused(
                 f"{self.base_url} does not accept this machine's credential. "
                 "Run `nomicous pair` to authorise it again."
             )
@@ -446,7 +544,6 @@ class PlatformClient:
             return Claim(
                 page=_claimed_page(body.get("page")),
                 poll_after_seconds=float(body.get("poll_after_seconds") or 0.0),
-                lease_seconds=int(body.get("lease_seconds") or 0),
                 agent=_agent_notice(body.get("agent")),
             )
         except (KeyError, TypeError, ValueError) as exc:
@@ -461,7 +558,13 @@ class PlatformClient:
         It is also why this bypasses `_request`: that method adds headers this
         request has no business carrying, and the answer is bytes rather than
         JSON.
+
+        The URL is server-controlled end to end, so its scheme is checked before
+        it reaches the opener. `urlopen` is not an HTTP client - the default
+        opener also services `file:`, which would turn "here is your page image"
+        into a read of any path the researcher's account can open.
         """
+        self._require_fetchable(url)
         request = urllib.request.Request(url, method="GET")
         request.add_header("User-Agent", f"nomicous-inference/{installed_version()}")
         try:
@@ -483,6 +586,25 @@ class PlatformClient:
             raise PlatformError("The page image did not arrive in time") from exc
         except OSError as exc:  # pragma: no cover - socket-level failures
             raise PlatformError(f"The page image could not be fetched: {exc}") from exc
+
+    def _require_fetchable(self, url: str) -> None:
+        """Refuse a page image link that is not an HTTPS URL.
+
+        Plain HTTP is allowed only when this client is itself pointed at a
+        loopback platform, which is the integration suite and nothing else. The
+        page image carries no credential, so the objection is not eavesdropping:
+        it is that a URL the platform chose must not be able to name a scheme
+        that reads this machine instead of the network.
+        """
+        parts = urlsplit(url)
+        if parts.scheme == "https":
+            return
+        if parts.scheme == "http" and self.plaintext_loopback and _is_loopback(parts.hostname):
+            return
+        raise PlatformError(
+            f"Refusing to fetch a page image over {parts.scheme or 'a URL with no'} scheme. "
+            "A page image link must be https."
+        )
 
     def report_page(
         self,
@@ -514,9 +636,15 @@ class PlatformClient:
         if status == 204:
             return
         if status == 403:
-            raise PlatformError(
+            expired = (
+                " Its **lease** had already run out on this machine's clock."
+                if (page.lease_expired())
+                else ""
+            )
+            raise PageLeaseLost(
                 "The platform says this machine is not holding that page. Its "
-                "**lease** most likely expired and the page went back to the queue."
+                "**lease** most likely expired and the page went back to the "
+                f"queue.{expired}"
             )
         raise PlatformError(_unexpected(status, body, "reporting a page"))
 
@@ -567,10 +695,8 @@ def _agent_notice(raw: object) -> AgentNotice | None:
         return None
     return AgentNotice(
         agent_version=str(raw.get("agent_version") or ""),
-        minimum_version=str(raw.get("minimum_version") or ""),
         latest_version=str(raw.get("latest_version") or ""),
         outdated=bool(raw.get("outdated")),
-        package=str(raw.get("package") or ""),
         upgrade_command=str(raw.get("upgrade_command") or ""),
     )
 
@@ -587,8 +713,6 @@ def _claimed_page(raw: object) -> ClaimedPage | None:
     return ClaimedPage(
         product_job_id=str(raw["product_job_id"]),
         inference_job_id=str(raw["inference_job_id"]),
-        job_type=str(raw["job_type"]),
-        execution_target=str(raw.get("execution_target") or ""),
         lease_expires_at=_parse_datetime(raw.get("lease_expires_at")),
         task=str(request["task"]),
         registry_model_id=str(request["registry_model_id"]),
@@ -612,11 +736,9 @@ def _version_refusal(body: Any, base_url: str) -> AgentVersionRefused:
         error = {}
     return AgentVersionRefused(
         message=str(error.get("message") or f"{base_url} refused this version of the agent"),
-        reason=str(error.get("reason") or "unknown"),
         agent_version=error.get("agent_version"),
         minimum_version=str(error.get("minimum_version") or "unknown"),
         latest_version=str(error.get("latest_version") or "unknown"),
-        package=str(error.get("package") or "nomicous-inference"),
         upgrade_command=str(error.get("upgrade_command") or "uv tool upgrade nomicous-inference"),
     )
 
@@ -642,7 +764,6 @@ def _refusal_floor(base_url: str, agent_version: str, body: Any) -> AgentFloor:
             package=str(error["package"]),
             refused=True,
             outdated=False,
-            reason=str(error.get("reason") or ""),
             message=str(error.get("message") or ""),
             upgrade_command=str(error.get("upgrade_command") or ""),
         )

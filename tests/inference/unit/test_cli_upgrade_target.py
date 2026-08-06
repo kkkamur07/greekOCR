@@ -32,7 +32,6 @@ def _floor(*, package: str = DISTRIBUTION_NAME, minimum_version: str = "9.9.9") 
         package=package,
         refused=True,
         outdated=False,
-        reason="below_floor",
         message="This agent is below the floor.",
     )
 
