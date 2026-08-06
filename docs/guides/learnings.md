@@ -67,7 +67,7 @@ Production ships the platform API as a **Vercel Python serverless function** (`d
 | Capability | Why not serverless | Where it runs |
 |------------|-------------------|---------------|
 | Platform job worker (`claim` → submit to inference) | Needs continuous polling / claiming | `platform-worker` on persistent Docker host |
-| Inference API + worker | PyTorch bundle size, 30+ min jobs, `LISTEN/NOTIFY` | `inference-api` + `inference-worker` on Docker |
+| Model execution (PyTorch) | Bundle size, 30+ min jobs | The **inference agent** — a laptop, or a hosted worker claiming with a service credential. There is no inference service to deploy (ADR 0002/0003) |
 | Job status SSE (`NOTIFY` → browser stream) | `LISTEN` is a long-lived DB connection | Disabled on Vercel; enabled in Docker Compose / future all-Docker deploy |
 
 ### Required env on Vercel
@@ -125,33 +125,16 @@ curl -sS https://api.nomicous.com/health
 # {"status":"ok","database":"ok"}
 ```
 
-### Local helper versus cloud inference
+### Local versus cloud inference
 
-Local OCR is currently the default. The browser connects to the user's local
-Inference Helper; the helper is not a Vercel service. The browser tries
-`NEXT_PUBLIC_INFERENCE_HELPER_URL` first, then `127.0.0.1:8001` and
-`localhost:8001`. The frontend Content Security Policy allows these loopback
-origins. IPv6 loopback (`[::1]`) is not probed: even though the helper may also
-bind `::1`, Chromium does not reliably honor IPv6 literals in `connect-src`, so
-probing it only adds CSP console noise.
-
-#### HTTPS app → HTTP loopback contract
-
-The hosted app at `https://app.nomicous.com` calls `http://127.0.0.1:8001`
-directly. That cross-origin, public-HTTPS → private-loopback path is intentional:
-
-- Helper CORS allows only `https://app.nomicous.com` (no credentials).
-- Chromium Private Network Access requires
-  `Access-Control-Allow-Private-Network` on preflight (`allow_private_network`).
-- **Invariant:** every helper response for that origin — including mapped and
-  unhandled failures — must carry `Access-Control-Allow-Origin`. Starlette's
-  `ServerErrorMiddleware` sits outside CORS and would otherwise emit a bare
-  500 that the browser reports as a CORS failure; the helper converts escaping
-  exceptions to JSON inside the CORS layer so the UI can read `detail`.
-- Do not embed a helper auth secret in frontend code for this browser flow.
-
-Loopback TLS (or a Safari-specific Local Network path) remains a follow-up if
-Safari still blocks mixed-content / local-network access after this hardening.
+Local inference runs as a CLI the user installs, not as a service the browser
+dials (ADR 0002). The agent connects **out** to the platform and claims work;
+nothing listens on the laptop, so no browser's local-network policy, no
+loopback CORS contract and no mixed-content rule is on the path. The frontend's
+old probe order, the loopback `connect-src` entries and the
+`Access-Control-Allow-Private-Network` preflight were all deleted by #60;
+`tests/nomicous/unit/test_deployment_hardening.py` now asserts the CSP grants
+no loopback origin.
 
 The Vercel API never dials out to an inference host, which is what removed a
 whole class of this mistake: `localhost` inside a Vercel function means the

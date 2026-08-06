@@ -34,10 +34,18 @@ Auto-upgrade executes newly fetched code without asking. A compromised
 every researcher's laptop at its next launch, with no human in the loop.
 Mitigable by pinning to published hashes; not eliminable, because the point of
 the feature is to install something nobody has approved yet. Two things narrow
-it rather than close it: the platform names a *package* and never a command to
-run, so a compromised platform cannot choose what executes here; and the
-installer is whichever one already owns this environment, so the index is the
-one the researcher configured, not one the platform picked.
+it rather than close it: the platform names neither a command to run nor *which*
+package to install - the name is pinned to `DISTRIBUTION_NAME` here and a
+mismatch is fatal (`_reject_unexpected_target`), so the only thing a compromised
+platform can choose is the *version* of this one distribution; and the installer
+is whichever one already owns this environment, so the index is the one the
+researcher configured, not one the platform picked.
+
+What is left is the index. A compromised `nomicous-inference` there still
+reaches every laptop. What is no longer possible is the platform pointing this
+process at some *other* distribution - which was code execution by a different
+route, because an sdist runs its build hooks and a wheel declaring a `nomicous`
+console script replaces the entry point `_re_exec` is about to run.
 
 The alternative - a notice telling researchers to upgrade themselves - was
 rejected. It is safer and it is ignorable, and stale agents are exactly the
@@ -49,6 +57,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -57,6 +66,32 @@ from inference.cli import console as ui
 from inference.cli.api import AgentFloor, PlatformClient, PlatformError, default_platform_url
 from inference.cli.credentials import CredentialError, load_credential
 from inference.cli.version import DISTRIBUTION_NAME, SOURCE_CHECKOUT_VERSION, installed_version
+
+MAX_FLOOR_VERSION_LENGTH = 32
+"""Mirrors ``MAX_AGENT_VERSION_LENGTH`` on the platform side. A floor longer
+than the column that records a version is not a version."""
+
+_FLOOR_VERSION_PATTERN = re.compile(
+    r"""
+    ^
+    (?:0|[1-9][0-9]*)
+    \.(?:0|[1-9][0-9]*)
+    \.(?:0|[1-9][0-9]*)
+    (?:[-.]?(?:a|b|rc|alpha|beta|dev)\.?(?:0|[1-9][0-9]*)?)?
+    (?:\+[0-9a-zA-Z.]+)?
+    $
+    """,
+    re.VERBOSE,
+)
+"""The same grammar ``backend/ml/domain/agent_version.py`` accepts, restated on
+this side of the wire.
+
+Deliberately a copy rather than an import: this package ships to a researcher's
+laptop and the platform's domain module does not travel with it. The value it
+guards is interpolated into an installer argument, so the client has to be able
+to reject a floor without asking anyone. Narrower than PEP 440 on purpose, for
+the same reason the platform's is - anything outside it is refused rather than
+guessed at."""
 
 UPGRADED_FROM_ENV = "NOMICOUS_UPGRADED_FROM"
 """Set on the process an upgrade re-execs into, holding the version it came
@@ -180,11 +215,61 @@ def _verbatim(console, raw: str, *, style: str = "dim") -> None:
     console.print(text, soft_wrap=True)
 
 
+def _reject_unexpected_target(errors, floor: AgentFloor) -> bool:
+    """True when the floor names something this agent must not install.
+
+    Two fields off the wire reach an installer argument, and both are checked
+    here before anything else in the upgrade path looks at them.
+
+    ``package`` is pinned to `DISTRIBUTION_NAME`. Upgrading *this* agent means
+    installing a newer build of the distribution it already is; any other name
+    is not an upgrade, and running an installer on it would hand the platform
+    the choice of what executes on the researcher's machine. There is no
+    legitimate reason for the two to differ, including for a self-hosted
+    platform: the agent it is talking to is `nomicous-inference` whatever the
+    platform is called.
+
+    ``minimum_version`` is held to the platform's own version grammar. It is
+    interpolated into ``package>=version``, and a requirement specifier is a
+    small language of its own - a floor of ``0 --index-url http://…`` is not a
+    version, and neither is anything else the grammar does not admit.
+    """
+    if floor.package != DISTRIBUTION_NAME:
+        errors.print(
+            f"[red]The platform asked this agent to install a different package.[/red] "
+            f"Only {DISTRIBUTION_NAME} can be upgraded here. Nothing was installed "
+            f"and nothing was claimed."
+        )
+        errors.print("It named:")
+        _verbatim(errors, f"  {floor.package}", style="")
+        return True
+
+    if (
+        len(floor.minimum_version) > MAX_FLOOR_VERSION_LENGTH
+        or _FLOOR_VERSION_PATTERN.match(floor.minimum_version) is None
+    ):
+        errors.print(
+            "[red]The platform named a floor that is not a version.[/red] "
+            "Nothing was installed and nothing was claimed."
+        )
+        errors.print("It named:")
+        _verbatim(errors, f"  {floor.minimum_version}", style="")
+        return True
+
+    return False
+
+
 def _upgrade_or_stop(console, errors, floor: AgentFloor, agent_version: str) -> int:
     # The platform's own sentence, printed rather than reworded so a researcher
     # and the server logs say the same thing - and printed inertly, because it
     # arrived over the wire.
     _verbatim(console, floor.message, style="yellow")
+
+    # Before any branch below quotes these fields or builds a requirement out of
+    # them. This is the boundary: past it, `floor.package` is known to be this
+    # distribution and `floor.minimum_version` is known to be a version.
+    if _reject_unexpected_target(errors, floor):
+        return ui.EXIT_FAILED
 
     if agent_version == SOURCE_CHECKOUT_VERSION:
         # There is no distribution here to replace, and installing one over a

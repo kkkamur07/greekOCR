@@ -38,6 +38,16 @@ body {
 
 a { color: var(--navy); }
 
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.875em;
+  padding: 0.1em 0.35em;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  overflow-wrap: break-word;
+}
+
 img {
   display: block;
   max-width: 100%;

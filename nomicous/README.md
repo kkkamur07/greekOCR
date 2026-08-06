@@ -71,7 +71,7 @@ Open [http://localhost:5173](http://localhost:5173).
 
 ## Docker (one command)
 
-Ensure ports **5173**, **8000**, **8001**, and **5433** are free. Run Compose from the repository root:
+Ensure ports **5173**, **8000**, and **5433** are free. Run Compose from the repository root:
 
 ```bash
 cd ..

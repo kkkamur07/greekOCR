@@ -234,7 +234,7 @@
       "id": "057",
       "title": "cli-run-loop",
       "type": "AFK",
-      "status": "ready",
+      "status": "done",
       "tracker": "https://github.com/kkkamur07/greekOCR/issues/57",
       "blocked_by": [
         "053-signed-page-image-link.md 054-device-lease-stale-sweep.md 056-cli-pair-and-version.md"
@@ -245,7 +245,7 @@
       "id": "058",
       "title": "cli-self-upgrade",
       "type": "AFK",
-      "status": "ready",
+      "status": "done",
       "tracker": "https://github.com/kkkamur07/greekOCR/issues/58",
       "blocked_by": [
         "055-version-floor.md 056-cli-pair-and-version.md"
@@ -267,7 +267,7 @@
       "id": "060",
       "title": "delete-loopback-transport",
       "type": "AFK",
-      "status": "backlog",
+      "status": "done",
       "tracker": "https://github.com/kkkamur07/greekOCR/issues/60",
       "blocked_by": [
         "057-cli-run-loop.md 059-frontend-host-preference.md"
