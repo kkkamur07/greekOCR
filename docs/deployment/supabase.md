@@ -315,9 +315,9 @@ receive the app JWT, storage service-role key, or migration URL.
 For the disposable pre-production project only, reset the application schema
 and rerun the consolidated migrations with an explicit guard:
 
-The guard is deliberately **not** satisfiable from your shell. `SUPABASE_NON_PRODUCTION=true`
+The guard is deliberately not satisfiable from your shell. `SUPABASE_NON_PRODUCTION=true`
 must appear inside the environment file itself, which is parsed before anything is
-merged into the process environment — an `export` in your profile will not do it, and
+merged into the process environment, so an `export` in your profile will not do it, and
 neither will an `ENVIRONMENT` of `production` in that file. Add to `.env.supabase`:
 
 ```dotenv
@@ -333,7 +333,7 @@ and requires you to type it back:
 ./scripts/platform/reset_supabase_nonprod.sh
 ```
 
-Unattended, name the same target explicitly — a fixed literal such as `RESET` is
+Unattended, name the same target explicitly. A fixed literal such as `RESET` is
 rejected, because a confirmation that is identical for every project confirms nothing:
 
 ```bash

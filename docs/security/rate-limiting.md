@@ -70,33 +70,33 @@ Because the account bucket is the only bucket in production, anything that stops
 it from being derived removes the limit entirely. Identity extraction therefore
 ignores what the request *says* it is sending:
 
-- **Media types are case-insensitive** (RFC 9110 §8.3.1). A gate comparing
+- Media types are case-insensitive (RFC 9110 §8.3.1). A gate comparing
   `Content-Type` against `"application/json"` byte for byte let
   `Content-Type: Application/JSON` past while FastAPI parsed the body and checked
   the password anyway. Same for `application/vnd.api+json` and for a request that
-  declares no content type at all — FastAPI parses both.
-- **A body too large to attribute is refused, not skipped.** Pydantic ignores
+  declares no content type at all, since FastAPI parses both.
+- A body too large to attribute is refused, not skipped. Pydantic ignores
   unknown keys, so a login payload padded past `MAX_IDENTITY_BODY_BYTES` with a
-  junk field still authenticates. Such a request gets **413**, because "we cannot
+  junk field still authenticates. Such a request gets a 413, because "we cannot
   read who this targets" must not resolve to "so charge it to nothing".
 
 The rule is that the bytes decide. Anything that is not JSON cannot reach a
-password check either — every route under this dependency binds a pydantic model,
-which FastAPI only fills from JSON — so there is nothing else to probe.
+password check either, because every route under this dependency binds a pydantic
+model, which FastAPI only fills from JSON, so there is nothing else to probe.
 
 ### Requests with no attributable dimension at all
 
-An empty key list does **not** mean the request goes through unmetered. It is
+An empty key list does not mean the request goes through unmetered. It is
 charged against a coarse, per-path `unattributable:<path>` bucket
 (`UNATTRIBUTABLE_AUTH_RATE_LIMIT`, 300 per window).
 
 A shared bucket is safe here for the reason it would be an outage on the main
 path: nothing that lands in it is a sign-in. A body with no `email` never reaches
 password verification, so a legitimate user cannot be locked out of a bucket they
-never enter. It is not a per-client limit and does not pretend to be one — it
+never enter. It is not a per-client limit and does not pretend to be one. It
 bounds what an unattributable caller can make the database do for free.
 
-**What this does not stop:** credential stuffing spread across many distinct
+What this does not stop is credential stuffing spread across many distinct
 accounts from a single unattributable source. Nothing keyed on request content
 can, and nothing keyed on the peer address can either while the peer is shared.
 Closing that gap requires either a verified trusted-proxy configuration (above)

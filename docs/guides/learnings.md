@@ -143,8 +143,8 @@ directly. That cross-origin, public-HTTPS → private-loopback path is intention
 - Helper CORS allows only `https://app.nomicous.com` (no credentials).
 - Chromium Private Network Access requires
   `Access-Control-Allow-Private-Network` on preflight (`allow_private_network`).
-- **Invariant:** every helper response for that origin — including mapped and
-  unhandled failures — must carry `Access-Control-Allow-Origin`. Starlette's
+- Invariant: every helper response for that origin, including mapped and
+  unhandled failures, must carry `Access-Control-Allow-Origin`. Starlette's
   `ServerErrorMiddleware` sits outside CORS and would otherwise emit a bare
   500 that the browser reports as a CORS failure; the helper converts escaping
   exceptions to JSON inside the CORS layer so the UI can read `detail`.
@@ -156,7 +156,7 @@ Safari still blocks mixed-content / local-network access after this hardening.
 The Vercel API never dials out to an inference host, which is what removed a
 whole class of this mistake: `localhost` inside a Vercel function means the
 ephemeral function container, not the researcher's computer. Inference is
-inbound now — an agent claims from the API (ADR 0003). Keep cloud inference
+inbound now, because an agent claims from the API (ADR 0003). Keep cloud inference
 disabled until a persistent agent host is available.
 
 Runbook: [`docs/deployment/production.md`](../deployment/production.md). Vercel Python notes: [`docs/deployment/vercel-platform-api.md`](../deployment/vercel-platform-api.md).

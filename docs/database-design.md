@@ -264,9 +264,9 @@ bypass.
 - `approved_user_id`, `approved_at`, `device_id`, `denied_at`, and `consumed_at`
   are the state machine and the audit trail of what was approved by whom.
 - `expires_at` is short (minutes) and is the only index, serving both the live
-  count and the sweep. Rows are **deleted** once past
+  count and the sweep. Rows are deleted once past
   `DEVICE_PAIRING_RETENTION_SECONDS` beyond expiry, and consumed or denied rows
-  past that age, from the endpoint that inserts them — the table is written
+  past that age, from the endpoint that inserts them. The table is written
   without authentication and would otherwise grow without bound.
 - `device_id` references `helper_devices` with `ON DELETE CASCADE` in that
   direction only: deleting a device removes its pairing rows, and sweeping a

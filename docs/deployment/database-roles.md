@@ -10,7 +10,7 @@ or a Docker image.
 | `nomicous_migrator` | one-off Alembic operator | schema usage/create plus application tables, sequences, and types |
 | `nomicous_api` | platform API | application-table CRUD, sequence usage, and type usage |
 | `nomicous_platform_worker` | persistent platform worker | claim/update `jobs`; read job-input tables |
-| `nomicous_inference_worker` | nothing — retained only so `002_service_roles` finds all four groups | none since `006_drop_inference_jobs` |
+| `nomicous_inference_worker` | nothing, retained only so `002_service_roles` finds all four groups | none since `006_drop_inference_jobs` |
 
 The platform API does not need the migrator connection at runtime. An inference
 agent needs no database credential at all: it reaches the platform over HTTP

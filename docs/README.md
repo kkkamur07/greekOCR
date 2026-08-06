@@ -1,6 +1,6 @@
 # Nomicous documentation
 
-Start with the audience-appropriate guide:
+Start with whichever guide matches what you are here for:
 
 | Doc                                                     | Use it when                                                                              |
 | ------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
@@ -29,38 +29,29 @@ Start with the audience-appropriate guide:
 
 ## Inference and publishing
 
-| Doc                                                             | Scope                                                             |
-| --------------------------------------------------------------- | ----------------------------------------------------------------- |
-| [Adding inference models](inference/adding-inference-models.md) | Registry, weights, catalog, helper sync, and deployment checklist |
+| Doc                                                             | Scope                                                                  |
+| --------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| [Adding inference models](inference/adding-inference-models.md) | Registry, weights, catalog, helper sync, and deployment checklist      |
 | [Inference service](../inference/README.md)                     | Install from PyPI, releasing, contracts, limits, and runtime reference |
-| [Hugging Face publishing](../scripts/hf/README.md)              | Model and dataset staging, validation, and upload workflow        |
+| [Hugging Face publishing](../scripts/hf/README.md)              | Model and dataset staging, validation, and upload workflow             |
 
 ## Platform references
 
-- [`nomicous/CONTEXT.md`](../nomicous/CONTEXT.md) — domain terminology and
+- [`nomicous/CONTEXT.md`](../nomicous/CONTEXT.md) for domain terminology and
   annotation semantics
-- [`database-design.md`](database-design.md) — schema, ownership, pooling,
+- [`database-design.md`](database-design.md) for the schema, ownership, pooling,
   job state, `NOTIFY`, SSE, and polling
-- [`nomicous/backend/README.md`](../nomicous/backend/README.md) — backend
+- [`nomicous/backend/README.md`](../nomicous/backend/README.md) for backend
   bounded contexts and routes
-- [`nomicous/frontend/README.md`](../nomicous/frontend/README.md) — editor
-  development and generated API client
-
-## Reviews
-
-Point-in-time reviews of the codebase. They carry file paths and line numbers that
-drift, so read them alongside the code rather than as current reference.
-
-| Doc                                                  | Scope                                                                       |
-| ---------------------------------------------------- | --------------------------------------------------------------------------- |
-| [Codebase review, 2026-08-04](codebase-review-2026-08-04.md) | Cleanup backlog, simplification findings, and ranked architectural candidates |
+- [`nomicous/frontend/README.md`](../nomicous/frontend/README.md) for editor
+  development and the generated API client
 
 ## Security
 
-Security-specific records live under [`security/`](security/). They include
-dependency vulnerability exceptions and their remediation plans.
+Security-specific records live under [`security/`](security/). They cover dependency
+vulnerability exceptions and their remediation plans.
 
 ## Internal backlog
 
-Deferred work lives in [`todo.md`](todo.md). It is an internal backlog, not a
-product capability list.
+Deferred work lives in [`todo.md`](todo.md). It is an internal backlog, not a product
+capability list.

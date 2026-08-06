@@ -224,15 +224,15 @@ nomicous pair
 nomicous run
 ```
 
-Releasing is `.github/workflows/release.yml` — one wheel, one runner, Trusted
+Releasing is `.github/workflows/release.yml`: one wheel, one runner, Trusted
 Publishing, no signing secret. The per-OS DMG, zip, and tarball builds it
 replaced are gone along with their Developer ID and Authenticode pipelines; see
 [`inference/README.md`](../../inference/README.md#releasing-and-what-that-changed-about-security-patching).
 
-**Patching a CVE in the shipped closure** is a dependency bump plus a raise of
-`INFERENCE_AGENT_MIN_VERSION`, the platform's **version floor**. Agents below
+Patching a CVE in the shipped closure is a dependency bump plus a raise of
+`INFERENCE_AGENT_MIN_VERSION`, the platform's version floor. Agents below
 the floor are refused at the claim endpoint and told to upgrade, so a fix lands
-without anyone reinstalling anything — the property four-platform frozen
+without anyone reinstalling anything, which is the property four-platform frozen
 installers could not offer at any price.
 
 Nothing has to be opened, forwarded, or certified on a researcher's machine.
