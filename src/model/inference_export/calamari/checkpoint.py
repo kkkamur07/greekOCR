@@ -8,7 +8,8 @@ path reaches here.
 This file was the loader half of the retired ONNX exporter
 (``src/model/inference_export/calamari/export.py``). Under ADR 0004 the Torch
 graph *is* the runtime, so the loader moved into the inference package and the
-exporter moved to ``archive/onnx-runtime/``.
+exporter was archived. ADR 0006 reversed that: the graph runs as ``.onnx``, and
+both this loader and the exporter beside it are export-time code again.
 """
 
 from __future__ import annotations

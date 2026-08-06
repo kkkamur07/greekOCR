@@ -1,6 +1,6 @@
 """Export the reference Calamari graph as a self-contained ONNX artifact.
 
-RETIRED. See ``archive/onnx-runtime/README.md`` and ADR 0004.
+Restored by ADR 0006, which supersedes 0004.
 
 Originally ``src/model/inference_export/calamari/export.py``. The checkpoint
 *loader* that used to live beside this exporter was not retired with it - it
