@@ -103,7 +103,6 @@ erDiagram
     DOCUMENTS ||--o{ JOBS : targets
     DOCUMENT_PARTS ||--o{ JOBS : targets
     JOBS ||--o{ TRANSCRIPTIONS : creates
-    JOBS ||--o| INFERENCE_JOBS : dispatches
 
     USERS {
         uuid id PK
@@ -156,22 +155,6 @@ erDiagram
         timestamptz updated_at
         timestamptz started_at
         timestamptz callback_claimed_at
-        timestamptz completed_at
-    }
-    INFERENCE_JOBS {
-        uuid id PK
-        uuid product_job_id
-        enum task
-        string registry_model_id
-        string registry_tag
-        enum status
-        bytea image_bytes
-        jsonb params
-        jsonb output
-        text error
-        timestamptz created_at
-        timestamptz updated_at
-        timestamptz started_at
         timestamptz completed_at
     }
 ```
