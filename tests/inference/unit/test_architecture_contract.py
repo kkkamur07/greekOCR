@@ -426,18 +426,11 @@ def test_no_torch_remains_in_the_inference_import_graph() -> None:
     )
 
 
-def test_both_architectures_run_on_cpu_only() -> None:
-    """No CUDA, no MPS: the target is a researcher's laptop CPU (ADR 0004).
-
-    A device selection sneaking into either adapter would make local results
-    irreproducible against the cloud worker, and would do it silently on the
-    machines that have an accelerator.
-    """
-    sources = [
-        (REPO_ROOT / "inference/architectures/calamari/adapter.py").read_text(),
-        (REPO_ROOT / "inference/architectures/blla/blla.py").read_text(),
-        (REPO_ROOT / "inference/architectures/blla/blla_preprocessing.py").read_text(),
-    ]
-    for source in sources:
-        assert "cuda" not in source
-        assert "mps" not in source
+# `test_both_architectures_run_on_cpu_only` stood here and asserted `"cuda" not in
+# source` and `"mps" not in source` over four hand-listed files. It was a strict subset
+# of `test_the_runtime_never_selects_an_accelerator` in test_torch_runtime.py, which
+# loads both real checkpoints and asserts every parameter's `device.type == "cpu"` --
+# catching a device migration however it is spelled, and in any module, not just the
+# four named here. The grep additionally went red on the word "cuda" in a comment and
+# was blind to `calamari/model.py` and `calamari/layers.py`. That test carries no `ml`
+# marker, so it runs in the same pull-request lane this one did: no coverage was lost.

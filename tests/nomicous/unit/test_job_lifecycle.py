@@ -779,7 +779,9 @@ def test_execute_claimed_job_passes_the_claim_owner(monkeypatch: pytest.MonkeyPa
 
 
 # --- Worker sweep wiring ---
-# Tests every stale-state sweep runs on each tick. Does not test handler dispatch.
+# Tests the order the stale-state sweeps run in, and the deadline each is handed.
+# Does not test handler dispatch, and does not test what any sweep does to a row --
+# that needs Postgres and lives in tests/nomicous/integration/test_job_worker_sweeps.py.
 
 
 def test_process_one_job_runs_every_stale_sweep(monkeypatch: pytest.MonkeyPatch):
@@ -792,13 +794,12 @@ def test_process_one_job_runs_every_stale_sweep(monkeypatch: pytest.MonkeyPatch)
 
         return _run
 
+    # All four sweeps, not three. An unpatched sweep does not make this test more
+    # realistic -- it makes `process_one_job` open a live Postgres connection from the
+    # lane CI runs with no database, so the test fails on connectivity rather than on
+    # the ordering it exists to pin.
     monkeypatch.setattr(worker_module, "reclaim_stale_running_jobs", _sweep("reclaim", 1))
     monkeypatch.setattr(worker_module, "fail_stale_waiting_jobs", _sweep("waiting", 2))
-    # The device-lease sweep is the third of the four, and it has to be patched like
-    # the rest. Left real, process_one_job opens a live Postgres connection from a
-    # unit test - so this passed only when an integration test had already provisioned
-    # a database earlier in the session, and failed whenever this directory ran alone
-    # or CI ran the unit suite without one.
     monkeypatch.setattr(worker_module, "release_expired_device_leases", _sweep("lease", 3))
     monkeypatch.setattr(worker_module, "clear_stale_callback_claims", _sweep("claims", 4))
     monkeypatch.setattr(worker_module, "claim_next_pending_job", lambda **_kwargs: None)
@@ -807,9 +808,10 @@ def test_process_one_job_runs_every_stale_sweep(monkeypatch: pytest.MonkeyPatch)
 
     settings = get_job_settings()
     # Waiting must be swept before claims are released: releasing rewrites the row.
-    # The lease sweep sits between them because it re-pends rather than fails, and it
-    # touches the same rows the claim release would otherwise stamp first.
+    # The lease sweep sits between the two because it re-pends agent-held pages rather
+    # than failing them, and it reads the same `updated_at` the waiting sweep compares.
     assert [name for name, _ in calls] == ["reclaim", "waiting", "lease", "claims"]
+    assert calls[0][1] == {"running_timeout_seconds": settings.job_worker_running_timeout_seconds}
     assert calls[1][1] == {"waiting_timeout_seconds": settings.job_worker_waiting_timeout_seconds}
     assert calls[2][1] == {"lease_seconds": get_device_settings().device_lease_seconds}
     assert calls[3][1] == {

@@ -3,11 +3,31 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { apiRequest } from "../api/client";
 import { AuthProvider, useAuthSession } from "./AuthProvider";
-import { clearAccessToken, getAccessToken } from "./storage";
+import { clearAccessToken, getAccessToken, setAccessToken } from "./storage";
 
 function SessionStatus() {
   const { status } = useAuthSession();
   return <output>{status}</output>;
+}
+
+/** Renders the status and exposes the two actions every sign-in and sign-out uses. */
+function SessionControls({
+  onLogoutError,
+}: {
+  onLogoutError?: (error: unknown) => void;
+}) {
+  const { status, establish, logout } = useAuthSession();
+  return (
+    <>
+      <output>{status}</output>
+      <button onClick={() => establish("granted-token")}>establish</button>
+      {/* `logout` clears in a `finally` but does not swallow: a failing `POST
+          /auth/logout` still rejects out to the caller, so a caller that ignores the
+          promise leaks an unhandled rejection. Catching here is what a real caller
+          must do, and the failure test asserts the clearing happened anyway. */}
+      <button onClick={() => void logout().catch(onLogoutError)}>logout</button>
+    </>
+  );
 }
 
 function jsonResponse(body: unknown): Response {
@@ -78,5 +98,94 @@ describe("AuthProvider refresh recovery", () => {
     await waitFor(() =>
       expect(screen.getByText("anonymous")).toBeInTheDocument(),
     );
+  });
+});
+
+// `establish` and `logout` are the whole of sign-in and sign-out. Until these existed,
+// both could be replaced with empty bodies without failing a single test in the repo,
+// because every consumer stubbed `useAuthSession` instead of rendering the provider.
+describe("AuthProvider session lifecycle", () => {
+  beforeEach(() => {
+    clearAccessToken();
+  });
+
+  async function renderControls(onLogoutError?: (error: unknown) => void) {
+    render(
+      <AuthProvider>
+        <SessionControls onLogoutError={onLogoutError} />
+      </AuthProvider>,
+    );
+    // Let the bootstrap refresh settle so the assertions below are about the action
+    // under test rather than about a race with it.
+    await waitFor(() =>
+      expect(screen.getByText("anonymous")).toBeInTheDocument(),
+    );
+  }
+
+  it("establish stores the token and authenticates the session", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 401 })),
+    );
+    await renderControls();
+
+    screen.getByRole("button", { name: "establish" }).click();
+
+    await waitFor(() =>
+      expect(screen.getByText("authenticated")).toBeInTheDocument(),
+    );
+    // The token is what every later request is signed with; a status flip alone is a
+    // logged-in-looking UI over an unauthenticated client.
+    expect(getAccessToken()).toBe("granted-token");
+  });
+
+  it("logout calls the API, clears the token, and ends anonymous", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.endsWith("/auth/refresh"))
+        return new Response(null, { status: 401 });
+      if (url.endsWith("/auth/logout"))
+        return new Response(null, { status: 204 });
+      throw new Error(`unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await renderControls();
+
+    setAccessToken("live-token");
+    screen.getByRole("button", { name: "logout" }).click();
+
+    await waitFor(() => expect(getAccessToken()).toBeNull());
+    expect(screen.getByText("anonymous")).toBeInTheDocument();
+    // The server must be told, or the refresh cookie outlives the sign-out and the
+    // next page load silently restores the session the user just ended.
+    expect(
+      fetchMock.mock.calls.filter(([url]) =>
+        (typeof url === "string" ? url : url.toString()).endsWith(
+          "/auth/logout",
+        ),
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("logout still clears the token when the API call fails", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.endsWith("/auth/refresh"))
+        return new Response(null, { status: 401 });
+      throw new Error("network down");
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const logoutError = vi.fn();
+    await renderControls(logoutError);
+
+    setAccessToken("live-token");
+    screen.getByRole("button", { name: "logout" }).click();
+
+    // A sign-out that leaves a live JWT in memory because the network blipped is the
+    // worst of both worlds: the user believes they are out, the tab is still armed.
+    await waitFor(() => expect(getAccessToken()).toBeNull());
+    expect(screen.getByText("anonymous")).toBeInTheDocument();
+    // ...and the failure is still reported rather than silently swallowed.
+    expect(logoutError).toHaveBeenCalled();
   });
 });

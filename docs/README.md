@@ -61,6 +61,8 @@ than as current reference.
 | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | [Resume: inference redesign](resume-inference-redesign.md)                       | **Current.** Trunk state, what was built, known gaps, and the owner's actions |
 | [Merge handoff: inference redesign](merge-handoff-inference-redesign.md)         | History. Executed 2026-08-05; kept for *why* each conflict was resolved as it was |
+| [Merge audit, 2026-08-05](merge-audit-2026-08-05.md)                             | History. Findings that produced the `fix/remediation-*` branches              |
+| [Test suite review, 2026-08-05](test-suite-review-2026-08-05.md)                 | Which tests would fail if the behaviour they name broke — CI blind spots, tests that cannot fail, and coverage gaps |
 | [Codebase review, 2026-08-04](codebase-review-2026-08-04.md)                     | Stale. Cleanup backlog and architectural candidates as believed that day      |
 
 ## Security
