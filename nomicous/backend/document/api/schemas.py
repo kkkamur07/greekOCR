@@ -30,9 +30,13 @@ MAX_LINE_TEXT_CHARS = 10_000
 # `.in_(...)` or drives one UPDATE per element before anything looks at it.
 MAX_LINE_IDS_PER_REQUEST = MAX_REPLACE_PART_LINES
 MAX_PART_IDS_PER_REQUEST = 10_000
-# Unauthenticated layout reads are keyset paginated like every other list endpoint.
-DEFAULT_PUBLIC_LAYOUT_LINES = 2_000
-MAX_PUBLIC_LAYOUT_LINES = 10_000
+# Unauthenticated layout reads are keyset paginated like every other list endpoint, so
+# the page size is how much work one anonymous request may ask for, not how much geometry
+# a document may have. It used to be a tenth of a manuscript per request: 10_000 lines,
+# each joined to its transcriptions through a nested selectinload, for a caller with no
+# account. The cursor is how a client reads the rest.
+DEFAULT_PUBLIC_LAYOUT_LINES = 500
+MAX_PUBLIC_LAYOUT_LINES = 500
 
 #: Optional list of line ids, bounded. Declared once so a new route cannot accept an
 #: unbounded one by forgetting a per-route check - the same reason ``GeometryPoints``
