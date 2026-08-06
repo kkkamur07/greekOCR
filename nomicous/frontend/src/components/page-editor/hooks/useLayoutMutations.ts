@@ -15,6 +15,7 @@ import {
   type PartLayoutResponse,
 } from "../../../api/client";
 import { ApiError, isAbortError } from "../../../api/errors";
+import { invalidateAfter } from "../../../api/resources";
 import { submissionRefusalExplanation } from "../../../inference";
 import { cleanPolygonPoints, offsetGeometry } from "../canvasGeometry";
 import {
@@ -25,6 +26,7 @@ import {
 } from "../editUndo";
 import { SEGMENT_JOB_TIMEOUT_MS, type PageEditorJobKind } from "../jobProgress";
 import { nextSegmentOrder } from "../segmentNumbering";
+import { statusMessage, type StatusMessage } from "../statusMessage";
 import {
   applyLayoutLineGeometryToSegments,
   mergeSavedLine,
@@ -101,7 +103,7 @@ export function useLayoutMutations({
     baseline?: LayoutLineResponse["baseline"];
     mask?: LayoutLineResponse["mask"];
   } | null>(null);
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [saveMessage, setSaveMessage] = useState<StatusMessage | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
   // A count, not a flag: a superseded run unwinds while its successor is still
   // going, and must not report the page as idle on the way out.
@@ -109,7 +111,9 @@ export function useLayoutMutations({
   const segmenting = segmentRunCount > 0;
   const [useOtsuRefinement, setUseOtsuRefinement] = useState(false);
   const [otsuSphereRadius, setOtsuSphereRadius] = useState(4);
-  const [segmentMessage, setSegmentMessage] = useState<string | null>(null);
+  const [segmentMessage, setSegmentMessage] = useState<StatusMessage | null>(
+    null,
+  );
   const undoStackRef = useRef<CanvasEdit[]>([]);
   const redoStackRef = useRef<CanvasEdit[]>([]);
   const [editUndoRevision, setEditUndoRevision] = useState(0);
@@ -126,6 +130,18 @@ export function useLayoutMutations({
     redoStackRef.current = [];
     setEditUndoRevision((value) => value + 1);
   }, [projectId, documentId, partId]);
+
+  /**
+   * Called once per committed write, after the server has taken it.
+   *
+   * The editor keeps its own copies of the Segments and layout, so a write here
+   * is visible on the page without any cache doing anything - which is exactly
+   * why the two reads that are *also* copies of it were being left behind.
+   */
+  const notePartContentChanged = useCallback(() => {
+    if (!projectId || !documentId) return;
+    invalidateAfter.partContentChanged(projectId, documentId);
+  }, [projectId, documentId]);
 
   const recordEdit = useCallback((edit: CanvasEdit) => {
     undoStackRef.current = pushEditOntoStack(undoStackRef.current, edit);
@@ -199,8 +215,9 @@ export function useLayoutMutations({
             : line,
         ),
       );
+      notePartContentChanged();
       setMutationError(null);
-      setSaveMessage("Manual geometry saved");
+      setSaveMessage(statusMessage("Manual geometry saved"));
       setSelectedLineSnapshot({
         baseline: selectedLine.baseline,
         mask: selectedLine.mask,
@@ -236,21 +253,30 @@ export function useLayoutMutations({
 
   async function resetSelectedLine() {
     if (!projectId || !documentId || !partId || !selectedLineId) return;
-    const resetLayout = await api.resetPartLayout(
-      projectId,
-      documentId,
-      partId,
-      {
-        line_ids: [selectedLineId],
-      },
-    );
-    const nextLayout = resetLayout ?? { blocks: [], lines: [] };
-    setLayout(nextLayout);
-    setLines((current) =>
-      applyLayoutLineGeometryToSegments(current, nextLayout.lines),
-    );
-    setSelectedLineSnapshot(null);
-    setSaveMessage("Layout reset");
+    try {
+      const resetLayout = await api.resetPartLayout(
+        projectId,
+        documentId,
+        partId,
+        {
+          line_ids: [selectedLineId],
+        },
+      );
+      const nextLayout = resetLayout ?? { blocks: [], lines: [] };
+      setLayout(nextLayout);
+      setLines((current) =>
+        applyLayoutLineGeometryToSegments(current, nextLayout.lines),
+      );
+      setSelectedLineSnapshot(null);
+      notePartContentChanged();
+      setSaveMessage(statusMessage("Layout reset"));
+    } catch (err) {
+      // Both call sites - the Delete key and the Reset layout button - drop the
+      // returned promise, so a rejection that got this far said nothing at all:
+      // a reader without write access pressed Reset and the page did not move.
+      setSaveMessage(null);
+      setLineError(layoutMutationMessage(err));
+    }
   }
 
   async function replaceWithManualLine(
@@ -272,6 +298,7 @@ export function useLayoutMutations({
       const nextLines = mergeSavedLine(linesRef.current, saved);
       applyLocalLines(nextLines);
       recordEdit({ kind: "create", line: saved });
+      notePartContentChanged();
       setLineError(null);
       onDrawComplete();
     } catch (err) {
@@ -327,6 +354,7 @@ export function useLayoutMutations({
         before,
         after: cleanedPoints,
       });
+      notePartContentChanged();
       setLineError(null);
     } catch (err) {
       applyLocalLines(previousLines);
@@ -364,6 +392,7 @@ export function useLayoutMutations({
     try {
       await api.deletePartLine(projectId, documentId, partId, deletedId);
       recordEdit({ kind: "delete", line: deletedLine });
+      notePartContentChanged();
       setLineError(null);
       const pairing = await api.getPagePairing(projectId, documentId, partId);
       setTextLines(pairing.text_lines);
@@ -407,6 +436,7 @@ export function useLayoutMutations({
           restored,
         );
       }
+      notePartContentChanged();
       setLineError(null);
       setEditUndoRevision((value) => value + 1);
       const pairing = await api.getPagePairing(projectId, documentId, partId);
@@ -449,6 +479,7 @@ export function useLayoutMutations({
         if (selectedSegmentId === edit.line.id) setSelectedSegmentId(null);
         undoStackRef.current = pushEditOntoStack(undoStackRef.current, edit);
       }
+      notePartContentChanged();
       setLineError(null);
       setEditUndoRevision((value) => value + 1);
       const pairing = await api.getPagePairing(projectId, documentId, partId);
@@ -528,12 +559,15 @@ export function useLayoutMutations({
       await trackJobAndWait(enqueued.job_id, jobMeta, {
         timeoutMs: SEGMENT_JOB_TIMEOUT_MS,
       });
+      notePartContentChanged();
 
       // The segmentation is stored by now and only the reload is left. A
       // failure here is a stale view of saved Segments, so it surfaces as an
       // error banner and stops: the write is already finished, and there is
       // nothing left for it to re-run.
-      setSegmentMessage(segmentationMessage(await reloadAfterSegmentation()));
+      setSegmentMessage(
+        statusMessage(segmentationMessage(await reloadAfterSegmentation())),
+      );
     } catch (err) {
       // The jobs panel already reports a user cancellation.
       if (isAbortError(err)) return;

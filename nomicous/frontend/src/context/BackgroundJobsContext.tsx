@@ -119,10 +119,7 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
   const activeJobIds = useMemo(
     () =>
       jobs
-        .filter(
-          (job) =>
-            !isTerminalJobStatus(job.status) && !job.id.startsWith("local-"),
-        )
+        .filter((job) => !isTerminalJobStatus(job.status))
         .map((job) => job.id),
     [jobs],
   );

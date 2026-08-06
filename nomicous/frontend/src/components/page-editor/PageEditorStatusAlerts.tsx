@@ -1,5 +1,20 @@
 import { useEffect } from "react";
 import { toast } from "../ui/toast";
+import type { StatusMessage } from "./statusMessage";
+
+/**
+ * One toast per message *raised*, not per distinct sentence.
+ *
+ * The effect is keyed on the message's token rather than its text, because
+ * several of these sentences are constants and two saves in a row would
+ * otherwise be one dependency that never changed - see `statusMessage`.
+ */
+function useSuccessToast(message: StatusMessage | null) {
+  useEffect(() => {
+    if (message) toast.success(message.text);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the token is the identity of this message
+  }, [message?.at]);
+}
 
 type PageEditorStatusAlertsProps = {
   /**
@@ -8,10 +23,10 @@ type PageEditorStatusAlertsProps = {
    * something the researcher can fix, so it stays on screen until the next run.
    */
   submissionRefusal: string | null;
-  saveMessage: string | null;
-  transcriptionSaveMessage: string | null;
-  ocrMessage: string | null;
-  segmentMessage: string | null;
+  saveMessage: StatusMessage | null;
+  transcriptionSaveMessage: StatusMessage | null;
+  ocrMessage: StatusMessage | null;
+  segmentMessage: StatusMessage | null;
   mutationError: string | null;
   pairingError: string | null;
   layoutError: string | null;
@@ -46,18 +61,10 @@ export function PageEditorStatusAlerts({
   layoutError,
   lineError,
 }: PageEditorStatusAlertsProps) {
-  useEffect(() => {
-    if (saveMessage) toast.success(saveMessage);
-  }, [saveMessage]);
-  useEffect(() => {
-    if (transcriptionSaveMessage) toast.success(transcriptionSaveMessage);
-  }, [transcriptionSaveMessage]);
-  useEffect(() => {
-    if (ocrMessage) toast.success(ocrMessage);
-  }, [ocrMessage]);
-  useEffect(() => {
-    if (segmentMessage) toast.success(segmentMessage);
-  }, [segmentMessage]);
+  useSuccessToast(saveMessage);
+  useSuccessToast(transcriptionSaveMessage);
+  useSuccessToast(ocrMessage);
+  useSuccessToast(segmentMessage);
   useEffect(() => {
     if (mutationError) toast.error(mutationError);
   }, [mutationError]);

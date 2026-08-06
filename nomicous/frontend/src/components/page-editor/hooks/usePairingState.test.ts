@@ -11,6 +11,8 @@ import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "../../../api/errors";
+import { queryClient, taggedMeta } from "../../../api/queryClient";
+import { resourceTags } from "../../../api/resources";
 import { platformNoCapacityMessage } from "../../../inference/platformMessages";
 import { usePairingState } from "./usePairingState";
 
@@ -78,6 +80,25 @@ function setup() {
   return { view, setPairingError, setSubmissionRefusal, trackJobAndWait };
 }
 
+/**
+ * A cached read of the published page, as `PublicDocumentPage` holds it. The
+ * editor never renders it, which is why nothing here used to notice that a
+ * transcription had just changed what a reader sees.
+ */
+const PUBLIC_DOCUMENT_KEY = ["public-document", "project-1", "document-1"];
+
+async function seedPublishedPageRead() {
+  await queryClient.fetchQuery({
+    queryKey: PUBLIC_DOCUMENT_KEY,
+    queryFn: () => Promise.resolve({ name: "before the run" }),
+    meta: taggedMeta([resourceTags.publicDocument("project-1", "document-1")]),
+  });
+}
+
+function publishedPageReadIsStale(): boolean {
+  return queryClient.getQueryState(PUBLIC_DOCUMENT_KEY)?.isInvalidated ?? false;
+}
+
 describe("usePairingState OCR", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -119,6 +140,34 @@ describe("usePairingState OCR", () => {
     );
   });
 
+  it("makes the published page stale once a transcription lands", async () => {
+    await seedPublishedPageRead();
+    const { view } = setup();
+    expect(publishedPageReadIsStale()).toBe(false);
+
+    await act(async () => {
+      await view.result.current.runPageOcr();
+    });
+
+    // The reader's copy of this document now has different text in it.
+    expect(publishedPageReadIsStale()).toBe(true);
+  });
+
+  it("leaves the published page alone when the submission is refused", async () => {
+    enqueueTranscribePart.mockRejectedValueOnce(
+      new ApiError(platformNoCapacityMessage(), 409),
+    );
+    await seedPublishedPageRead();
+    const { view } = setup();
+
+    await act(async () => {
+      await view.result.current.runPageOcr();
+    });
+
+    // Nothing was written, so nothing is stale.
+    expect(publishedPageReadIsStale()).toBe(false);
+  });
+
   it("stays quiet when the researcher cancels the job", async () => {
     enqueueTranscribePart.mockRejectedValueOnce(
       new DOMException("The operation was aborted.", "AbortError"),
@@ -140,7 +189,7 @@ describe("usePairingState OCR", () => {
       await view.result.current.runPageOcr();
     });
 
-    expect(view.result.current.ocrMessage).not.toMatch(
+    expect(view.result.current.ocrMessage?.text).not.toMatch(
       /\(local\)|locally|in the cloud/i,
     );
   });

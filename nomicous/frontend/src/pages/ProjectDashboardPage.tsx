@@ -81,7 +81,8 @@ export function ProjectDashboardPage() {
       // 403 and 404 both mean "not yours to see", which reads better as the
       // feature sentence than as the raw API message. Note the toast still
       // carries the raw message.
-      return err instanceof ApiError && (err.status === 403 || err.status === 404)
+      return err instanceof ApiError &&
+        (err.status === 403 || err.status === 404)
         ? "This project is not available to your account."
         : msg;
     },
@@ -193,9 +194,12 @@ export function ProjectDashboardPage() {
                   guidelines: updated.guidelines,
                 },
               }));
-              // The project list carries this name too, and is not what the
-              // panel just wrote to.
-              invalidateAfter.projectUpdatedInPlace();
+              // The patch shows the new name at once; the invalidation is what
+              // reaches the reads the patch cannot. `includeArchived` is part
+              // of this query's key, so the variant the researcher is not
+              // looking at is a second cache entry, and the project list is a
+              // third.
+              invalidateAfter.projectUpdated(projectId);
             }}
           />
         ) : null

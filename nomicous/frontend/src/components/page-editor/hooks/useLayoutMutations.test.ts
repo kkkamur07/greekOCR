@@ -15,6 +15,8 @@ import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "../../../api/errors";
+import { queryClient, taggedMeta } from "../../../api/queryClient";
+import { resourceTags } from "../../../api/resources";
 import { platformNoCapacityMessage } from "../../../inference/platformMessages";
 import { useLayoutMutations } from "./useLayoutMutations";
 
@@ -60,6 +62,25 @@ function setup() {
   );
 
   return { view, setPairingError, setSubmissionRefusal, trackJobAndWait };
+}
+
+/**
+ * A cached read of the published page, as `PublicDocumentPage` holds it. The
+ * editor never renders it, which is why nothing here used to notice it had gone
+ * stale.
+ */
+const PUBLIC_DOCUMENT_KEY = ["public-document", "project-1", "document-1"];
+
+async function seedPublishedPageRead() {
+  await queryClient.fetchQuery({
+    queryKey: PUBLIC_DOCUMENT_KEY,
+    queryFn: () => Promise.resolve({ name: "before the edit" }),
+    meta: taggedMeta([resourceTags.publicDocument("project-1", "document-1")]),
+  });
+}
+
+function publishedPageReadIsStale(): boolean {
+  return queryClient.getQueryState(PUBLIC_DOCUMENT_KEY)?.isInvalidated ?? false;
 }
 
 describe("useLayoutMutations auto segment", () => {
@@ -108,7 +129,7 @@ describe("useLayoutMutations auto segment", () => {
 
     // The job announces its **execution target**; a second sentence here, from
     // a second source, is how the two come to disagree.
-    expect(view.result.current.segmentMessage).not.toMatch(
+    expect(view.result.current.segmentMessage?.text).not.toMatch(
       /locally|in the cloud|on your computer/i,
     );
   });
@@ -129,6 +150,34 @@ describe("useLayoutMutations auto segment", () => {
     expect(setPairingError).not.toHaveBeenCalledWith(
       platformNoCapacityMessage(),
     );
+  });
+
+  it("makes the published page stale once the segmentation is stored", async () => {
+    await seedPublishedPageRead();
+    const { view } = setup();
+    expect(publishedPageReadIsStale()).toBe(false);
+
+    await act(async () => {
+      await view.result.current.runAutoSegment();
+    });
+
+    // The reader's copy of this document now has different lines in it.
+    expect(publishedPageReadIsStale()).toBe(true);
+  });
+
+  it("leaves the published page alone when the submission is refused", async () => {
+    segmentPart.mockRejectedValueOnce(
+      new ApiError(platformNoCapacityMessage(), 409),
+    );
+    await seedPublishedPageRead();
+    const { view } = setup();
+
+    await act(async () => {
+      await view.result.current.runAutoSegment();
+    });
+
+    // Nothing was written, so nothing is stale.
+    expect(publishedPageReadIsStale()).toBe(false);
   });
 
   it("stays quiet when the researcher cancels the job", async () => {

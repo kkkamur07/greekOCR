@@ -61,8 +61,8 @@ export type ServerQueryOptions<T, E = string> = {
  * The lifecycle - in-flight sharing, a freshness window, cancellation on
  * unmount, and a refetch that cannot land out of order - is React Query's. What
  * stays here is the part that is this app's: failures are mapped to a call
- * site's own banner text by `onError`, `data` drops to null on failure rather
- * than showing the last good value beside an error, and tags travel in `meta` so
+ * site's own banner text by `onError`, a first read that fails drops to null
+ * while a later one keeps the value it already has, and tags travel in `meta` so
  * a write can invalidate a composite read without knowing its key.
  *
  * This hook only ever *reads*. It has no mutation entry point and no way to be
@@ -111,15 +111,35 @@ export function useServerQuery<T, E = string>({
   const { isError, errorUpdatedAt } = query;
   const failureRef = useRef<unknown>(null);
   failureRef.current = query.error;
+  /**
+   * Whether this read has ever succeeded under the current key. A read that has
+   * not has nothing to show but its failure; one that has keeps showing what it
+   * got, because a refetch on window focus is not a reason to take a rendered
+   * page away.
+   */
+  const hasLastGoodValue = query.data !== undefined;
+  const backgroundFailureReportedRef = useRef(false);
   useEffect(() => {
     if (!isError) {
       setError(null);
+      backgroundFailureReportedRef.current = false;
+      return;
+    }
+    if (hasLastGoodValue) {
+      // `retry: false` and `refetchOnWindowFocus: true` mean an offline
+      // researcher fails a read every time they come back to the tab. The call
+      // site's side effect still has to run - an expired session reaches the
+      // login redirect through it - but only once, and its banner text never
+      // replaces content that is on screen and still true.
+      if (backgroundFailureReportedRef.current) return;
+      backgroundFailureReportedRef.current = true;
+      onErrorRef.current(failureRef.current);
       return;
     }
     setError(onErrorRef.current(failureRef.current));
     // `errorUpdatedAt` advances on every failure, including a repeat of an
     // identical one and the first failure under a new key.
-  }, [isError, errorUpdatedAt]);
+  }, [isError, errorUpdatedAt, hasLastGoodValue]);
 
   const refetch = useCallback(async () => {
     const currentKey = keyRef.current;
@@ -136,9 +156,10 @@ export function useServerQuery<T, E = string>({
   }, []);
 
   return {
-    // A failed read shows its banner alone; the last good value is not left on
-    // screen beside it.
-    data: isError ? null : (query.data ?? null),
+    // A read that never succeeded shows its banner alone. One that did keeps
+    // its value: dropping it would blank a fully rendered page over a refetch
+    // the researcher never asked for.
+    data: isError && query.data === undefined ? null : (query.data ?? null),
     // First load only. A background refetch on window focus must not put the
     // public document page back to its skeleton, and callers that want a busy
     // flag across an explicit `refetch` already keep their own.
