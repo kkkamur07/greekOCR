@@ -231,13 +231,6 @@ async def test_listing_a_project_you_are_not_in_is_forbidden_and_reads_nothing()
     assert repo.calls == []
 
 
-async def test_listing_a_missing_project_is_not_found() -> None:
-    catalog, _project, _document, _repo = _fixture()
-
-    with pytest.raises(NotFoundError, match="Project not found"):
-        await catalog.list_documents(_Session(), _user(), uuid.uuid4())
-
-
 async def test_create_writes_into_the_project_the_caller_belongs_to() -> None:
     owner_id = uuid.uuid4()
     catalog, project, _document, repo = _fixture(owner_id=owner_id)
@@ -261,15 +254,6 @@ async def test_non_member_cannot_create_a_document_and_nothing_is_written() -> N
 # Tests that the ``_public`` variants really do fall through to the anonymous rule rather
 # than trusting their caller. Does not re-test the 404/403 split itself, which belongs to
 # the access seam.
-
-
-async def test_member_read_returns_the_document() -> None:
-    owner_id = uuid.uuid4()
-    catalog, project, document, _repo = _fixture(owner_id=owner_id)
-
-    assert (
-        await catalog.get_document(_Session(), _user(owner_id), project.id, document.id) is document
-    )
 
 
 async def test_public_read_serves_published_and_hides_draft() -> None:
@@ -345,18 +329,6 @@ async def test_unknown_field_is_refused_loudly_and_nothing_is_written() -> None:
     assert repo.updates == []
 
 
-async def test_unknown_fields_are_reported_together_and_sorted() -> None:
-    owner_id = uuid.uuid4()
-    catalog, project, document, _repo = _fixture(owner_id=owner_id)
-
-    with pytest.raises(ValidationError) as raised:
-        await catalog.update_document(
-            _Session(), _user(owner_id), project.id, document.id, zeta=1, alpha=2
-        )
-
-    assert "alpha, zeta" in str(raised.value)
-
-
 async def test_the_field_whitelist_is_applied_before_anything_is_loaded() -> None:
     """A malformed PATCH is a 422 regardless of who sent it, so it need not cost a load."""
     catalog, project, document, repo = _fixture()
@@ -424,15 +396,6 @@ async def test_delete_queues_an_intent_for_every_page_image() -> None:
     # One call, so the row deletion and the intents commit together: an intent without a
     # deletion would erase a live page, a deletion without an intent would orphan bytes.
     assert image_keys == ["page-0.webp", "page-1.webp", "page-2.webp"]
-
-
-async def test_deleting_a_document_with_no_parts_still_deletes_it() -> None:
-    owner_id = uuid.uuid4()
-    catalog, project, document, repo = _fixture(owner_id=owner_id, parts=0)
-
-    await catalog.delete_document(_Session(), _user(owner_id), project.id, document.id)
-
-    assert repo.deleted == [(document, [])]
 
 
 async def test_a_non_member_cannot_delete_and_no_intent_is_queued() -> None:

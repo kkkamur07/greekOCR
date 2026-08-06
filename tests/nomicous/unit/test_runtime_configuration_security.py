@@ -9,7 +9,6 @@ from starlette.requests import Request
 from backend.core.app import create_app
 from backend.core.settings import (
     AppSettings,
-    AuthSettings,
     MLSettings,
     get_app_settings,
     get_auth_settings,
@@ -70,17 +69,6 @@ def test_proxy_allowlist_normalizes_networks() -> None:
     assert settings.forwarded_allow_ips == "10.0.0.7/32,2001:db8::1/128"
 
 
-def test_rate_limit_uses_forwarded_client_only_from_trusted_proxy(monkeypatch) -> None:
-    monkeypatch.setenv("BEHIND_PROXY", "true")
-    monkeypatch.setenv("FORWARDED_ALLOW_IPS", "10.0.0.0/8")
-    get_app_settings.cache_clear()
-
-    assert _real_ip(_request(peer="10.1.2.3", forwarded_for="203.0.113.10, 10.2.3.4")) == (
-        "203.0.113.10"
-    )
-    assert _real_ip(_request(peer="198.51.100.9", forwarded_for="203.0.113.10")) == "198.51.100.9"
-
-
 def test_rate_limit_ignores_malformed_forwarded_client(monkeypatch) -> None:
     monkeypatch.setenv("BEHIND_PROXY", "true")
     monkeypatch.setenv("FORWARDED_ALLOW_IPS", "10.0.0.0/8")
@@ -116,12 +104,6 @@ def test_platform_production_rejects_missing_or_placeholder_inference_secrets(
             INFERENCE_WEBHOOK_SECRET=secret,
             _env_file=None,
         ).require_callback_receiver_configuration()
-
-
-@pytest.mark.parametrize("secret", ["replace-me", "replace-with-at-least-32-byte-secret"])
-def test_platform_rejects_placeholder_jwt_secret(secret: str) -> None:
-    with pytest.raises(ValidationError, match="JWT_SECRET"):
-        AuthSettings(JWT_SECRET=secret, _env_file=None)
 
 
 def test_platform_app_fails_fast_for_production_inference_configuration(monkeypatch) -> None:

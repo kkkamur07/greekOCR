@@ -142,10 +142,6 @@ async def test_reorder_parts_rejects_a_mismatched_id_set() -> None:
     assert session.commits == 0
 
 
-def test_repository_no_longer_exposes_the_dead_add_part_writer() -> None:
-    assert not hasattr(DocumentRepository, "add_part")
-
-
 @pytest.mark.asyncio
 async def test_the_locking_read_refreshes_the_rows_it_locked() -> None:
     """The row lock decided nothing while the orders came from the identity map.

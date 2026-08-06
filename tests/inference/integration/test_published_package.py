@@ -88,13 +88,7 @@ def installed_package(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Pat
         text=True,
     )
 
-    return {
-        "wheel": wheels[0],
-        "venv": venv,
-        "python": python,
-        "scripts": python.parent,
-        "elsewhere": workspace,
-    }
+    return {"wheel": wheels[0], "venv": venv, "python": python, "elsewhere": workspace}
 
 
 def _run_installed(
@@ -133,113 +127,28 @@ def _last_json_line(output: str) -> dict:
     return json.loads(output.strip().splitlines()[-1])
 
 
-def test_the_installed_package_imports_from_site_packages_not_the_repository_tree(
-    installed_package: dict[str, Path],
-) -> None:
-    output = _run_installed(
-        installed_package,
-        "import inference, inference.hub, inference.jobs.runner, json;"
-        " print(json.dumps({'file': inference.__file__}))",
-    )
-    module_path = Path(_last_json_line(output)["file"]).resolve()
-
-    assert installed_package["venv"].resolve() in module_path.parents
-    assert REPO_ROOT.resolve() not in module_path.parents
-
-
-def test_the_console_entry_point_is_present_and_executable(
-    installed_package: dict[str, Path],
-) -> None:
-    executable = installed_package["scripts"] / ("nomicous.exe" if os.name == "nt" else "nomicous")
-
-    assert executable.is_file()
-    assert os.access(executable, os.X_OK)
-
-    completed = subprocess.run(
-        [str(executable), "--version"],
-        cwd=installed_package["elsewhere"],
-        capture_output=True,
-        text=True,
-    )
-
-    assert completed.returncode == 0, completed.stderr
-    # The version comes from installed metadata, so this also proves the entry
-    # point is resolving the distribution rather than a source checkout.
-    assert completed.stdout.startswith("nomicous ")
-    assert "0+unknown" not in completed.stdout
-
-
-def test_the_installed_closure_carries_no_torch_and_no_accelerator_wheels(
-    installed_package: dict[str, Path],
-) -> None:
-    """ADR 0006 retired PyTorch from the runtime and needs no CPU pin.
-
-    This is a property of the *closure*, not of our own imports, which is why it
-    reads installed distribution metadata rather than trying an import. Torch is
-    the whole point: it is still in the repository, tracing the graph, and the
-    only thing keeping it out of a researcher's install is this list.
-    """
-    output = _run_installed(
-        installed_package,
-        "import json; from importlib.metadata import distributions;"
-        " print(json.dumps(sorted(d.metadata['Name'] for d in distributions())))",
-    )
-    names = json.loads(output.strip().splitlines()[-1])
-
-    assert [name for name in names if name.lower() in {"torch", "torchvision"}] == []
-    assert [name for name in names if name.startswith(("nvidia", "triton"))] == []
-    assert "onnxruntime" in names
-
-
-def test_the_installed_package_holds_no_web_server(
-    installed_package: dict[str, Path],
-) -> None:
-    """Nothing a researcher installs can listen on a port (ADR 0002, #60).
-
-    `inference/api` and `inference/helper` used to be held out of the wheel by
-    an exclude list; #60 deleted them, so this is now a property of the tree
-    rather than of the build configuration. The assertion stays because the
-    thing it guards is the same either way: no ASGI framework and no server
-    reach a laptop, so there is nothing there for a hosted page to call.
-    """
-    output = _run_installed(
-        installed_package,
-        "import json, importlib.util as u;"
-        " print(json.dumps({name: u.find_spec(name) is not None"
-        " for name in ('inference.api', 'inference.helper', 'fastapi',"
-        " 'uvicorn', 'starlette')}))",
-    )
-    present = _last_json_line(output)
-
-    assert present == {
-        "inference.api": False,
-        "inference.helper": False,
-        "fastapi": False,
-        "uvicorn": False,
-        "starlette": False,
-    }
-
-
-def test_the_installed_package_opens_no_socket(
-    installed_package: dict[str, Path],
-) -> None:
-    """Importing the shipped modules must not bind anything.
-
-    A grep proves no source file *says* `bind`; this proves no import path
-    reaches one, which is the property the researcher's machine actually has.
-    """
-    probe = (
-        "import json, socket;"
-        " bound = [];"
-        " real = socket.socket.bind;"
-        " socket.socket.bind = lambda self, address: bound.append(address);"
-        " import inference, inference.cli, inference.cli.run, inference.jobs.runner;"
-        " socket.socket.bind = real;"
-        " print(json.dumps(bound))"
-    )
-    output = _run_installed(installed_package, probe)
-
-    assert _last_json_line(output) == []
+# Five tests stood here, and between them they tested pip, hatchling and CPython's import
+# system rather than this repository's code:
+#
+# * `..._imports_from_site_packages_not_the_repository_tree` asserted that clearing
+#   `PYTHONPATH` makes an import resolve out of site-packages. That is the stdlib's
+#   behaviour, and `_run_installed` arranges it for every test below anyway.
+# * `test_the_console_entry_point_is_present_and_executable` asserted `[project.scripts]`
+#   produced a file. `test_cli_pairing.py` and `test_cli_run.py` both assert the console
+#   script exists in their `installed_cli` fixtures and then *run* it, and
+#   `test_cli_pairing.py::test_the_version_subcommand_reports_the_installed_package_version`
+#   keeps the `0+unknown` guard in the lane that runs on every pull request rather than
+#   behind this module's `ml` marker.
+# * `test_the_installed_closure_carries_no_torch_and_no_accelerator_wheels` was a strict
+#   subset of `test_every_target_platform_resolves_without_an_accelerator_wheel` below,
+#   which asserts the same three properties across five target platforms instead of one.
+# * `test_the_installed_package_holds_no_web_server` asserted `find_spec` returns `None`
+#   for `inference.api` and `inference.helper`, two modules #60 deleted; asking whether a
+#   module that does not exist can be found is not a guard. Its `fastapi`/`uvicorn`/
+#   `starlette` half is a closure claim, also covered five platforms wide below.
+# * `test_the_installed_package_opens_no_socket` monkeypatched `socket.socket.bind` and
+#   imported four modules. No library binds a socket at import time, so it could only ever
+#   pass.
 
 
 def test_the_hub_cache_defaults_under_the_researchers_home_directory(
@@ -310,19 +219,11 @@ def test_a_real_page_is_segmented_and_transcribed_through_the_installed_package(
     assert 0.0 <= result["confidence"] <= 1.0
 
 
-def test_the_installed_package_resolves_hf_weights_and_records_their_provenance(
-    real_page_run: dict,
-) -> None:
-    """The run above had no weights on disk. Both came from `hf://`."""
-    manifests = {
-        path.parent.parent.name: json.loads(path.read_text())
-        for path in real_page_run["cache_root"].rglob(".hub-manifest.json")
-    }
-
-    assert set(manifests) == {"blla-segment", "syriac-calamari-v1"}
-    for manifest in manifests.values():
-        assert len(manifest["hub_revision"]) == 40
-        assert len(manifest["artifact_sha256"]) == 64
+# `test_the_installed_package_resolves_hf_weights_and_records_their_provenance` stood here
+# and asserted the manifest's `hub_revision` and `artifact_sha256` are 40 and 64 characters
+# long. That is `tests/hf/test_resolve.py`, and the test below makes the stronger claim
+# about the same two manifests: not that the fields have the right *shape* but that they
+# match the registry's pins and the bytes on disk.
 
 
 def test_the_cached_artifacts_match_the_digests_the_registry_pins(
@@ -354,38 +255,10 @@ def test_the_cached_artifacts_match_the_digests_the_registry_pins(
     assert checked == 2
 
 
-def test_a_corrupted_artifact_is_rejected_by_the_installed_verifier(
-    installed_package: dict[str, Path], tmp_path: Path
-) -> None:
-    """Digest verification is live in the wheel, not left behind in the tree.
-
-    Under ADR 0004 this step was what kept an unverified `.pt` away from
-    `torch.load`. ADR 0006 removed that surface - a `.pt` is refused by suffix
-    now - so what this defends is integrity rather than sandboxing: onnxruntime
-    parses the graph in C++, and an artifact that does not match its pin is a
-    broken deployment whatever it then does.
-    """
-    artifact = tmp_path / "best.onnx"
-    artifact.write_bytes(b"not a checkpoint")
-    honest = hashlib.sha256(artifact.read_bytes()).hexdigest()
-
-    source = f"""
-import json, pathlib
-from inference.hub.artifacts import ArtifactIntegrityError, verify_artifact_sha256
-
-path = pathlib.Path({str(artifact)!r})
-verify_artifact_sha256(path, {honest!r})
-
-rejected = False
-try:
-    verify_artifact_sha256(path, {"0" * 64!r})
-except ArtifactIntegrityError:
-    rejected = True
-print(json.dumps({{"rejected": rejected}}))
-"""
-    output = _run_installed(installed_package, source)
-
-    assert _last_json_line(output)["rejected"] is True
+# `test_a_corrupted_artifact_is_rejected_by_the_installed_verifier` stood here. Accept and
+# reject for `verify_artifact_sha256` are `tests/hf/test_artifacts.py`; this ran the same
+# two calls in a subprocess to show the function is in the wheel, which `real_page_run`
+# above already shows by resolving two digest-pinned artifacts through it and running them.
 
 
 @pytest.mark.parametrize("platform", TARGET_PLATFORMS)

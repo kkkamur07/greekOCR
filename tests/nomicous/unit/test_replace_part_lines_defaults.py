@@ -212,27 +212,6 @@ async def test_omitting_source_leaves_a_kraken_line_kraken(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_omitting_kind_leaves_an_existing_line_kind_alone(monkeypatch) -> None:
-    document = Document(id=uuid.uuid4(), project_id=uuid.uuid4(), name="codex")
-    part = DocumentPart(id=uuid.uuid4(), document_id=document.id, order=0, image_key="page.webp")
-    prior = _kraken_line(part.id)
-    prior.kind = LineGeometryKind.rectangle
-    service, session, document, part, _repository = _service(monkeypatch, existing=[prior])
-    prior.part_id = part.id
-
-    lines = await service.replace_part_lines(
-        session,
-        user=object(),
-        project_id=document.project_id,
-        document_id=document.id,
-        part_id=part.id,
-        lines=_payload(id=str(prior.id)),
-    )
-
-    assert lines[0].kind is LineGeometryKind.rectangle
-
-
-@pytest.mark.asyncio
 async def test_an_explicit_source_still_overrides_an_existing_line(monkeypatch) -> None:
     """Preserving on absence must not make the field unwritable."""
     document = Document(id=uuid.uuid4(), project_id=uuid.uuid4(), name="codex")

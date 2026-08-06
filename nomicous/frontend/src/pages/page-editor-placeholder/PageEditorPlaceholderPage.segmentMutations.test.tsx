@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DOCUMENT,
   flushPageEditorEffects,
+  line,
   mockedApi,
   renderPageEditor,
   resetPageEditorApiMocks,
@@ -91,44 +92,17 @@ describe("PageEditorPlaceholderPage segment mutations", () => {
   it("deletes a selected Segment without replacing every line", async () => {
     mockedApi.getDocument.mockResolvedValue(DOCUMENT);
     mockedApi.listPartLines.mockResolvedValue([
-      {
-        id: "line-1",
-        part_id: "part-1",
-        block_id: null,
-        order: 0,
-        kind: "rectangle",
-        points: [
-          [10, 10],
-          [50, 10],
-          [50, 30],
-          [10, 30],
-        ],
-        source: "manual",
-        source_metadata: null,
-        kraken_ceiling: null,
-        manual_geometry: true,
-        line_transcriptions: [],
-        created_at: "2026-06-16T10:00:00Z",
-      },
-      {
+      line({ kind: "rectangle" }),
+      line({
         id: "line-2",
-        part_id: "part-1",
-        block_id: null,
         order: 1,
-        kind: "polygon",
         points: [
           [80, 20],
           [120, 20],
           [120, 50],
           [80, 50],
         ],
-        source: "manual",
-        source_metadata: null,
-        kraken_ceiling: null,
-        manual_geometry: true,
-        line_transcriptions: [],
-        created_at: "2026-06-16T10:00:00Z",
-      },
+      }),
     ]);
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
 
@@ -153,27 +127,7 @@ describe("PageEditorPlaceholderPage segment mutations", () => {
 
   it("cancels whole-Segment delete when confirmation is declined", async () => {
     mockedApi.getDocument.mockResolvedValue(DOCUMENT);
-    mockedApi.listPartLines.mockResolvedValue([
-      {
-        id: "line-1",
-        part_id: "part-1",
-        block_id: null,
-        order: 0,
-        kind: "rectangle",
-        points: [
-          [10, 10],
-          [50, 10],
-          [50, 30],
-          [10, 30],
-        ],
-        source: "manual",
-        source_metadata: null,
-        kraken_ceiling: null,
-        manual_geometry: true,
-        line_transcriptions: [],
-        created_at: "2026-06-16T10:00:00Z",
-      },
-    ]);
+    mockedApi.listPartLines.mockResolvedValue([line({ kind: "rectangle" })]);
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
 
     renderPageEditor();
@@ -190,25 +144,14 @@ describe("PageEditorPlaceholderPage segment mutations", () => {
   it("removes only the selected vertex with Delete and supports Edit undo", async () => {
     mockedApi.getDocument.mockResolvedValue(DOCUMENT);
     mockedApi.listPartLines.mockResolvedValue([
-      {
-        id: "line-1",
-        part_id: "part-1",
-        block_id: null,
-        order: 0,
-        kind: "polygon",
+      line({
         points: [
           [10, 10],
           [80, 10],
           [80, 40],
           [10, 40],
         ],
-        source: "manual",
-        source_metadata: null,
-        kraken_ceiling: null,
-        manual_geometry: true,
-        line_transcriptions: [],
-        created_at: "2026-06-16T10:00:00Z",
-      },
+      }),
     ]);
 
     renderPageEditor();
@@ -265,25 +208,14 @@ describe("PageEditorPlaceholderPage segment mutations", () => {
   it("adds a vertex when clicking a Segment edge", async () => {
     mockedApi.getDocument.mockResolvedValue(DOCUMENT);
     mockedApi.listPartLines.mockResolvedValue([
-      {
-        id: "line-1",
-        part_id: "part-1",
-        block_id: null,
-        order: 0,
-        kind: "polygon",
+      line({
         points: [
           [0, 0],
           [100, 0],
           [100, 100],
           [0, 100],
         ],
-        source: "manual",
-        source_metadata: null,
-        kraken_ceiling: null,
-        manual_geometry: true,
-        line_transcriptions: [],
-        created_at: "2026-06-16T10:00:00Z",
-      },
+      }),
     ]);
 
     renderPageEditor();
@@ -330,27 +262,7 @@ describe("PageEditorPlaceholderPage segment mutations", () => {
 
   it("Escape commits selection chrome away without deleting the Segment", async () => {
     mockedApi.getDocument.mockResolvedValue(DOCUMENT);
-    mockedApi.listPartLines.mockResolvedValue([
-      {
-        id: "line-1",
-        part_id: "part-1",
-        block_id: null,
-        order: 0,
-        kind: "rectangle",
-        points: [
-          [10, 10],
-          [50, 10],
-          [50, 30],
-          [10, 30],
-        ],
-        source: "manual",
-        source_metadata: null,
-        kraken_ceiling: null,
-        manual_geometry: true,
-        line_transcriptions: [],
-        created_at: "2026-06-16T10:00:00Z",
-      },
-    ]);
+    mockedApi.listPartLines.mockResolvedValue([line({ kind: "rectangle" })]);
 
     renderPageEditor();
 

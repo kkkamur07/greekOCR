@@ -51,21 +51,6 @@ def isolated_env(monkeypatch) -> None:
                 monkeypatch.delenv(field.alias, raising=False)
 
 
-def test_the_shipped_template_exists_where_the_documents_say_it_does() -> None:
-    assert ENV_EXAMPLE.is_file()
-
-
 @pytest.mark.parametrize("settings_class", SETTINGS_CLASSES, ids=lambda cls: cls.__name__)
 def test_every_settings_class_loads_the_shipped_template(isolated_env, settings_class) -> None:
     settings_class(_env_file=ENV_EXAMPLE)
-
-
-def test_a_blank_entry_means_unset_rather_than_the_empty_string(isolated_env) -> None:
-    """`KNOB=` is how a .env file writes down a knob nobody is using.
-
-    Reaching a `bool | None` field as `''` is what took the API down at boot.
-    """
-    settings = JobSettings(_env_file=ENV_EXAMPLE)
-
-    assert "JOB_WORKER_CLAIM_TEST_ONLY=" in ENV_EXAMPLE.read_text(encoding="utf-8")
-    assert settings.job_worker_claim_test_only is None

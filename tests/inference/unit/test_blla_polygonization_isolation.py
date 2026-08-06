@@ -120,13 +120,10 @@ def test_multi_part_intersection_keeps_its_largest_ring() -> None:
     assert xs.max() == 60
 
 
-def test_single_part_intersection_still_returns_the_plain_ring() -> None:
-    roi = geom.box(0, 0, 10, 10)
-    clip = geom.box(2, 2, 8, 8)
-
-    ring = _intersection_ring(roi, clip)
-
-    assert np.asarray(roi.intersection(clip).boundary.coords, dtype=int).tolist() == ring.tolist()
+# `test_single_part_intersection_still_returns_the_plain_ring` stood here. Its assertion was
+# `np.asarray(roi.intersection(clip).boundary.coords, dtype=int).tolist() == ring.tolist()`
+# -- a line-for-line restatement of `_intersection_ring`'s own single-part branch, so it
+# agrees with the implementation by construction whatever that implementation does.
 
 
 def test_empty_intersection_yields_no_ring_rather_than_raising() -> None:

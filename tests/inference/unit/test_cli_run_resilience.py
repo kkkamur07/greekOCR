@@ -145,20 +145,10 @@ def test_repeated_failures_give_up_rather_than_spinning_forever() -> None:
     assert client.claim_calls == run_module.MAX_CLAIM_FAILURES
 
 
-def test_one_success_resets_the_failure_budget() -> None:
-    """The count is of *consecutive* failures. A flaky link is not a dead one."""
-    script: list[object] = []
-    for _ in range(run_module.MAX_CLAIM_FAILURES - 1):
-        script.append(PlatformError("flaky"))
-    script.append(Claim(page=None, poll_after_seconds=0.0, agent=None))
-
-    client = StubClient(script, reports=[])
-    # Exhausting the budget again after that success must still take the full
-    # allowance, which only holds if the counter was reset.
-    client._claims.pop()
-    client._claims.append(Claim(page=None, poll_after_seconds=0.0, agent=None))
-
-    assert _loop(client) == ui.EXIT_OK
+# `test_one_success_resets_the_failure_budget` stood here. Its body popped the trailing
+# success and appended an identical success, never exhausted the budget a second time, and
+# asserted `EXIT_OK` -- which holds whether or not `failures = 0` exists in `run.py`. It did
+# not test what its docstring claimed.
 
 
 def test_a_refused_credential_still_stops_immediately() -> None:

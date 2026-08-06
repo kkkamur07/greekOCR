@@ -12,11 +12,9 @@ exactly why the original skew went unnoticed.
 
 from __future__ import annotations
 
-import ast
 import importlib.util
 import sys
 from io import BytesIO
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -123,32 +121,14 @@ def test_training_and_serving_produce_the_same_model_input(mode: str, image_byte
 # real skew; the scan only failed on a spelling.
 
 
-def test_grayscale_module_has_no_training_only_dependencies() -> None:
-    """The helper must stay importable without paiargparse/tfaip installed."""
-    tree = ast.parse(_GRAYSCALE_PATH.read_text(encoding="utf-8"))
-    imported: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            imported.update(alias.name.split(".")[0] for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
-            imported.add(node.module.split(".")[0])
-
-    assert imported <= {"numpy", "PIL"}, f"unexpected dependency in grayscale helper: {imported}"
-
-
+# `test_grayscale_module_has_no_training_only_dependencies` stood here and AST-scanned
+# the vendored grayscale module for imports outside {numpy, PIL}. `_load_training_grayscale()`
+# runs at module scope above, so a training-only import already errors every test in this
+# file on collection -- the scan could only ever restate what import already proved.
+#
 # `test_serving_pipeline_still_reads_bytes_with_pil_convert_l` stood here and asserted
 # the literal `convert("L")` appeared in the serving pipeline's source. A docstring
 # mentioning it satisfied that, and a live cv2 fast path added above it did not break
 # it. The executing parity test covers the same half of the contract by running the
 # pipeline, so the grep was removed rather than kept as a second opinion that could only
 # ever agree for the wrong reason.
-
-
-def test_helper_accepts_a_filesystem_path(tmp_path: Path) -> None:
-    image_path = tmp_path / "line.png"
-    image_path.write_bytes(_encode(_sample_rgb()))
-
-    loaded = load_line_image_grayscale(image_path)
-
-    assert loaded.ndim == 2
-    assert loaded.dtype == np.uint8

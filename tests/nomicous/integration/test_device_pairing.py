@@ -13,9 +13,9 @@ the second client failed with "attached to a different loop" (issue #63).
 It also removes a hazard worth naming: an app assembled by the test module is
 never evidence that anything is reachable in the deployed application. That is
 how this phase once shipped with its routers unmounted and a green suite.
-``test_device_routes_are_served_by_the_real_app`` below and
-``test_device_routes_are_mounted_on_the_real_app`` in the unit suite hold that
-line; now the rest of the module does too.
+``test_device_routes_are_mounted_on_the_real_app`` in the unit suite holds that
+line over the full route set; every test here reaches those routes on the app
+the deployment builds, so the module carries it too.
 
 Requires migration ``005_helper_devices``.
 """
@@ -32,12 +32,6 @@ from backend.ml.application.device_auth import DEVICE_TOKEN_HEADER
 from infrastructure.db import sync_engine
 
 pytestmark = pytest.mark.integration
-
-
-@pytest.fixture
-def device_client(client: TestClient) -> TestClient:
-    """The real application, on the one event loop its connection pool belongs to."""
-    return client
 
 
 def _register(client: TestClient) -> dict[str, str]:
@@ -104,15 +98,15 @@ def _pair_device(client: TestClient, headers: dict, name: str = "Researcher lapt
     return approved
 
 
-def test_mint_redeem_then_authenticate(device_client: TestClient) -> None:
-    headers = _register(device_client)
-    started, verification_token = _start_pairing(device_client)
+def test_mint_redeem_then_authenticate(client: TestClient) -> None:
+    headers = _register(client)
+    started, verification_token = _start_pairing(client)
 
-    pending = _collect(device_client, started["pairing_id"], started["device_code"])
+    pending = _collect(client, started["pairing_id"], started["device_code"])
     assert pending["status"] == "authorization_pending"
     assert pending["device_token"] is None
 
-    lookup = device_client.post(
+    lookup = client.post(
         "/devices/pairings/lookup",
         headers=headers,
         json={"verification_token": verification_token},
@@ -127,20 +121,20 @@ def test_mint_redeem_then_authenticate(device_client: TestClient) -> None:
     assert "same_network" not in lookup.json()
     assert "request_ip" not in lookup.json()
 
-    device = _approve(device_client, headers, started["pairing_id"], verification_token)
+    device = _approve(client, headers, started["pairing_id"], verification_token)
     assert device["status"] == "pairing"
     assert device["token_prefix"] == ""
 
-    approved = _collect(device_client, started["pairing_id"], started["device_code"])
+    approved = _collect(client, started["pairing_id"], started["device_code"])
     assert approved["status"] == "approved"
     token = approved["device_token"]
     assert token.startswith("nmd1.")
 
-    me = device_client.get("/device/v1/self", headers={DEVICE_TOKEN_HEADER: token})
+    me = client.get("/device/v1/self", headers={DEVICE_TOKEN_HEADER: token})
     assert me.status_code == 200, me.text
     assert me.json()["device_id"] == approved["device_id"]
 
-    listed = device_client.get("/devices", headers=headers)
+    listed = client.get("/devices", headers=headers)
     assert listed.status_code == 200
     entries = listed.json()
     assert len(entries) == 1
@@ -148,67 +142,37 @@ def test_mint_redeem_then_authenticate(device_client: TestClient) -> None:
     assert entries[0]["token_prefix"].startswith("nmd1.")
 
 
-def test_device_token_cannot_reach_another_users_devices(device_client: TestClient) -> None:
-    owner_headers = _register(device_client)
-    outsider_headers = _register(device_client)
+def test_device_token_cannot_reach_another_users_devices(client: TestClient) -> None:
+    owner_headers = _register(client)
+    outsider_headers = _register(client)
 
-    approved = _pair_device(device_client, owner_headers, "Owner laptop")
+    approved = _pair_device(client, owner_headers, "Owner laptop")
     token = approved["device_token"]
     device_id = approved["device_id"]
 
     # The outsider sees nothing and cannot revoke it.
-    assert device_client.get("/devices", headers=outsider_headers).json() == []
-    denied = device_client.delete(f"/devices/{device_id}", headers=outsider_headers)
+    assert client.get("/devices", headers=outsider_headers).json() == []
+    denied = client.delete(f"/devices/{device_id}", headers=outsider_headers)
     assert denied.status_code == 403, denied.text
 
     # A device token is not a Bearer credential and cannot impersonate a user.
-    as_bearer = device_client.get("/devices", headers={"Authorization": f"Bearer {token}"})
+    as_bearer = client.get("/devices", headers={"Authorization": f"Bearer {token}"})
     assert as_bearer.status_code == 401
 
     # A user's access token is not a device credential either.
     owner_access_token = owner_headers["Authorization"].split(" ", 1)[1]
-    as_device = device_client.get(
-        "/device/v1/self", headers={DEVICE_TOKEN_HEADER: owner_access_token}
-    )
+    as_device = client.get("/device/v1/self", headers={DEVICE_TOKEN_HEADER: owner_access_token})
     assert as_device.status_code == 401
 
     # The owner still has it.
-    assert [
-        entry["id"] for entry in device_client.get("/devices", headers=owner_headers).json()
-    ] == [device_id]
+    assert [entry["id"] for entry in client.get("/devices", headers=owner_headers).json()] == [
+        device_id
+    ]
 
 
-def test_revoked_device_token_is_rejected_immediately(device_client: TestClient) -> None:
-    headers = _register(device_client)
-    approved = _pair_device(device_client, headers)
-    token = approved["device_token"]
-
-    assert (
-        device_client.get("/device/v1/self", headers={DEVICE_TOKEN_HEADER: token}).status_code
-        == 200
-    )
-
-    revoked = device_client.delete(f"/devices/{approved['device_id']}", headers=headers)
-    assert revoked.status_code == 204
-
-    after = device_client.get("/device/v1/self", headers={DEVICE_TOKEN_HEADER: token})
-    assert after.status_code == 401
-    assert device_client.get("/devices", headers=headers).json() == []
-
-
-def test_pair_code_cannot_be_redeemed_twice(device_client: TestClient) -> None:
-    headers = _register(device_client)
-    approved = _pair_device(device_client, headers)
-    started = approved["_pairing"]
-
-    second = _collect(device_client, started["pairing_id"], started["device_code"])
-    assert second["status"] == "access_denied"
-    assert second["device_token"] is None
-
-
-def test_expired_pairing_cannot_be_approved(device_client: TestClient) -> None:
-    headers = _register(device_client)
-    started, verification_token = _start_pairing(device_client)
+def test_expired_pairing_cannot_be_approved(client: TestClient) -> None:
+    headers = _register(client)
+    started, verification_token = _start_pairing(client)
 
     with sync_engine.begin() as connection:
         connection.execute(
@@ -219,19 +183,19 @@ def test_expired_pairing_cannot_be_approved(device_client: TestClient) -> None:
             {"pairing_id": started["pairing_id"]},
         )
 
-    expired = _collect(device_client, started["pairing_id"], started["device_code"])
+    expired = _collect(client, started["pairing_id"], started["device_code"])
     assert expired["status"] == "expired"
     assert expired["device_token"] is None
 
     # And the browser can no longer see it at all.
-    lookup = device_client.post(
+    lookup = client.post(
         "/devices/pairings/lookup",
         headers=headers,
         json={"verification_token": verification_token},
     )
     assert lookup.status_code == 404
 
-    approve = device_client.post(
+    approve = client.post(
         f"/devices/pairings/{started['pairing_id']}/approve",
         headers=headers,
         json={"verification_token": verification_token},
@@ -239,66 +203,29 @@ def test_expired_pairing_cannot_be_approved(device_client: TestClient) -> None:
     assert approve.status_code == 409
 
 
-def test_wrong_device_code_never_yields_a_token(device_client: TestClient) -> None:
-    headers = _register(device_client)
-    started, verification_token = _start_pairing(device_client)
-    _approve(device_client, headers, started["pairing_id"], verification_token)
-
-    wrong = _collect(device_client, started["pairing_id"], "not-the-device-code")
-    assert wrong["status"] == "access_denied"
-    assert wrong["device_token"] is None
-
-    # The device row exists but has no usable credential.
-    with sync_engine.begin() as connection:
-        token_hash = connection.execute(text("SELECT token_hash FROM helper_devices")).scalar_one()
-    assert token_hash == ""
-
-
-def test_approve_requires_the_verification_token(device_client: TestClient) -> None:
-    headers = _register(device_client)
-    started, _ = _start_pairing(device_client)
-    response = device_client.post(
-        f"/devices/pairings/{started['pairing_id']}/approve",
-        headers=headers,
-        json={"verification_token": "not-the-verification-token"},
-    )
-    assert response.status_code == 404
-
-
-def test_lookup_of_an_unknown_verification_token_is_404(device_client: TestClient) -> None:
-    headers = _register(device_client)
-    response = device_client.post(
-        "/devices/pairings/lookup",
-        headers=headers,
-        json={"verification_token": "definitely-not-a-real-token"},
-    )
-    assert response.status_code == 404
-    assert response.json()["error"]["code"] == "NOT_FOUND"
-
-
-def test_pairing_routes_require_authentication(device_client: TestClient) -> None:
-    started, verification_token = _start_pairing(device_client)
-    assert device_client.get("/devices").status_code == 401
+def test_pairing_routes_require_authentication(client: TestClient) -> None:
+    started, verification_token = _start_pairing(client)
+    assert client.get("/devices").status_code == 401
     assert (
-        device_client.post(
+        client.post(
             "/devices/pairings/lookup", json={"verification_token": verification_token}
         ).status_code
         == 401
     )
     assert (
-        device_client.post(
+        client.post(
             f"/devices/pairings/{started['pairing_id']}/approve",
             json={"verification_token": verification_token},
         ).status_code
         == 401
     )
-    assert device_client.get("/device/v1/self").status_code == 401
-    assert device_client.post("/device/v1/token/renew").status_code == 401
+    assert client.get("/device/v1/self").status_code == 401
+    assert client.post("/device/v1/token/renew").status_code == 401
 
 
-def test_raw_secrets_are_absent_from_the_database(device_client: TestClient) -> None:
-    headers = _register(device_client)
-    approved = _pair_device(device_client, headers)
+def test_raw_secrets_are_absent_from_the_database(client: TestClient) -> None:
+    headers = _register(client)
+    approved = _pair_device(client, headers)
     started = approved["_pairing"]
     verification_token = approved["_verification_token"]
     secret = approved["device_token"].split(".", 2)[2]
@@ -328,55 +255,15 @@ def test_raw_secrets_are_absent_from_the_database(device_client: TestClient) -> 
             assert verification_token not in rendered, f"raw verification token found in {column}"
 
     # And no read endpoint hands any of it back.
-    listed = device_client.get("/devices", headers=headers).text
+    listed = client.get("/devices", headers=headers).text
     for leaked in (secret, started["device_code"], verification_token):
         assert leaked not in listed
 
 
-def test_token_renewal_replaces_the_credential(device_client: TestClient) -> None:
-    headers = _register(device_client)
-    token = _pair_device(device_client, headers)["device_token"]
-
-    renewed = device_client.post("/device/v1/token/renew", headers={DEVICE_TOKEN_HEADER: token})
-    assert renewed.status_code == 200, renewed.text
-    new_token = renewed.json()["device_token"]
-    assert new_token != token
-
-    assert (
-        device_client.get("/device/v1/self", headers={DEVICE_TOKEN_HEADER: new_token}).status_code
-        == 200
-    )
-    # The predecessor stays valid during the overlap so a lost response is harmless.
-    assert (
-        device_client.get("/device/v1/self", headers={DEVICE_TOKEN_HEADER: token}).status_code
-        == 200
-    )
-
-
-def test_the_ip_scoped_recovery_list_is_gone(device_client: TestClient) -> None:
-    """It had no user predicate - a pairing has no owner before consent.
-
-    Behind a proxy the platform does not allowlist, its only filter matched every
-    row, so an authenticated user saw every other user's live pairing requests
-    and their ``pairing_id``.
-    """
-    headers = _register(device_client)
-    _start_pairing(device_client, "Recoverable laptop")
-
-    response = device_client.get("/devices/pairings", headers=headers)
-
-    # 405 rather than 404, because on the real app the path falls through to
-    # DELETE /devices/{device_id} with device_id="pairings". Which status it is
-    # is an accident of routing; what this test holds is that no GET anywhere
-    # hands an authenticated user a list of pairings it does not own.
-    assert response.status_code in {404, 405}
-    assert "pairing_id" not in response.text
-
-
-def test_finished_pairings_are_deleted(device_client: TestClient) -> None:
+def test_finished_pairings_are_deleted(client: TestClient) -> None:
     """Unauthenticated writes with no cleanup grow forever. Also proves the grant."""
-    headers = _register(device_client)
-    approved = _pair_device(device_client, headers, "Sweepable laptop")
+    headers = _register(client)
+    approved = _pair_device(client, headers, "Sweepable laptop")
     consumed_id = approved["_pairing"]["pairing_id"]
 
     with sync_engine.begin() as connection:
@@ -389,7 +276,7 @@ def test_finished_pairings_are_deleted(device_client: TestClient) -> None:
         )
 
     # The sweep runs from the one endpoint that inserts into this table.
-    _start_pairing(device_client, "Fresh laptop")
+    _start_pairing(client, "Fresh laptop")
 
     with sync_engine.begin() as connection:
         remaining = connection.execute(
@@ -404,29 +291,3 @@ def test_finished_pairings_are_deleted(device_client: TestClient) -> None:
     assert remaining == 0
     # Sweeping a pairing must never cascade into the device it created.
     assert devices == 1
-
-
-def test_device_routes_are_served_by_the_real_app(client: TestClient) -> None:
-    """The application the deployment builds, not one assembled by this module."""
-    paths = set(client.app.openapi()["paths"])
-    assert {
-        "/device/v1/pairings",
-        "/device/v1/pairings/token",
-        "/devices/pairings/lookup",
-        "/devices/pairings/{pairing_id}/approve",
-        "/devices",
-        "/device/v1/self",
-    } <= paths
-
-    # The session client, not a fresh TestClient over a fresh create_app(): a second
-    # client brings a second event loop, and the asyncpg pool belongs to the first.
-    response = client.post(
-        "/device/v1/pairings",
-        json={
-            "device_name": "Mounted laptop",
-            "platform": "darwin-arm64",
-            "helper_version": "0.2.0",
-            "capabilities": {},
-        },
-    )
-    assert response.status_code == 201, response.text

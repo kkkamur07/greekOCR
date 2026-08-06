@@ -140,6 +140,97 @@ export const DOCUMENT: DocumentWithPartsResponse = {
   ],
 };
 
+/**
+ * A Line as `listPartLines` answers with one.
+ *
+ * The default is the plain manual rectangle-ish polygon most of these tests
+ * only need to exist so that a Segment is on the canvas; anything a test
+ * actually asserts on - its id, order, kind, points, source, or its
+ * transcriptions - is passed as an override, so no call site loses a value it
+ * cared about. `baseline` and `mask` are deliberately absent: a segment line
+ * carries neither, and adding them here would put baselines on the canvas of
+ * every test that never asked for one.
+ */
+export function line(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "line-1",
+    part_id: "part-1",
+    block_id: null,
+    order: 0,
+    kind: "polygon",
+    points: [
+      [10, 10],
+      [50, 10],
+      [50, 30],
+      [10, 30],
+    ],
+    source: "manual",
+    source_metadata: null,
+    kraken_ceiling: null,
+    manual_geometry: true,
+    line_transcriptions: [],
+    created_at: "2026-06-16T10:00:00Z",
+    ...overrides,
+  };
+}
+
+/** The baseline the layout fixtures are drawn around, fresh on every call. */
+export function baselinePoints() {
+  return [
+    [60, 140],
+    [300, 150],
+  ];
+}
+
+/** The line outline the layout fixtures are drawn around, fresh every call. */
+export function maskPoints() {
+  return [
+    [55, 110],
+    [305, 118],
+    [300, 178],
+    [50, 168],
+  ];
+}
+
+/**
+ * The same Line as `listPartLines` answers with it once Kraken has laid the
+ * page out: machine geometry, carrying the baseline and mask the layout editor
+ * moves. Pass `baseline`/`mask` as `{ points }` to drive the wrapped form.
+ */
+export function layoutLine(overrides: Record<string, unknown> = {}) {
+  return line({
+    kind: "polygon",
+    points: maskPoints(),
+    baseline: baselinePoints(),
+    mask: maskPoints(),
+    source: "kraken",
+    manual_geometry: false,
+    ...overrides,
+  });
+}
+
+/**
+ * `getPartLayout`'s answer for a part holding one machine-detected Line.
+ *
+ * The overrides land on the line, which is the only part of this payload the
+ * layout tests vary - `manual_geometry`, and whether the geometry arrives as a
+ * bare point list or wrapped in `{ points }`.
+ */
+export function layoutWith(overrides: Record<string, unknown> = {}) {
+  return {
+    blocks: [],
+    lines: [
+      {
+        id: "line-1",
+        baseline: baselinePoints(),
+        mask: maskPoints(),
+        manual_geometry: false,
+        ...overrides,
+      },
+    ],
+  };
+}
+
 export function renderPageEditor() {
   window.history.replaceState(
     {},

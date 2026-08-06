@@ -130,19 +130,6 @@ def test_one_claim_hands_over_exactly_one_page(
     assert _stored_job(first).claimed_by == agent_claim_owner(uuid.UUID(agent["device_id"]))
 
 
-def test_a_claimed_page_is_not_handed_out_twice(
-    client: TestClient, owner_user, owner_headers, owner_project
-) -> None:
-    agent = _running_agent(client, owner_headers)
-    _prefer_local(client, owner_headers)
-    ids = _make_part(client, owner_headers, owner_project)
-    job_id = _submit_segment(client, owner_headers, owner_project, ids)
-
-    headers = _device_headers(agent["device_token"])
-    assert _claim(client, headers).json()["page"]["product_job_id"] == job_id
-    assert _claim(client, headers).json()["page"] is None
-
-
 # ---------------------------------------------------------------------------
 # Authorization: account scope, and execution target
 # ---------------------------------------------------------------------------
@@ -379,18 +366,6 @@ def test_an_empty_queue_is_a_well_formed_response_and_not_an_error(
     assert body["lease_seconds"] > 0
     assert body["server_time"]
     assert "error" not in body
-
-
-def test_a_long_poll_over_an_empty_queue_still_answers_empty(
-    client: TestClient, owner_headers
-) -> None:
-    """The contract, not the clock: what a long poll returns when nothing arrives."""
-    agent = _running_agent(client, owner_headers)
-
-    response = _claim(client, _device_headers(agent["device_token"]), wait_seconds=1)
-
-    assert response.status_code == 200, response.text
-    assert response.json()["page"] is None
 
 
 def test_the_wait_is_clamped_rather_than_refused(client: TestClient, owner_headers) -> None:

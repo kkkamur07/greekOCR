@@ -145,20 +145,9 @@ def test_transcribe_batch_response_json_contract():
     assert payload["lines"][0]["output"]["text"] == "α"
 
 
-# --- Job submit contracts ---
-# Tests async job request/response serialization. Does not touch the database.
-
-
-def test_job_submit_round_trip():
-    product_job_id = uuid4()
-    request = JobSubmitRequest(
-        task=InferenceTask.segment,
-        registry_model_id="blla-segment",
-        product_job_id=product_job_id,
-        image_bytes=b"page-bytes",
-    )
-    payload = _round_trip(request)
-    assert payload["product_job_id"] == str(product_job_id)
+# `test_job_submit_round_trip` stood here. `test_image_bytes_json_contract` above already
+# round-trips a `JobSubmitRequest` through `_round_trip`; the only increment was that
+# pydantic renders a `UUID` as a string.
 
 
 # --- Job submit validation rules ---

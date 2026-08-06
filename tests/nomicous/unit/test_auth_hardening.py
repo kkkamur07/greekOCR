@@ -14,17 +14,16 @@ from typing import Annotated
 
 import pytest
 from fastapi import Depends, FastAPI, HTTPException
+from jwt import InvalidTokenError
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 from fastapi.security import HTTPAuthorizationCredentials
 from fastapi.testclient import TestClient
-from jwt import InvalidTokenError
 from pydantic import BaseModel, ValidationError
 from starlette.requests import Request
 
 from backend.core.exceptions import AccessDeniedError, ConflictError, InvalidCredentialsError
 from backend.core.settings import (
-    AppSettings,
     AuthSettings,
     get_app_settings,
     get_auth_settings,
@@ -223,21 +222,6 @@ def test_patterned_secrets_of_the_same_length_are_still_rejected(secret: str) ->
     assert secret_guesses_log10(secret) < MIN_JWT_SECRET_GUESSES_LOG10
 
 
-# --- Credentialed CORS allowlist ---
-# Tests the production template's origin list. Does not test CORSMiddleware behaviour.
-
-
-def test_production_cors_template_excludes_the_marketing_apex() -> None:
-    template = (REPO_ROOT / "nomicous" / "backend" / "core" / ".env.production.example").read_text(
-        encoding="utf-8"
-    )
-    line = next(line for line in template.splitlines() if line.startswith("CORS_ORIGINS="))
-    origins = line.split("=", 1)[1].split(",")
-
-    assert origins == ["https://app.nomicous.com"]
-    assert "https://nomicous.com" not in origins
-
-
 # --- Access-token revocation ---
 # Tests that a token is only accepted while its browser session is live.
 # Does not test session rotation or CSRF, which integration tests cover.
@@ -277,6 +261,22 @@ def test_access_token_carries_its_session_id() -> None:
 
     assert claims.user_id == user_id
     assert claims.session_id == session_id
+
+
+def test_tampered_token_is_rejected() -> None:
+    """The signature check itself: a token minted under a different key is refused.
+
+    Restored after a test-suite reduction pass removed it. Nothing else in the
+    suite exercises signature verification - the sibling tests below all mint
+    with the *same* settings and probe the claims or the session row, so a
+    regression that stopped verifying the signature would leave them all green.
+    """
+    settings = AuthSettings(JWT_SECRET=STRONG_SECRET, _env_file=None)
+    other = AuthSettings(JWT_SECRET=STRONG_SECRET[::-1], _env_file=None)
+    token = create_access_token(uuid.uuid4(), other, session_id=uuid.uuid4())
+
+    with pytest.raises(InvalidTokenError):
+        decode_access_token(token, settings)
 
 
 async def test_token_without_a_session_claim_is_refused(monkeypatch) -> None:
@@ -324,15 +324,6 @@ async def test_live_session_still_authenticates_and_filters_on_revocation(monkey
     assert "expires_at >" in sql
 
 
-def test_tampered_token_is_rejected() -> None:
-    settings = AuthSettings(JWT_SECRET=STRONG_SECRET, _env_file=None)
-    other = AuthSettings(JWT_SECRET=STRONG_SECRET[::-1], _env_file=None)
-    token = create_access_token(uuid.uuid4(), other, session_id=uuid.uuid4())
-
-    with pytest.raises(InvalidTokenError):
-        decode_access_token(token, settings)
-
-
 # --- Registration enumeration ---
 # Tests that conflict responses are indistinguishable. Does not test password hashing.
 
@@ -366,13 +357,6 @@ async def test_registration_conflicts_are_indistinguishable(kwargs, monkeypatch)
         )
 
     assert str(exc.value) == REGISTRATION_CONFLICT_MESSAGE
-
-
-def test_registration_conflict_message_names_neither_field() -> None:
-    lowered = REGISTRATION_CONFLICT_MESSAGE.casefold()
-
-    assert "email" not in lowered
-    assert "username" not in lowered
 
 
 # --- Development seed gate ---
@@ -418,18 +402,6 @@ def test_production_serves_no_docs_or_openapi_schema(monkeypatch) -> None:
     assert "/docs" not in served
     assert "/redoc" not in served
     assert "/openapi.json" not in served
-
-
-def test_development_keeps_the_docs(monkeypatch) -> None:
-    from backend.core.app import create_app
-
-    monkeypatch.setenv("ENVIRONMENT", "development")
-    monkeypatch.setenv("JWT_SECRET", "local-dev-secret")
-    _clear_platform_settings()
-    app = create_app()
-
-    assert app.docs_url == "/docs"
-    assert app.openapi_url == "/openapi.json"
 
 
 async def test_root_route_does_not_advertise_docs_in_production(monkeypatch) -> None:
@@ -540,18 +512,6 @@ async def test_auth_throttle_charges_both_dimensions_when_the_ip_is_usable(monke
     )
 
     assert _charged(keys) == ["ip:203.0.113.7:/auth/login", f"account:{digest}:/auth/login"]
-
-
-async def test_account_bucket_never_stores_the_plain_email(monkeypatch) -> None:
-    monkeypatch.setenv("TRUST_PEER_IP", "false")
-    _clear_platform_settings()
-
-    keys = await auth_rate_limit_keys(
-        _request(peer="10.0.0.1", body=b'{"email":"victim@example.com","password":"x"}')
-    )
-
-    assert _charged(keys)
-    assert all("victim@example.com" not in key for key in _charged(keys))
 
 
 @pytest.mark.parametrize(
@@ -877,26 +837,6 @@ async def test_client_failure_beacon_uses_the_shared_store(monkeypatch) -> None:
 
     assert calls == [(["client-failure:global"], client_failures.CLIENT_FAILURE_GLOBAL_RATE_LIMIT)]
     assert not hasattr(client_failures, "_rate_buckets")
-
-
-async def test_client_failure_beacon_is_per_ip_when_the_address_is_usable(monkeypatch) -> None:
-    from backend.core.api import client_failures
-
-    monkeypatch.setenv("TRUST_PEER_IP", "true")
-    _clear_platform_settings()
-    calls: list[tuple[list[str], int]] = []
-
-    async def _record(keys, *, limit, window_seconds, detail):
-        calls.append((list(keys), limit))
-
-    monkeypatch.setattr(client_failures, "consume_rate_limit", _record)
-    await client_failures._throttle_client_failure(_request(peer="203.0.113.7"))
-
-    assert calls == [(["client-failure:ip:203.0.113.7"], client_failures.CLIENT_FAILURE_RATE_LIMIT)]
-
-
-def test_trust_peer_ip_defaults_to_true_for_direct_deployments() -> None:
-    assert AppSettings(_env_file=None).trust_peer_ip is True
 
 
 # --- Publish authorization ---

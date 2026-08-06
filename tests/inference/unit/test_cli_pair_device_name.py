@@ -17,7 +17,6 @@ import argparse
 
 import pytest
 
-from inference.cli import api as api_module
 from inference.cli import pair as pair_module
 from inference.cli.api import DEVICE_NAME_LIMIT, PlatformError
 
@@ -70,8 +69,8 @@ def test_a_blank_name_still_falls_back_to_the_hostname(
     assert _pair_with("   ") == "ada-laptop"
 
 
-def test_an_over_long_hostname_is_still_truncated(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The case the limit was written for keeps working."""
-    monkeypatch.setattr(api_module.socket, "gethostname", lambda: "h" * 400)
-
-    assert len(api_module.this_machine_name()) == DEVICE_NAME_LIMIT
+# `test_an_over_long_hostname_is_still_truncated` stood here. `pair.py` truncates at the
+# settling point, so `api.py`'s `name[:DEVICE_NAME_LIMIT]` is a second slice of an
+# already-sliced string; the test pinned that vestigial guard rather than the behaviour
+# this file's docstring is about, which
+# `test_an_over_long_name_is_truncated_rather_than_sent` covers through the real flow.

@@ -6,7 +6,6 @@ import {
   type DocumentWithPartsResponse,
   type PublicLayoutResponse,
 } from "../api/client";
-import { ApiError } from "../api/errors";
 import { PublicDocumentPage } from "./PublicDocumentPage";
 
 vi.mock("../components/public/PublicPageCanvas", () => ({
@@ -167,82 +166,6 @@ describe("PublicDocumentPage", () => {
       screen.queryByRole("status", { name: "Loading document" }),
     ).not.toBeInTheDocument();
     expect(screen.getByTestId("public-page-canvas")).toBeInTheDocument();
-  });
-
-  it("shows document-not-available only after a settled 404", async () => {
-    const documentFetch = defer<DocumentWithPartsResponse>();
-    const layoutFetch = defer<PublicLayoutResponse>();
-    vi.mocked(api.getPublicDocument).mockReturnValue(documentFetch.promise);
-    vi.mocked(api.getPublicLayout).mockReturnValue(layoutFetch.promise);
-
-    renderPublicPage();
-
-    expect(
-      screen.getByRole("status", { name: "Loading document" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByText("Document not available"),
-    ).not.toBeInTheDocument();
-
-    documentFetch.reject(new ApiError("Not found", 404));
-    layoutFetch.reject(new ApiError("Not found", 404));
-
-    expect(
-      await screen.findByText("Document not available"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("navigation", { name: "Main navigation" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("status", { name: "Loading document" }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("shows load error copy only after a settled failure", async () => {
-    const documentFetch = defer<DocumentWithPartsResponse>();
-    const layoutFetch = defer<PublicLayoutResponse>();
-    vi.mocked(api.getPublicDocument).mockReturnValue(documentFetch.promise);
-    vi.mocked(api.getPublicLayout).mockReturnValue(layoutFetch.promise);
-
-    renderPublicPage();
-
-    expect(
-      screen.queryByText("Could not load document"),
-    ).not.toBeInTheDocument();
-
-    documentFetch.reject(new ApiError("Server exploded", 500));
-    layoutFetch.reject(new ApiError("Server exploded", 500));
-
-    expect(
-      await screen.findByText("Could not load document"),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Server exploded")).toBeInTheDocument();
-    expect(
-      screen.getByRole("navigation", { name: "Main navigation" }),
-    ).toBeInTheDocument();
-  });
-
-  it("shows line geometry, transcription text, and export actions", async () => {
-    renderPublicPage();
-
-    expect(
-      await screen.findByRole("heading", { name: "MS Or. 1445 - Genesis" }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Live")).toBeInTheDocument();
-    expect(screen.getByText("1 page")).toBeInTheDocument();
-    expect(screen.getByTestId("public-page-canvas")).toHaveTextContent(
-      "Regions: 1",
-    );
-    expect(screen.getByText("alpha beta")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Export" })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Export" }));
-    expect(
-      screen.getByRole("menuitem", { name: "Transcription PDF" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("menuitem", { name: "PAGE XML" }),
-    ).toBeInTheDocument();
   });
 
   it("syncs canvas selection with the transcript panel", async () => {

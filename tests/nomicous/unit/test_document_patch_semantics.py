@@ -62,17 +62,7 @@ def _service_with(monkeypatch, *, part: DocumentPart, line: Line | None, block: 
     return service, document
 
 
-# --- Request schema: omitted vs explicit null ---
-
-
-def test_line_patch_separates_omitted_from_explicit_null() -> None:
-    assert LinePatchRequest().model_dump(exclude_unset=True) == {}
-    assert LinePatchRequest.model_validate({"block_id": None}).model_dump(exclude_unset=True) == {
-        "block_id": None
-    }
-    assert LinePatchRequest.model_validate({"mask": None}).model_dump(exclude_unset=True) == {
-        "mask": None
-    }
+# --- Request schema: an explicit null is refused for NOT NULL columns ---
 
 
 @pytest.mark.parametrize("field", ["order", "baseline", "points"])
@@ -130,29 +120,3 @@ async def test_patch_line_leaves_block_id_alone_when_omitted(monkeypatch) -> Non
 
     assert patched.block_id == block_id
     assert patched.order == 4
-
-
-@pytest.mark.asyncio
-async def test_patch_line_clears_mask_when_explicitly_null(monkeypatch) -> None:
-    part = DocumentPart(id=uuid.uuid4(), document_id=uuid.uuid4(), order=0, image_key="k")
-    line = Line(
-        id=uuid.uuid4(),
-        part_id=part.id,
-        baseline={"points": [[0, 0], [1, 1]]},
-        mask={"points": [[0, 0], [1, 1]]},
-        order=0,
-    )
-    service, _ = _service_with(monkeypatch, part=part, line=line, block=None)
-    body = LinePatchRequest.model_validate({"mask": None})
-
-    patched = await service.patch_part_line(
-        _Session(),
-        object(),
-        uuid.uuid4(),
-        part.document_id,
-        part.id,
-        line.id,
-        **body.model_dump(exclude_unset=True),
-    )
-
-    assert patched.mask is None

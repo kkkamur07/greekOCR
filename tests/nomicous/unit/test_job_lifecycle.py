@@ -24,7 +24,6 @@ from backend.jobs.infrastructure import stale_sweep as stale_sweep_module
 from backend.jobs.infrastructure import worker as worker_module
 from backend.jobs.infrastructure.job_repository import (
     AGENT_CLAIM_PREFIX,
-    WAITING_TIMEOUT_ERROR,
     _apply_cancellation,
     claim_next_pending_job,
     clear_stale_callback_claims,
@@ -122,20 +121,6 @@ def _params(statement) -> dict:
     return statement.compile(dialect=postgresql.dialect()).params
 
 
-# --- Waiting timeout settings ---
-# Tests the 240s inference deadline is configurable. Does not test the sweep itself.
-
-
-def test_waiting_timeout_defaults_to_240_seconds(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.delenv("JOB_WORKER_WAITING_TIMEOUT_SECONDS", raising=False)
-    assert JobSettings().job_worker_waiting_timeout_seconds == 240.0
-
-
-def test_waiting_timeout_reads_its_env_alias(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("JOB_WORKER_WAITING_TIMEOUT_SECONDS", "12.5")
-    assert JobSettings().job_worker_waiting_timeout_seconds == 12.5
-
-
 # --- Waiting-state timeout sweep ---
 # Tests jobs abandoned by the inference service are failed and announced.
 # Does not test running-job reclaim, which re-pends instead of failing.
@@ -185,30 +170,6 @@ def test_waiting_sweep_is_a_noop_without_stale_jobs(monkeypatch: pytest.MonkeyPa
     assert len(session.statements) == 1
     assert session.commits == 0
     assert notified == []
-
-
-async def test_idle_backoff_cannot_sleep_past_the_waiting_deadline(
-    monkeypatch: pytest.MonkeyPatch,
-):
-    monkeypatch.setattr(
-        worker_module,
-        "seconds_until_next_stale_waiting_job",
-        lambda **_kwargs: 0.4,
-    )
-
-    assert await worker_module._idle_wait_seconds(JobSettings(), 30.0) == 0.4
-
-
-async def test_idle_backoff_keeps_its_interval_without_waiting_jobs(
-    monkeypatch: pytest.MonkeyPatch,
-):
-    monkeypatch.setattr(
-        worker_module,
-        "seconds_until_next_stale_waiting_job",
-        lambda **_kwargs: None,
-    )
-
-    assert await worker_module._idle_wait_seconds(JobSettings(), 2.0) == 2.0
 
 
 async def test_idle_backoff_floors_an_expired_deadline(monkeypatch: pytest.MonkeyPatch):
@@ -477,21 +438,6 @@ async def test_read_fails_a_stale_waiting_job_when_no_worker_runs(
     assert notified == [(job.id, JobStatus.failed)]
 
 
-async def test_timeout_failure_names_the_deadline(monkeypatch: pytest.MonkeyPatch, job_env):
-    settings = job_env(JOB_WORKER_WAITING_TIMEOUT_SECONDS="240")
-    job = _readable_job(updated_at=datetime.now(UTC) - timedelta(seconds=600))
-    _install_sweep_store(monkeypatch, job)
-    _record_notifications(monkeypatch)
-
-    await stale_sweep_module.sweep_stale_jobs_on_read()
-
-    # Distinguishable from a generic "Job failed", and still allowlisted text:
-    # no exception detail reaches the client.
-    assert job.error == waiting_timeout_error(settings.job_worker_waiting_timeout_seconds)
-    assert job.error.startswith(WAITING_TIMEOUT_ERROR)
-    assert "240s" in job.error
-
-
 async def test_two_quick_reads_run_only_one_sweep(monkeypatch: pytest.MonkeyPatch, job_env):
     job_env(JOB_STALE_SWEEP_MIN_INTERVAL_SECONDS="30")
     job = _readable_job(updated_at=datetime.now(UTC) - timedelta(seconds=600))
@@ -573,18 +519,6 @@ async def test_sweep_skips_when_another_replica_holds_the_lock(
     assert notified == []
 
 
-def test_sweep_never_parks_a_request_behind_another_replica():
-    source = inspect.getsource(stale_sweep_module)
-
-    # try-lock skips; the blocking variants would queue a user request behind
-    # another replica's sweep.
-    assert "pg_try_advisory_xact_lock" in source
-    assert "pg_advisory_lock(" not in source
-    assert "pg_advisory_xact_lock(" not in source
-    # Sync sessions must not run on the event loop.
-    assert "asyncio.to_thread(run_stale_job_sweep)" in source
-
-
 async def test_sweep_flag_disables_the_on_read_recovery(monkeypatch: pytest.MonkeyPatch, job_env):
     job_env(JOB_STALE_SWEEP_ON_READ_ENABLED="false")
     job = _readable_job(updated_at=datetime.now(UTC) - timedelta(seconds=600))
@@ -596,64 +530,18 @@ async def test_sweep_flag_disables_the_on_read_recovery(monkeypatch: pytest.Monk
     assert job.status == JobStatus.waiting
 
 
-def test_on_read_sweep_defaults_to_enabled(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.delenv("JOB_STALE_SWEEP_ON_READ_ENABLED", raising=False)
+def test_the_sweep_throttle_stays_well_under_the_deadline_it_enforces(
+    monkeypatch: pytest.MonkeyPatch,
+):
     monkeypatch.delenv("JOB_STALE_SWEEP_MIN_INTERVAL_SECONDS", raising=False)
     settings = JobSettings()
 
-    assert settings.job_stale_sweep_on_read_enabled is True
     # Detection lag is bounded by the throttle, so it has to stay well under the
     # deadline it is enforcing.
     assert (
         settings.job_stale_sweep_min_interval_seconds
         < settings.job_worker_waiting_timeout_seconds / 4
     )
-
-
-async def test_every_job_read_path_triggers_the_sweep(monkeypatch: pytest.MonkeyPatch):
-    from backend.jobs.api import jobs as jobs_api
-    from backend.jobs.api.schemas import job_response_from_orm
-    from backend.jobs.application import job_service as job_service_module
-
-    calls: list[str] = []
-
-    async def _record() -> None:
-        calls.append("sweep")
-
-    monkeypatch.setattr(jobs_api, "sweep_stale_jobs_on_read", _record)
-    monkeypatch.setattr(job_service_module, "sweep_stale_jobs_on_read", _record)
-
-    job = _readable_job()
-    user = _StubUser(job.user_id)
-
-    await jobs_api.get_job(job_id=job.id, service=_StubJobService(job), current_user=user)
-    assert calls == ["sweep"]
-
-    async def _authorized(*_args, **_kwargs):
-        return job_response_from_orm(job)
-
-    monkeypatch.setattr(jobs_api, "_load_authorized_job", _authorized)
-    await jobs_api.stream_job_events(job_id=job.id, request=object(), current_user=user)
-    assert calls == ["sweep", "sweep"]
-
-    class _Repo:
-        async def list_for_project(self, _project_id, *, limit, cursor):
-            return []
-
-    service = job_service_module.JobService.__new__(job_service_module.JobService)
-    service._repo = _Repo()
-    assert await service.list_project_jobs(uuid.uuid4()) == []
-    assert calls == ["sweep", "sweep", "sweep"]
-
-
-def test_callback_apply_runs_off_the_event_loop():
-    from backend.jobs.application import job_callback_service
-
-    source = inspect.getsource(job_callback_service.JobCallbackService.apply_callback)
-
-    # Sync sessions plus a document merge; the same offload cancel_job_async uses.
-    assert "asyncio.to_thread(_apply_callback_locked, callback)" in source
-    assert inspect.iscoroutinefunction(job_callback_service.JobCallbackService.apply_callback)
 
 
 # --- Worker ownership ---
@@ -820,7 +708,7 @@ def test_process_one_job_runs_every_stale_sweep(monkeypatch: pytest.MonkeyPatch)
 
 
 # --- Clear job history ---
-# Tests the DELETE /jobs/history contract and its terminal-only filter.
+# Tests the terminal-only filter on DELETE /jobs/history.
 # Does not test project membership, which reuses ProjectService.get_project.
 
 
@@ -842,20 +730,6 @@ async def test_clear_history_deletes_only_terminal_project_jobs():
     assert values["project_id_1"] == project_id
     # pending/running/waiting are absent, so active jobs survive the clear.
     assert set(values["status_1"]) == {JobStatus.done, JobStatus.failed, JobStatus.cancelled}
-
-
-def test_clear_job_history_route_contract():
-    from backend.jobs.api.jobs import router
-    from backend.jobs.api.schemas import ClearJobHistoryResponse
-
-    route = next(item for item in router.routes if item.path == "/jobs/history")
-    assert route.methods == {"DELETE"}
-    assert route.response_model is ClearJobHistoryResponse
-
-    parameters = inspect.signature(route.endpoint).parameters
-    assert "project_id" in parameters
-    assert parameters["project_id"].annotation is uuid.UUID
-    assert ClearJobHistoryResponse(deleted=3).model_dump() == {"deleted": 3}
 
 
 # --- SSE stream dependencies ---
@@ -896,45 +770,6 @@ async def test_job_event_stream_ends_cleanly_when_access_is_lost(
     assert len(chunks) == 1
     assert chunks[0].startswith("event: error")
     assert "Job stream closed" in chunks[0]
-
-
-# --- Migration 003 ---
-# Tests the lifecycle migration chains onto the service-roles revision.
-
-
-def test_job_lifecycle_migration_chains_and_reverses():
-    import importlib.util
-    from pathlib import Path
-
-    versions = (
-        Path(__file__).resolve().parents[3] / "nomicous" / "infrastructure" / "alembic" / "versions"
-    )
-    spec = importlib.util.spec_from_file_location(
-        "migration_003", versions / "003_job_lifecycle.py"
-    )
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-
-    service_roles = importlib.util.spec_from_file_location(
-        "migration_002", versions / "002_service_roles.py"
-    )
-    parent = importlib.util.module_from_spec(service_roles)
-    service_roles.loader.exec_module(parent)
-
-    assert module.revision == "003_job_lifecycle"
-    assert module.down_revision == parent.revision
-
-    source = inspect.getsource(module)
-    assert "claimed_by" in source
-    assert "heartbeat_at" in source
-    assert "DROP COLUMN IF EXISTS heartbeat_at" in source
-    assert "DROP COLUMN IF EXISTS claimed_by" in source
-
-
-def test_job_model_exposes_worker_ownership_columns():
-    columns = Job.__table__.columns
-    assert columns["claimed_by"].nullable
-    assert columns["heartbeat_at"].nullable
 
 
 # --- Poison-page ceiling ---

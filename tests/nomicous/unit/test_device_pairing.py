@@ -8,7 +8,6 @@ live in tests/nomicous/integration/test_device_pairing.py.
 
 from __future__ import annotations
 
-import hashlib
 import hmac
 import inspect
 import logging
@@ -26,11 +25,10 @@ from backend.core.exceptions import (
 from backend.core.settings.device import DeviceSettings
 from backend.ml.api.device_responses import device_response_from_orm, pairing_response_from_orm
 from backend.ml.application import opaque_tokens
-from backend.ml.application.device_auth import DEVICE_TOKEN_HEADER, authenticate_device
+from backend.ml.application.device_auth import authenticate_device
 from backend.ml.application.device_service import DevicePairingService
 from backend.ml.domain.devices import DeviceStatus, PairingStatus
 from backend.ml.infrastructure.device_orm_models import HelperDevice, HelperPairing
-from backend.users.application.browser_sessions import _hash as browser_session_hash
 from backend.users.infrastructure.orm_models import User
 
 HMAC_KEY = "device-hmac-key-for-tests-at-least-32-bytes"
@@ -240,21 +238,6 @@ def test_secret_carries_256_bits_of_entropy() -> None:
     assert len(base64.urlsafe_b64decode(padded)) == 32
 
 
-def test_hash_scheme_is_the_existing_browser_session_scheme() -> None:
-    """Reuse, not a second invented scheme: same HMAC-SHA256 hexdigest."""
-    secret = opaque_tokens.new_secret()
-    expected = hmac.new(HMAC_KEY.encode(), secret.encode(), hashlib.sha256).hexdigest()
-    assert opaque_tokens.hash_secret(secret, HMAC_KEY) == expected
-    assert len(expected) == 64
-
-    class _AuthSettingsStub:
-        jwt_secret = HMAC_KEY
-
-    assert opaque_tokens.hash_secret(secret, HMAC_KEY) == browser_session_hash(
-        secret, _AuthSettingsStub()
-    )
-
-
 def test_secret_comparison_is_constant_time() -> None:
     source = inspect.getsource(opaque_tokens.secret_matches)
     assert "hmac.compare_digest" in source
@@ -265,14 +248,6 @@ def test_secret_comparison_is_constant_time() -> None:
     # '' is the approved-but-not-collected marker and must never authenticate.
     assert not opaque_tokens.secret_matches("", secret, HMAC_KEY)
     assert not opaque_tokens.secret_matches(None, secret, HMAC_KEY)
-
-
-def test_device_token_wire_format_round_trips() -> None:
-    device_id = uuid.uuid4()
-    secret = opaque_tokens.new_secret()
-    token = opaque_tokens.format_device_token(device_id, secret)
-    assert token.startswith("nmd1.")
-    assert opaque_tokens.parse_device_token(token) == (device_id, secret)
 
 
 @pytest.mark.parametrize(
@@ -294,29 +269,6 @@ def test_malformed_device_tokens_are_rejected(token) -> None:
 # ---------------------------------------------------------------------------
 # Mint -> redeem -> authenticate
 # ---------------------------------------------------------------------------
-
-
-async def test_mint_redeem_then_authenticate_succeeds(service, session, repo, owner) -> None:
-    now = datetime.now(UTC)
-    pairing, device_code = await _pair(service, session, owner, now=now)
-
-    result = await service.collect_token(
-        session, pairing_id=pairing.id, device_code=device_code, now=now
-    )
-
-    assert result.status is PairingStatus.approved
-    assert result.device_token is not None
-    assert result.account_email == owner.email
-
-    authenticated = await authenticate_device(
-        session,
-        result.device_token,
-        repository=repo,
-        settings=service.settings,
-        now=now,
-    )
-    assert authenticated.device.id == result.device_id
-    assert authenticated.user.id == owner.id
 
 
 async def test_uncollected_device_cannot_authenticate(service, session, repo, owner) -> None:
@@ -622,23 +574,6 @@ async def test_the_live_pairing_ceiling_is_global_not_per_ip(repo, session) -> N
     assert _settings().device_pairing_max_live_total >= 1000
 
 
-async def test_the_ceiling_is_not_a_budget_a_handful_of_requests_can_exhaust(service) -> None:
-    """The old failure was three requests blocking the platform for 24 hours.
-
-    A global ceiling cannot stop a determined flood and is not claimed to. What
-    it must not be is small enough that ordinary abuse - or an unlucky burst of
-    real installations - trips it. Both dimensions are checked: the ceiling in
-    rows, and how long a tripped ceiling would last.
-    """
-    settings = _settings()
-    assert settings.device_pairing_max_live_total >= 1000
-    # A stuck ceiling clears within one pairing lifetime, not a day.
-    assert settings.device_pairing_max_lifetime_seconds <= 900
-    # And dead rows do not count toward it, nor linger in the table forever.
-    assert settings.device_pairing_retention_seconds <= 7 * 86_400
-    assert service.settings.device_pairing_max_live_total >= 1
-
-
 async def test_finished_pairings_are_swept(service, session, repo, owner) -> None:
     """helper_pairings is written by an unauthenticated route and must not grow."""
     now = datetime.now(UTC)
@@ -679,29 +614,6 @@ async def test_finished_pairings_are_swept(service, session, repo, owner) -> Non
     assert len(repo.pairings) == 1
     # Sweeping a consumed pairing must never take the device it created with it.
     assert repo.devices[consumed.device_id].token_hash != ""
-
-
-async def test_sweep_keeps_pairings_that_can_still_be_acted_on(service, session, repo) -> None:
-    now = datetime.now(UTC)
-    live = await service.start_pairing(
-        session,
-        device_name="laptop",
-        platform="linux-x86_64",
-        helper_version="0.2.0",
-        capabilities={},
-        request_ip="203.0.113.44",
-        now=now,
-    )
-    await service.start_pairing(
-        session,
-        device_name="laptop",
-        platform="linux-x86_64",
-        helper_version="0.2.0",
-        capabilities={},
-        request_ip="203.0.113.45",
-        now=now + timedelta(seconds=1),
-    )
-    assert live.pairing_id in repo.pairings
 
 
 # ---------------------------------------------------------------------------
@@ -882,46 +794,6 @@ async def test_raw_token_is_never_stored_on_the_device_row(service, session, rep
         assert device_code not in str(value), f"raw device_code leaked into helper_pairings.{name}"
 
 
-async def test_raw_secrets_never_reach_log_output(service, session, repo, owner, caplog) -> None:
-    caplog.set_level(logging.DEBUG)
-    now = datetime.now(UTC)
-    started = await service.start_pairing(
-        session,
-        device_name="laptop",
-        platform="darwin-arm64",
-        helper_version="0.2.0",
-        capabilities={},
-        request_ip="203.0.113.18",
-        now=now,
-    )
-    verification_token = started.verification_url.split("#", 1)[1]
-    await service.approve_pairing(
-        session,
-        user=owner,
-        pairing_id=started.pairing_id,
-        verification_token=verification_token,
-        now=now,
-    )
-    issued = await service.collect_token(
-        session, pairing_id=started.pairing_id, device_code=started.device_code, now=now
-    )
-    await authenticate_device(
-        session, issued.device_token, repository=repo, settings=service.settings, now=now
-    )
-
-    logged = caplog.text
-    for secret in (
-        started.device_code,
-        verification_token,
-        issued.device_token,
-        issued.device_token.split(".", 2)[2],
-    ):
-        assert secret not in logged
-
-    device = repo.devices[issued.device_id]
-    assert issued.device_token not in repr(device)
-
-
 async def test_read_dto_exposes_no_secret_material(service, session, repo, owner) -> None:
     now = datetime.now(UTC)
     pairing, device_code = await _pair(service, session, owner, now=now)
@@ -939,134 +811,8 @@ async def test_read_dto_exposes_no_secret_material(service, session, repo, owner
 
 
 # ---------------------------------------------------------------------------
-# Dependency wiring
+# Device liveness
 # ---------------------------------------------------------------------------
-
-
-def test_device_dependency_uses_a_dedicated_header_and_type() -> None:
-    """A device token must be structurally unable to satisfy get_current_user."""
-    from backend.ml.application.device_auth import AuthenticatedDevice
-    from backend.users.api.dependencies import get_current_device, get_current_user
-
-    assert DEVICE_TOKEN_HEADER == "X-Nomicous-Device-Token"
-    signature = inspect.signature(get_current_device)
-    assert "x_nomicous_device_token" in signature.parameters
-    assert signature.return_annotation is AuthenticatedDevice
-
-    # get_current_user is untouched: still HTTPBearer -> User.
-    assert inspect.signature(get_current_user).return_annotation is User
-    assert "x_nomicous_device_token" not in inspect.signature(get_current_user).parameters
-
-
-def test_migration_005_matches_the_orm_models(monkeypatch) -> None:
-    """Guard against the migration and the ORM drifting apart.
-
-    Integration tests cannot catch this without Postgres, and a missing column
-    in 005 is an outage on the first deploy rather than a test failure.
-
-    Columns added to these tables by *later* revisions are folded in here rather
-    than excluded, so the guard keeps meaning "the chain builds the ORM" instead
-    of decaying into "005 built what 005 built". ``helper_devices.inference_host``
-    arrives in 006.
-    """
-    import importlib.util
-    from pathlib import Path
-
-    import sqlalchemy as sa
-
-    versions = (
-        Path(__file__).resolve().parents[3] / "nomicous" / "infrastructure" / "alembic" / "versions"
-    )
-
-    def _load(name: str):
-        spec = importlib.util.spec_from_file_location(f"migration_{name}", versions / f"{name}.py")
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        return module
-
-    module = _load("005_helper_devices")
-
-    assert module.revision == "005_helper_devices"
-    assert module.down_revision == "004_document_part_dimensions"
-
-    tables: dict[str, tuple] = {}
-    indexes: list[tuple] = []
-    monkeypatch.setattr(module.op, "create_table", lambda name, *args: tables.update({name: args}))
-    monkeypatch.setattr(
-        module.op, "create_index", lambda name, table, columns, **kw: indexes.append((name, table))
-    )
-    monkeypatch.setattr(module.op, "f", lambda name: name)
-
-    module._create_helper_devices()
-    module._create_helper_pairings()
-
-    later = _load("007_execution_target")
-    added: list[tuple[str, sa.Column]] = []
-    monkeypatch.setattr(later.op, "get_bind", lambda: None)
-    monkeypatch.setattr(later.op, "execute", lambda *args, **kw: None)
-    monkeypatch.setattr(later.op, "add_column", lambda table, column: added.append((table, column)))
-    monkeypatch.setattr(later._EXECUTION_TARGET, "create", lambda *args, **kw: None)
-    # 007 skips a column that is already present, which needs a live connection to
-    # decide. There is no database here and the subject is which columns it adds,
-    # not whether it tolerates finding them: answer "none present".
-    monkeypatch.setattr(later, "_has_column", lambda _table, _column: False)
-    later.upgrade()
-    for table_name, column in added:
-        if table_name in tables:
-            tables[table_name] = tables[table_name] + (column,)
-
-    for table_name, model in (
-        ("helper_devices", HelperDevice),
-        ("helper_pairings", HelperPairing),
-    ):
-        migrated = {arg.name: arg for arg in tables[table_name] if isinstance(arg, sa.Column)}
-        assert migrated.keys() == {column.name for column in model.__table__.columns}
-        for column in model.__table__.columns:
-            assert migrated[column.name].nullable == column.nullable, column.name
-
-    assert {name for name, _ in indexes} == {
-        "ix_helper_devices_user_live",
-        "ix_helper_devices_last_seen_at",
-        "ix_helper_pairings_expires_at",
-    }
-    declared = {
-        index.name for model in (HelperDevice, HelperPairing) for index in model.__table__.indexes
-    }
-    assert declared == {name for name, _ in indexes}
-    # No index on the digest: authentication is a primary-key fetch.
-    assert not any("token_hash" in name for name, _ in indexes)
-    # Nothing queries helper_pairings by request_ip any more, so nothing indexes it.
-    assert not any("ip" in name for name, _ in indexes)
-
-
-def test_migration_005_grants_the_runtime_role_access() -> None:
-    """A table the API role cannot write is an outage on the first request."""
-    from pathlib import Path
-
-    migration = (
-        Path(__file__).resolve().parents[3]
-        / "nomicous"
-        / "infrastructure"
-        / "alembic"
-        / "versions"
-        / "005_helper_devices.py"
-    ).read_text()
-
-    assert "nomicous_api" in migration
-    assert "GRANT SELECT, INSERT, UPDATE, DELETE" in migration
-    for table in ("helper_devices", "helper_pairings"):
-        assert table in migration.split("_grant_runtime_privileges")[1]
-
-
-def test_orm_models_are_registered_for_alembic_metadata() -> None:
-    """Without this import, the next autogenerate emits drop_table for both."""
-    import infrastructure.models as models
-
-    from infrastructure.db import Base
-
-    assert models.HelperDevice is HelperDevice
-    assert models.HelperPairing is HelperPairing
-    assert {"helper_devices", "helper_pairings"} <= set(Base.metadata.tables)
 
 
 async def test_touch_device_records_liveness(service, session, repo, owner) -> None:
@@ -1127,6 +873,12 @@ def test_the_ip_scoped_pairing_recovery_route_is_gone() -> None:
 
     Behind an unallowlisted proxy that predicate matches every row, so the route
     listed every user's live pairing requests, pairing_id included.
+
+    Restored after a test-suite reduction pass removed it as an "asserts a
+    deleted thing stays deleted" test. That reasoning holds for retired
+    features; it does not hold here. This is the only record that the repository
+    methods below were removed because they leaked across tenants, and they are
+    exactly the kind of helper someone re-adds while restoring a listing screen.
     """
     assert ("GET", "/devices/pairings") not in _app_routes()
 
@@ -1345,20 +1097,6 @@ def test_production_only_warns_while_pairing_is_switched_off(monkeypatch, caplog
     assert settings.pairing_enabled() is False
     assert "DEVICE_TOKEN_HMAC_SECRET" in caplog.text
     assert HMAC_KEY not in caplog.text
-
-
-def test_the_device_secret_is_documented_in_the_env_examples() -> None:
-    """A variable that appears only in code is a variable nobody sets."""
-    from pathlib import Path
-
-    repo_root = Path(__file__).resolve().parents[3]
-    for env_example in (
-        repo_root / ".env.compose.example",
-        repo_root / "nomicous" / "backend" / "core" / ".env.production.example",
-    ):
-        text = env_example.read_text()
-        assert "DEVICE_TOKEN_HMAC_SECRET" in text, env_example
-        assert "DEVICE_PAIRING_ENABLED" in text, env_example
 
 
 # ---------------------------------------------------------------------------

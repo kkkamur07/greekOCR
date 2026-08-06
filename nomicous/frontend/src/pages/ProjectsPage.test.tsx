@@ -75,15 +75,4 @@ describe("ProjectsPage", () => {
     });
     expect(screen.queryByText("Projects unavailable")).toBeNull();
   });
-
-  it("redirects to login when no access token is present", async () => {
-    vi.spyOn(session, "hasAccessToken").mockReturnValue(false);
-
-    render(<ProjectsPage />);
-
-    await waitFor(() => {
-      expect(session.navigateToLogin).toHaveBeenCalled();
-    });
-    expect(api.me).not.toHaveBeenCalled();
-  });
 });

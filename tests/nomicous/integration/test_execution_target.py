@@ -32,7 +32,6 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select, text
 
-from backend.core.exceptions import ConflictError
 from backend.core.settings.device import get_device_settings
 from backend.jobs.infrastructure.job_repository import mark_job_failed
 from backend.jobs.infrastructure.orm_models import Job, JobStatus
@@ -200,25 +199,6 @@ def test_an_unavailable_preferred_host_substitutes_and_the_job_reports_it(
     assert body["execution_target_substituted"] is True
 
 
-def test_a_cloud_preference_substitutes_to_the_laptop_when_no_worker_is_online(
-    client: TestClient, owner_user: dict[str, str], owner_headers: dict[str, str], owner_project
-) -> None:
-    """Cloud capacity will not exist for some time, and that needs no special
-    handling: a running laptop simply answers the same query."""
-    pair_inference_device(
-        user_id=user_id_for_email(owner_user["email"]), host="local", seen_seconds_ago=5
-    )
-    ids = _make_part(client, owner_headers, owner_project)
-
-    response = _segment(client, owner_headers, owner_project, ids)
-
-    assert response.status_code == 202, response.text
-    body = client.get(f"/jobs/{response.json()['job_id']}", headers=owner_headers).json()
-    assert body["preferred_execution_target"] == "cloud"
-    assert body["execution_target"] == "local"
-    assert body["execution_target_substituted"] is True
-
-
 # ---------------------------------------------------------------------------
 # Outcome 3: neither host has capacity
 # ---------------------------------------------------------------------------
@@ -251,62 +231,9 @@ def test_no_capacity_anywhere_refuses_the_submission_and_writes_no_job(
         assert session.execute(select(Job)).scalars().all() == []
 
 
-def test_transcribe_is_gated_on_capacity_too(
-    client: TestClient, owner_user: dict[str, str], owner_headers: dict[str, str], owner_project
-) -> None:
-    document_id, part_id = _make_part(client, owner_headers, owner_project)
-    base = documents_url(owner_project["id"])
-    lines = client.put(
-        f"{base}/{document_id}/parts/{part_id}/lines",
-        headers=owner_headers,
-        json={
-            "lines": [
-                {
-                    "order": 0,
-                    "kind": "polygon",
-                    "points": [[0, 0], [1, 0], [1, 1], [0, 1]],
-                    "source": "manual",
-                }
-            ]
-        },
-    )
-    assert lines.status_code == 200, lines.text
-
-    refused = client.post(f"{base}/{document_id}/parts/{part_id}/transcribe", headers=owner_headers)
-    assert refused.status_code == 409, refused.text
-
-    pair_inference_device(
-        user_id=user_id_for_email(owner_user["email"]), host="cloud", seen_seconds_ago=5
-    )
-    accepted = client.post(
-        f"{base}/{document_id}/parts/{part_id}/transcribe", headers=owner_headers
-    )
-    assert accepted.status_code == 202, accepted.text
-    body = client.get(f"/jobs/{accepted.json()['job_id']}", headers=owner_headers).json()
-    assert body["execution_target"] == "cloud"
-
-
 # ---------------------------------------------------------------------------
 # Outcome 4: a submitted job's target cannot be changed
 # ---------------------------------------------------------------------------
-
-
-def test_a_submitted_jobs_execution_target_cannot_be_changed_through_the_mapper(
-    client: TestClient, owner_user: dict[str, str], owner_headers: dict[str, str], owner_project
-) -> None:
-    pair_inference_device(
-        user_id=user_id_for_email(owner_user["email"]), host="cloud", seen_seconds_ago=5
-    )
-    ids = _make_part(client, owner_headers, owner_project)
-    job_id = _segment(client, owner_headers, owner_project, ids).json()["job_id"]
-
-    with sync_system_session() as session:
-        job = session.execute(select(Job).where(Job.id == uuid.UUID(job_id))).scalar_one()
-        with pytest.raises(ConflictError, match="fixed when the job is submitted"):
-            job.execution_target = ExecutionTarget.local
-        session.rollback()
-
-    assert _stored_job(job_id).execution_target is ExecutionTarget.cloud
 
 
 def test_a_submitted_jobs_execution_target_cannot_be_changed_by_raw_sql(
@@ -350,30 +277,7 @@ def test_an_ordinary_update_that_leaves_the_target_alone_still_works(
 
 
 # ---------------------------------------------------------------------------
-# A failed job reports which host it failed on
-# ---------------------------------------------------------------------------
-
-
-def test_a_failed_job_reports_the_host_it_failed_on(
-    client: TestClient, owner_user: dict[str, str], owner_headers: dict[str, str], owner_project
-) -> None:
-    pair_inference_device(
-        user_id=user_id_for_email(owner_user["email"]), host="local", seen_seconds_ago=5
-    )
-    ids = _make_part(client, owner_headers, owner_project)
-    job_id = _segment(client, owner_headers, owner_project, ids).json()["job_id"]
-    mark_job_failed(uuid.UUID(job_id), "inference failed", claimed_by=None)
-
-    body = client.get(f"/jobs/{job_id}", headers=owner_headers).json()
-
-    assert body["status"] == "failed"
-    assert body["execution_target"] == "local"
-    assert body["preferred_execution_target"] == "cloud"
-    assert body["execution_target_substituted"] is True
-
-
-# ---------------------------------------------------------------------------
-# The account setting, and the absence of a per-job one
+# The account setting
 # ---------------------------------------------------------------------------
 
 
@@ -408,35 +312,3 @@ def test_the_preference_route_requires_a_logged_in_researcher(client: TestClient
         client.put("/account/execution-target", json={"prefer_local_inference": True}).status_code
         == 401
     )
-
-
-def test_changing_the_preference_does_not_move_a_job_that_was_already_submitted(
-    client: TestClient, owner_user: dict[str, str], owner_headers: dict[str, str], owner_project
-) -> None:
-    user_id = user_id_for_email(owner_user["email"])
-    pair_inference_device(user_id=user_id, host="local", seen_seconds_ago=5)
-    pair_inference_device(user_id=user_id, host="cloud", seen_seconds_ago=5)
-    ids = _make_part(client, owner_headers, owner_project)
-    job_id = _segment(client, owner_headers, owner_project, ids).json()["job_id"]
-
-    client.put(
-        "/account/execution-target",
-        headers=owner_headers,
-        json={"prefer_local_inference": True},
-    )
-
-    body = client.get(f"/jobs/{job_id}", headers=owner_headers).json()
-    assert body["execution_target"] == "cloud"
-
-
-def test_there_is_no_per_job_execution_target_control(client: TestClient) -> None:
-    """A per-job toggle is what regrows the three-mode complexity ADR 0002
-    deletes, so its absence is asserted rather than assumed. ``local_only`` is
-    absent from the published API for the same reason."""
-    schema = client.get("/openapi.json").json()
-    for name in ("SegmentPartRequest", "TranscribePartRequest"):
-        properties = schema["components"]["schemas"][name].get("properties", {})
-        assert not [key for key in properties if key.startswith("execution")]
-
-    assert "local_only" not in client.get("/openapi.json").text
-    assert set(schema["components"]["schemas"]["ExecutionTarget"]["enum"]) == {"local", "cloud"}

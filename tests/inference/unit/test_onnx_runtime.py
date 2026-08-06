@@ -25,7 +25,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from inference.architectures.blla.blla import BLLAUnavailableError, run_blla_segment
+from inference.architectures.blla.blla import run_blla_segment
 from inference.architectures.calamari.adapter import (
     CalamariUnavailableError,
     _load_session,
@@ -158,8 +158,13 @@ def test_the_graph_carries_the_codec_the_decoder_needs(calamari_artifact: Path) 
     _load_session.cache_clear()
     _, charset, line_height = _load_session(str(calamari_artifact))
 
-    assert line_height == 48
-    assert len(charset) == 47
+    # Deliberately not `line_height == 48` and `len(charset) == 47`: those are
+    # properties of one published checkpoint, and pinning them turns a legitimate
+    # republish red. What the decoder needs is that the stamps are *there* and
+    # sane, plus the one value that is a real decode invariant rather than a
+    # property of these weights.
+    assert isinstance(line_height, int) and line_height > 0
+    assert charset
     assert charset[0] == ""  # the CTC blank, at index 0
 
 
@@ -179,17 +184,10 @@ def test_a_graph_without_its_metadata_is_refused(tmp_path: Path) -> None:
 
 
 # --- The retired native formats are refused, not loaded -----------------------
-
-
-def test_a_native_calamari_checkpoint_is_refused() -> None:
-    """``best.pt`` is published beside ``best.onnx`` and must never be run."""
-    with pytest.raises(CalamariUnavailableError, match="requires an .onnx model"):
-        run_calamari_transcribe(TRANSCRIBE_LINE.read_bytes(), checkpoint_path=CALAMARI_CHECKPOINT)
-
-
-def test_a_native_blla_checkpoint_is_refused() -> None:
-    with pytest.raises(BLLAUnavailableError, match="requires an .onnx model"):
-        run_blla_segment(SEGMENT_PAGE.read_bytes(), model_path=BLLA_CHECKPOINT)
+# The per-architecture "a native checkpoint is refused" pair stood here. Both are
+# the suffix branch, and `test_architecture_contract.py::
+# test_foreign_artifact_is_a_service_error_on_every_path` takes it over both
+# architectures *and* asserts the failure family, which neither of these did.
 
 
 def test_the_cache_directory_resolves_to_the_graph_not_the_checkpoint(tmp_path: Path) -> None:
@@ -243,24 +241,11 @@ def test_the_registry_pins_the_digest_of_the_artifact_the_loader_opens() -> None
 
 
 # --- The two architectures compose --------------------------------------------
-
-
-def test_a_page_that_segments_can_be_transcribed_line_by_line(
-    calamari_artifact: Path,
-    blla_artifact: Path,
-) -> None:
-    from inference.architectures.calamari.adapter import run_calamari_transcribe_many
-    from inference.jobs.runner import _crop_line_image
-
-    page = SEGMENT_PAGE.read_bytes()
-    segmented = run_blla_segment(page, model_path=blla_artifact)
-    crops = [_crop_line_image(page, line.points) for line in segmented.lines[:5]]
-    assert len(crops) == 5
-
-    results = run_calamari_transcribe_many(crops, checkpoint_path=calamari_artifact)
-
-    assert len(results) == 5
-    assert all(hasattr(result, "text") for result in results)
+# `test_a_page_that_segments_can_be_transcribed_line_by_line` stood here. Its only
+# claim about the composed result was `hasattr(result, "text")` on a pydantic model,
+# which holds whatever the crops contained. The composition is run for real by
+# `test_published_package.py`'s `real_page_run` and end to end by `test_cli_run.py`;
+# cutting it removes a third full model execution from this file.
 
 
 def test_segment_geometry_stays_inside_the_page(blla_artifact: Path) -> None:

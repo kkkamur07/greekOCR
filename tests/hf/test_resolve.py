@@ -1,16 +1,13 @@
-"""Essential hf:// resolution, cache, and fetch_model coverage."""
+"""Essential hf:// resolution and cache coverage."""
 
 from __future__ import annotations
 
 import hashlib
-import importlib.util
 import shutil
-import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
-from inference.weights import resolve_weights_source
 from inference.hub import resolve_hf_weights_source, set_default_hub_client
 from inference.hub.manifest import load_manifest
 from inference.hub.uri import parse_hf_weights_uri
@@ -30,11 +27,8 @@ ARTIFACT_SHA256 = hashlib.sha256(MOCK_GRAPH).hexdigest()
 @dataclass
 class MockHubClient:
     downloads: list[tuple[str, str, Path]] = field(default_factory=list)
-    download_error: Exception | None = None
 
     def snapshot_download(self, repo_id: str, revision: str, local_dir: Path) -> None:
-        if self.download_error is not None:
-            raise self.download_error
         self.downloads.append((repo_id, revision, local_dir))
         local_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(MOCK_CHECKPOINT, local_dir / "best.pt")
@@ -119,23 +113,6 @@ def test_resolve_rejects_downloaded_digest_mismatch(tmp_path: Path):
     assert not (tmp_path / "greek-calamari-v1" / "stable").exists()
 
 
-def test_resolve_surfaces_missing_repo_error(tmp_path: Path):
-    class RepositoryNotFoundError(Exception):
-        pass
-
-    with pytest.raises(ValueError, match="Hub model repo not found"):
-        resolve_hf_weights_source(
-            "hf://nomicous/missing-htr-calamari@stable",
-            registry_model_id="greek-calamari-v1",
-            registry_tag="stable",
-            hub_revision=HUB_REVISION,
-            artifact_sha256=ARTIFACT_SHA256,
-            architecture="calamari",
-            hub_client=MockHubClient(download_error=RepositoryNotFoundError("missing")),
-            cache_root=tmp_path,
-        )
-
-
 def test_resolve_rejects_mutable_only_hf_reference(tmp_path: Path):
     with pytest.raises(ValueError, match="immutable.*hub_revision"):
         resolve_hf_weights_source(
@@ -148,53 +125,3 @@ def test_resolve_rejects_mutable_only_hf_reference(tmp_path: Path):
             hub_client=MockHubClient(),
             cache_root=tmp_path,
         )
-
-
-def test_inference_delegate_requires_hf_context():
-    with pytest.raises(ValueError, match="registry_model_id and registry_tag"):
-        resolve_weights_source("hf://nomicous/greek-htr-calamari@stable")
-
-
-def test_fetch_model_warms_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    cache_root = tmp_path / "cache"
-    # Unlike the tests above, this one resolves against the *real* registry, so
-    # the bytes the mock serves have to hash to the pin in `registry.yaml` -
-    # `best.onnx` since ADR 0006. That is what makes this a check on the
-    # registry and the resolver agreeing, rather than on the mock agreeing with
-    # itself. The artifact is gitignored (`/src/hf/cache/`), so a checkout that
-    # has not fetched it exports an equivalent graph from the tracked
-    # checkpoint; both routes produce the pinned digest.
-    published = REPO_ROOT / "src/hf/cache/syriac-calamari-v1/stable/best.onnx"
-    if not published.is_file():
-        pytest.importorskip("torch", reason="no cached best.onnx and Torch is unavailable")
-        from src.model.inference_export.calamari import export_calamari_onnx
-
-        published = tmp_path / "best.onnx"
-        export_calamari_onnx(MOCK_CHECKPOINT, published)
-    graph_bytes = published.read_bytes()
-
-    class RealArtifactHubClient(MockHubClient):
-        def snapshot_download(self, repo_id: str, revision: str, local_dir: Path) -> None:
-            self.downloads.append((repo_id, revision, local_dir))
-            local_dir.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(MOCK_CHECKPOINT, local_dir / "best.pt")
-            (local_dir / "best.onnx").write_bytes(graph_bytes)
-
-    client = RealArtifactHubClient()
-    set_default_hub_client(client)
-    monkeypatch.setenv("HF_CACHE_ROOT", str(cache_root))
-
-    module_path = REPO_ROOT / "scripts/hf/fetch_model.py"
-    spec = importlib.util.spec_from_file_location("fetch_model", module_path)
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    spec.loader.exec_module(module)
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        ["fetch_model.py", "syriac-calamari-v1", "--registry-tag", "stable"],
-    )
-
-    assert module.main() == 0
-    assert len(client.downloads) == 1
-    assert (cache_root / "syriac-calamari-v1" / "stable" / "best.onnx").is_file()

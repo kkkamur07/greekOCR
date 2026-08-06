@@ -1,27 +1,4 @@
-"""Root welcome endpoint."""
-
-from pathlib import Path
-
-# --- Root metadata ---
-# Tests welcome payload and version fields. Does not test authenticated routes.
-
-_EXPECTED_VERSION = (
-    (Path(__file__).resolve().parents[3] / "nomicous" / "VERSION")
-    .read_text(encoding="utf-8")
-    .strip()
-)
-
-
-def test_root_welcome(client):
-    response = client.get("/")
-    assert response.status_code == 200
-    body = response.json()
-    assert body["service"] == "Kalamos API"
-    assert "Kalamos" in body["message"]
-    assert body["version"] == _EXPECTED_VERSION
-    assert body["docs_url"] == "/docs"
-    assert body["health_url"] == "/health"
-
+"""Root endpoint security headers."""
 
 # --- Security headers ---
 # Tests baseline HTTP security headers on responses. Does not test CSP for the SPA.

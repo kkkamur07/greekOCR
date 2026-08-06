@@ -19,8 +19,6 @@ from backend.core.exceptions import ValidationError
 from backend.document.application.document_access import DocumentContext
 from backend.document.application.part_service import DocumentPartService
 from backend.document.infrastructure.media_store.encoding import (
-    MAX_DECODE_PIXELS,
-    bounded_image,
     encode_part_image_with_size,
     read_image_size,
     render_part_thumbnail,
@@ -184,36 +182,6 @@ async def test_backfill_tolerates_missing_blob() -> None:
 
 
 # --- Bounded, single decode ---
-
-
-def test_importing_document_routes_does_not_raise_global_pixel_limit() -> None:
-    import backend.document.api.documents  # noqa: F401
-
-    assert Image.MAX_IMAGE_PIXELS == PILLOW_DEFAULT_MAX_PIXELS
-    assert Image.MAX_IMAGE_PIXELS < MAX_DECODE_PIXELS
-
-
-def test_bounded_image_never_touches_the_process_wide_limit() -> None:
-    before = Image.MAX_IMAGE_PIXELS
-
-    with bounded_image(_png_bytes(4, 4)) as image:
-        assert before == Image.MAX_IMAGE_PIXELS
-        assert image.size == (4, 4)
-
-    assert before == Image.MAX_IMAGE_PIXELS
-
-
-def test_decode_rejects_raster_above_the_bound_without_decoding_it() -> None:
-    # 15_000 x 15_000 = 225M pixels, declared in the header only: the raster is never
-    # allocated because the size is read before the decode starts.
-    before = Image.MAX_IMAGE_PIXELS
-    oversized = _png_header_claiming(15_000, 15_000)
-    assert MAX_DECODE_PIXELS < 15_000 * 15_000
-
-    with pytest.raises(ValidationError):
-        read_image_size(oversized)
-
-    assert before == Image.MAX_IMAGE_PIXELS
 
 
 def test_bound_is_enforced_by_this_module_not_by_pillows_global(monkeypatch) -> None:

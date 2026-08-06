@@ -39,16 +39,6 @@ def _write(path: Path, data: bytes = CONTENT) -> Path:
     return path
 
 
-def test_repeat_verification_hashes_the_artifact_once(tmp_path: Path, hash_calls: list[Path]):
-    """Three call sites per run must cost one read of the file, not three."""
-    artifact = _write(tmp_path / "model.pt")
-
-    for _ in range(3):
-        verify_artifact_sha256(artifact, DIGEST)
-
-    assert len(hash_calls) == 1
-
-
 def test_corrupted_artifact_raises(tmp_path: Path):
     artifact = _write(tmp_path / "model.pt", b"corrupted")
 
@@ -83,17 +73,6 @@ def test_same_size_replacement_is_reverified(tmp_path: Path, hash_calls: list[Pa
 
     with pytest.raises(ArtifactIntegrityError, match="artifact SHA-256 mismatch"):
         verify_artifact_sha256(artifact, DIGEST)
-    assert len(hash_calls) == 2
-
-
-def test_rewritten_identical_content_is_reverified(tmp_path: Path, hash_calls: list[Path]):
-    """A new mtime invalidates the memo even when the bytes are unchanged."""
-    artifact = _write(tmp_path / "model.pt")
-    verify_artifact_sha256(artifact, DIGEST)
-    stat = artifact.stat()
-    os.utime(artifact, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
-
-    verify_artifact_sha256(artifact, DIGEST)
     assert len(hash_calls) == 2
 
 

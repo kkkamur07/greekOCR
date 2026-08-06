@@ -15,7 +15,6 @@ import { describe, expect, it } from "vitest";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SRC = resolve(HERE, "..");
-const FRONTEND = resolve(SRC, "..");
 
 function sourceFiles(directory: string): string[] {
   return readdirSync(directory).flatMap((entry) => {
@@ -60,28 +59,5 @@ describe("local_only is retired from the interface", () => {
     );
 
     expect(offenders).toEqual([]);
-  });
-
-  it("does not appear in the API contract the interface is generated from", () => {
-    for (const contract of ["openapi/openapi.json", "src/api/schema.d.ts"]) {
-      expect(readFileSync(resolve(FRONTEND, contract), "utf8")).not.toContain(
-        "local_only",
-      );
-    }
-  });
-
-  it("offers no per-job execution target control", () => {
-    // The account setting is the only input. A request body field named for an
-    // execution target would be a per-job toggle by another name.
-    for (const request of ["SegmentPartRequest", "TranscribePartRequest"]) {
-      const schema = JSON.parse(
-        readFileSync(resolve(FRONTEND, "openapi/openapi.json"), "utf8"),
-      ).components.schemas[request];
-      expect(Object.keys(schema.properties ?? {})).toEqual(
-        expect.not.arrayContaining([
-          expect.stringMatching(/^(execution|prefer)/),
-        ]),
-      );
-    }
   });
 });

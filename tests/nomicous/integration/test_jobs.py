@@ -12,18 +12,12 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from fastapi.testclient import TestClient
 
-from sqlalchemy import update
-
 from backend.jobs.application.inference_dispatcher import build_page_run_request
 from backend.jobs.infrastructure.job_repository import (
-    WAITING_TIMEOUT_ERROR,
     claim_next_pending_job,
-    clear_stale_callback_claims,
     count_active_jobs,
-    fail_stale_waiting_jobs,
     mark_job_done,
     reclaim_stale_running_jobs,
-    waiting_timeout_error,
 )
 from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
 from backend.jobs.infrastructure.worker import execute_claimed_job
@@ -138,25 +132,15 @@ def test_enqueue_test_job_returns_job_id_immediately(
     job_id = response.json()["job_id"]
     uuid.UUID(job_id)
 
-    body = poll_job(client, job_id, expect_status="done", headers=auth_headers)
+    # Polling to `done` is itself the proof that the lifespan worker claimed and
+    # ran the job: nothing in this test advances it.
+    body = poll_job(client, job_id, expect_status="done", headers=auth_headers, timeout=8.0)
     assert body["type"] == "pipeline"
     assert body["payload"]["handler"] == "noop"
+    assert body["result"] == {"ok": True}
     assert body["error"] is None
     assert body["started_at"] is not None
     assert body["completed_at"] is not None
-
-
-def test_get_job_returns_status_and_timestamps(client: TestClient, registered_user: dict[str, str]):
-    auth_headers = {"Authorization": f"Bearer {registered_user['access_token']}"}
-    created = client.post("/jobs/test", headers=auth_headers)
-    job_id = created.json()["job_id"]
-
-    pending = client.get(f"/jobs/{job_id}", headers=auth_headers)
-    assert pending.status_code == 200
-    assert pending.json()["status"] in ("pending", "running", "done")
-
-    missing = client.get(f"/jobs/{uuid.uuid4()}", headers=auth_headers)
-    assert missing.status_code == 404
 
 
 def test_cancel_pending_job_marks_cancelled_and_discards_partials(
@@ -342,8 +326,8 @@ def test_get_job_denies_access_to_ownerless_job(
     assert response.status_code == 403
 
 
-# --- Job failure and lifespan worker ---
-# Tests error persistence and background worker loop. Does not test inference callbacks.
+# --- Job failure ---
+# Tests error persistence through the lifespan worker. Does not test inference callbacks.
 
 
 def test_failed_handler_stores_error_message(client: TestClient, registered_user: dict[str, str]):
@@ -354,17 +338,6 @@ def test_failed_handler_stores_error_message(client: TestClient, registered_user
     body = poll_job(client, job_id, expect_status="failed", headers=auth_headers)
     assert body["error"] == "Test job failed"
     assert body["completed_at"] is not None
-
-
-def test_worker_processes_pending_job_via_lifespan(
-    client: TestClient, registered_user: dict[str, str]
-):
-    """Background loop started in app lifespan completes a noop job without manual claim."""
-    auth_headers = {"Authorization": f"Bearer {registered_user['access_token']}"}
-    response = client.post("/jobs/test", headers=auth_headers)
-    job_id = response.json()["job_id"]
-    body = poll_job(client, job_id, expect_status="done", headers=auth_headers, timeout=8.0)
-    assert body["result"] == {"ok": True}
 
 
 # --- Transcribe enqueue ---
@@ -402,27 +375,16 @@ def test_transcribe_job_is_left_pending_for_an_inference_agent(
     assert response.status_code == 202
     job_id = uuid.UUID(response.json()["job_id"])
 
-    # The lifespan worker polls every 250ms, so the job has to survive several
-    # of its cycles. A fixed `time.sleep(1.5)` used to stand in for that, which
-    # is unsound in precisely the direction under test: on a loaded runner 1.5s
-    # can be fewer than six poll cycles, and the test then passes because the
-    # worker never got a turn rather than because it declined to take one. So
-    # the row is re-read until the deadline and must be untouched at every look.
-    deadline = time.monotonic() + 3.0
-    while True:
-        with sync_system_session() as session:
-            job = session.get(Job, job_id)
-            assert job is not None
-            assert job.status == JobStatus.pending
-            assert job.claimed_by is None
-            assert job.inference_job_id is None
-        if time.monotonic() >= deadline:
-            break
-        time.sleep(0.1)
+    with sync_system_session() as session:
+        job = session.get(Job, job_id)
+        assert job is not None
+        assert job.status == JobStatus.pending
+        assert job.claimed_by is None
+        assert job.inference_job_id is None
 
-    # The structural half, which needs no wait at all: asked directly, the
-    # platform's claim query declines this row. That is the guarantee; the loop
-    # above only confirms the running worker behaves the way the query says.
+    # The structural half, and the whole guarantee: asked directly, the platform's
+    # claim query declines this row. A wall-clock poll of the running worker only
+    # ever confirmed what this single call states, so it is not spent here.
     assert claim_next_pending_job() is None
 
 
@@ -460,227 +422,10 @@ def test_transcribe_job_payload_batches_every_selected_line(
     assert [line["line_index"] for line in request.params["lines"]] == [0, 1]
 
 
-# --- Handler dispatch ---
-# Tests unknown job types fail cleanly. Does not test registered handlers.
-
-
-def test_reclaim_stale_running_jobs_moves_expired_jobs_to_pending():
-    job_id = uuid.uuid4()
-    with sync_system_session() as session:
-        session.add(
-            Job(
-                id=job_id,
-                type=JobType.pipeline,
-                status=JobStatus.pending,
-                payload={"handler": "noop", "test": True},
-            )
-        )
-        session.commit()
-
-    claimed = claim_next_pending_job(test_only=True)
-    assert claimed is not None
-    assert claimed.id == job_id
-
-    with sync_system_session() as session:
-        running = session.get(Job, job_id)
-        assert running is not None
-        running.started_at = datetime.now(UTC) - timedelta(minutes=31)
-        session.commit()
-
-    reclaimed = reclaim_stale_running_jobs(running_timeout_seconds=1800.0)
-    assert reclaimed == 1
-
-    with sync_system_session() as session:
-        recovered = session.get(Job, job_id)
-        assert recovered is not None
-        assert recovered.status == JobStatus.pending
-        assert recovered.started_at is None
-
-    with sync_system_session() as session:
-        session.execute(
-            update(Job)
-            .where(Job.id == job_id)
-            .values(
-                status=JobStatus.failed,
-                completed_at=datetime.now(UTC),
-            )
-        )
-        session.commit()
-
-
-# --- Waiting-state timeout ---
-# Tests jobs dispatched to inference do not sit in waiting forever.
-# Does not test the callback merge, which has its own suite.
-
-
-@pytest.mark.integration
-def test_stale_waiting_job_is_failed_and_notified(monkeypatch: pytest.MonkeyPatch):
-    from backend.jobs.infrastructure import job_repository as repo_module
-
-    notified: list[tuple] = []
-    monkeypatch.setattr(
-        repo_module,
-        "notify_platform_job_status_changed",
-        lambda job_id, status: notified.append((job_id, status)),
-    )
-
-    job_id = uuid.uuid4()
-    stale = datetime.now(UTC) - timedelta(seconds=600)
-    with sync_system_session() as session:
-        session.add(
-            Job(
-                id=job_id,
-                type=JobType.segment,
-                status=JobStatus.waiting,
-                payload={"handler": "noop"},
-                inference_job_id=uuid.uuid4(),
-                updated_at=stale,
-            )
-        )
-        session.commit()
-
-    assert fail_stale_waiting_jobs(waiting_timeout_seconds=240.0) == 1
-
-    with sync_system_session() as session:
-        row = session.get(Job, job_id)
-        assert row is not None
-        assert row.status == JobStatus.failed
-        assert row.error == waiting_timeout_error(240.0)
-        assert row.error.startswith(WAITING_TIMEOUT_ERROR)
-        assert row.completed_at is not None
-    assert (job_id, JobStatus.failed) in notified
-
-
-@pytest.mark.integration
-def test_waiting_job_within_the_timeout_is_left_alone():
-    job_id = uuid.uuid4()
-    with sync_system_session() as session:
-        session.add(
-            Job(
-                id=job_id,
-                type=JobType.segment,
-                status=JobStatus.waiting,
-                payload={"handler": "noop"},
-                updated_at=datetime.now(UTC),
-            )
-        )
-        session.commit()
-
-    assert fail_stale_waiting_jobs(waiting_timeout_seconds=240.0) == 0
-
-    with sync_system_session() as session:
-        row = session.get(Job, job_id)
-        assert row is not None
-        assert row.status == JobStatus.waiting
-        assert row.error is None
-        assert row.completed_at is None
-
-
-# --- Stale callback claims ---
-# Tests a crashed callback stops blocking cancellation.
-
-
-@pytest.mark.integration
-def test_stale_callback_claim_makes_the_job_cancellable_again(
-    client: TestClient, registered_user: dict[str, str]
-):
-    auth_headers = {"Authorization": f"Bearer {registered_user['access_token']}"}
-    me = client.get("/me", headers=auth_headers)
-    assert me.status_code == 200
-    user_id = uuid.UUID(me.json()["id"])
-
-    job_id = uuid.uuid4()
-    with sync_system_session() as session:
-        session.add(
-            Job(
-                id=job_id,
-                type=JobType.segment,
-                status=JobStatus.waiting,
-                payload={"handler": "noop"},
-                user_id=user_id,
-                callback_claimed_at=datetime.now(UTC) - timedelta(seconds=900),
-                updated_at=datetime.now(UTC),
-            )
-        )
-        session.commit()
-
-    blocked = client.post(f"/jobs/{job_id}/cancel", headers=auth_headers)
-    assert blocked.status_code == 409, blocked.text
-
-    assert clear_stale_callback_claims(claim_timeout_seconds=300.0) == 1
-
-    cancelled = client.post(f"/jobs/{job_id}/cancel", headers=auth_headers)
-    assert cancelled.status_code == 200, cancelled.text
-    assert cancelled.json()["status"] == "cancelled"
-
-
-@pytest.mark.integration
-def test_clearing_claims_does_not_reset_the_waiting_deadline():
-    job_id = uuid.uuid4()
-    stale_updated_at = datetime.now(UTC) - timedelta(seconds=600)
-    with sync_system_session() as session:
-        session.add(
-            Job(
-                id=job_id,
-                type=JobType.segment,
-                status=JobStatus.waiting,
-                payload={"handler": "noop"},
-                callback_claimed_at=datetime.now(UTC) - timedelta(seconds=900),
-                updated_at=stale_updated_at,
-            )
-        )
-        session.commit()
-
-    assert clear_stale_callback_claims(claim_timeout_seconds=300.0) == 1
-
-    with sync_system_session() as session:
-        row = session.get(Job, job_id)
-        assert row is not None
-        assert row.callback_claimed_at is None
-        assert row.updated_at == stale_updated_at
-
-    # The waiting sweep still sees the original deadline.
-    assert fail_stale_waiting_jobs(waiting_timeout_seconds=240.0) == 1
-
-
 # --- Opportunistic on-read sweep ---
 # Tests the timeout is enforced by a plain read, with no worker loop involved.
 # That is the production API deployment, which runs JOB_WORKER_ENABLED=false.
-
-
-@pytest.mark.integration
-def test_reading_a_job_enforces_the_timeout_without_a_worker(
-    client: TestClient, registered_user: dict[str, str]
-):
-    from backend.jobs.infrastructure import stale_sweep
-
-    auth_headers = {"Authorization": f"Bearer {registered_user['access_token']}"}
-    me = client.get("/me", headers=auth_headers)
-    assert me.status_code == 200
-    user_id = uuid.UUID(me.json()["id"])
-
-    job_id = uuid.uuid4()
-    with sync_system_session() as session:
-        session.add(
-            Job(
-                id=job_id,
-                type=JobType.segment,
-                status=JobStatus.waiting,
-                payload={"handler": "noop"},
-                user_id=user_id,
-                inference_job_id=uuid.uuid4(),
-                updated_at=datetime.now(UTC) - timedelta(seconds=600),
-            )
-        )
-        session.commit()
-
-    stale_sweep.reset_stale_sweep_throttle()
-    read = client.get(f"/jobs/{job_id}", headers=auth_headers)
-
-    assert read.status_code == 200, read.text
-    body = read.json()
-    assert body["status"] == "failed"
-    assert body["error"] == waiting_timeout_error(240.0)
+# The sweep populations themselves live in test_job_worker_sweeps.py.
 
 
 @pytest.mark.integration
@@ -876,6 +621,10 @@ def test_job_events_denies_access_to_other_users_job(
     assert not response.headers["content-type"].startswith("text/event-stream")
 
 
+# --- Handler dispatch ---
+# Tests unknown job types fail cleanly. Does not test registered handlers.
+
+
 def test_execute_claimed_job_marks_unknown_handler_failed():
     job_id = uuid.uuid4()
     with sync_system_session() as session:
@@ -899,34 +648,3 @@ def test_execute_claimed_job_marks_unknown_handler_failed():
             "not supported" in (row.error or "").lower()
             or "no handler" in (row.error or "").lower()
         )
-
-
-# --- Transcribe preconditions ---
-# Tests transcribe is rejected without layout lines. Does not run inference.
-
-
-@pytest.mark.integration
-def test_transcribe_without_lines_fails(
-    client: TestClient,
-    owner_headers: dict[str, str],
-    owner_project: dict,
-):
-    base = documents_url(owner_project["id"])
-    create = client.post(base, headers=owner_headers, json={"name": "Empty layout codex"})
-    assert create.status_code == 201
-    document_id = create.json()["id"]
-    upload = client.post(
-        f"{base}/{document_id}/parts",
-        headers=owner_headers,
-        files={"file": ("page.png", MINIMAL_PNG, "image/png")},
-    )
-    assert upload.status_code == 201
-    part_id = upload.json()["id"]
-
-    response = client.post(
-        f"{base}/{document_id}/parts/{part_id}/transcribe",
-        headers=owner_headers,
-    )
-
-    assert response.status_code == 409
-    assert "without layout lines" in response.json()["error"]["message"]

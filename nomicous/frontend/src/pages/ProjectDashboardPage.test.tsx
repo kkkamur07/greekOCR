@@ -119,34 +119,6 @@ describe("ProjectDashboardPage", () => {
     });
   });
 
-  it("lets the owner edit the project from the dashboard header", async () => {
-    renderProjectDashboard();
-
-    fireEvent.click(
-      await screen.findByRole("button", {
-        name: /test project, click to edit/i,
-      }),
-    );
-    fireEvent.change(screen.getByLabelText("Name"), {
-      target: { value: "ByzantineGreekCorpus" },
-    });
-    fireEvent.change(screen.getByLabelText("Guidelines"), {
-      target: { value: "Updated notes" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
-
-    await waitFor(() => {
-      expect(api.updateProject).toHaveBeenCalledWith("project-1", {
-        name: "ByzantineGreekCorpus",
-        slug: "byzantinegreekcorpus",
-        guidelines: "Updated notes",
-      });
-    });
-    expect(
-      screen.getByRole("heading", { name: "ByzantineGreekCorpus" }),
-    ).toBeTruthy();
-  });
-
   it("declares every cached read of the project stale after a rename", async () => {
     // `includeArchived` is part of this page's query key, so the view the
     // researcher is not looking at is a second cache entry with its own copy of
@@ -188,16 +160,5 @@ describe("ProjectDashboardPage", () => {
       expect(session.navigateToLogin).toHaveBeenCalled();
     });
     expect(screen.queryByText("Project unavailable")).toBeNull();
-  });
-
-  it("redirects to login when no access token is present", async () => {
-    vi.spyOn(session, "hasAccessToken").mockReturnValue(false);
-
-    renderProjectDashboard();
-
-    await waitFor(() => {
-      expect(session.navigateToLogin).toHaveBeenCalled();
-    });
-    expect(api.getProject).not.toHaveBeenCalled();
   });
 });

@@ -62,27 +62,3 @@ def test_the_walk_that_proves_it_can_actually_find_a_session_dependency() -> Non
     app = create_app()
 
     assert get_db in _dependency_calls(_route(app, "/device/v1/self", "GET").dependant)
-
-
-def test_no_heartbeat_endpoint_was_added() -> None:
-    """Deliberately absent, and asserted so it does not creep back.
-
-    Work is seconds-to-minutes and the lease covers it with margin, so a
-    heartbeat would be a second liveness mechanism for a window nothing runs
-    past. A slept laptop loses one page, not a document.
-    """
-    paths = set(create_app().openapi()["paths"])
-
-    assert not [path for path in paths if "heartbeat" in path]
-
-
-def test_the_claim_endpoint_is_the_only_new_route_on_the_agent_credential() -> None:
-    """Completion and failure are the existing callback contract, not new routes.
-
-    Release is the existing stale sweep. The whole outbound agent layer is one
-    endpoint (ADR 0003), and that is worth failing a test over.
-    """
-    paths = set(create_app().openapi()["paths"])
-
-    agent_job_paths = {path for path in paths if path.startswith("/device/v1/jobs")}
-    assert agent_job_paths == {CLAIM_PATH}

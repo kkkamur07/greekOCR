@@ -6,6 +6,7 @@ import { toast } from "../../components/ui/toast";
 import {
   DOCUMENT,
   flushPageEditorEffects,
+  line,
   mockedApi,
   renderPageEditor,
   resetPageEditorApiMocks,
@@ -23,44 +24,17 @@ describe("PageEditorPlaceholderPage transcription", () => {
   it("pairs a selected Segment to imported text lines and updates Pairing progress", async () => {
     mockedApi.getDocument.mockResolvedValue(DOCUMENT);
     mockedApi.listPartLines.mockResolvedValue([
-      {
-        id: "line-1",
-        part_id: "part-1",
-        block_id: null,
-        order: 0,
-        kind: "polygon",
-        points: [
-          [10, 10],
-          [50, 10],
-          [50, 30],
-          [10, 30],
-        ],
-        source: "manual",
-        source_metadata: null,
-        kraken_ceiling: null,
-        manual_geometry: true,
-        line_transcriptions: [],
-        created_at: "2026-06-16T10:00:00Z",
-      },
-      {
+      line(),
+      line({
         id: "line-2",
-        part_id: "part-1",
-        block_id: null,
         order: 1,
-        kind: "polygon",
         points: [
           [80, 20],
           [120, 20],
           [120, 50],
           [80, 50],
         ],
-        source: "manual",
-        source_metadata: null,
-        kraken_ceiling: null,
-        manual_geometry: true,
-        line_transcriptions: [],
-        created_at: "2026-06-16T10:00:00Z",
-      },
+      }),
     ]);
     mockedApi.getPagePairing.mockResolvedValue({
       text_lines: [
@@ -100,46 +74,7 @@ describe("PageEditorPlaceholderPage transcription", () => {
 
   it("saves typed approved text for the selected Segment and refreshes Pairing progress", async () => {
     mockedApi.getDocument.mockResolvedValue(DOCUMENT);
-    mockedApi.listPartLines.mockResolvedValue([
-      {
-        id: "line-1",
-        part_id: "part-1",
-        block_id: null,
-        order: 0,
-        kind: "polygon",
-        points: [
-          [10, 10],
-          [50, 10],
-          [50, 30],
-          [10, 30],
-        ],
-        source: "manual",
-        source_metadata: null,
-        kraken_ceiling: null,
-        manual_geometry: true,
-        line_transcriptions: [],
-        created_at: "2026-06-16T10:00:00Z",
-      },
-      {
-        id: "line-2",
-        part_id: "part-1",
-        block_id: null,
-        order: 1,
-        kind: "polygon",
-        points: [
-          [80, 20],
-          [120, 20],
-          [120, 50],
-          [80, 50],
-        ],
-        source: "manual",
-        source_metadata: null,
-        kraken_ceiling: null,
-        manual_geometry: true,
-        line_transcriptions: [],
-        created_at: "2026-06-16T10:00:00Z",
-      },
-    ]);
+    mockedApi.listPartLines.mockResolvedValue([line()]);
     mockedApi.getPagePairing
       .mockResolvedValueOnce({
         text_lines: [],
@@ -186,22 +121,7 @@ describe("PageEditorPlaceholderPage transcription", () => {
   it("switches to Transcription edit mode and saves Ground truth text for the selected Segment", async () => {
     mockedApi.getDocument.mockResolvedValue(DOCUMENT);
     mockedApi.listPartLines.mockResolvedValue([
-      {
-        id: "line-1",
-        part_id: "part-1",
-        block_id: null,
-        order: 0,
-        kind: "polygon",
-        points: [
-          [10, 10],
-          [50, 10],
-          [50, 30],
-          [10, 30],
-        ],
-        source: "manual",
-        source_metadata: null,
-        kraken_ceiling: null,
-        manual_geometry: true,
+      line({
         line_transcriptions: [
           {
             id: "line-tx-1",
@@ -220,8 +140,7 @@ describe("PageEditorPlaceholderPage transcription", () => {
             character_confidences: null,
           },
         ],
-        created_at: "2026-06-16T10:00:00Z",
-      },
+      }),
     ]);
     mockedApi.listTranscriptions.mockResolvedValue([
       {
@@ -296,88 +215,38 @@ describe("PageEditorPlaceholderPage transcription", () => {
         created_at: "2026-06-16T10:00:00Z",
       },
     ]);
-    mockedApi.listTranscriptions
-      .mockResolvedValueOnce([
-        {
-          id: "ground-truth-1",
-          document_id: "doc-1",
-          name: "Ground truth",
-          kind: "ground_truth",
-          created_by_job_id: null,
-          created_at: "2026-06-16T10:00:00Z",
-        },
-        {
-          id: "model-1",
-          document_id: "doc-1",
-          name: "Model layer",
-          kind: "model",
-          created_by_job_id: "job-old",
-          created_at: "2026-06-16T10:00:00Z",
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          id: "ground-truth-1",
-          document_id: "doc-1",
-          name: "Ground truth",
-          kind: "ground_truth",
-          created_by_job_id: null,
-          created_at: "2026-06-16T10:00:00Z",
-        },
-        {
-          id: "model-2",
-          document_id: "doc-1",
-          name: "Model layer 2",
-          kind: "model",
-          created_by_job_id: "job-new",
-          created_at: "2026-06-16T10:00:00Z",
-        },
-      ]);
-    const lineFixture = {
-      id: "line-1",
-      part_id: "part-1",
-      block_id: null,
-      order: 0,
-      kind: "polygon" as const,
-      points: [
-        [10, 10],
-        [50, 10],
-        [50, 30],
-        [10, 30],
-      ],
-      source: "manual" as const,
-      source_metadata: null,
-      kraken_ceiling: null,
-      manual_geometry: true,
-      line_transcriptions: [
-        {
-          id: "line-tx-model-1",
-          transcription_id: "model-1",
-          transcription_kind: "model" as const,
-          text: "old ocr",
-          confidence: 0.8,
-          character_confidences: null,
-        },
-      ],
-      created_at: "2026-06-16T10:00:00Z",
-    };
-    mockedApi.listPartLines
-      .mockResolvedValueOnce([lineFixture])
-      .mockResolvedValueOnce([
-        {
-          ...lineFixture,
-          line_transcriptions: [
-            {
-              id: "line-tx-model-2",
-              transcription_id: "model-2",
-              transcription_kind: "model" as const,
-              text: "fresh ocr",
-              confidence: 0.92,
-              character_confidences: null,
-            },
-          ],
-        },
-      ]);
+    mockedApi.listTranscriptions.mockResolvedValue([
+      {
+        id: "ground-truth-1",
+        document_id: "doc-1",
+        name: "Ground truth",
+        kind: "ground_truth",
+        created_by_job_id: null,
+        created_at: "2026-06-16T10:00:00Z",
+      },
+      {
+        id: "model-1",
+        document_id: "doc-1",
+        name: "Model layer",
+        kind: "model",
+        created_by_job_id: "job-old",
+        created_at: "2026-06-16T10:00:00Z",
+      },
+    ]);
+    mockedApi.listPartLines.mockResolvedValue([
+      line({
+        line_transcriptions: [
+          {
+            id: "line-tx-model-1",
+            transcription_id: "model-1",
+            transcription_kind: "model",
+            text: "old ocr",
+            confidence: 0.8,
+            character_confidences: null,
+          },
+        ],
+      }),
+    ]);
     mockedApi.enqueueTranscribePart.mockResolvedValue({ job_id: "job-ocr-1" });
     mockedApi.getJob.mockResolvedValue({
       id: "job-ocr-1",
@@ -421,190 +290,10 @@ describe("PageEditorPlaceholderPage transcription", () => {
     });
   });
 
-  it("shows model OCR review and saves the selected Segment to Ground truth", async () => {
-    mockedApi.getDocument.mockResolvedValue(DOCUMENT);
-    mockedApi.listPartLines.mockResolvedValue([
-      {
-        id: "line-1",
-        part_id: "part-1",
-        block_id: null,
-        order: 0,
-        kind: "polygon",
-        points: [
-          [10, 10],
-          [50, 10],
-          [50, 30],
-          [10, 30],
-        ],
-        source: "manual",
-        source_metadata: null,
-        kraken_ceiling: null,
-        manual_geometry: true,
-        line_transcriptions: [
-          {
-            id: "line-tx-model-1",
-            transcription_id: "model-1",
-            transcription_kind: "model",
-            text: "model suggestion",
-            confidence: 0.91,
-            character_confidences: null,
-          },
-        ],
-        created_at: "2026-06-16T10:00:00Z",
-      },
-    ]);
-    mockedApi.listTranscriptions.mockResolvedValue([
-      {
-        id: "ground-truth-1",
-        document_id: "doc-1",
-        name: "Ground truth",
-        kind: "ground_truth",
-        created_by_job_id: null,
-        created_at: "2026-06-16T10:00:00Z",
-      },
-      {
-        id: "model-1",
-        document_id: "doc-1",
-        name: "Kraken run",
-        kind: "model",
-        created_by_job_id: "job-1",
-        created_at: "2026-06-16T10:01:00Z",
-      },
-    ]);
-    mockedApi.getPagePairing
-      .mockResolvedValueOnce({
-        text_lines: [],
-        pairing_progress: { paired_lines: 0, total_lines: 1, percent: 0 },
-      })
-      .mockResolvedValueOnce({
-        text_lines: [],
-        pairing_progress: { paired_lines: 1, total_lines: 1, percent: 100 },
-      });
-
-    renderPageEditor();
-
-    fireEvent.click(
-      await screen.findByRole("button", { name: /transcription edit/i }),
-    );
-    fireEvent.click(screen.getByLabelText(/^Segment 1/));
-
-    expect(screen.getByText("Model output:")).toBeTruthy();
-    expect(
-      screen.getByLabelText("OCR model output for segment 1"),
-    ).toBeTruthy();
-    fireEvent.change(
-      screen.getByLabelText(/approved text for selected segment/i),
-      {
-        target: { value: "model suggestion" },
-      },
-    );
-    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
-
-    await waitFor(() => {
-      expect(mockedApi.updateGroundTruthLineText).toHaveBeenLastCalledWith(
-        "project-1",
-        "doc-1",
-        "ground-truth-1",
-        "line-1",
-        { text: "model suggestion" },
-      );
-    });
-  });
-
-  it("ignores stale text source metadata on ground truth", async () => {
-    mockedApi.getDocument.mockResolvedValue(DOCUMENT);
-    mockedApi.listPartLines.mockResolvedValue([
-      {
-        id: "line-1",
-        part_id: "part-1",
-        block_id: null,
-        order: 0,
-        kind: "polygon",
-        points: [
-          [10, 10],
-          [50, 10],
-          [50, 30],
-          [10, 30],
-        ],
-        source: "manual",
-        source_metadata: null,
-        kraken_ceiling: null,
-        manual_geometry: true,
-        line_transcriptions: [
-          {
-            id: "line-tx-ground-1",
-            transcription_id: "ground-truth-1",
-            transcription_kind: "ground_truth",
-            text: "model suggestion",
-            confidence: null,
-          },
-          {
-            id: "line-tx-model-1",
-            transcription_id: "model-1",
-            transcription_kind: "model",
-            text: "model suggestion",
-            confidence: 0.91,
-            character_confidences: [
-              { char: "m", confidence: 0.95 },
-              { char: "o", confidence: 0.62 },
-            ],
-          },
-        ],
-        created_at: "2026-06-16T10:00:00Z",
-      },
-    ]);
-    mockedApi.listTranscriptions.mockResolvedValue([
-      {
-        id: "ground-truth-1",
-        document_id: "doc-1",
-        name: "Ground truth",
-        kind: "ground_truth",
-        created_by_job_id: null,
-        created_at: "2026-06-16T10:00:00Z",
-      },
-      {
-        id: "model-1",
-        document_id: "doc-1",
-        name: "Kraken run",
-        kind: "model",
-        created_by_job_id: "job-1",
-        created_at: "2026-06-16T10:01:00Z",
-      },
-    ]);
-
-    renderPageEditor();
-
-    fireEvent.click(
-      await screen.findByRole("button", { name: /transcription edit/i }),
-    );
-    fireEvent.click(screen.getByLabelText(/^Segment 1/));
-
-    expect(screen.getByText("Model output:")).toBeTruthy();
-    expect(
-      screen.getByLabelText("OCR model output for segment 1"),
-    ).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /accept/i })).toBeNull();
-  });
-
   it("surfaces Ground truth save API errors and keeps the typed text visible", async () => {
     mockedApi.getDocument.mockResolvedValue(DOCUMENT);
     mockedApi.listPartLines.mockResolvedValue([
-      {
-        id: "line-1",
-        part_id: "part-1",
-        block_id: null,
-        order: 0,
-        kind: "polygon",
-        points: [
-          [10, 10],
-          [50, 10],
-          [50, 30],
-          [10, 30],
-        ],
-        source: "manual",
-        source_metadata: null,
-        kraken_ceiling: null,
-        manual_geometry: true,
+      line({
         line_transcriptions: [
           {
             id: "line-tx-1",
@@ -615,8 +304,7 @@ describe("PageEditorPlaceholderPage transcription", () => {
             character_confidences: null,
           },
         ],
-        created_at: "2026-06-16T10:00:00Z",
-      },
+      }),
     ]);
     mockedApi.updateGroundTruthLineText.mockRejectedValue(
       new ApiError("Only Ground truth transcriptions can be edited.", 400),

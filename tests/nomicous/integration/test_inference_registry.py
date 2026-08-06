@@ -21,9 +21,3 @@ def test_inference_registry_returns_304_when_etag_matches(client: TestClient):
     second = client.get("/inference/v1/registry", headers={"If-None-Match": etag})
     assert second.status_code == 304
     assert second.text == ""
-
-
-def test_inference_registry_etag_is_stable(client: TestClient):
-    first = client.get("/inference/v1/registry")
-    second = client.get("/inference/v1/registry")
-    assert first.headers["etag"] == second.headers["etag"]

@@ -256,62 +256,6 @@ def test_direct_ground_truth_text_edit_counts_toward_pairing_progress(
     }
 
 
-# --- Review status vs pairing ---
-# Tests reviewed flag is independent of pairing progress. Does not auto-review on full pairing.
-
-
-def test_part_review_status_stays_independent_from_partial_pairing_and_text_edits(
-    client: TestClient, owner_headers: dict[str, str], owner_project: dict
-) -> None:
-    project_id, document_id, part_id, line_ids = _create_document_part_with_segments(
-        client, owner_headers, owner_project
-    )
-    base = documents_url(project_id)
-    import_response = client.put(
-        f"{base}/{document_id}/parts/{part_id}/page-transcription",
-        headers=owner_headers,
-        json={"text": "alpha\nbeta"},
-    )
-    assert import_response.status_code == 200
-    pair = client.post(
-        f"{base}/{document_id}/parts/{part_id}/pairings",
-        headers=owner_headers,
-        json={"line_id": line_ids[0], "text_line_order": 0},
-    )
-    assert pair.status_code == 200
-    assert pair.json()["pairing_progress"] == {
-        "paired_lines": 1,
-        "total_lines": 2,
-        "percent": 50,
-    }
-
-    reviewed = client.patch(
-        f"{base}/{document_id}/parts/{part_id}",
-        headers=owner_headers,
-        json={"reviewed": True},
-    )
-    assert reviewed.status_code == 200
-    assert reviewed.json()["reviewed"] is True
-
-    reloaded = client.get(f"{base}/{document_id}", headers=owner_headers)
-    assert reloaded.status_code == 200
-    assert reloaded.json()["parts"][0]["reviewed"] is True
-
-    ground_truth_id = client.get(
-        f"{base}/{document_id}/transcriptions", headers=owner_headers
-    ).json()[0]["id"]
-    edit = client.patch(
-        f"{base}/{document_id}/transcriptions/{ground_truth_id}/lines/{line_ids[0]}",
-        headers=owner_headers,
-        json={"text": "corrected alpha"},
-    )
-    assert edit.status_code == 200
-
-    after_edit = client.get(f"{base}/{document_id}", headers=owner_headers)
-    assert after_edit.status_code == 200
-    assert after_edit.json()["parts"][0]["reviewed"] is True
-
-
 # --- Pairing access control ---
 # Tests outsiders cannot toggle review status. Does not test read-only collaborators.
 

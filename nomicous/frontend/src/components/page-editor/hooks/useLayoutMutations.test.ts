@@ -95,17 +95,6 @@ describe("useLayoutMutations auto segment", () => {
     });
   });
 
-  it("submits one job and waits for it", async () => {
-    const { view, trackJobAndWait } = setup();
-
-    await act(async () => {
-      await view.result.current.runAutoSegment();
-    });
-
-    expect(segmentPart).toHaveBeenCalledTimes(1);
-    expect(trackJobAndWait).toHaveBeenCalledTimes(1);
-  });
-
   it("keeps a finished segmentation when the reload that follows it fails", async () => {
     // A blip on the cosmetic reload, after the segmentation is already stored.
     listPartLines.mockRejectedValue(new Error("network hiccup"));

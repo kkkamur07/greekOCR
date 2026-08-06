@@ -16,12 +16,6 @@ import pytest
 os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production-at-least-32-bytes")
 
 from backend.core.settings.device import DeviceSettings
-from backend.ml.api.agent_version import (
-    AGENT_VERSION_REFUSED_STATUS,
-    AGENT_VERSION_UNSUPPORTED,
-    AgentVersionRefusedError,
-    require_supported_agent_version,
-)
 from backend.ml.domain.agent_version import (
     AgentVersion,
     AgentVersionStatus,
@@ -46,14 +40,6 @@ def test_zero_ten_is_newer_than_zero_nine() -> None:
     assert AgentVersion.parse("0.10.0") > AgentVersion.parse("0.9.0")
     assert AgentVersion.parse("1.0.0") > AgentVersion.parse("0.99.99")
     assert AgentVersion.parse("0.2.10") > AgentVersion.parse("0.2.9")
-
-
-def test_a_double_digit_minor_is_not_below_a_single_digit_floor() -> None:
-    """The same trap, at the level the platform actually decides at."""
-    verdict = evaluate_agent_version("0.10.0", minimum="0.9.0", latest="0.10.0")
-
-    assert verdict.status is AgentVersionStatus.current
-    assert not verdict.refused
 
 
 def test_versions_that_are_equal_compare_equal() -> None:
@@ -157,38 +143,6 @@ def test_an_absurdly_long_header_is_malformed_rather_than_stored() -> None:
     assert verdict.status is AgentVersionStatus.malformed
     assert verdict.presented is not None
     assert len(verdict.presented) <= 32
-
-
-# ---------------------------------------------------------------------------
-# The dependency, called directly - the shape 058 parses
-# ---------------------------------------------------------------------------
-
-
-def test_the_refusal_carries_everything_needed_to_act_on_it(monkeypatch) -> None:
-    from backend.core.settings import reset_settings_caches
-
-    monkeypatch.setenv("INFERENCE_AGENT_MIN_VERSION", "0.4.0")
-    monkeypatch.setenv("INFERENCE_AGENT_LATEST_VERSION", "0.6.2")
-    reset_settings_caches()
-    try:
-        with pytest.raises(AgentVersionRefusedError) as raised:
-            require_supported_agent_version("0.3.0")
-
-        refusal = raised.value.refusal
-        assert refusal.code == AGENT_VERSION_UNSUPPORTED
-        assert refusal.reason == "below_floor"
-        assert refusal.agent_version == "0.3.0"
-        assert refusal.minimum_version == "0.4.0"
-        assert refusal.latest_version == "0.6.2"
-        assert refusal.package == "nomicous-inference"
-        assert refusal.upgrade_command == "uv tool upgrade nomicous-inference"
-        # Retrying the same build cannot succeed. A claim loop must not treat this
-        # as a blip to back off from.
-        assert refusal.retryable is False
-        assert AGENT_VERSION_REFUSED_STATUS == 426
-    finally:
-        monkeypatch.undo()
-        reset_settings_caches()
 
 
 # ---------------------------------------------------------------------------

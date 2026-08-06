@@ -3,13 +3,21 @@
 import pytest
 from inference.contracts import ComputeDevice, InferenceTask, RegistryArchitecture
 from inference.registry import RegistryVersionEntry, get_model_entry, load_registry
-from inference.weights import DEFAULT_WEIGHTS_ROOT, resolve_weights_source
+from inference.weights import resolve_weights_source
 
 # --- registry.yaml entries ---
 # Tests bundled model metadata loads correctly. Does not run inference.
 
 
 def test_registry_yaml_validates_model_entries():
+    """The schema each entry must satisfy, not the values one publish happened to have.
+
+    The literal ``hub_revision`` and ``artifact_sha256`` this used to inline made a
+    legitimate model republish a test edit. What the digests are actually *worth* is
+    checked against real bytes by ``test_onnx_runtime.py::
+    test_the_registry_pins_the_digest_of_the_artifact_the_loader_opens``; here only
+    their presence and shape matter.
+    """
     registry = load_registry()
 
     syriac = get_model_entry(registry, "syriac-calamari-v1", "stable")
@@ -18,23 +26,16 @@ def test_registry_yaml_validates_model_entries():
     assert syriac.device == ComputeDevice.cpu
     assert syriac.host_eligibility.value == "local"
     assert syriac.versions["stable"].weights_source.startswith("hf://")
-    assert syriac.versions["stable"].hub_revision == "5ff715e873f1ae3f325ebea4d2c4a95eb5094601"
-    assert (
-        syriac.versions["stable"].artifact_sha256
-        == "3cb01b58be5809032318c717c079a5b681a87074a372ea4334b9767c67ce301c"
-    )
-    assert "greek-calamari-v1" not in registry.models
+    assert len(syriac.versions["stable"].hub_revision) == 40
+    assert len(syriac.versions["stable"].artifact_sha256) == 64
 
     blla = get_model_entry(registry, "blla-segment", "stable")
     assert blla.task == InferenceTask.segment
     assert blla.architecture == RegistryArchitecture.blla
     assert blla.device == ComputeDevice.cpu
-    assert blla.versions["stable"].weights_source == "hf://kkkamur07/segmentation-blla@stable"
-    assert (
-        blla.versions["stable"].artifact_sha256
-        == "d3e9c086541157a2f55209bc4802206478231e7637c12ee4884504f94d6c4ed3"
-    )
-    assert blla.versions["stable"].hub_revision == "5c20a584b39988a25dfc682f9fe634ac1b4a42dd"
+    assert blla.versions["stable"].weights_source.startswith("hf://")
+    assert len(blla.versions["stable"].hub_revision) == 40
+    assert len(blla.versions["stable"].artifact_sha256) == 64
 
 
 # --- Weight path resolution ---
@@ -49,24 +50,10 @@ def test_registry_rejects_partial_hf_provenance():
         )
 
 
-def test_blla_rejects_digest_mismatch_before_runtime_load(tmp_path):
-    """The digest is checked before onnxruntime opens the file.
-
-    The artifact here is deliberately not a valid graph: if the ordering were
-    reversed, this would fail with a parse error from the loader instead of the
-    mismatch, so the assertion distinguishes the two.
-    """
-    from inference.architectures.blla.blla import run_blla_segment
-
-    model_path = tmp_path / "blla.onnx"
-    model_path.write_bytes(b"not a graph, and never opened")
-
-    with pytest.raises(ValueError, match="artifact SHA-256 mismatch"):
-        run_blla_segment(
-            b"not-read-after-integrity-failure",
-            model_path=model_path,
-            artifact_sha256="0" * 64,
-        )
+# `test_blla_rejects_digest_mismatch_before_runtime_load` stood here. The same ordering
+# claim -- digest before open, integrity failure rather than a parse error -- is
+# `test_architecture_contract.py::test_corrupt_artifact_is_a_service_error_not_a_client_error`,
+# which runs it over both architectures instead of BLLA alone.
 
 
 # --- Path safety ---
@@ -81,6 +68,7 @@ def test_weights_source_rejects_paths_outside_ml_root():
         resolve_weights_source("file://../pyproject.toml")
 
 
-def test_interim_weights_layout():
-    assert DEFAULT_WEIGHTS_ROOT.name == "weights"
-    assert (DEFAULT_WEIGHTS_ROOT / "kraken").is_dir()
+# `test_interim_weights_layout` stood here and asserted `inference/weights/kraken/` is a
+# directory. pyproject.toml calls that tree an empty placeholder from the pre-Hub weights
+# layout and excludes its `.gitkeep` from the wheel; `DEFAULT_WEIGHTS_ROOT` has no
+# production caller.

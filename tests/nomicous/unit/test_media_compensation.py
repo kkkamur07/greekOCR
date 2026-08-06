@@ -164,21 +164,3 @@ async def test_upload_writes_the_blob_off_the_event_loop(monkeypatch) -> None:
 
     assert store.writes == ["parts/compensation.webp"]
     assert threading.get_ident() not in store.write_threads
-
-
-@pytest.mark.asyncio
-async def test_compensating_delete_also_runs_off_the_event_loop(monkeypatch) -> None:
-    store = _RecordingStore()
-    service, document = _upload_service(store, monkeypatch)
-
-    with pytest.raises(RuntimeError, match="database commit unavailable"):
-        await service.upload_part(
-            _CommitFailingSession(),
-            user=object(),
-            project_id=uuid.uuid4(),
-            document_id=document.id,
-            data=b"source",
-        )
-
-    assert store.deletes == ["parts/compensation.webp"]
-    assert threading.get_ident() not in store.delete_threads

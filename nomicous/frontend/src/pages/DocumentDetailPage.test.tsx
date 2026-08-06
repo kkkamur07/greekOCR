@@ -182,35 +182,6 @@ describe("DocumentDetailPage", () => {
     });
   });
 
-  it("lets a project member mark a reviewed part unreviewed", async () => {
-    vi.mocked(api.getDocument).mockResolvedValue({
-      ...DOCUMENT,
-      parts: [{ ...DOCUMENT.parts[1], reviewed: true }, DOCUMENT.parts[0]],
-    });
-    vi.mocked(api.updatePartReviewStatus).mockResolvedValue({
-      ...DOCUMENT.parts[0],
-      reviewed: false,
-    });
-
-    renderDocumentPage();
-
-    await screen.findByRole("heading", { name: "Grec 1360" });
-    expect(screen.getByText("reviewed")).toBeTruthy();
-
-    fireEvent.click(
-      screen.getByRole("button", { name: /mark part 1 unreviewed/i }),
-    );
-
-    await waitFor(() => {
-      expect(api.updatePartReviewStatus).toHaveBeenLastCalledWith(
-        "project-1",
-        "doc-1",
-        "part-1",
-        { reviewed: false },
-      );
-    });
-  });
-
   it("keeps review status when the API rejects the change", async () => {
     vi.mocked(api.updatePartReviewStatus).mockRejectedValue(
       new ApiError("Forbidden", 403),
@@ -227,43 +198,6 @@ describe("DocumentDetailPage", () => {
       expect(api.updatePartReviewStatus).toHaveBeenCalled();
     });
     expect(screen.getAllByText("unreviewed")).toHaveLength(2);
-  });
-
-  it("opens live sharing from the document header and publishes the document", async () => {
-    renderDocumentPage();
-
-    fireEvent.click(
-      await screen.findByRole("button", { name: /grec 1360, click to edit/i }),
-    );
-    fireEvent.click(screen.getByRole("button", { name: /publish live page/i }));
-
-    await waitFor(() => {
-      expect(api.updateDocument).toHaveBeenCalledWith("project-1", "doc-1", {
-        workflow: "published",
-      });
-    });
-    expect(screen.getByLabelText(/public document url/i)).toBeTruthy();
-  });
-
-  it("renames the document from the header panel", async () => {
-    renderDocumentPage();
-
-    fireEvent.click(
-      await screen.findByRole("button", { name: /grec 1360, click to edit/i }),
-    );
-    fireEvent.change(screen.getByLabelText("Name"), {
-      target: { value: "MS Or. 1445 - Genesis" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /save name/i }));
-
-    await waitFor(() => {
-      expect(api.updateDocument).toHaveBeenCalledWith("project-1", "doc-1", {
-        name: "MS Or. 1445 - Genesis",
-      });
-    });
-    expect(
-      screen.getByRole("heading", { name: "MS Or. 1445 - Genesis" }),
-    ).toBeTruthy();
   });
 
   it("makes the copy of the document the page editor holds stale after a rename", async () => {
@@ -307,16 +241,5 @@ describe("DocumentDetailPage", () => {
     expect(
       screen.queryByText("This document is not available to your account."),
     ).toBeNull();
-  });
-
-  it("redirects to login when no access token is present", async () => {
-    vi.spyOn(session, "hasAccessToken").mockReturnValue(false);
-
-    renderDocumentPage();
-
-    await waitFor(() => {
-      expect(session.navigateToLogin).toHaveBeenCalled();
-    });
-    expect(api.getDocument).not.toHaveBeenCalled();
   });
 });

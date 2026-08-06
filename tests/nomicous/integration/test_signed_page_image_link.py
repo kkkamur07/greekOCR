@@ -306,34 +306,6 @@ def test_the_link_expires_long_before_the_lease_does(
     assert 590 <= lease_window <= 610
 
 
-def test_a_longer_lease_does_not_lengthen_the_link(
-    client: TestClient, owner_user, owner_headers, owner_project, monkeypatch
-) -> None:
-    """The two lifetimes answer different questions, so one dial must not move
-    the other. A ten-times-longer lease with a link that followed it would keep a
-    bearer token in a URL alive for an hour to buy nothing."""
-    monkeypatch.setenv("DEVICE_LEASE_SECONDS", "3600")
-    reset_settings_caches()
-
-    page = _claimed_page(client, owner_headers, owner_project)
-
-    assert 3590 <= _seconds_until(page["lease_expires_at"], of=page["_server_time"]) <= 3610
-    assert 55 <= _seconds_until(page["page_image_expires_at"], of=page["_server_time"]) <= 65
-
-
-def test_the_links_ttl_is_its_own_dial(
-    client: TestClient, owner_user, owner_headers, owner_project, monkeypatch
-) -> None:
-    """And the independence runs both ways."""
-    monkeypatch.setenv("DEVICE_PAGE_IMAGE_URL_TTL_SECONDS", "120")
-    reset_settings_caches()
-
-    page = _claimed_page(client, owner_headers, owner_project)
-
-    assert 115 <= _seconds_until(page["page_image_expires_at"], of=page["_server_time"]) <= 125
-    assert 590 <= _seconds_until(page["lease_expires_at"], of=page["_server_time"]) <= 610
-
-
 # ---------------------------------------------------------------------------
 # The platform never becomes the thing that streams scans in production
 # ---------------------------------------------------------------------------

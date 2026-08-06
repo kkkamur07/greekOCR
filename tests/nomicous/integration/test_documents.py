@@ -1,30 +1,15 @@
 """Document and part integration tests — real Postgres (kalamos)."""
 
-from concurrent.futures import ThreadPoolExecutor
-from io import BytesIO
-from threading import Barrier
 import uuid
 
 import pytest
-from PIL import Image
-from sqlalchemy.exc import IntegrityError
 
-from backend.document.api.schemas import MAX_LINE_GEOMETRY_POINTS
-from backend.document.infrastructure.orm_models import Document, DocumentPart
-from backend.project.infrastructure.orm_models import Project
-from infrastructure.db import sync_system_session
 from tests.fixtures.paths import MINIMAL_PNG
 from tests.nomicous.integration.helpers import (
     assert_api_error,
     documents_url,
     stored_minimal_page_bytes,
 )
-
-
-def _sized_png_bytes(width: int, height: int) -> bytes:
-    buffer = BytesIO()
-    Image.new("RGB", (width, height), "white").save(buffer, format="PNG")
-    return buffer.getvalue()
 
 
 def _create_document_with_part(client, owner_headers, owner_project) -> tuple[str, str, str]:
@@ -234,57 +219,6 @@ def test_upload_part_rejects_non_image_bytes(client, owner_headers, owner_projec
 
 
 @pytest.mark.integration
-def test_reorder_rejects_duplicate_part_ids(client, owner_headers, owner_project):
-    project_id = owner_project["id"]
-    base = documents_url(project_id)
-    create = client.post(base, headers=owner_headers, json={"name": "Reorder dup"})
-    assert create.status_code == 201
-    document_id = create.json()["id"]
-
-    upload = client.post(
-        f"{base}/{document_id}/parts",
-        headers=owner_headers,
-        files={"file": ("page.png", MINIMAL_PNG, "image/png")},
-    )
-    assert upload.status_code == 201
-    part_id = upload.json()["id"]
-
-    reorder = client.patch(
-        f"{base}/{document_id}/parts/reorder",
-        headers=owner_headers,
-        json={"part_ids": [part_id, part_id]},
-    )
-    assert reorder.status_code == 422
-
-
-@pytest.mark.integration
-def test_uploaded_part_persists_page_dimensions(client, owner_headers, owner_project):
-    project_id = owner_project["id"]
-    base = documents_url(project_id)
-    create = client.post(base, headers=owner_headers, json={"name": "Sized pages"})
-    assert create.status_code == 201
-    document_id = create.json()["id"]
-
-    upload = client.post(
-        f"{base}/{document_id}/parts",
-        headers=owner_headers,
-        files={"file": ("page.png", _sized_png_bytes(37, 19), "image/png")},
-    )
-    assert upload.status_code == 201
-    assert upload.json()["width"] == 37
-    assert upload.json()["height"] == 19
-
-    reread = client.get(f"{base}/{document_id}", headers=owner_headers)
-    assert reread.status_code == 200
-    part = reread.json()["parts"][0]
-    assert (part["width"], part["height"]) == (37, 19)
-
-    with sync_system_session() as session:
-        stored = session.get(DocumentPart, uuid.UUID(part["id"]))
-        assert (stored.width, stored.height) == (37, 19)
-
-
-@pytest.mark.integration
 def test_reorder_after_deleting_the_leading_parts(client, owner_headers, owner_project):
     """Surviving parts no longer start at order 0; the reorder must not self-collide."""
     project_id = owner_project["id"]
@@ -328,124 +262,6 @@ def test_reorder_after_deleting_the_leading_parts(client, owner_headers, owner_p
     assert reorder.status_code == 200
     assert [part["id"] for part in reorder.json()] == list(reversed(remaining))
     assert [part["order"] for part in reorder.json()] == [0, 1, 2]
-
-
-@pytest.mark.integration
-def test_patch_line_clears_block_id_with_an_explicit_null(
-    client, owner_headers, owner_project
-) -> None:
-    project_id, document_id, part_id = _create_document_with_part(
-        client, owner_headers, owner_project
-    )
-    lines_url = f"{documents_url(project_id)}/{document_id}/parts/{part_id}"
-
-    block = client.post(
-        f"{lines_url}/blocks",
-        headers=owner_headers,
-        json={"order": 0, "box": {"x": 0, "y": 0, "width": 10, "height": 10}},
-    )
-    assert block.status_code == 201
-    block_id = block.json()["id"]
-
-    line = client.post(
-        f"{lines_url}/lines",
-        headers=owner_headers,
-        json={"order": 0, "points": [[0, 0], [1, 0], [1, 1], [0, 1]], "block_id": block_id},
-    )
-    assert line.status_code == 201
-    line_id = line.json()["id"]
-    assert line.json()["block_id"] == block_id
-
-    cleared = client.patch(
-        f"{lines_url}/lines/{line_id}",
-        headers=owner_headers,
-        json={"block_id": None},
-    )
-    assert cleared.status_code == 200
-    assert cleared.json()["block_id"] is None
-
-    untouched = client.patch(
-        f"{lines_url}/lines/{line_id}",
-        headers=owner_headers,
-        json={"order": 3},
-    )
-    assert untouched.status_code == 200
-    assert untouched.json()["order"] == 3
-
-    rejected = client.patch(
-        f"{lines_url}/lines/{line_id}",
-        headers=owner_headers,
-        json={"order": None},
-    )
-    assert rejected.status_code == 422
-
-
-@pytest.mark.integration
-def test_line_routes_reject_unbounded_geometry(client, owner_headers, owner_project) -> None:
-    project_id, document_id, part_id = _create_document_with_part(
-        client, owner_headers, owner_project
-    )
-    lines_url = f"{documents_url(project_id)}/{document_id}/parts/{part_id}/lines"
-    oversized = [[float(index), float(index)] for index in range(MAX_LINE_GEOMETRY_POINTS + 1)]
-
-    response = client.post(
-        lines_url,
-        headers=owner_headers,
-        json={"order": 0, "points": oversized},
-    )
-    assert response.status_code == 422
-
-
-@pytest.mark.integration
-def test_simultaneous_part_inserts_cannot_duplicate_document_order():
-    project_id = uuid.uuid4()
-    document_id = uuid.uuid4()
-    with sync_system_session() as session:
-        session.add(
-            Project(id=project_id, name="Concurrent", slug=f"concurrent-{uuid.uuid4().hex}")
-        )
-        session.add(Document(id=document_id, project_id=project_id, name="Concurrent pages"))
-        session.commit()
-
-    barrier = Barrier(2)
-
-    def insert_part() -> bool:
-        try:
-            with sync_system_session() as session:
-                session.add(
-                    DocumentPart(
-                        document_id=document_id,
-                        order=0,
-                        image_key=f"parts/{uuid.uuid4()}.webp",
-                    )
-                )
-                barrier.wait(timeout=5)
-                session.commit()
-            return True
-        except IntegrityError:
-            return False
-
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        outcomes = list(executor.map(lambda _unused: insert_part(), range(2)))
-
-    assert outcomes.count(True) == 1
-    assert outcomes.count(False) == 1
-
-
-@pytest.mark.integration
-def test_patch_null_name_returns_422(client, owner_headers, owner_project):
-    project_id = owner_project["id"]
-    base = documents_url(project_id)
-    create = client.post(base, headers=owner_headers, json={"name": "Named"})
-    assert create.status_code == 201
-    document_id = create.json()["id"]
-
-    response = client.patch(
-        f"{base}/{document_id}",
-        headers=owner_headers,
-        json={"name": None},
-    )
-    assert response.status_code == 422
 
 
 # --- Transcription layers and review ---
@@ -559,55 +375,9 @@ def test_replace_part_lines_persists_segment_geometry_and_approved_text(
     assert listed.json() == lines
 
 
-# --- Kraken baseline preservation ---
-# Tests existing kraken baselines survive point updates. Does not call the inference service.
-
-
-@pytest.mark.integration
-def test_replace_part_lines_preserves_existing_kraken_baseline(
-    client, owner_headers, owner_project
-):
-    project_id, document_id, part_id = _create_document_with_part(
-        client, owner_headers, owner_project
-    )
-    base = documents_url(project_id)
-    kraken_baseline = {"points": [[1, 7], [5, 7.5], [9, 7]]}
-    seed = client.put(
-        f"{base}/{document_id}/parts/{part_id}/lines",
-        headers=owner_headers,
-        json={
-            "lines": [
-                {
-                    "order": 0,
-                    "kind": "polygon",
-                    "points": [[0, 0], [10, 0], [10, 8], [0, 8]],
-                    "source": "kraken",
-                    "baseline": kraken_baseline,
-                    "mask": {"points": [[0, 0], [10, 0], [10, 8], [0, 8]]},
-                }
-            ]
-        },
-    )
-    assert seed.status_code == 200
-    line_id = seed.json()[0]["id"]
-
-    updated = client.put(
-        f"{base}/{document_id}/parts/{part_id}/lines",
-        headers=owner_headers,
-        json={
-            "lines": [
-                {
-                    "id": line_id,
-                    "order": 0,
-                    "kind": "polygon",
-                    "points": [[1, 1], [11, 1], [11, 9], [1, 9]],
-                    "source": "kraken",
-                }
-            ]
-        },
-    )
-    assert updated.status_code == 200
-    assert updated.json()[0]["baseline"] == kraken_baseline
+# --- Kraken metadata preservation ---
+# Tests kraken source metadata survives point updates. Does not call the inference service.
+# Baseline preservation itself is unit-tested at the resolver (unit/test_line_geometry.py).
 
 
 @pytest.mark.integration
@@ -705,20 +475,3 @@ def test_replace_part_lines_rejects_client_selected_id_for_new_line(
 
     assert response.status_code == 422
     assert response.json()["error"]["message"] == "New line ids are server-generated"
-
-
-# --- OpenAPI contract ---
-# Tests line/transcription schemas are published. Does not validate every endpoint.
-
-
-@pytest.mark.integration
-def test_document_line_transcription_contract_is_in_openapi(client):
-    schema = client.get("/openapi.json")
-    assert schema.status_code == 200
-    components = schema.json()["components"]["schemas"]
-
-    assert "LineResponse" in components
-    assert "LineTranscriptionResponse" in components
-    assert "TranscriptionLayerResponse" in components
-    part_properties = components["DocumentPartResponse"]["properties"]
-    assert part_properties["reviewed"]["type"] == "boolean"

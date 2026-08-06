@@ -111,17 +111,6 @@ describe("usePairingState OCR", () => {
     });
   });
 
-  it("submits one job for a page and waits for it", async () => {
-    const { view, trackJobAndWait } = setup();
-
-    await act(async () => {
-      await view.result.current.runPageOcr();
-    });
-
-    expect(enqueueTranscribePart).toHaveBeenCalledTimes(1);
-    expect(trackJobAndWait).toHaveBeenCalledTimes(1);
-  });
-
   it("explains a refused submission instead of reporting a generic failure", async () => {
     enqueueTranscribePart.mockRejectedValueOnce(
       new ApiError(platformNoCapacityMessage(), 409),

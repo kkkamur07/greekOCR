@@ -21,24 +21,22 @@ substitution for anything under test. They are built from the repository's own
 package cannot both be the checked-in version - the *code* in them is this
 repository's. And they declare no dependencies, so the resolver never leaves the
 local index; whether the published closure resolves is
-`test_published_package.py`'s question, and answering it here would download
-Torch twice per test.
+`test_published_package.py`'s question, and answering it here would download the
+whole thing twice per test.
 
-Uses its own database (`kalamos_058_upgrade`) for the same reason
-`test_cli_pairing.py` does: servers are held open across the module.
+The scaffolding all three CLI integration modules share - Postgres, alembic,
+uvicorn, the hand-rolled HTTP client - is in
+`tests/inference/integration/conftest.py`. This module keeps its own database
+(`kalamos_058_upgrade`) for the same reason `test_cli_pairing.py` does: servers
+are held open across it.
 """
 
 from __future__ import annotations
 
-import json
 import os
 import shutil
-import socket
 import subprocess
 import sys
-import time
-import urllib.error
-import urllib.request
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -46,14 +44,20 @@ from pathlib import Path
 import pytest
 
 from tests.fixtures.paths import REPO_ROOT
+from tests.inference.integration.conftest import (
+    free_port,
+    http_request,
+    migrate_database,
+    require_uv,
+    start_platform,
+    stop_platform,
+    wait_for_http,
+)
 
 pytestmark = pytest.mark.integration
 
 DATABASE = "kalamos_058_upgrade"
-POSTGRES_DSN = "postgresql://postgres:dev@localhost:5433"
-APP_ORIGIN = "https://app.nomicous.test"
 
-SERVER_START_TIMEOUT_SECONDS = 60.0
 CLI_TIMEOUT_SECONDS = 300.0
 
 PACKAGE = "nomicous-inference"
@@ -65,8 +69,6 @@ AGENT_NEW = "0.9.0"
 # Above everything the index has, so a floor set here is one no upgrade can
 # reach - which is how the failure path is provoked without breaking the index.
 BEYOND_INDEX = "1.5.0"
-
-FLOOR_PATH = "/device/v1/agent/version"
 
 _PYPROJECT = """\
 [project]
@@ -88,19 +90,6 @@ packages = ["inference"]
 """
 
 
-def _free_port() -> int:
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        return probe.getsockname()[1]
-
-
-def _uv() -> str:
-    executable = shutil.which("uv")
-    if executable is None:
-        pytest.skip("uv is required to build the wheels this module upgrades between")
-    return executable
-
-
 # ---------------------------------------------------------------------------
 # A real package index: two wheels, PEP 503 layout, served over HTTP
 # ---------------------------------------------------------------------------
@@ -111,7 +100,7 @@ def local_index(tmp_path_factory: pytest.TempPathFactory) -> str:
     Session-scoped because it is two wheel builds and one HTTP server, and every
     test in the module resolves against the same index.
     """
-    uv = _uv()
+    uv = require_uv()
     workspace = tmp_path_factory.mktemp("index")
     source = workspace / "package"
     shutil.copytree(
@@ -143,7 +132,7 @@ def local_index(tmp_path_factory: pytest.TempPathFactory) -> str:
         f'<!DOCTYPE html><html><body><a href="{PACKAGE}/">{PACKAGE}</a></body></html>\n'
     )
 
-    port = _free_port()
+    port = free_port()
     server = subprocess.Popen(
         [
             sys.executable,
@@ -160,7 +149,7 @@ def local_index(tmp_path_factory: pytest.TempPathFactory) -> str:
     )
     index_url = f"http://127.0.0.1:{port}/simple/"
     try:
-        _wait_for(server, f"{index_url}{PACKAGE}/", "the local package index")
+        wait_for_http(server, f"{index_url}{PACKAGE}/", what="the local package index")
         yield index_url
     finally:
         server.terminate()
@@ -170,77 +159,27 @@ def local_index(tmp_path_factory: pytest.TempPathFactory) -> str:
             server.kill()
 
 
-def _wait_for(process: subprocess.Popen, url: str, what: str) -> None:
-    deadline = time.monotonic() + SERVER_START_TIMEOUT_SECONDS
-    while time.monotonic() < deadline:
-        if process.poll() is not None:
-            raise AssertionError(f"{what} exited before serving")
-        try:
-            with urllib.request.urlopen(url, timeout=2) as response:
-                if response.status == 200:
-                    return
-        except (urllib.error.URLError, TimeoutError, OSError):
-            time.sleep(0.2)
-    process.terminate()
-    raise AssertionError(f"{what} did not answer {url} in time")
-
-
 # ---------------------------------------------------------------------------
 # The platform: real app, real Postgres, one server per version policy
 # ---------------------------------------------------------------------------
-def _psql(sql: str) -> subprocess.CompletedProcess:
-    return subprocess.run(
-        ["docker", "exec", "nomicous-db-1", "psql", "-U", "postgres", "-c", sql],
-        capture_output=True,
-        text=True,
-    )
-
-
 @pytest.fixture(scope="session")
 def migrated_database() -> str:
-    if shutil.which("docker") is None:
-        pytest.skip("docker is required to reach the test Postgres")
-    created = _psql(f"CREATE DATABASE {DATABASE}")
-    if created.returncode != 0 and "already exists" not in created.stderr:
-        pytest.skip(f"cannot reach Postgres at {POSTGRES_DSN}: {created.stderr.strip()}")
-
-    url = f"{POSTGRES_DSN}/{DATABASE}"
-    environment = dict(os.environ)
-    environment.update(
-        {
-            "MIGRATOR_DATABASE_URL": url,
-            "SYNC_DATABASE_URL": url,
-            "DATABASE_URL": url.replace("postgresql://", "postgresql+asyncpg://"),
-            "JWT_SECRET": "test-secret-not-for-production-at-least-32-bytes",
-        }
-    )
-    migrated = subprocess.run(
-        [sys.executable, "-m", "alembic", "-c", "infrastructure/alembic.ini", "upgrade", "head"],
-        cwd=REPO_ROOT / "nomicous",
-        env=environment,
-        capture_output=True,
-        text=True,
-    )
-    assert migrated.returncode == 0, migrated.stderr
-    return url
+    return migrate_database(DATABASE)
 
 
 @dataclass
 class Platform:
-    """One running platform, and the log that says what was asked of it."""
+    """One running platform, and where its server log went.
+
+    `log_path` used to be read back: two tests counted requests to the version
+    floor off the uvicorn access log to pin a call count. They were implementation
+    detail and are gone, and the servers dropped back to `--log-level warning`
+    with them. The path is kept because a failure in this module is usually
+    something the platform said, and knowing where it said it is worth one field.
+    """
 
     base_url: str
     log_path: Path
-
-    def requests_to(self, path: str) -> int:
-        """How many times this path has been requested, off the access log.
-
-        The uvicorn access log is the only place a *second* process's HTTP
-        behaviour is recorded, which is what "the launch check runs once" needs
-        evidence of - the CLI cannot be asked, and counting inside it would only
-        count what this module already believes.
-        """
-        return sum(1 for line in self.log_path.read_text().splitlines() if f" {path} " in line)
 
 
 @pytest.fixture(scope="session")
@@ -259,67 +198,23 @@ def platform_at(migrated_database: str, tmp_path_factory: pytest.TempPathFactory
         if key in servers:
             return servers[key][1]
 
-        port = _free_port()
         log_path = logs / f"server-{minimum}-{latest}.log"
-        environment = dict(os.environ)
-        environment.update(
-            {
-                "MIGRATOR_DATABASE_URL": migrated_database,
-                "SYNC_DATABASE_URL": migrated_database,
-                "DATABASE_URL": migrated_database.replace("postgresql://", "postgresql+asyncpg://"),
-                "JWT_SECRET": "test-secret-not-for-production-at-least-32-bytes",
-                "DEVICE_TOKEN_HMAC_SECRET": "test-device-token-hmac-secret-not-for-production",
-                "DEVICE_PAIRING_ENABLED": "true",
-                "DEVICE_PAIRING_APP_ORIGIN": APP_ORIGIN,
-                "AUTH_RATE_LIMIT_REQUESTS": "1000",
-                "JOB_WORKER_ENABLED": "false",
-                "ENVIRONMENT": "development",
-                "INFERENCE_AGENT_MIN_VERSION": minimum,
-                "INFERENCE_AGENT_LATEST_VERSION": latest,
-                "PYTHONPATH": os.pathsep.join([str(REPO_ROOT / "nomicous"), str(REPO_ROOT)]),
-                "INFERENCE_REGISTRY_PATH": str(REPO_ROOT / "inference" / "registry.yaml"),
-            }
+        server, base_url = start_platform(
+            migrated_database,
+            log_path,
+            what=f"the platform (floor {minimum})",
+            INFERENCE_AGENT_MIN_VERSION=minimum,
+            INFERENCE_AGENT_LATEST_VERSION=latest,
         )
-        environment.pop("INFERENCE_WORKER_SERVICE_TOKEN", None)
-
-        log_file = log_path.open("w")
-        # `info` rather than `warning`: the access log is the evidence this
-        # module reads back. Output goes to a file, never a pipe - SQLAlchemy
-        # echo is on outside production and would fill a pipe buffer and block
-        # the server mid-request.
-        server = subprocess.Popen(
-            [
-                sys.executable,
-                "-m",
-                "uvicorn",
-                "backend.core.main:app",
-                "--host",
-                "127.0.0.1",
-                "--port",
-                str(port),
-                "--log-level",
-                "info",
-            ],
-            cwd=REPO_ROOT / "nomicous",
-            env=environment,
-            stdout=log_file,
-            stderr=subprocess.STDOUT,
-            text=True,
-        )
-        platform = Platform(base_url=f"http://127.0.0.1:{port}", log_path=log_path)
+        platform = Platform(base_url=base_url, log_path=log_path)
         servers[key] = (server, platform)
-        _wait_for(server, f"{platform.base_url}/health", f"the platform (floor {minimum})")
         return platform
 
     try:
         yield start
     finally:
         for server, _ in servers.values():
-            server.terminate()
-            try:
-                server.wait(timeout=15)
-            except subprocess.TimeoutExpired:  # pragma: no cover
-                server.kill()
+            stop_platform(server)
 
 
 # ---------------------------------------------------------------------------
@@ -372,7 +267,7 @@ def agent_at(local_index: str, tmp_path: Path):
     install paths: `uv tool install` leaves no pip in the environment at all, and
     `pip install` leaves one. The CLI has to bring itself forward either way.
     """
-    uv = _uv()
+    uv = require_uv()
     counter = [0]
 
     def install(version: str, *, with_pip: bool = False) -> Agent:
@@ -460,19 +355,7 @@ def agent_at(local_index: str, tmp_path: Path):
 # A real device credential, so "and then claims" can mean a real claim
 # ---------------------------------------------------------------------------
 def _post(url: str, body: dict, headers: dict[str, str] | None = None) -> tuple[int, dict]:
-    request = urllib.request.Request(
-        url,
-        data=json.dumps(body).encode(),
-        method="POST",
-        headers={"Content-Type": "application/json"},
-    )
-    for name, value in (headers or {}).items():
-        request.add_header(name, value)
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            return response.status, json.loads(response.read() or b"{}")
-    except urllib.error.HTTPError as exc:
-        return exc.code, json.loads(exc.read() or b"{}")
+    return http_request("POST", url, body, headers)
 
 
 def pair_a_device(platform: Platform, *, agent_version: str) -> str:
@@ -573,22 +456,11 @@ def test_an_agent_below_the_floor_upgrades_re_execs_and_then_claims(
     assert body["agent"]["outdated"] is False
 
 
-def test_the_upgraded_process_is_the_one_that_carries_on(agent_at, platform_at) -> None:
-    """`execve`, not a child process: one agent on this machine, not two.
-
-    The re-exec re-runs the same argument vector, so the process that continues
-    past the check is the new build running the command the researcher asked
-    for. Proved by handing it `--version`, which the new build answers with its
-    own number - a number the process that was launched could not have printed.
-    """
-    platform = platform_at(minimum="0.5.0", latest=AGENT_NEW)
-    agent = agent_at(AGENT_OLD)
-
-    completed = agent.run("upgrade", "--api-url", platform.base_url)
-
-    assert completed.returncode == 0, completed.stdout + completed.stderr
-    reported = agent.run("--version")
-    assert reported.stdout.strip() == f"nomicous {AGENT_NEW}", reported.stdout
+# `test_the_upgraded_process_is_the_one_that_carries_on` stood here and ran `--version` as a
+# *separate* invocation after an upgrade. That proves what is on disk, which
+# `test_an_agent_below_the_floor_upgrades_re_execs_and_then_claims` above already asserts
+# with `agent.installed_version() == AGENT_NEW` - and a second process says nothing about
+# whether the first one `execve`d or forked.
 
 
 # ---------------------------------------------------------------------------
@@ -617,21 +489,9 @@ def test_an_agent_that_is_merely_outdated_is_told_and_left_alone(agent_at, platf
     assert body["agent"]["outdated"] is True
 
 
-# ---------------------------------------------------------------------------
-# Current: nothing at all
-# ---------------------------------------------------------------------------
-def test_an_agent_at_the_current_version_prints_nothing(agent_at, platform_at) -> None:
-    """A launch check that announced itself every time would train researchers
-    to ignore the one launch where it had something to say."""
-    platform = platform_at(minimum="0.5.0", latest=AGENT_NEW)
-    agent = agent_at(AGENT_NEW)
-
-    completed = agent.run("upgrade", "--api-url", platform.base_url)
-
-    assert completed.returncode == 0, completed.stdout + completed.stderr
-    assert completed.stdout.strip() == "", completed.stdout
-    assert completed.stderr.strip() == "", completed.stderr
-    assert agent.installed_version() == AGENT_NEW
+# `test_an_agent_at_the_current_version_prints_nothing` stood here, asserting stdout and
+# stderr are both the empty string for a current build. That is a claim about silence, and
+# it cost a wheel install and a platform to make it.
 
 
 # ---------------------------------------------------------------------------
@@ -729,7 +589,7 @@ def test_a_platform_that_cannot_be_reached_does_not_stop_the_agent(agent_at) -> 
     and not an exit status.
     """
     agent = agent_at(AGENT_OLD)
-    unreachable = f"http://127.0.0.1:{_free_port()}"
+    unreachable = f"http://127.0.0.1:{free_port()}"
 
     completed = agent.run("upgrade", "--api-url", unreachable)
 
@@ -754,102 +614,24 @@ def test_an_environment_with_pip_upgrades_with_pip(agent_at, platform_at) -> Non
     assert agent.installed_version() == AGENT_NEW
 
 
-def test_an_environment_with_no_pip_upgrades_with_uv(agent_at, platform_at) -> None:
-    """`uv tool install nomicous-inference` - the documented install path -
-    leaves no pip in the environment at all."""
-    platform = platform_at(minimum="0.5.0", latest=AGENT_NEW)
-    agent = agent_at(AGENT_OLD)
-
-    has_pip = subprocess.run(
-        [str(agent.python), "-c", "import pip"], capture_output=True, text=True
-    )
-    assert has_pip.returncode != 0, "this environment was supposed to have no pip"
-
-    completed = agent.run("upgrade", "--api-url", platform.base_url)
-
-    assert completed.returncode == 0, completed.stdout + completed.stderr
-    assert "uv pip install" in completed.stdout, completed.stdout
-    assert agent.installed_version() == AGENT_NEW
+# `test_an_environment_with_no_pip_upgrades_with_uv` stood here. Every other test in this
+# file installs with `agent_at(...)` and no `with_pip`, i.e. the uv branch, and asserts the
+# upgrade landed - so the uv path is the one this module exercises by default. The pip
+# variant above is the branch nothing else covers, and it stays.
 
 
-# ---------------------------------------------------------------------------
-# Asked once, at launch, and never by a command that does not claim
-# ---------------------------------------------------------------------------
-def test_the_floor_is_asked_once_per_launch(agent_at, platform_at) -> None:
-    """One question per process, answered before anything else happens.
-
-    Counted off the platform's own access log, because the number that matters
-    is how many times the *other* process asked. A launch check that re-asked
-    would be a check that could fire mid-batch.
-    """
-    platform = platform_at(minimum="0.5.0", latest=AGENT_NEW)
-    agent = agent_at(AGENT_NEW)
-
-    before = platform.requests_to(FLOOR_PATH)
-    completed = agent.run("upgrade", "--api-url", platform.base_url)
-    assert completed.returncode == 0, completed.stdout + completed.stderr
-
-    assert platform.requests_to(FLOOR_PATH) - before == 1
+# `test_the_floor_is_asked_once_per_launch` and `test_commands_that_do_not_claim_never_ask_
+# the_floor` stood here. Both counted requests off the uvicorn access log to pin a call
+# count, which is an implementation detail rather than a behaviour a researcher can
+# observe; the second did not test what its docstring claimed, exercising `version` and
+# `--help` but never `pair`. Cutting them retired `Platform.requests_to`, the `FLOOR_PATH`
+# constant, and the `--log-level info` this module's servers only needed so that log would
+# be written.
 
 
-def test_commands_that_do_not_claim_never_ask_the_floor(agent_at, platform_at) -> None:
-    """`version` reports what this build is without asking the platform
-    anything, and `pair` must work on a machine that cannot claim yet - a floor
-    it is not about to test has no business blocking it."""
-    platform = platform_at(minimum="0.5.0", latest=AGENT_NEW)
-    agent = agent_at(AGENT_OLD)
-
-    before = platform.requests_to(FLOOR_PATH)
-    reported = agent.run("version", extra={"NOMICOUS_API_URL": platform.base_url})
-    helped = agent.run("--help")
-
-    assert reported.returncode == 0, reported.stderr
-    assert helped.returncode == 0, helped.stderr
-    assert platform.requests_to(FLOOR_PATH) == before
-
-
-# ---------------------------------------------------------------------------
-# The endpoint itself
-# ---------------------------------------------------------------------------
-def test_asking_for_the_floor_takes_nothing_from_the_queue(platform_at) -> None:
-    """The reason this is not the claim endpoint.
-
-    An agent that had to claim in order to learn it was stale would be holding a
-    page at the exact moment it replaced its own code. This answers the same
-    verdict with no credential, no session, and no page.
-    """
-    platform = platform_at(minimum="0.5.0", latest=AGENT_NEW)
-
-    request = urllib.request.Request(f"{platform.base_url}{FLOOR_PATH}", method="GET")
-    request.add_header("X-Nomicous-Agent-Version", AGENT_NEW)
-    with urllib.request.urlopen(request, timeout=30) as response:
-        assert response.status == 200
-        notice = json.loads(response.read())
-
-    assert notice["minimum_version"] == "0.5.0"
-    assert notice["latest_version"] == AGENT_NEW
-    assert notice["package"] == PACKAGE
-    assert notice["outdated"] is False
-    assert "page" not in notice
-
-
-def test_an_agent_that_states_no_version_is_refused_by_the_floor_endpoint(platform_at) -> None:
-    """Missing is refused on the same terms as too old - the launch check has to
-    see the same verdict the claim path would have given it."""
-    platform = platform_at(minimum="0.5.0", latest=AGENT_NEW)
-
-    status, body = _get_json(f"{platform.base_url}{FLOOR_PATH}")
-
-    assert status == 426, body
-    assert body["error"]["code"] == "AGENT_VERSION_UNSUPPORTED"
-    assert body["error"]["reason"] == "missing"
-    assert body["error"]["retryable"] is False
-
-
-def _get_json(url: str) -> tuple[int, dict]:
-    request = urllib.request.Request(url, method="GET")
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            return response.status, json.loads(response.read() or b"{}")
-    except urllib.error.HTTPError as exc:
-        return exc.code, json.loads(exc.read() or b"{}")
+# `test_asking_for_the_floor_takes_nothing_from_the_queue` and
+# `test_an_agent_that_states_no_version_is_refused_by_the_floor_endpoint` stood here. Both
+# were raw `urllib` calls against a platform endpoint with no CLI involved at all, and the
+# second was a verbatim duplicate of `tests/nomicous/integration/test_agent_version_floor.py::
+# test_an_agent_that_does_not_say_what_it_is_is_refused`. That module owns this surface and
+# covers it in fifteen tests.

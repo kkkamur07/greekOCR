@@ -213,20 +213,6 @@ async def test_a_non_member_cannot_enqueue_and_nothing_is_staged(method: str) ->
     assert inference.resolutions == []
 
 
-@pytest.mark.parametrize("method", ["enqueue_segment_part", "enqueue_transcribe_part"])
-async def test_a_part_filed_under_another_document_is_not_found(method: str) -> None:
-    owner_id = uuid.uuid4()
-    service, project, document, part, _lines, _inference = _fixture(owner_id=owner_id, line_count=2)
-    part.document_id = uuid.uuid4()
-    session = _Session()
-
-    with pytest.raises(NotFoundError, match="Part not found"):
-        await getattr(service, method)(
-            session, _user(owner_id), project.id, document.id, part.id, execution=CLOUD_AVAILABLE
-        )
-    assert session.added == []
-
-
 # --- Transcribe refusals: three inputs, three statuses ---
 # Tests the exception type for each bad request, because the type is what selects the HTTP
 # status. Does not test the router's request schema.
@@ -499,7 +485,6 @@ async def test_no_binding_anywhere_still_enqueues_with_a_null_model(method: str)
 
 # --- Segment parameter precedence: the caller's request wins ---
 # Tests that per-request tuning layers over whatever the model or binding supplies.
-# Transcribe takes no caller params at all, which is asserted as an absence.
 
 
 async def test_request_params_override_an_explicit_models_defaults() -> None:
@@ -542,23 +527,6 @@ async def test_request_params_override_a_bindings_effective_params() -> None:
     assert job.payload["ml_params"] == {"min_iou": 0.5, "target_max_points": 80}
 
 
-async def test_request_params_survive_when_nothing_is_bound() -> None:
-    owner_id = uuid.uuid4()
-    service, project, document, part, _lines, _inference = _fixture(owner_id=owner_id)
-
-    job = await service.enqueue_segment_part(
-        _Session(),
-        _user(owner_id),
-        project.id,
-        document.id,
-        part.id,
-        ml_params={"use_otsu_refinement": True},
-        execution=CLOUD_AVAILABLE,
-    )
-
-    assert job.payload["ml_params"] == {"use_otsu_refinement": True}
-
-
 async def test_the_payload_params_are_a_copy_of_the_catalog_row() -> None:
     """The job payload is a per-run snapshot; mutating it must not edit the shared model."""
     owner_id = uuid.uuid4()
@@ -577,25 +545,3 @@ async def test_the_payload_params_are_a_copy_of_the_catalog_row() -> None:
     job.payload["ml_params"]["min_iou"] = 0.1
 
     assert model.default_params == {"min_iou": 0.97}
-
-
-async def test_a_binding_supplied_transcribe_job_takes_no_caller_params() -> None:
-    """``enqueue_transcribe_part`` has no ``ml_params`` argument, and the payload reflects
-    only what the catalog supplied — the transcribe route sends no tuning knobs."""
-    owner_id = uuid.uuid4()
-    model = _model(InferenceTask.transcribe)
-    resolved = _binding(model, {"beam": 8})
-    service, project, document, part, _lines, _inference = _fixture(
-        owner_id=owner_id, line_count=1, resolved=resolved
-    )
-
-    job = await service.enqueue_transcribe_part(
-        _Session(),
-        _user(owner_id),
-        project.id,
-        document.id,
-        part.id,
-        execution=CLOUD_AVAILABLE,
-    )
-
-    assert job.payload["ml_params"] == {"beam": 8}

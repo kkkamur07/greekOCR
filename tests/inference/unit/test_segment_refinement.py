@@ -336,31 +336,12 @@ def test_blla_adapter_preserves_legacy_ceiling_and_neutral_metadata(
     assert line.source_metadata["otsu_margin_px"] == 6
 
 
-def test_blla_adapter_splits_oversized_refined_line(
-    monkeypatch,
-    tmp_path: Path,
-) -> None:
-    image, ceiling = _merged_two_line_fixture()
-    model_path = tmp_path / "model.onnx"
-    model_path.write_bytes(b"stub")
-    _stub_blla(
-        monkeypatch,
-        DecodedBLLALine(
-            baseline=[[35.0, 77.0], [190.0, 77.0]],
-            polygon=ceiling,
-        ),
-    )
-
-    response = blla.run_blla_segment(
-        _image_bytes(image),
-        model_path=model_path,
-        params={"use_otsu_refinement": True, "split_large_lines": True},
-    )
-
-    assert len(response.lines) == 2
-    assert [line.order for line in response.lines] == [0, 1]
-    assert all(line.kraken_ceiling == ceiling for line in response.lines)
-    assert all(line.source_metadata["split_count"] == 2 for line in response.lines)
+# `test_blla_adapter_splits_oversized_refined_line` stood here. The split itself is
+# `test_refine_segment_candidates_splits_merged_vertical_bands` above, on the same
+# `_merged_two_line_fixture`; this re-asserted it through the adapter behind a
+# `_FakeBLLASession`, adding only `line.order == [0, 1]` and the `kraken_ceiling`
+# passthrough that `test_blla_adapter_preserves_legacy_ceiling_and_neutral_metadata`
+# already covers.
 
 
 # --- Per-line refinement isolation ---

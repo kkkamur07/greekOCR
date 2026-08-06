@@ -112,7 +112,13 @@ jobs:
     # This used to be the ONNX-vs-Kraken parity job. ADR 0004 left one runtime,
     # so there is nothing to be at parity with; what remains worth running on a
     # schedule is the real graph on the real weights.
-    if: github.event_name != 'pull_request'
+    #
+    # The trigger is named positively rather than as `!= 'pull_request'`. That
+    # negation also matched `push`, so every merge to main paid for a Postgres
+    # service, an alembic run and a checkpoint load - which is not what the
+    # paragraph above describes, and not what anybody wanted from a job whose
+    # whole point is that it is too slow to gate on. Nightly and on demand.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -141,7 +147,48 @@ jobs:
           python-version: "3.11"
           enable-cache: true
       - run: PYTHONPATH=nomicous uv run --locked --group platform alembic -c nomicous/infrastructure/alembic.ini upgrade head
-      - run: uv run --locked --group test --group platform --group inference pytest tests/nomicous tests/inference -m ml
+      # `tests/nomicous` used to be in this path list and carries no `ml` marker
+      # at all - the platform hands a page to an agent, it does not run a model
+      # (see the `test-ml` task in pyproject.toml, which already says so). All
+      # naming it here bought was collecting the entire platform suite to select
+      # nothing out of it.
+      - run: uv run --locked --group test --group platform --group inference pytest tests/inference -m ml
+      # `tests/export` was listed in `testpaths` but named by no job, so the
+      # ONNX-vs-PyTorch parity assertions ran only when a maintainer happened to
+      # type `poe test-export`. Those assertions are the only thing standing
+      # between a bad export and silently wrong transcriptions - see the note at
+      # inference/registry.yaml, which records that regression having shipped
+      # once - so leaving them un-run was strictly worse than not having them.
+      # They belong in this job: it is the other thing here too slow to gate a
+      # pull request, and the export tree is the only one that still needs Torch
+      # (ADR 0006), which is why this step names `--group export`.
+      #
+      # Six of the seven export gates compare logits and need only the two
+      # checkpoints tracked in git. The seventh - the Calamari graph-vs-artifact
+      # gate - is the only one that compares decoded *text*, and it skips unless
+      # the published pair is cached under `src/hf/cache/`, which is gitignored.
+      # On a clean runner that skip is permanent, so the single most meaningful
+      # assertion in the directory would go on not running even after wiring the
+      # directory in. Fetch the pair first. The revision is read out of
+      # registry.yaml rather than repeated here, so this cannot pin one revision
+      # while the runtime resolves another. Public repo, no token, ~12 MB.
+      - run: |
+          uv run --locked --group inference python - <<'PY'
+          import pathlib
+          import yaml
+          from huggingface_hub import hf_hub_download
+
+          registry = yaml.safe_load(pathlib.Path("inference/registry.yaml").read_text())
+          pinned = registry["models"]["syriac-calamari-v1"]["versions"]["stable"]
+          repo = pinned["weights_source"].removeprefix("hf://").split("@")[0]
+          destination = pathlib.Path("src/hf/cache/syriac-calamari-v1/stable")
+          destination.mkdir(parents=True, exist_ok=True)
+          for artifact in ("best.pt", "best.onnx"):
+              hf_hub_download(
+                  repo, artifact, revision=pinned["hub_revision"], local_dir=destination
+              )
+          PY
+      - run: uv run --locked --group test --group inference --group export pytest tests/export
 
   api-contracts:
     name: API contract artifacts

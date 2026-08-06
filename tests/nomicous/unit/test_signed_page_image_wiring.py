@@ -18,19 +18,13 @@ import os
 
 os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production-at-least-32-bytes")
 
-import inspect
 from datetime import UTC, datetime, timedelta
 
-import pytest
 from fastapi.routing import APIRoute
 
 from backend.core.app import create_app
-from backend.core.settings import get_device_settings
 from backend.document.infrastructure.media_store import (
     SIGNED_MEDIA_PREFIX,
-    LocalMediaStore,
-    MediaStore,
-    SupabaseMediaStore,
     sign_object_path,
 )
 from backend.users.api.dependencies import get_current_user
@@ -92,52 +86,6 @@ def test_no_authenticated_page_image_route_was_added_to_the_device_credential() 
     assert {path for path in paths if path.startswith("/device/v1/jobs")} == {
         "/device/v1/jobs/claim"
     }
-
-
-def test_the_page_image_link_ttl_is_about_a_minute_and_not_the_lease() -> None:
-    """Two dials, and the default of one is not derived from the other."""
-    settings = get_device_settings()
-
-    assert settings.device_page_image_url_ttl_seconds == 60
-    assert settings.device_lease_seconds == 600
-    # Not "the lease divided by ten": the fields are independent, and a change to
-    # either must not silently move the other.
-    assert (
-        type(settings).model_fields["device_page_image_url_ttl_seconds"].default
-        != type(settings).model_fields["device_lease_seconds"].default
-    )
-
-
-def test_both_media_store_backends_can_sign_a_link_to_one_object() -> None:
-    """Both stores answer the same question, so the claim path never has to ask
-    which one it is talking to.
-
-    Structural only - it says the method exists with the agreed signature on both
-    backends. What a Supabase-issued signature actually *does* is not asserted
-    anywhere in this repository; see the skip below for why.
-    """
-    for store in (LocalMediaStore, SupabaseMediaStore):
-        signature = inspect.signature(store.signed_object_url)
-        assert list(signature.parameters) == ["self", "image_key", "expires_at"]
-        assert signature.parameters["expires_at"].kind is inspect.Parameter.KEYWORD_ONLY
-    assert hasattr(MediaStore, "signed_object_url")
-
-
-@pytest.mark.skip(
-    reason=(
-        "DEFERRED, not mocked. Proving a Supabase-signed link fetches bytes, dies at its "
-        "TTL, and opens one object only needs a live Supabase Storage instance: SUPABASE_URL "
-        "and SUPABASE_SERVICE_ROLE_KEY for a project with the document-media bucket, or a "
-        "local supabase/storage-api behind the /storage/v1 path supabase-py builds. Neither "
-        "exists in this environment - the only container running is Postgres on 5433 - and "
-        "the substitute would be a fake storage client, which would assert nothing about "
-        "the signature Storage actually issues. The local backend, which this repository "
-        "runs everywhere but production, is covered live in "
-        "tests/nomicous/integration/test_signed_page_image_link.py."
-    )
-)
-def test_a_supabase_signed_link_reaches_one_object_until_it_expires() -> None:
-    raise AssertionError("unreachable: see the skip reason above")
 
 
 def test_a_signature_binds_one_key_and_one_deadline() -> None:

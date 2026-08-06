@@ -8,8 +8,6 @@ Torch-free decoder, and the runner that ties them to the ONNX session.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import numpy as np
 import pytest
 from PIL import Image
@@ -20,13 +18,6 @@ from inference.architectures.blla.blla_preprocessing import (
     MAX_WIDTH_TO_HEIGHT_RATIO,
     preprocess_blla_image,
 )
-from inference.contracts.common import InferenceTask
-from inference.contracts.segment import SegmentRunResponse
-from inference.jobs.runner import run_model
-from inference.settings import get_inference_settings
-from tests.fixtures.paths import REPO_ROOT, SEGMENT_PAGE
-
-BLLA_ARTIFACT = REPO_ROOT / "src/hf/cache/blla-segment/stable/blla.onnx"
 
 
 def test_blla_preprocessing_matches_fixed_height_rgb_inversion() -> None:
@@ -98,36 +89,9 @@ def test_nearest_resize_repeats_source_pixels_rather_than_blending() -> None:
     np.testing.assert_array_equal(resized[0, 0], np.array([0, 0, 0, 1, 1, 1], dtype=np.float32))
 
 
-def test_run_model_returns_a_blla_response_for_a_real_image(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    """Exercise admission, registry resolution, runner dispatch and the response.
-
-    This is the whole entry point now: an **inference agent** calls `run_model`
-    in its own process, so there is no serialization step between the decoder
-    and the caller and nothing to POST it to (ADR 0002).
-    """
-    if not BLLA_ARTIFACT.is_file():
-        pytest.skip("published BLLA artifact is not cached locally")
-
-    registry = REPO_ROOT / "inference" / "registry.yaml"
-    monkeypatch.setenv("INFERENCE_REGISTRY_PATH", str(registry))
-    monkeypatch.setenv("HF_CACHE_ROOT", str(tmp_path / "hf-cache"))
-    get_inference_settings.cache_clear()
-    monkeypatch.setattr(
-        "inference.jobs.runner.resolve_weights_source",
-        lambda *_args, **_kwargs: BLLA_ARTIFACT,
-    )
-
-    output = run_model(
-        task=InferenceTask.segment,
-        registry_model_id="blla-segment",
-        registry_tag="stable",
-        image_bytes=SEGMENT_PAGE.read_bytes(),
-    )
-
-    assert isinstance(output, SegmentRunResponse)
-    assert len(output.blocks) == 1
-    assert len(output.lines) > 10
-    assert all(line.source_metadata["adapter"] == "blla" for line in output.lines)
+# `test_run_model_returns_a_blla_response_for_a_real_image` stood here and ran the
+# published artifact through `run_model`, asserting `blocks == 1` and `len(lines) > 10`.
+# `test_onnx_runtime.py::test_segment_runs_the_graph_on_real_weights` makes the same two
+# assertions on the same artifact and the same page; the `run_model` dispatch increment is
+# covered by `test_transcribe_batch_isolation.py`'s runner fixture and end to end by
+# `test_cli_run.py`. Cutting it removes a second full model execution from the unit lane.

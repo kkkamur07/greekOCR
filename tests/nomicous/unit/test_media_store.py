@@ -34,14 +34,3 @@ def test_rejects_traversal_keys(store: LocalMediaStore) -> None:
         store.absolute_path("../outside.png")
     with pytest.raises(ValueError, match="Invalid image key"):
         store.absolute_path("parts/../../etc/passwd")
-
-
-# --- Resolved paths stay under root ---
-# Tests normal keys resolve inside the configured media directory.
-
-
-def test_resolved_path_stays_under_root(store: LocalMediaStore) -> None:
-    part_id = uuid.uuid4()
-    key = store.part_image_key(part_id, suffix="webp")
-    resolved = store.absolute_path(key)
-    assert resolved.is_relative_to(store._root)

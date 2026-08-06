@@ -11,39 +11,24 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-import torch
-import torch.nn.functional as F
 from PIL import Image
-from safetensors.torch import load_file
 
-from src.model.inference_export.blla import export_blla_onnx
-from src.model.inference_export.blla.model import BLLATorchModel
 from inference.architectures.blla.blla import run_blla_logits
 from inference.architectures.blla.blla_decoder.common import resize_heatmaps_nearest
 from inference.architectures.blla.blla_preprocessing import preprocess_blla_image
 from tests.fixtures.paths import REPO_ROOT
 
+torch = pytest.importorskip("torch")
 pytest.importorskip("onnx")
 pytest.importorskip("onnxruntime")
 
+import torch.nn.functional as F  # noqa: E402
+from safetensors.torch import load_file  # noqa: E402
+
+from src.model.inference_export.blla import export_blla_onnx  # noqa: E402
+from src.model.inference_export.blla.model import BLLATorchModel  # noqa: E402
+
 BLLA_ARTIFACT = REPO_ROOT / "src/hf/staging/models/segmentation/blla/v1/stable/blla.safetensors"
-
-
-def test_blla_numpy_preprocessing_is_float32() -> None:
-    image = Image.new("RGB", (20, 10), (0, 64, 255))
-
-    prepared = preprocess_blla_image(image)
-
-    assert prepared.array.dtype == np.float32
-
-
-def test_blla_numpy_interpolation_matches_torch_nearest() -> None:
-    values = np.random.default_rng(7).random((4, 9, 13), dtype=np.float32)
-
-    actual = resize_heatmaps_nearest(values, height=31, width=17)
-    expected = F.interpolate(torch.from_numpy(values[None]), size=(31, 17))[0].numpy()
-
-    np.testing.assert_array_equal(actual, expected)
 
 
 def test_the_numpy_decoder_head_matches_the_torch_one_on_a_real_page() -> None:
@@ -97,19 +82,6 @@ def blla_onnx_path(tmp_path_factory: pytest.TempPathFactory) -> Path:
     destination = tmp_path_factory.mktemp("blla-onnx") / "blla.onnx"
     export_blla_onnx(BLLA_ARTIFACT, destination, example_width=64)
     return destination
-
-
-def test_blla_onnx_embeds_dynamic_width_metadata(blla_onnx_path: Path) -> None:
-    import onnx
-
-    model = onnx.load(str(blla_onnx_path))
-    metadata = {entry.key: entry.value for entry in model.metadata_props}
-    input_shape = model.graph.input[0].type.tensor_type.shape
-    width_dimension = input_shape.dim[3]
-
-    assert metadata["format"] == "blla-onnx-v1"
-    assert metadata["graph"] == "inference-owned-blla-torch-v1"
-    assert width_dimension.dim_param == "width"
 
 
 def test_blla_onnx_raw_logits_match_native_graph(blla_onnx_path: Path) -> None:

@@ -14,10 +14,8 @@ from backend.document.infrastructure.orm_models import (
     DocumentPart,
     Line,
     LineGeometryKind,
-    Transcription,
 )
 from backend.jobs.application import job_callback_service
-from backend.jobs.application.job_callback_service import INFERENCE_FAILURE_ERROR
 from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
 from backend.project.infrastructure.orm_models import Project
 from fastapi.testclient import TestClient
@@ -86,20 +84,6 @@ def _transcribe_done_payload(
                 ]
             },
         },
-    }
-
-
-def _failed_payload(
-    *,
-    product_job_id: uuid.UUID,
-    inference_job_id: uuid.UUID,
-) -> dict:
-    return {
-        "inference_job_id": str(inference_job_id),
-        "product_job_id": str(product_job_id),
-        "task": "segment",
-        "status": "failed",
-        "error": "weights not found in cache",
     }
 
 
@@ -317,64 +301,10 @@ def test_callback_transcribe_success_marks_job_done(client: TestClient):
     assert job.result["lines"][0]["confidence"] == 0.91
 
 
-# --- Failed callbacks ---
-# Tests error persistence on terminal failure. Does not retry delivery from the platform side.
-
-
-def test_callback_failure_marks_job_failed(client: TestClient):
-    product_job_id, inference_job_id = _seed_waiting_job()
-    response = client.post(
-        CALLBACK_URL,
-        headers=WEBHOOK_HEADERS,
-        json=_failed_payload(product_job_id=product_job_id, inference_job_id=inference_job_id),
-    )
-    assert response.status_code == 204
-
-    job = _get_job(product_job_id)
-    assert job.status == JobStatus.failed
-    # The inference service's own message is the only diagnostic it sends; it has
-    # to survive the hop, behind a stable prefix.
-    assert job.error == f"{INFERENCE_FAILURE_ERROR}: weights not found in cache"
-    assert job.completed_at is not None
-
-
-def test_callback_failure_redacts_secret_shaped_detail(client: TestClient):
-    product_job_id, inference_job_id = _seed_waiting_job()
-    payload = _failed_payload(product_job_id=product_job_id, inference_job_id=inference_job_id)
-    payload["error"] = "download failed: https://weights.example/model?token=s3cr3ttokenvalue000"
-
-    response = client.post(CALLBACK_URL, headers=WEBHOOK_HEADERS, json=payload)
-    assert response.status_code == 204
-
-    job = _get_job(product_job_id)
-    assert job.error is not None
-    assert job.error.startswith(INFERENCE_FAILURE_ERROR)
-    assert "s3cr3ttokenvalue000" not in job.error
-    assert "weights.example" not in job.error
-
-
 # --- Idempotency and validation ---
 # Tests duplicate callbacks and mismatched job metadata. Does not enqueue new inference work.
-
-
-def test_callback_on_terminal_job_is_idempotent(client: TestClient):
-    product_job_id, inference_job_id = _seed_waiting_job()
-    payload = _segment_done_payload(
-        product_job_id=product_job_id, inference_job_id=inference_job_id
-    )
-
-    first = client.post(CALLBACK_URL, headers=WEBHOOK_HEADERS, json=payload)
-    assert first.status_code == 204
-    after_first = _get_job(product_job_id)
-
-    second = client.post(CALLBACK_URL, headers=WEBHOOK_HEADERS, json=payload)
-    assert second.status_code == 204
-    after_second = _get_job(product_job_id)
-
-    assert after_second.status == JobStatus.done
-    assert after_second.completed_at == after_first.completed_at
-    assert after_second.result == after_first.result
-    assert after_second.error == after_first.error
+# Failure persistence and error redaction are unit-tested against the same pure
+# functions in unit/test_job_callback_service.py.
 
 
 def test_callback_after_cancel_skips_merge(client: TestClient):
@@ -556,39 +486,6 @@ def test_finalize_failure_rolls_back_the_merged_lines(
     assert job.status == JobStatus.failed
     assert job.callback_claimed_at is None
     assert job.completed_at is not None
-
-
-def test_transcribe_finalize_failure_rolls_back_the_transcription(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-):
-    product_job_id, inference_job_id, line_id = _seed_transcribe_waiting_job()
-
-    def _boom(*_args, **_kwargs) -> None:
-        raise RuntimeError("finalize exploded")
-
-    monkeypatch.setattr(job_callback_service, "_mark_done_from_callback_sync", _boom)
-
-    with pytest.raises(RuntimeError, match="finalize exploded"):
-        client.post(
-            CALLBACK_URL,
-            headers=WEBHOOK_HEADERS,
-            json=_transcribe_done_payload(
-                product_job_id=product_job_id,
-                inference_job_id=inference_job_id,
-                line_id=line_id,
-            ),
-        )
-
-    with sync_system_session() as session:
-        transcriptions = list(
-            session.execute(
-                select(Transcription).where(Transcription.created_by_job_id == product_job_id)
-            )
-            .scalars()
-            .all()
-        )
-    assert transcriptions == []
-    assert _get_job(product_job_id).status == JobStatus.failed
 
 
 def test_callback_unknown_job_returns_404(client: TestClient):

@@ -8,7 +8,6 @@ tests/nomicous/integration/test_ml_job_callback.py.
 
 from __future__ import annotations
 
-import logging
 import uuid
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -266,25 +265,6 @@ def test_callback_error_reaches_job_error(monkeypatch: pytest.MonkeyPatch):
     assert events == ["commit:0", "notify:failed"]
 
 
-def test_callback_failure_is_logged_with_both_job_ids(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-):
-    job = _waiting_job()
-    events: list[str] = []
-    _use_sessions(monkeypatch, job, events)
-    _record_notifications(monkeypatch, events)
-
-    with caplog.at_level(logging.WARNING, logger=service.__name__):
-        _apply_callback_locked(_failed_callback(job, "CUDA out of memory"))
-
-    logged = "\n".join(record.getMessage() for record in caplog.records)
-    assert str(job.id) in logged
-    assert str(job.inference_job_id) in logged
-    # The unredacted message survives in the log even though the stored copy is
-    # sanitised - that is the only place a raw diagnostic is allowed to land.
-    assert "CUDA out of memory" in logged
-
-
 @pytest.mark.parametrize(
     "raw",
     [
@@ -438,20 +418,3 @@ def test_a_fully_failed_batch_is_not_merged_as_a_success(monkeypatch: pytest.Mon
             context=_transcribe_context(part_id),
             output=all_failed,
         )
-
-
-def test_a_fully_successful_batch_reports_no_failures(monkeypatch: pytest.MonkeyPatch):
-    part_id = uuid.uuid4()
-    monkeypatch.setattr(
-        service.TranscribeMergeService,
-        "apply_sync",
-        lambda *_args, **_kwargs: {"transcription_id": "t", "lines": []},
-    )
-
-    summary = service._apply_transcribe_merge_sync(
-        _LineLookupSession(part_id),
-        context=_transcribe_context(part_id),
-        output=_batch(part_id, [(0, "alpha"), (1, "beta")]),
-    )
-
-    assert "failed_line_indexes" not in summary

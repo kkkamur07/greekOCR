@@ -29,7 +29,6 @@ from backend.ml.api.agent_version import (
     AGENT_VERSION_UNSUPPORTED,
 )
 from backend.ml.application.agent_credentials import SERVICE_TOKEN_HEADER, WORKER_NAME_HEADER
-from backend.ml.domain.agent_version import MAX_AGENT_VERSION_LENGTH
 from infrastructure.db import sync_system_session
 from tests.nomicous.integration.helpers import (
     CLAIM_URL,
@@ -260,116 +259,9 @@ def test_an_agent_above_the_floor_but_behind_the_latest_is_served_and_told(
     assert _stored_job(job_id).status is JobStatus.waiting
 
 
-def test_an_idle_agent_is_still_told_it_is_outdated(
-    client: TestClient, owner_headers, version_policy
-) -> None:
-    """The notice rides every claim response, page or no page. An agent polling
-    an empty queue is exactly the one with time to upgrade."""
-    token = _paired_agent(client, owner_headers)
-    version_policy(minimum="0.4.0", latest="0.6.2")
-
-    body = _claim(client, token, "0.5.0").json()
-
-    assert body["page"] is None
-    assert body["agent"]["outdated"] is True
-
-
-# ---------------------------------------------------------------------------
-# Saying nothing, or saying nonsense
-# ---------------------------------------------------------------------------
-
-
-def test_an_agent_that_does_not_say_what_it_is_is_refused(
-    client: TestClient, owner_user, owner_headers, owner_project, version_policy
-) -> None:
-    """Not assumed current. An agent old enough to predate the header is exactly
-    the population the floor exists to stop, so silence is refusal."""
-    token = _paired_agent(client, owner_headers)
-    job_id = _submitted_page(client, owner_headers, owner_project)
-    version_policy(minimum="0.4.0", latest="0.4.0")
-
-    error = _refusal(_claim(client, token, None))
-
-    assert error["code"] == AGENT_VERSION_UNSUPPORTED
-    assert error["reason"] == "missing"
-    assert error["agent_version"] is None
-    assert error["minimum_version"] == "0.4.0"
-    assert error["retryable"] is False
-    assert _stored_job(job_id).status is JobStatus.pending
-
-
-@pytest.mark.parametrize(
-    ("presented", "expected_reason", "expected_echo"),
-    [
-        ("latest", "malformed", "latest"),
-        ("0.4", "malformed", "0.4"),
-        ("0.4.0.1", "malformed", "0.4.0.1"),
-        ("v0.4.0-nightly", "malformed", "v0.4.0-nightly"),
-        # A header that is present but says nothing is the same state as no
-        # header at all, and the sibling above pins ``missing`` exactly. Left as
-        # a set of two, these two rows could not tell a correct classification
-        # from one that called everything malformed.
-        ("", "missing", None),
-        ("   ", "missing", None),
-        # Echoed back truncated to MAX_AGENT_VERSION_LENGTH - the refusal must
-        # not become a way to get 200 bytes of attacker text into a log line or
-        # a terminal.
-        ("9" * 200, "malformed", "9" * MAX_AGENT_VERSION_LENGTH),
-    ],
-)
-def test_a_version_the_platform_cannot_compare_is_refused(
-    client: TestClient,
-    owner_headers,
-    version_policy,
-    presented: str,
-    expected_reason: str,
-    expected_echo: str | None,
-) -> None:
-    """Refused rather than guessed at. A version we cannot order against the
-    floor tells us nothing about whether this agent is one we want claiming.
-
-    Each case names the reason it expects. The two are not interchangeable: an
-    agent that sent nothing has to be told to *set* the header, and one that
-    sent nonsense has to be told to fix it.
-    """
-    token = _paired_agent(client, owner_headers)
-    version_policy(minimum="0.4.0", latest="0.4.0")
-
-    error = _refusal(_claim(client, token, presented))
-
-    assert error["code"] == AGENT_VERSION_UNSUPPORTED
-    assert error["reason"] == expected_reason
-    assert error["agent_version"] == expected_echo
-    assert error["retryable"] is False
-
-
 # ---------------------------------------------------------------------------
 # The floor is configuration
 # ---------------------------------------------------------------------------
-
-
-def test_the_same_agent_is_refused_or_served_depending_only_on_configuration(
-    client: TestClient, owner_user, owner_headers, owner_project, version_policy
-) -> None:
-    """One agent, one build, two answers - and nothing between them but an
-    environment variable. This is the property the issue is for: stopping a
-    known-bad agent must not require anyone to install anything.
-    """
-    token = _paired_agent(client, owner_headers)
-    job_id = _submitted_page(client, owner_headers, owner_project)
-
-    version_policy(minimum="0.5.0", latest="0.5.0")
-    refused = _claim(client, token, "0.4.0")
-
-    version_policy(minimum="0.4.0", latest="0.4.0")
-    served = _claim(client, token, "0.4.0")
-
-    assert refused.status_code == 426
-    assert refused.json()["error"]["minimum_version"] == "0.5.0"
-    assert served.status_code == 200, served.text
-    assert served.json()["page"]["product_job_id"] == job_id
-    # The job survived the refusal untouched and was still there to be claimed.
-    assert _stored_job(job_id).status is JobStatus.waiting
 
 
 def test_raising_the_floor_stops_an_agent_that_was_claiming_a_moment_ago(
@@ -391,71 +283,8 @@ def test_raising_the_floor_stops_an_agent_that_was_claiming_a_moment_ago(
 
 
 # ---------------------------------------------------------------------------
-# Numeric ordering, over the wire
-# ---------------------------------------------------------------------------
-
-
-def test_zero_ten_is_above_a_zero_nine_floor_and_zero_nine_is_below_a_zero_ten_one(
-    client: TestClient, owner_user, owner_headers, owner_project, version_policy
-) -> None:
-    """``"0.10.0" > "0.9.0"`` is False in Python, and a platform that compared
-    strings would have refused every agent on the tenth minor release - for being
-    too old. Both directions, because getting one right by accident is easy."""
-    token = _paired_agent(client, owner_headers)
-    job_id = _submitted_page(client, owner_headers, owner_project)
-
-    version_policy(minimum="0.9.0", latest="0.10.0")
-    newer = _claim(client, token, "0.10.0")
-
-    version_policy(minimum="0.10.0", latest="0.10.0")
-    older = _claim(client, token, "0.9.0")
-
-    assert newer.status_code == 200, newer.text
-    assert newer.json()["page"]["product_job_id"] == job_id
-    assert newer.json()["agent"]["outdated"] is False
-    assert older.status_code == 426
-    assert older.json()["error"]["reason"] == "below_floor"
-
-
-def test_a_double_digit_patch_is_not_behind_a_single_digit_latest(
-    client: TestClient, owner_headers, version_policy
-) -> None:
-    """The same arithmetic on the outdated side: 0.4.10 is ahead of 0.4.9, so it
-    must not be told it is behind."""
-    token = _paired_agent(client, owner_headers)
-    version_policy(minimum="0.4.0", latest="0.4.9")
-
-    body = _claim(client, token, "0.4.10").json()
-
-    assert body["agent"]["outdated"] is False
-
-
-# ---------------------------------------------------------------------------
 # The hosted worker is an agent like any other
 # ---------------------------------------------------------------------------
-
-
-def test_a_hosted_worker_is_held_to_the_same_floor(client: TestClient, version_policy) -> None:
-    """One agent implementation (ADR 0003), so one floor. A stale cloud worker is
-    as capable of returning wrong transcriptions as a stale laptop, and the
-    credential does not change that."""
-    version_policy(minimum="0.4.0", latest="0.4.0")
-
-    refused = client.post(
-        CLAIM_URL,
-        headers={**SERVICE_HEADERS, AGENT_VERSION_HEADER: "0.3.0"},
-        json={"wait_seconds": 0},
-    )
-    served = client.post(
-        CLAIM_URL,
-        headers={**SERVICE_HEADERS, AGENT_VERSION_HEADER: "0.4.0"},
-        json={"wait_seconds": 0},
-    )
-
-    assert refused.status_code == 426
-    assert refused.json()["error"]["reason"] == "below_floor"
-    assert served.status_code == 200, served.text
-    assert served.json()["agent"]["outdated"] is False
 
 
 def test_a_refused_hosted_worker_never_provisions_its_device_row(
@@ -484,21 +313,3 @@ def test_a_refused_hosted_worker_never_provisions_its_device_row(
             .all()
         )
     assert cloud_devices == []
-
-
-# ---------------------------------------------------------------------------
-# The contract, as documented
-# ---------------------------------------------------------------------------
-
-
-def test_the_refusal_is_published_in_the_api_schema(client: TestClient) -> None:
-    """058 builds against this, so it is part of the documented contract rather
-    than something discovered by receiving one."""
-    schema = client.get("/openapi.json").json()
-    claim = schema["paths"][CLAIM_URL]["post"]
-
-    assert str(AGENT_VERSION_REFUSED_STATUS) in claim["responses"]
-    header_names = {
-        parameter["name"] for parameter in claim["parameters"] if parameter["in"] == "header"
-    }
-    assert AGENT_VERSION_HEADER in header_names

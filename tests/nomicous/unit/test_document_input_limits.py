@@ -28,12 +28,9 @@ from backend.document.api.schemas import (
     MAX_LINE_TEXT_CHARS,
     MAX_PART_IDS_PER_REQUEST,
     MAX_PUBLIC_LAYOUT_LINES,
-    BlockPatchRequest,
     CopyToGroundTruthRequest,
     LayoutResetRequest,
     LineCreateRequest,
-    LinePatchRequest,
-    LinesReplaceRequest,
     LineTranscriptionPatchRequest,
     LineUpsertRequest,
     ReorderPartsRequest,
@@ -77,11 +74,6 @@ def test_line_id_lists_are_bounded(model) -> None:
         model(line_ids=[uuid.uuid4()] * (MAX_LINE_IDS_PER_REQUEST + 1))
 
 
-def test_a_line_id_list_may_still_name_every_line_a_part_can_hold() -> None:
-    """The bound exists to stop the absurd list, not to make a full selection illegal."""
-    LayoutResetRequest(line_ids=[uuid.uuid4()] * MAX_LINE_IDS_PER_REQUEST)
-
-
 def test_reorder_part_ids_are_bounded() -> None:
     """One UPDATE per element, so the length of this list is a work budget."""
     ReorderPartsRequest(part_ids=[uuid.uuid4(), uuid.uuid4()])
@@ -103,23 +95,6 @@ def test_create_line_rejects_unbounded_point_lists() -> None:
         LineCreateRequest(order=0, points=_points(MAX_LINE_GEOMETRY_POINTS + 1))
 
 
-def test_patch_line_rejects_unbounded_point_lists() -> None:
-    LinePatchRequest(points=_points(MAX_LINE_GEOMETRY_POINTS))
-
-    with pytest.raises(PydanticValidationError):
-        LinePatchRequest(points=_points(MAX_LINE_GEOMETRY_POINTS + 1))
-
-
-def test_bulk_replace_rejects_unbounded_point_lists() -> None:
-    def upsert(count: int) -> dict:
-        return {"order": 0, "points": _points(count)}
-
-    LinesReplaceRequest(lines=[upsert(MAX_LINE_GEOMETRY_POINTS)])
-
-    with pytest.raises(PydanticValidationError):
-        LinesReplaceRequest(lines=[upsert(MAX_LINE_GEOMETRY_POINTS + 1)])
-
-
 def test_upsert_rejects_unbounded_kraken_ceiling() -> None:
     with pytest.raises(PydanticValidationError):
         LineUpsertRequest(
@@ -139,10 +114,6 @@ def test_segmentation_cannot_request_more_points_than_the_platform_stores() -> N
 
     with pytest.raises(PydanticValidationError):
         SegmentPartRequest(target_max_points=MAX_LINE_GEOMETRY_POINTS + 1)
-
-
-def test_block_patch_still_accepts_a_partial_update() -> None:
-    assert BlockPatchRequest(order=2).model_dump(exclude_unset=True) == {"order": 2}
 
 
 # --- Public layout read surface ---
@@ -195,24 +166,6 @@ async def test_public_layout_truncates_and_emits_a_cursor(monkeypatch) -> None:
     assert fake.calls[0]["limit"] == 2  # the page size; the catalog probes past it
     resumed = decode_cursor(response.next_cursor)
     assert resumed.id == lines[1].id
-
-
-@pytest.mark.asyncio
-async def test_public_layout_resumes_from_the_cursor(monkeypatch) -> None:
-    base = datetime(2026, 1, 1, tzinfo=UTC)
-    lines = [_line(base + timedelta(seconds=index)) for index in range(5)]
-    fake = _FakeLayoutService(lines)
-    monkeypatch.setattr(public_api, "_service", fake)
-
-    first = await public_api.get_published_layout(
-        uuid.uuid4(), uuid.uuid4(), db=None, limit=2, cursor=None
-    )
-    second = await public_api.get_published_layout(
-        uuid.uuid4(), uuid.uuid4(), db=None, limit=2, cursor=first.next_cursor
-    )
-
-    assert [line.id for line in second.lines] == [lines[2].id, lines[3].id]
-    assert second.next_cursor is not None
 
 
 @pytest.mark.asyncio

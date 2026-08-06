@@ -3,16 +3,14 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { MessageInstance } from "antd/es/message/interface";
 
-import { ApiError } from "../../api/errors";
 import { registerToastApi } from "../../components/ui/toast";
-import { platformNoCapacityMessage } from "../../inference/platformMessages";
 import {
   DOCUMENT,
   flushPageEditorEffects,
+  line,
   mockedApi,
   renderPageEditor,
   resetPageEditorApiMocks,
-  seedExecutionPreference,
 } from "./testSupport";
 
 /**
@@ -42,26 +40,6 @@ function recordedToasts(): string[] {
 }
 
 afterEach(() => registerToastApi(null));
-
-const LINE = {
-  id: "line-1",
-  part_id: "part-1",
-  block_id: null,
-  order: 0,
-  kind: "polygon" as const,
-  points: [
-    [10, 10],
-    [50, 10],
-    [50, 30],
-    [10, 30],
-  ],
-  source: "manual" as const,
-  source_metadata: null,
-  kraken_ceiling: null,
-  manual_geometry: true,
-  line_transcriptions: [],
-  created_at: "2026-06-16T10:00:00Z",
-};
 
 const TRANSCRIBE_MODEL = {
   id: "model-1",
@@ -99,7 +77,7 @@ function jobResponse(overrides: Record<string, unknown> = {}) {
 function loadedPageWithOneSegment() {
   mockedApi.getDocument.mockResolvedValue(DOCUMENT);
   mockedApi.listInferenceModels.mockResolvedValue([TRANSCRIBE_MODEL]);
-  mockedApi.listPartLines.mockResolvedValue([LINE]);
+  mockedApi.listPartLines.mockResolvedValue([line()]);
 }
 
 async function runOcrOnTheSelectedSegment() {
@@ -159,20 +137,6 @@ describe("the account-level host preference", () => {
       ).toBeChecked(),
     );
   });
-
-  it("offers no per-job execution target control alongside the run actions", async () => {
-    seedExecutionPreference(true);
-    loadedPageWithOneSegment();
-    renderPageEditor();
-
-    await screen.findByLabelText(/^Segment 1/);
-    // Every control that could pick a host for one run, by any of the names the
-    // retired three-mode picker used.
-    expect(screen.queryByRole("radio", { name: /cloud/i })).toBeNull();
-    expect(screen.queryByRole("radio", { name: /local/i })).toBeNull();
-    expect(screen.queryByLabelText(/run this in the cloud/i)).toBeNull();
-    expect(screen.queryByText(/local only/i)).toBeNull();
-  });
 });
 
 describe("the announcement on a job", () => {
@@ -184,16 +148,6 @@ describe("the announcement on a job", () => {
 
   afterEach(async () => {
     await flushPageEditorEffects();
-  });
-
-  it("states the inference host the job was given", async () => {
-    mockedApi.getJob.mockResolvedValue(jobResponse());
-
-    renderPageEditor();
-    await runOcrOnTheSelectedSegment();
-    await openBackgroundJobs();
-
-    expect(await screen.findByText("Ran in the cloud.")).toBeTruthy();
   });
 
   it("states a substituted host on the job rather than in a toast", async () => {
@@ -219,48 +173,5 @@ describe("the announcement on a job", () => {
     expect(toasts.filter((shown) => /had no capacity/i.test(shown))).toEqual(
       [],
     );
-  });
-
-  it("shows which host a failed job failed on", async () => {
-    mockedApi.getJob.mockResolvedValue(
-      jobResponse({
-        status: "failed",
-        error: "weights could not be loaded",
-        execution_target: "local",
-        preferred_execution_target: "local",
-      }),
-    );
-
-    renderPageEditor();
-    await runOcrOnTheSelectedSegment();
-    await openBackgroundJobs();
-
-    expect(await screen.findByText("Failed on your computer.")).toBeTruthy();
-  });
-});
-
-describe("a submission the platform refuses", () => {
-  beforeEach(() => {
-    resetPageEditorApiMocks();
-    loadedPageWithOneSegment();
-  });
-
-  afterEach(async () => {
-    await flushPageEditorEffects();
-  });
-
-  it("explains that no inference host had capacity, and keeps the explanation on screen", async () => {
-    const toasts = recordedToasts();
-    mockedApi.enqueueTranscribePart.mockRejectedValue(
-      new ApiError(platformNoCapacityMessage(), 409),
-    );
-
-    renderPageEditor();
-    await runOcrOnTheSelectedSegment();
-
-    const explanation = await screen.findByText(platformNoCapacityMessage());
-    expect(explanation).toBeTruthy();
-    // Not the generic error toast the ordinary failure path uses.
-    expect(toasts).not.toContain(platformNoCapacityMessage());
   });
 });

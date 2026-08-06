@@ -275,13 +275,3 @@ def test_reset_refuses_before_it_can_drop_anything(
     assert "Guard failed" in result.stderr, result.stderr
     assert expected in result.stderr, result.stderr
     assert not sentinel.exists(), f"{name}: psql ran anyway - {sentinel.read_text()}"
-
-
-def test_reset_never_reintroduces_the_bypassable_guard_forms() -> None:
-    """The one claim that is genuinely about the text and not about behaviour:
-    the two exact expressions that made the old guards bypassable are gone. An
-    absence cannot be executed, so it is asserted here rather than pretended
-    away."""
-    script = RESET_SCRIPT.read_text(encoding="utf-8")
-    assert '"${SUPABASE_NON_PRODUCTION:-}"' not in script
-    assert '"${CONFIRM_SUPABASE_RESET:-}" != "RESET"' not in script

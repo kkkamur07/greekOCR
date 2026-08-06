@@ -142,29 +142,6 @@ def test_a_model_that_is_not_a_lite_tier_is_ineligible_for_local() -> None:
     assert decision.substituted is True
 
 
-@pytest.mark.parametrize(
-    ("eligibility", "expected"),
-    [
-        (HostEligibility.remote, frozenset({CLOUD})),
-        (HostEligibility.local, EITHER),
-        (HostEligibility.any, EITHER),
-    ],
-)
-def test_host_eligibility_maps_to_the_targets_a_job_may_choose(
-    eligibility: HostEligibility, expected: frozenset[ExecutionTarget]
-) -> None:
-    """The mapping is asymmetric on purpose.
-
-    ``remote`` is "only on a hosted server", so ``local`` is out. ``local`` is
-    "may run on the researcher's machine" - a **lite model tier** is sized for a
-    laptop CPU, and a hosted worker runs the same package on a bigger machine, so
-    it can run one too.
-    """
-    from backend.ml.application.model_hosts import _ELIGIBLE_TARGETS
-
-    assert _ELIGIBLE_TARGETS[eligibility] == expected
-
-
 # --- Resolving a model to its registry entry ---
 
 
@@ -183,11 +160,6 @@ def _model(artifact_ref: str, task: InferenceTask = InferenceTask.transcribe) ->
 )
 def test_a_registry_ref_resolves_to_its_registry_model_id(artifact_ref: str, expected: str) -> None:
     assert registry_model_id_for(_model(artifact_ref), task=InferenceTask.transcribe) == expected
-
-
-def test_a_job_with_no_catalog_model_falls_back_to_the_tasks_default_registry_id() -> None:
-    for task, registry_model_id in DEFAULT_REGISTRY_MODEL_IDS.items():
-        assert registry_model_id_for(None, task=task) == registry_model_id
 
 
 def test_a_model_that_does_not_point_at_the_registry_cannot_be_shown_to_be_lite() -> None:

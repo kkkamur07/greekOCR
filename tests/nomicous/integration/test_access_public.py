@@ -122,16 +122,9 @@ def test_outsider_can_read_published_via_public_route(client, outsider_headers, 
     assert allowed.status_code == 200
 
 
-# --- Public media and layout ---
-# Tests anonymous access to images, layout, and transcription layers. Does not test export zip.
-
-
-@pytest.mark.integration
-def test_anonymous_can_read_published_part_media(client, published_document):
-    part_id = published_document["part_id"]
-    response = client.get(f"/public/media/parts/{part_id}")
-    assert response.status_code == 200
-    assert response.headers["content-type"].startswith("image/")
+# --- Public layout ---
+# Tests anonymous access to layout and transcription layers. Public part media is
+# covered end to end in test_part_media_variants.py. Does not test export zip.
 
 
 @pytest.mark.integration
