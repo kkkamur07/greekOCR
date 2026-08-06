@@ -18,7 +18,6 @@ from backend.core.exceptions import ConflictError
 from backend.document.infrastructure.orm_models import Document
 from backend.jobs.infrastructure.notifications import notify_platform_job_status_changed
 from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
-from backend.ml.domain.execution import ExecutionTarget
 
 _TERMINAL_STATUSES = (JobStatus.done, JobStatus.failed, JobStatus.cancelled)
 _NON_TERMINAL_STATUSES = (JobStatus.pending, JobStatus.running, JobStatus.waiting)
@@ -56,43 +55,6 @@ class JobRepository:
             status=JobStatus.pending,
             payload={"handler": handler, "test": True},
             user_id=user_id,
-        )
-        self._session.add(job)
-        await self._session.commit()
-        await self._session.refresh(job)
-        return job
-
-    async def record_local_job(
-        self,
-        *,
-        user_id: uuid.UUID,
-        document_id: uuid.UUID,
-        document_part_id: uuid.UUID,
-        job_type: JobType,
-        registry_model_id: str,
-        registry_tag: str,
-        result: dict,
-    ) -> Job:
-        """Record a browser-orchestrated local inference run for project job history."""
-        from datetime import UTC, datetime
-
-        now = datetime.now(UTC)
-        job = Job(
-            type=job_type,
-            status=JobStatus.done,
-            user_id=user_id,
-            document_id=document_id,
-            document_part_id=document_part_id,
-            execution_target=ExecutionTarget.local,
-            preferred_execution_target=ExecutionTarget.local,
-            payload={
-                "execution": "local",
-                "registry_model_id": registry_model_id,
-                "registry_tag": registry_tag,
-            },
-            result=result,
-            started_at=now,
-            completed_at=now,
         )
         self._session.add(job)
         await self._session.commit()
