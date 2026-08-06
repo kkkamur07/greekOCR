@@ -126,8 +126,6 @@ service-core = [
 # `--group inference`, never `--only-group`.
 inference = [
     { include-group = "service-core" },
-    # Floor clears CVE-2025-4565 / CVE-2026-0994.
-    "protobuf>=5.29.6",
     "uvicorn[standard]>=0.32.0",
 ]
 load-testing = [
