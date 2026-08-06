@@ -63,7 +63,13 @@ import subprocess
 import sys
 
 from inference.cli import console as ui
-from inference.cli.api import AgentFloor, PlatformClient, PlatformError, default_platform_url
+from inference.cli.api import (
+    AgentFloor,
+    InsecurePlatformURL,
+    PlatformClient,
+    PlatformError,
+    default_platform_url,
+)
 from inference.cli.credentials import CredentialError, load_credential
 from inference.cli.version import DISTRIBUTION_NAME, SOURCE_CHECKOUT_VERSION, installed_version
 
@@ -141,6 +147,12 @@ def check_before_claiming(args: argparse.Namespace) -> int:
 
     try:
         floor = _ask(args, agent_version)
+    except InsecurePlatformURL as exc:
+        # Unlike an unreachable platform, this is not something the next command
+        # would fail on with a better message - it would fail with this same one.
+        # Saying it once, here, is what keeps it from reading as a network blip.
+        errors.print(f"[red]{exc}[/red]")
+        return ui.EXIT_FAILED
     except PlatformError as exc:
         # Not a reason to stop. A researcher on a train has not been refused, and
         # whatever they were about to do will fail on its own terms with a better

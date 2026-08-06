@@ -7,10 +7,13 @@ before it is authenticated - so it also stops reporting **capacity**. That makes
 "which version am I running" the first question worth asking when a machine
 stops taking work, and this subcommand is the answer to it.
 
-The floor itself is deliberately not shown. It is served only on the claim
-response (`backend/ml/api/agent_version.py`), and asking for it would mean
-asking for a page of work; a subcommand whose job is to report a version has no
-business claiming one. `nomicous run` prints the floor when it is told one.
+The floor itself is deliberately not shown, but not because it cannot be: since
+`read_agent_floor`, `GET /device/v1/agent/version` answers it without a
+credential and without touching a queue, and `nomicous upgrade` - which this same
+package runs before every `nomicous run` - asks it there. This subcommand stays
+offline anyway. It is the thing a researcher runs when the network is the
+suspect, and a version report that needs the platform to answer cannot report
+the version of a machine that cannot reach it.
 """
 
 from __future__ import annotations
@@ -44,6 +47,12 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def run(args: argparse.Namespace) -> int:
+    # Imported here to break a cycle, not to defer a cost: `api` imports
+    # `installed_version` from this module at *its* module scope, so a top-level
+    # import of `api` here - or of `credentials`, which imports `api` - fails on
+    # a partially initialised module and takes every subcommand with it. There is
+    # nothing to defer either way; `main` has already imported both through the
+    # other three commands by the time this runs.
     from inference.cli.api import AGENT_VERSION_HEADER
     from inference.cli.credentials import CredentialError, credential_path, load_credential
 
