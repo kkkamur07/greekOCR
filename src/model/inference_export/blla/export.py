@@ -1,8 +1,8 @@
 """Development-only export of the inference-owned BLLA graph.
 
-RETIRED. See ``archive/onnx-runtime/README.md`` and ADR 0004. Originally
-``src/model/inference_export/blla/export.py``. ``_ExportGroupNorm`` below is
-the reason this file is worth keeping.
+Restored by ADR 0006. ``_ExportGroupNorm`` below is the reason this file is
+worth keeping: see that ADR for the accumulator bug it exists to avoid, and for
+what shipping a graph exported *without* it cost.
 """
 
 from __future__ import annotations
@@ -12,10 +12,9 @@ import hashlib
 from pathlib import Path
 
 import torch
+from src.model.inference_export.blla.checkpoint import load_blla_model
+from src.model.inference_export.blla.model import BLLATorchModel, _GroupNorm
 from torch import Tensor, nn
-
-from inference.architectures.blla.blla import _load_blla_model
-from inference.architectures.blla.blla_model import BLLATorchModel, _GroupNorm
 
 
 class _ExportGroupNorm(nn.Module):
@@ -100,7 +99,7 @@ def export_blla_onnx(
     if opset_version < 17:
         raise ValueError("opset_version must be at least 17")
 
-    model = _load_blla_model(str(source))
+    model = load_blla_model(str(source))
     if not isinstance(model, BLLATorchModel):
         raise TypeError("unexpected BLLA model loaded for export")
 

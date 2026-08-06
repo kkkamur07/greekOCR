@@ -16,13 +16,12 @@ import json
 from pathlib import Path
 
 import torch
-from torch import Tensor, nn
-
-from inference.architectures.calamari.checkpoint import (
+from src.model.inference_export.calamari.checkpoint import (
     CalamariCheckpointMetadata,
     load_calamari_checkpoint,
 )
-from inference.architectures.calamari.model import CalamariTorchModel
+from src.model.inference_export.calamari.model import CalamariTorchModel
+from torch import Tensor, nn
 
 
 def export_calamari_onnx(

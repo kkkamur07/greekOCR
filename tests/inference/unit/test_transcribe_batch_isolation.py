@@ -30,8 +30,14 @@ from inference.contracts.transcribe import (
 )
 from inference.jobs.runner import run_model
 
-CALAMARI_CHECKPOINT = (
-    Path(__file__).resolve().parents[3] / "src/hf/local/syriac/calamari/v1/stable/best.pt"
+# The published graph, from the Hub revision the registry pins. Gitignored, so
+# these two real-weights cases skip in a checkout that has not fetched it; every
+# other case here injects failures at the batch seam and needs no artifact.
+CALAMARI_ARTIFACT = (
+    Path(__file__).resolve().parents[3] / "src/hf/cache/syriac-calamari-v1/stable/best.onnx"
+)
+requires_artifact = pytest.mark.skipif(
+    not CALAMARI_ARTIFACT.is_file(), reason="published Calamari artifact is not cached locally"
 )
 
 
@@ -86,7 +92,7 @@ def calamari_runner(monkeypatch: pytest.MonkeyPatch):
     )
     monkeypatch.setattr(
         "inference.jobs.runner.resolve_weights_source",
-        lambda *_args, **_kwargs: CALAMARI_CHECKPOINT,
+        lambda *_args, **_kwargs: CALAMARI_ARTIFACT,
     )
 
     def run(params: dict, image_bytes: bytes | None = None):
@@ -172,6 +178,7 @@ def test_batch_with_no_croppable_line_fails_instead_of_returning_nothing(
         calamari_runner(_line_params(3))
 
 
+@requires_artifact
 def test_one_undecodable_crop_does_not_take_the_page_down() -> None:
     """Run the real checkpoint: one bad crop, two real ones, one page.
 
@@ -181,7 +188,7 @@ def test_one_undecodable_crop_does_not_take_the_page_down() -> None:
     """
     results = adapter.run_calamari_transcribe_many(
         [TRANSCRIBE_LINE.read_bytes(), b"not an image", TRANSCRIBE_LINE.read_bytes()],
-        checkpoint_path=CALAMARI_CHECKPOINT,
+        checkpoint_path=CALAMARI_ARTIFACT,
     )
 
     assert len(results) == 3
@@ -194,6 +201,7 @@ def test_one_undecodable_crop_does_not_take_the_page_down() -> None:
     assert survivors[0].text == survivors[1].text
 
 
+@requires_artifact
 def test_batch_where_every_line_failed_reraises_the_original_error() -> None:
     """An all-failed batch must keep the cause, not return an empty page.
 
@@ -208,7 +216,7 @@ def test_batch_where_every_line_failed_reraises_the_original_error() -> None:
     with pytest.raises(UnidentifiedImageError):
         adapter.run_calamari_transcribe_many(
             [b"not an image", b"also not an image"],
-            checkpoint_path=CALAMARI_CHECKPOINT,
+            checkpoint_path=CALAMARI_ARTIFACT,
         )
 
 

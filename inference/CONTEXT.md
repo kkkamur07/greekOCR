@@ -51,8 +51,8 @@ The immutable 40-character git commit on a **Hub model repo** selected by a **re
 _Avoid_: mutable tag as a runtime revision, version (too generic), release branch
 
 **Hub artifact**:
-The checkpoint files published inside a **Hub model repo** at one **Hub revision** - Calamari and BLLA inference load native PyTorch checkpoints (`.pt`, `.safetensors`) directly. There is no conversion step between the trained artifact and the run artifact.
-_Avoid_: weights (too generic), model file, ONNX artifact (retired runtime)
+The files published inside a **Hub model repo** at one **Hub revision**. Calamari and BLLA inference both load the ONNX graph (`best.onnx`, `blla.onnx`), which carries its own codec and input geometry. The native checkpoints (`.pt`, `.safetensors`) are published at the same revision and are the *export* input, never the run input.
+_Avoid_: weights (too generic), model file, checkpoint (means the native export input here)
 
 **Artifact SHA-256**:
 The required 64-character SHA-256 digest for the architecture-native **Hub artifact**. The inference service verifies it after download, before Hub-cache reuse, and before passing the artifact to an architecture loader.
@@ -188,8 +188,8 @@ _Avoid_: org (when meaning the namespace generically)
 
 - "data" was used to mean both weights and training material - resolved: use **Hub model repo** vs **Hub dataset repo**.
 - "kalamos" vs "nomicous" as public product name - resolved for Hub: product is **nomicous**; **Hub namespace** may be personal until the org exists.
-- Checkpoint filename at repo root - resolved: use native runtime artifact names (**Hub artifact**), e.g. Calamari `best.pt` and BLLA `blla.safetensors`.
-- Calamari and BLLA runtime **Hub artifact** format is native PyTorch (`.pt`, `.safetensors`). ONNX was the runtime until 2026-08-04 and is retired - the trained artifact and the run artifact are now the same file, which is what removed the parity problem. See ADR 0004.
+- Checkpoint filename at repo root - resolved: use runtime artifact names (**Hub artifact**), e.g. Calamari `best.onnx` and BLLA `blla.onnx`, published beside the `best.pt` / `blla.safetensors` they were exported from.
+- Calamari and BLLA runtime **Hub artifact** format is ONNX (`best.onnx`, `blla.onnx`). PyTorch was the runtime from 2026-08-04 to 2026-08-05 and is now the *exporter*: the trained artifact and the run artifact are different files again, and the parity between them is asserted by `tests/export/` rather than assumed away. The 445 MB that buys off a researcher's install is why. See ADR 0006, which supersedes ADR 0004.
 - Legacy registry ids (`greek-calamariv1`) - resolved: migrate to `{script}-{architecture}-{model_version}` (e.g. `greek-calamari-v1`); **Hub repo slug** is task-specific.
 - **Hub cache** invalidation - resolved: manifest hash (not files-exist-only).
 
@@ -204,7 +204,7 @@ _Avoid_: org (when meaning the namespace generically)
 - **Version floor**: every claim sends `X-Nomicous-Agent-Version`. Below the floor the platform answers `426` with `error.code = AGENT_VERSION_UNSUPPORTED`, `reason` (`below_floor` / `missing` / `malformed`), `minimum_version`, `latest_version`, `package`, and `retryable: false`. At or above it, the 200 response carries an `agent` notice with `outdated`. Configured by `INFERENCE_AGENT_MIN_VERSION` / `INFERENCE_AGENT_LATEST_VERSION` on the platform (`backend/ml/domain/agent_version.py`, `backend/ml/api/agent_version.py`).
 - **Launch check**: `GET /device/v1/agent/version` answers the same 426 or the same notice with nothing taken from the queue - unauthenticated, because the version dependency resolves before any credential is looked at. The CLI half is `inference/cli/upgrade.py`, wired into `main.py` for the commands that claim and nowhere else; it upgrades with whichever installer already owns the environment (`pip` if this interpreter has one, otherwise `uv pip`) and re-execs through `os.execve`.
 - Architectures implemented: **Calamari** (`inference/architectures/calamari/`) and native **BLLA segment** (`inference/architectures/blla/`)
-- **Calamari runtime**: local PyTorch graph + local preprocessing; no TensorFlow or vendored `calamari_ocr` import at inference time.
+- **Calamari runtime**: local ONNX Runtime session + local preprocessing; no TensorFlow, no PyTorch, and no vendored `calamari_ocr` import at inference time.
 - Weight resolution: `file://`, `hf://`, and `package://` (see `inference/weights/__init__.py` and `inference/hub/`)
 - Runtime cache: `~/.nomicous/hf/cache/<registry_model_id>/<registry_tag>/`
 - **CLI** (`inference/cli/`): the only entry point a researcher has. `nomicous pair` and `nomicous version` (#56), `nomicous run` (#57), `nomicous upgrade` (#58). `pair` runs the pairing protocol above and writes the **device credential file**; `version` reports what the **version floor** will read, and asks the platform nothing; `upgrade` is the **launch check** run on demand, and prints nothing when this agent is current. `run` is the **claim** loop: one page in flight, fetched through the **signed page image link**, executed by the same `run_model` the platform's own worker calls, and ended through the existing job callback - `--exit-when-empty` for a script, waiting otherwise. `run` is also the only command that claims, so it is the only one the launch check gates, and it runs that check before its first claim and never again. A hosted **inference agent** runs the same loop with a **service credential** in `NOMICOUS_SERVICE_TOKEN` and a short poll. The platform base URL comes from `NOMICOUS_API_URL` or `--api-url`.

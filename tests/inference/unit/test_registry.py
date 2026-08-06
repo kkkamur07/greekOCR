@@ -21,7 +21,7 @@ def test_registry_yaml_validates_model_entries():
     assert syriac.versions["stable"].hub_revision == "5ff715e873f1ae3f325ebea4d2c4a95eb5094601"
     assert (
         syriac.versions["stable"].artifact_sha256
-        == "ea711b918010aa31bd4a8a5de99c7953207421a7c7d4a39163166db380013053"
+        == "3cb01b58be5809032318c717c079a5b681a87074a372ea4334b9767c67ce301c"
     )
     assert "greek-calamari-v1" not in registry.models
 
@@ -32,9 +32,9 @@ def test_registry_yaml_validates_model_entries():
     assert blla.versions["stable"].weights_source == "hf://kkkamur07/segmentation-blla@stable"
     assert (
         blla.versions["stable"].artifact_sha256
-        == "8b5b6ec21947d3c5a7c117c7b873f3a923aab48950ba05707805899877c397ce"
+        == "d3e9c086541157a2f55209bc4802206478231e7637c12ee4884504f94d6c4ed3"
     )
-    assert blla.versions["stable"].hub_revision == "444d51dd7b34cd2012b1ffe1c9c9442c875d8230"
+    assert blla.versions["stable"].hub_revision == "5c20a584b39988a25dfc682f9fe634ac1b4a42dd"
 
 
 # --- Weight path resolution ---
@@ -49,21 +49,18 @@ def test_registry_rejects_partial_hf_provenance():
         )
 
 
-def test_native_blla_rejects_digest_mismatch_before_runtime_load():
+def test_blla_rejects_digest_mismatch_before_runtime_load(tmp_path):
+    """The digest is checked before onnxruntime opens the file.
+
+    The artifact here is deliberately not a valid graph: if the ordering were
+    reversed, this would fail with a parse error from the loader instead of the
+    mismatch, so the assertion distinguishes the two.
+    """
     from inference.architectures.blla.blla import run_blla_segment
 
-    model_path = (
-        DEFAULT_WEIGHTS_ROOT.parent.parent
-        / "src"
-        / "hf"
-        / "staging"
-        / "models"
-        / "segmentation"
-        / "blla"
-        / "v1"
-        / "stable"
-        / "blla.safetensors"
-    )
+    model_path = tmp_path / "blla.onnx"
+    model_path.write_bytes(b"not a graph, and never opened")
+
     with pytest.raises(ValueError, match="artifact SHA-256 mismatch"):
         run_blla_segment(
             b"not-read-after-integrity-failure",

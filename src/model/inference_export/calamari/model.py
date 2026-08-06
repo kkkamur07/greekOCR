@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import torch
-from torch import Tensor, nn
-
-from inference.architectures.calamari.config import CalamariTorchConfig, require_int
-from inference.architectures.calamari.layers import (
+from src.model.inference_export.calamari.config import CalamariTorchConfig, require_int
+from src.model.inference_export.calamari.layers import (
     LazyBiLSTM,
     SameConv2d,
     SameMaxPool2d,
     cnn_to_sequence,
 )
+from torch import Tensor, nn
 
 
 class CalamariTorchModel(nn.Module):

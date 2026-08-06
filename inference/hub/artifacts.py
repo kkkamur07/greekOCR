@@ -65,28 +65,32 @@ def verify_artifact_sha256(path: Path, expected_sha256: str) -> None:
 
 
 def find_hub_artifact(cache_dir: Path, *, architecture: str | None) -> Path:
-    """Locate the one architecture-native **Hub artifact** in a cache directory.
+    """Locate the one runtime **Hub artifact** in a cache directory.
 
-    There is exactly one runtime format per architecture since ADR 0004 retired
-    the ONNX runtime: Calamari loads ``.pt`` and BLLA loads ``.safetensors``.
-    This function used to rank two formats per architecture, which meant a
-    directory holding both silently decided which runtime ran.
+    There is exactly one runtime format under ADR 0006 and it is ``.onnx`` for
+    both architectures. The rule that matters is *one* format, not which one:
+    this function used to rank two per architecture, which meant a directory
+    holding both silently decided which runtime ran.
+
+    That is not hypothetical here. ``snapshot_download`` fetches the whole repo
+    revision, and these repos publish the native checkpoint beside the graph -
+    so every cache directory holds a ``.pt`` or ``.safetensors`` this runtime
+    must not pick up. Naming only ``.onnx`` is what keeps the choice from being
+    made by directory contents.
     """
     if architecture == "calamari":
-        for name in ("best.pt", "stable.pt", "model.pt"):
+        for name in ("best.onnx", "stable.onnx", "model.onnx"):
             candidate = cache_dir / name
             if candidate.is_file():
                 return candidate
-        for path in sorted(cache_dir.glob("*.pt")):
-            if path.is_file():
-                return path
 
     if architecture in (None, "blla", "blla-segment", "blla_segment", "kraken_segment"):
-        candidate = cache_dir / "blla.safetensors"
+        candidate = cache_dir / "blla.onnx"
         if candidate.is_file():
             return candidate
-        for path in sorted(cache_dir.glob("*.safetensors")):
-            if path.is_file():
-                return path
+
+    for path in sorted(cache_dir.glob("*.onnx")):
+        if path.is_file():
+            return path
 
     raise FileNotFoundError(f"no supported Hub artifact found in cache directory: {cache_dir}")

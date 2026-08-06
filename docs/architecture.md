@@ -15,7 +15,7 @@ flowchart LR
     API --> Jobs["Durable platform jobs"]
     LocalAgent["nomicous agent (researcher's machine)"] -->|"claim"| Jobs
     HostedAgent["nomicous agent (hosted worker)"] -->|"claim"| Jobs
-    LocalAgent --> Models["BLLA + Calamari (PyTorch CPU)"]
+    LocalAgent --> Models["BLLA + Calamari (ONNX Runtime CPU)"]
     HostedAgent --> Models
     LocalAgent -->|"job callback"| API
     HostedAgent -->|"job callback"| API
@@ -49,7 +49,7 @@ a failure: the work goes to the cloud and the researcher is told so.
 - **Supabase:** managed Postgres and private Storage. The browser does not use
   Supabase Auth, PostgREST, Realtime, Edge Functions, or direct Storage access.
 - **Vercel:** suitable for the landing page, Next.js editor, and
-  request/response API, but not long-running PyTorch workers.
+  request/response API, but not long-running inference workers.
 - **Docker:** repeatable local packaging and persistent worker deployment.
 
 ## Annotation and sharing
@@ -99,7 +99,7 @@ sequenceDiagram
 ```
 
 There is one queue and one database. The agent is a researcher's laptop or a
-hosted worker — the same program with different credentials (ADR 0003).
+hosted worker, the same program with different credentials (ADR 0003).
 
 The job is user-visible. `pending` means unclaimed, `running` means the
 platform worker is processing it, `waiting` means an agent has taken it, and

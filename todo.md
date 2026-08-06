@@ -6,26 +6,28 @@ what is **not** done. Ordered by what blocks what.
 
 Current tree: committed on `feat/inference-cli-redesign`. The 2026-08-04 inference
 redesign (ADRs 0002-0005, issues #48-#66) is layered on top; see
-`docs/merge-handoff-inference-redesign.md` before merging anything into it.
+`docs/resume-inference-redesign.md` before merging anything into it.
 
 ---
 
 ## P0 — Blocks shipping
 
-### 1. ~~Bump the pinned `blla.onnx` digest~~ - dissolved by ADR 0004 / issue 049
+### 1. ~~Bump the pinned `blla.onnx` digest~~ - done 2026-08-05 (ADR 0006)
 
-This was a four-step ordered dance: upload the re-exported `blla.onnx` to the Hub
-*first* (because `src/hf/resolve/cache.py` rmtree's the cache on manifest mismatch
-and `src/hf/cache/` is untracked), then bump `hub_revision` and `artifact_sha256`,
-then the hardcoded copies in `test_registry.py`, then the local cache copy. It was
-caused by the GroupNorm export fix changing the ONNX graph, so the artifact hash
-moved away from what the registry pinned.
+ADR 0004 dissolved this by retiring the ONNX runtime rather than by doing it, and
+that turned out to matter: the `blla.onnx` published at `444d51dd` was the
+**pre-fix** export all along, carrying six `InstanceNormalization` nodes. So the
+GroupNorm fix existed in the exporter and had never reached the artifact.
 
-Retiring the ONNX runtime removed the problem rather than solving it. The registry
-now pins `blla.safetensors` (`8b5b6ec2...`) and `best.pt` (`ea711b91...`) at the
-same already-published **Hub revision**, both verified against the live Hub. There
-is no re-export step, so there is no artifact that can drift from the checkpoint it
-came from.
+ADR 0006 put the ONNX runtime back, which made this blocking again, and the dance
+was run in the order this entry always specified: re-export, upload to the Hub
+first, then `hub_revision` + `artifact_sha256`, then the hardcoded copies in
+`test_registry.py`, then the local `src/hf/cache/` copy.
+
+The registry now pins `blla.onnx` (`d3e9c086...`) at revision `5c20a584...` and
+`best.onnx` (`3cb01b58...`) at the unchanged `5ff715e8...`. Calamari needed no
+re-publish: re-exporting `best.pt` today reproduces the published graph byte for
+byte.
 
 ### 2. Set `DEVICE_TOKEN_HMAC_SECRET` before rotating `JWT_SECRET`
 
@@ -42,48 +44,26 @@ runs with `JOB_WORKER_ENABLED=false` (it is request/response only), so if that s
 isn't running, **nothing claims `pending` jobs in production**. The new on-read stale sweep
 covers timeouts but does not claim work.
 
-### 4. Benchmark ONNX vs Torch **closure** sizes, then decide
+### 4. ~~Benchmark ONNX vs Torch **closure** sizes, then decide~~ - done 2026-08-05
 
-ADR 0004 retired ONNX on measurements that were real but not comparable, and the
-one number that matters was never taken.
+Measured on the same machine, same method as the 811 MB row, macOS arm64:
 
-What we measured:
-
-| | measured |
+| closure | installed |
 |---|---|
-| `onnxruntime` package, installed | 63 MB |
-| `torch` package, installed | 388 MB |
-| **Full `nomicous-inference` closure, CPU-pinned (Linux)** | **969 MB** |
-| Full closure, no pin (Linux) — 16 CUDA wheels | **4801 MB** |
-| Full closure, macOS arm64 | 811 MB |
+| Torch (ADR 0004) | **817 MB** |
+| ONNX Runtime (ADR 0006) | **372 MB** |
 
-The first two rows compare *packages*. The last three measure a *closure* — Torch
-plus OpenCV, SciPy, NumPy, SymPy, scikit-image and the rest of what a researcher
-actually downloads. **There is no ONNX counterpart to those three rows**, so the
-comparison that would justify or overturn the decision has never been run: nobody
-has built the equivalent ONNX-runtime closure and weighed it against 969 MB.
+The gap is 445 MB, 54% of the install, and `onnxruntime` (70 MB) replaces `torch`
+(475 MB) plus the SymPy/networkx/torchgen tail that came with it. That is the
+"revisit" branch this entry described, and it was taken: see
+[ADR 0006](docs/adr/0006-onnx-runtime-is-the-inference-runtime.md), which also
+records the two things the disk figure understates - the CPU pin that could not
+be expressed in package metadata (4801 MB on a plain Linux `pip install`), and
+the 3.0 GB vs 7.0 GB peak RSS from issue #62.
 
-That gap matters more now than when ADR 0004 was written, because the closure came
-in far worse than the ADR assumed — 2.5x its stated figure at best, 12x at worst,
-and the worst case is what a plain `pip install` produces (issue #65).
-
-Take both closures on the same machine, same lockfile discipline, same platforms
-(Linux x86_64/aarch64, macOS arm64, Windows), and report installed size, bytes
-fetched, and cold-cache wall clock. Include peak RSS while segmenting one page —
-issue #62 measured 3.0 GB for ONNX against 7.0 GB for Torch, which is the same
-question in memory rather than disk, and on an 8 GB laptop it may matter more.
-
-Then decide, on the numbers:
-
-- **Keep Torch** if the closure gap is modest. Output is byte-identical, PyTorch is
-  14%/40%/12% faster (ADR 0004), and the ONNX↔Torch parity apparatus stays deleted
-  — that was the recurring cost the owner named.
-- **Revisit** if the gap is large. Reversal is now cheap by design: the ONNX
-  implementation was archived rather than deleted, under `archive/onnx-runtime/`
-  with a README and a revival checklist, precisely so this stays a live option.
-
-Do not decide this from the package-level 63 MB vs 388 MB figures. They are the
-numbers that made the original argument and they are the wrong unit.
+The latency the decision gives up is real and was weighed: PyTorch is 40% faster
+on the forward pass, which is 12-14% of a page end to end, because the NumPy and
+scikit-image decoder dominates and is unchanged either way.
 
 ### 5. ~~Commit~~ - done
 
@@ -105,6 +85,7 @@ multiple worker threads.
 
 ### 8. BLLA residual divergence at extreme widths
 
+**Live again as of ADR 0006** - this was moot only while PyTorch was the runtime.
 The fix bounds the accumulator; it does not remove the mechanism.
 
 | scaled width | max logit delta | sigmoid flips |
@@ -121,7 +102,10 @@ reduction stage to `_ExportGroupNorm`.
 
 - They read only the staging path, so a stale `src/hf/cache/` copy is invisible to them.
 - The parity suite bypasses the resolver entirely.
-- The graph-shape guard inspects the committed blob rather than a freshly exported one.
+- ~~The graph-shape guard inspects the committed blob rather than a freshly exported one.~~
+  Closed by ADR 0006, and closed by asserting *both*: one test exports and checks the
+  result, a second checks the **published** artifact. Splitting them is what surfaced the
+  fact that the exporter was correct while the published file was not.
 
 ### 10. ~~Pin the helper download URLs~~ - dissolved by issue 061
 

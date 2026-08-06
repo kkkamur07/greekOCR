@@ -34,8 +34,9 @@ See [`issues/kanban.md`](../issues/kanban.md) for the per-lane table.
 The shape of the change: a browser talked to a loopback HTTP server on the researcher's own
 machine; now a CLI installed from PyPI pairs with the platform and **pulls** work outbound.
 
-- **048–052** collapsed the second job queue, moved the runtime to PyTorch (ADR 0004),
-  published the package, added the execution target, and opened the device claim endpoint.
+- **048–052** collapsed the second job queue, moved the runtime to PyTorch (ADR 0004 —
+  since superseded by ADR 0006, which moved it back), published the package, added the
+  execution target, and opened the device claim endpoint.
 - **053–056** added the signed page-image link, the device lease and stale sweep, the version
   floor, and `nomicous pair` / `nomicous version`.
 - **057** closed the loop: `nomicous run` claims a page, fetches it through the signed link,
@@ -63,26 +64,42 @@ produces phantom failures (see the notes below).
 
 | Command | Expected |
 |---|---|
-| `pytest tests/nomicous` | 659 passed, 1 skipped, **9 failed** |
-| `pytest tests/inference tests/hf` | 206 passed, 2 skipped, **1 failed** |
+| `pytest tests/nomicous` | **668 passed, 1 skipped, 0 failed** |
+| `pytest tests/inference tests/hf` | **0 failed** — ADR 0006 reshaped this suite; see below |
+| `pytest tests/export` (needs `--group export`) | **0 failed** — the Torch graphs and the exporters |
 | `cd nomicous/frontend && npm test` | 45 files, 182 passed |
 | `npx tsc --noEmit` / `npx eslint .` | clean / 0 errors, 2 warnings |
-| `ruff check .` | **164 errors, all under `src/`** |
-| `ruff format --check .` | 105 files, **all pre-existing**; 100 under `src/`, 5 in `scripts/hf` and `tests/` |
+| `ruff check . src/model/inference_export` | **All checks passed** |
+| `ruff format --check` (CI's path list) | clean; `src/` is excluded from both ruff gates |
 
-Every failure is pre-existing and understood:
+**Green means green.** Any red is now a signal. The suite used to carry nine documented
+platform failures; all nine were real defects, and none was in the code the tests pointed at:
 
-- **4 × `integration/test_device_pairing.py`** — asyncpg event-loop collision, issue
-  [#63](https://github.com/kkkamur07/greekOCR/issues/63). Not a product bug.
-- **5 × caplog cross-contamination** (`unit/test_device_pairing.py` ×4,
-  `unit/test_job_callback_service.py` ×1). `-p no:logging` turns these into ERRORs instead,
-  so only ever compare like-for-like invocations.
-- **1 × `test_grayscale_helper_is_the_only_convention_under_src`** —
-  `src/models/trocr/augmentation/weather.py` uses `COLOR_RGB2GRAY` outside the allow-list.
-  Under `src/`, which is audit-only, so it is reported rather than fixed.
-- **164 ruff errors** — all under `src/`. `per-file-ignores` names `src/model/**` (singular);
-  the offending tree is `src/models/**` (plural), restored later by `516c3fc`, so the ignores
-  never matched. Config change plus a decision about the vendored tree — not a merge task.
+- **4 × `integration/test_device_pairing.py`** — the module assembled its own app and opened
+  a second `TestClient`, so its queries ran on a second event loop while the asyncpg pool
+  belonged to the first. It did that only to set the poll cadence before `backend.core.app`
+  imports; the env var moved to the integration conftest, which loads earlier still.
+- **4 × empty `caplog`** — `alembic/env.py` called `fileConfig(path)`, which defaults to
+  `disable_existing_loggers=True` and switched off every existing logger for the rest of the
+  session. Not only a test bug: any process that configured logging and then ran a migration
+  lost its logging silently.
+- **1 × poll cadence** — `DeviceSettings` is a pydantic-settings model, so anything not passed
+  explicitly comes from the environment, and the unit fixture inherited the integration
+  conftest's `DEVICE_PAIRING_POLL_INTERVAL_SECONDS=1`. The fixture now states what it asserts.
+- **1 × `test_process_one_job_runs_every_stale_sweep`** — patched three of the worker's four
+  sweeps, so the lease sweep opened a live Postgres connection from a *unit* test. It passed
+  only when an integration test had provisioned a database earlier in the same session.
+- **1 × `test_grayscale_helper_is_the_only_convention_under_src`** — allow-listed, with the
+  reason: `weather.py`'s `COLOR_RGB2GRAY` is a luminance term for a snow blend, not the
+  train/serve conversion. **Audit finding recorded there and not fixed**, because `src/` is
+  audit-only: that same function does its real grayscale with PIL's `ImageOps.grayscale`, and
+  PIL and OpenCV use different luma coefficients — the exact skew that module exists to
+  prevent, by a route its marker list cannot see.
+
+`src/` is excluded from ruff wholesale via `extend-exclude`. That is a **suppression**, not a
+fix: pointing ruff at `src/` directly still reports its ~576 findings. The previous config
+listed `src/model` (singular) and silently missed `src/models` (plural), which was 159 of the
+164 findings — a whole-tree exclusion cannot drift that way.
 
 > **A tenth failure that is not real.** Running another suite, or another agent, against the
 > same Postgres concurrently produces one extra failure — and **not always the same one**. It
@@ -103,8 +120,9 @@ docker ps --filter name=nomicous-db-1 || docker start nomicous-db-1
 
 # Python. Bare `uv sync` PRUNES the venv to the default groups and takes zxcvbn,
 # fastapi and the rest with it; every backend import then fails. Always name the groups.
-# NOTE: `--group helper` is gone as of #060.
-uv sync --group dev --group test --group platform --group inference
+# NOTE: `--group helper` is gone as of #060. `--group export` is where Torch
+# lives as of ADR 0006 — only `tests/export` and the exporters need it.
+uv sync --group dev --group test --group platform --group inference --group export
 
 # Frontend
 cd nomicous/frontend && npm install
@@ -134,11 +152,18 @@ mocking it — installing a package into an isolated environment to make it live
 4. **Never memoize anything settings-derived with a bare `lru_cache`.** Use `@settings_cache`
    from `backend/core/settings/_cache.py` so `reset_settings_caches()` can reach it.
 5. **Do not capture a settings-derived object in `__init__`.**
-6. **ADR 0004 is invisible in a diff.** A three-way merge resolves "modified here, deleted
-   there" by keeping the modification, silently resurrecting ONNX. After any merge:
-   `grep -rl onnxruntime inference/` must be empty and `inference/architectures/*/onnx.py`
-   must not exist.
-7. **`src/` is audit-only.** Report what is wrong there; do not edit it.
+6. **The runtime decision is invisible in a diff, and it has now flipped twice.** A
+   three-way merge resolves "modified here, deleted there" by keeping the modification, so
+   either side can be resurrected silently. The check is the import graph rather than a
+   grep, and it is a test:
+   `pytest tests/inference/unit/test_architecture_contract.py -k torch`. Nothing under
+   `inference/` may import Torch (ADR 0006) — Torch is still in the repository, under
+   `src/model/inference_export/`, where it traces the graphs.
+7. **`src/` is no longer entirely audit-only.** ADR 0006 moved the Torch graphs and the ONNX
+   exporters to `src/model/inference_export/`, which is ours and is maintained. Everything
+   else under `src/` (vendored Calamari, the research trees) is still report-don't-edit.
+   Lint consequence: `src` is in `tool.ruff.extend-exclude`, so the export tree is checked
+   only because CI and pre-commit name its path explicitly.
 
 ## 6. Known gaps, deliberately not closed
 

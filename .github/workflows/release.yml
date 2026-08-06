@@ -118,7 +118,10 @@ jobs:
               raise SystemExit(
                   f"release SBOM has {len(packages)} packages; it is not describing the real package"
               )
-          for required in ("torch", "pillow", "huggingface-hub"):
+          # ADR 0006: `onnxruntime` is the runtime. This list named `torch` until
+          # 2026-08-05, and it is a real gate - a wheel whose SBOM does not
+          # mention the inference runtime is not describing what ships.
+          for required in ("onnxruntime", "pillow", "huggingface-hub"):
               if required not in names:
                   raise SystemExit(f"release SBOM does not mention {required}")
           PY

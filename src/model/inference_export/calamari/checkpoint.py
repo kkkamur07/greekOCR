@@ -19,13 +19,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import torch
-from torch import Tensor
-
-from inference.architectures.calamari.config import (
+from src.model.inference_export.calamari.config import (
     CalamariTorchConfig,
     CalamariTorchLayerConfig,
 )
-from inference.architectures.calamari.model import CalamariTorchModel
+from src.model.inference_export.calamari.model import CalamariTorchModel
+from torch import Tensor
 
 
 @dataclass(frozen=True)

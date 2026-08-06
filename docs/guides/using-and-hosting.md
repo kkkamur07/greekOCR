@@ -8,7 +8,7 @@ This guide covers the supported local stack and the current hosted topology.
 
 ## Docker Compose quick start
 
-The repository’s Compose file is a development stack, not a hardened
+The repository's Compose file is a development stack, not a hardened
 internet-facing deployment. It uses local Postgres, local filesystem media,
 bind mounts, reload mode, and development seed data.
 
@@ -64,7 +64,7 @@ docker compose down
 
 ## Run services individually
 
-For service development, install Python 3.11–3.12, `uv`, Node.js 20+, and
+For service development, install Python 3.11 to 3.12, `uv`, Node.js 20+, and
 Docker for Postgres:
 
 ```bash
@@ -103,13 +103,15 @@ terminal. A hosted worker runs the same package (ADR 0002), so there is no
 separate local build and no per-OS installer.
 
 ```bash
-uv tool install nomicous-inference --torch-backend=cpu   # requires uv >= 0.10
+uv tool install nomicous-inference
 nomicous pair          # links this machine to your account
 nomicous run           # takes pages from the queue until you stop it
 ```
 
-See [`inference/README.md`](../../inference/README.md#install) for why the
-`--torch-backend` flag and the uv version floor are both load-bearing.
+No flags and no uv version floor: ADR 0006 replaced PyTorch with ONNX Runtime,
+which publishes one CPU wheel per platform, so there is no accelerator variant to
+pin against. See [`inference/README.md`](../../inference/README.md#install) for
+what the instruction used to be and why it mattered.
 
 The agent opens no port and accepts no connection. It asks the platform for a
 page, downloads that one page image through a short-lived signed link, runs the

@@ -66,11 +66,23 @@ Example: `registry://syriac-calamari-v1?tag=stable`.
 
 ### Calamari transcribe (Hub)
 
-1. Copy the converted `.pt` checkpoint into the **Hub staging tree**:
+1. Copy the converted `.pt` checkpoint into the **Hub staging tree**, then
+   export the graph beside it. The `.onnx` is what the runtime loads (ADR 0006);
+   the `.pt` is published with it as the export input, and `publish_model.py`
+   refuses a staging directory that has no `.onnx` in it:
 
    ```
    src/hf/staging/models/{script}/calamari/{model_version}/{registry_tag}/
      best.pt
+     best.onnx
+   ```
+
+   ```bash
+   uv run --group export python -c "
+   from pathlib import Path
+   from src.model.inference_export.calamari import export_calamari_onnx
+   d = Path('src/hf/staging/models/{script}/calamari/{model_version}/{registry_tag}')
+   export_calamari_onnx(d / 'best.pt', d / 'best.onnx')"
    ```
 
 2. Dry-run, then upload:
@@ -129,10 +141,26 @@ metadata lookup for public repositories.
 
 ### BLLA segment
 
-The BLLA runtime loads `blla.safetensors` from the registry-pinned
-`segmentation-blla` Hub artifact. The inference image does not install the
-Kraken Python package; nothing in the repository does since ADR 0004 retired
-the ONNX runtime and the parity harness Kraken was the oracle for.
+The BLLA runtime loads `blla.onnx` from the registry-pinned
+`segmentation-blla` Hub artifact, exported from `blla.safetensors` the same way:
+
+```bash
+uv run --group export python -c "
+from pathlib import Path
+from src.model.inference_export.blla import export_blla_onnx
+d = Path('src/hf/staging/models/segmentation/blla/v1/stable')
+export_blla_onnx(d / 'blla.safetensors', d / 'blla.onnx', example_width=64)"
+```
+
+The inference image does not install the Kraken Python package and nothing in
+the repository does: the parity harness Kraken was the oracle for was not
+restored with the rest of the ONNX path, because the Torch graph in
+`src/model/inference_export/` is a closer oracle and is already here.
+
+**Verify the export before publishing, not after.** `blla.onnx` was published
+once from a pre-fix exporter and the mistake survived a whole ADR - see ADR 0006.
+`uv run --group export pytest tests/export -q` compares graph against artifact on
+real weights.
 
 ### Local / offline dev
 
@@ -161,7 +189,7 @@ models:
       stable:
         weights_source: hf://<namespace>/syriac-htr-calamari@stable
         hub_revision: <40-character-resolved-Hub-commit>
-        artifact_sha256: <sha256-of-best.pt>
+        artifact_sha256: <sha256-of-best.onnx>
 ```
 
 When present, the two provenance fields must be supplied together for an

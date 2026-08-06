@@ -175,29 +175,29 @@ def test_refine_segment_falls_back_to_clean_ceiling_without_ink() -> None:
     assert result.metadata["simplification_status"] == "no_otsu_contour"
 
 
-# --- Native BLLA adapter integration (stubbed model) ---
+# --- BLLA adapter integration (stubbed session) ---
 
 
-class _FakeBLLAModel:
-    """A model-shaped stand-in whose output is *not* what these tests assert on.
+class _FakeBLLASession:
+    """A session-shaped stand-in whose output is *not* what these tests assert on.
 
     These cases exercise refinement geometry, so the decoded lines are injected
-    directly and the graph only has to produce a correctly shaped tensor.
-    ``eval()`` is here because the adapter calls it on every run - see ADR 0004
-    - and a stand-in that could not be put in eval mode would let that call
-    regress unnoticed.
+    directly and the graph only has to produce a correctly shaped array. The
+    shape is derived from the input rather than fixed, because the adapter
+    validates the logits it gets back (ADR 0006) and a constant would stop
+    exercising that check.
     """
 
-    def eval(self):
-        return self
-
-    def __call__(self, tensor):
-        width = max(1, tensor.shape[-1] // 4)
-        return blla.torch.zeros((1, 4, 450, width))
+    def run(self, _output_names, feeds):
+        values = next(iter(feeds.values()))
+        width = max(1, values.shape[-1] // 4)
+        return [np.zeros((1, 4, 450, width), dtype=np.float32)]
 
 
 def _stub_blla(monkeypatch, decoded: DecodedBLLALine) -> None:
-    monkeypatch.setattr(blla, "_load_blla_model", lambda *_args, **_kwargs: _FakeBLLAModel())
+    monkeypatch.setattr(
+        blla, "_load_blla_session", lambda *_args, **_kwargs: (_FakeBLLASession(), "input")
+    )
     monkeypatch.setattr(
         "inference.architectures.blla.blla_runtime.decode_blla_heatmaps",
         lambda *_args, **_kwargs: [decoded],
@@ -210,7 +210,7 @@ def test_blla_adapter_preserves_legacy_ceiling_and_neutral_metadata(
 ) -> None:
     image, _ = _synthetic_ink_fixture()
     dense_ceiling = _dense_rectangle(20, 25, 200, 90)
-    model_path = tmp_path / "model.safetensors"
+    model_path = tmp_path / "model.onnx"
     model_path.write_bytes(b"stub")
     _stub_blla(
         monkeypatch,
@@ -239,7 +239,7 @@ def test_blla_adapter_splits_oversized_refined_line(
     tmp_path: Path,
 ) -> None:
     image, ceiling = _merged_two_line_fixture()
-    model_path = tmp_path / "model.safetensors"
+    model_path = tmp_path / "model.onnx"
     model_path.write_bytes(b"stub")
     _stub_blla(
         monkeypatch,
@@ -266,7 +266,9 @@ def test_blla_adapter_splits_oversized_refined_line(
 
 
 def _stub_blla_lines(monkeypatch, decoded: list[DecodedBLLALine]) -> None:
-    monkeypatch.setattr(blla, "_load_blla_model", lambda *_args, **_kwargs: _FakeBLLAModel())
+    monkeypatch.setattr(
+        blla, "_load_blla_session", lambda *_args, **_kwargs: (_FakeBLLASession(), "input")
+    )
     monkeypatch.setattr(
         "inference.architectures.blla.blla_runtime.decode_blla_heatmaps",
         lambda *_args, **_kwargs: decoded,
@@ -278,7 +280,7 @@ def test_blla_adapter_keeps_the_page_when_one_line_refinement_fails(
     tmp_path: Path,
 ) -> None:
     image, ceiling = _synthetic_ink_fixture()
-    model_path = tmp_path / "model.safetensors"
+    model_path = tmp_path / "model.onnx"
     model_path.write_bytes(b"stub")
     doomed = [[30.0, 95.0], [190.0, 95.0], [190.0, 110.0], [30.0, 110.0]]
     _stub_blla_lines(
@@ -315,7 +317,7 @@ def test_blla_adapter_fails_when_every_line_refinement_fails(
 ) -> None:
     """An empty page is a worse answer than an error when nothing could refine."""
     image, ceiling = _synthetic_ink_fixture()
-    model_path = tmp_path / "model.safetensors"
+    model_path = tmp_path / "model.onnx"
     model_path.write_bytes(b"stub")
     _stub_blla_lines(
         monkeypatch,

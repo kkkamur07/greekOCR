@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import numpy as np
-import torch
 from scipy.ndimage import gaussian_filter
 from skimage import filters
 
-from inference.architectures.blla.blla_decoder.common import as_heatmaps
+from inference.architectures.blla.blla_decoder.common import resize_heatmaps_nearest
 from shapely import geometry as geom
 
 from inference.architectures.blla.blla_decoder.lines import (
@@ -21,6 +20,12 @@ from inference.architectures.blla.blla_decoder.simple import decode_simple_heatm
 from inference.architectures.blla.blla_decoder.types import DecodedBLLALine
 
 __all__ = ["DecodedBLLALine", "decode_blla_heatmaps"]
+
+
+def _sigmoid(values: np.ndarray) -> np.ndarray:
+    """The NumPy half of what used to be the decoder's ``torch_free`` branch."""
+
+    return np.reciprocal(np.add(1.0, np.exp(-values), dtype=np.float32))
 
 
 def decode_blla_heatmaps(
@@ -73,16 +78,11 @@ def _decode_reference_pipeline(
 ) -> list[DecodedBLLALine]:
     """Run the reference heatmap, skeleton, and polygonization sequence."""
 
-    values = as_heatmaps(heatmaps)
     scaled_height, scaled_width = scaled_gray.shape
-    # ``interpolate`` without a mode is nearest-neighbour for a 4D tensor, which
-    # is what the reference BLLA decoder uses.
-    with torch.inference_mode():
-        resized = torch.nn.functional.interpolate(
-            torch.from_numpy(values).unsqueeze(0),
-            size=(scaled_height, scaled_width),
-        )[0]
-        probabilities = (torch.sigmoid(resized) if raw_logits else resized).numpy()
+    # Nearest-neighbour, which is what ``interpolate`` without a mode does for a
+    # 4D tensor and therefore what the reference BLLA decoder uses.
+    resized = resize_heatmaps_nearest(heatmaps, height=scaled_height, width=scaled_width)
+    probabilities = _sigmoid(resized) if raw_logits else resized
     baselines = vectorize_lines(
         probabilities[:3],
         threshold=threshold,

@@ -26,19 +26,22 @@ from tests.fixtures.paths import REPO_ROOT, SEGMENT_PAGE, TRANSCRIBE_LINE
 
 pytestmark = pytest.mark.ml
 
-# ADR 0004 requires the CPU-only Torch build. On Linux the default PyPI wheel
-# pulls sixteen nvidia/triton packages behind `torch`, so this flag is not a
-# nicety here - without it this fixture alone installs about 4.8 GB.
-CPU_TORCH_FLAG = "--torch-backend=cpu"
+# ADR 0006 needs no install flag at all. Under ADR 0004 this constant was
+# `--torch-backend=cpu`, and it was not a nicety: without it a Linux resolve
+# pulled sixteen nvidia/triton wheels behind `torch` and this fixture alone
+# installed about 4.8 GB. `onnxruntime` publishes one CPU wheel per platform,
+# so there is no accelerator variant to exclude and nothing for a researcher to
+# remember.
 
-# Every platform the package claims to support. Intel macOS is absent on
-# purpose: PyTorch publishes no `x86_64-apple-darwin` wheel from 2.10 onward,
-# so there is nothing there to resolve.
+# Every platform the package claims to support. Intel macOS is back: it was
+# absent under ADR 0004 only because PyTorch publishes no
+# `x86_64-apple-darwin` wheel from 2.10 onward.
 TARGET_PLATFORMS = (
     "x86_64-manylinux_2_28",
     "aarch64-manylinux_2_28",
     "x86_64-pc-windows-msvc",
     "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
 )
 
 
@@ -79,7 +82,7 @@ def installed_package(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Pat
     )
     python = venv / ("Scripts" if os.name == "nt" else "bin") / "python"
     subprocess.run(
-        [uv, "pip", "install", "--python", str(python), CPU_TORCH_FLAG, str(wheels[0])],
+        [uv, "pip", "install", "--python", str(python), str(wheels[0])],
         check=True,
         capture_output=True,
         text=True,
@@ -166,13 +169,15 @@ def test_the_console_entry_point_is_present_and_executable(
     assert "0+unknown" not in completed.stdout
 
 
-def test_the_installed_closure_carries_no_onnxruntime_and_no_cuda_wheels(
+def test_the_installed_closure_carries_no_torch_and_no_accelerator_wheels(
     installed_package: dict[str, Path],
 ) -> None:
-    """ADR 0004 archived ONNX Runtime and requires the CPU-only Torch build.
+    """ADR 0006 retired PyTorch from the runtime and needs no CPU pin.
 
-    Both are properties of the *closure*, not of our own imports, which is why
-    this reads installed distribution metadata rather than trying an import.
+    This is a property of the *closure*, not of our own imports, which is why it
+    reads installed distribution metadata rather than trying an import. Torch is
+    the whole point: it is still in the repository, tracing the graph, and the
+    only thing keeping it out of a researcher's install is this list.
     """
     output = _run_installed(
         installed_package,
@@ -181,9 +186,9 @@ def test_the_installed_closure_carries_no_onnxruntime_and_no_cuda_wheels(
     )
     names = json.loads(output.strip().splitlines()[-1])
 
-    assert [name for name in names if "onnx" in name.lower()] == []
+    assert [name for name in names if name.lower() in {"torch", "torchvision"}] == []
     assert [name for name in names if name.startswith(("nvidia", "triton"))] == []
-    assert "torch" in names
+    assert "onnxruntime" in names
 
 
 def test_the_installed_package_holds_no_web_server(
@@ -354,10 +359,13 @@ def test_a_corrupted_artifact_is_rejected_by_the_installed_verifier(
 ) -> None:
     """Digest verification is live in the wheel, not left behind in the tree.
 
-    ADR 0004 made checkpoint loading a code-execution surface, so this is the
-    step that keeps an unverified `.pt` away from `torch.load`.
+    Under ADR 0004 this step was what kept an unverified `.pt` away from
+    `torch.load`. ADR 0006 removed that surface - a `.pt` is refused by suffix
+    now - so what this defends is integrity rather than sandboxing: onnxruntime
+    parses the graph in C++, and an artifact that does not match its pin is a
+    broken deployment whatever it then does.
     """
-    artifact = tmp_path / "best.pt"
+    artifact = tmp_path / "best.onnx"
     artifact.write_bytes(b"not a checkpoint")
     honest = hashlib.sha256(artifact.read_bytes()).hexdigest()
 
@@ -381,14 +389,15 @@ print(json.dumps({{"rejected": rejected}}))
 
 
 @pytest.mark.parametrize("platform", TARGET_PLATFORMS)
-def test_every_target_platform_resolves_a_cpu_only_torch(
+def test_every_target_platform_resolves_without_an_accelerator_wheel(
     installed_package: dict[str, Path], tmp_path: Path, platform: str
 ) -> None:
-    """The pin has to hold where the package lands, not where it was built.
+    """The closure has to hold where the package lands, not where it was built.
 
-    This machine's resolution proves nothing: PyPI's macOS wheel is CPU-only
-    already, and it is Linux that drags CUDA. The requirements come from the
-    built wheel's own metadata so the check cannot drift from what ships.
+    This machine's resolution proves nothing on its own: it was Linux that
+    dragged CUDA under ADR 0004, and it did so with no flag passed. Resolving
+    with **no flag at all** is the claim now - the requirements come from the
+    built wheel's own metadata, so the check cannot drift from what ships.
     """
     uv = _uv()
     output = _run_installed(
@@ -406,7 +415,6 @@ def test_every_target_platform_resolves_a_cpu_only_torch(
             "pip",
             "compile",
             "--quiet",
-            CPU_TORCH_FLAG,
             "--python-platform",
             platform,
             "--python-version",
@@ -423,4 +431,5 @@ def test_every_target_platform_resolves_a_cpu_only_torch(
     pinned = [line.split("==")[0] for line in resolution.read_text().splitlines() if "==" in line]
 
     assert [name for name in pinned if name.startswith(("nvidia", "triton"))] == []
-    assert "torch" in pinned
+    assert [name for name in pinned if name.lower() in {"torch", "torchvision"}] == []
+    assert "onnxruntime" in pinned

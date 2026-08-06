@@ -1,76 +1,132 @@
-"""BLLA segmentation inference adapter.
+"""BLLA segmentation on the ONNX Runtime CPU runtime (ADR 0006).
 
-The **Hub artifact** is ``blla.safetensors``: safetensors carries tensors only
-and cannot execute code on load, which is why it is preferred over a pickled
-checkpoint here (ADR 0004). The **artifact SHA-256** is still verified through
-``architectures.artifact`` before the file is opened.
+Restored by ADR 0006: this is the adapter that ran here before ADR 0004 made
+PyTorch the runtime.
+Two things changed on the way back in:
+
+* it is no longer a *second* adapter beside a Torch one, so it keeps the plain
+  names (``BLLAUnavailableError``, ``run_blla_segment``) rather than the
+  ``Onnx``-suffixed ones it needed while both existed;
+* ``resolve_artifact`` verifies the **artifact SHA-256** before the file is
+  opened, which the archived adapter predates.
+
+The **Hub artifact** is ``blla.onnx``. Unlike a pickled ``.pt`` it carries no
+executable payload, but the digest is still checked: onnxruntime parses the
+protobuf in C++, and an artifact that does not match its pin is a broken
+deployment however it fails.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
 from typing import Any
 
-import torch
+import numpy as np
 from PIL import Image
 
-from inference.architectures.artifact import resolve_artifact
-from inference.architectures.blla.blla_model import BLLATorchModel
+from inference.architectures.artifact import ArtifactHandle, resolve_artifact
 from inference.architectures.blla.blla_preprocessing import preprocess_blla_image
 from inference.architectures.blla.blla_runtime import build_blla_segment_response
 from inference.contracts.segment import SegmentRunResponse
 
-BLLA_ARTIFACT_SUFFIXES = frozenset({".safetensors"})
+BLLA_ARTIFACT_SUFFIXES = frozenset({".onnx"})
+
+# The graph has a fixed input height and a fixed channel count; the width is the
+# only free axis. Both are asserted against the artifact's own metadata rather
+# than assumed, because a re-export at a different height would otherwise
+# produce silently mis-scaled baselines instead of an error.
+BLLA_INPUT_HEIGHT = 1800
+BLLA_INPUT_CHANNELS = 3
 
 
 class BLLAUnavailableError(RuntimeError):
-    """Raised when a native BLLA checkpoint cannot be used."""
+    """Raised when a BLLA runtime artifact cannot be used."""
 
 
-def _validate_checkpoint(checkpoint: object) -> Mapping[str, object]:
-    if not isinstance(checkpoint, Mapping):
-        raise BLLAUnavailableError("BLLA checkpoint must be a mapping")
-    if checkpoint.get("format") != "blla-pytorch-v1":
-        raise BLLAUnavailableError("unsupported BLLA checkpoint format")
-    state_dict = checkpoint.get("state_dict")
-    if not isinstance(state_dict, Mapping) or not state_dict:
-        raise BLLAUnavailableError("BLLA checkpoint has no model state dictionary")
-    if not all(
-        isinstance(name, str) and isinstance(value, torch.Tensor)
-        for name, value in state_dict.items()
-    ):
-        raise BLLAUnavailableError("BLLA checkpoint has an invalid model state dictionary")
-    return checkpoint
+def _resolve_blla_artifact(
+    model_path: Path,
+    artifact_sha256: str | None = None,
+) -> ArtifactHandle:
+    return resolve_artifact(
+        model_path,
+        label="BLLA model",
+        allowed_suffixes=BLLA_ARTIFACT_SUFFIXES,
+        unusable_error=BLLAUnavailableError,
+        unusable_message=f"BLLA runtime requires an .onnx model: {model_path}",
+        artifact_sha256=artifact_sha256,
+    )
 
 
 @lru_cache(maxsize=4)
-def _load_blla_model(
+def _load_blla_session(
     model_path: str,
     fingerprint: tuple[int, int] | None = None,
-) -> BLLATorchModel:
-    try:
-        from safetensors import safe_open
-        from safetensors.torch import load_file
+) -> tuple[Any, str]:
+    """Open a session and check the graph is the one this decoder can read.
 
-        with safe_open(model_path, framework="pt", device="cpu") as handle:
-            metadata = handle.metadata() or {}
-        checkpoint = _validate_checkpoint(
-            {
-                "format": metadata.get("format"),
-                "state_dict": load_file(model_path, device="cpu"),
-            }
+    ``fingerprint`` is part of the cache key rather than an argument the loader
+    reads: it is what makes a *replaced* artifact file miss the cache instead of
+    serving the previous model for the life of the process.
+    """
+    try:
+        import onnxruntime as ort
+
+        session = ort.InferenceSession(
+            model_path,
+            providers=["CPUExecutionProvider"],
         )
-        model = BLLATorchModel()
-        model.load_state_dict(checkpoint["state_dict"], strict=True)
+        metadata = session.get_modelmeta().custom_metadata_map
+        if metadata.get("format") != "blla-onnx-v1":
+            raise BLLAUnavailableError("unsupported BLLA ONNX model format")
+        if metadata.get("input_layout") != "NCHW":
+            raise BLLAUnavailableError("unsupported BLLA ONNX input layout")
+        if metadata.get("input_height") != str(BLLA_INPUT_HEIGHT) or metadata.get(
+            "input_channels"
+        ) != str(BLLA_INPUT_CHANNELS):
+            raise BLLAUnavailableError("unsupported BLLA ONNX input dimensions")
+        inputs = session.get_inputs()
+        outputs = session.get_outputs()
+        if len(inputs) != 1 or len(outputs) != 1:
+            raise BLLAUnavailableError("BLLA ONNX graph must have one input and output")
+        if len(inputs[0].shape) != 4 or len(outputs[0].shape) != 4:
+            raise BLLAUnavailableError("BLLA ONNX graph must use 4D tensors")
+        return session, inputs[0].name
     except BLLAUnavailableError:
         raise
+    except ImportError as error:
+        raise BLLAUnavailableError("onnxruntime is required for the BLLA runtime") from error
     except Exception as error:
-        raise BLLAUnavailableError("unable to safely load BLLA checkpoint") from error
-    model.eval()
-    return model
+        raise BLLAUnavailableError("unable to load BLLA ONNX model") from error
+
+
+def run_blla_logits(
+    inputs: np.ndarray,
+    *,
+    model_path: Path,
+    artifact_sha256: str | None = None,
+) -> np.ndarray:
+    """Run the graph on one float32 NCHW NumPy input."""
+
+    handle = _resolve_blla_artifact(model_path, artifact_sha256)
+    values = np.asarray(inputs, dtype=np.float32)
+    expected = f"BLLA input must have shape (1, {BLLA_INPUT_CHANNELS}, {BLLA_INPUT_HEIGHT}, width)"
+    if values.ndim != 4 or values.shape[0] != 1:
+        raise ValueError(expected)
+    if (
+        values.shape[1] != BLLA_INPUT_CHANNELS
+        or values.shape[2] != BLLA_INPUT_HEIGHT
+        or values.shape[3] <= 0
+    ):
+        raise ValueError(expected)
+
+    session, input_name = _load_blla_session(handle.path, handle.fingerprint)
+    outputs = session.run(None, {input_name: np.ascontiguousarray(values)})
+    logits = np.asarray(outputs[0], dtype=np.float32)
+    if logits.ndim != 4 or logits.shape[0] != 1 or logits.shape[1] != 4:
+        raise BLLAUnavailableError("BLLA ONNX graph returned invalid logits")
+    return logits
 
 
 def run_blla_segment(
@@ -80,24 +136,26 @@ def run_blla_segment(
     artifact_sha256: str | None = None,
     params: dict[str, Any] | None = None,
 ) -> SegmentRunResponse:
-    """Run native BLLA and return the legacy-compatible segment contract."""
+    """Run BLLA and return the legacy-compatible segment contract."""
 
-    handle = resolve_artifact(
-        model_path,
-        label="BLLA model",
-        allowed_suffixes=BLLA_ARTIFACT_SUFFIXES,
-        unusable_error=BLLAUnavailableError,
-        unusable_message=(f"native BLLA runtime requires a safetensors checkpoint: {model_path}"),
-        artifact_sha256=artifact_sha256,
-    )
+    # Resolved once here so a missing, mis-suffixed or tampered artifact fails
+    # before a full-page Lanczos resize is paid for; ``run_blla_logits``
+    # re-resolves from a memoized digest, which costs a ``stat``.
+    _resolve_blla_artifact(model_path, artifact_sha256)
 
-    model = _load_blla_model(handle.path, handle.fingerprint)
-    # ``_load_blla_model`` already called ``eval()``; the model is cached across
-    # calls, so assert it here rather than trust the cache.
-    model.eval()
     with Image.open(BytesIO(image_bytes)) as image:
         image = image.convert("RGB")
-        prepared = preprocess_blla_image(image)
-        with torch.inference_mode():
-            logits = model(prepared.tensor.unsqueeze(0))[0].cpu().numpy()
+        prepared = preprocess_blla_image(image, input_height=BLLA_INPUT_HEIGHT)
+        logits = run_blla_logits(
+            prepared.array[None, ...],
+            model_path=model_path,
+            artifact_sha256=artifact_sha256,
+        )[0]
         return build_blla_segment_response(image, logits, prepared, params=params)
+
+
+__all__ = [
+    "BLLAUnavailableError",
+    "run_blla_logits",
+    "run_blla_segment",
+]

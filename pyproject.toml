@@ -23,26 +23,25 @@ requires-python = ">=3.11,<3.13"
 dependencies = [
     "huggingface-hub>=0.27.0",
     "numpy>=1.24.4,<2",
+    # ADR 0006: ONNX Runtime is the inference runtime for both architectures,
+    # CPU only. The wheel is self-contained - no CUDA variant is resolved for
+    # `onnxruntime`, which is why the `--torch-backend=cpu` install ceremony
+    # ADR 0004 needed is gone with it.
+    "onnxruntime>=1.23.2",
     "opencv-python-headless>=4.8,<4.13",
     "pillow>=12.3.0",
     "pydantic>=2.10.0",
     "pydantic-settings>=2.6.0",
     "pyyaml>=6.0.2",
     # The CLI's terminal output (#56). Pure Python, two small dependencies
-    # (markdown-it-py, pygments), no compiled extension - it costs a researcher
-    # a rounding error next to Torch. It earns its place on the pairing screen:
-    # the URL must survive being printed at any width, and the **confirmation
-    # code** has to be the most prominent thing on it or ADR 0001's
-    # anti-phishing mitigation is decoration again.
+    # (markdown-it-py, pygments), no compiled extension. It earns its place on
+    # the pairing screen: the URL must survive being printed at any width, and
+    # the **confirmation code** has to be the most prominent thing on it or ADR
+    # 0001's anti-phishing mitigation is decoration again.
     "rich>=13.9.0",
-    # ADR 0004: PyTorch is the inference runtime for both architectures. CPU
-    # only - see [tool.uv.sources] below, which pins the CPU wheel index on the
-    # platforms where PyPI would otherwise serve a CUDA build.
-    "safetensors>=0.5.0",
     "scikit-image>=0.25.0",
     "scipy>=1.15.0",
     "shapely>=2.1.0",
-    "torch>=2.10.0",
 ]
 
 [project.scripts]
@@ -87,6 +86,18 @@ train = [
     "torchvision>=0.25.0",
     "transformers>=5.11.0",
 ]
+# Artifact production, not artifact execution (ADR 0006).
+# `src/model/inference_export/` traces the
+# trained PyTorch graph into the `.onnx` the runtime loads, so this is where
+# Torch lives now: on a maintainer's machine, at the moment weights are
+# published, and nowhere near `[project].dependencies`. `safetensors` is here
+# for the same reason - it is the native BLLA checkpoint format the exporter
+# reads, and nothing under `inference/` opens it any more.
+export = [
+    "onnx>=1.17.0",
+    "safetensors>=0.5.0",
+    "torch>=2.10.0",
+]
 dev = [
     "mypy>=2.3.0",
     "nbstripout>=0.8.1",
@@ -120,8 +131,8 @@ service-core = [
 # run` at it. None of it reaches a researcher - that is [project].dependencies,
 # which is now the single statement of what does.
 #
-# NOTE: the model runtime itself (numpy / torch / pillow / scikit-image / scipy
-# / shapely / safetensors / opencv-python-headless / huggingface-hub) lives in
+# NOTE: the model runtime itself (numpy / onnxruntime / pillow / scikit-image /
+# scipy / shapely / opencv-python-headless / huggingface-hub) lives in
 # [project].dependencies, so this group must be installed with
 # `--group inference`, never `--only-group`.
 inference = [
@@ -164,26 +175,24 @@ platform = [
 [tool.uv]
 package = false
 
-# ADR 0004 requires the CPU-only Torch build: CUDA wheels dominate the download
-# and are useless on a researcher's laptop. PyPI's macOS wheels are already CPU
-# only, so the explicit index is pinned on the platforms where they are not.
+# The CPU-only Torch build, for the `train` and `export` groups. CUDA wheels
+# dominate the download and are useless for tracing a graph on a maintainer's
+# laptop; PyPI's macOS wheels are already CPU only, so the explicit index is
+# pinned on the platforms where they are not.
 #
-# This pins *this repository's* lock. It does not travel with the published
-# wheel - `tool.uv.sources` is ignored when a package is consumed from a
-# registry, and no PEP 621 metadata can name an index. Measured against the
-# published dependency set on 2026-08-04: a plain resolve on either Linux
-# architecture drags 16 nvidia/triton wheels behind `torch`; on macOS arm64 and
-# Windows it drags none. So the CPU pin has to be re-stated at install time,
-# and the documented install command is
+# Under ADR 0004 this same pin had to be re-stated by the *user*, because Torch
+# was in `[project].dependencies` and `tool.uv.sources` is ignored when a
+# package is consumed from a registry - hence the documented
+# `uv tool install nomicous-inference --torch-backend=cpu`, and a uv >= 0.10
+# floor to go with it, because 0.7.x accepts `UV_TORCH_BACKEND=cpu` and then
+# ignores it. ADR 0006 deletes that whole problem rather than documenting it
+# better: `onnxruntime` publishes one CPU wheel per platform, there is no CUDA
+# variant to accidentally resolve, and the install command is now just
 #
-#     uv tool install nomicous-inference --torch-backend=cpu   # uv >= 0.10
+#     uv tool install nomicous-inference
 #
-# which resolves `torch==<v>+cpu` and zero CUDA wheels on every platform that
-# has a wheel at all. The version floor is load-bearing: `uv tool install`
-# grew the flag in 0.10, and 0.7.x accepts `UV_TORCH_BACKEND=cpu` from the
-# environment and then ignores it. `tests/inference/integration/
-# test_published_package.py` holds the resolution claim to a real per-platform
-# resolve; nothing can hold the *user's* install command to anything.
+# This block now pins only *this repository's* lock, which is the scope
+# `tool.uv.sources` could ever actually enforce.
 [tool.uv.sources]
 torch = [
     { index = "pytorch-cpu", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
@@ -210,13 +219,16 @@ test-integration = { shell = "uv run --group test --group platform --group infer
 # runs a model, it hands a page to an agent that does.
 test-ml = { shell = "uv run --group test --group platform --group inference pytest tests/inference -m ml" }
 test-inference = { shell = "uv run --group test --group platform --group inference pytest tests/inference" }
+# The export tree is the only thing in this repository that still needs Torch
+# (ADR 0006), so it is the only task that names the `export` group.
+test-export = { shell = "uv run --group test --group inference --group export pytest tests/export" }
 test-hf = { shell = "uv run --group test --group inference pytest tests/hf" }
 
 [tool.pytest.ini_options]
 addopts = ["--import-mode=importlib"]
 pythonpath = ["nomicous", "."]
 asyncio_mode = "auto"
-testpaths = ["tests/nomicous", "tests/inference", "tests/hf"]
+testpaths = ["tests/nomicous", "tests/inference", "tests/export", "tests/hf"]
 filterwarnings = [
     "ignore:Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.:starlette.exceptions.StarletteDeprecationWarning",
 ]
@@ -240,7 +252,17 @@ extend-exclude = [
     "data",
     "deploy/platform/inference",
     "deploy/platform/nomicous",
-    "src/experiments",
+    # The whole research tree, not `src/experiments` alone. It is vendored code
+    # nobody is maintaining to a lint standard, and it carried 555 findings that
+    # said nothing about the application. Excluding it here rather than listing
+    # per-directory ignores means a new subdirectory under `src/` is covered the
+    # day it appears - the previous list named `src/model` (singular) and silently
+    # missed `src/models` (plural) for exactly that reason.
+    #
+    # This is a suppression and only a suppression. The findings are real; they
+    # are recorded in docs/resume-inference-redesign.md. Everything outside `src/`
+    # is linted with no exemptions beyond the per-file-ignores below.
+    "src",
 ]
 
 [tool.ruff.lint]
@@ -273,16 +295,6 @@ select = ["F", "I", "UP", "B", "SIM"]
 "nomicous/backend/**" = ["B008", "B009", "I001", "SIM105", "UP037", "UP042"]
 "nomicous/infrastructure/**" = ["I001"]
 "scripts/**" = ["I001", "SIM112"]
-"src/hf/**" = ["I001"]
-"src/model/**" = [
-    "B007", "B010", "B023", "B905",
-    "F401", "F403", "F541", "F841", "F901",
-    "I001",
-    "SIM101", "SIM102", "SIM108", "SIM114", "SIM115", "SIM118", "SIM300", "SIM401",
-    "UP006", "UP007", "UP008", "UP010", "UP015", "UP018", "UP031", "UP032",
-    "UP035", "UP036", "UP045",
-]
-"src/preprocessing_data/**" = ["B905", "F401", "I001", "SIM102", "UP015"]
 "tests/**" = ["B007", "B905", "F401", "I001", "SIM117"]
 
 [tool.ruff.format]

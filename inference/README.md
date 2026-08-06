@@ -14,27 +14,26 @@ see the [root README](../README.md), [use and hosting guide](../docs/guides/usin
 ## Install
 
 ```bash
-uv tool install nomicous-inference --torch-backend=cpu   # requires uv >= 0.10
+uv tool install nomicous-inference
 nomicous --version
 ```
 
-`--torch-backend=cpu` is not optional on Linux, and **the uv version floor is
-part of the instruction, not a footnote**. PyTorch's default PyPI wheel on
-Linux pulls sixteen `nvidia-*`/`triton` packages behind it — measured at
-4801 MB installed against 969 MB with the flag — which are useless on a
-CPU-only laptop. No packaging metadata can express "resolve this dependency
-from that index", so the flag is the pin, and nothing in the package can
-enforce it.
+No flags, no uv version floor. That is a deliberate outcome of
+[ADR 0006](../docs/adr/0006-onnx-runtime-is-the-inference-runtime.md) rather
+than a simplification of the instructions: `onnxruntime` publishes one CPU wheel
+per platform, so there is no accelerator variant to resolve by accident and
+nothing for the install command to pin.
 
-`uv tool install` only grew `--torch-backend` in uv 0.10. Older uv does not
-merely reject the flag: **0.7.x accepts `UV_TORCH_BACKEND=cpu` in the
-environment and silently ignores it**, installing the full CUDA tree. Check
-`uv --version` before trusting the install. `uv pip install --torch-backend=cpu`
-has worked since 0.7.
+The previous instruction was `uv tool install nomicous-inference
+--torch-backend=cpu`, and it was load-bearing — without it a Linux resolve pulled
+sixteen `nvidia-*`/`triton` wheels, 4801 MB installed against 969 MB with the
+flag. No packaging metadata can express "resolve this dependency from that
+index", so the flag was the pin and nothing in the package could enforce it;
+worse, uv 0.7.x accepted `UV_TORCH_BACKEND=cpu` and silently ignored it.
 
-On macOS arm64 and Windows the default wheel is already CPU-only and the flag
-changes nothing. Intel macOS has no PyTorch wheel at all from 2.10 onward and
-therefore cannot install this package.
+Measured closure on macOS arm64: **372 MB**, down from 817 MB. Every supported
+platform resolves the same way, Intel macOS included — it was excluded only
+because PyTorch ships no wheel for it.
 
 ## Status
 
@@ -150,24 +149,33 @@ Registry models resolve weights at runtime from:
 |--------|---------|----------------|
 | Hub | `hf://kkkamur07/syriac-htr-calamari@stable` | `~/.nomicous/hf/cache/<registry_model_id>/<registry_tag>/` |
 | Local bundled (offline) | `file://local/syriac/calamari/v1/stable/best.pt` | `src/hf/local/...` |
-| BLLA segmentation | `hf://kkkamur07/segmentation-blla@stable` | `blla.safetensors` in the Hub cache |
+| BLLA segmentation | `hf://kkkamur07/segmentation-blla@stable` | `blla.onnx` in the Hub cache |
 
 No local weight checkout is required for the default Hub models; they download from their public repos on first use into `HF_CACHE_ROOT`.
 
 ### Runtime
 
-Both architectures run on PyTorch, CPU only ([ADR 0004](../docs/adr/0004-pytorch-is-the-inference-runtime.md)).
-Transcribe loads a native `.pt` checkpoint through
-`inference/architectures/calamari/`, and segment loads `blla.safetensors`
-through `inference/architectures/blla/`. Every inference path calls
-`model.eval()` and runs under `torch.inference_mode()`.
+Both architectures run on ONNX Runtime, CPU only
+([ADR 0006](../docs/adr/0006-onnx-runtime-is-the-inference-runtime.md)).
+Transcribe loads `best.onnx` through `inference/architectures/calamari/` and
+segment loads `blla.onnx` through `inference/architectures/blla/`. The graph
+carries its own codec, line height and blank index in `metadata_props`, which is
+why one file is the whole model - there is no sidecar and no `.pt` to pair it
+with.
 
 The **artifact SHA-256** is verified in `architectures/artifact.py` *before* the
-architecture loader opens the file, which is what keeps `torch.load` (itself
-called with `weights_only=True`) off an unverified checkpoint.
+loader opens the file. That check used to be what kept `torch.load` off an
+unverified pickle; there is no unpickling left to reach, because a `.pt` is
+refused by suffix, so what it defends now is integrity.
 
-The retired ONNX Runtime path, its conversion scripts, and the parity harness
-are in [`archive/onnx-runtime/`](../archive/onnx-runtime/README.md).
+Both native checkpoints are still published beside the graphs at the same **Hub
+revision**, so every cache directory holds a file this runtime must not open.
+`find_hub_artifact` names only `.onnx` for exactly that reason.
+
+PyTorch is not in the published closure. It builds the artifacts and lives in
+`src/model/inference_export/` with the exporters, behind the `export` dependency
+group; `tests/inference/unit/test_architecture_contract.py` asserts nothing under
+`inference/` imports it.
 
 Training and vendored TensorFlow Calamari: [`docs/guides/learnings.md`](../docs/guides/learnings.md#calamari-training).
 

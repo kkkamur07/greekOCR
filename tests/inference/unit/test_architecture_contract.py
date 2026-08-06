@@ -85,21 +85,23 @@ def _run_blla_native(artifact: Path, artifact_sha256: str | None) -> object:
 def _execution_paths() -> list[ExecutionPath]:
     from inference.architectures.blla.blla import BLLAUnavailableError
 
-    # ADR 0004 left one execution path per architecture. Each architecture's
-    # native suffix is the other's foreign one, which is exactly the confusion
-    # the preflight has to refuse.
+    # One execution path per architecture, and under ADR 0006 both load the
+    # same format. The foreign suffix is each architecture's *retired* native
+    # format, which is the confusion that actually happens: those files are
+    # published at the same Hub revision and land in the same cache directory,
+    # so a preflight that shrugged at them would run the wrong file.
     return [
         ExecutionPath(
-            name="calamari-torch",
-            native_suffix=".pt",
-            foreign_suffix=".safetensors",
+            name="calamari-onnx",
+            native_suffix=".onnx",
+            foreign_suffix=".pt",
             unusable_error=calamari_adapter.CalamariUnavailableError,
             run=_run_calamari,
         ),
         ExecutionPath(
-            name="blla-native",
-            native_suffix=".safetensors",
-            foreign_suffix=".pt",
+            name="blla-onnx",
+            native_suffix=".onnx",
+            foreign_suffix=".safetensors",
             unusable_error=BLLAUnavailableError,
             run=_run_blla_native,
         ),
@@ -209,11 +211,11 @@ def _calamari_page(
     checkpoint can be coaxed into. The runtime itself is exercised on real
     weights in ``test_transcribe_batch_isolation``.
     """
-    checkpoint = tmp_path / "calamari.pt"
+    checkpoint = tmp_path / "calamari.onnx"
     checkpoint.write_bytes(b"stub")
     monkeypatch.setattr(
         calamari_adapter,
-        "_run_torch_transcribe_many",
+        "_run_onnx_transcribe_many",
         lambda line_images, **_kwargs: [
             TranscribeLineFailure(index=index, error=failure)
             if failure is not None
@@ -374,14 +376,22 @@ def test_an_empty_page_is_where_the_two_architectures_legitimately_differ(
 # --- Runtime boundary ---------------------------------------------------------
 
 
-def test_no_onnx_runtime_remains_in_the_inference_import_graph() -> None:
-    """ADR 0004 retired ONNX Runtime; nothing may drag it back in.
+def test_no_torch_remains_in_the_inference_import_graph() -> None:
+    """ADR 0006 retired PyTorch from the runtime; nothing may drag it back in.
+
+    This is the guard that keeps the published closure honest. Torch is 475 MB
+    of the 817 MB a researcher used to install, and it is *still in this
+    repository* - `src/model/inference_export/` traces the graph with it - so the only thing
+    standing between the two is that nothing under `inference/` imports it. A
+    single convenience import would put it back in `[project].dependencies`
+    without anyone noticing, because the dev venv has Torch installed and
+    everything would keep working here.
 
     Checked against the real import graph in a fresh interpreter rather than by
-    inspection. This is the inverse of the test it replaces, which imported the
-    same modules and asserted *Torch* was absent - the frozen-installer denylist
-    that enforced it and its release-time bundle verifier were deleted along
-    with the second runtime.
+    reading source, so a re-export through some third module is caught too. The
+    inverse of this test guarded ADR 0004; the pair of them have now traded
+    places twice, which is the argument for asserting on the import graph
+    instead of on a denylist somebody maintains.
     """
     program = (
         "import importlib, sys\n"
@@ -398,7 +408,7 @@ def test_no_onnx_runtime_remains_in_the_inference_import_graph() -> None:
         "    importlib.import_module(name)\n"
         "leaked = sorted(\n"
         "    m for m in sys.modules\n"
-        "    if m.split('.')[0] in {'onnx', 'onnxruntime', 'kraken', 'coremltools'}\n"
+        "    if m.split('.')[0] in {'torch', 'torchvision', 'safetensors', 'kraken'}\n"
         ")\n"
         "print(','.join(leaked))\n"
     )
@@ -425,7 +435,6 @@ def test_both_architectures_run_on_cpu_only() -> None:
     """
     sources = [
         (REPO_ROOT / "inference/architectures/calamari/adapter.py").read_text(),
-        (REPO_ROOT / "inference/architectures/calamari/checkpoint.py").read_text(),
         (REPO_ROOT / "inference/architectures/blla/blla.py").read_text(),
         (REPO_ROOT / "inference/architectures/blla/blla_preprocessing.py").read_text(),
     ]

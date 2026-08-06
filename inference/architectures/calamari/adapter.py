@@ -1,27 +1,42 @@
-"""Calamari transcription on the PyTorch CPU runtime (ADR 0004)."""
+"""Calamari transcription on the ONNX Runtime CPU runtime (ADR 0006).
+
+Restored by ADR 0006 from the adapter ADR 0004 retired.
+The archived adapter carried its own copies of ``TranscribeLineFailure``,
+``_decode_greedy`` and ``_response_from_decoded`` because a Torch adapter held
+the originals; there is one adapter again, so they are simply here. What the
+archive did *not* have, and this does, is ``resolve_artifact`` (the digest is
+verified before the artifact is opened) and ``reraise_if_none_survived`` (an
+all-failed batch is a failed run, not a page of per-line errors).
+
+The **Hub artifact** is ``best.onnx``: the graph carries its own codec, line
+height and blank index in ``metadata_props``, which is why the runtime needs
+neither the ``.pt`` checkpoint nor a sidecar to decode.
+"""
 
 from __future__ import annotations
 
+import json
+import math
+from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
 import numpy as np
-import torch
 
 from inference.architectures.artifact import ArtifactHandle, resolve_artifact
-from inference.architectures.calamari.checkpoint import load_calamari_checkpoint
-from inference.architectures.calamari.model import CalamariTorchModel
 from inference.architectures.calamari.preprocessing import (
     preprocess_line_image_bytes_to_calamari_tensor,
 )
 from inference.architectures.isolation import reraise_if_none_survived
 from inference.contracts.transcribe import CharacterConfidence, TranscribeRunResponse
 
-# The Calamari **Hub artifact** is the native ``.pt`` checkpoint the training
-# run produced. There is no second format to accept since ADR 0004 retired the
-# ONNX runtime.
-CALAMARI_ARTIFACT_SUFFIXES = frozenset({".pt"})
+# The Calamari **Hub artifact** is the self-contained ONNX graph. There is one
+# runtime format per architecture; ``find_hub_artifact`` enforces the same rule
+# on the cache directory so a repo holding both formats cannot silently decide
+# which runtime ran.
+CALAMARI_ARTIFACT_SUFFIXES = frozenset({".onnx"})
 
 
 class CalamariUnavailableError(RuntimeError):
@@ -44,31 +59,78 @@ class TranscribeLineFailure:
     error: Exception
 
 
+def _metadata_int(metadata: Mapping[str, str], key: str, *, minimum: int) -> int:
+    try:
+        value = int(metadata[key])
+    except (KeyError, TypeError, ValueError) as error:
+        raise CalamariUnavailableError(f"Calamari ONNX metadata has invalid {key}") from error
+    if value < minimum:
+        raise CalamariUnavailableError(f"Calamari ONNX metadata has invalid {key}")
+    return value
+
+
 @lru_cache(maxsize=4)
-def _load_checkpoint(
-    checkpoint_path: str,
+def _load_session(
+    model_path: str,
     fingerprint: tuple[int, int] | None = None,
-) -> tuple[CalamariTorchModel, list[str], int]:
-    """Open a digest-verified checkpoint without unpickling it.
+) -> tuple[Any, list[str], int]:
+    """Open a session and read the codec the graph carries with it.
 
     ``fingerprint`` is part of the cache key rather than an argument the loader
     reads: it is what makes a *replaced* artifact file miss the cache instead of
     serving the previous model for the life of the process.
     """
     try:
-        model, metadata = load_calamari_checkpoint(Path(checkpoint_path))
-    except ValueError as error:
-        message = str(error)
-        if "safely load" in message:
-            raise CalamariUnavailableError("unable to safely load Calamari checkpoint") from error
-        if "state dictionary" in message:
+        import onnxruntime as ort
+
+        session = ort.InferenceSession(model_path, providers=["CPUExecutionProvider"])
+        metadata = session.get_modelmeta().custom_metadata_map
+        if metadata.get("format") != "calamari-onnx-v1":
+            raise CalamariUnavailableError("unsupported Calamari ONNX artifact format")
+        classes = _metadata_int(metadata, "classes", minimum=2)
+        line_height = _metadata_int(metadata, "line_height", minimum=1)
+        if metadata.get("blank_index") != "0":
+            raise CalamariUnavailableError("Calamari ONNX artifact has an unsupported blank index")
+        # The exporter bakes any positive temperature into the graph itself
+        # (``CalamariTorchModel.forward`` divides the logits before tracing), so
+        # the session output is already temperature-scaled. The metadata value
+        # is validated only to reject corrupted artifacts; the runtime must
+        # NOT re-apply it to the logits.
+        try:
+            temperature = float(metadata["temperature"])
+        except (KeyError, TypeError, ValueError) as error:
             raise CalamariUnavailableError(
-                "Calamari checkpoint state dictionary is incompatible with the runtime"
+                "Calamari ONNX artifact has invalid temperature metadata"
             ) from error
-        raise CalamariUnavailableError(message) from error
+        if not math.isfinite(temperature):
+            raise CalamariUnavailableError(
+                "Calamari ONNX artifact has invalid temperature metadata"
+            )
+        charset_value = metadata.get("charset")
+        if charset_value is None:
+            raise CalamariUnavailableError("Calamari ONNX artifact has no codec metadata")
+        charset = json.loads(charset_value)
+        if (
+            not isinstance(charset, list)
+            or len(charset) != classes
+            or not all(isinstance(character, str) for character in charset)
+        ):
+            raise CalamariUnavailableError("Calamari ONNX artifact has invalid codec metadata")
+        input_names = {input_.name for input_ in session.get_inputs()}
+        if not {"image", "image_lengths"}.issubset(input_names):
+            raise CalamariUnavailableError("Calamari ONNX artifact has incompatible inputs")
+        output_names = {output.name for output in session.get_outputs()}
+        if not {"logits", "out_len"}.issubset(output_names):
+            raise CalamariUnavailableError("Calamari ONNX artifact has incompatible outputs")
+        return session, charset, line_height
+    except CalamariUnavailableError:
+        raise
+    except ImportError as error:
+        raise CalamariUnavailableError(
+            "onnxruntime is required for the Calamari runtime"
+        ) from error
     except Exception as error:
-        raise CalamariUnavailableError("unable to safely load Calamari checkpoint") from error
-    return model, list(metadata.charset), metadata.line_height
+        raise CalamariUnavailableError("unable to load Calamari ONNX artifact") from error
 
 
 def _decode_greedy(
@@ -150,48 +212,54 @@ def run_calamari_transcribe_many(
 ) -> list[TranscribeRunResponse | TranscribeLineFailure]:
     handle = resolve_artifact(
         checkpoint_path,
-        label="Calamari checkpoint",
+        label="Calamari model",
         allowed_suffixes=CALAMARI_ARTIFACT_SUFFIXES,
         unusable_error=CalamariUnavailableError,
-        unusable_message=(f"Calamari runtime requires a native .pt checkpoint: {checkpoint_path}"),
+        unusable_message=(f"Calamari runtime requires an .onnx model: {checkpoint_path}"),
         artifact_sha256=artifact_sha256,
     )
     if not line_images:
         raise ValueError("at least one line image is required")
 
-    return _reject_fully_failed_batch(_run_torch_transcribe_many(line_images, handle=handle))
+    return _reject_fully_failed_batch(_run_onnx_transcribe_many(line_images, handle=handle))
 
 
-def _run_torch_transcribe_many(
+def _run_onnx_transcribe_many(
     line_images: list[bytes],
     *,
     handle: ArtifactHandle,
 ) -> list[TranscribeRunResponse | TranscribeLineFailure]:
-    model, charset, line_height = _load_checkpoint(handle.path, handle.fingerprint)
+    session, charset, line_height = _load_session(handle.path, handle.fingerprint)
     if not charset:
-        raise CalamariUnavailableError(f"Calamari checkpoint has no codec metadata: {handle.path}")
+        raise CalamariUnavailableError(f"Calamari artifact has no codec metadata: {handle.path}")
 
     responses: list[TranscribeRunResponse | TranscribeLineFailure] = []
-    # ``load_calamari_checkpoint`` already called ``eval()``; the model is
-    # cached across calls, so assert it here rather than trust the cache.
-    model.eval()
-    with torch.inference_mode():
-        for index, image_bytes in enumerate(line_images):
-            # Per-line isolation: the caller decides what a failed line means,
-            # and one of them must not end the batch.
-            try:
-                image = preprocess_line_image_bytes_to_calamari_tensor(
-                    image_bytes,
-                    line_height=line_height,
-                )
-                image_tensor = torch.from_numpy(image.astype(np.float32))
-                image_lengths = torch.tensor([image.shape[1]], dtype=torch.long)
-                outputs = model(image_tensor, image_lengths=image_lengths)
-                softmax = outputs["softmax"][0].detach().cpu().numpy()
-                text, confidences = _decode_greedy(softmax, charset=charset)
-                responses.append(_response_from_decoded(text, confidences))
-            except Exception as error:  # noqa: BLE001 - per-line isolation is the point
-                responses.append(TranscribeLineFailure(index=index, error=error))
+    for index, image_bytes in enumerate(line_images):
+        # Per-line isolation: the caller decides what a failed line means,
+        # and one of them must not end the batch.
+        try:
+            image = preprocess_line_image_bytes_to_calamari_tensor(
+                image_bytes,
+                line_height=line_height,
+            ).astype(np.float32, copy=False)
+            outputs = session.run(
+                ["logits", "out_len"],
+                {
+                    "image": image,
+                    "image_lengths": np.asarray([image.shape[1]], dtype=np.int64),
+                },
+            )
+            # Softmax in NumPy rather than in the graph: the exporter traces the
+            # logits so the temperature it baked in stays visible to anything
+            # comparing against the reference forward.
+            logits = np.asarray(outputs[0], dtype=np.float32)[0]
+            logits -= np.max(logits, axis=-1, keepdims=True)
+            softmax = np.exp(logits)
+            softmax /= np.sum(softmax, axis=-1, keepdims=True)
+            text, confidences = _decode_greedy(softmax, charset=charset)
+            responses.append(_response_from_decoded(text, confidences))
+        except Exception as error:  # noqa: BLE001 - per-line isolation is the point
+            responses.append(TranscribeLineFailure(index=index, error=error))
     return responses
 
 

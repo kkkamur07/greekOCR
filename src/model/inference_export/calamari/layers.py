@@ -1,23 +1,25 @@
 """PyTorch layers matching the Calamari TensorFlow graph.
 
-Under ADR 0004 this is the production runtime, not a conversion oracle: it used
-to live at ``src/model/inference_export/calamari/layers.py`` and feed an ONNX
-exporter.
+Export-time code under ADR 0006: this graph is traced into ``best.onnx``, which
+is what a researcher actually runs. It was briefly the production runtime under
+ADR 0004, and before that it lived at
+``src/model/inference_export/calamari/layers.py`` and fed the same exporter it
+feeds again now.
 """
 
 from __future__ import annotations
 
 import math
 
+import torch
 import torch.nn.functional as F
-from torch import Tensor, nn
-
-from inference.architectures.calamari.config import (
+from src.model.inference_export.calamari.config import (
     CalamariTorchLayerConfig,
     maxpool_strides,
     require_int,
     require_tuple,
 )
+from torch import Tensor, nn
 
 
 class SameConv2d(nn.Module):
@@ -92,8 +94,19 @@ def pad_same(
     *,
     value: float = 0.0,
 ) -> Tensor:
-    time_size = x.shape[-2]
-    height_size = x.shape[-1]
+    # Under the tracer, ``x.shape`` freezes into Python constants and the
+    # exported graph would then pad every line to the width of the one dummy
+    # input it was traced on. ``_shape_as_tensor`` keeps the time axis dynamic,
+    # which is the whole reason the artifact accepts a variable-length line.
+    # Restored with the exporter by ADR 0006; ADR 0004 dropped it as dead code
+    # when this file was runtime-only.
+    if torch.onnx.is_in_onnx_export():
+        shape = torch._shape_as_tensor(x)
+        time_size: int | Tensor = shape[-2]
+        height_size: int | Tensor = shape[-1]
+    else:
+        time_size = x.shape[-2]
+        height_size = x.shape[-1]
     pad_time = _same_padding_amount(time_size, kernel_size[0], strides[0])
     pad_height = _same_padding_amount(height_size, kernel_size[1], strides[1])
     return F.pad(
@@ -122,6 +135,13 @@ def activation(name: str | None) -> nn.Module | None:
     raise ValueError(f"unsupported activation: {name}")
 
 
-def _same_padding_amount(size: int, kernel: int, stride: int) -> int:
+def _same_padding_amount(size: int | Tensor, kernel: int, stride: int) -> int | Tensor:
+    # The Tensor branch is the tracing half of ``pad_same`` above: same
+    # arithmetic, expressed in ops the exporter can put in the graph. ``ceil``
+    # of a division becomes floor of ``size + stride - 1``, and ``max(..., 0)``
+    # becomes ``clamp``.
+    if isinstance(size, Tensor):
+        output_size = torch.div(size + stride - 1, stride, rounding_mode="floor")
+        return torch.clamp((output_size - 1) * stride + kernel - size, min=0)
     output_size = math.ceil(size / stride)
     return max((output_size - 1) * stride + kernel - size, 0)

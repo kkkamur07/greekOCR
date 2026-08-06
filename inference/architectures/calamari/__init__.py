@@ -1,4 +1,11 @@
-"""Calamari OCR architecture: PyTorch graph, checkpoint loader, and adapter."""
+"""Calamari OCR architecture: ONNX Runtime adapter and line preprocessing.
+
+The Torch graph that used to be re-exported here (``CalamariTorchModel`` and
+its config) is not part of the runtime under ADR 0006. It builds the artifact
+rather than running it, so it lives in ``src/model/inference_export/calamari/``
+and is not in the
+published wheel.
+"""
 
 from inference.architectures.calamari.adapter import (
     CalamariUnavailableError,
@@ -6,19 +13,11 @@ from inference.architectures.calamari.adapter import (
     run_calamari_transcribe,
     run_calamari_transcribe_many,
 )
-from inference.architectures.calamari.config import (
-    CalamariTorchConfig,
-    CalamariTorchLayerConfig,
-)
-from inference.architectures.calamari.model import CalamariTorchModel
 from inference.architectures.calamari.preprocessing import (
     preprocess_line_image_to_calamari_tensor,
 )
 
 __all__ = [
-    "CalamariTorchConfig",
-    "CalamariTorchLayerConfig",
-    "CalamariTorchModel",
     "CalamariUnavailableError",
     "TranscribeLineFailure",
     "preprocess_line_image_to_calamari_tensor",

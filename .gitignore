@@ -87,3 +87,14 @@ data/
 # this repo, so committing one would nest the tree inside itself and make
 # `ruff check .` lint every copy. Nothing here is authored by hand or shared.
 /.claude/
+
+# Local tool cache (graphify) — build artefact, never source.
+graphify-out/
+
+# Exported ONNX artifacts in the Hub staging tree (ADR 0006). Derived, not
+# source: `src/model/inference_export/` produces them from the tracked `.pt` /
+# `.safetensors` beside them, and the published bytes live on the Hub at a
+# pinned revision + digest. Committing a copy would create a third version that
+# can drift from both - which is the exact defect ADR 0006 had to fix, where the
+# published blla.onnx no longer matched what the exporter produced.
+src/hf/staging/**/*.onnx

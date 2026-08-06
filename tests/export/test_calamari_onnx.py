@@ -1,8 +1,8 @@
-"""Focused Calamari ONNX export and runtime parity tests.
+"""Calamari ONNX export and runtime parity tests.
 
-RETIRED. See ``archive/onnx-runtime/README.md`` and ADR 0004. Originally
-``tests/inference/unit/test_calamari_onnx.py``; not collected, since
-``archive/`` is outside ``testpaths``.
+Restored by ADR 0006. They live under ``tests/export`` rather than
+``tests/inference`` because they import Torch: the graph is the export-time
+oracle, and nothing a researcher installs can import it.
 """
 
 from __future__ import annotations

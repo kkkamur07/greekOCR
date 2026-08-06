@@ -1,4 +1,4 @@
-"""BLLA segmentation on the PyTorch CPU runtime (ADR 0004)."""
+"""BLLA segmentation on the ONNX Runtime CPU runtime (ADR 0006)."""
 
 from inference.architectures.blla.blla import BLLAUnavailableError, run_blla_segment
 
