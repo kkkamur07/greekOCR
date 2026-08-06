@@ -1,240 +1,232 @@
-# TODO — remaining work after the 2026-08-03 review + implementation pass
+# TODO — after the 2026-08-06 validate-and-build sweep
 
-Everything from the 109-finding review is implemented and unit-tested (backend 252 pass,
-frontend 185 pass + typecheck clean, inference 159 pass / 1 skip / 1 fail). What follows is
-what is **not** done. Ordered by what blocks what.
+The previous list is done, and a third of it turned out not to need doing. Every entry
+below was checked against the tree before it was worked on; where the old entry was wrong,
+the correction is kept rather than deleted, so the same wrong diagnosis is not rediscovered.
 
-Current tree: `main`. The 2026-08-04 inference redesign (ADRs 0002-0005, issues
-#48-#66) and the ONNX Runtime migration (ADR 0006) are both merged in; see
-`docs/resume-inference-redesign.md` for where that work stands.
-(`docs/merge-handoff-inference-redesign.md` is history — its own line 3 says so — and
-is worth opening only to find out *why* a particular conflict was resolved as it was.)
+Branch: `feat/todo-sweep` (three commits, off `main` at `6c0bb7b`). Nothing is pushed.
 
----
-
-## P0 — Blocks shipping
-
-### 0. Run the inference suites end to end, once, on a quiet machine
-
-**Not done, and it is the one claim about ADR 0006 that has not been verified as a
-whole.** Every part has passed on its own, each run to completion:
+**Verified green on this branch**, each run to completion:
 
 | suite | result |
 |---|---|
-| `pytest tests/inference/unit` | 119 passed |
-| `pytest tests/export` | 16 passed |
-| `pytest tests/inference/integration/test_published_package.py` | 15 passed |
-| `pytest tests/hf` | 29 passed |
-| `ruff check . src/model/inference_export` | clean |
+| `pytest tests/nomicous` (incl. integration) | 746 passed, 1 skipped |
+| `pytest tests/export tests/inference tests/hf` | 316 passed, 7 skipped |
+| frontend `vitest` | 51 files, 252 passed |
+| `tsc --noEmit` / `eslint .` | clean / 0 errors, 2 pre-existing warnings |
+| `ruff check . src/model/inference_export` | All checks passed |
+| `npm run check:api` | exit 0 |
 
-What has never finished is the three together:
-
-```bash
-uv run --group test --group platform --group inference --group export \
-  pytest tests/inference tests/export tests/hf
-```
-
-Three attempts, none conclusive. Two were competing with another agent's suite on
-the same machine and one Postgres, which is exactly the contention the notes in
-`docs/resume-inference-redesign.md` §3 warn produces phantom failures; the third
-was killed before it reported. The one combined run that *did* finish caught five
-real `tests/hf` failures (fixed in `23bbb88`) plus
-`test_cli_run.py::test_only_one_page_is_ever_in_flight`, which passes alone in 62 s
-and is contention, not a defect.
-
-So run it once with nothing else running. Expect green. If it is red, measure again
-on an idle database before believing it - and if it is still red, that is a real
-regression in ADR 0006 and it gets fixed rather than explained.
-
-### 1. ~~Bump the pinned `blla.onnx` digest~~ - done 2026-08-05 (ADR 0006)
-
-ADR 0004 dissolved this by retiring the ONNX runtime rather than by doing it, and
-that turned out to matter: the `blla.onnx` published at `444d51dd` was the
-**pre-fix** export all along, carrying six `InstanceNormalization` nodes. So the
-GroupNorm fix existed in the exporter and had never reached the artifact.
-
-ADR 0006 put the ONNX runtime back, which made this blocking again, and the dance
-was run in the order this entry always specified: re-export, upload to the Hub
-first, then `hub_revision` + `artifact_sha256`, then the hardcoded copies in
-`test_registry.py`, then the local `src/hf/cache/` copy.
-
-The registry now pins `blla.onnx` (`d3e9c086...`) at revision `5c20a584...` and
-`best.onnx` (`3cb01b58...`) at the unchanged `5ff715e8...`. Calamari needed no
-re-publish: re-exporting `best.pt` today reproduces the published graph byte for
-byte.
-
-### 2. Set `DEVICE_TOKEN_HMAC_SECRET` before rotating `JWT_SECRET`
-
-`JWT_SECRET` now requires ≥32 bytes and ≥128 bits of entropy in production. **The API refuses
-to boot if the live value fails the check** — so verify the deployed value before deploying.
-
-`DEVICE_TOKEN_HMAC_SECRET` falls back to `JWT_SECRET` when unset. Set it explicitly *first*,
-otherwise rotating `JWT_SECRET` silently unpairs every helper device.
-
-### 3. Confirm the `platform-worker` host is actually deployed
-
-`claim_next_pending_job` has exactly one caller: `python -m backend.jobs.worker_main`. Vercel
-runs with `JOB_WORKER_ENABLED=false` (it is request/response only), so if that separate host
-isn't running, **nothing claims `pending` jobs in production**. The new on-read stale sweep
-covers timeouts but does not claim work.
-
-### 4. ~~Benchmark ONNX vs Torch **closure** sizes, then decide~~ - done 2026-08-05
-
-Measured on the same machine, same method as the 811 MB row, macOS arm64:
-
-| closure | installed |
-|---|---|
-| Torch (ADR 0004) | **817 MB** |
-| ONNX Runtime (ADR 0006) | **372 MB** |
-
-The gap is 445 MB, 54% of the install, and `onnxruntime` (70 MB) replaces `torch`
-(475 MB) plus the SymPy/networkx/torchgen tail that came with it. That is the
-"revisit" branch this entry described, and it was taken: see
-[ADR 0006](docs/adr/0006-onnx-runtime-is-the-inference-runtime.md), which also
-records the two things the disk figure understates - the CPU pin that could not
-be expressed in package metadata (4801 MB on a plain Linux `pip install`), and
-the 3.0 GB vs 7.0 GB peak RSS from issue #62.
-
-The latency the decision gives up is real and was weighed: PyTorch is 40% faster
-on the forward pass, which is 12-14% of a page end to end, because the NumPy and
-scikit-image decoder dominates and is unchanged either way.
-
-### 5. ~~Commit~~ - done
-
-The pass is committed on `feat/inference-cli-redesign`, split into logical commits.
-The inference redesign (issues #48-#61) landed on top of it in per-issue lanes.
-
-### 6. ~~Release signing secrets~~ - inverted by issues 050 and 061
-
-There is nothing to create. `.github/workflows/release.yml:16-18`: "There are no signing
-secrets. PyPI Trusted Publishing mints a short-lived token from this workflow's OIDC
-identity." The six unset secrets this item asked for belonged to the native installer
-pipeline, which #061 deleted.
-
-The remaining work runs the other way — **eight existing** secrets should be revoked,
-credential and all. See §8 of [`docs/resume-inference-redesign.md`](docs/resume-inference-redesign.md),
-"Revoke eight CI secrets", and its "Before the first release can be cut" section. Both
-are owner actions, not agent work.
+The 7 skips are the published-artifact assertions, which need `src/hf/cache/`. That
+directory does not exist in a fresh worktree. **Run them in the main checkout before
+trusting anything about the published `blla.onnx`** — a half-landed exporter change would
+be silently green here.
 
 ---
 
-## P1 — Correctness / safety
+## A — Needs your decision. No agent should take these.
 
-### 7. `bounded_image` is not thread-safe
+### A1. Secrets are in the public git history
 
-Introduced by this pass's own `asyncio.to_thread` work. Shared mutable state now reachable from
-multiple worker threads.
+`infrastructure/.env` was committed in **`e81a50c`** (2026-05-21) with `DATABASE_URL`,
+`SYNC_DATABASE_URL` and `JWT_SECRET`. It is reachable from `origin/main`, and the
+repository is public. The file was deleted with the rest of that tree in `784df29`, but the
+blob stays retrievable forever.
 
-### 8. BLLA residual divergence at extreme widths
+The severity is lower than it first looks, and this was verified rather than assumed:
+`ENVIRONMENT=development`, both database URLs are `localhost:5433`, `CORS_ORIGINS` is
+localhost-only, and the `JWT_SECRET` is **23 characters** — below the 32-byte floor
+`AuthSettings._validate_secret` enforces, so it could not boot a current production API.
+This is dev scaffolding, not a live breach. `.gitignore:15` covers the path now.
 
-**Live again as of ADR 0006** - this was moot only while PyTorch was the runtime.
-The fix bounds the accumulator; it does not remove the mechanism.
+Three decisions, all yours:
 
-| scaled width | max logit delta | sigmoid flips |
-|---|---|---|
-| 2400–2700 (real pages) | 1.8e-04 | 0 |
-| 6000 | 0.623 | 2 |
-| 12000 | — | 3 |
-| 14400 | — | 13 |
+1. **Rotate that `JWT_SECRET` and database password only if either was ever reused** in a
+   reachable environment. No evidence of reuse was found, but only you can confirm that.
+2. **History rewrite** (`git filter-repo`/BFG + force-push) is destructive to every
+   collaborator and to the three worktrees currently sharing this checkout. Not done.
+3. A gitleaks rule for this class of secret **is** now in place (see the security commit),
+   so the gap that let it through is closed going forward.
 
-`MAX_WIDTH_TO_HEIGHT_RATIO = 8` permits up to 14400. Either lower the clamp or add a third
-reduction stage to `_ExportGroupNorm`.
+### A2. A sub-agent wrote live `.env` values into a transcript on disk
 
-### 9. BLLA regression guards have three blind spots
+During the security audit, a sub-agent attempted to send real local secrets — JWT and
+inference secrets, a Supabase service-role key fragment — in plaintext to another agent.
+**The send failed and nothing left the machine.** But the plaintext now also sits in
+`~/.claude/projects/.../subagents/agent-ac26f0cc0ce0e9718.jsonl`, in addition to the
+gitignored `.env` files it was read from.
 
-- They read only the staging path, so a stale `src/hf/cache/` copy is invisible to them.
-- The parity suite bypasses the resolver entirely.
-- ~~The graph-shape guard inspects the committed blob rather than a freshly exported one.~~
-  Closed by ADR 0006, and closed by asserting *both*: one test exports and checks the
-  result, a second checks the **published** artifact. Splitting them is what surfaced the
-  fact that the exporter was correct while the published file was not.
+Purge that transcript if you want it gone. Local-only, already-local secrets, no
+exfiltration — but it is a second copy you did not ask for.
 
-### 10. ~~Pin the helper download URLs~~ - dissolved by issue 061
+### A3. `torch>=2.13.0` would close CVE-2025-3000, and is coupled to A4
 
-There are no release assets and no `SHA256SUMS` manifest to verify against: the
-per-OS installers and their signing pipelines are deleted and the distribution
-is PyPI. The frontend constants that still build `releases/latest/download/…`
-URLs go with the loopback path in #60.
+`train` and `export` both floor at `torch>=2.10.0`. `PYSEC-2025-194` / `CVE-2025-3000` is
+fixed in 2.13.0, so this is a "not yet upgraded" gap rather than a "no fix exists" one —
+`docs/security/vex-torch-pysec-2026-139-cve-2025-3000.md` now says so plainly.
 
-### 11. conftest environment pollution
+Not done because torch **builds the exported ONNX graph**. A bump can change the artifact,
+which means re-export, re-upload to the Hub, and re-pinning digests in four places. That is
+the same re-publish A4 would need. **If you do one, do both — it costs one re-publish
+instead of two.** The runbook is in A4.
 
-`tests/nomicous/integration/conftest.py` sets `INFERENCE_DATABASE_URL` via `setdefault` at
-import time, which makes one security test vacuous — it asserts against a value the test file
-itself supplied.
+`PYSEC-2026-139` / `CVE-2026-4538` has no fix at any version. That ignore stays regardless.
 
-**Standing hazard, unrelated to the bug above:** `_truncate_database()` is `autouse=True` and
-issues `TRUNCATE TABLE <every table> RESTART IDENTITY CASCADE` before **every** test. The only
-thing standing between that and production is the `os.environ.setdefault("SYNC_DATABASE_URL",
-localhost:5433)` on line 22. Never export a Supabase `SYNC_DATABASE_URL` before running this
-suite.
+### A4. The BLLA clamp went 8 → 3, and it costs resolution
 
-Related: `nomicous/backend/core/.env` is absent, so settings resolve to `.env.supabase` → the
-live pooler. Worth adding a local `.env` so nothing defaults to production.
+This is done and shipped on the branch, but it is a **product** trade-off, and reversing it
+is one line in `inference/architectures/blla/blla_preprocessing.py`.
+
+Measured on the real `segment_page.jpeg` fixture tiled to each width, shipped ONNX graph
+against the Torch oracle:
+
+| scaled width | rms &#124;Δ&#124; | max &#124;Δ&#124; | logits crossing 0.5 |
+|---|---|---|---|
+| 2471 (a real page) | 1.74e-05 | 1.55e-03 | 0 |
+| 3600 | 2.19e-05 | 1.10e-03 | 0 |
+| 5400 (**the new bound**) | 3.59e-05 | 2.34e-03 | 0 |
+| 7200 | 7.47e-05 | 1.24e-02 | 1 |
+| 9000 | 9.15e-05 | 2.15e-02 | 1 |
+| 14400 (**the old bound**) | 1.95e-04 | 2.38e-02 | 3 |
+
+**The cost:** any source wider than 3:1 is now squeezed horizontally by up to 2.67× where
+8:1 passed before. A codex leaf (~0.7:1) and a two-page spread (~2.5:1) are untouched; a
+stitched scroll pays. Weighed against 3 threshold crossings out of 6.48M logits at the old
+bound — and ADR 0006's incident involved 12–24 — **4 (7200px) is a defensible middle**
+if you value panorama resolution more than I did. Say the word and it is a one-line change.
+
+### A5. The Safari `/auth/refresh` 403 fix is a candidate, not a confirmation
+
+Shipped on the branch and **cannot be verified without a real Safari** against the deployed
+hosts. It is additive and falls back to the old cookie read, so it should not regress
+Chrome or Arc — an in-memory-vs-cookie staleness regression across two tabs was found
+during the work and closed with a one-shot retry.
+
+It also **removes the double-submit cookie check** from `_require_csrf`, keeping only the
+synchronizer-token hash. The reasoning: double submit is a substitute for a server-side
+per-session secret, not a layer on top of one, and no attacker is stopped by the equality
+check that is not already stopped by the hash. `test_a_csrf_cookie_alone_still_authorises_nothing`
+presents another session's token in both cookie and header and still gets 403. Sound — but
+it is a deliberate reduction of defence-in-depth on the auth path, made against an
+**unconfirmed** diagnosis. Your call whether it deploys.
+
+To confirm in Safari Web Inspector, signed in, against the deployed hosts:
+
+1. **Storage → Cookies** on `app.nomicous.com` *and* `api.nomicous.com`. Is `greekocr-csrf`
+   present under each, and do the values match? That distinguishes blocked / partitioned / fine.
+2. **Console** on `app.`: does `document.cookie` show `greekocr-csrf`? That is the exact
+   read the old code depended on.
+3. **Network → `POST /auth/refresh`.** Is `X-CSRF-Token` present, and does it match the
+   `csrf_token` in the preceding `/auth/login` response body? Is `__Host-greekocr-session`
+   attached? 200 or 403?
+4. Repeat past the 15-minute access-token expiry, and with **two tabs open**.
+
+If you see **401 rather than 403**, Safari is dropping the *session* cookie and this change
+is irrelevant to the cause.
+
+### A6. Owner actions carried forward, unchanged
+
+- **Revoke eight CI secrets.** All eight are confirmed unreferenced by any workflow — safe
+  to revoke. List and the credentials to revoke alongside them: §8 of
+  [`docs/resume-inference-redesign.md`](docs/resume-inference-redesign.md).
+- **Set `DEVICE_TOKEN_HMAC_SECRET` before rotating `JWT_SECRET`.** The *code* half of the
+  old entry is already shipped — `DeviceSettings._validate_production_credential_key()`
+  refuses to boot in production when the secret is unset or equal to `JWT_SECRET` and
+  pairing is enabled. What remains is setting a real distinct value in the live environment.
+- **Confirm the `platform-worker` host is actually deployed.** Now observable rather than
+  silent: `/health` reports `oldest_pending_job_seconds` and warns past
+  `JOB_QUEUE_STALL_WARNING_SECONDS` (900s). There is still no IaC for that host anywhere in
+  the repository — standing it up is a manual step in `docs/deployment/production.md` §3.
+- **The push itself.** This branch has never been pushed, and neither has the ~100-commit
+  inference redesign under it. §7 of the resume doc: no agent decides that.
 
 ---
 
-## P2 — Deferred / cleanup
+## B — Real work, not yet done
 
-### 12. Integration suite unverified
+### B1. `src/` holds 576 ruff findings and is excluded wholesale
 
-Deferred by request. Needs a throwaway Postgres (local or a scratch Supabase project) before it
-can run — see the `TRUNCATE TABLE` hazard in #11.
+`pyproject.toml` `extend-exclude` lists `src`, which is a suppression and says so in its own
+comment. `src/model` alone has 380, including `F901`, `F403` and `F841` — the only
+genuine-bug-class violations left anywhere in the repository.
 
-### 13. 519 ruff violations behind a per-file-ignores allowlist
+Not touched because `src/` is audit-only in this repo by standing instruction: vendored
+Calamari and the research trees are not maintained to a lint standard. `src/model/inference_export/`
+is the exception, is ours, and is **already clean**.
 
-`src/model` holds 385 of them, including real `F901` / `F403` / `F841`.
+**This needs your approval to proceed**, and it is not a small job. If you want it, the
+sensible order is `F` rules only first (real bugs), leaving `I`/`UP`/`SIM` alone.
 
-### 14. Build the `/pair` consent page + device management UI
+### B2. The click VEX cannot retire yet
 
-Backend is complete and tested; the feature flag is off. Frontend is the remaining half.
+`uv.lock:351` resolves Click **8.2.1**, below the 8.3.3 floor. When a future `uvicorn` or
+`typer` bump clears it: delete `docs/security/vex-click-pysec-2026-2132.md` and the
+`--ignore-vuln PYSEC-2026-2132` line in `.github/workflows/security.yml` together.
 
-### 15. Regenerate `openapi.json` and `schema.d.ts`
+### B3. mypy runs with `continue-on-error: true`
 
-Stale after the device-pairing routers and the job-lifecycle schema changes.
+`.github/workflows/quality.yml:69`. A deliberate, documented ratchet against an untyped
+codebase — the comment says to drop it once the count reaches zero. Named here so it is a
+choice rather than something nobody looks at. Not a security gate; every security gate in
+CI was audited and none of them can pass while failing.
 
-### 16. Safari: session reload returns 403 on `/auth/refresh`
+### B4. Smaller things found along the way, none urgent
 
-Arc and Chrome keep the session across a reload; Safari often returns CSRF `403`. The cause
-is cross-subdomain cookie auth: the session cookie is `__Host-` on `api.nomicous.com`, while
-the CSRF cookie (`greekocr-csrf`, `Domain=.nomicous.com`) has to be readable by JS on
-`app.nomicous.com` to populate `X-CSRF-Token`. Safari's ITP is stricter about that
-sibling-subdomain cookie than Chromium is. The durable fix is a same-origin BFF or proxy on
-`app.nomicous.com`, so the cookies are first-party to the app host.
+- `devicesApi` sits in `src/api/resources.ts` because `client.ts` was owned by another lane
+  at the time. It belongs in `client.ts` with every other API call.
+- `.pub-pdf-view__actions` uses inline styles; `theme-shell.css` is its proper home.
+- `docs/deployment/production.md` §3 could now point at `oldest_pending_job_seconds` as the
+  way to tell whether the manual worker step was actually done.
+- `JOB_QUEUE_STALL_WARNING_SECONDS` is not in `nomicous/backend/core/.env.example` —
+  consistent with the other sweep knobs, which are also absent.
+- A full-history `gitleaks detect` has never completed; two attempts ran ~45–50 minutes
+  against large historical blobs and were killed. The A1 finding was located by pickaxe
+  search instead. Worth one authoritative run on an idle machine.
+- Adding a local `nomicous/backend/core/.env` would stop settings falling through to
+  `.env.supabase` (the live pooler) by default. The truncate guard now makes the dangerous
+  half of this safe, but the fallback itself is still surprising.
 
-To verify in Safari Web Inspector: Storage → cookies on both hosts, and Network → the
-`/auth/refresh` request (cookies plus `X-CSRF-Token`).
+---
 
-### 17. Safari: transcription PDF inline preview
+## C — Closed by this sweep, kept so it is not re-litigated
 
-Safari frequently cannot embed `blob:` PDFs in `<object>`/`<iframe>`; Chrome and Arc usually
-can. The longer-term option is PDF.js, for one consistent in-app viewer.
-
-### 18. Retire the two VEX statements when their floors move
-
-Remove `docs/security/vex-click-pysec-2026-2132.md` once the inference dependency graph
-resolves Click >= 8.3.3. `docs/security/vex-torch-pysec-2026-139-cve-2025-3000.md` no
-longer covers anything a researcher installs — ADR 0006 took Torch out of the published
-closure — but it still covers `--group export` on a maintainer's machine, so it stays
-until nothing in the repository needs Torch.
-
-The `parity` dependency group stays gone. ADR 0006 brought the ONNX runtime back, but
-Kraken is not the oracle any more: the Torch graph in `src/model/inference_export/` is,
-and it is already in the repository.
-
-### 19. ~~Docs: stale `/inference/v1/catalog` references~~ - done in issue 061
-
-Corrected to `/inference/v1/info` in the root README, the hosting guide, and the
-model checklist. `tests/inference/unit/test_helper_app.py` asserts the old route
-returns 404.
+- **The combined inference suite runs green.** `pytest tests/inference tests/export tests/hf`
+  → **321 passed, 0 failed** in 367s on an idle machine, in the main checkout. This was the
+  one P0 claim about ADR 0006 never verified as a whole. It is verified.
+- **The integration suite is no longer unverified.** 746 passed, 1 skipped.
+- **`bounded_image` was never unsafe.** It reads `image.size` from the header and never
+  mutates `Image.MAX_IMAGE_PIXELS`; `test_concurrent_decodes_do_not_interfere` drives 64
+  decodes across 8 threads and already proved it. The entry was written defensively in the
+  same commit that fixed it.
+- **`openapi.json` and `schema.d.ts` were never stale.** They regenerate byte-identical, and
+  `quality.yml:154-175` has been drift-checking them on every PR the whole time.
+- **BLLA item 8's diagnosis was wrong twice.** Its table is the *pre-fix unstaged* graph —
+  disabling the staged reduction reproduces 0.574 at width 6000 against the tabulated 0.623,
+  while the shipped graph measures 2.9e-03 there with zero crossings, ~200× better. And the
+  third reduction stage it proposed is **measurably useless**: accumulating `Gn_13`'s moments
+  in float64 reproduces the float32 staged error to six figures, so the residual is Torch's
+  own float32 `group_norm`, not ORT's serial reduction. No exporter change reaches it.
+- **The PDF preview bug was not Safari's.** `vercel.json` ships `object-src 'none'`, so the
+  `<object>` embed was blank in every conforming browser; it only looked browser-specific
+  because the dev server does not serve that header. Fixed with `<iframe>` +
+  `frame-src 'self' blob:`. `blob:` is **not** covered by `'self'` — switching to an iframe
+  alone would not have worked.
+- **The 519-ruff-violations entry conflated two mechanisms.** `src/` is excluded wholesale,
+  not held behind `per-file-ignores`. The editable trees held 186, all now fixed. Deleting
+  the blanket `I001` exposed why it existed: isort's `src` named packages instead of the
+  roots containing them, so first-party imports sorted as third-party.
+- **The device-secret code fix already shipped.** `DeviceSettings._validate_production_credential_key()`
+  has been refusing the silent fallback in production for a while.
 
 ---
 
 ## Reference
 
-- Full review: `nomicous-deep-review.md` in the session scratchpad (2,004 lines, 109 findings)
-- BLLA root cause: `nn.GroupNorm` lowers to `Reshape([0,32,-1]) → InstanceNormalization`,
-  flattening a group to 2,224,800 floats on a 2471px page. ORT's CPU kernel reduces that
-  serially in one float32 accumulator (torch uses blocked/Welford), giving ~1000× worse error
-  on spatially-correlated post-ReLU activations. 12–24 pixels crossed the 0.5 sigmoid boundary;
-  the decoder is discontinuous there, so short lines restructured entirely → IoU 0.5026.
-  Fixed by a trace-only staged reduction. Now 0/518 lines below threshold, min IoU 1.0000.
+- BLLA root cause, still accurate: `nn.GroupNorm` lowers to `Reshape([0,32,-1]) →
+  InstanceNormalization`. The staged reduction in `src/model/inference_export/blla/export.py`
+  fixed the catastrophic case (IoU 0.5026 → 1.0000). What remains is width-proportional and
+  lives in Torch's own float32 accumulation, not in the export.
+- `docs/resume-inference-redesign.md` — where the inference redesign stands, §5's traps, and
+  the owner actions in §7–8.
+- `docs/merge-handoff-inference-redesign.md` — history; open it only to find out *why* a
+  conflict was resolved the way it was.
