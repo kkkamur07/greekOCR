@@ -16,7 +16,7 @@ if str(SCRIPT_DIR) not in sys.path:
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.logging.wandb_logger import WandbLogger  # noqa: E402
+from src.logging.wandb import WandbLogger  # noqa: E402
 from train_utils import (  # noqa: E402
     build_calamari_train_command,
     stream_process,
