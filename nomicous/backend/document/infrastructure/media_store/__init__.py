@@ -10,7 +10,10 @@ from backend.document.infrastructure.media_store.encoding import (
 )
 from backend.document.infrastructure.media_store.errors import PresignUnsupported
 from backend.document.infrastructure.media_store.factory import MediaStore, get_media_store
-from backend.document.infrastructure.media_store.keys import DEFAULT_PART_IMAGE_SUFFIX
+from backend.document.infrastructure.media_store.keys import (
+    DEFAULT_PART_IMAGE_SUFFIX,
+    validate_image_key,
+)
 from backend.document.infrastructure.media_store.local import LocalMediaStore
 from backend.document.infrastructure.media_store.signing import (
     SIGNED_MEDIA_PREFIX,
@@ -37,4 +40,5 @@ __all__ = [
     "render_part_thumbnail",
     "sign_object_path",
     "signature_is_valid",
+    "validate_image_key",
 ]

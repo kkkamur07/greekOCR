@@ -18,7 +18,10 @@ import { ContentRegionLoading } from "../components/layout/ContentRegionLoading"
 import { DocumentLiveSharingPanel } from "../components/sharing/DocumentLiveSharingPanel";
 import { WorkflowBadge } from "../components/WorkflowBadge";
 import { useServerQuery } from "../hooks/useServerQuery";
-import { encodePartImage } from "../utils/encodePartImage";
+import {
+  encodePartImage,
+  type EncodedPartImage,
+} from "../utils/encodePartImage";
 
 const ENABLE_TEST_JOBS = process.env.NEXT_PUBLIC_ENABLE_TEST_JOBS === "true";
 
@@ -110,7 +113,7 @@ export function DocumentDetailPage() {
       // bypasses Vercel's 4.5 MB function-body cap that a manuscript scan would hit.
       // If the backend cannot presign (local storage) or the browser cannot decode the
       // file to WebP, fall back to the legacy multipart upload.
-      let encoded;
+      let encoded: EncodedPartImage | undefined;
       let presignable = true;
       try {
         encoded = await encodePartImage(file);

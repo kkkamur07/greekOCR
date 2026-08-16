@@ -18,6 +18,7 @@ from pypdf import PdfReader
 
 from backend.annotation.application.export_service import AnnotationExportService
 from backend.annotation.application.transcription_pdf_service import TranscriptionPdfService
+from backend.document.infrastructure.media_store import PresignUnsupported
 from backend.document.infrastructure.orm_models import (
     Document,
     DocumentPart,
@@ -105,7 +106,7 @@ class _Store:
         return f"/media/signed/{image_key}"
 
     def create_upload_url(self, image_key, *, expires_at):
-        raise ValueError("cannot presign")
+        raise PresignUnsupported("cannot presign")
 
 
 def _fixtures(*, width: int | None, height: int | None, texts: list[str | None]):

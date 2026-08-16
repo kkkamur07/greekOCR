@@ -26,6 +26,7 @@ from backend.document.infrastructure.media_store import (
     encode_part_thumbnail,
     get_media_store,
     read_image_size,
+    validate_image_key,
 )
 from backend.document.infrastructure.orm_models import DocumentPart
 from backend.project.infrastructure.project_repository import ProjectRepository
@@ -206,6 +207,14 @@ class DocumentPartService:
         part = context.part
         if part.image_key != "pending":
             raise ValidationError("Part upload has already been finalized")
+        # The key is client-supplied. The media store refuses a malformed one with
+        # ``ValueError``, and letting that surface through the read below would both
+        # misreport it as "not a valid image" and run the delete/compensation ladder
+        # against an attacker-controlled string. Reject it before touching storage.
+        try:
+            validate_image_key(image_key)
+        except ValueError as exc:
+            raise ValidationError("image_key is not a valid media key") from exc
         # The key must be one this part's own begin could have minted. Without this
         # check any project member could seal a *foreign* part's key onto their row,
         # and deleting either row would then destroy the other document's image via

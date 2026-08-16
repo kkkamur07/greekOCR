@@ -3022,6 +3022,7 @@
               },
               "type": "array"
             },
+            "maxItems": 256,
             "minItems": 4,
             "title": "Points",
             "type": "array"
@@ -3105,6 +3106,7 @@
             "items": {
               "$ref": "#/components/schemas/SegmentBlock"
             },
+            "maxItems": 1000,
             "title": "Blocks",
             "type": "array"
           },
@@ -3112,6 +3114,7 @@
             "items": {
               "$ref": "#/components/schemas/SegmentLine"
             },
+            "maxItems": 10000,
             "title": "Lines",
             "type": "array"
           }
@@ -3209,6 +3212,7 @@
             "items": {
               "$ref": "#/components/schemas/TranscribeBatchLineResult"
             },
+            "maxItems": 10000,
             "minItems": 1,
             "title": "Lines",
             "type": "array"
@@ -3283,6 +3287,7 @@
             "type": "number"
           },
           "text": {
+            "maxLength": 10000,
             "title": "Text",
             "type": "string"
           }
