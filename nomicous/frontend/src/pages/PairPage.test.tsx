@@ -197,8 +197,11 @@ describe("PairPage", () => {
     await waitFor(() => {
       expect(devicesApi.approvePairing).toHaveBeenCalled();
     });
-    // Still answerable: a failed approve must not strand the request.
-    expect(screen.getByRole("button", { name: "Approve" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Deny" })).toBeTruthy();
+    // Still answerable: a failed approve must not strand the request. Queried
+    // asynchronously because the rejection lands after ``approvePairing`` is
+    // recorded: on a slow runner the buttons are still unmounted for the
+    // in-flight decision when a synchronous query would run.
+    expect(await screen.findByRole("button", { name: "Approve" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Deny" })).toBeTruthy();
   });
 });

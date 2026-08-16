@@ -148,15 +148,25 @@ class DocumentPartService:
         """Mint a presigned upload URL, or signal multipart with a ``None`` part.
 
         The part row is created only once the URL exists, so a backend that cannot
-        presign (the filesystem) never leaves a ``pending`` row behind. When presign
-        is impossible the tuple comes back ``(None, image_key, None, None)`` and the
+        presign (the filesystem) never leaves a pending row behind. When presign is
+        impossible the tuple comes back ``(None, image_key, None, None)`` and the
         caller falls back to the multipart upload; otherwise the row is committed with
-        ``image_key="pending"`` and the URL/token are returned for the direct PUT.
+        ``image_key="pending:<minted key>"`` and the URL/token are returned for the
+        direct PUT. The sentinel keeps the minted key on the row so the abandoned-
+        upload sweep can reap both the row and the blob of a begin whose browser
+        never finalized.
+
+        The key's suffix follows the filename: the direct path stores the browser's
+        bytes exactly as sent - no transcode, no loss - so the stored object is
+        whatever format the client uploaded, not a server-encoded WebP.
         """
         context = await self._access.require_document(session, user, project_id, document_id)
         document = context.document
         order = await self._documents.next_part_order(session, document.id)
-        filename_stem = filename.rsplit(".", 1)[0] if "." in filename else None
+        filename_stem: str | None = None
+        suffix = DEFAULT_PART_IMAGE_SUFFIX
+        if "." in filename:
+            filename_stem, suffix = filename.rsplit(".", 1)
         part = DocumentPart(
             document_id=document.id,
             order=order,
@@ -166,7 +176,7 @@ class DocumentPartService:
         await session.flush()
         image_key = self._media.part_image_key(
             part.id,
-            suffix=DEFAULT_PART_IMAGE_SUFFIX,
+            suffix=suffix,
             filename_stem=filename_stem,
         )
         try:
@@ -175,9 +185,10 @@ class DocumentPartService:
             )
         except PresignUnsupported:
             # The local filesystem backend cannot presign. Roll the part back so no
-            # ``pending`` row is orphaned and signal the caller to use multipart.
+            # pending row is orphaned and signal the caller to use multipart.
             await session.rollback()
             return None, image_key, None, None
+        part.image_key = f"pending:{image_key}"
         await session.commit()
         return part, image_key, upload_url, token
 
@@ -195,17 +206,16 @@ class DocumentPartService:
     ) -> DocumentPart:
         """Seal a direct upload: verify the blob and persist its key and dimensions.
 
-        The browser-supplied dimensions are trusted only as a hint. The stored WebP is
+        The browser-supplied dimensions are trusted only as a hint. The stored blob is
         decoded once here - the same bounded decode multipart uploads run - so a client
         cannot fabricate geometry or smuggle a non-image past the media store. The
         server's read is authoritative; a disagreement is logged rather than rejected,
-        because the browser re-encodes to WebP and can be a few pixels off on exotic
-        sources, and the cost of a mismatch is a wrong thumbnail for one request, not a
+        because the cost of a mismatch is a wrong thumbnail for one request, not a
         wrong stored image.
         """
         context = await self._access.require_part(session, user, project_id, document_id, part_id)
         part = context.part
-        if part.image_key != "pending":
+        if not part.image_key.startswith("pending"):
             raise ValidationError("Part upload has already been finalized")
         # The key is client-supplied. The media store refuses a malformed one with
         # ``ValueError``, and letting that surface through the read below would both
@@ -215,13 +225,15 @@ class DocumentPartService:
             validate_image_key(image_key)
         except ValueError as exc:
             raise ValidationError("image_key is not a valid media key") from exc
-        # The key must be one this part's own begin could have minted. Without this
-        # check any project member could seal a *foreign* part's key onto their row,
-        # and deleting either row would then destroy the other document's image via
-        # the shared blob's deletion intent.
-        if image_key != f"parts/{part.id}.{DEFAULT_PART_IMAGE_SUFFIX}" and not image_key.startswith(
-            f"parts/{part.id}/"
-        ):
+        # The key must be the one this part's own begin minted. Without this check
+        # any project member could seal a *foreign* part's key onto their row, and
+        # deleting either row would then destroy the other document's image via the
+        # shared blob's deletion intent. Rows begun since the sentinel carry the
+        # minted key verbatim; the prefix check covers rows begun before it.
+        if part.image_key.startswith("pending:"):
+            if part.image_key != f"pending:{image_key}":
+                raise ValidationError("image_key does not belong to this part")
+        elif not image_key.startswith((f"parts/{part.id}.", f"parts/{part.id}/")):
             raise ValidationError("image_key does not belong to this part")
         try:
             true_width, true_height = await asyncio.to_thread(
@@ -293,7 +305,14 @@ class DocumentPartService:
         persist the result; every later read is served from Postgres. Storage failures are
         swallowed — a missing blob must not break listing the rest of the document.
         """
-        pending = [part for part in parts if part.width is None or part.height is None]
+        # A pending row has no stored blob yet (its key is the ``pending`` sentinel),
+        # so trying to backfill it would only log a spurious warning per listing.
+        pending = [
+            part
+            for part in parts
+            if (part.width is None or part.height is None)
+            and not part.image_key.startswith("pending")
+        ]
         if not pending:
             return
         changed = False

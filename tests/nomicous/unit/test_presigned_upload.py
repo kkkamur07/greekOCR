@@ -139,7 +139,7 @@ class _Store:
         self.blobs: dict[str, bytes] = {}
 
     def part_image_key(self, part_id, **kwargs) -> str:
-        return part_image_key(part_id)
+        return part_image_key(part_id, **kwargs)
 
     def create_upload_url(self, image_key, *, expires_at):
         self.presign_calls.append(image_key)
@@ -212,10 +212,14 @@ async def test_begin_upload_creates_pending_row_and_mints_url() -> None:
     assert begin is not None
     part, image_key, url, token = begin
 
-    assert part.image_key == "pending"
+    # The committed row carries the minted key behind the sentinel so the
+    # abandoned-upload sweep can reap the blob if finalize never comes; the
+    # key's suffix follows the filename because the direct path stores the
+    # browser's bytes as sent.
+    assert part.image_key == f"pending:{image_key}"
     assert part.width is None
     assert part.height is None
-    assert image_key == f"parts/{part.id}.webp"
+    assert image_key == f"parts/{part.id}/page.png"
     assert store.presign_calls == [image_key]
     assert url == "https://presigned.example/x"
     assert token == "tok"
@@ -334,7 +338,7 @@ async def test_finalize_upload_rejects_a_foreign_image_key() -> None:
         filename="page.png",
     )
     assert begin is not None
-    part, _image_key, _url, _token = begin
+    part, image_key, _url, _token = begin
 
     foreign_key = part_image_key(uuid.uuid4())
     store.blobs[foreign_key] = encode_part_image_with_size(_png_bytes(9, 9)).data
@@ -353,7 +357,47 @@ async def test_finalize_upload_rejects_a_foreign_image_key() -> None:
     # someone else's image and must survive untouched.
     assert store.reads == []
     assert foreign_key in store.blobs
-    assert part.image_key == "pending"
+    assert part.image_key == f"pending:{image_key}"
+
+
+async def test_finalize_upload_requires_the_exact_minted_key() -> None:
+    """A sentinel row seals only the key its own begin minted.
+
+    ``parts/{part.id}.webp`` is *owned* by the part under the legacy prefix rule,
+    but it is not the key begin handed the browser - accepting it would let a
+    client point the row at an object nothing ever uploaded or swept.
+    """
+    document = Document(id=uuid.uuid4(), name="codex")
+    store = _Store()
+    service = _make_service(store, document)
+    session = _RecordingSession()
+
+    begin = await service.begin_upload(
+        session,
+        user=object(),
+        project_id=uuid.uuid4(),
+        document_id=document.id,
+        filename="page.png",
+    )
+    assert begin is not None
+    part, image_key, _url, _token = begin
+    assert image_key != f"parts/{part.id}.webp"
+
+    owned_but_not_minted = f"parts/{part.id}.webp"
+    store.blobs[owned_but_not_minted] = encode_part_image_with_size(_png_bytes(9, 9)).data
+
+    with pytest.raises(ValidationError, match="does not belong"):
+        await service.finalize_upload(
+            session,
+            user=object(),
+            project_id=uuid.uuid4(),
+            document_id=document.id,
+            part_id=part.id,
+            image_key=owned_but_not_minted,
+        )
+
+    assert store.reads == []
+    assert part.image_key == f"pending:{image_key}"
 
 
 async def test_finalize_upload_rejects_and_discards_an_oversized_blob(monkeypatch) -> None:
@@ -388,7 +432,7 @@ async def test_finalize_upload_rejects_and_discards_an_oversized_blob(monkeypatc
         )
 
     assert image_key not in store.blobs
-    assert part.image_key == "pending"
+    assert part.image_key == f"pending:{image_key}"
 
 
 async def test_finalize_upload_rejects_double_finalize() -> None:

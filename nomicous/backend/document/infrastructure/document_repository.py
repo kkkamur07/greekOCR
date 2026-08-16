@@ -382,10 +382,31 @@ class DocumentRepository:
         return list(result.scalars().all())
 
     async def delete_part(self, session: AsyncSession, part: DocumentPart) -> None:
-        session.add(MediaDeletionIntent(image_key=part.image_key))
+        # A pending row's key is the sentinel, not an object key: enqueueing it
+        # verbatim would poison the GC with a key the store refuses forever. The
+        # sentinel carries the minted key; a bare "pending" row has no blob at all.
+        image_key = part.image_key
+        if image_key.startswith("pending:"):
+            image_key = image_key.removeprefix("pending:")
+        elif image_key.startswith("pending"):
+            image_key = ""
+        if image_key:
+            await self._add_media_deletion_intent(session, image_key)
         await session.delete(part)
         await session.commit()
 
     async def enqueue_media_deletion_intent(self, session: AsyncSession, image_key: str) -> None:
-        session.add(MediaDeletionIntent(image_key=image_key))
+        await self._add_media_deletion_intent(session, image_key)
         await session.commit()
+
+    async def _add_media_deletion_intent(self, session: AsyncSession, image_key: str) -> None:
+        """Stage an intent unless one for this key is already queued.
+
+        ``image_key`` is unique on the table, so a blind insert after a rejected
+        finalize already queued the same key would fail the whole transaction.
+        """
+        existing = await session.execute(
+            select(MediaDeletionIntent.id).where(MediaDeletionIntent.image_key == image_key)
+        )
+        if existing.scalar_one_or_none() is None:
+            session.add(MediaDeletionIntent(image_key=image_key))

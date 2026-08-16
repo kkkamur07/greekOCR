@@ -19,8 +19,8 @@ import { DocumentLiveSharingPanel } from "../components/sharing/DocumentLiveShar
 import { WorkflowBadge } from "../components/WorkflowBadge";
 import { useServerQuery } from "../hooks/useServerQuery";
 import {
-  encodePartImage,
-  type EncodedPartImage,
+  prepareDirectUpload,
+  type DirectUploadPayload,
 } from "../utils/encodePartImage";
 
 const ENABLE_TEST_JOBS = process.env.NEXT_PUBLIC_ENABLE_TEST_JOBS === "true";
@@ -108,37 +108,38 @@ export function DocumentDetailPage() {
     if (!projectId || !documentId) return;
     setUploading(true);
     try {
-      // Prefer the direct-to-storage path: re-encode to WebP in the browser, get a
-      // presigned Supabase URL, PUT the bytes straight to storage, then finalize. This
-      // bypasses Vercel's 4.5 MB function-body cap that a manuscript scan would hit.
-      // If the backend cannot presign (local storage) or the browser cannot decode the
-      // file to WebP, fall back to the legacy multipart upload.
-      let encoded: EncodedPartImage | undefined;
-      let presignable = true;
+      // Prefer the direct-to-storage path: get a presigned Supabase URL, PUT the
+      // bytes straight to storage, then finalize. This bypasses Vercel's 4.5 MB
+      // function-body cap that a manuscript scan would hit. The payload is never
+      // lossy: natively displayable formats upload as the user's original bytes,
+      // everything else is transcoded to lossless PNG. If the backend cannot
+      // presign (local storage) or the browser cannot decode the file at all,
+      // fall back to the legacy multipart upload.
+      let payload: DirectUploadPayload | undefined;
       try {
-        encoded = await encodePartImage(file);
+        payload = await prepareDirectUpload(file);
       } catch {
-        presignable = false;
+        payload = undefined;
       }
 
-      if (presignable && encoded) {
+      if (payload) {
         const begin = await api.beginPartUpload(projectId, documentId, {
-          filename: file.name,
-          size: encoded.data.size,
+          filename: payload.filename,
+          size: payload.blob.size,
         });
         if (begin.upload_url && begin.part_id) {
           const put = await fetch(begin.upload_url, {
             method: "PUT",
-            body: encoded.data,
-            headers: { "Content-Type": "image/webp" },
+            body: payload.blob,
+            headers: { "Content-Type": payload.contentType },
           });
           if (!put.ok) {
             throw new Error("Storage upload failed");
           }
           await api.finalizePartUpload(projectId, documentId, begin.part_id, {
             image_key: begin.image_key,
-            width: encoded.width,
-            height: encoded.height,
+            width: payload.width ?? null,
+            height: payload.height ?? null,
           });
           toast.success("Part uploaded");
           invalidateAfter.documentPartsChanged(projectId, documentId);
