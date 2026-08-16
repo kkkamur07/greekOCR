@@ -16,7 +16,7 @@ import { isAbortError } from "../../../api/errors";
 import { invalidateAfter } from "../../../api/resources";
 import { submissionRefusalExplanation } from "../../../inference";
 import {
-  TRANSCRIBE_JOB_TIMEOUT_MS,
+  INFERENCE_JOB_WAIT_CEILING_MS,
   type PageEditorJobKind,
 } from "../jobProgress";
 import { segmentNumberFor, segmentsInNumberOrder } from "../segmentNumbering";
@@ -369,7 +369,7 @@ export function usePairingState({
             : "Selected segment",
           kind: "transcription-segment",
         },
-        { timeoutMs: TRANSCRIBE_JOB_TIMEOUT_MS },
+        { timeoutMs: INFERENCE_JOB_WAIT_CEILING_MS },
       );
       const result = await applyTranscribeJob(job);
       const hasAnyText =
@@ -424,7 +424,7 @@ export function usePairingState({
       const job = await trackJobAndWait(
         enqueued.job_id,
         { label: "Full page", kind: "transcription-page" },
-        { timeoutMs: TRANSCRIBE_JOB_TIMEOUT_MS },
+        { timeoutMs: INFERENCE_JOB_WAIT_CEILING_MS },
       );
       const result = await applyTranscribeJob(job);
       const withText =
