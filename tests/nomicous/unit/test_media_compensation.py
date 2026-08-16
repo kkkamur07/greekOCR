@@ -68,6 +68,12 @@ class _RecordingStore:
         self.deletes.append(image_key)
         self.delete_threads.append(threading.get_ident())
 
+    def signed_object_url(self, image_key, *, expires_at):
+        return f"/media/signed/{image_key}"
+
+    def create_upload_url(self, image_key, *, expires_at):
+        raise ValueError("cannot presign")
+
 
 class _DeleteFailingStore(_RecordingStore):
     def delete(self, image_key: str) -> None:

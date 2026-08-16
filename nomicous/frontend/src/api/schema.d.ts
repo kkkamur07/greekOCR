@@ -772,6 +772,34 @@ export interface paths {
     patch: operations["reorder_parts_projects__project_id__documents__document_id__parts_reorder_patch"];
     trace?: never;
   };
+  "/projects/{project_id}/documents/{document_id}/parts/upload": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Begin Part Upload
+     * @description Name the file and get a presigned storage URL for the browser to PUT to.
+     *
+     *     Vercel Functions cap a request body at 4.5 MB, so a manuscript page scan cannot
+     *     be POSTed through the platform directly. This minted URL lets the browser stream
+     *     the bytes to Supabase Storage instead; the caller then posts
+     *     ``/{part_id}/finalize`` to persist the key and dimensions.
+     *
+     *     On a backend that cannot presign (``STORAGE_BACKEND=local``) the URL and token are
+     *     ``null`` and the caller falls back to the multipart :func:`upload_part`.
+     */
+    post: operations["begin_part_upload_projects__project_id__documents__document_id__parts_upload_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/projects/{project_id}/documents/{document_id}/parts/{part_id}": {
     parameters: {
       query?: never;
@@ -836,6 +864,26 @@ export interface paths {
     put?: never;
     /** Export Approved Line Artifacts */
     post: operations["export_approved_line_artifacts_projects__project_id__documents__document_id__parts__part_id__export_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/projects/{project_id}/documents/{document_id}/parts/{part_id}/finalize": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Finalize Part Upload
+     * @description Seal a direct upload after the browser has PUT the bytes to storage.
+     */
+    post: operations["finalize_part_upload_projects__project_id__documents__document_id__parts__part_id__finalize_post"];
     delete?: never;
     options?: never;
     head?: never;
@@ -2543,6 +2591,39 @@ export interface components {
       status: components["schemas"]["PairingStatus"];
       /** Token Expires At */
       token_expires_at?: string | null;
+    };
+    /**
+     * PartUploadBeginRequest
+     * @description Begin a direct-to-storage part upload: name the file, get a presigned URL.
+     */
+    PartUploadBeginRequest: {
+      /** Filename */
+      filename: string;
+      /** Size */
+      size: number;
+    };
+    /** PartUploadBeginResponse */
+    PartUploadBeginResponse: {
+      /** Image Key */
+      image_key: string;
+      /** Part Id */
+      part_id?: string | null;
+      /** Token */
+      token?: string | null;
+      /** Upload Url */
+      upload_url?: string | null;
+    };
+    /**
+     * PartUploadFinalizeRequest
+     * @description Seal a direct upload after the browser has PUT the bytes to storage.
+     */
+    PartUploadFinalizeRequest: {
+      /** Height */
+      height?: number | null;
+      /** Image Key */
+      image_key: string;
+      /** Width */
+      width?: number | null;
     };
     /** ProjectCreateRequest */
     ProjectCreateRequest: {
@@ -6859,6 +6940,96 @@ export interface operations {
       };
     };
   };
+  begin_part_upload_projects__project_id__documents__document_id__parts_upload_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: string;
+        document_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PartUploadBeginRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PartUploadBeginResponse"];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
   delete_part_projects__project_id__documents__document_id__parts__part_id__delete: {
     parameters: {
       query?: never;
@@ -7324,6 +7495,97 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ExportResponse"];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
+  finalize_part_upload_projects__project_id__documents__document_id__parts__part_id__finalize_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: string;
+        document_id: string;
+        part_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PartUploadFinalizeRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DocumentPartResponse"];
         };
       };
       /** @description Not authenticated */

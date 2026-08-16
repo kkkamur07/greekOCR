@@ -8,6 +8,7 @@ from backend.document.infrastructure.media_store.encoding import (
     read_image_size,
     render_part_thumbnail,
 )
+from backend.document.infrastructure.media_store.errors import PresignUnsupported
 from backend.document.infrastructure.media_store.factory import MediaStore, get_media_store
 from backend.document.infrastructure.media_store.keys import DEFAULT_PART_IMAGE_SUFFIX
 from backend.document.infrastructure.media_store.local import LocalMediaStore
@@ -25,6 +26,7 @@ __all__ = [
     "DecodedPartImage",
     "LocalMediaStore",
     "MediaStore",
+    "PresignUnsupported",
     "SupabaseMediaStore",
     "clear_thumbnail_cache",
     "encode_part_image",

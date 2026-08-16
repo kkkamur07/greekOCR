@@ -98,6 +98,15 @@ class _Store:
         self.reads.append(image_key)
         return self.blobs[image_key]
 
+    def write(self, image_key: str, data: bytes) -> None:
+        self.blobs[image_key] = data
+
+    def signed_object_url(self, image_key, *, expires_at):
+        return f"/media/signed/{image_key}"
+
+    def create_upload_url(self, image_key, *, expires_at):
+        raise ValueError("cannot presign")
+
 
 def _fixtures(*, width: int | None, height: int | None, texts: list[str | None]):
     document = Document(id=uuid.uuid4(), project_id=uuid.uuid4(), name="codex")

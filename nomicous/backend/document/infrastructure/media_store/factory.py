@@ -19,6 +19,16 @@ class MediaStore(Protocol):
         filename_stem: str | None = None,
     ) -> str: ...
 
+    def create_upload_url(self, image_key: str, *, expires_at: datetime) -> tuple[str, str]:
+        """A presigned URL plus token for uploading one object to object storage.
+
+        Only object storage knows how to hand the browser a URL it can PUT a
+        large file to directly, bypassing the serverless request-body cap. The
+        filesystem backend has no such thing and raises instead - a part upload
+        on ``local`` still flows through the API's own byte handling.
+        """
+        ...
+
     def signed_object_url(self, image_key: str, *, expires_at: datetime) -> str:
         """A link that reaches this one object without any further credential.
 

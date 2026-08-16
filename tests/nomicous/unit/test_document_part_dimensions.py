@@ -108,6 +108,12 @@ class _Store:
     def delete(self, image_key: str) -> None:
         self.blobs.pop(image_key, None)
 
+    def signed_object_url(self, image_key, *, expires_at):
+        return f"/media/signed/{image_key}"
+
+    def create_upload_url(self, image_key, *, expires_at):
+        raise ValueError("cannot presign")
+
 
 # --- Upload persists dimensions ---
 

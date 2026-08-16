@@ -225,7 +225,7 @@ Enums:
 - `inference_task`: `segment`, `transcribe`, `binarize`
 - `binding_task`: `segment`, `transcribe`, `binarize`
 - `job_type`: `segment`, `transcribe`, `binarize`, `pipeline`
-- `job_status`: `pending`, `running`, `done`, `failed`
+- `job_status`: `pending`, `waiting`, `running`, `done`, `failed`, `cancelled`
 
 Special behavior:
 

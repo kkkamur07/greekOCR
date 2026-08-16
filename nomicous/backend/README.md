@@ -231,7 +231,7 @@ deleted it.
 
 Major route families:
 
-- `POST /auth/register`, `POST /auth/login`, `GET /auth/me`
+- `POST /auth/register`, `POST /auth/login`, `GET /me`
 - `GET/POST /projects`, project update/share routes
 - `GET/POST /projects/{project_id}/documents`
 - `POST /projects/{project_id}/documents/{document_id}/parts`
@@ -263,8 +263,8 @@ Settings are loaded by `backend/core/settings/` from environment variables and
 | `DATABASE_URL` | Async SQLAlchemy app connection | Set in ignored `backend/core/.env` |
 | `SYNC_DATABASE_URL` | Alembic sync connection | Set in ignored `backend/core/.env` |
 | `JWT_SECRET` | JWT signing secret | required; use a unique value per environment |
-| `JWT_EXPIRE_MINUTES` | Access-token lifetime | `60` |
-| `AUTH_RATE_LIMIT_REQUESTS` | Login/register attempts per window per client | `60` |
+| `JWT_EXPIRE_MINUTES` | Access-token lifetime | `15` |
+| `AUTH_RATE_LIMIT_REQUESTS` | Login/register attempts per window per client | `10` |
 | `AUTH_RATE_LIMIT_WINDOW_SECONDS` | Login/register rate-limit window | `60` |
 | `CORS_ORIGINS` | Browser origins | `http://localhost:3000,http://localhost:5173` |
 | `MEDIA_ROOT` | Uploaded Document part media | `nomicous/backend/media` |

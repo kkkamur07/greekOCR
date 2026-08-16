@@ -43,6 +43,24 @@ export type DocumentPartUpdateRequest =
   components["schemas"]["DocumentPartUpdateRequest"];
 export type DocumentWorkflow = components["schemas"]["DocumentWorkflow"];
 export type ReorderPartsRequest = components["schemas"]["ReorderPartsRequest"];
+
+// The direct-to-storage (presigned) upload contract. Types are defined here rather
+// than under `components["schemas"]` until ``npm run codegen:api`` regenerates them.
+export type PartUploadBeginRequest = {
+  filename: string;
+  size: number;
+};
+export type PartUploadBeginResponse = {
+  part_id: string | null;
+  image_key: string;
+  upload_url: string | null;
+  token: string | null;
+};
+export type PartUploadFinalizeRequest = {
+  image_key: string;
+  width: number | null;
+  height: number | null;
+};
 export type PublicLayoutResponse =
   components["schemas"]["PublicLayoutResponse"];
 export type PublicLineResponse = NonNullable<
@@ -575,6 +593,27 @@ export const api = {
       { method: "POST", body: form },
     );
   },
+
+  beginPartUpload: (
+    projectId: string,
+    documentId: string,
+    body: PartUploadBeginRequest,
+  ) =>
+    apiRequest<PartUploadBeginResponse>(
+      `/projects/${projectId}/documents/${documentId}/parts/upload`,
+      { method: "POST", body },
+    ),
+
+  finalizePartUpload: (
+    projectId: string,
+    documentId: string,
+    partId: string,
+    body: PartUploadFinalizeRequest,
+  ) =>
+    apiRequest<DocumentPartResponse>(
+      `/projects/${projectId}/documents/${documentId}/parts/${partId}/finalize`,
+      { method: "POST", body },
+    ),
 
   reorderParts: (
     projectId: string,

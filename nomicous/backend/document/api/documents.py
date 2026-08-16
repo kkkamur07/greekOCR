@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Query, Response, UploadFile, status
@@ -48,6 +48,9 @@ from backend.document.api.schemas import (
     PageTranscriptionTextLineResponse,
     PairingProgressResponse,
     PairTextLineRequest,
+    PartUploadBeginRequest,
+    PartUploadBeginResponse,
+    PartUploadFinalizeRequest,
     ReorderPartsRequest,
     SegmentPartRequest,
     TranscribePartRequest,
@@ -59,7 +62,7 @@ from backend.document.application.layout_service import LayoutService
 from backend.document.application.part_service import DocumentPartService
 from backend.document.application.transcription_service import TranscriptionService
 from backend.document.infrastructure.document_repository import DocumentRepository
-from backend.document.infrastructure.orm_models import Block
+from backend.document.infrastructure.orm_models import Block, TranscriptionKind
 from backend.jobs.api.schemas import EnqueueJobResponse
 from backend.ml.application.capacity_service import InferenceCapacityService
 from backend.users.api.dependencies import get_current_user
@@ -78,13 +81,13 @@ _export_service = AnnotationExportService()
 _page_xml_export_service = PageXmlExportService()
 _transcription_pdf_service = TranscriptionPdfService()
 MAX_UPLOAD_BYTES = 100 * 1024 * 1024
-PDF_RESPONSE = {
+PDF_RESPONSE: dict[int | str, dict[str, Any]] = {
     200: {
         "content": {"application/pdf": {"schema": {"type": "string", "format": "binary"}}},
         "description": "Transcription PDF bytes",
     }
 }
-XML_RESPONSE = {
+XML_RESPONSE: dict[int | str, dict[str, Any]] = {
     200: {
         "content": {"application/xml": {"schema": {"type": "string", "format": "binary"}}},
         "description": "PAGE XML bytes",
@@ -259,6 +262,70 @@ async def upload_part(
         document_id,
         data=data,
         filename=file.filename,
+    )
+    return part_response(part)
+
+
+@router.post(
+    "/{document_id}/parts/upload",
+    response_model=PartUploadBeginResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def begin_part_upload(
+    project_id: UUID,
+    document_id: UUID,
+    body: PartUploadBeginRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> PartUploadBeginResponse:
+    """Name the file and get a presigned storage URL for the browser to PUT to.
+
+    Vercel Functions cap a request body at 4.5 MB, so a manuscript page scan cannot
+    be POSTed through the platform directly. This minted URL lets the browser stream
+    the bytes to Supabase Storage instead; the caller then posts
+    ``/{part_id}/finalize`` to persist the key and dimensions.
+
+    On a backend that cannot presign (``STORAGE_BACKEND=local``) the URL and token are
+    ``null`` and the caller falls back to the multipart :func:`upload_part`.
+    """
+    part, image_key, upload_url, token = await _parts.begin_upload(
+        db,
+        current_user,
+        project_id,
+        document_id,
+        filename=body.filename,
+    )
+    return PartUploadBeginResponse(
+        part_id=part.id if part is not None else None,
+        image_key=image_key,
+        upload_url=upload_url,
+        token=token,
+    )
+
+
+@router.post(
+    "/{document_id}/parts/{part_id}/finalize",
+    response_model=DocumentPartResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def finalize_part_upload(
+    project_id: UUID,
+    document_id: UUID,
+    part_id: UUID,
+    body: PartUploadFinalizeRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> DocumentPartResponse:
+    """Seal a direct upload after the browser has PUT the bytes to storage."""
+    part = await _parts.finalize_upload(
+        db,
+        current_user,
+        project_id,
+        document_id,
+        part_id,
+        image_key=body.image_key,
+        width=body.width,
+        height=body.height,
     )
     return part_response(part)
 
@@ -740,7 +807,7 @@ async def patch_ground_truth_line_text(
     return LineTranscriptionResponse(
         id=line_transcription.id,
         transcription_id=line_transcription.transcription_id,
-        transcription_kind="ground_truth",
+        transcription_kind=TranscriptionKind.ground_truth,
         text=line_transcription.text,
         confidence=line_transcription.confidence,
     )

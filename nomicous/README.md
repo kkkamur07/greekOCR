@@ -11,23 +11,14 @@ Public-facing documentation:
 
 ## Data layout
 
-All persistence is under `data/` (path configurable via `NOMICOUS_DATA_ROOT` in `backend/.env`):
+Structured data lives in Postgres. Uploaded Document part images are stored
+under `MEDIA_ROOT` (default `nomicous/backend/media`) or in Supabase Storage
+when `STORAGE_BACKEND=supabase`, and referenced by `document_parts.image_key`.
+Exports, annotation snapshots, and transcriptions are Postgres rows or
+on-demand artifacts, not files under `data/`.
 
-| Path | Contents |
-|------|----------|
-| `data/manuscripts/pages/` | Source page images (`.jpg`, `.png`, …) |
-| `data/transcriptions/pages/` | Page transcriptions (`<stem>.txt`, line-broken) |
-| `data/annotations/pages/` | Per-page annotation JSON (segments + pairings; tool-internal) |
-| `data/manuscripts/export/` | **Exported outputs** - paired `<stem>_<segment_number>.jpg` and `.txt` side by side |
-
-Missing subdirectories are **created automatically** when the API starts. If creation fails (permissions, bad path), startup aborts with a clear error pointing at `NOMICOUS_DATA_ROOT`.
-
-### Sample fixture
-
-Place page images under `data/manuscripts/pages/` and matching line-broken
-transcriptions under `data/transcriptions/pages/` for local testing. Uploaded
-Document parts are stored as normal WebP objects (`parts/<uuid>/<stem>.webp`),
-not special `folio*` names.
+The `data/` directory and `NOMICOUS_DATA_ROOT` were part of an earlier on-disk
+layout that the current backend does not read. Ignore both.
 
 ## Setup
 

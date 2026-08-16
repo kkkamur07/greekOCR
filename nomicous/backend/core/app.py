@@ -2,7 +2,9 @@
 
 import logging
 import uuid
+from collections.abc import Mapping
 from contextlib import asynccontextmanager, suppress
+from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
@@ -69,7 +71,7 @@ SECURITY_HEADERS = {
     "Referrer-Policy": "strict-origin-when-cross-origin",
 }
 
-COMMON_ERROR_RESPONSES = {
+COMMON_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     401: {"model": ApiErrorResponse, "description": "Not authenticated"},
     403: {"model": ApiErrorResponse, "description": "Not authorized"},
     404: {"model": ApiErrorResponse, "description": "Resource not found"},
@@ -96,7 +98,7 @@ def _error_response(
     status_code: int,
     code: str,
     message: str,
-    headers: dict[str, str] | None = None,
+    headers: Mapping[str, str] | None = None,
     correlation_id: str | None = None,
 ) -> JSONResponse:
     error: dict[str, object] = {"code": code, "message": message}
@@ -132,7 +134,7 @@ def _correlated_error(
     code: str,
     message: str,
     exc: BaseException,
-    headers: dict[str, str] | None = None,
+    headers: Mapping[str, str] | None = None,
 ) -> JSONResponse:
     correlation_id = uuid.uuid4().hex
     logger.warning(
