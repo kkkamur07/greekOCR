@@ -35,7 +35,7 @@ from backend.core.settings.device import get_device_settings
 from backend.core.settings.job import get_job_settings
 from backend.jobs.application.job_claim_service import agent_claim_owner
 from backend.jobs.infrastructure import worker
-from backend.jobs.infrastructure.job_repository import WAITING_TIMEOUT_ERROR
+from backend.jobs.infrastructure.job_claim_engine import WAITING_TIMEOUT_ERROR
 from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
 from infrastructure.db import sync_system_session
 

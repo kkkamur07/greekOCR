@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 import infrastructure.models  # noqa: F401 — register all ORM mappers
 from backend.jobs.application.inference_dispatcher import build_page_run_request
-from backend.jobs.infrastructure.job_repository import (
+from backend.jobs.infrastructure.job_claim_engine import (
     claim_next_pending_job,
     count_active_jobs,
     mark_job_done,
@@ -178,7 +178,7 @@ def test_mark_job_waiting_does_not_overwrite_cancelled(
     client: TestClient, registered_user: dict[str, str]
 ):
     """Cancel wins over a late waiting transition (worker race)."""
-    from backend.jobs.infrastructure.job_repository import mark_job_waiting
+    from backend.jobs.infrastructure.job_claim_engine import mark_job_waiting
 
     auth_headers = {"Authorization": f"Bearer {registered_user['access_token']}"}
     me = client.get("/me", headers=auth_headers)
