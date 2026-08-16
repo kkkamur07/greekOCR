@@ -141,9 +141,7 @@ failure: the job goes to the cloud and says so.
 
 1. Create a Supabase project.
 2. Create a private Storage bucket named `document-media`.
-3. Fill:
-   - `nomicous/backend/core/.env.supabase.example`
-   - `nomicous/backend/core/.env.inference.example`
+3. Fill `nomicous/backend/core/.env.supabase.example`.
 4. Set service secrets in the repository-root `.env`.
 5. Provision the least-privilege roles in
    [`../deployment/database-roles.md`](../deployment/database-roles.md).

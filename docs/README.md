@@ -1,9 +1,10 @@
 # Nomicous documentation
 
 **Picking the work back up?** Read
-[`resume-inference-redesign.md`](resume-inference-redesign.md) first. It is the entry point
-for the 2026-08-04/05 inference redesign: where the trunk is, what was built, what red is
-supposed to look like, and which actions are the owner's rather than an agent's.
+[`final-code-review-2026-08-06.md`](final-code-review-2026-08-06.md) first. It is the
+current audit of `main`: four criticals, the confirmed defect list per bounded context,
+the dead-file inventory, and the ranked architecture candidates. (The 2026-08-04/05
+inference-redesign handoffs and the ADRs they replaced are retired; that work is merged.)
 
 Start with the audience-appropriate guide:
 
@@ -59,8 +60,7 @@ than as current reference.
 
 | Doc                                                                             | Scope                                                                        |
 | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| [Resume: inference redesign](resume-inference-redesign.md)                       | **Current.** Trunk state, what was built, known gaps, and the owner's actions |
-| [Merge handoff: inference redesign](merge-handoff-inference-redesign.md)         | History. Executed 2026-08-05; kept for *why* each conflict was resolved as it was |
+| [Final code review 2026-08-06](final-code-review-2026-08-06.md)                  | **Current.** Full-codebase five-axis audit of `main` @ `198738a`: 4 criticals, 49 confirmed required findings, dead-file inventory, architecture candidates |
 
 ## Security
 

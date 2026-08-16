@@ -6,7 +6,7 @@ Architecture overview: [technical architecture](../architecture.md).
 Serverless constraints and pitfalls: [learnings - Vercel](../guides/learnings.md#serverless-api-vercel).
 
 | Domain | Vercel project | Root directory | Role |
-|--------|----------------|----------------|------|
+| -------- | ---------------- | ---------------- | ------ |
 | [nomicous.com](https://nomicous.com) | `nomicous-landing` | `landing/` | Static marketing site |
 | [app.nomicous.com](https://app.nomicous.com) | `nomicous-app` | `nomicous/frontend/` | Next.js App Router client |
 | [api.nomicous.com](https://api.nomicous.com) | `nomicous-api` | `deploy/platform/` | FastAPI platform API |
@@ -42,12 +42,11 @@ Background (persistent compute, not serverless):
 
 ### Why local inference is the default
 
-The **inference agent** carries the **PyTorch CPU Calamari runtime** and the
-inference-owned **PyTorch BLLA runtime**. Hub weights are resolved lazily into
-the runtime cache; the BLLA asset is loaded from the registry-pinned
-`segmentation-blla` repository as `blla.safetensors`. Vercel serverless
+The **inference agent** runs both models on ONNX Runtime. Hub weights are
+resolved lazily into the runtime cache; Calamari loads `best.onnx` and BLLA
+loads `blla.onnx` from the registry-pinned repository. Vercel serverless
 functions have strict size limits and short execution timeouts, so a hosted
-function cannot be where a model runs; the hosted platform holds the queue and
+function cannot be where a model runs. The hosted platform holds the queue and
 persists only the result.
 
 Nothing is deployed to make local inference work. A researcher installs the
@@ -74,7 +73,7 @@ cp nomicous/backend/core/.env.supabase.example nomicous/backend/core/.env.supaba
 ./scripts/platform/migrate_supabase.sh
 ```
 
-4. Seed production data if needed (admin user, model catalog) - do **not** run dev seed scripts in production.
+1. Seed production data if needed (admin user, model catalog) - do **not** run dev seed scripts in production.
 
 ---
 
@@ -85,7 +84,7 @@ Connect the same GitHub repo to **three** Vercel projects. Set the **Root Direct
 ### Landing (`nomicous-landing`)
 
 | Setting | Value |
-|---------|-------|
+| --------- | ------- |
 | Root Directory | `landing` |
 | Framework | Other (static) |
 | Build Command | *(empty)* |
@@ -97,7 +96,7 @@ Config: [`landing/vercel.json`](../../landing/vercel.json).
 ### App (`nomicous-app`)
 
 | Setting | Value |
-|---------|-------|
+| --------- | ------- |
 | Root Directory | `nomicous/frontend` |
 | Framework | Next.js |
 | Build Command | `npm run build` |
@@ -124,7 +123,7 @@ Config: [`nomicous/frontend/vercel.json`](../../nomicous/frontend/vercel.json).
 ### Platform API (`nomicous-api`)
 
 | Setting | Value |
-|---------|-------|
+| --------- | ------- |
 | Root Directory | `deploy/platform` |
 | Install Command | *(empty / default)* |
 | Build Command | `bash build.sh` |
@@ -137,7 +136,7 @@ Environment variables: copy from [`nomicous/backend/core/.env.production.example
 **Critical serverless settings:**
 
 | Variable | Production value | Why |
-|----------|------------------|-----|
+| ---------- | ------------------ | ----- |
 | `JOB_WORKER_ENABLED` | `false` | Worker runs on persistent host |
 | `JOB_SSE_NOTIFICATIONS_ENABLED` | `false` | NOTIFY listener needs long-lived process |
 | `BEHIND_PROXY` | `false` (current Vercel deployment) | Forwarded headers are not trusted without a fixed proxy allowlist |
@@ -191,7 +190,8 @@ in `NOMICOUS_SERVICE_TOKEN` instead of a device token, claims pages from
 `api.nomicous.com`, and reports results to
 `https://api.nomicous.com/internal/inference/job-complete`, exactly as a paired
 laptop does. Set `CLOUD_INFERENCE_ENABLED=true` on the API so it fails closed
-without `INFERENCE_WEBHOOK_SECRET`.
+without `INFERENCE_WEBHOOK_SECRET`. Full runbook (install, credential, systemd,
+ops): [`cloud-inference-worker.md`](cloud-inference-worker.md).
 
 Use the distinct API and platform-worker database principals from
 [`database-roles.md`](database-roles.md); do not give these containers the
@@ -202,7 +202,7 @@ Supabase operator/migration URI. The agent needs no database access at all.
 ## 4. DNS checklist
 
 | Record | Type | Target |
-|--------|------|--------|
+| -------- | ------ | -------- |
 | `nomicous.com` | A / CNAME | Vercel landing project |
 | `www` | CNAME | Vercel (redirect to apex) |
 | `app` | CNAME | Vercel app project |
@@ -219,7 +219,7 @@ There is nothing to ship. The **published package** goes to PyPI and
 researchers install it themselves:
 
 ```bash
-uv tool install nomicous-inference --torch-backend=cpu   # requires uv >= 0.10
+uv tool install nomicous-inference
 nomicous pair
 nomicous run
 ```
@@ -336,7 +336,7 @@ broken critical flow.
 ## Troubleshooting
 
 | Symptom | Likely cause |
-|---------|----------------|
+| --------- | ---------------- |
 | CORS error from app | `CORS_ORIGINS` missing `https://app.nomicous.com` |
 | 401 on all API calls | Wrong `JWT_SECRET` or clock skew |
 | Jobs stuck in `pending` | Platform worker not running (`JOB_WORKER_ENABLED` must be `false` on API, worker elsewhere) |

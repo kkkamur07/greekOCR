@@ -3,8 +3,9 @@
 Hosted environments, database operations, and release evidence.
 
 | Doc | When to read |
-|-----|----------------|
+| ----- | ---------------- |
 | [production.md](production.md) | **Primary runbook** - Vercel (landing, app, API), workers, rollback |
+| [cloud-inference-worker.md](cloud-inference-worker.md) | Persistent hosted inference agent - install, credential, systemd, ops |
 | [supabase.md](supabase.md) | Hosted Postgres + Storage, env vars, migrations |
 | [database-roles.md](database-roles.md) | Least-privilege API, worker, and migrator roles |
 | [vercel-platform-api.md](vercel-platform-api.md) | Vercel Python runtime, bundle size, dependency trimming |

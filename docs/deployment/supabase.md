@@ -148,8 +148,6 @@ Alembic also needs `%` doubled (`%%`) when passed through ConfigParser - handled
 | `nomicous/backend/core/.env`                   | Default local dev (Docker Postgres)            |
 | `nomicous/backend/core/.env.supabase`          | Supabase profile (gitignored)                  |
 | `nomicous/backend/core/.env.supabase.example`  | Template (committed)                           |
-| `nomicous/backend/core/.env.inference`         | Cloud inference containers only (gitignored)   |
-| `nomicous/backend/core/.env.inference.example` | Least-privilege inference template (committed) |
 
 Settings load **`.env` first**; if missing, fall back to **`.env.supabase`** (`backend/core/settings/_env.py`).
 
@@ -295,15 +293,14 @@ container, and the agent listens on nothing.
 
 ```bash
 cp nomicous/backend/core/.env.supabase.example nomicous/backend/core/.env.supabase
-cp nomicous/backend/core/.env.inference.example nomicous/backend/core/.env.inference
 ```
 
 Fill `.env.supabase` from the provider secret store with the API and migrator
-DB URLs, `SUPABASE_URL`,
-`SUPABASE_SERVICE_ROLE_KEY`, `JWT_SECRET`, and `STORAGE_BACKEND=supabase`.
-Fill `.env.inference` with only the inference-role pooler URL and the two shared
-inference secrets. The Docker inference API and worker deliberately do not
-receive the app JWT, storage service-role key, or migration URL.
+DB URLs, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `JWT_SECRET`, and
+`STORAGE_BACKEND=supabase`. There is no separate inference environment file:
+an inference agent needs no database access, and a hosted agent reads its
+service credential from `NOMICOUS_SERVICE_TOKEN` in its own process
+environment.
 
 ### 3. Migrate
 
@@ -366,8 +363,7 @@ PYTHONPATH=. uvicorn backend.core.app:create_app --factory --reload --port 8000
 
 ### 5b. Run full stack with Docker (recommended)
 
-From the **repository root**, with `.env.supabase` and `.env.inference`
-configured:
+From the **repository root**, with `.env.supabase` configured:
 
 ```bash
 # First time (or after code changes)

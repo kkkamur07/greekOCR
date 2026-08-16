@@ -94,7 +94,7 @@ in a script; without it `run` waits for more work. `--api-url` overrides
 `NOMICOUS_API_URL` per invocation.
 
 Researchers install the same program from PyPI rather than running it from a
-checkout - `uv tool install nomicous-inference --torch-backend=cpu`, then
+checkout - `uv tool install nomicous-inference`, then
 `nomicous pair` and `nomicous run`
 ([`inference/README.md`](../../inference/README.md#install)). There is no
 installer to build.
