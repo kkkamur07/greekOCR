@@ -27,16 +27,7 @@ LOGGER = logging.getLogger(__name__)
 
 _SWEEP_PARAMETER_PATHS = frozenset(
     {
-        "lora_adaptors.rank",
-        "lora_adaptors.alpha_rank_ratio",
-        "lora_adaptors.dropout",
-        "lora_adaptors.num_layers",
-        "lora_adaptors.target_modules",
-        "training.learning_rate",
-        "training.weight_decay",
-        "training.max_grad_norm",
-        "training.warmup_ratio",
-        "training.lr_scheduler_type",
+        "experiment",
     }
 )
 
@@ -70,7 +61,7 @@ def log_training_summary(
         ("Tokenizer", "Path", str(cfg.tokenizer.path)),
         ("Tokenizer", "Vocabulary size", f"{len(tokenizer):,}"),
         ("Tokenizer", "Fast tokenizer", str(bool(cfg.tokenizer.use_fast))),
-        ("Decoder", "Reinitialized", str(bool(cfg.decoder.reinitialize))),
+        ("Decoder", "Reinitialize mode", str(cfg.decoder.reinitialize)),
         ("Decoder", "Tied input/output embeddings", str(bool(cfg.decoder.tied))),
         ("Decoder", "Dropout", str(cfg.decoder.dropout)),
         ("Tokenization", "Special tokens", "Not added; EOS is appended manually"),
@@ -143,6 +134,26 @@ def configure_wandb(cfg: DictConfig, log_dir: Path) -> list[str]:
     return ["wandb"]
 
 
+def apply_sweep_experiment(cfg: DictConfig, experiment_name: str) -> None:
+    """Apply the fixed configuration assigned to a named sweep experiment."""
+    experiment = cfg.sweep.experiments.get(experiment_name)
+    if experiment is None:
+        available = ", ".join(sorted(cfg.sweep.experiments.keys()))
+        raise ValueError(
+            f"Unknown W&B sweep experiment {experiment_name!r}. "
+            f"Available experiments: {available}."
+        )
+
+    overrides = OmegaConf.to_container(experiment, resolve=True)
+    if not isinstance(overrides, dict):
+        raise TypeError(
+            f"Sweep experiment {experiment_name!r} must contain configuration overrides."
+        )
+    for path, value in overrides.items():
+        OmegaConf.update(cfg, str(path), value, merge=False)
+    LOGGER.info("Applied W&B sweep experiment %s: %s", experiment_name, overrides)
+
+
 def initialize_run(cfg: DictConfig, log_dir: Path) -> str:
     """Initialize W&B when enabled and return a unique run directory name."""
     if not cfg.wandb.enabled:
@@ -167,9 +178,7 @@ def initialize_run(cfg: DictConfig, log_dir: Path) -> str:
                 "Unsupported W&B sweep parameters: "
                 f"{sorted(unknown_parameters)}"
             )
-        for path, value in run.config.items():
-            OmegaConf.update(cfg, path, value, merge=False)
-        LOGGER.info("Applied W&B sweep parameters: %s", dict(run.config))
+        apply_sweep_experiment(cfg, str(run.config["experiment"]))
 
     safe_name = re.sub(r"[^A-Za-z0-9._-]+", "-", run.name).strip("-")
     return f"{safe_name or 'tr_ocr'}-{run.id}"
@@ -227,8 +236,9 @@ def main(cfg: DictConfig) -> None:
         tokenizer,
         max_target_length=cfg.training.max_target_length,
         freeze_visual_encoder=bool(cfg.model.freeze_encoder),
-        reinitialize_decoder=bool(cfg.decoder.reinitialize)
-        and not is_resume_checkpoint,
+        reinitialize_decoder=(
+            "none" if is_resume_checkpoint else str(cfg.decoder.reinitialize)
+        ),
         tie_decoder_embeddings=bool(cfg.decoder.tied),
         decoder_dropout=float(cfg.decoder.dropout),
         lora_config=lora_config,

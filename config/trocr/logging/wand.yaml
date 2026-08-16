@@ -1,10 +1,10 @@
 #! entity / project / run name
 
 
-enabled: false
+enabled: true
 project: OCR
 entity: personal-space-astha
-name: tr_ocr  #! run name 
+name: tr_ocr_full_finetune
 
 mode: online
 

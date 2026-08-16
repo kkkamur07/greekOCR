@@ -1,4 +1,4 @@
-enabled: true
+enabled: false
 rank: 8
 alpha_rank_ratio: 2.0
 dropout: 0.05
