@@ -4,6 +4,12 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field, model_validator
 
+from inference.contracts.common import (
+    MAX_GEOMETRY_POINTS,
+    MAX_LINE_TEXT_CHARS,
+    MAX_TRANSCRIBE_LINES,
+)
+
 
 class CharacterConfidence(BaseModel):
     char: str = Field(min_length=1, max_length=1)
@@ -11,7 +17,7 @@ class CharacterConfidence(BaseModel):
 
 
 class TranscribeRunResponse(BaseModel):
-    text: str
+    text: str = Field(max_length=MAX_LINE_TEXT_CHARS)
     confidence: float = Field(ge=0.0, le=1.0)
     character_confidences: list[CharacterConfidence]
 
@@ -29,7 +35,7 @@ class TranscribeRunResponse(BaseModel):
 class TranscribeLineRegion(BaseModel):
     line_id: str | None = None
     line_index: int = Field(ge=0)
-    points: list[list[float]] | None = None
+    points: list[list[float]] | None = Field(default=None, max_length=MAX_GEOMETRY_POINTS)
 
 
 # Client-visible text for a line the runtime could not transcribe. Static on
@@ -57,7 +63,7 @@ class TranscribeBatchLineResult(BaseModel):
 
 
 class TranscribeBatchRunResponse(BaseModel):
-    lines: list[TranscribeBatchLineResult] = Field(min_length=1)
+    lines: list[TranscribeBatchLineResult] = Field(min_length=1, max_length=MAX_TRANSCRIBE_LINES)
 
     @model_validator(mode="after")
     def require_one_transcribed_line(self) -> TranscribeBatchRunResponse:

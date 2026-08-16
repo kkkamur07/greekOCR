@@ -19,13 +19,12 @@ deployment however it fails.
 from __future__ import annotations
 
 from functools import lru_cache
-from io import BytesIO
 from pathlib import Path
 from typing import Any
 
 import numpy as np
-from PIL import Image
 
+from inference.admission import open_image_bytes
 from inference.architectures.artifact import ArtifactHandle, resolve_artifact
 from inference.architectures.blla.blla_preprocessing import preprocess_blla_image
 from inference.architectures.blla.blla_runtime import build_blla_segment_response
@@ -143,7 +142,7 @@ def run_blla_segment(
     # re-resolves from a memoized digest, which costs a ``stat``.
     _resolve_blla_artifact(model_path, artifact_sha256)
 
-    with Image.open(BytesIO(image_bytes)) as image:
+    with open_image_bytes(image_bytes) as image:
         image = image.convert("RGB")
         prepared = preprocess_blla_image(image, input_height=BLLA_INPUT_HEIGHT)
         logits = run_blla_logits(

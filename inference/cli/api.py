@@ -66,6 +66,28 @@ IMAGE_TIMEOUT_SECONDS = 120.0
 the **signed page image link** dies in about a minute anyway, so a fetch that has
 not finished long after that is not going to."""
 
+MAX_PAGE_IMAGE_BYTES_ENV = "NOMICOUS_MAX_PAGE_IMAGE_BYTES"
+
+
+def max_page_image_bytes() -> int:
+    """Ceiling on a downloaded page image, loose and overridable.
+
+    A signed link names exactly one object and expires in about a minute, so the
+    practical bound is the platform's own upload cap, not this number. It exists
+    only to stop a slow-drip or hostile response from exhausting memory, so the
+    default is deliberately generous and any operator expecting larger objects
+    raises it via ``NOMICOUS_MAX_PAGE_IMAGE_BYTES``.
+    """
+    raw = os.environ.get(MAX_PAGE_IMAGE_BYTES_ENV)
+    if raw is None:
+        return 1024 * 1024 * 1024
+    try:
+        parsed = int(raw)
+    except ValueError as exc:
+        raise ValueError(f"{MAX_PAGE_IMAGE_BYTES_ENV} must be an integer") from exc
+    return max(1, parsed)
+
+
 # The platform caps these on the way in (`PairingStartRequest`). Truncating here
 # rather than sending an over-long value keeps a long hostname from turning into
 # a 422 a researcher cannot act on.
@@ -354,6 +376,32 @@ def _parse_datetime(value: object) -> datetime | None:
     return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
 
 
+def _read_bounded(response: Any, limit: int) -> bytes:
+    """Read a response body, refusing to hold more than ``limit`` bytes.
+
+    Streamed rather than ``response.read()`` so a response whose size was not
+    announced (or was lied about) cannot force a single unbounded allocation.
+    """
+    content_length = response.headers.get("Content-Length")
+    if content_length is not None:
+        try:
+            if int(content_length) > limit:
+                raise PlatformError("the page image exceeded the size limit")
+        except ValueError:
+            pass
+
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = response.read(1024 * 1024)
+        if not chunk:
+            return b"".join(chunks)
+        total += len(chunk)
+        if total > limit:
+            raise PlatformError("the page image exceeded the size limit")
+        chunks.append(chunk)
+
+
 class PlatformClient:
     """Every request the CLI makes: pair a machine, ask the floor, then claim,
     fetch, report."""
@@ -466,14 +514,17 @@ class PlatformClient:
         )
         if status != 200 or not isinstance(body, dict):
             raise PlatformError(_unexpected(status, body, "waiting for approval"))
-        return PairingPoll(
-            status=str(body.get("status") or ""),
-            interval_seconds=int(body.get("interval_seconds") or 0),
-            device_id=body.get("device_id"),
-            device_token=body.get("device_token"),
-            token_expires_at=_parse_datetime(body.get("token_expires_at")),
-            account_email=body.get("account_email"),
-        )
+        try:
+            return PairingPoll(
+                status=str(body.get("status") or ""),
+                interval_seconds=int(body.get("interval_seconds") or 0),
+                device_id=body.get("device_id"),
+                device_token=body.get("device_token"),
+                token_expires_at=_parse_datetime(body.get("token_expires_at")),
+                account_email=body.get("account_email"),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise PlatformError(f"{self.base_url} returned an unusable pairing response") from exc
 
     def read_self(self, *, device_token: str) -> DeviceIdentity | None:
         """Confirm a stored credential. `None` means the platform refused it.
@@ -575,7 +626,7 @@ class PlatformClient:
         request.add_header("User-Agent", f"nomicous-inference/{installed_version()}")
         try:
             with urllib.request.urlopen(request, timeout=IMAGE_TIMEOUT_SECONDS) as response:  # noqa: S310
-                return response.read()
+                return _read_bounded(response, max_page_image_bytes())
         except urllib.error.HTTPError as exc:
             if exc.code == 403:
                 # Forged, malformed, and expired are one status on purpose, so

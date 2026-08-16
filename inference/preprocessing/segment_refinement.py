@@ -117,7 +117,7 @@ def _refine_cluster(
         # and holding the mask to it would only ever be circular.
         baseline=cluster_baseline if baseline_source == "decoder" else None,
     )
-    if len(points) < 3:
+    if len(points) < 4:
         points = fallback
         metrics = {"simplification_status": "fallback_after_invalid_simplification"}
 
@@ -140,11 +140,27 @@ def _refine_cluster(
     )
 
 
+def grayscale_image(image: Image.Image) -> np.ndarray | None:
+    """One grayscale conversion per page, or ``None`` when cv2 is unavailable.
+
+    ``refine_segment_candidates`` runs once per decoded line, and converting the
+    whole page to grayscale on every call was a full-page RGB->gray pass per
+    line. The caller converts once and passes the result down; ``None`` (cv2
+    missing) falls back to the per-call conversion inside the callee.
+    """
+    try:
+        import cv2
+    except ImportError:
+        return None
+    return cv2.cvtColor(np.array(image.convert("RGB")), cv2.COLOR_RGB2GRAY)
+
+
 def refine_segment_candidates(
     image: Image.Image,
     ceiling: list[list[float]],
     *,
     baseline: list[list[float]] | None = None,
+    gray: np.ndarray | None = None,
     margin_px: float = REFINEMENT_MARGIN_PX,
     target_max_points: int = TARGET_MAX_POINTS,
     min_iou: float = MIN_IOU,
@@ -162,7 +178,7 @@ def refine_segment_candidates(
         )
 
     min_spacing = max(MIN_VERTEX_SPACING_PX, 0.02 * line_height(ceiling))
-    fallback = clean_polygon(ceiling, min_distance=min_spacing)
+    fallback = clean_polygon(ceiling, min_distance=min_spacing, min_vertices=4)
 
     try:
         import cv2
@@ -173,7 +189,8 @@ def refine_segment_candidates(
             status="opencv_unavailable",
         )
 
-    gray = cv2.cvtColor(np.array(image.convert("RGB")), cv2.COLOR_RGB2GRAY)
+    if gray is None:
+        gray = cv2.cvtColor(np.array(image.convert("RGB")), cv2.COLOR_RGB2GRAY)
     contours = otsu_band_contours(gray, ceiling, margin_px=margin_px)
     if not contours:
         return _fallback_result(

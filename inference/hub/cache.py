@@ -48,6 +48,15 @@ def cache_dir_for(
     *,
     cache_root: Path | None = None,
 ) -> Path:
+    # The registry lookup already insists these are exact keys, but this function
+    # is also callable directly: a segment containing a separator or ``..`` must
+    # not be able to write outside the cache root.
+    for label, value in (
+        ("registry_model_id", registry_model_id),
+        ("registry_tag", registry_tag),
+    ):
+        if not value or value in {".", ".."} or "/" in value or "\\" in value:
+            raise ValueError(f"{label} must be a single path segment")
     root = cache_root or default_cache_root()
     return root / registry_model_id / registry_tag
 

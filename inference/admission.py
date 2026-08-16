@@ -44,6 +44,11 @@ SEGMENT_PARAM_BOUNDS: dict[str, tuple[float, float]] = {
     # clustering degenerates into "never split", which is what
     # ``split_large_lines: false`` already expresses.
     "split_vertical_gap_px": (0.0, 256.0),
+    # Decoder emission gate. The decoder requires a threshold strictly between
+    # zero and one, and the runtime clamps to 0.99, so the admission ceiling
+    # matches that clamp rather than leaving a caller to trigger the decoder's
+    # own ``ValueError``.
+    "heatmap_threshold": (0.0, 0.99),
 }
 
 
@@ -157,6 +162,25 @@ def validate_image_bytes(image_bytes: bytes, settings: AdmissionSettings) -> Non
         SyntaxError,
     ):
         raise ValueError(CLIENT_INPUT_ERROR) from None
+
+
+def open_image_bytes(image_bytes: bytes) -> Image.Image:
+    """Open encoded image bytes with the decompression-bomb warning promoted.
+
+    ``validate_image_bytes`` is the admission gate every entry point passes
+    through, but architecture paths reopen the same bytes (line crops, the BLLA
+    page) and should still refuse a decompression bomb if one is ever reached
+    without it. Returns the lazily-open image; the caller closes it.
+    """
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            return Image.open(BytesIO(image_bytes))
+    except (
+        Image.DecompressionBombError,
+        Image.DecompressionBombWarning,
+    ) as exc:
+        raise ValueError(CLIENT_INPUT_ERROR) from exc
 
 
 def _validate_param_structure(value: Any, settings: AdmissionSettings) -> int:

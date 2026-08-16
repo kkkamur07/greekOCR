@@ -1,14 +1,13 @@
-"""Public Calamari preprocessing pipeline for PyTorch inference."""
+"""Public Calamari preprocessing pipeline for the ONNX inference runtime."""
 
 from __future__ import annotations
 
-from io import BytesIO
 from pathlib import Path
 from typing import Any
 
 import numpy as np
-from PIL import Image
 
+from inference.admission import open_image_bytes
 from inference.architectures.calamari.preprocessing.conversion import load_line_image_grayscale
 from inference.architectures.calamari.preprocessing.final import final_prepare_line_image
 from inference.architectures.calamari.preprocessing.geometry import center_normalize
@@ -39,7 +38,7 @@ def preprocess_line_image_bytes_to_calamari_tensor(
     pad_value: int = 0,
 ) -> np.ndarray:
     """Return Calamari model input for encoded image bytes."""
-    with Image.open(BytesIO(image_bytes)) as image:
+    with open_image_bytes(image_bytes) as image:
         image_array = np.asarray(image.convert("L"), dtype=np.uint8)
     return preprocess_line_array_to_calamari_tensor(
         image_array,

@@ -27,12 +27,10 @@ is a skip, not a failure. A page of nothing but skips is genuinely a page with
 no text and must return empty rather than raise, which is why the caller
 passes a survivor count and a first failure rather than a total.
 
-Both architectures import this module, and under ADR 0004 both run on PyTorch.
-It previously carried a "must stay Torch-free" note, written when the frozen
-installer bundle shipped two ONNX paths and a denylist kept Torch out; that
-constraint is gone, and the policy above is not. This module still holds no
-runtime dependency of its own, which is what lets one rule govern two
-differently shaped loops.
+Both architectures import this module, and both run on ONNX Runtime under
+ADR 0006. The policy above does not care which runtime executes it. This
+module holds no runtime dependency of its own, which is what lets one rule
+govern two differently shaped loops.
 """
 
 from __future__ import annotations
