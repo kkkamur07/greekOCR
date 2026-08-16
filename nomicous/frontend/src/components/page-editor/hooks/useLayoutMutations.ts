@@ -24,7 +24,10 @@ import {
   pushEditOntoStack,
   type CanvasEdit,
 } from "../editUndo";
-import { SEGMENT_JOB_TIMEOUT_MS, type PageEditorJobKind } from "../jobProgress";
+import {
+  INFERENCE_JOB_WAIT_CEILING_MS,
+  type PageEditorJobKind,
+} from "../jobProgress";
 import { nextSegmentOrder } from "../segmentNumbering";
 import { statusMessage, type StatusMessage } from "../statusMessage";
 import {
@@ -557,7 +560,7 @@ export function useLayoutMutations({
         otsu_sphere_radius: otsuSphereRadius,
       });
       await trackJobAndWait(enqueued.job_id, jobMeta, {
-        timeoutMs: SEGMENT_JOB_TIMEOUT_MS,
+        timeoutMs: INFERENCE_JOB_WAIT_CEILING_MS,
       });
       notePartContentChanged();
 

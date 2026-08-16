@@ -15,7 +15,10 @@ import {
 import { isAbortError } from "../../../api/errors";
 import { invalidateAfter } from "../../../api/resources";
 import { submissionRefusalExplanation } from "../../../inference";
-import type { PageEditorJobKind } from "../jobProgress";
+import {
+  INFERENCE_JOB_WAIT_CEILING_MS,
+  type PageEditorJobKind,
+} from "../jobProgress";
 import { segmentNumberFor, segmentsInNumberOrder } from "../segmentNumbering";
 import { statusMessage, type StatusMessage } from "../statusMessage";
 import {
@@ -60,6 +63,7 @@ type PairingStateInput = {
   trackJobAndWait: (
     jobId: string,
     meta: { label: string; kind: PageEditorJobKind },
+    options?: { timeoutMs?: number },
   ) => Promise<JobResponse>;
 };
 
@@ -305,16 +309,28 @@ export function usePairingState({
     return result;
   }
 
-  function transcribeJobResult(job: JobResponse): TranscribeJobResult {
+  async function applyTranscribeJob(
+    job: JobResponse,
+  ): Promise<TranscribeJobResult | null> {
     const result = job.result as TranscribeJobResult | null;
-    if (!result?.transcription_id) {
-      throw new Error("Transcribe job returned no result.");
+    if (result?.transcription_id) {
+      return applyTranscribeResult(result);
     }
-    return result;
-  }
-
-  async function applyTranscribeJob(job: JobResponse) {
-    return applyTranscribeResult(transcribeJobResult(job));
+    // The layer is committed before the job reports done, so a result this
+    // client cannot read must not strand the page on stale segments: find the
+    // layer the job created and reload, exactly what a manual refresh does.
+    if (projectId && documentId) {
+      const layers = await api.listTranscriptions(projectId, documentId);
+      const created = layers.find(
+        (layer) => layer.created_by_job_id === job.id,
+      );
+      if (created) {
+        await refreshAfterOcr(created.id);
+        notePartContentChanged();
+        return null;
+      }
+    }
+    throw new Error("Transcribe job returned no result.");
   }
 
   async function runSegmentOcr() {
@@ -345,14 +361,19 @@ export function usePairingState({
           line_ids: [selectedSegmentId],
         },
       );
-      const job = await trackJobAndWait(enqueued.job_id, {
-        label: selectedSegmentNumber
-          ? `Segment ${selectedSegmentNumber}`
-          : "Selected segment",
-        kind: "transcription-segment",
-      });
+      const job = await trackJobAndWait(
+        enqueued.job_id,
+        {
+          label: selectedSegmentNumber
+            ? `Segment ${selectedSegmentNumber}`
+            : "Selected segment",
+          kind: "transcription-segment",
+        },
+        { timeoutMs: INFERENCE_JOB_WAIT_CEILING_MS },
+      );
       const result = await applyTranscribeJob(job);
-      const hasAnyText = result.lines.some((line) => line.text?.trim());
+      const hasAnyText =
+        result === null || result.lines.some((line) => line.text?.trim());
       setOcrMessage(
         statusMessage(
           hasAnyText
@@ -400,17 +421,23 @@ export function usePairingState({
           model_id: selectedTranscribeModelId,
         },
       );
-      const job = await trackJobAndWait(enqueued.job_id, {
-        label: "Full page",
-        kind: "transcription-page",
-      });
+      const job = await trackJobAndWait(
+        enqueued.job_id,
+        { label: "Full page", kind: "transcription-page" },
+        { timeoutMs: INFERENCE_JOB_WAIT_CEILING_MS },
+      );
       const result = await applyTranscribeJob(job);
-      const withText = result.lines.filter((line) => line.text?.trim()).length;
+      const withText =
+        result === null
+          ? null
+          : result.lines.filter((line) => line.text?.trim()).length;
       setOcrMessage(
         statusMessage(
-          withText > 0
-            ? `OCR prediction completed for ${withText} Segment(s).`
-            : "OCR finished with no text for the selected segments.",
+          withText === null
+            ? "OCR prediction completed for the page."
+            : withText > 0
+              ? `OCR prediction completed for ${withText} Segment(s).`
+              : "OCR finished with no text for the selected segments.",
         ),
       );
     } catch (err) {

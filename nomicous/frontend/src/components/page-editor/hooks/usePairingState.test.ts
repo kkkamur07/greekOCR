@@ -182,4 +182,46 @@ describe("usePairingState OCR", () => {
       /\(local\)|locally|in the cloud/i,
     );
   });
+
+  it("waits with a budget that outlasts a real cloud transcription", async () => {
+    // The implicit 120s default was shorter than a cloud page run: the waiter
+    // gave up on jobs that then finished, and the new layer only showed after
+    // a page refresh.
+    const { view, trackJobAndWait } = setup();
+
+    await act(async () => {
+      await view.result.current.runPageOcr();
+    });
+
+    const options = trackJobAndWait.mock.calls[0]?.[2] as {
+      timeoutMs?: number;
+    };
+    expect(options?.timeoutMs).toBeGreaterThan(120_000);
+  });
+
+  it("reloads the layer the job created when the result is unreadable", async () => {
+    const { view, trackJobAndWait, setPairingError } = setup();
+    trackJobAndWait.mockResolvedValueOnce({
+      id: "cloud-job-1",
+      status: "done",
+      result: null,
+    });
+    listTranscriptions.mockResolvedValue([
+      {
+        id: "transcription-2",
+        created_by_job_id: "cloud-job-1",
+        kind: "model",
+      },
+    ]);
+
+    await act(async () => {
+      await view.result.current.runPageOcr();
+    });
+
+    // The layer was committed before the job reported done, so the page must
+    // reload it rather than refuse and strand the researcher on stale text.
+    expect(listPartLines).toHaveBeenCalled();
+    expect(setPairingError).not.toHaveBeenCalledWith(expect.any(String));
+    expect(view.result.current.ocrMessage?.text).toMatch(/completed/i);
+  });
 });
