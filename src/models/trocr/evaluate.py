@@ -10,10 +10,11 @@ import torch
 from hydra.utils import to_absolute_path
 from omegaconf import DictConfig
 from PIL import Image
-from transformers import TrOCRProcessor, VisionEncoderDecoderModel
+from transformers import TrOCRProcessor
 
 from .dataloader import read_ground_truth
 from .metrics import edit_distance
+from .model_builder import load_model
 
 
 @hydra.main(version_base=None, config_path="../../../config/trocr", config_name="configs")
@@ -28,7 +29,7 @@ def main(cfg: DictConfig) -> None:
     )
     processor = TrOCRProcessor.from_pretrained(checkpoint)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = VisionEncoderDecoderModel.from_pretrained(checkpoint).to(device).eval()
+    model = load_model(str(checkpoint)).to(device).eval()
 
     total_edits = 0
     total_reference_characters = 0

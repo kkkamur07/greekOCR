@@ -1,0 +1,47 @@
+name: trocr-lora-sweep
+project: OCR
+entity: personal-space-astha
+method: bayes
+
+metric:
+  name: eval/cer
+  goal: minimize
+
+early_terminate:
+  type: hyperband
+  min_iter: 3
+  eta: 3
+
+program: src.train.trocr
+command:
+  - ${env}
+  - ${interpreter}
+  - -m
+  - src.train.trocr
+  - wandb.enabled=true
+  - wandb.name=null
+  - training.epochs=20
+  - training.checkpoint_top_k=1
+
+parameters:
+  lora_adaptors.rank:
+    values: [8, 16, 32, 64]
+  lora_adaptors.alpha_rank_ratio:
+    values: [1.0, 2.0]
+  lora_adaptors.dropout:
+    value: 0.05
+  lora_adaptors.num_layers:
+    values: [3, 4, 5]
+  lora_adaptors.target_modules:
+    value: [query, value]
+
+  training.learning_rate:
+    distribution: log_uniform_values
+    min: 2.0e-5
+    max: 1.0e-3
+  training.weight_decay:
+    value: 0.03
+  training.max_grad_norm:
+    values: [1, 2, 3]
+  training.lr_scheduler_type:
+    value: cosine

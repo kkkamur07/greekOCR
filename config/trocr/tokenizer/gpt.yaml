@@ -1,4 +1,3 @@
 path: bundled:gpt_tokenizer
 use_fast: true
 pad_token: "<|pad|>"
-reinitialize_decoder: true

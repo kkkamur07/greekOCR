@@ -2,17 +2,17 @@
 
 model:
   name: microsoft/trocr-small-handwritten
-  checkpoint_dir: null
-  freeze_encoder: false
+  checkpoint_dir: trocr_checkpoints/trocr-small-handwritten
+  freeze_encoder: true
 
 training:
   max_target_length: 50
-  epochs: 40
+  epochs: 100
   batch_size: 32
   eval_batch_size: 32
   gradient_accumulation_steps: 1
   save_strategy: epoch
-  save_total_limit: 3
+  checkpoint_top_k: 2
   num_workers: 4
   seed: 1111
   max_steps: -1

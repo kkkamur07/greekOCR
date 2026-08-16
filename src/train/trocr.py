@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import logging
 import os
+import re
+from datetime import datetime
 from pathlib import Path
 
 import hydra
 import torch
 from hydra.utils import to_absolute_path
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 from transformers import Seq2SeqTrainingArguments
 
 from ..logging.local import configure_file_logging
@@ -22,6 +24,21 @@ from ..models.trocr.trainer import MetricsCsvCallback, TrOCRTrainer
 
 
 LOGGER = logging.getLogger(__name__)
+
+_SWEEP_PARAMETER_PATHS = frozenset(
+    {
+        "lora_adaptors.rank",
+        "lora_adaptors.alpha_rank_ratio",
+        "lora_adaptors.dropout",
+        "lora_adaptors.num_layers",
+        "lora_adaptors.target_modules",
+        "training.learning_rate",
+        "training.weight_decay",
+        "training.max_grad_norm",
+        "training.warmup_ratio",
+        "training.lr_scheduler_type",
+    }
+)
 
 
 def log_training_summary(
@@ -53,7 +70,9 @@ def log_training_summary(
         ("Tokenizer", "Path", str(cfg.tokenizer.path)),
         ("Tokenizer", "Vocabulary size", f"{len(tokenizer):,}"),
         ("Tokenizer", "Fast tokenizer", str(bool(cfg.tokenizer.use_fast))),
-        ("Tokenizer", "Reinitialize decoder", str(bool(cfg.tokenizer.reinitialize_decoder))),
+        ("Decoder", "Reinitialized", str(bool(cfg.decoder.reinitialize))),
+        ("Decoder", "Tied input/output embeddings", str(bool(cfg.decoder.tied))),
+        ("Decoder", "Dropout", str(cfg.decoder.dropout)),
         ("Tokenization", "Special tokens", "Not added; EOS is appended manually"),
         ("Tokenization", "Max input tokens", str(cfg.training.max_target_length - 1)),
         ("Tokenization", "Max label tokens", str(cfg.training.max_target_length)),
@@ -71,11 +90,23 @@ def log_training_summary(
         ),
         ("Training", "Mixed precision (FP16)", str(training_args.fp16)),
         ("Training", "Data loader workers", str(training_args.dataloader_num_workers)),
+        ("Checkpoints", "Ranking metric", "Evaluation CER"),
+        ("Checkpoints", "Retained", str(cfg.training.checkpoint_top_k)),
         ("Optimizer", "Learning rate", str(training_args.learning_rate)),
         ("Optimizer", "Weight decay", str(training_args.weight_decay)),
         ("Optimizer", "Max gradient norm", str(training_args.max_grad_norm)),
         ("Optimizer", "Warmup ratio", str(training_args.warmup_ratio)),
         ("Optimizer", "LR scheduler", str(training_args.lr_scheduler_type)),
+        ("LoRA", "Enabled", str(bool(cfg.lora_adaptors.enabled))),
+        ("LoRA", "Rank", str(cfg.lora_adaptors.rank)),
+        (
+            "LoRA",
+            "Alpha/rank ratio",
+            str(cfg.lora_adaptors.alpha_rank_ratio),
+        ),
+        ("LoRA", "Dropout", str(cfg.lora_adaptors.dropout)),
+        ("LoRA", "Encoder layers", f"Last {cfg.lora_adaptors.num_layers}"),
+        ("LoRA", "Attention targets", ", ".join(cfg.lora_adaptors.target_modules)),
         ("Augmentation", "Probability", str(cfg.augmentation.probability)),
         ("Augmentation", "Mode", str(cfg.augmentation.mode)),
         ("Augmentation", "Operations per image", str(cfg.augmentation.num_operations)),
@@ -112,11 +143,59 @@ def configure_wandb(cfg: DictConfig, log_dir: Path) -> list[str]:
     return ["wandb"]
 
 
+def initialize_run(cfg: DictConfig, log_dir: Path) -> str:
+    """Initialize W&B when enabled and return a unique run directory name."""
+    if not cfg.wandb.enabled:
+        run_name = str(cfg.wandb.name or "tr_ocr")
+        run_id = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+        safe_name = re.sub(r"[^A-Za-z0-9._-]+", "-", run_name).strip("-")
+        return f"{safe_name or 'tr_ocr'}-{run_id}"
+
+    configure_wandb(cfg, log_dir)
+    import wandb
+
+    run = wandb.init(
+        project=str(cfg.wandb.project),
+        entity=str(cfg.wandb.entity) if cfg.wandb.entity is not None else None,
+        mode=str(cfg.wandb.mode),
+        dir=str(log_dir),
+    )
+    if "WANDB_SWEEP_ID" in os.environ:
+        unknown_parameters = set(run.config.keys()) - _SWEEP_PARAMETER_PATHS
+        if unknown_parameters:
+            raise ValueError(
+                "Unsupported W&B sweep parameters: "
+                f"{sorted(unknown_parameters)}"
+            )
+        for path, value in run.config.items():
+            OmegaConf.update(cfg, path, value, merge=False)
+        LOGGER.info("Applied W&B sweep parameters: %s", dict(run.config))
+
+    safe_name = re.sub(r"[^A-Za-z0-9._-]+", "-", run.name).strip("-")
+    return f"{safe_name or 'tr_ocr'}-{run.id}"
+
+
 @hydra.main(version_base=None, config_path="../../config/trocr", config_name="configs")
 def main(cfg: DictConfig) -> None:
+    initial_output_dir = Path(to_absolute_path(cfg.output.root)).expanduser().resolve()
+    initial_log_dir = (
+        Path(to_absolute_path(cfg.logging.root)).expanduser().resolve()
+        / "trocr"
+        / initial_output_dir.name
+    )
+    run_directory = initialize_run(cfg, initial_log_dir)
+    OmegaConf.update(
+        cfg,
+        "output.root",
+        str(Path(str(cfg.output.root)) / run_directory),
+        merge=False,
+    )
+
     output_dir = Path(to_absolute_path(cfg.output.root)).expanduser().resolve()
     log_dir = (
-        Path(to_absolute_path(cfg.logging.root)).expanduser().resolve() / "trocr" / output_dir.name
+        Path(to_absolute_path(cfg.logging.root)).expanduser().resolve()
+        / "trocr"
+        / output_dir.name
     )
     configure_file_logging(
         log_file=log_dir / "train.log",
@@ -129,6 +208,9 @@ def main(cfg: DictConfig) -> None:
         if checkpoint_dir
         else None
     )
+    is_resume_checkpoint = (
+        model_root is not None and (model_root / "trainer_state.json").exists()
+    )
     model_source = str(model_root) if model_root and model_root.exists() else str(cfg.model.name)
     tokenizer_path = resolve_tokenizer_path(cfg.tokenizer.path)
     tokenizer = load_tokenizer(
@@ -137,12 +219,19 @@ def main(cfg: DictConfig) -> None:
         pad_token=str(cfg.tokenizer.pad_token),
     )
     processor = build_processor(model_source, tokenizer)
+    lora_config = OmegaConf.to_container(cfg.lora_adaptors, resolve=True)
+    if not isinstance(lora_config, dict):
+        raise TypeError("LoRA configuration must resolve to a mapping.")
     model = build_model(
         model_source,
         tokenizer,
         max_target_length=cfg.training.max_target_length,
         freeze_visual_encoder=bool(cfg.model.freeze_encoder),
-        reinitialize_decoder=bool(cfg.tokenizer.reinitialize_decoder),
+        reinitialize_decoder=bool(cfg.decoder.reinitialize)
+        and not is_resume_checkpoint,
+        tie_decoder_embeddings=bool(cfg.decoder.tied),
+        decoder_dropout=float(cfg.decoder.dropout),
+        lora_config=lora_config,
     )
 
     augmentation = LineAugmentation(
@@ -150,6 +239,8 @@ def main(cfg: DictConfig) -> None:
         mode=str(cfg.augmentation.mode),
         num_operations=int(cfg.augmentation.num_operations),
         magnitude=cfg.augmentation.magnitude,
+        exclude_groups=tuple(cfg.augmentation.exclude_groups),
+        exclude_operations=tuple(cfg.augmentation.exclude_operations),
     )
     data_dir = Path(to_absolute_path(cfg.data.dir)).expanduser().resolve()
     train_dataset = LineDataset(data_dir, "train", augmentation=augmentation)
@@ -172,11 +263,10 @@ def main(cfg: DictConfig) -> None:
         warmup_ratio=cfg.training.warmup_ratio,
         lr_scheduler_type=cfg.training.lr_scheduler_type,
         logging_steps=cfg.logging.steps,
-        evaluation_strategy="epoch",
+        eval_strategy="epoch",
         save_strategy=cfg.training.save_strategy,
-        save_total_limit=cfg.training.save_total_limit,
         load_best_model_at_end=True,
-        metric_for_best_model="eval_loss",
+        metric_for_best_model="eval_cer",
         greater_is_better=False,
         predict_with_generate=True,
         generation_max_length=cfg.training.max_target_length,
@@ -202,11 +292,13 @@ def main(cfg: DictConfig) -> None:
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         data_collator=TrOCRCollator(processor, cfg.training.max_target_length),
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
         compute_metrics=compute_metrics,
         callbacks=[MetricsCsvCallback(log_dir / "metrics.csv")],
+        checkpoint_top_k=int(cfg.training.checkpoint_top_k),
     )
-    trainer.train()
+    resume_checkpoint = str(model_root) if is_resume_checkpoint else None
+    trainer.train(resume_from_checkpoint=resume_checkpoint)
     final_dir = output_dir / "final"
     trainer.save_model(str(final_dir))
     processor.image_processor.save_pretrained(final_dir)

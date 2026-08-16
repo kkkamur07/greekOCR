@@ -14,11 +14,12 @@
 from __future__ import annotations
 
 from transformers import VisionEncoderDecoderModel
+from transformers.models.trocr.modeling_trocr import TrOCRForCausalLM
 from transformers.models.vision_encoder_decoder.configuration_vision_encoder_decoder import (
     VisionEncoderDecoderConfig,
 )
 
-from .decoder.model import TrOCRForCausalLM
+from .encoder.lora import configure_encoder_lora
 from .encoder.model import DeiTModel
 
 
@@ -46,6 +47,7 @@ class TrOCRVisionEncoderDecoderModel(VisionEncoderDecoderModel):
                     f"received {config.encoder.model_type!r}."
                 )
             encoder = DeiTModel(config.encoder)
+            configure_encoder_lora(encoder, getattr(config, "encoder_lora", None))
         if decoder is None:
             if config.decoder.model_type != "trocr":
                 raise ValueError(

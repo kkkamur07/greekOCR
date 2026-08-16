@@ -1,4 +1,5 @@
-path: gpt_new
+#! gpt with 2k embedding
+
+path: gpt_new_3k
 use_fast: true
 pad_token: "<|pad|>"
-reinitialize_decoder: true

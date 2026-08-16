@@ -1,7 +1,10 @@
 """PyTorch layers matching the Calamari TensorFlow graph.
 
-This module deliberately lives outside ``inference``.  It is the conversion
-oracle, not a production runtime dependency.
+Export-time code under ADR 0006: this graph is traced into ``best.onnx``, which
+is what a researcher actually runs. It was briefly the production runtime under
+ADR 0004, and before that it lived at
+``src/model/inference_export/calamari/layers.py`` and fed the same exporter it
+feeds again now.
 """
 
 from __future__ import annotations
@@ -92,8 +95,12 @@ def pad_same(
     *,
     value: float = 0.0,
 ) -> Tensor:
-    # ``x.shape`` becomes a Python constant in the legacy ONNX tracer.  Read
-    # the shape tensor during export so temporal padding remains dynamic.
+    # Under the tracer, ``x.shape`` freezes into Python constants and the
+    # exported graph would then pad every line to the width of the one dummy
+    # input it was traced on. ``_shape_as_tensor`` keeps the time axis dynamic,
+    # which is the whole reason the artifact accepts a variable-length line.
+    # Restored with the exporter by ADR 0006; ADR 0004 dropped it as dead code
+    # when this file was runtime-only.
     if torch.onnx.is_in_onnx_export():
         shape = torch._shape_as_tensor(x)
         time_size: int | Tensor = shape[-2]
@@ -130,6 +137,10 @@ def activation(name: str | None) -> nn.Module | None:
 
 
 def _same_padding_amount(size: int | Tensor, kernel: int, stride: int) -> int | Tensor:
+    # The Tensor branch is the tracing half of ``pad_same`` above: same
+    # arithmetic, expressed in ops the exporter can put in the graph. ``ceil``
+    # of a division becomes floor of ``size + stride - 1``, and ``max(..., 0)``
+    # becomes ``clamp``.
     if isinstance(size, Tensor):
         output_size = torch.div(size + stride - 1, stride, rounding_mode="floor")
         return torch.clamp((output_size - 1) * stride + kernel - size, min=0)

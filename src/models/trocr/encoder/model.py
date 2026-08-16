@@ -7,7 +7,7 @@ Microsoft TrOCR checkpoints load without state-dict key changes.
 
 import collections.abc
 import math
-from typing import Optional, Set, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -16,7 +16,6 @@ from torch import nn
 from transformers.activations import ACT2FN
 from transformers.modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from transformers.modeling_utils import PreTrainedModel
-from transformers.pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from transformers.utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -188,25 +187,6 @@ class DeiTAttention(nn.Module):
         super().__init__()
         self.attention = DeiTSelfAttention(config)
         self.output = DeiTSelfOutput(config)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads: Set[int]) -> None:
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.attention.num_attention_heads, self.attention.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.attention.query = prune_linear_layer(self.attention.query, index)
-        self.attention.key = prune_linear_layer(self.attention.key, index)
-        self.attention.value = prune_linear_layer(self.attention.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
-        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
         self,
@@ -443,14 +423,6 @@ class DeiTModel(DeiTPreTrainedModel):
     def get_input_embeddings(self) -> DeiTPatchEmbeddings:
         return self.embeddings.patch_embeddings
 
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
-
     @add_start_docstrings_to_model_forward(DEIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -477,15 +449,18 @@ class DeiTModel(DeiTPreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
         # TODO: maybe have a cleaner way to cast the input (from `ImageProcessor` side?)
         expected_dtype = self.embeddings.patch_embeddings.projection.weight.dtype
+        if head_mask is not None:
+            if head_mask.dim() == 1:
+                head_mask = head_mask[None, None, :, None, None].expand(
+                    self.config.num_hidden_layers, -1, -1, -1, -1
+                )
+            elif head_mask.dim() == 2:
+                head_mask = head_mask[:, None, :, None, None]
+            else:
+                raise ValueError("head_mask must have one or two dimensions")
+            head_mask = head_mask.to(dtype=expected_dtype)
         if pixel_values.dtype != expected_dtype:
             pixel_values = pixel_values.to(expected_dtype)
 
