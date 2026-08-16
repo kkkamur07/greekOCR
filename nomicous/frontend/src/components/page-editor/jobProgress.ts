@@ -25,10 +25,7 @@ export type PageEditorJobKind =
 export const INFERENCE_JOB_WAIT_CEILING_MS = 1_860_000;
 
 export function jobStatusLabel(job: JobResponse): string {
-  // "pending" is the queue: submission was accepted because a machine is
-  // online, and the job is waiting for one to claim it on its next poll.
-  // Say that, rather than a bare "Queued" that reads as stuck.
-  if (job.status === "pending") return "Waiting for allocation…";
+  if (job.status === "pending") return "Queued";
   if (job.status === "running") return "Starting…";
   if (job.status === "waiting") return "Processing…";
   if (job.status === "done") return "Complete";
