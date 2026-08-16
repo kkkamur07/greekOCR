@@ -35,7 +35,7 @@ from sqlalchemy import text
 
 from backend.core.settings.device import get_device_settings
 from backend.core.settings.job import get_job_settings
-from backend.jobs.infrastructure.job_repository import (
+from backend.jobs.infrastructure.job_claim_engine import (
     clear_stale_callback_claims,
     fail_stale_waiting_jobs,
     release_expired_device_leases,

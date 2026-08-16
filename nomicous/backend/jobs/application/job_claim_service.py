@@ -69,7 +69,7 @@ from backend.jobs.application.inference_dispatcher import (
     build_page_run_request,
     page_image_key_for_job,
 )
-from backend.jobs.infrastructure.job_repository import (
+from backend.jobs.infrastructure.job_claim_engine import (
     AGENT_CLAIM_PREFIX,
     AGENT_CLAIMED_JOB_TYPES,
 )
@@ -219,7 +219,7 @@ def claim_one_page(
 
 
 def _fail_unbuildable_page(job_id: uuid.UUID, agent: InferenceAgent) -> None:
-    from backend.jobs.infrastructure.job_repository import mark_job_failed
+    from backend.jobs.infrastructure.job_claim_engine import mark_job_failed
 
     mark_job_failed(
         job_id, UNBUILDABLE_PAYLOAD_ERROR, claimed_by=agent_claim_owner(agent.device_id)

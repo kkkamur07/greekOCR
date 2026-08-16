@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 from backend.core.settings.device import get_device_settings
 from backend.core.settings.job import JobSettings, get_job_settings
 from backend.jobs.infrastructure.handlers import TestJobHandlerError, run_test_handler
-from backend.jobs.infrastructure.job_repository import (
+from backend.jobs.infrastructure.job_claim_engine import (
     claim_next_pending_job,
     clear_stale_callback_claims,
     fail_stale_waiting_jobs,
