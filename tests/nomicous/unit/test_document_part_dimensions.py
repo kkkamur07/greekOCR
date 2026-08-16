@@ -18,6 +18,7 @@ from PIL import Image
 from backend.core.exceptions import ValidationError
 from backend.document.application.document_access import DocumentContext
 from backend.document.application.part_service import DocumentPartService
+from backend.document.infrastructure.media_store import PresignUnsupported
 from backend.document.infrastructure.media_store.encoding import (
     encode_part_image_with_size,
     read_image_size,
@@ -107,6 +108,12 @@ class _Store:
 
     def delete(self, image_key: str) -> None:
         self.blobs.pop(image_key, None)
+
+    def signed_object_url(self, image_key, *, expires_at):
+        return f"/media/signed/{image_key}"
+
+    def create_upload_url(self, image_key, *, expires_at):
+        raise PresignUnsupported("cannot presign")
 
 
 # --- Upload persists dimensions ---

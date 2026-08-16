@@ -16,6 +16,7 @@ import pytest
 
 from backend.document.application.document_access import DocumentContext
 from backend.document.application.part_service import DocumentPartService
+from backend.document.infrastructure.media_store import PresignUnsupported
 from backend.document.infrastructure.media_store.encoding import DecodedPartImage
 from backend.document.infrastructure.orm_models import Document
 
@@ -67,6 +68,12 @@ class _RecordingStore:
     def delete(self, image_key: str) -> None:
         self.deletes.append(image_key)
         self.delete_threads.append(threading.get_ident())
+
+    def signed_object_url(self, image_key, *, expires_at):
+        return f"/media/signed/{image_key}"
+
+    def create_upload_url(self, image_key, *, expires_at):
+        raise PresignUnsupported("cannot presign")
 
 
 class _DeleteFailingStore(_RecordingStore):

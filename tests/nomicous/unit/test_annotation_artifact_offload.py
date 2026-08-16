@@ -18,6 +18,7 @@ from pypdf import PdfReader
 
 from backend.annotation.application.export_service import AnnotationExportService
 from backend.annotation.application.transcription_pdf_service import TranscriptionPdfService
+from backend.document.infrastructure.media_store import PresignUnsupported
 from backend.document.infrastructure.orm_models import (
     Document,
     DocumentPart,
@@ -97,6 +98,15 @@ class _Store:
     def read(self, image_key: str) -> bytes:
         self.reads.append(image_key)
         return self.blobs[image_key]
+
+    def write(self, image_key: str, data: bytes) -> None:
+        self.blobs[image_key] = data
+
+    def signed_object_url(self, image_key, *, expires_at):
+        return f"/media/signed/{image_key}"
+
+    def create_upload_url(self, image_key, *, expires_at):
+        raise PresignUnsupported("cannot presign")
 
 
 def _fixtures(*, width: int | None, height: int | None, texts: list[str | None]):

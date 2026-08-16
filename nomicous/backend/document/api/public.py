@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -39,13 +40,13 @@ _service = DocumentCatalog()
 _transcription_pdf_service = TranscriptionPdfService()
 _page_xml_export_service = PageXmlExportService()
 
-PDF_RESPONSE = {
+PDF_RESPONSE: dict[int | str, dict[str, Any]] = {
     200: {
         "content": {"application/pdf": {"schema": {"type": "string", "format": "binary"}}},
         "description": "Transcription PDF bytes",
     }
 }
-XML_RESPONSE = {
+XML_RESPONSE: dict[int | str, dict[str, Any]] = {
     200: {
         "content": {"application/xml": {"schema": {"type": "string", "format": "binary"}}},
         "description": "PAGE XML bytes",

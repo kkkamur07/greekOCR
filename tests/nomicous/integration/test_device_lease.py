@@ -33,7 +33,7 @@ import infrastructure.models  # noqa: F401 - register all ORM mappers
 from backend.core.settings.device import get_device_settings
 from backend.core.settings.job import get_job_settings
 from backend.jobs.application.job_claim_service import agent_claim_owner
-from backend.jobs.infrastructure.job_repository import (
+from backend.jobs.infrastructure.job_claim_engine import (
     WAITING_TIMEOUT_ERROR,
     fail_stale_waiting_jobs,
     release_expired_device_leases,

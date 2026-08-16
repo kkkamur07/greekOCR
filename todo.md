@@ -4,9 +4,9 @@ The previous list is done, and a third of it turned out not to need doing. Every
 below was checked against the tree before it was worked on; where the old entry was wrong,
 the correction is kept rather than deleted, so the same wrong diagnosis is not rediscovered.
 
-Branch: `feat/todo-sweep` (three commits, off `main` at `6c0bb7b`). Nothing is pushed.
+The `feat/todo-sweep` branch is merged to `main`; what follows is the open backlog.
 
-**Verified green on this branch**, each run to completion:
+**Verified green before merge**, each run to completion:
 
 | suite | result |
 |---|---|
@@ -126,9 +126,8 @@ is irrelevant to the cause.
 
 ### A6. Owner actions carried forward, unchanged
 
-- **Revoke eight CI secrets.** All eight are confirmed unreferenced by any workflow — safe
-  to revoke. List and the credentials to revoke alongside them: §8 of
-  [`docs/resume-inference-redesign.md`](docs/resume-inference-redesign.md).
+- **Revoke eight CI secrets.** All eight are confirmed unreferenced by any workflow, so
+  revoking them is safe. The list was carried in the retired resume doc.
 - **Set `DEVICE_TOKEN_HMAC_SECRET` before rotating `JWT_SECRET`.** The *code* half of the
   old entry is already shipped — `DeviceSettings._validate_production_credential_key()`
   refuses to boot in production when the secret is unset or equal to `JWT_SECRET` and
@@ -137,8 +136,6 @@ is irrelevant to the cause.
   silent: `/health` reports `oldest_pending_job_seconds` and warns past
   `JOB_QUEUE_STALL_WARNING_SECONDS` (900s). There is still no IaC for that host anywhere in
   the repository — standing it up is a manual step in `docs/deployment/production.md` §3.
-- **The push itself.** This branch has never been pushed, and neither has the ~100-commit
-  inference redesign under it. §7 of the resume doc: no agent decides that.
 
 ---
 
@@ -186,7 +183,61 @@ CI was audited and none of them can pass while failing.
   `.env.supabase` (the live pooler) by default. The truncate guard now makes the dangerous
   half of this safe, but the fallback itself is still surprising.
 
-### B5. Grep-style assertions that could execute instead
+### B5. Record model output and its human corrections as future training data
+
+Not designed yet — deliberately deferred; we will develop this further later. Named here so
+it shapes decisions made before it ships.
+
+The platform already draws the right domain line — a **Model transcription** becomes a
+**Ground truth transcription** only when a researcher accepts or edits it — but the moment
+of correction is exactly where the training signal is thrown away today:
+
+- **Transcribe:** when a researcher edits a Model transcription into Ground truth, the
+  model's original string is overwritten. The (line image, model output, human correction)
+  triple is lost.
+- **Segment:** Kraken output keeps its **Kraken ceiling**, but a hand-edited polygon does
+  not preserve the model's claimed geometry as a comparable pair; **Segment source** flips
+  without recording what the model originally drew. (Worse right now: the layout PATCH
+  provenance bug in the 2026-08-06 final review rewrites `source=manual` on non-geometry
+  edits — fix that first or the recorded pairs are polluted.)
+
+What to capture, per correction event: the line/page reference, the model output as
+delivered (text or geometry), the human-corrected result, the **registry model id** and
+**Hub revision** that produced it, and a timestamp. Corrections are worth more than fresh
+annotations — they concentrate on the model's actual failure modes — and they are the
+natural feed for the **Hub dataset repos** the publishing pipeline already targets.
+
+Decisions needed before implementation (yours, not an agent's): storage shape (a dedicated
+correction-pair table vs deriving from **History snapshots**), retention, whether consent /
+dataset licensing needs to be surfaced to researchers before their corrections are used for
+training, and at what point pairs are exported into the Hub staging tree.
+
+### B7. Calamari TF→PyTorch converter + ONNX GPU runtime
+
+Two publishing/runtime gaps, both named so they are choices rather than surprises.
+
+**Converter is now lossless but arch-bounded (done, with a caveat).**
+`scripts/hf/convert_calamari.py` converts a TF `best.ckpt` + `best.ckpt.json` into the
+`calamari-pytorch-v1` checkpoint `export_calamari_onnx` reads, re-laying out conv/dense/LSTM
+weights without touching their values. The codec (language) is carried verbatim from the config,
+so it is language-agnostic out of the box; `hidden_nodes` is derived from the recurrent-kernel
+shape, not a constant. The one bound is the *architecture*: the PyTorch loader
+(`_default_config` in `src/model/inference_export/calamari/checkpoint.py`) hardcodes the
+6-layer CNN-BiLSTM stack, and the converter validates against it and refuses anything else.
+To support a differently shaped Calamari model, `_default_config` and `CalamariTorchModel`
+must be generalised first; the converter itself already reads the layer list from the config.
+A test (`tests/export/test_calamari_convert.py`) proves TF == PyTorch == ONNX logits to float32
+rounding on a dense panorama, and is the pattern to extend when more languages are published.
+
+**ONNX GPU runtime support (not started).** `_load_session` (Calamari) and `run_blla_logits`
+(BLLA) both pin `providers=["CPUExecutionProvider"]`; `test_onnx_runtime.py` asserts exactly
+that. A researcher with a CUDA/CoreML device gets CPU-only inference today. Supporting selectable
+providers is a real change: the runtime must fall back cleanly when a requested accelerator is
+absent, the `test_the_runtime_never_selects_an_accelerator` guarantee must be re-scoped rather
+than deleted, and provider selection has to ride the existing registry/host-eligibility channel
+so a laptop and a cloud worker still produce the same result on the same page.
+
+### B6. Grep-style assertions that could execute instead
 
 Carried forward from `docs/test-hardening-handoff.md`, deleted once `test/suite-hardening`
 merged. **Partly overtaken**: the suite-reduction pass deleted a number of these greps
@@ -247,7 +298,5 @@ never root-caused. Related to the known asyncpg "attached to a different loop" i
   InstanceNormalization`. The staged reduction in `src/model/inference_export/blla/export.py`
   fixed the catastrophic case (IoU 0.5026 → 1.0000). What remains is width-proportional and
   lives in Torch's own float32 accumulation, not in the export.
-- `docs/resume-inference-redesign.md` — where the inference redesign stands, §5's traps, and
-  the owner actions in §7–8.
-- `docs/merge-handoff-inference-redesign.md` — history; open it only to find out *why* a
-  conflict was resolved the way it was.
+- `docs/final-code-review-2026-08-06.md` — the current audit of `main`, including the ADR
+  chain that replaced the retired handoff docs.

@@ -12,14 +12,16 @@ from PIL import Image
 from inference.architectures.blla.blla_decoder import decode_blla_heatmaps
 from inference.architectures.blla.blla_preprocessing import BLLAInput
 from inference.architectures.isolation import reraise_if_none_survived
+from inference.contracts.common import MAX_GEOMETRY_POINTS
 from inference.contracts.segment import SegmentBlock, SegmentLine, SegmentRunResponse
-from inference.preprocessing.segment_geometry import simplify_blla_boundary
+from inference.preprocessing.segment_geometry import clamp_polygon_vertices, simplify_blla_boundary
 from inference.preprocessing.segment_refinement import (
     MIN_AREA_RATIO,
     MIN_IOU,
     SPLIT_VERTICAL_GAP_PX,
     TARGET_MAX_POINTS,
     SegmentRefinementResult,
+    grayscale_image,
     refine_segment_candidates,
 )
 
@@ -90,6 +92,11 @@ def build_blla_segment_response(
     threshold = min(threshold, 0.99)
 
     width, height = image.size
+    # One grayscale conversion per page, not per line: ``refine_segment_candidates``
+    # runs once per decoded line and would otherwise re-convert the whole page
+    # to grayscale each time. ``None`` (cv2 unavailable) keeps the old per-call
+    # fallback inside the callee.
+    gray = grayscale_image(image) if use_otsu_refinement else None
     decoded_lines = decode_blla_heatmaps(
         values,
         image_size=(width, height),
@@ -129,13 +136,14 @@ def build_blla_segment_response(
         }
         try:
             if use_otsu_refinement:
-                # ``image`` itself, not a copy: refinement reads it once
-                # through ``np.array(image.convert("RGB"))`` and mutates
-                # nothing, so the copy was a full-page allocation per page.
+                # ``image`` and the precomputed ``gray`` are read, never
+                # mutated, so the per-page grayscale conversion is done once
+                # above rather than once per line.
                 refinements = refine_segment_candidates(
                     image,
                     ceiling,
                     baseline=baseline,
+                    gray=gray,
                     margin_px=otsu_sphere_radius,
                     target_max_points=target_max_points,
                     min_iou=min_iou,
@@ -168,7 +176,22 @@ def build_blla_segment_response(
             continue
 
         for split_index, refinement in enumerate(refinements):
-            refined_points = refinement.points
+            # Clamp to the stored-geometry cap before the segment contract
+            # (which enforces it with ``max_length``) rejects the line, so a
+            # denser ring is coarsened rather than failing the whole page.
+            refined_points = clamp_polygon_vertices(
+                refinement.points,
+                max_points=MAX_GEOMETRY_POINTS,
+            )
+            if len(refined_points) < 4:
+                first_failure = first_failure or ValueError(
+                    "BLLA line refined to fewer than four points"
+                )
+                logger.warning(
+                    "BLLA line refinement produced no polygon (raw_order=%s)",
+                    order,
+                )
+                continue
             line_baseline = refinement.baseline or baseline
             line_metadata = {
                 **source_metadata,

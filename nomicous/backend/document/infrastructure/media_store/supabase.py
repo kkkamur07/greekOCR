@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime
 from math import ceil
+from typing import cast
 from uuid import UUID
 
 from supabase import Client, create_client
@@ -44,6 +45,28 @@ class SupabaseMediaStore:
         filename_stem: str | None = None,
     ) -> str:
         return part_image_key(part_id, suffix=suffix, filename_stem=filename_stem)
+
+    def create_upload_url(self, image_key: str, *, expires_at: datetime) -> tuple[str, str]:
+        """A presigned URL the browser PUTs this one object to, plus its token.
+
+        Vercel Functions cap a request body at 4.5 MB, so a manuscript page scan
+        (TIFF, multi-MB JPEG, or a full-resolution PNG) cannot be POSTed through
+        the API. Presigning an upload lets the browser stream the bytes straight
+        to Supabase Storage instead, while the API still owns the object key, the
+        validation, and the part row the key is derived from. The returned URL is
+        scoped to exactly *image_key* - nothing else in the bucket is writable
+        with it. *expires_at* is accepted for protocol symmetry but not honored:
+        Storage's signed upload URLs live for its fixed window (currently two
+        hours) and the API offers no shorter one.
+        """
+        validate_image_key(image_key)
+        bucket = self._client.storage.from_(self._bucket)
+        signed = cast(dict[str, str], bucket.create_signed_upload_url(image_key, options=None))
+        url = signed.get("signedUrl") or signed.get("signedURL")
+        token = signed.get("token")
+        if not url or not token:
+            raise RuntimeError(f"Supabase Storage returned no signed upload URL for {image_key}")
+        return url, token
 
     def signed_object_url(self, image_key: str, *, expires_at: datetime) -> str:
         """Storage's own signed link to this one object.

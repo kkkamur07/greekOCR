@@ -19,10 +19,10 @@ from sqlalchemy.dialects import postgresql
 from backend.core.exceptions import ConflictError
 from backend.core.settings.device import get_device_settings
 from backend.core.settings.job import JobSettings, get_job_settings
-from backend.jobs.infrastructure import job_repository
+from backend.jobs.infrastructure import job_claim_engine, job_repository
 from backend.jobs.infrastructure import stale_sweep as stale_sweep_module
 from backend.jobs.infrastructure import worker as worker_module
-from backend.jobs.infrastructure.job_repository import (
+from backend.jobs.infrastructure.job_claim_engine import (
     AGENT_CLAIM_PREFIX,
     _apply_cancellation,
     claim_next_pending_job,
@@ -99,13 +99,13 @@ def _use_session(monkeypatch: pytest.MonkeyPatch, session: _FakeSession) -> None
     def _factory():
         yield session
 
-    monkeypatch.setattr(job_repository, "sync_system_session", _factory)
+    monkeypatch.setattr(job_claim_engine, "sync_system_session", _factory)
 
 
 def _record_notifications(monkeypatch: pytest.MonkeyPatch) -> list[tuple]:
     notified: list[tuple] = []
     monkeypatch.setattr(
-        job_repository,
+        job_claim_engine,
         "notify_platform_job_status_changed",
         lambda job_id, status: notified.append((job_id, status)),
     )
@@ -343,7 +343,7 @@ def _install_sweep_store(
     # The advisory lock runs on the sweep module's session; the two sweeps open
     # their own sessions inside the repository module.
     monkeypatch.setattr(stale_sweep_module, "sync_system_session", _factory)
-    monkeypatch.setattr(job_repository, "sync_system_session", _factory)
+    monkeypatch.setattr(job_claim_engine, "sync_system_session", _factory)
     return store
 
 
@@ -588,7 +588,7 @@ def test_reclaim_fails_a_job_that_exhausted_its_claim_budget(monkeypatch: pytest
     job_id = uuid.uuid4()
     session = _FakeSession(
         [
-            _FakeResult(rows=[(job_id, job_repository.MAX_CLAIM_ATTEMPTS - 1)]),
+            _FakeResult(rows=[(job_id, job_claim_engine.MAX_CLAIM_ATTEMPTS - 1)]),
             _FakeResult(rowcount=1),
         ]
     )
@@ -599,7 +599,9 @@ def test_reclaim_fails_a_job_that_exhausted_its_claim_budget(monkeypatch: pytest
 
     values = _params(session.statements[1])
     assert values["status"] == JobStatus.failed
-    assert values["error"] == job_repository.poison_page_error(job_repository.MAX_CLAIM_ATTEMPTS)
+    assert values["error"] == job_claim_engine.poison_page_error(
+        job_claim_engine.MAX_CLAIM_ATTEMPTS
+    )
     assert values["completed_at"] is not None
     # Terminal, so a browser watching this job has to be told; a re-pend is not
     # announced because pending is not a state the UI renders differently.
@@ -808,7 +810,7 @@ async def test_a_repeatedly_abandoned_page_is_finally_failed(
     _record_notifications(monkeypatch)
     store = _install_sweep_store(monkeypatch, job)
 
-    for lap in range(job_repository.MAX_CLAIM_ATTEMPTS):
+    for lap in range(job_claim_engine.MAX_CLAIM_ATTEMPTS):
         # What the next agent's claim writes: the sweep cleared the claim, so
         # without this the row falls into the *other* half of ``waiting`` and the
         # inference timeout fails it for the wrong reason.
@@ -817,12 +819,12 @@ async def test_a_repeatedly_abandoned_page_is_finally_failed(
         job.updated_at = datetime.now(UTC) - timedelta(days=1)
         stale_sweep_module.reset_stale_sweep_throttle()
         await stale_sweep_module.sweep_stale_jobs_on_read()
-        if lap < job_repository.MAX_CLAIM_ATTEMPTS - 1:
+        if lap < job_claim_engine.MAX_CLAIM_ATTEMPTS - 1:
             assert job.status == JobStatus.pending, f"lap {lap} should still be retried"
 
-    assert store.lease_selects == job_repository.MAX_CLAIM_ATTEMPTS
+    assert store.lease_selects == job_claim_engine.MAX_CLAIM_ATTEMPTS
     assert job.status == JobStatus.failed
-    assert job.error == job_repository.poison_page_error(job_repository.MAX_CLAIM_ATTEMPTS)
+    assert job.error == job_claim_engine.poison_page_error(job_claim_engine.MAX_CLAIM_ATTEMPTS)
 
 
 def test_a_finished_job_starts_over_with_a_full_claim_budget(monkeypatch: pytest.MonkeyPatch):

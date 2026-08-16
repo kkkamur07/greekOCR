@@ -45,7 +45,7 @@ There is one job record. `jobs` represents user-visible work such as
 segmentation or transcription, and it is the only queue.
 
 A second table, `inference_jobs`, used to hold the same work again for the
-inference service. Migration `006_drop_inference_jobs` removed it (ADR 0003);
+inference service. It was removed when the queue was consolidated (ADR 0003);
 `jobs.inference_job_id` survives as the identifier an agent echoes back in its
 completion callback.
 
@@ -201,8 +201,8 @@ Many-to-many project sharing table.
 #### `helper_devices`
 
 A researcher's own computer, authorised once from a logged-in browser and
-thereafter authenticating outbound with an opaque device token. See
-`docs/adr/0001-outbound-helper-device-pairing.md`.
+thereafter authenticating outbound with an opaque device token. See the pairing
+flow in `inference/CONTEXT.md`.
 
 - `user_id` is `NOT NULL` and cascades to the owning user. That foreign key is
   the entire authorization scope of the credential, which is why it is a schema
@@ -405,7 +405,7 @@ are later removed.
 
 #### `inference_jobs` - removed
 
-Dropped by `006_drop_inference_jobs`. It duplicated the image bytes and the
+Dropped when the queue was consolidated. It duplicated the image bytes and the
 execution payload of a `jobs` row so a second worker could claim the same work
 a second time. See ADR 0003.
 
@@ -803,7 +803,5 @@ The main implementation references for this design are:
 - `nomicous/backend/project/infrastructure/orm_models.py`
 - `nomicous/backend/users/infrastructure/orm_models.py`
 - `nomicous/backend/ml/infrastructure/orm_models.py`
-- `inference/infrastructure/orm_models.py`
-- `inference/infrastructure/job_repository.py`
 - `nomicous/infrastructure/alembic/versions/`
 - `docs/deployment/supabase.md`

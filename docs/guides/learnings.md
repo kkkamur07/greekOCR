@@ -67,7 +67,7 @@ Production ships the platform API as a **Vercel Python serverless function** (`d
 | Capability | Why not serverless | Where it runs |
 |------------|-------------------|---------------|
 | Platform job worker (`claim` → submit to inference) | Needs continuous polling / claiming | `platform-worker` on persistent Docker host |
-| Model execution (PyTorch) | Bundle size, 30+ min jobs | The **inference agent** — a laptop, or a hosted worker claiming with a service credential. There is no inference service to deploy (ADR 0002/0003) |
+| Model execution (ONNX Runtime) | Bundle size, 30+ min jobs | The **inference agent** — a laptop, or a hosted worker claiming with a service credential. There is no inference service to deploy (ADR 0002/0003) |
 | Job status SSE (`NOTIFY` → browser stream) | `LISTEN` is a long-lived DB connection | Disabled on Vercel; enabled in Docker Compose / future all-Docker deploy |
 
 ### Required env on Vercel
@@ -148,7 +148,12 @@ Runbook: [`docs/deployment/production.md`](../deployment/production.md). Vercel 
 
 ## Calamari training
 
-Training and finetuning use the **vendored TensorFlow Calamari tree** under `src/model/calamari/`. Inference does **not** import that tree - it runs a separate PyTorch graph under `inference/architectures/calamari/` and loads converted `.pt` checkpoints from Hugging Face Hub (`hf://`).
+The training entry points below are currently broken. The `uv` extras and
+Hydra config paths they reference do not exist, so none of these commands run
+as written. See `docs/final-code-review-2026-08-06.md` for the exact failures
+before trusting this section.
+
+Training and finetuning use the **vendored TensorFlow Calamari tree** under `src/model/calamari/`. Inference does **not** import that tree - it runs a separate ONNX Runtime graph under `inference/architectures/calamari/` and loads `best.onnx` from Hugging Face Hub (`hf://`).
 
 ### Layout
 
@@ -197,7 +202,7 @@ ln -sfn ../src/model/calamari _support_repo/calamari
 | `ModuleNotFoundError: No module named 'calamari_ocr'` with `_support_repo` in traceback | Legacy path expected | Symlink `_support_repo/calamari` → `src/model/calamari` |
 | Training OOM / very slow on Apple Silicon | TensorFlow + emulation | Prefer Linux + GPU; reduce batch size |
 | `Expected train/ and val/ images under ...` | Wrong pack layout | Pack needs `train/` and `val/` image folders |
-| Checkpoint works in training but inference rejects `.ckpt` | Inference needs PyTorch `.pt` | Convert to `calamari-pytorch-v1` and publish to Hub |
+| Checkpoint works in training but inference rejects `.ckpt` | Inference needs the ONNX graph | Export `best.onnx` and publish the graph to Hub |
 | Empty OCR despite job **done** | Wrong model for script | Use a model matching the page script (e.g. Syriac model only for Syriac pages) |
 | First Hub transcribe slow in Docker | Cold download + CPU | `PYTHONPATH=. python scripts/hf/fetch_model.py syriac-calamari-v1 --registry-tag stable` (Greek model not published yet) |
 

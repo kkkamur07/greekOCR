@@ -76,20 +76,25 @@ def resolve_weights_source(
         package_name, _, resource_name = package_resource.partition("/")
         if not package_name or not resource_name:
             raise ValueError("package weights source must be package://<package>/<resource>")
+        if ".." in resource_name.split("/"):
+            raise ValueError("package weights source must stay within the package")
+        if not artifact_sha256:
+            raise ValueError("package weights source requires a pinned artifact_sha256")
         resource = resources.files(package_name).joinpath(resource_name)
         if not resource.is_file():
             raise FileNotFoundError(f"package weights source not found: {uri}")
         resolved_path = Path(str(resource))
-        if artifact_sha256:
-            from inference.hub.artifacts import verify_artifact_sha256
+        from inference.hub.artifacts import verify_artifact_sha256
 
-            verify_artifact_sha256(resolved_path, artifact_sha256)
+        verify_artifact_sha256(resolved_path, artifact_sha256)
         return resolved_path
 
     if not uri.startswith("file://"):
         raise ValueError(f"unsupported weights source scheme: {uri}")
 
     relative = uri.removeprefix("file://")
+    if not relative:
+        raise ValueError("file weights source must name a path")
     source_path = Path(relative)
     if source_path.is_absolute():
         raise ValueError("file weights source must be relative to INFERENCE_ROOT or src/hf/")

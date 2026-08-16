@@ -174,6 +174,15 @@ Source of truth: [`src/hf/publish/collection.yaml`](../src/hf/publish/collection
 | `publish_model.py` | Staging → **Hub model repo** + model card + revision tag |
 | `publish_dataset.py` | Staging → **Hub dataset repo** + dataset README |
 | `sync_collection.py` | `collection.yaml` → **Hub collection** membership |
+| `convert_blla.py` | Kraken `blla.mlmodel` → `blla.safetensors` (`blla-pytorch-v1`) |
+| `convert_calamari.py` | TF `best.ckpt` + `best.ckpt.json` → `.pt` (`calamari-pytorch-v1`) |
+
+`convert_calamari.py` is the TF → PyTorch weight re-layout that feeds
+`export_calamari_onnx`. It needs TensorFlow at runtime (read the SavedModel
+variables) and Torch (write the checkpoint); run it in an environment that has
+both, e.g. the `calamari-train` group once declared. See the module docstring
+for the exact re-layout (conv/dense transposes, LSTM `[i,f,c,o]` gate order, and
+forget-bias semantics all preserve values losslessly).
 
 ## Tests
 

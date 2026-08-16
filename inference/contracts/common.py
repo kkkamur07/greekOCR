@@ -44,6 +44,18 @@ class HostEligibility(StrEnum):
     any = "any"
 
 
+# Wire-format bounds for segment and transcribe responses. These mirror
+# ``AdmissionSettings.inference_max_geometry_points`` (256) and the platform's
+# ``MAX_LINE_GEOMETRY_POINTS`` / ``MAX_LINE_TEXT_CHARS``; the response contract
+# enforces what admission promises, so a denser polygon or a longer text can
+# never be produced and written back to the platform.
+MAX_GEOMETRY_POINTS = 256
+MAX_LINE_TEXT_CHARS = 10_000
+MAX_TRANSCRIBE_LINES = 10_000
+MAX_SEGMENT_LINES = 10_000
+MAX_SEGMENT_BLOCKS = 1_000
+
+
 def _coerce_image_bytes(value: Any) -> bytes:
     settings = get_inference_settings()
     raw_bytes = validate_encoded_image(value, settings)
@@ -80,5 +92,10 @@ __all__ = [
     "ImageBytes",
     "InferenceJobStatus",
     "InferenceTask",
+    "MAX_GEOMETRY_POINTS",
+    "MAX_LINE_TEXT_CHARS",
+    "MAX_SEGMENT_BLOCKS",
+    "MAX_SEGMENT_LINES",
+    "MAX_TRANSCRIBE_LINES",
     "RegistryArchitecture",
 ]

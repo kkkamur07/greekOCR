@@ -43,6 +43,13 @@ export type DocumentPartUpdateRequest =
   components["schemas"]["DocumentPartUpdateRequest"];
 export type DocumentWorkflow = components["schemas"]["DocumentWorkflow"];
 export type ReorderPartsRequest = components["schemas"]["ReorderPartsRequest"];
+
+export type PartUploadBeginRequest =
+  components["schemas"]["PartUploadBeginRequest"];
+export type PartUploadBeginResponse =
+  components["schemas"]["PartUploadBeginResponse"];
+export type PartUploadFinalizeRequest =
+  components["schemas"]["PartUploadFinalizeRequest"];
 export type PublicLayoutResponse =
   components["schemas"]["PublicLayoutResponse"];
 export type PublicLineResponse = NonNullable<
@@ -575,6 +582,27 @@ export const api = {
       { method: "POST", body: form },
     );
   },
+
+  beginPartUpload: (
+    projectId: string,
+    documentId: string,
+    body: PartUploadBeginRequest,
+  ) =>
+    apiRequest<PartUploadBeginResponse>(
+      `/projects/${projectId}/documents/${documentId}/parts/upload`,
+      { method: "POST", body },
+    ),
+
+  finalizePartUpload: (
+    projectId: string,
+    documentId: string,
+    partId: string,
+    body: PartUploadFinalizeRequest,
+  ) =>
+    apiRequest<DocumentPartResponse>(
+      `/projects/${projectId}/documents/${documentId}/parts/${partId}/finalize`,
+      { method: "POST", body },
+    ),
 
   reorderParts: (
     projectId: string,

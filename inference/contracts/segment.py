@@ -7,6 +7,12 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
+from inference.contracts.common import (
+    MAX_GEOMETRY_POINTS,
+    MAX_SEGMENT_BLOCKS,
+    MAX_SEGMENT_LINES,
+)
+
 
 class SegmentGeometryKind(StrEnum):
     polygon = "polygon"
@@ -32,7 +38,7 @@ class SegmentLine(BaseModel):
     baseline: dict[str, Any]
     mask: dict[str, Any] | None = None
     kind: SegmentGeometryKind = SegmentGeometryKind.polygon
-    points: list[list[float]] = Field(min_length=4)
+    points: list[list[float]] = Field(min_length=4, max_length=MAX_GEOMETRY_POINTS)
     kraken_ceiling: list[list[float]] | None = None
     source_metadata: dict[str, Any] = Field(default_factory=dict)
 
@@ -50,8 +56,8 @@ class SegmentLine(BaseModel):
 
 
 class SegmentRunResponse(BaseModel):
-    blocks: list[SegmentBlock] = Field(default_factory=list)
-    lines: list[SegmentLine] = Field(default_factory=list)
+    blocks: list[SegmentBlock] = Field(default_factory=list, max_length=MAX_SEGMENT_BLOCKS)
+    lines: list[SegmentLine] = Field(default_factory=list, max_length=MAX_SEGMENT_LINES)
 
 
 __all__ = [

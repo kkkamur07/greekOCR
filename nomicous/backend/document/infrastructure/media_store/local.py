@@ -5,6 +5,7 @@ from pathlib import Path
 from uuid import UUID
 
 from backend.core.settings import get_app_settings
+from backend.document.infrastructure.media_store.errors import PresignUnsupported
 from backend.document.infrastructure.media_store.keys import (
     DEFAULT_PART_IMAGE_SUFFIX,
     part_image_key,
@@ -26,6 +27,17 @@ class LocalMediaStore:
         filename_stem: str | None = None,
     ) -> str:
         return part_image_key(part_id, suffix=suffix, filename_stem=filename_stem)
+
+    def create_upload_url(self, image_key: str, *, expires_at: datetime) -> tuple[str, str]:
+        """A filesystem has no presigned upload URL - the browser cannot write it.
+
+        The local backend serves uploads through the API's own byte handling, so a
+        presigned upload is impossible by construction. Callers that offer the
+        direct-upload path must first check the backend and fall back to the plain
+        multipart upload; this method exists only to make the store protocol honest
+        and raises if it is ever asked to mint a URL it cannot.
+        """
+        raise PresignUnsupported("local media store cannot presign uploads")
 
     def signed_object_url(self, image_key: str, *, expires_at: datetime) -> str:
         """A root-relative signed link to this one object.

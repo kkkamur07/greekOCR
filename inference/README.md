@@ -4,7 +4,7 @@ The manuscript **segment** and **transcribe** runtime. It lives at the repositor
 root in `inference/`, separate from the Nomicous platform API in
 `nomicous/backend/`, and it is the one distribution published to PyPI: a
 researcher's laptop and a hosted worker install the same wheel
-([ADR 0002](../docs/adr/0002-inference-cli-replaces-loopback-helper.md)).
+(ADR 0002).
 
 For the public product overview, setup, model availability, and architecture,
 see the [root README](../README.md), [use and hosting guide](../docs/guides/using-and-hosting.md),
@@ -18,8 +18,7 @@ uv tool install nomicous-inference
 nomicous --version
 ```
 
-No flags, no uv version floor. That is a deliberate outcome of
-[ADR 0006](../docs/adr/0006-onnx-runtime-is-the-inference-runtime.md) rather
+No flags, no uv version floor. That is a deliberate outcome of ADR 0006 rather
 than a simplification of the instructions: `onnxruntime` publishes one CPU wheel
 per platform, so there is no accelerator variant to resolve by accident and
 nothing for the install command to pin.
@@ -57,7 +56,7 @@ only check available: every other field on the consent screen — the machine
 name, the platform, the version — is supplied by whoever started the pairing, so
 a convincing one is not evidence. A different code means the request came from
 somewhere else. Close the page and approve nothing
-([ADR 0001](../docs/adr/0001-outbound-helper-device-pairing.md), decision 13).
+(ADR 0001, decision 13).
 
 The URL is printed before any browser is opened, and no browser is opened at all
 over SSH. `--no-browser` forces that everywhere.
@@ -119,7 +118,7 @@ Patching is now two moves:
 
 The second is what makes the first land. An **inference agent** below the floor
 is refused at the claim endpoint and told to upgrade
-([ADR 0002](../docs/adr/0002-inference-cli-replaces-loopback-helper.md), #55),
+(ADR 0002, #55),
 so a vulnerable agent stops taking work whether or not its operator noticed.
 The floor is served by the platform rather than read from PyPI, which means it
 turns without a release.
@@ -135,8 +134,7 @@ uv tool upgrade nomicous-inference
 This package holds no job queue, no database, and no claim loop. A queued page is
 a row in the platform's `jobs` table; an inference agent claims it, runs it
 through the same `run_model()` the sync path uses, and reports the outcome
-through the platform's existing job callback contract. See
-[ADR 0003](../docs/adr/0003-single-job-queue-cloud-worker-claims-like-a-device.md).
+through the platform's existing job callback contract. See ADR 0003.
 
 There is consequently no `inference-api` container: the registry endpoint an
 agent syncs from is served by the platform on port 8000.
@@ -155,8 +153,7 @@ No local weight checkout is required for the default Hub models; they download f
 
 ### Runtime
 
-Both architectures run on ONNX Runtime, CPU only
-([ADR 0006](../docs/adr/0006-onnx-runtime-is-the-inference-runtime.md)).
+Both architectures run on ONNX Runtime, CPU only (ADR 0006).
 Transcribe loads `best.onnx` through `inference/architectures/calamari/` and
 segment loads `blla.onnx` through `inference/architectures/blla/`. The graph
 carries its own codec, line height and blank index in `metadata_props`, which is
@@ -211,7 +208,6 @@ PYTHONPATH=. python scripts/hf/fetch_model.py syriac-calamari-v1 --registry-tag 
 
 Shared Pydantic schemas in `inference/contracts/` define the wire format for inference endpoints:
 
-- **Run** - `InferenceRunRequest` / `InferenceRunResponse` (`inference/contracts/run.py`): task, registry model, image bytes, and params in; typed output out.
 - **Segment** - `SegmentRunResponse` (`inference/contracts/segment.py`): page image in, blocks and line polygons out.
 - **Transcribe** - `TranscribeRunResponse` / `TranscribeBatchRunResponse` (`inference/contracts/transcribe.py`): line image(s) in, text and per-character confidence out.
 
@@ -224,7 +220,7 @@ Job callbacks use a tagged output union: `output.kind` is either `segment` or `t
 `inference/registry.yaml` lists available models and weight locations. Example entries:
 
 - `syriac-calamari-v1` - transcribe, Calamari architecture, pinned Hub revision and digest
-- `blla-segment` - segment, BLLA `safetensors` weights
+- `blla-segment` - segment, BLLA `blla.onnx` weights
 
 Weights are resolved at runtime from the Hub cache (`~/.nomicous/hf/cache/`) or, in a source
 checkout only, local bundled paths (`src/hf/local/`).
@@ -260,13 +256,6 @@ connections at all.
 
 ```bash
 uv run --group inference --group export pytest tests/inference tests/hf
-```
-
-The slow native-BLLA parity suite installs the original Kraken implementation
-only through the development-only `parity` group:
-
-```bash
-uv run --group inference --group export --group parity pytest tests/inference/integration/test_blla_parity.py -q
 ```
 
 Full-suite layout, `DATABASE_URL` caveats, and failure analysis: [`docs/guides/testing.md`](../docs/guides/testing.md).

@@ -2477,6 +2477,107 @@
         "title": "PairingTokenResponse",
         "type": "object"
       },
+      "PartUploadBeginRequest": {
+        "description": "Begin a direct-to-storage part upload: name the file, get a presigned URL.",
+        "properties": {
+          "filename": {
+            "maxLength": 130,
+            "minLength": 1,
+            "title": "Filename",
+            "type": "string"
+          },
+          "size": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 104857600.0,
+            "title": "Size",
+            "type": "integer"
+          }
+        },
+        "required": ["filename", "size"],
+        "title": "PartUploadBeginRequest",
+        "type": "object"
+      },
+      "PartUploadBeginResponse": {
+        "properties": {
+          "image_key": {
+            "title": "Image Key",
+            "type": "string"
+          },
+          "part_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Part Id"
+          },
+          "token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token"
+          },
+          "upload_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upload Url"
+          }
+        },
+        "required": ["image_key"],
+        "title": "PartUploadBeginResponse",
+        "type": "object"
+      },
+      "PartUploadFinalizeRequest": {
+        "description": "Seal a direct upload after the browser has PUT the bytes to storage.",
+        "properties": {
+          "height": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Height"
+          },
+          "image_key": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Image Key",
+            "type": "string"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Width"
+          }
+        },
+        "required": ["image_key"],
+        "title": "PartUploadFinalizeRequest",
+        "type": "object"
+      },
       "ProjectCreateRequest": {
         "properties": {
           "guidelines": {
@@ -2921,6 +3022,7 @@
               },
               "type": "array"
             },
+            "maxItems": 256,
             "minItems": 4,
             "title": "Points",
             "type": "array"
@@ -3004,6 +3106,7 @@
             "items": {
               "$ref": "#/components/schemas/SegmentBlock"
             },
+            "maxItems": 1000,
             "title": "Blocks",
             "type": "array"
           },
@@ -3011,6 +3114,7 @@
             "items": {
               "$ref": "#/components/schemas/SegmentLine"
             },
+            "maxItems": 10000,
             "title": "Lines",
             "type": "array"
           }
@@ -3108,6 +3212,7 @@
             "items": {
               "$ref": "#/components/schemas/TranscribeBatchLineResult"
             },
+            "maxItems": 10000,
             "minItems": 1,
             "title": "Lines",
             "type": "array"
@@ -3182,6 +3287,7 @@
             "type": "number"
           },
           "text": {
+            "maxLength": 10000,
             "title": "Text",
             "type": "string"
           }
@@ -8366,6 +8472,133 @@
         "tags": ["documents"]
       }
     },
+    "/projects/{project_id}/documents/{document_id}/parts/upload": {
+      "post": {
+        "description": "Name the file and get a presigned storage URL for the browser to PUT to.\n\nVercel Functions cap a request body at 4.5 MB, so a manuscript page scan cannot\nbe POSTed through the platform directly. This minted URL lets the browser stream\nthe bytes to Supabase Storage instead; the caller then posts\n``/{part_id}/finalize`` to persist the key and dimensions.\n\nOn a backend that cannot presign (``STORAGE_BACKEND=local``) the URL and token are\n``null`` and the caller falls back to the multipart :func:`upload_part`.",
+        "operationId": "begin_part_upload_projects__project_id__documents__document_id__parts_upload_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PartUploadBeginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartUploadBeginResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict with current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Begin Part Upload",
+        "tags": ["documents"]
+      }
+    },
     "/projects/{project_id}/documents/{document_id}/parts/{part_id}": {
       "delete": {
         "operationId": "delete_part_projects__project_id__documents__document_id__parts__part_id__delete",
@@ -9151,6 +9384,143 @@
           }
         ],
         "summary": "Export Approved Line Artifacts",
+        "tags": ["documents"]
+      }
+    },
+    "/projects/{project_id}/documents/{document_id}/parts/{part_id}/finalize": {
+      "post": {
+        "description": "Seal a direct upload after the browser has PUT the bytes to storage.",
+        "operationId": "finalize_part_upload_projects__project_id__documents__document_id__parts__part_id__finalize_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Part Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PartUploadFinalizeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentPartResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict with current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Finalize Part Upload",
         "tags": ["documents"]
       }
     },

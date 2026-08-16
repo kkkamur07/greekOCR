@@ -1,13 +1,11 @@
 """Artifact preflight shared by every architecture execution path.
 
-Each execution path - once four of them, Calamari and BLLA on ONNX and on
-Torch, now the two Torch paths ADR 0004 kept - used to open its artifact with
-its own copy of the same steps, and the copies had already drifted apart. They
-are collapsed here because the *order* of those steps is load-bearing: each
-failure says something different about a deployment, so a path that verified
-the digest before checking existence, or that raised a bare ``ValueError`` for
-an unusable suffix, would describe the same broken deployment differently from
-its sibling.
+Calamari and BLLA once each carried their own copy of these steps, on both the
+ONNX and Torch runtimes, and the copies had already drifted apart. They are
+collapsed here because the *order* of the steps is load-bearing: each failure
+says something different about a deployment, so a path that verified the digest
+before checking existence, or that raised a bare ``ValueError`` for an unusable
+suffix, would describe the same broken deployment differently from its sibling.
 
 The order, and what each step says:
 
@@ -23,9 +21,14 @@ digest before the suffix check would not change that, but verifying it before
 the existence check would turn a missing file into an ``OSError`` from the
 hasher.
 
-Step 3 also gates a code-execution surface: ``artifact_sha256`` is verified
-here, before the architecture loader ever opens the file, so a Calamari
-``.pt`` checkpoint is never handed to ``torch.load`` unverified.
+Step 3 runs before the architecture loader opens the file. Under ADR 0006 both
+runtimes are ONNX, so the digest no longer gates a ``torch.load`` surface as it
+did under ADR 0004; it still gates onnxruntime's protobuf parser, so a tampered
+artifact is rejected as an integrity failure before it is parsed.
+
+``artifact_sha256`` may be ``None`` only for source-checkout ``file://local``
+weights, which are unpinned by design; every Hub and packaged artifact carries
+a digest, which the registry enforces.
 """
 
 from __future__ import annotations

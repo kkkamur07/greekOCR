@@ -108,3 +108,7 @@ graphify-out/
 # can drift from both - which is the exact defect ADR 0006 had to fix, where the
 # published blla.onnx no longer matched what the exporter produced.
 src/hf/staging/**/*.onnx
+
+# Database dumps kept for rollback. These contain real user rows (auth records,
+# request IPs), so they must never reach the repo.
+backups/

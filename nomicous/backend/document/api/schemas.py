@@ -9,6 +9,9 @@ from uuid import UUID
 from pydantic import AfterValidator, BaseModel, Field, field_validator
 from pydantic.json_schema import SkipJsonSchema
 
+from backend.document.application.part_service import (
+    MAX_PART_UPLOAD_BYTES as _MAX_PART_UPLOAD_BYTES,
+)
 from backend.document.infrastructure.orm_models import (
     DocumentWorkflow,
     LineGeometryKind,
@@ -19,6 +22,10 @@ from backend.document.infrastructure.orm_models import (
 MAX_PAGE_TRANSCRIPTION_CHARS = 1_000_000
 MAX_PAGE_TRANSCRIPTION_LINES = 10_000
 MAX_REPLACE_PART_LINES = 10_000
+# The largest page scan a direct-to-storage upload may declare up front. The same
+# bound is re-enforced by finalize against the blob actually stored, since the direct
+# PUT bypasses the API entirely (see MAX_PART_UPLOAD_BYTES in part_service).
+MAX_PART_UPLOAD_BYTES = _MAX_PART_UPLOAD_BYTES
 # Mirrors INFERENCE_MAX_GEOMETRY_POINTS (inference/admission.py). Geometry above this
 # bound is refused by the inference runtime, so the platform must never store it either.
 MAX_LINE_GEOMETRY_POINTS = 256
@@ -132,6 +139,28 @@ class DocumentPartUpdateRequest(BaseModel):
         if value is None:
             raise ValueError("must not be null")
         return value
+
+
+class PartUploadBeginRequest(BaseModel):
+    """Begin a direct-to-storage part upload: name the file, get a presigned URL."""
+
+    filename: str = Field(min_length=1, max_length=130)
+    size: int = Field(gt=0, le=MAX_PART_UPLOAD_BYTES)
+
+
+class PartUploadBeginResponse(BaseModel):
+    part_id: UUID | None = None
+    image_key: str
+    upload_url: str | None = None
+    token: str | None = None
+
+
+class PartUploadFinalizeRequest(BaseModel):
+    """Seal a direct upload after the browser has PUT the bytes to storage."""
+
+    image_key: str = Field(min_length=1, max_length=1024)
+    width: int | None = None
+    height: int | None = None
 
 
 class DocumentWithPartsResponse(DocumentResponse):

@@ -221,6 +221,44 @@ def approx_polygon(points: list[list[float]], *, epsilon: float) -> list[list[fl
     return [[float(x), float(y)] for x, y in simplified.reshape(-1, 2)]
 
 
+def clamp_polygon_vertices(
+    points: list[list[float]],
+    *,
+    max_points: int,
+    min_points: int = 4,
+) -> list[list[float]]:
+    """Reduce a polygon to at most ``max_points`` vertices, never below four.
+
+    The stored-geometry cap (``MAX_LINE_GEOMETRY_POINTS`` on the platform,
+    mirrored by ``inference.admission``) refuses polygons denser than
+    ``max_points``. The quality-gated simplifier targets that cap, but a gate
+    that stopped early or a clean-only fallback can still hand up a denser ring,
+    so every polygon is clamped here before it reaches the segment contract. The
+    floor is four because the contract requires a polygon, not a triangle.
+    """
+    if len(points) <= max_points:
+        return points
+
+    result = points
+    epsilon = 1.0
+    for _ in range(40):
+        candidate = approx_polygon(points, epsilon=epsilon)
+        candidate = clean_polygon(candidate, min_distance=MIN_VERTEX_SPACING_PX)
+        if len(candidate) < min_points:
+            break
+        result = candidate
+        if len(result) <= max_points:
+            return result
+        epsilon *= 1.5
+
+    # ``approxPolyDP`` flattened as far as it can without collapsing below a
+    # triangle; keep every k-th vertex so the ring still follows the shape.
+    if len(result) > max_points:
+        step = len(result) / max_points
+        result = [result[int(round(i * step))] for i in range(max_points)]
+    return result
+
+
 def candidate_quality(
     candidate: list[list[float]],
     reference: list[list[float]],

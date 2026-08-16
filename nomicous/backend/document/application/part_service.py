@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,10 +21,12 @@ from backend.document.infrastructure.document_repository import DocumentReposito
 from backend.document.infrastructure.media_store import (
     DEFAULT_PART_IMAGE_SUFFIX,
     MediaStore,
+    PresignUnsupported,
     encode_part_image_with_size,
     encode_part_thumbnail,
     get_media_store,
     read_image_size,
+    validate_image_key,
 )
 from backend.document.infrastructure.orm_models import DocumentPart
 from backend.project.infrastructure.project_repository import ProjectRepository
@@ -34,6 +37,11 @@ logger = logging.getLogger(__name__)
 # Parts uploaded before dimensions were persisted are backfilled lazily on read; bound how
 # many object-store round trips a single request may trigger.
 MAX_DIMENSION_BACKFILLS_PER_REQUEST = 25
+
+# The largest page scan a part upload may carry, on either path. Multipart uploads
+# declare it in the request contract; direct-to-storage uploads can PUT whatever they
+# like past the API, so finalize re-checks the stored blob against the same bound.
+MAX_PART_UPLOAD_BYTES = 100 * 1024 * 1024
 
 
 class DocumentPartService:
@@ -128,6 +136,163 @@ class DocumentPartService:
         await session.refresh(part)
         return part
 
+    async def begin_upload(
+        self,
+        session: AsyncSession,
+        user: User,
+        project_id: UUID,
+        document_id: UUID,
+        *,
+        filename: str,
+    ) -> tuple[DocumentPart | None, str, str | None, str | None]:
+        """Mint a presigned upload URL, or signal multipart with a ``None`` part.
+
+        The part row is created only once the URL exists, so a backend that cannot
+        presign (the filesystem) never leaves a pending row behind. When presign is
+        impossible the tuple comes back ``(None, image_key, None, None)`` and the
+        caller falls back to the multipart upload; otherwise the row is committed with
+        ``image_key="pending:<minted key>"`` and the URL/token are returned for the
+        direct PUT. The sentinel keeps the minted key on the row so the abandoned-
+        upload sweep can reap both the row and the blob of a begin whose browser
+        never finalized.
+
+        The key's suffix follows the filename: the direct path stores the browser's
+        bytes exactly as sent - no transcode, no loss - so the stored object is
+        whatever format the client uploaded, not a server-encoded WebP.
+        """
+        context = await self._access.require_document(session, user, project_id, document_id)
+        document = context.document
+        order = await self._documents.next_part_order(session, document.id)
+        filename_stem: str | None = None
+        suffix = DEFAULT_PART_IMAGE_SUFFIX
+        if "." in filename:
+            filename_stem, suffix = filename.rsplit(".", 1)
+        part = DocumentPart(
+            document_id=document.id,
+            order=order,
+            image_key="pending",
+        )
+        session.add(part)
+        await session.flush()
+        image_key = self._media.part_image_key(
+            part.id,
+            suffix=suffix,
+            filename_stem=filename_stem,
+        )
+        try:
+            upload_url, token = self._media.create_upload_url(
+                image_key, expires_at=datetime.now(UTC) + timedelta(minutes=5)
+            )
+        except PresignUnsupported:
+            # The local filesystem backend cannot presign. Roll the part back so no
+            # pending row is orphaned and signal the caller to use multipart.
+            await session.rollback()
+            return None, image_key, None, None
+        part.image_key = f"pending:{image_key}"
+        await session.commit()
+        return part, image_key, upload_url, token
+
+    async def finalize_upload(
+        self,
+        session: AsyncSession,
+        user: User,
+        project_id: UUID,
+        document_id: UUID,
+        part_id: UUID,
+        *,
+        image_key: str,
+        width: int | None = None,
+        height: int | None = None,
+    ) -> DocumentPart:
+        """Seal a direct upload: verify the blob and persist its key and dimensions.
+
+        The browser-supplied dimensions are trusted only as a hint. The stored blob is
+        decoded once here - the same bounded decode multipart uploads run - so a client
+        cannot fabricate geometry or smuggle a non-image past the media store. The
+        server's read is authoritative; a disagreement is logged rather than rejected,
+        because the cost of a mismatch is a wrong thumbnail for one request, not a
+        wrong stored image.
+        """
+        context = await self._access.require_part(session, user, project_id, document_id, part_id)
+        part = context.part
+        if not part.image_key.startswith("pending"):
+            raise ValidationError("Part upload has already been finalized")
+        # The key is client-supplied. The media store refuses a malformed one with
+        # ``ValueError``, and letting that surface through the read below would both
+        # misreport it as "not a valid image" and run the delete/compensation ladder
+        # against an attacker-controlled string. Reject it before touching storage.
+        try:
+            validate_image_key(image_key)
+        except ValueError as exc:
+            raise ValidationError("image_key is not a valid media key") from exc
+        # The key must be the one this part's own begin minted. Without this check
+        # any project member could seal a *foreign* part's key onto their row, and
+        # deleting either row would then destroy the other document's image via the
+        # shared blob's deletion intent. Rows begun since the sentinel carry the
+        # minted key verbatim; the prefix check covers rows begun before it.
+        if part.image_key.startswith("pending:"):
+            if part.image_key != f"pending:{image_key}":
+                raise ValidationError("image_key does not belong to this part")
+        elif not image_key.startswith((f"parts/{part.id}.", f"parts/{part.id}/")):
+            raise ValidationError("image_key does not belong to this part")
+        try:
+            true_width, true_height = await asyncio.to_thread(
+                self._read_part_image_size_with_key, image_key
+            )
+        except FileNotFoundError as exc:
+            raise ValidationError("Uploaded image is missing from storage") from exc
+        except ValidationError:
+            await self._discard_rejected_blob(session, image_key)
+            raise
+        except Exception as exc:
+            await self._discard_rejected_blob(session, image_key)
+            raise ValidationError("Uploaded file is not a valid image") from exc
+
+        if (
+            width is not None
+            and height is not None
+            and (width, height)
+            != (
+                true_width,
+                true_height,
+            )
+        ):
+            logger.warning(
+                "Part %s dimensions disagreed: client (%d, %d) vs stored (%d, %d)",
+                part.id,
+                width,
+                height,
+                true_width,
+                true_height,
+            )
+        part.image_key = image_key
+        part.width = true_width
+        part.height = true_height
+        await session.commit()
+        await session.refresh(part)
+        return part
+
+    def _read_part_image_size_with_key(self, image_key: str) -> tuple[int, int]:
+        data = self._media.read(image_key)
+        if len(data) > MAX_PART_UPLOAD_BYTES:
+            raise ValidationError("Uploaded image exceeds the maximum allowed size")
+        return read_image_size(data)
+
+    async def _discard_rejected_blob(self, session: AsyncSession, image_key: str) -> None:
+        """Delete a directly-uploaded blob that finalize refused to seal.
+
+        Same compensation ladder as :meth:`upload_part`: without it a rejected
+        direct upload stays in storage forever, referenced by nothing.
+        """
+        try:
+            await asyncio.to_thread(self._media.delete, image_key)
+        except Exception:
+            try:
+                await self._documents.enqueue_media_deletion_intent(session, image_key)
+            except Exception:
+                await session.rollback()
+                logger.exception("Could not persist media compensation intent")
+
     async def backfill_part_dimensions(
         self,
         session: AsyncSession,
@@ -140,7 +305,14 @@ class DocumentPartService:
         persist the result; every later read is served from Postgres. Storage failures are
         swallowed — a missing blob must not break listing the rest of the document.
         """
-        pending = [part for part in parts if part.width is None or part.height is None]
+        # A pending row has no stored blob yet (its key is the ``pending`` sentinel),
+        # so trying to backfill it would only log a spurious warning per listing.
+        pending = [
+            part
+            for part in parts
+            if (part.width is None or part.height is None)
+            and not part.image_key.startswith("pending")
+        ]
         if not pending:
             return
         changed = False

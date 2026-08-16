@@ -274,14 +274,30 @@ def vectorize_regions(region_probability: np.ndarray) -> list[list[list[int]]]:
 
     boundaries = []
     for region in regionprops(label(region_probability > 0.5)):
-        boundary = _boundary_tracing(region)
+        # Same region filter ``_extend_boundaries`` applies: a single isolated
+        # pixel produces a component with no traversable boundary, and
+        # ``_boundary_tracing`` would walk past the end of its coordinate array
+        # and raise, failing the whole page for one stray pixel.
+        if region.area < 6:
+            continue
+        try:
+            boundary = _boundary_tracing(region)
+        except Exception as error:  # noqa: BLE001 - one bad region is not a bad page
+            logger.debug("boundary tracing skipped a region: %s", error)
+            continue
         if len(boundary) > 2:
             boundaries.append(geom.Polygon(boundary))
+    if not boundaries:
+        return []
     merged = unary_union(boundaries)
     if merged.geom_type == "Polygon":
         polygons = [merged.boundary.simplify(10)]
-    else:
+    elif merged.geom_type == "MultiPolygon":
         polygons = [item.boundary.simplify(10) for item in merged.geoms]
+    else:
+        # ``unary_union`` can collapse degenerate regions into a LineString,
+        # whose boundary carries no ``coords``. Nothing usable to vectorize.
+        return []
     return [np.asarray(polygon.coords, dtype=np.uint)[:, [1, 0]].tolist() for polygon in polygons]
 
 

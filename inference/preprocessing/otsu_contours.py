@@ -2,22 +2,11 @@
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 
 from inference.preprocessing.segment_geometry import bbox, mask_from_polygon
-
-
-def crop_bounds_from_mask(mask: np.ndarray) -> tuple[int, int, int, int] | None:
-    ys, xs = np.where(mask > 0)
-    if len(xs) == 0:
-        return None
-
-    height, width = mask.shape
-    y0 = max(int(ys.min()) - 2, 0)
-    y1 = min(int(ys.max()) + 3, height)
-    x0 = max(int(xs.min()) - 2, 0)
-    x1 = min(int(xs.max()) + 3, width)
-    return x0, y0, x1, y1
 
 
 def combine_contours(contours: list[list[list[float]]]) -> list[list[float]]:
@@ -68,14 +57,26 @@ def otsu_band_contours(
     import cv2
 
     height, width = gray.shape
-    ceiling_mask = mask_from_polygon(ceiling, width=width, height=height)
-    bounds = crop_bounds_from_mask(ceiling_mask)
-    if bounds is None:
+    # Rasterize the ceiling into its own page-clipped window rather than a
+    # full-page mask: a line ceiling spans a few thousand pixels on a page of
+    # millions, and a full-page mask was allocated and scanned once per line.
+    xs = [point[0] for point in ceiling]
+    ys = [point[1] for point in ceiling]
+    if not xs or not ys:
         return []
 
-    x0, y0, x1, y1 = bounds
+    x0 = max(0, int(math.floor(min(xs))) - 2)
+    y0 = max(0, int(math.floor(min(ys))) - 2)
+    x1 = min(width, int(math.ceil(max(xs))) + 3)
+    y1 = min(height, int(math.ceil(max(ys))) + 3)
+    if x1 <= x0 or y1 <= y0:
+        return []
+
+    crop_mask = mask_from_polygon(ceiling, width=x1 - x0, height=y1 - y0, origin=(x0, y0))
+    if cv2.countNonZero(crop_mask) == 0:
+        return []
+
     crop = gray[y0:y1, x0:x1].copy()
-    crop_mask = ceiling_mask[y0:y1, x0:x1]
     crop[crop_mask == 0] = 255
 
     blurred = cv2.GaussianBlur(crop, (3, 3), 0)
