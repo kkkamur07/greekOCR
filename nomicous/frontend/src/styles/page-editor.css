@@ -11,12 +11,17 @@
 /* ─── Toolbar ───────────────────────────────────────────────────── */
 .pe-toolbar {
   flex-shrink: 0;
-  height: 52px;
+  /* One 52px row on a normal desktop window. A narrower window wraps the
+     action clusters onto a second row instead of crushing them into the
+     shell's hidden overflow; the canvas below flexes to absorb the height. */
+  min-height: 52px;
+  flex-wrap: wrap;
+  row-gap: 4px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
-  padding: 0 12px;
+  padding: 4px 12px;
   gap: 8px;
   z-index: 20;
 }
@@ -133,8 +138,30 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-wrap: wrap;
   gap: 10px;
+  row-gap: 4px;
   min-width: 0;
+}
+
+/* Desktop-first: below a comfortable desktop width, shed the decorative
+   pieces before anything wraps - shortcut hints, the pairing track, and the
+   status pill's verbose half. Every control stays reachable; only ornament
+   goes. */
+@media (max-width: 1200px) {
+  .pe-kbd {
+    display: none;
+  }
+  .pe-toolbar__progress-track {
+    display: none;
+  }
+  .pe-infstat__sep,
+  .pe-infstat__state {
+    display: none;
+  }
+  .pe-toolbar__sep {
+    display: none;
+  }
 }
 .pe-toolbar__stat {
   font-size: 0.8125rem;
@@ -276,8 +303,10 @@
 .pe-toolbar__actions {
   display: flex;
   align-items: center;
-  flex-shrink: 1;
-  min-width: 0;
+  flex-wrap: wrap;
+  row-gap: 4px;
+  justify-content: flex-end;
+  margin-left: auto;
 }
 .pe-toolbar__cluster {
   display: inline-flex;
