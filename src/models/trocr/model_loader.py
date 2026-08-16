@@ -19,8 +19,8 @@ from transformers.models.vision_encoder_decoder.configuration_vision_encoder_dec
     VisionEncoderDecoderConfig,
 )
 
+from .encoder import DeiTModel, ViTModel
 from .encoder.lora import configure_encoder_lora
-from .encoder.model import DeiTModel
 
 
 class TrOCRVisionEncoderDecoderModel(VisionEncoderDecoderModel):
@@ -37,16 +37,19 @@ class TrOCRVisionEncoderDecoderModel(VisionEncoderDecoderModel):
     def __init__(
         self,
         config: VisionEncoderDecoderConfig,
-        encoder: DeiTModel | None = None,
+        encoder: DeiTModel | ViTModel | None = None,
         decoder: TrOCRForCausalLM | None = None,
     ) -> None:
         if encoder is None:
-            if config.encoder.model_type != "deit":
+            if config.encoder.model_type == "deit":
+                encoder = DeiTModel(config.encoder)
+            elif config.encoder.model_type == "vit":
+                encoder = ViTModel(config.encoder)
+            else:
                 raise ValueError(
-                    "This local TrOCR implementation requires a DeiT encoder; "
+                    "This local TrOCR implementation requires a DeiT or ViT encoder; "
                     f"received {config.encoder.model_type!r}."
                 )
-            encoder = DeiTModel(config.encoder)
             configure_encoder_lora(encoder, getattr(config, "encoder_lora", None))
         if decoder is None:
             if config.decoder.model_type != "trocr":

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from torch import nn
 from transformers import PreTrainedTokenizerBase, VisionEncoderDecoderModel
 
 
@@ -10,7 +11,7 @@ def configure_decoder(
     tokenizer: PreTrainedTokenizerBase,
     *,
     max_target_length: int,
-    reinitialize: bool = True,
+    reinitialize: bool | str = True,
     tie_embeddings: bool = False,
     dropout: float = 0.1,
 ) -> int:
@@ -51,11 +52,38 @@ def configure_decoder(
     for layer in decoder.layers:
         layer.dropout = dropout
 
-    if reinitialize:
+    if isinstance(reinitialize, bool):
+        reinitialize_mode = "all" if reinitialize else "none"
+    else:
+        reinitialize_mode = str(reinitialize)
+    if reinitialize_mode not in {"all", "token_layers", "none"}:
+        raise ValueError(
+            "Decoder reinitialize mode must be 'all', 'token_layers', or 'none'; "
+            f"received {reinitialize_mode!r}."
+        )
+
+    if reinitialize_mode == "all":
         for module in model.decoder.modules():
             if hasattr(module, "_is_hf_initialized"):
                 delattr(module, "_is_hf_initialized")
         model.decoder.init_weights()
+    elif reinitialize_mode == "token_layers":
+        initializer_std = float(model.decoder.config.init_std)
+        input_embeddings = model.decoder.get_input_embeddings()
+        output_embeddings = model.decoder.get_output_embeddings()
+        nn.init.normal_(input_embeddings.weight, mean=0.0, std=initializer_std)
+        if input_embeddings.padding_idx is not None:
+            nn.init.zeros_(
+                input_embeddings.weight[input_embeddings.padding_idx]
+            )
+        if output_embeddings.weight is not input_embeddings.weight:
+            nn.init.normal_(
+                output_embeddings.weight,
+                mean=0.0,
+                std=initializer_std,
+            )
+        if output_embeddings.bias is not None:
+            nn.init.zeros_(output_embeddings.bias)
     if tie_embeddings:
         model.decoder.tie_weights()
 

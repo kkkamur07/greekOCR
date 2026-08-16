@@ -3,7 +3,7 @@
 model:
   name: microsoft/trocr-small-handwritten
   checkpoint_dir: trocr_checkpoints/trocr-small-handwritten
-  freeze_encoder: true
+  freeze_encoder: false
 
 training:
   max_target_length: 50

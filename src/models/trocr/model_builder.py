@@ -50,7 +50,7 @@ def build_model(
     *,
     max_target_length: int,
     freeze_visual_encoder: bool = True,
-    reinitialize_decoder: bool = True,
+    reinitialize_decoder: bool | str = True,
     tie_decoder_embeddings: bool = False,
     decoder_dropout: float = 0.1,
     lora_config: dict[str, object] | None = None,

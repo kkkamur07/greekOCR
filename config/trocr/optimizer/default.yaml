@@ -1,6 +1,6 @@
 # @package training
 
-learning_rate: 2.0e-5
+learning_rate: 1.0e-6
 weight_decay: 0.03
 max_grad_norm: 3
 warmup_ratio: 0.09
