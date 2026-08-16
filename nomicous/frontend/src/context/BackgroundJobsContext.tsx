@@ -155,7 +155,7 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
             kind: meta.kind,
             status: "pending" as JobStatus,
             error: null,
-            progressLabel: "Queued",
+            progressLabel: "Waiting for allocation…",
             finishedAt: null,
             // Filled by the first update from the platform. Enqueueing returns
             // only an id, and guessing a host would be a claim, not a report.
