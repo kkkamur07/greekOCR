@@ -1,0 +1,3 @@
+# @package augmentation
+probability: 1.0
+n_augmentations: 5

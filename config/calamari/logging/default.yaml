@@ -1,0 +1,5 @@
+# @package _global_
+
+logging:
+  root: var/logs
+  steps: 10

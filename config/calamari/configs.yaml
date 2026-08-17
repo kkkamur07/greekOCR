@@ -1,21 +1,15 @@
 defaults:
+  - data: default
+  - model: default
+  - augmentation: default
   - training: default
-  - encoder: small
   - optimizer: default
   - logging: default
   - logging@wandb: wand
-  - output: local
-  - tokenizer: gpt_500
-  - decoder: decoder
-  - lora_adaptors: lora
-  - augmentation: default
+  - output: default
   - evaluation: default
   - preparation: default
-  - wanbd_sweep: experiments
   - _self_
-
-data:
-  dir: data/processed/combined/pretraining
 
 hydra:
   job:

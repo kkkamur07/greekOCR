@@ -1,0 +1,8 @@
+# @package _global_
+
+preparation:
+  source_format: trocr_manifest
+  raw_root: data/trocr_processed/combined/pretraining
+  output_dir: ${data.dir}
+  copy_images: false
+  force: false

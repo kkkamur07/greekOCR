@@ -1,0 +1,9 @@
+#! entity / project / run name
+
+
+enabled: true
+project: OCR
+entity: personal-space-astha
+name: calamari_pretraining
+mode: online
+

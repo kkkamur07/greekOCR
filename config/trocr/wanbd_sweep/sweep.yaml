@@ -21,11 +21,6 @@ command:
 parameters:
   experiment:
     values:
-      - small_random_full
-      - small_pretrained_decoder
-      - small_pretrained_lora
-      - small_pretrained_full
-      - small_random_lora
       - base_random_full
       - base_pretrained_decoder
       - base_pretrained_lora
