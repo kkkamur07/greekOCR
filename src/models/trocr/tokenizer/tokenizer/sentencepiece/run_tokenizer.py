@@ -14,8 +14,8 @@ import json
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 
-from .. import bundled_tokenizer_path
-from ..builder import load_tokenizer
+from ... import bundled_tokenizer_path
+from ...builder import load_tokenizer
 
 
 DEFAULT_CORPUS_DIRECTORIES = (
