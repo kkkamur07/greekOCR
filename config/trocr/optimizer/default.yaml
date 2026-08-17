@@ -1,7 +1,7 @@
 # @package training
 
-learning_rate: 2.0e-4
-weight_decay: 0
-max_grad_norm: 1
-warmup_ratio: 0.02
+learning_rate: 2.0e-5
+weight_decay: 0.03
+max_grad_norm: 3
+warmup_ratio: 0.09
 lr_scheduler_type: cosine

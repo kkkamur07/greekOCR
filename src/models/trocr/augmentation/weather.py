@@ -44,7 +44,7 @@ class Fog:
         # print('fog', fog.shape)
         # print(H, W)
         # exit(0)
-        fog = cv2.resize(fog, dsize=(W, H), interpolation=cv2.INTER_CUBIC)
+        fog = cv2.resize(fog, dsize=(H, W), interpolation=cv2.INTER_CUBIC)
         img += fog
         img = np.clip(img * max_val / (max_val + c[0]), 0, 1) * 255
         return Image.fromarray(img.astype(np.uint8))

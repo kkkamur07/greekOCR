@@ -8,6 +8,7 @@ from transformers.utils import logging as transformers_logging
 
 from .decoder import configure_decoder
 from .encoder import freeze_encoder
+from .encoder.lora import configure_encoder_lora
 from .model_loader import TrOCRVisionEncoderDecoderModel
 
 
@@ -50,6 +51,9 @@ def build_model(
     max_target_length: int,
     freeze_visual_encoder: bool = True,
     reinitialize_decoder: bool = True,
+    tie_decoder_embeddings: bool = False,
+    decoder_dropout: float = 0.1,
+    lora_config: dict[str, object] | None = None,
 ) -> TrOCRVisionEncoderDecoderModel:
     """Load TrOCR and adapt its decoder to a replacement tokenizer."""
     model = load_model(model_source)
@@ -58,9 +62,15 @@ def build_model(
         tokenizer,
         max_target_length=max_target_length,
         reinitialize=reinitialize_decoder,
+        tie_embeddings=tie_decoder_embeddings,
+        dropout=decoder_dropout,
     )
     if freeze_visual_encoder:
         encoder_parameters = freeze_encoder(model)
         LOGGER.info("Frozen visual encoder (%d parameters).", encoder_parameters)
+    lora_adapters = configure_encoder_lora(model.encoder, lora_config)
+    model.config.encoder_lora = dict(lora_config) if lora_config else None
+    if lora_adapters:
+        LOGGER.info("Added LoRA to %d encoder attention projections.", lora_adapters)
     LOGGER.info("Decoder parameter count: %d", decoder_parameters)
     return model

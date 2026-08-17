@@ -88,3 +88,6 @@ imp.md
 need.md
 *.log
 archive/
+
+# Local TrOCR checkpoints
+/trocr_checkpoints/trocr-small-handwritten/

@@ -38,9 +38,9 @@ def compute_text_metrics(
 ) -> dict[str, float]:
     """Compute corpus OCR metrics; all reported values are fractions in [0, 1].
 
-    ``wpa`` and ``exact_match_accuracy`` are aliases: the fraction of complete
-    transcriptions that exactly match their reference. SROIE F1 follows the
-    legacy implementation's bag-of-whitespace-token matching rule.
+    ``exact_match`` is the fraction of complete transcriptions that
+    exactly match their reference. SROIE F1 follows the legacy implementation's
+    bag-of-whitespace-token matching rule.
     """
     if len(references) != len(predictions):
         raise ValueError("references and predictions must have the same length.")
@@ -48,9 +48,7 @@ def compute_text_metrics(
         return {
             "cer": 0.0,
             "wer": 0.0,
-            "wpa": 0.0,
-            "normalized_edit_distance": 0.0,
-            "exact_match_accuracy": 0.0,
+            "exact_match": 0.0,
             "sroie_precision": 0.0,
             "sroie_recall": 0.0,
             "sroie_f1": 0.0,
@@ -60,7 +58,6 @@ def compute_text_metrics(
     reference_characters = 0
     word_edits = 0
     reference_words = 0
-    normalized_distances = []
     exact_matches = 0
     matched_sroie_words = 0
     predicted_sroie_words = 0
@@ -70,9 +67,6 @@ def compute_text_metrics(
         character_distance = edit_distance(reference, prediction)
         character_edits += character_distance
         reference_characters += len(reference)
-        normalized_distances.append(
-            character_distance / max(len(reference), len(prediction), 1)
-        )
         exact_matches += int(reference == prediction)
 
         reference_tokens = _words(reference)
@@ -90,7 +84,7 @@ def compute_text_metrics(
 
     cer = character_edits / reference_characters if reference_characters else 0.0
     wer = word_edits / reference_words if reference_words else 0.0
-    exact_match_accuracy = exact_matches / len(references)
+    exact_match = exact_matches / len(references)
     sroie_precision = (
         matched_sroie_words / predicted_sroie_words
         if predicted_sroie_words
@@ -109,10 +103,7 @@ def compute_text_metrics(
     return {
         "cer": cer,
         "wer": wer,
-        "wpa": exact_match_accuracy,
-        "normalized_edit_distance": sum(normalized_distances)
-        / len(normalized_distances),
-        "exact_match_accuracy": exact_match_accuracy,
+        "exact_match": exact_match,
         "sroie_precision": sroie_precision,
         "sroie_recall": sroie_recall,
         "sroie_f1": sroie_f1,

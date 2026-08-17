@@ -22,6 +22,8 @@ class LineAugmentation:
     mode: str = "random"
     num_operations: int = 3
     magnitude: int | None = None
+    exclude_groups: tuple[str, ...] = ()
+    exclude_operations: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         mode_flags = {
@@ -44,6 +46,35 @@ class LineAugmentation:
                 **mode_flags,
             )
         )
+        excluded_groups = set(self.exclude_groups)
+        excluded_operations = set(self.exclude_operations)
+        known_groups = {
+            "process",
+            "camera",
+            "noise",
+            "blur",
+            "weather",
+            "pattern",
+            "warp",
+            "geometry",
+        }
+        unknown_groups = excluded_groups - known_groups
+        if unknown_groups:
+            raise ValueError(f"Unknown augmentation groups: {sorted(unknown_groups)}")
+
+        for group_name in known_groups:
+            group = getattr(self._augmenter, group_name, None)
+            if group is None:
+                continue
+            if group_name in excluded_groups:
+                group.clear()
+            else:
+                group[:] = [
+                    operation
+                    for operation in group
+                    if type(operation).__name__ not in excluded_operations
+                ]
+        self._augmenter.augs = [group for group in self._augmenter.augs if group]
 
     def __call__(self, image: Image.Image) -> Image.Image:
         from numpy.random import uniform

@@ -23,12 +23,14 @@ class TrOCRPredictor:
     ) -> "TrOCRPredictor":
         """Load a checkpoint produced by ``greekocr-train-trocr``."""
         import torch
-        from transformers import TrOCRProcessor, VisionEncoderDecoderModel
+        from transformers import TrOCRProcessor
+
+        from src.models.trocr.model_builder import load_model
 
         resolved_device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
         checkpoint_path = Path(checkpoint).expanduser().resolve()
         processor = TrOCRProcessor.from_pretrained(checkpoint_path)
-        model = VisionEncoderDecoderModel.from_pretrained(checkpoint_path).to(resolved_device).eval()
+        model = load_model(str(checkpoint_path)).to(resolved_device).eval()
         return cls(model=model, processor=processor, device=resolved_device)
 
     def predict(self, image: Any, *, max_length: int = 50, num_beams: int = 1) -> str:

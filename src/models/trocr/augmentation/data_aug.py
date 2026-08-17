@@ -248,7 +248,7 @@ class DataAugment(object):
                     img = op(img.copy(), mag=mag)
                 else:
                     img = op(img, mag=mag)
-            except RuntimeError as error:
+            except (RuntimeError, TypeError, ValueError) as error:
                 logger.warning("Skipping unavailable TrOCR augmentation %s: %s", type(op).__name__, error)
 
         return img

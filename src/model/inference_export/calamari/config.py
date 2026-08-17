@@ -1,4 +1,4 @@
-"""Configuration for the reference Calamari graph."""
+"""Layer configuration for the Calamari inference graph."""
 
 from __future__ import annotations
 

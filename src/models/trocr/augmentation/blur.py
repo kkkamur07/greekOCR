@@ -126,7 +126,7 @@ class GlassBlur:
 
         c = c[index]
 
-        img = np.uint8(gaussian(np.array(img) / 255., sigma=c[0], channel_axis=-1) * 255)
+        img = np.uint8(gaussian(np.array(img) / 255.0, sigma=c[0], channel_axis=-1) * 255)
 
         # locally shuffle pixels
         for i in range(c[2]):
@@ -137,7 +137,7 @@ class GlassBlur:
                     # swap
                     img[h, w], img[h_prime, w_prime] = img[h_prime, w_prime], img[h, w]
 
-        img = np.clip(gaussian(img / 255., sigma=c[0], multichannel=True), 0, 1) * 255
+        img = np.clip(gaussian(img / 255.0, sigma=c[0], channel_axis=-1), 0, 1) * 255
         return Image.fromarray(img.astype(np.uint8))
 
 
