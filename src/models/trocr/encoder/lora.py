@@ -56,14 +56,30 @@ def apply_lora_to_encoder(
     num_layers: int,
     target_modules: Sequence[str],
 ) -> int:
-    """Attach LoRA to attention projections in the encoder's final layers.
-
-    The local DeiT encoder stores blocks at ``encoder.encoder.layer`` and
-    attention projections at ``layer.attention.attention``.
-    """
-    layers = encoder.encoder.layer
+    """Attach LoRA to attention projections in the encoder's final layers."""
     if num_layers < 1:
         raise ValueError(f"LoRA num_layers must be positive; received {num_layers}.")
+
+    if hasattr(encoder, "encoder") and hasattr(encoder.encoder, "layer"):
+        # Small DeiT: encoder.encoder.layer[*].attention.attention.{query,key,value}
+        layers = encoder.encoder.layer
+        attention_for_layer = lambda layer: layer.attention.attention
+        projection_names = {"query": "query", "key": "key", "value": "value"}
+    elif hasattr(encoder, "layers"):
+        # Base ViT: encoder.layers[*].attention.{q_proj,k_proj,v_proj}
+        layers = encoder.layers
+        attention_for_layer = lambda layer: layer.attention
+        projection_names = {
+            "query": "q_proj",
+            "key": "k_proj",
+            "value": "v_proj",
+        }
+    else:
+        raise TypeError(
+            "Unsupported encoder layout for LoRA; expected small DeiT "
+            "encoder.encoder.layer or base ViT encoder.layers."
+        )
+
     if num_layers > len(layers):
         raise ValueError(
             f"LoRA requested {num_layers} layers, but the encoder has only {len(layers)}."
@@ -79,15 +95,16 @@ def apply_lora_to_encoder(
 
     adapter_count = 0
     for layer in layers[-num_layers:]:
-        attention = layer.attention.attention
+        attention = attention_for_layer(layer)
         for target_name in target_modules:
-            projection = getattr(attention, target_name)
+            projection_name = projection_names[target_name]
+            projection = getattr(attention, projection_name)
             if isinstance(projection, LoRALinear):
                 projection.enable_adapter_gradients()
             elif isinstance(projection, nn.Linear):
                 setattr(
                     attention,
-                    target_name,
+                    projection_name,
                     LoRALinear(
                         projection,
                         rank=rank,

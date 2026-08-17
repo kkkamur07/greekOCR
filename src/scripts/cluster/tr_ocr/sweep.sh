@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#SBATCH --job-name=tr-ocr-sweep
+#SBATCH --job-name=sweep
 #SBATCH --output=slurm-%x-%j.out
 #SBATCH --error=slurm-%x-%j.err
 #SBATCH --partition=all

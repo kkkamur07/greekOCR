@@ -1,6 +1,0 @@
-[
-  {"rule":  ["(?u)\\s+", " "], "type":  "regex"},
-  {"rule":  ["(?u)\\n", ""], "type":  "regex"},
-  {"rule":  ["(?u)^\\s+", ""], "type":  "regex"},
-  {"rule":  ["(?u)\\s+$", ""], "type":  "regex"}
-]

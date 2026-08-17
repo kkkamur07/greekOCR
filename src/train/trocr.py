@@ -64,9 +64,13 @@ def log_training_summary(
         ("Decoder", "Reinitialize mode", str(cfg.decoder.reinitialize)),
         ("Decoder", "Tied input/output embeddings", str(bool(cfg.decoder.tied))),
         ("Decoder", "Dropout", str(cfg.decoder.dropout)),
-        ("Tokenization", "Special tokens", "Not added; EOS is appended manually"),
-        ("Tokenization", "Max input tokens", str(cfg.training.max_target_length - 1)),
-        ("Tokenization", "Max label tokens", str(cfg.training.max_target_length)),
+        (
+            "Tokenization",
+            "Special-token handling",
+            "BOS starts decoder; EOS appended to labels; PAD masked from loss",
+        ),
+        ("Tokenization", "Max input tokens", str(cfg.tokenizer.max_target_length - 1)),
+        ("Tokenization", "Max label tokens", str(cfg.tokenizer.max_target_length)),
         ("Image preprocessing", "Resize", str(image_size)),
         ("Data", "Training examples", f"{len(train_dataset):,}"),
         ("Data", "Validation examples", f"{len(eval_dataset):,}"),
@@ -234,7 +238,7 @@ def main(cfg: DictConfig) -> None:
     model = build_model(
         model_source,
         tokenizer,
-        max_target_length=cfg.training.max_target_length,
+        max_target_length=cfg.tokenizer.max_target_length,
         freeze_visual_encoder=bool(cfg.model.freeze_encoder),
         reinitialize_decoder=(
             "none" if is_resume_checkpoint else str(cfg.decoder.reinitialize)
@@ -279,7 +283,7 @@ def main(cfg: DictConfig) -> None:
         metric_for_best_model="eval_cer",
         greater_is_better=False,
         predict_with_generate=True,
-        generation_max_length=cfg.training.max_target_length,
+        generation_max_length=cfg.tokenizer.max_target_length,
         fp16=torch.cuda.is_available() and not cfg.training.no_fp16,
         dataloader_num_workers=cfg.training.num_workers,
         remove_unused_columns=False,
@@ -301,7 +305,7 @@ def main(cfg: DictConfig) -> None:
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
-        data_collator=TrOCRCollator(processor, cfg.training.max_target_length),
+        data_collator=TrOCRCollator(processor, cfg.tokenizer.max_target_length),
         processing_class=tokenizer,
         compute_metrics=compute_metrics,
         callbacks=[MetricsCsvCallback(log_dir / "metrics.csv")],
