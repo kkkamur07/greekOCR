@@ -6,7 +6,6 @@ model:
   freeze_encoder: false
 
 training:
-  max_target_length: 50
   epochs: 100
   batch_size: 32
   eval_batch_size: 32
