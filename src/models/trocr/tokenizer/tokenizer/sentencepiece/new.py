@@ -20,8 +20,8 @@ from pathlib import Path
 from sentencepiece import sentencepiece_model_pb2 as sentencepiece_pb2
 from transformers import PreTrainedTokenizerBase
 
-from .. import bundled_tokenizer_path
-from ..builder import load_tokenizer
+from ... import bundled_tokenizer_path
+from ...builder import load_tokenizer
 from .count import load_frequencies
 
 

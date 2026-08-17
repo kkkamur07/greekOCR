@@ -9,9 +9,9 @@ import torch
 from torch import nn
 from transformers import PreTrainedTokenizerBase
 
-from ...model_builder import load_model
-from .. import bundled_tokenizer_path
-from ..builder import load_tokenizer
+from ....model_builder import load_model
+from ... import bundled_tokenizer_path
+from ...builder import load_tokenizer
 from .new import old_to_new_token_ids
 
 

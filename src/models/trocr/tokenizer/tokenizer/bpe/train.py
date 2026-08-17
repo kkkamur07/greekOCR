@@ -16,15 +16,13 @@ from pathlib import Path
 
 from transformers import PreTrainedTokenizerBase
 
-from .. import bundled_tokenizer_path
-from ..builder import load_tokenizer
+from ... import bundled_tokenizer_path
+from ...builder import load_tokenizer
 
 
 DEFAULT_CORPUS_DIRECTORIES = (
-    Path("data/trocr_processed/greek/pretraining"),
-    Path("data/trocr_processed/greek/finetuning"),
-    Path("data/trocr_processed/syriac/pretraining"),
-    Path("data/trocr_processed/syriac/finetuning"),
+    Path("data/trocr_processed/combined/pretraining"),
+    Path("data/trocr_processed/combined/finetuning"),
 )
 
 

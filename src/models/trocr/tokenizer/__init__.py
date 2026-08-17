@@ -10,19 +10,21 @@ _BUNDLED_TOKENIZER_DIRECTORIES = {
     "gpt_tokenizer": "gpt_tokenizer",
     "trocr": "trocr",
 }
+REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
+TOKENIZER_ROOT = REPOSITORY_ROOT / "tokenizer"
 
 
 def bundled_tokenizer_path(name: str) -> Path:
-    """Resolve a tokenizer bundled alongside this module."""
+    """Resolve a tokenizer stored in the repository-level tokenizer directory."""
     try:
         directory = _BUNDLED_TOKENIZER_DIRECTORIES[name]
     except KeyError as error:
         available = ", ".join(sorted(_BUNDLED_TOKENIZER_DIRECTORIES))
         raise ValueError(f"Unknown bundled tokenizer {name!r}; choose one of: {available}.") from error
 
-    path = Path(__file__).parent / directory
+    path = TOKENIZER_ROOT / directory
     if not path.is_dir():
-        raise FileNotFoundError(f"Bundled tokenizer directory is missing: {path}")
+        raise FileNotFoundError(f"Tokenizer directory is missing: {path}")
     return path
 
 
