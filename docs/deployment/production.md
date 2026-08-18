@@ -1,19 +1,19 @@
 # Production deployment
 
-Host Nomicous at **nomicous.com** with three public surfaces and Supabase as the shared database + storage backend.
+Host Nomikos at **nomikos.app** with three public surfaces and Supabase as the shared database + storage backend.
 
 Architecture overview: [technical architecture](../architecture.md).
 Serverless constraints and pitfalls: [learnings - Vercel](../guides/learnings.md#serverless-api-vercel).
 
 | Domain | Vercel project | Root directory | Role |
 | -------- | ---------------- | ---------------- | ------ |
-| [nomicous.com](https://nomicous.com) | `nomicous-landing` | `landing/` | Static marketing site |
-| [app.nomicous.com](https://app.nomicous.com) | `nomicous-app` | `nomicous/frontend/` | Next.js App Router client |
-| [api.nomicous.com](https://api.nomicous.com) | `nomicous-api` | `deploy/platform/` | FastAPI platform API |
+| [nomikos.app](https://nomikos.app) | `nomikos-landing` | `landing/` | Static marketing site |
+| [app.nomikos.app](https://app.nomikos.app) | `nomikos-app` | `nomikos/frontend/` | Next.js App Router client |
+| [api.nomikos.app](https://api.nomikos.app) | `nomikos-api` | `deploy/platform/` | FastAPI platform API |
 
 Inference has no public surface of its own. Models run in an **inference
 agent** - the **published package** started by a researcher, or by an operator
-on a persistent host - which reaches `api.nomicous.com` outbound and listens on
+on a persistent host - which reaches `api.nomikos.app` outbound and listens on
 nothing (ADR 0002).
 
 Supabase setup: [`supabase.md`](supabase.md).
@@ -25,19 +25,19 @@ Local development: [`../guides/local-development.md`](../guides/local-developmen
 
 ```text
 Browser
-  ├─ nomicous.com          → Vercel (static landing)
-  ├─ app.nomicous.com      → Vercel (Next.js App Router)
-  │     └─ REST + JWT      → api.nomicous.com (Vercel serverless FastAPI)
+  ├─ nomikos.app          → Vercel (static landing)
+  ├─ app.nomikos.app      → Vercel (Next.js App Router)
+  │     └─ REST + JWT      → api.nomikos.app (Vercel serverless FastAPI)
   │
-  └─ api.nomicous.com      → Supabase Postgres + Storage
+  └─ api.nomikos.app      → Supabase Postgres + Storage
 
 Inference (no inbound address, no port):
-  nomicous agent    → claims pages from api.nomicous.com, runs models, calls back
+  nomikos agent    → claims pages from api.nomikos.app, runs models, calls back
                       (researcher's laptop, device token)
 
 Background (persistent compute, not serverless):
   platform-worker   → runs the job types the platform executes itself
-  nomicous agent    → same package, service credential, for cloud work
+  nomikos agent    → same package, service credential, for cloud work
 ```
 
 ### Why local inference is the default
@@ -51,7 +51,7 @@ persists only the result.
 
 Nothing is deployed to make local inference work. A researcher installs the
 package, pairs the machine, and runs the agent in a terminal; it connects out
-to `api.nomicous.com` to claim a page and to report it, which is why no
+to `api.nomikos.app` to claim a page and to report it, which is why no
 inbound path, port, or certificate has to exist on a laptop.
 
 Cloud inference remains optional. When it is enabled, a hosted worker runs the
@@ -67,7 +67,7 @@ same agent a laptop does and claims work with a **service credential**
 3. Provision database service roles and run migrations:
 
 ```bash
-cp nomicous/backend/core/.env.supabase.example nomicous/backend/core/.env.supabase
+cp nomikos/backend/core/.env.supabase.example nomikos/backend/core/.env.supabase
 # Store credentials only in the provider's secret manager.
 # Follow docs/deployment/database-roles.md before this first migration.
 ./scripts/platform/migrate_supabase.sh
@@ -81,7 +81,7 @@ cp nomicous/backend/core/.env.supabase.example nomicous/backend/core/.env.supaba
 
 Connect the same GitHub repo to **three** Vercel projects. Set the **Root Directory** per project (Project Settings → General).
 
-### Landing (`nomicous-landing`)
+### Landing (`nomikos-landing`)
 
 | Setting | Value |
 | --------- | ------- |
@@ -89,24 +89,24 @@ Connect the same GitHub repo to **three** Vercel projects. Set the **Root Direct
 | Framework | Other (static) |
 | Build Command | *(empty)* |
 | Output Directory | `.` |
-| Domain | `nomicous.com`, `www.nomicous.com` → redirect to apex |
+| Domain | `nomikos.app`, `www.nomikos.app` → redirect to apex |
 
 Config: [`landing/vercel.json`](../../landing/vercel.json).
 
-### App (`nomicous-app`)
+### App (`nomikos-app`)
 
 | Setting | Value |
 | --------- | ------- |
-| Root Directory | `nomicous/frontend` |
+| Root Directory | `nomikos/frontend` |
 | Framework | Next.js |
 | Build Command | `npm run build` |
 | Output Directory | *(default)* |
-| Domain | `app.nomicous.com` |
+| Domain | `app.nomikos.app` |
 
 Environment variables (Production):
 
 ```bash
-NEXT_PUBLIC_API_BASE_URL=https://api.nomicous.com
+NEXT_PUBLIC_API_BASE_URL=https://api.nomikos.app
 NEXT_PUBLIC_CSRF_COOKIE_NAME=greekocr-csrf
 NEXT_PUBLIC_ENABLE_TEST_JOBS=false
 ```
@@ -116,11 +116,11 @@ machine can take work from **capacity** on the account's execution-target
 response, which is the same fact submission uses to fix an **execution
 target** - not from anything the browser reaches.
 
-Template: [`nomicous/frontend/.env.production.example`](../../nomicous/frontend/.env.production.example).
+Template: [`nomikos/frontend/.env.production.example`](../../nomikos/frontend/.env.production.example).
 
-Config: [`nomicous/frontend/vercel.json`](../../nomicous/frontend/vercel.json).
+Config: [`nomikos/frontend/vercel.json`](../../nomikos/frontend/vercel.json).
 
-### Platform API (`nomicous-api`)
+### Platform API (`nomikos-api`)
 
 | Setting | Value |
 | --------- | ------- |
@@ -128,10 +128,10 @@ Config: [`nomicous/frontend/vercel.json`](../../nomicous/frontend/vercel.json).
 | Install Command | *(empty / default)* |
 | Build Command | `bash build.sh` |
 | Output Directory | `.` |
-| Domain | `api.nomicous.com` |
+| Domain | `api.nomikos.app` |
 | Function region | `fra1` (Frankfurt, Europe) |
 
-Environment variables: copy from [`nomicous/backend/core/.env.production.example`](../../nomicous/backend/core/.env.production.example).
+Environment variables: copy from [`nomikos/backend/core/.env.production.example`](../../nomikos/backend/core/.env.production.example).
 
 **Critical serverless settings:**
 
@@ -142,7 +142,7 @@ Environment variables: copy from [`nomicous/backend/core/.env.production.example
 | `BEHIND_PROXY` | `false` (current Vercel deployment) | Forwarded headers are not trusted without a fixed proxy allowlist |
 | `FORWARDED_ALLOW_IPS` | Unset (current Vercel deployment) | Set explicit IP/CIDRs before enabling `BEHIND_PROXY`; never `*` |
 | `TRUST_PEER_IP` | `false` (current Vercel deployment) | The peer is the platform proxy, so IP-keyed throttles are skipped rather than made global - [`docs/security/rate-limiting.md`](../security/rate-limiting.md) |
-| `CORS_ORIGINS` | `https://app.nomicous.com` | Browser origin |
+| `CORS_ORIGINS` | `https://app.nomikos.app` | Browser origin |
 | `STORAGE_BACKEND` | `supabase` | No local filesystem on Vercel |
 
 Job progress in the browser falls back to **HTTP polling** when SSE is unavailable (already implemented in the frontend).
@@ -181,14 +181,14 @@ Minimum services:
 | Service | Command | Port |
 |---------|---------|------|
 | `platform-worker` | `python -m backend.jobs.worker_main` | - |
-| inference agent | `nomicous run`, one per host that should run models | - |
+| inference agent | `nomikos run`, one per host that should run models | - |
 
 Cloud inference is currently disabled. Enabling it means standing up a hosted
 inference agent, not a service: it installs the same
-`nomicous-inference` package a laptop does, presents a **service credential**
-in `NOMICOUS_SERVICE_TOKEN` instead of a device token, claims pages from
-`api.nomicous.com`, and reports results to
-`https://api.nomicous.com/internal/inference/job-complete`, exactly as a paired
+`nomikos-inference` package a laptop does, presents a **service credential**
+in `NOMIKOS_SERVICE_TOKEN` instead of a device token, claims pages from
+`api.nomikos.app`, and reports results to
+`https://api.nomikos.app/internal/inference/job-complete`, exactly as a paired
 laptop does. Set `CLOUD_INFERENCE_ENABLED=true` on the API so it fails closed
 without `INFERENCE_WEBHOOK_SECRET`. Full runbook (install, credential, systemd,
 ops): [`cloud-inference-worker.md`](cloud-inference-worker.md).
@@ -203,12 +203,12 @@ Supabase operator/migration URI. The agent needs no database access at all.
 
 | Record | Type | Target |
 | -------- | ------ | -------- |
-| `nomicous.com` | A / CNAME | Vercel landing project |
+| `nomikos.app` | A / CNAME | Vercel landing project |
 | `www` | CNAME | Vercel (redirect to apex) |
 | `app` | CNAME | Vercel app project |
 | `api` | CNAME | Vercel API project |
 
-A hosted inference agent needs no record: it calls `api.nomicous.com` and is
+A hosted inference agent needs no record: it calls `api.nomikos.app` and is
 never called.
 
 ---
@@ -219,9 +219,9 @@ There is nothing to ship. The **published package** goes to PyPI and
 researchers install it themselves:
 
 ```bash
-uv tool install nomicous-inference
-nomicous pair
-nomicous run
+uv tool install nomikos-inference
+nomikos pair
+nomikos run
 ```
 
 Releasing is `.github/workflows/release.yml`: one wheel, one runner, Trusted
@@ -278,11 +278,11 @@ If a secret scanner or Git-history review identifies a possible exposure:
 
 - [ ] Supabase migrations applied (`alembic upgrade head`)
 - [ ] Service-role bootstrap completed and each runtime has only its own DB URL
-- [ ] `CORS_ORIGINS` includes only production app origins (`https://app.nomicous.com`) - never the marketing apex, since CORS runs with credentials
+- [ ] `CORS_ORIGINS` includes only production app origins (`https://app.nomikos.app`) - never the marketing apex, since CORS runs with credentials
 - [ ] `TRUST_PEER_IP=false` on Vercel, so auth throttling falls back to the per-account budget
 - [ ] `/docs`, `/redoc`, and `/openapi.json` return 404 in production
-- [ ] `AUTH_CSRF_COOKIE_DOMAIN=.nomicous.com` so `app.nomicous.com` can read the CSRF cookie for refresh
-- [ ] Production verification uses `app.nomicous.com` / `api.nomicous.com` only - never `*.vercel.app` deployment or Preview URLs
+- [ ] `AUTH_CSRF_COOKIE_DOMAIN=.nomikos.app` so `app.nomikos.app` can read the CSRF cookie for refresh
+- [ ] Production verification uses `app.nomikos.app` / `api.nomikos.app` only - never `*.vercel.app` deployment or Preview URLs
 - [ ] `ENABLE_TEST_JOB_ROUTES=false`
 - [ ] Platform worker running and healthy; a hosted inference agent too if cloud inference is enabled
 - [ ] Vercel bundle contains no model weights, local media, `.env` files, or training artifacts
@@ -290,9 +290,9 @@ If a secret scanner or Git-history review identifies a possible exposure:
 - [ ] Release checksums, SBOMs, vulnerability scans, and provenance attestations are available
 - [ ] Raw/encoded upload limits, decoded pixel limits, job limits, timeouts, and rate limits are enabled
 - [ ] Upload a test page image → appears in Supabase Storage as WebP
-- [ ] Login/register on `app.nomicous.com`
+- [ ] Login/register on `app.nomikos.app`
 - [ ] Cloud segment/transcribe job completes end-to-end
-- [ ] The page editor shows the three agent commands (install, `nomicous pair`, `nomicous run`), copyable and with no download link
+- [ ] The page editor shows the three agent commands (install, `nomikos pair`, `nomikos run`), copyable and with no download link
 - [ ] `INFERENCE_AGENT_MIN_VERSION` is at or below the published version, so a current agent is not refused at the claim endpoint
 
 ### Accessibility and user-flow checks
@@ -307,7 +307,7 @@ If a secret scanner or Git-history review identifies a possible exposure:
 
 - [ ] Record API p50/p95/p99 latency, error rate, request volume, and `/health` response before deployment
 - [ ] Deploy a preview/staging build and run the smoke checks before production
-- [ ] Deploy `api.nomicous.com` with function region `fra1`
+- [ ] Deploy `api.nomikos.app` with function region `fra1`
 - [ ] Confirm Vercel logs show the expected region and contain no secrets or submitted payloads
 - [ ] During the first hour, verify health, login, upload, job submission, polling, storage, and export
 - [ ] Compare European p95 latency and error rate with the pre-deployment baseline
@@ -337,7 +337,7 @@ broken critical flow.
 
 | Symptom | Likely cause |
 | --------- | ---------------- |
-| CORS error from app | `CORS_ORIGINS` missing `https://app.nomicous.com` |
+| CORS error from app | `CORS_ORIGINS` missing `https://app.nomikos.app` |
 | 401 on all API calls | Wrong `JWT_SECRET` or clock skew |
 | Jobs stuck in `pending` | Platform worker not running (`JOB_WORKER_ENABLED` must be `false` on API, worker elsewhere) |
 | Jobs stuck in `waiting` | No inference agent claiming for that **execution target** |

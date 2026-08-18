@@ -5,7 +5,7 @@ Two guards on the same surface, for two different reasons.
 Every request the CLI makes carries a bearer credential in a header - the
 180-day **device token**, or a **service credential** with wider scope. The
 client used to accept whatever URL it was handed, so `--api-url http://...`,
-`$NOMICOUS_API_URL`, or a stored `platform_url` put that token on the wire in
+`$NOMIKOS_API_URL`, or a stored `platform_url` put that token on the wire in
 cleartext, and the researcher who typed it got no indication.
 
 The page image link is the opposite shape of problem: it carries no credential,
@@ -38,16 +38,16 @@ from inference.cli.api import (
 @pytest.mark.parametrize(
     "base_url",
     [
-        "http://api.nomicous.com",
+        "http://api.nomikos.app",
         "http://example.invalid:8000",
         # Loopback in the *userinfo*, not the host. The token still leaves the
         # machine; only a check that parses rather than substring-matches sees it.
         "http://localhost@evil.example",
         "http://127.0.0.1.evil.example",
         "http://notlocalhost",
-        "ftp://api.nomicous.com",
+        "ftp://api.nomikos.app",
         "file:///etc/passwd",
-        "api.nomicous.com",
+        "api.nomikos.app",
         "",
     ],
 )
@@ -59,8 +59,8 @@ def test_a_client_refuses_to_carry_a_credential_over_this_url(base_url: str) -> 
 @pytest.mark.parametrize(
     "base_url",
     [
-        "https://api.nomicous.com",
-        "https://api.nomicous.com/",
+        "https://api.nomikos.app",
+        "https://api.nomikos.app/",
         "https://127.0.0.1:8000",
         "http://localhost:8000",
         "http://127.0.0.1:54321",
@@ -75,7 +75,7 @@ def test_https_anywhere_and_http_on_loopback_are_accepted(base_url: str) -> None
 
 def test_the_trailing_slash_is_still_stripped() -> None:
     """The one thing `__init__` did before the check was added still happens."""
-    assert PlatformClient("https://api.nomicous.com/").base_url == "https://api.nomicous.com"
+    assert PlatformClient("https://api.nomikos.app/").base_url == "https://api.nomikos.app"
 
 
 # ---------------------------------------------------------------------------
@@ -100,7 +100,7 @@ def test_a_page_image_link_that_is_not_https_is_never_opened(url: str) -> None:
     image - and the fix is a scheme allowlist rather than a `file:` denylist,
     because the next opener Python registers should not silently become reachable.
     """
-    client = PlatformClient("https://api.nomicous.com")
+    client = PlatformClient("https://api.nomikos.app")
 
     with pytest.raises(PlatformError, match="page image"):
         client.fetch_page_image(url)
@@ -110,7 +110,7 @@ def test_the_file_scheme_cannot_read_a_real_file_off_this_machine(tmp_path: Path
     """The concrete exploit, pinned: a readable file that is not a page image."""
     secret = tmp_path / "secret.txt"
     secret.write_text("device-token-would-be-here", encoding="utf-8")
-    client = PlatformClient("https://api.nomicous.com")
+    client = PlatformClient("https://api.nomikos.app")
 
     with pytest.raises(PlatformError):
         client.fetch_page_image(secret.as_uri())
@@ -132,7 +132,7 @@ def test_an_https_platform_may_not_hand_out_a_loopback_http_image() -> None:
     Otherwise a hosted platform could point a researcher's agent at a service
     listening on their own machine, which is the SSRF this check exists for.
     """
-    client = PlatformClient("https://api.nomicous.com")
+    client = PlatformClient("https://api.nomikos.app")
 
     with pytest.raises(PlatformError):
         client.fetch_page_image("http://127.0.0.1:8000/page.png")

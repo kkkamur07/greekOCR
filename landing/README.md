@@ -1,6 +1,6 @@
-# Nomicous landing page
+# Nomikos landing page
 
-Minimal static site for **nomicous.com**. Same palette as the app (navy + warm neutrals). Will be expanded later.
+Minimal static site for **nomikos.app**. Same palette as the app (navy + warm neutrals). Will be expanded later.
 
 ## Preview
 
@@ -12,12 +12,12 @@ Open http://localhost:8080
 
 ## Deploy
 
-Upload the `landing/` folder to any static host, or use the Vercel project in [`docs/deployment/production.md`](../docs/deployment/production.md). Point **nomicous.com** here; the annotation app lives at **app.nomicous.com**.
+Upload the `landing/` folder to any static host, or use the Vercel project in [`docs/deployment/production.md`](../docs/deployment/production.md). Point **nomikos.app** here; the annotation app lives at **app.nomikos.app**.
 
 ## Edit
 
 - Copy and links: `index.html`
-- Styles: `styles.css` (tokens match `nomicous/frontend/src/styles/theme-shell.css`)
+- Styles: `styles.css` (tokens match `nomikos/frontend/src/styles/theme-shell.css`)
 - Screenshots: `assets/screenshots/` (responsive `.webp` at 640 / 960 / 1280px)
 
 Re-encode after replacing a source capture (save as `*-source.png`, then):

@@ -13,8 +13,8 @@
 # to leak; naming the value keeps every other secret in those files in scope.
 #
 # Both hits are the same string, in:
-#   tests/nomicous/unit/test_auth_hardening.py                (STRONG_SECRET)
-#   tests/nomicous/unit/test_runtime_configuration_security.py (JWT_SECRET setenv)
+#   tests/nomikos/unit/test_auth_hardening.py                (STRONG_SECRET)
+#   tests/nomikos/unit/test_runtime_configuration_security.py (JWT_SECRET setenv)
 #
 # It has never been a live credential: JWT_SECRET is supplied per environment and
 # the settings validator refuses to start on a value shipped in the repository.
@@ -57,13 +57,13 @@ description = """
 Three shapes that match the pattern without carrying a credential.
 
 1. Template placeholders. The `.env.*.example` files interpolate
-   `${NOMICOUS_DATABASE_PASSWORD}` where the password goes; a `${...}` in that
+   `${NOMIKOS_DATABASE_PASSWORD}` where the password goes; a `${...}` in that
    position is the absence of a secret, not one.
 2. Angle-bracket and obvious-word placeholders, the other way the same files and
    the deployment docs spell "put yours here".
 3. Local throwaway credentials published on purpose - the integration suite and
    docker-compose both hard-code postgres/dev on 127.0.0.1:5433. Since
-   tests/nomicous/integration/conftest.py now refuses any host that is not
+   tests/nomikos/integration/conftest.py now refuses any host that is not
    loopback, these strings cannot name a real database.
 
 Matched by the literal shape, never by path, so a genuine credential pasted into

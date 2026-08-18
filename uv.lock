@@ -1301,7 +1301,7 @@ wheels = [
 ]
 
 [[package]]
-name = "nomicous-inference"
+name = "nomikos-inference"
 version = "0.2.0"
 source = { virtual = "." }
 dependencies = [

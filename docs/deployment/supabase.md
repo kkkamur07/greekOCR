@@ -18,7 +18,7 @@ This document covers setup, configuration choices, known pitfalls, and trade-off
          │ JWT auth (app-owned)                   │ claim a page, report it
          ▼                                        │ (outbound, device token)
 ┌─────────────────────┐              ┌──────────────────────────┐
-│ Supabase Postgres   │              │ nomicous inference agent │
+│ Supabase Postgres   │              │ nomikos inference agent │
 │ (postgres DB)       │              │ (researcher's machine)   │
 └─────────────────────┘              └──────────────────────────┘
          │                                        │
@@ -72,7 +72,7 @@ We authorize in **FastAPI**, not Postgres RLS. The backend connects with the dat
 
 ## API keys: publishable vs secret
 
-| Dashboard label | Old name       | Use in Nomicous                                     |
+| Dashboard label | Old name       | Use in Nomikos                                     |
 | --------------- | -------------- | --------------------------------------------------- |
 | **Publishable** | `anon`         | **Not used** - frontend talks to our API only       |
 | **Secret**      | `service_role` | **`SUPABASE_SERVICE_ROLE_KEY`** in backend env only |
@@ -99,7 +99,7 @@ secrets, never in an example file or command history.
 | Variable                | Connection                         | Port        | Driver                     | Purpose                                              |
 | ----------------------- | ---------------------------------- | ----------- | -------------------------- | ---------------------------------------------------- |
 | `MIGRATOR_DATABASE_URL` | **Direct** `db.<ref>.supabase.co`  | 5432        | `postgresql://` (psycopg2) | Alembic operator/migrator only                       |
-| `DATABASE_URL`          | **Transaction pooler** `…pooler…`  | 6543        | `postgresql+asyncpg://`    | `nomicous_api` or platform-worker runtime            |
+| `DATABASE_URL`          | **Transaction pooler** `…pooler…`  | 6543        | `postgresql+asyncpg://`    | `nomikos_api` or platform-worker runtime            |
 | `SYNC_DATABASE_URL`     | **Transaction pooler** (or direct) | 6543 / 5432 | `postgresql://`            | Matching runtime principal for sync listener/scripts |
 
 Database name is **`postgres`** (Supabase default) - not `kalamos`.
@@ -145,9 +145,9 @@ Alembic also needs `%` doubled (`%%`) when passed through ConfigParser - handled
 
 | File                                           | Purpose                                        |
 | ---------------------------------------------- | ---------------------------------------------- |
-| `nomicous/backend/core/.env`                   | Default local dev (Docker Postgres)            |
-| `nomicous/backend/core/.env.supabase`          | Supabase profile (gitignored)                  |
-| `nomicous/backend/core/.env.supabase.example`  | Template (committed)                           |
+| `nomikos/backend/core/.env`                   | Default local dev (Docker Postgres)            |
+| `nomikos/backend/core/.env.supabase`          | Supabase profile (gitignored)                  |
+| `nomikos/backend/core/.env.supabase.example`  | Template (committed)                           |
 
 Settings load **`.env` first**; if missing, fall back to **`.env.supabase`** (`backend/core/settings/_env.py`).
 
@@ -162,7 +162,7 @@ Settings load **`.env` first**; if missing, fall back to **`.env.supabase`** (`b
 **Use `#` comments only** in env files. Do **not** use Python `"""` docstrings - shell `source` will fail.
 
 ```bash
-cp nomicous/backend/core/.env.supabase.example nomicous/backend/core/.env.supabase
+cp nomikos/backend/core/.env.supabase.example nomikos/backend/core/.env.supabase
 # edit credentials (never commit .env.supabase)
 ```
 
@@ -231,8 +231,8 @@ Browser → API creates job → agent claims it → runs the model → job callb
 
 |                     | Local (researcher's machine)                            | Cloud (hosted agent)                                      |
 | ------------------- | -------------------------------------------------------- | ----------------------------------------------------------- |
-| **Started by**      | The researcher: `nomicous pair`, then `nomicous run`     | An operator, as a supervised process                        |
-| **Credential**      | Device token in `~/.nomicous/device.json`                | **Service credential** in `NOMICOUS_SERVICE_TOKEN`          |
+| **Started by**      | The researcher: `nomikos pair`, then `nomikos run`     | An operator, as a supervised process                        |
+| **Credential**      | Device token in `~/.nomikos/device.json`                | **Service credential** in `NOMIKOS_SERVICE_TOKEN`          |
 | **Frontend config** | None - the editor reads **capacity** from the API         | None                                                        |
 | **Backend env**     | `DEVICE_PAIRING_ENABLED`, `DEVICE_TOKEN_HMAC_SECRET`     | `INFERENCE_WORKER_SERVICE_TOKEN`                            |
 | **Pros**            | No hosted inference cost; weights stay warm on one machine | Works with nothing installed; always available              |
@@ -248,7 +248,7 @@ page it is holding. The secret still guards the platform's own webhook path, so
 it stays configured on the API.
 
 **Typical Supabase test setup:** Supabase DB + Storage, API local, agent on the
-same machine pointed at `NOMICOUS_API_URL=http://localhost:8000`.
+same machine pointed at `NOMIKOS_API_URL=http://localhost:8000`.
 
 Nothing in this stack publishes an inference port. Compose runs no inference
 container, and the agent listens on nothing.
@@ -292,14 +292,14 @@ container, and the agent listens on nothing.
 ### 2. Configure env
 
 ```bash
-cp nomicous/backend/core/.env.supabase.example nomicous/backend/core/.env.supabase
+cp nomikos/backend/core/.env.supabase.example nomikos/backend/core/.env.supabase
 ```
 
 Fill `.env.supabase` from the provider secret store with the API and migrator
 DB URLs, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `JWT_SECRET`, and
 `STORAGE_BACKEND=supabase`. There is no separate inference environment file:
 an inference agent needs no database access, and a hosted agent reads its
-service credential from `NOMICOUS_SERVICE_TOKEN` in its own process
+service credential from `NOMIKOS_SERVICE_TOKEN` in its own process
 environment.
 
 ### 3. Migrate
@@ -357,7 +357,7 @@ uv run python scripts/platform/seed_dev_annotated_data.py   # optional corpus
 ### 5. Run API
 
 ```bash
-cd nomicous
+cd nomikos
 PYTHONPATH=. uvicorn backend.core.app:create_app --factory --reload --port 8000
 ```
 
@@ -400,8 +400,8 @@ The **inference agent** is not in Compose - run it on the host if you want jobs
 to execute:
 
 ```bash
-NOMICOUS_API_URL=http://localhost:8000 uv run --group inference python -m inference.cli pair
-NOMICOUS_API_URL=http://localhost:8000 uv run --group inference python -m inference.cli run
+NOMIKOS_API_URL=http://localhost:8000 uv run --group inference python -m inference.cli pair
+NOMIKOS_API_URL=http://localhost:8000 uv run --group inference python -m inference.cli run
 ```
 
 It reaches the API the same way your browser does, so it works from the host
@@ -412,7 +412,7 @@ from the API.
 ### 6. Run frontend (without Docker)
 
 ```bash
-# nomicous/frontend/.env.local
+# nomikos/frontend/.env.local
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 ```
 
@@ -460,7 +460,7 @@ Dev login after seed: `dev@example.com` / `dev-pass-123`
 | `JWT_SECRET` missing                                  | Only `.env.supabase` exists, old code path | Update repo; or copy to `.env`                                           |
 | `connect() got unexpected keyword argument 'sslmode'` | asyncpg URL                                | Use `ssl=` or let `db.py` rewrite                                        |
 | `DuplicatePreparedStatementError`                     | Pooler + asyncpg                           | Fixed in `db.py`; restart process                                        |
-| `role nomicous_app cannot be dropped`                 | Legacy pre-squash role                     | Remove it during a non-production reset or through the provider operator |
+| `role nomikos_app cannot be dropped`                 | Legacy pre-squash role                     | Remove it during a non-production reset or through the provider operator |
 | Upload 401/403 to Storage                             | Wrong key or missing bucket                | Secret key + private `document-media`                                    |
 | Connection refused on `:5433`                         | Docker not running                         | `docker compose up db -d`                                                |
 | Integration tests hang                                | Stale DB advisory locks                    | Stop API; terminate idle sessions                                        |
@@ -472,4 +472,4 @@ Dev login after seed: `dev@example.com` / `dev-pass-123`
 - [Supabase learnings (pitfalls + connection URLs)](../guides/learnings.md#supabase-hosted-postgres--storage)
 - [Self-hosting and local inference](../../README.md#self-hosting-and-local-inference)
 - [Local development guide](../guides/local-development.md)
-- [Infrastructure README](../../nomicous/infrastructure/README.md)
+- [Infrastructure README](../../nomikos/infrastructure/README.md)

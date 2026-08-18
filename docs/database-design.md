@@ -1,6 +1,6 @@
 # Database design and execution model
 
-This document describes the database design used by the Nomicous/greekOCR
+This document describes the database design used by the Nomikos/greekOCR
 platform, including the Supabase deployment profile. It is intended to help
 new contributors understand:
 
@@ -12,7 +12,7 @@ new contributors understand:
 - which connection, pooling, security, and transaction rules must be preserved.
 
 The schema source of truth is the Alembic migration history under
-`nomicous/infrastructure/alembic/versions/`. SQLAlchemy ORM models mirror the
+`nomikos/infrastructure/alembic/versions/`. SQLAlchemy ORM models mirror the
 schema but do not replace migrations.
 
 ## 1. High-level architecture
@@ -738,10 +738,10 @@ The current migrations define service role groups:
 
 | Role group | Intended access |
 |---|---|
-| `nomicous_migrator` | Schema and full database administration for migrations |
-| `nomicous_api` | CRUD access to application tables |
-| `nomicous_platform_worker` | Read job context and update `jobs` |
-| `nomicous_inference_worker` | Nothing; retained only until no login principal is a member |
+| `nomikos_migrator` | Schema and full database administration for migrations |
+| `nomikos_api` | CRUD access to application tables |
+| `nomikos_platform_worker` | Read job context and update `jobs` |
+| `nomikos_inference_worker` | Nothing; retained only until no login principal is a member |
 
 Provider-managed login principals should be granted exactly one appropriate
 group role. Credentials belong in the deployment secret store.
@@ -762,7 +762,7 @@ credentials.
 ## 11. Schema change workflow
 
 1. Modify or add an Alembic migration under
-   `nomicous/infrastructure/alembic/versions/`.
+   `nomikos/infrastructure/alembic/versions/`.
 2. Update SQLAlchemy ORM models if runtime code uses the changed table.
 3. Update the relevant service/repository tests.
 4. Run the migration against a development database first.
@@ -793,15 +793,15 @@ changes to support that model.
 
 The main implementation references for this design are:
 
-- `nomicous/infrastructure/db.py`
-- `nomicous/backend/core/settings/infrastructure.py`
-- `nomicous/backend/jobs/infrastructure/orm_models.py`
-- `nomicous/backend/jobs/infrastructure/worker.py`
-- `nomicous/backend/jobs/infrastructure/notifications.py`
-- `nomicous/backend/jobs/application/job_callback_service.py`
-- `nomicous/backend/document/infrastructure/orm_models.py`
-- `nomicous/backend/project/infrastructure/orm_models.py`
-- `nomicous/backend/users/infrastructure/orm_models.py`
-- `nomicous/backend/ml/infrastructure/orm_models.py`
-- `nomicous/infrastructure/alembic/versions/`
+- `nomikos/infrastructure/db.py`
+- `nomikos/backend/core/settings/infrastructure.py`
+- `nomikos/backend/jobs/infrastructure/orm_models.py`
+- `nomikos/backend/jobs/infrastructure/worker.py`
+- `nomikos/backend/jobs/infrastructure/notifications.py`
+- `nomikos/backend/jobs/application/job_callback_service.py`
+- `nomikos/backend/document/infrastructure/orm_models.py`
+- `nomikos/backend/project/infrastructure/orm_models.py`
+- `nomikos/backend/users/infrastructure/orm_models.py`
+- `nomikos/backend/ml/infrastructure/orm_models.py`
+- `nomikos/infrastructure/alembic/versions/`
 - `docs/deployment/supabase.md`

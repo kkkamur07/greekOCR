@@ -1,6 +1,6 @@
 name: Release
 
-# Publishes the **published package** (`nomicous-inference`) to PyPI. This is
+# Publishes the **published package** (`nomikos-inference`) to PyPI. This is
 # the whole release: one wheel and one sdist, built once, for every platform.
 #
 # It replaces a four-way per-OS installer matrix, a Developer ID notarization
@@ -75,7 +75,7 @@ jobs:
           ]
           if tag != f"v{version}":
               raise SystemExit(f"tag {tag} does not match pyproject version {version}")
-          print(f"releasing nomicous-inference {version}")
+          print(f"releasing nomikos-inference {version}")
           PY
 
       - name: Build the wheel and sdist
@@ -98,7 +98,7 @@ jobs:
         with:
           path: release-scan
           format: spdx-json
-          output-file: dist/nomicous-inference.spdx.json
+          output-file: dist/nomikos-inference.spdx.json
           upload-artifact: false
           upload-release-assets: false
 
@@ -109,7 +109,7 @@ jobs:
           from pathlib import Path
 
           document = json.loads(
-              Path("dist/nomicous-inference.spdx.json").read_text(encoding="utf-8")
+              Path("dist/nomikos-inference.spdx.json").read_text(encoding="utf-8")
           )
           packages = document.get("packages", [])
           names = {package.get("name") for package in packages}
@@ -158,4 +158,4 @@ jobs:
           RELEASE_TAG: ${{ github.event.inputs.tag || github.event.release.tag_name }}
         run: |
           gh release view "$RELEASE_TAG" >/dev/null
-          gh release upload "$RELEASE_TAG" dist/nomicous-inference.spdx.json
+          gh release upload "$RELEASE_TAG" dist/nomikos-inference.spdx.json

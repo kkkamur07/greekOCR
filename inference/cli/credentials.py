@@ -32,8 +32,8 @@ from inference.cli.api import InsecurePlatformURL, is_secure_platform_url
 # The same root the **Hub cache** uses (`inference/hub/cache.py`). One directory
 # in the researcher's home for everything the installed package writes, rather
 # than one per subsystem.
-DEFAULT_NOMICOUS_HOME = Path.home() / ".nomicous"
-NOMICOUS_HOME_ENV = "NOMICOUS_HOME"
+DEFAULT_NOMIKOS_HOME = Path.home() / ".nomikos"
+NOMIKOS_HOME_ENV = "NOMIKOS_HOME"
 
 CREDENTIAL_FILENAME = "device.json"
 
@@ -41,21 +41,21 @@ CREDENTIAL_FILE_MODE = 0o600
 CREDENTIAL_DIR_MODE = 0o700
 
 
-def nomicous_home() -> Path:
+def nomikos_home() -> Path:
     """The directory the CLI keeps its state in, overridable for tests.
 
     Read from the environment on every call rather than at import time, for the
     same reason `default_cache_root()` is: the process that sets it is often not
     the one that imported this module.
     """
-    override = os.environ.get(NOMICOUS_HOME_ENV)
+    override = os.environ.get(NOMIKOS_HOME_ENV)
     if override:
         return Path(override).expanduser()
-    return DEFAULT_NOMICOUS_HOME
+    return DEFAULT_NOMIKOS_HOME
 
 
 def credential_path() -> Path:
-    return nomicous_home() / CREDENTIAL_FILENAME
+    return nomikos_home() / CREDENTIAL_FILENAME
 
 
 @dataclass(frozen=True)
@@ -161,7 +161,7 @@ def save_credential(credential: DeviceCredential, path: Path | None = None) -> P
     """Write the credential owner-only, and return where it landed.
 
     Refuses to persist a token bound to a platform this CLI would not be allowed
-    to send it to. A stored credential is not a passive record - `nomicous run`
+    to send it to. A stored credential is not a passive record - `nomikos run`
     reads `platform_url` back and claims against it - so writing one for a
     cleartext remote host would launder a URL that was rejected at pairing time
     into one that is trusted on every run afterwards.

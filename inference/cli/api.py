@@ -30,24 +30,24 @@ from urllib.parse import urlsplit
 
 from inference.cli.version import installed_version
 
-DEFAULT_PLATFORM_URL = "https://api.nomicous.com"
-PLATFORM_URL_ENV = "NOMICOUS_API_URL"
+DEFAULT_PLATFORM_URL = "https://api.nomikos.app"
+PLATFORM_URL_ENV = "NOMIKOS_API_URL"
 
-DEVICE_TOKEN_HEADER = "X-Nomicous-Device-Token"  # noqa: S105 - a header name, not a token
-AGENT_VERSION_HEADER = "X-Nomicous-Agent-Version"
+DEVICE_TOKEN_HEADER = "X-Nomikos-Device-Token"  # noqa: S105 - a header name, not a token
+AGENT_VERSION_HEADER = "X-Nomikos-Agent-Version"
 """Which build of the agent is calling. The **version floor** judges it on the
 **claim** path and on `GET /device/v1/agent/version`
 (`backend/ml/api/agent_version.py`); the constant lives here so the run loop and
 the launch check both state the same version this CLI reports."""
 
-SERVICE_TOKEN_HEADER = "X-Nomicous-Service-Token"  # noqa: S105 - a header name, not a token
+SERVICE_TOKEN_HEADER = "X-Nomikos-Service-Token"  # noqa: S105 - a header name, not a token
 """A hosted worker's **service credential**. A separate header from the device
 token because the two resolve to different scopes (ADR 0005, decision 1): a
 device token claims `local` work on one account, this claims `cloud` work for the
 platform. Two credentials that must never be interchangeable by accident do not
 share a header."""
 
-WORKER_NAME_HEADER = "X-Nomicous-Worker-Name"
+WORKER_NAME_HEADER = "X-Nomikos-Worker-Name"
 """Which hosted worker is calling. Names its device row; not a secret."""
 
 CLAIM_PATH = "/device/v1/jobs/claim"
@@ -66,7 +66,7 @@ IMAGE_TIMEOUT_SECONDS = 120.0
 the **signed page image link** dies in about a minute anyway, so a fetch that has
 not finished long after that is not going to."""
 
-MAX_PAGE_IMAGE_BYTES_ENV = "NOMICOUS_MAX_PAGE_IMAGE_BYTES"
+MAX_PAGE_IMAGE_BYTES_ENV = "NOMIKOS_MAX_PAGE_IMAGE_BYTES"
 
 
 def max_page_image_bytes() -> int:
@@ -76,7 +76,7 @@ def max_page_image_bytes() -> int:
     practical bound is the platform's own upload cap, not this number. It exists
     only to stop a slow-drip or hostile response from exhausting memory, so the
     default is deliberately generous and any operator expecting larger objects
-    raises it via ``NOMICOUS_MAX_PAGE_IMAGE_BYTES``.
+    raises it via ``NOMIKOS_MAX_PAGE_IMAGE_BYTES``.
     """
     raw = os.environ.get(MAX_PAGE_IMAGE_BYTES_ENV)
     if raw is None:
@@ -134,7 +134,7 @@ class CredentialRefused(PlatformError):
     Its own exception because it is the one **claim** failure that backing off
     cannot fix. A revoked, expired, or unknown credential answers 401 forever, so
     a loop that retried it would hammer the platform until someone noticed;
-    stopping and saying `nomicous pair` is the only useful response.
+    stopping and saying `nomikos pair` is the only useful response.
     """
 
 
@@ -335,7 +335,7 @@ def require_secure_platform_url(base_url: str) -> str:
     """The trimmed URL, or `InsecurePlatformURL` if it would leak a credential.
 
     Enforced once, where a client is built, rather than at each call site that
-    supplies a URL - `--api-url`, `$NOMICOUS_API_URL`, and the stored credential
+    supplies a URL - `--api-url`, `$NOMIKOS_API_URL`, and the stored credential
     are three doors into the same room, and a check on one of them is a check on
     none of them.
     """
@@ -444,7 +444,7 @@ class PlatformClient:
         request = urllib.request.Request(url, data=payload, method=method)  # noqa: S310
         request.add_header("Accept", "application/json")
         # Recorded on `helper_pairings.user_agent` for support correlation.
-        request.add_header("User-Agent", f"nomicous-inference/{installed_version()}")
+        request.add_header("User-Agent", f"nomikos-inference/{installed_version()}")
         if payload is not None:
             request.add_header("Content-Type", "application/json")
         for name, value in (headers or {}).items():
@@ -584,7 +584,7 @@ class PlatformClient:
         if status == 401:
             raise CredentialRefused(
                 f"{self.base_url} does not accept this machine's credential. "
-                "Run `nomicous pair` to authorise it again."
+                "Run `nomikos pair` to authorise it again."
             )
         if status == 404:
             raise PlatformError(
@@ -623,7 +623,7 @@ class PlatformClient:
         # rejects every scheme but https, which is what stops a server-chosen
         # `file:` URL from reading this machine. See its docstring.
         request = urllib.request.Request(url, method="GET")  # noqa: S310
-        request.add_header("User-Agent", f"nomicous-inference/{installed_version()}")
+        request.add_header("User-Agent", f"nomikos-inference/{installed_version()}")
         try:
             with urllib.request.urlopen(request, timeout=IMAGE_TIMEOUT_SECONDS) as response:  # noqa: S310
                 return _read_bounded(response, max_page_image_bytes())
@@ -796,7 +796,7 @@ def _version_refusal(body: Any, base_url: str) -> AgentVersionRefused:
         agent_version=error.get("agent_version"),
         minimum_version=str(error.get("minimum_version") or "unknown"),
         latest_version=str(error.get("latest_version") or "unknown"),
-        upgrade_command=str(error.get("upgrade_command") or "uv tool upgrade nomicous-inference"),
+        upgrade_command=str(error.get("upgrade_command") or "uv tool upgrade nomikos-inference"),
     )
 
 

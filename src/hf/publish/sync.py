@@ -25,7 +25,7 @@ def plan_collection_sync(
   if not spec.hub_slug and not dry_run:
     raise ValueError(
       "collection hub_slug is required for sync; set it after the first Hub "
-      "collection is created (for example nomicous/nomos-<id>)"
+      "collection is created (for example nomikos/nomos-<id>)"
     )
 
   collection_slug = spec.hub_slug or f"{spec.namespace}/{spec.slug}"

@@ -44,14 +44,14 @@ def reset_hub_client():
 
 
 def test_parse_hf_weights_uri():
-    parsed = parse_hf_weights_uri("hf://nomicous/greek-htr-calamari@stable")
-    assert parsed.repo_id == "nomicous/greek-htr-calamari"
+    parsed = parse_hf_weights_uri("hf://nomikos/greek-htr-calamari@stable")
+    assert parsed.repo_id == "nomikos/greek-htr-calamari"
     assert parsed.registry_tag == "stable"
 
 
 def test_resolve_uses_pinned_revision_not_moved_registry_tag(tmp_path: Path):
     client = MockHubClient()
-    uri = "hf://nomicous/greek-htr-calamari@stable"
+    uri = "hf://nomikos/greek-htr-calamari@stable"
     kwargs = dict(
         uri=uri,
         registry_model_id="greek-calamari-v1",
@@ -78,7 +78,7 @@ def test_resolve_uses_pinned_revision_not_moved_registry_tag(tmp_path: Path):
 def test_resolve_replaces_tampered_cache_before_reuse(tmp_path: Path):
     client = MockHubClient()
     kwargs = dict(
-        uri="hf://nomicous/greek-htr-calamari@stable",
+        uri="hf://nomikos/greek-htr-calamari@stable",
         registry_model_id="greek-calamari-v1",
         registry_tag="stable",
         hub_revision=HUB_REVISION,
@@ -101,7 +101,7 @@ def test_resolve_replaces_tampered_cache_before_reuse(tmp_path: Path):
 def test_resolve_rejects_downloaded_digest_mismatch(tmp_path: Path):
     with pytest.raises(ValueError, match="artifact SHA-256 mismatch"):
         resolve_hf_weights_source(
-            "hf://nomicous/greek-htr-calamari@stable",
+            "hf://nomikos/greek-htr-calamari@stable",
             registry_model_id="greek-calamari-v1",
             registry_tag="stable",
             hub_revision=HUB_REVISION,
@@ -117,7 +117,7 @@ def test_resolve_rejects_downloaded_digest_mismatch(tmp_path: Path):
 def test_resolve_rejects_mutable_only_hf_reference(tmp_path: Path):
     with pytest.raises(ValueError, match="immutable.*hub_revision"):
         resolve_hf_weights_source(
-            "hf://nomicous/greek-htr-calamari@stable",
+            "hf://nomikos/greek-htr-calamari@stable",
             registry_model_id="greek-calamari-v1",
             registry_tag="stable",
             hub_revision=None,

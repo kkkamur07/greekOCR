@@ -20,8 +20,8 @@ heartbeat endpoint and no release endpoint.
 
 ### 1. The credential fixes the execution target; the caller cannot ask
 
-An `X-Nomicous-Device-Token` claims `local` work belonging to the one account on
-`helper_devices.user_id`. An `X-Nomicous-Service-Token` claims `cloud` work for any account.
+An `X-Nomikos-Device-Token` claims `local` work belonging to the one account on
+`helper_devices.user_id`. An `X-Nomikos-Service-Token` claims `cloud` work for any account.
 Nothing in the request body can widen either.
 
 A device token is deliberately not allowed to claim `cloud` work even when its own

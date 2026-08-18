@@ -29,7 +29,7 @@ def _hub_error_message(exc: Exception, *, repo_id: str, revision: str) -> str:
     ):
         return (
             f"Hub access denied for {repo_id}@{revision}. "
-            "Set HF_TOKEN only for private or gated repos; public nomicous repos do not require a token."
+            "Set HF_TOKEN only for private or gated repos; public nomikos repos do not require a token."
         )
     if name == "OfflineModeIsEnabled":
         return (

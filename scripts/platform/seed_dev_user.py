@@ -4,9 +4,9 @@
 import asyncio
 import os
 
-from _bootstrap import ensure_nomicous_on_path
+from _bootstrap import ensure_nomikos_on_path
 
-ensure_nomicous_on_path()
+ensure_nomikos_on_path()
 
 from backend.dev.bootstrap import DEV_EMAIL, DEV_PASSWORD, reset_dev_user_password
 from backend.users.application.auth_service import AuthService

@@ -1,9 +1,9 @@
-namespace: nomicous
+namespace: nomikos
 slug: nomos
-title: Nomicous Manuscript HTR
+title: nomikos Manuscript HTR
 description: |
   Handwritten text recognition models and labelled manuscript line datasets for
-  ancient and medieval scripts published by the nomicous project.
+  ancient and medieval scripts published by the nomikos project.
 # Full Hub collection slug (namespace/slug-<id>). Set after creating the collection
 # on Hugging Face, then commit before running sync_collection.py with --upload.
 hub_slug: null

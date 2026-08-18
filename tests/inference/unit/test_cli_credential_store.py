@@ -1,11 +1,11 @@
 """What may be written to `device.json`, and what must survive writing it.
 
 The file holds a 180-day **device token** and the platform it is good against,
-and `nomicous run` reads both back on every launch. Two properties follow.
+and `nomikos run` reads both back on every launch. Two properties follow.
 
 **The platform it names must be one this CLI would talk to.** `PlatformClient`
 refuses a cleartext remote URL, but refusing it there only would let a single
-`nomicous pair --api-url http://...` write a record that every later run reads
+`nomikos pair --api-url http://...` write a record that every later run reads
 back and trusts - laundering a URL that was rejected once into one that is never
 questioned again.
 
@@ -14,7 +14,7 @@ interrupted write leaves the previous credential intact. Through a temporary fil
 and `os.replace` that held for a killed process, but not for a lost power supply:
 the rename could reach the disk before the bytes did, leaving a zero-length
 `device.json` that `load_credential` reports as a corrupt credential rather than
-as an unpaired machine - a state no `nomicous pair` run recovers from without a
+as an unpaired machine - a state no `nomikos pair` run recovers from without a
 manual delete.
 """
 
@@ -37,7 +37,7 @@ from inference.cli.credentials import (
 )
 
 
-def _credential(platform_url: str = "https://api.nomicous.com") -> DeviceCredential:
+def _credential(platform_url: str = "https://api.nomikos.app") -> DeviceCredential:
     return DeviceCredential(
         platform_url=platform_url,
         device_id="device-1",
@@ -55,10 +55,10 @@ def _credential(platform_url: str = "https://api.nomicous.com") -> DeviceCredent
 @pytest.mark.parametrize(
     "platform_url",
     [
-        "http://api.nomicous.com",
+        "http://api.nomikos.app",
         "http://staging.internal:8000",
         "http://localhost@evil.example",
-        "ftp://api.nomicous.com",
+        "ftp://api.nomikos.app",
         "",
     ],
 )
@@ -78,7 +78,7 @@ def test_a_refused_write_leaves_no_temporary_file_behind(tmp_path: Path) -> None
     target = tmp_path / "device.json"
 
     with pytest.raises(InsecurePlatformURL):
-        save_credential(_credential("http://api.nomicous.com"), target)
+        save_credential(_credential("http://api.nomikos.app"), target)
 
     assert list(tmp_path.iterdir()) == []
 
@@ -91,11 +91,11 @@ def test_a_refused_write_does_not_disturb_the_credential_already_there(
     save_credential(_credential(), target)
 
     with pytest.raises(InsecurePlatformURL):
-        save_credential(_credential("http://api.nomicous.com"), target)
+        save_credential(_credential("http://api.nomikos.app"), target)
 
     stored = load_credential(target)
     assert stored is not None
-    assert stored.platform_url == "https://api.nomicous.com"
+    assert stored.platform_url == "https://api.nomikos.app"
 
 
 def test_a_loopback_pairing_still_stores_its_credential(tmp_path: Path) -> None:
@@ -169,11 +169,11 @@ def test_the_rename_is_still_what_publishes_the_file(
 
     monkeypatch.setattr(credentials_module.os, "replace", _die)
     with pytest.raises(OSError):
-        save_credential(_credential("https://staging.nomicous.com"), target)
+        save_credential(_credential("https://staging.nomikos.app"), target)
 
     stored = load_credential(target)
     assert stored is not None
-    assert stored.platform_url == "https://api.nomicous.com"
+    assert stored.platform_url == "https://api.nomikos.app"
 
 
 def test_the_credential_lands_complete_and_owner_only(tmp_path: Path) -> None:

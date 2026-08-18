@@ -1,8 +1,8 @@
-# nomicous-inference
+# nomikos-inference
 
 The manuscript **segment** and **transcribe** runtime. It lives at the repository
-root in `inference/`, separate from the Nomicous platform API in
-`nomicous/backend/`, and it is the one distribution published to PyPI: a
+root in `inference/`, separate from the Nomikos platform API in
+`nomikos/backend/`, and it is the one distribution published to PyPI: a
 researcher's laptop and a hosted worker install the same wheel
 (ADR 0002).
 
@@ -14,8 +14,8 @@ see the [root README](../README.md), [use and hosting guide](../docs/guides/usin
 ## Install
 
 ```bash
-uv tool install nomicous-inference
-nomicous --version
+uv tool install nomikos-inference
+nomikos --version
 ```
 
 No flags, no uv version floor. That is a deliberate outcome of ADR 0006 rather
@@ -23,7 +23,7 @@ than a simplification of the instructions: `onnxruntime` publishes one CPU wheel
 per platform, so there is no accelerator variant to resolve by accident and
 nothing for the install command to pin.
 
-The previous instruction was `uv tool install nomicous-inference
+The previous instruction was `uv tool install nomikos-inference
 --torch-backend=cpu`, and it was load-bearing — without it a Linux resolve pulled
 sixteen `nvidia-*`/`triton` wheels, 4801 MB installed against 969 MB with the
 flag. No packaging metadata can express "resolve this dependency from that
@@ -38,7 +38,7 @@ because PyTorch ships no wheel for it.
 
 | Piece | State |
 |-------|--------|
-| Console entry point (`inference/cli/`) | `nomicous pair`, `nomicous run`, `nomicous version`, `nomicous upgrade` |
+| Console entry point (`inference/cli/`) | `nomikos pair`, `nomikos run`, `nomikos version`, `nomikos upgrade` |
 | Hub integration (`inference/hub/`) | `hf://` resolution, cache manifest, artifact SHA-256 |
 | Request/response contracts (`inference/contracts/`) | Defined for segment, transcribe, jobs, and callbacks |
 | Model registry (`inference/registry.yaml`) | Calamari transcribe + BLLA segmentation entries |
@@ -47,7 +47,7 @@ because PyTorch ships no wheel for it.
 ## Pairing a machine
 
 ```bash
-nomicous pair
+nomikos pair
 ```
 
 It prints a link and a confirmation code, then waits. **Open the link and check
@@ -61,7 +61,7 @@ somewhere else. Close the page and approve nothing
 The URL is printed before any browser is opened, and no browser is opened at all
 over SSH. `--no-browser` forces that everywhere.
 
-The device token lands in `~/.nomicous/device.json`, mode `0600` in a `0700`
+The device token lands in `~/.nomikos/device.json`, mode `0600` in a `0700`
 directory. Running `pair` again on a paired machine reports the existing pairing
 rather than creating a second device; `--force` overrides that. If the device has
 been removed from the account, `pair` says so and exits non-zero — revoking is a
@@ -69,22 +69,22 @@ decision made in the browser, and only `--force` reverses it.
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `NOMICOUS_API_URL` | `https://api.nomicous.com` | Platform to pair against (`--api-url` wins) |
-| `NOMICOUS_HOME` | `~/.nomicous` | Where the device credential is kept |
+| `NOMIKOS_API_URL` | `https://api.nomikos.app` | Platform to pair against (`--api-url` wins) |
+| `NOMIKOS_HOME` | `~/.nomikos` | Where the device credential is kept |
 
 ```bash
-nomicous version
+nomikos version
 ```
 
 Reports the installed distribution version — the exact string sent as
-`X-Nomicous-Agent-Version` on every claim, which the platform's **version floor**
+`X-Nomikos-Agent-Version` on every claim, which the platform's **version floor**
 refuses on. It contacts nothing: the floor is served only on a claim response,
 and reporting a version should not cost a page of work.
 
 ## Building the wheel
 
 ```bash
-uv build            # -> dist/nomicous_inference-<version>-py3-none-any.whl
+uv build            # -> dist/nomikos_inference-<version>-py3-none-any.whl
 ```
 
 The repository root is the project, because a build backend cannot reach
@@ -126,7 +126,7 @@ turns without a release.
 To upgrade an installed agent by hand:
 
 ```bash
-uv tool upgrade nomicous-inference
+uv tool upgrade nomikos-inference
 ```
 
 ## One queue, owned by the platform
@@ -145,7 +145,7 @@ Registry models resolve weights at runtime from:
 
 | Source | Example | Cache / path |
 |--------|---------|----------------|
-| Hub | `hf://kkkamur07/syriac-htr-calamari@stable` | `~/.nomicous/hf/cache/<registry_model_id>/<registry_tag>/` |
+| Hub | `hf://kkkamur07/syriac-htr-calamari@stable` | `~/.nomikos/hf/cache/<registry_model_id>/<registry_tag>/` |
 | Local bundled (offline) | `file://local/syriac/calamari/v1/stable/best.pt` | `src/hf/local/...` |
 | BLLA segmentation | `hf://kkkamur07/segmentation-blla@stable` | `blla.onnx` in the Hub cache |
 
@@ -187,7 +187,7 @@ uv sync --group inference
 PYTHONPATH=. python -m inference.cli run --api-url http://localhost:8000
 ```
 
-That is the same claim loop the installed `nomicous run` executes; there is no
+That is the same claim loop the installed `nomikos run` executes; there is no
 server to start, because since ADR 0002 nothing here listens.
 
 Environment:
@@ -195,8 +195,8 @@ Environment:
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `INFERENCE_REGISTRY_PATH` | `inference/registry.yaml` | Model catalog file |
-| `HF_CACHE_ROOT` | `~/.nomicous/hf/cache` | Hub weight download cache |
-| `HF_TOKEN` | unset | Required only for **private** or gated Hub repos; all nomicous inference repos are public |
+| `HF_CACHE_ROOT` | `~/.nomikos/hf/cache` | Hub weight download cache |
+| `HF_TOKEN` | unset | Required only for **private** or gated Hub repos; all nomikos inference repos are public |
 
 Prefetch Hub weights without running inference:
 
@@ -222,7 +222,7 @@ Job callbacks use a tagged output union: `output.kind` is either `segment` or `t
 - `syriac-calamari-v1` - transcribe, Calamari architecture, pinned Hub revision and digest
 - `blla-segment` - segment, BLLA `blla.onnx` weights
 
-Weights are resolved at runtime from the Hub cache (`~/.nomicous/hf/cache/`) or, in a source
+Weights are resolved at runtime from the Hub cache (`~/.nomikos/hf/cache/`) or, in a source
 checkout only, local bundled paths (`src/hf/local/`).
 New `hf://` entries should include both `hub_revision` and `artifact_sha256`; see
 the migration note in [`docs/inference/adding-inference-models.md`](../docs/inference/adding-inference-models.md).
@@ -262,5 +262,5 @@ Full-suite layout, `DATABASE_URL` caveats, and failure analysis: [`docs/guides/t
 
 ## Related docs
 
-- Nomicous platform API and job integration: [`nomicous/backend/README.md`](../nomicous/backend/README.md)
-- Compose stack and env vars: [`docker-compose.yml`](../docker-compose.yml) and [`nomicous/README.md`](../nomicous/README.md)
+- Nomikos platform API and job integration: [`nomikos/backend/README.md`](../nomikos/backend/README.md)
+- Compose stack and env vars: [`docker-compose.yml`](../docker-compose.yml) and [`nomikos/README.md`](../nomikos/README.md)

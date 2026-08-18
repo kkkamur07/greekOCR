@@ -7,7 +7,7 @@ tests/
     inference/
         unit/
         integration/
-    nomicous/
+    nomikos/
         unit/
         integeration/
 """

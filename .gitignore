@@ -28,7 +28,7 @@ outputs/
 output/
 model/data/
 model/outputs/
-nomicous/data/
+nomikos/data/
 
 # Experiments and local artifacts
 notebooks/
@@ -73,7 +73,7 @@ data/
 .lgraph/
 
 # Hugging Face resolver cache. The default cache root moved to
-# ~/.nomicous/hf/cache when hf:// resolution moved into the published package,
+# ~/.nomikos/hf/cache when hf:// resolution moved into the published package,
 # but HF_CACHE_ROOT can still point here and older checkouts have one.
 # inference/hub/cache.py shutil.rmtree()s the model directories under it
 # whenever a cached artifact fails verification, so a tracked file in this tree
@@ -81,7 +81,7 @@ data/
 # on demand and must never be committed.
 /src/hf/cache/
 
-# Build output of the published `nomicous-inference` wheel.
+# Build output of the published `nomikos-inference` wheel.
 /dist/
 
 # Frozen-installer residue. #061 deleted the PyInstaller pipeline, but a checkout
@@ -90,7 +90,7 @@ data/
 # generic `build/` and `dist/` rules above; the wheel `dist` is already scoped to
 # `/dist/`, so narrowing the other two would silently expose a gigabyte of
 # binaries to `git add`. This line makes the exclusion deliberate.
-# `tests/nomicous/unit/test_deployment_hardening.py::test_no_native_packaging_survives`
+# `tests/nomikos/unit/test_deployment_hardening.py::test_no_native_packaging_survives`
 # checks tracked content, not directory existence, for the same reason.
 /packaging/
 # Local agent tooling state. `worktrees/` in particular holds full checkouts of

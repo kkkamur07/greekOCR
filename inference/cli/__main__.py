@@ -1,6 +1,6 @@
 """`python -m inference.cli`, the same entry point the console script calls.
 
-The installed `nomicous` script is the interface a researcher uses. This exists
+The installed `nomikos` script is the interface a researcher uses. This exists
 so a source checkout can run the CLI without installing itself first.
 """
 

@@ -2,7 +2,7 @@
 
 Two Consoles, deliberately: everything a researcher is meant to read goes to
 stdout, and everything that explains a non-zero exit goes to stderr, so
-`nomicous pair > pairing.txt` still shows the failure.
+`nomikos pair > pairing.txt` still shows the failure.
 
 `highlight=False` everywhere. Rich's automatic highlighter colours anything that
 looks like a number, a path, or a URL, which on this surface means it recolours

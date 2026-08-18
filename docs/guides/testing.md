@@ -44,16 +44,16 @@ uv run poe test-hf
 Direct `pytest` examples:
 
 ```bash
-uv run --group platform --group inference pytest tests/nomicous -m "not integration and not ml" -q
-uv run --group platform --group inference pytest tests/nomicous -m integration -q
-uv run --group platform --group inference pytest tests/nomicous -m ml -q
+uv run --group platform --group inference pytest tests/nomikos -m "not integration and not ml" -q
+uv run --group platform --group inference pytest tests/nomikos -m integration -q
+uv run --group platform --group inference pytest tests/nomikos -m ml -q
 uv run --group platform --group inference --group export pytest tests/inference -q
 ```
 
 Frontend:
 
 ```bash
-cd nomicous/frontend
+cd nomikos/frontend
 npm run typecheck
 npm run lint
 npm test
@@ -64,7 +64,7 @@ npm run check:api
 Python correctness checks and the configured pre-commit hook:
 
 ```bash
-uv run --locked --group dev ruff check nomicous/backend inference scripts/platform tests/nomicous tests/inference tests/hf
+uv run --locked --group dev ruff check nomikos/backend inference scripts/platform tests/nomikos tests/inference tests/hf
 uv run --locked --group dev pre-commit run --all-files
 ```
 
@@ -94,5 +94,5 @@ For Supabase-backed local testing, see [deployment/supabase.md](../deployment/su
 | Symptom | Fix |
 |---------|-----|
 | Tests hang on DB lock | Stop the `api` container; terminate stale Postgres sessions |
-| `DuplicatePreparedStatementError` with Supabase pooler | Handled in `nomicous/infrastructure/db.py` (`statement_cache_size=0`) |
+| `DuplicatePreparedStatementError` with Supabase pooler | Handled in `nomikos/infrastructure/db.py` (`statement_cache_size=0`) |
 | ML tests skip or fail | Prefetch the default transcribe model: `PYTHONPATH=. python scripts/hf/fetch_model.py syriac-calamari-v1 --registry-tag stable` (see [`inference/README.md`](../../inference/README.md)) |

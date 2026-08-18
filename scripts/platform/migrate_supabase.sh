@@ -3,11 +3,11 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-ENV_FILE="${SUPABASE_ENV_FILE:-$ROOT/nomicous/backend/core/.env.supabase}"
+ENV_FILE="${SUPABASE_ENV_FILE:-$ROOT/nomikos/backend/core/.env.supabase}"
 
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "Missing $ENV_FILE" >&2
-  echo "Copy nomicous/backend/core/.env.supabase.example and fill in credentials." >&2
+  echo "Copy nomikos/backend/core/.env.supabase.example and fill in credentials." >&2
   exit 1
 fi
 
@@ -36,7 +36,7 @@ if [[ -z "$ALEMBIC" ]]; then
   exit 1
 fi
 
-cd "$ROOT/nomicous"
+cd "$ROOT/nomikos"
 echo "Running Alembic against Supabase (migrator URL)…"
 echo "  alembic: $ALEMBIC"
 PYTHONPATH=. "$ALEMBIC" -c infrastructure/alembic.ini upgrade head

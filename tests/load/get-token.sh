@@ -38,7 +38,7 @@ load_locust_token() {
     curl --fail-with-body --silent --show-error \
       --connect-timeout 5 \
       --max-time 15 \
-      -X POST "https://api.nomicous.com/auth/login" \
+      -X POST "https://api.nomikos.app/auth/login" \
       -H "Content-Type: application/json" \
       --data "{\"email\":\"${LOCUST_EMAIL}\",\"password\":\"${LOCUST_PASSWORD}\"}"
   )"; then

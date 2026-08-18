@@ -1,7 +1,7 @@
-"""`nomicous upgrade` - the launch check - against a real index and a real platform.
+"""`nomikos upgrade` - the launch check - against a real index and a real platform.
 
 Everything here is live, and the package index is the part that had to be. The
-agent is a real `nomicous` console script installed from a real wheel; the index
+agent is a real `nomikos` console script installed from a real wheel; the index
 it upgrades from is a PEP 503 tree of real wheels served over real HTTP by
 `python -m http.server`; the installer is the real `pip` or the real `uv`,
 resolving over the network to that index; and the platform is a real uvicorn
@@ -60,7 +60,7 @@ DATABASE = "kalamos_058_upgrade"
 
 CLI_TIMEOUT_SECONDS = 300.0
 
-PACKAGE = "nomicous-inference"
+PACKAGE = "nomikos-inference"
 
 # The two builds on the index. `0.9.0` beats `0.1.0` by arithmetic and not by
 # alphabet, which is the ordering the platform's floor is careful about.
@@ -72,14 +72,14 @@ BEYOND_INDEX = "1.5.0"
 
 _PYPROJECT = """\
 [project]
-name = "nomicous-inference"
+name = "nomikos-inference"
 version = "{version}"
 description = "Agent build {version}, for the self-upgrade tests"
 requires-python = ">=3.11,<3.13"
 dependencies = []
 
 [project.scripts]
-nomicous = "inference.cli:main"
+nomikos = "inference.cli:main"
 
 [build-system]
 requires = ["hatchling>=1.27"]
@@ -250,7 +250,7 @@ class Agent:
             [
                 str(self.python),
                 "-c",
-                "from importlib.metadata import version; print(version('nomicous-inference'))",
+                "from importlib.metadata import version; print(version('nomikos-inference'))",
             ],
             capture_output=True,
             text=True,
@@ -274,7 +274,7 @@ def agent_at(local_index: str, tmp_path: Path):
         counter[0] += 1
         workspace = tmp_path / f"agent-{counter[0]}"
         venv = workspace / "venv"
-        home = workspace / "nomicous-home"
+        home = workspace / "nomikos-home"
         workspace.mkdir(parents=True)
 
         create = [
@@ -316,11 +316,11 @@ def agent_at(local_index: str, tmp_path: Path):
         )
 
         environment = dict(os.environ)
-        for inherited in ("NOMICOUS_API_URL", "NOMICOUS_UPGRADED_FROM", "VIRTUAL_ENV"):
+        for inherited in ("NOMIKOS_API_URL", "NOMIKOS_UPGRADED_FROM", "VIRTUAL_ENV"):
             environment.pop(inherited, None)
         environment.update(
             {
-                "NOMICOUS_HOME": str(home),
+                "NOMIKOS_HOME": str(home),
                 "PYTHONUNBUFFERED": "1",
                 # The index the *installer* reaches, exactly as a researcher's
                 # own configuration would reach it. The CLI has no index flag:
@@ -338,8 +338,8 @@ def agent_at(local_index: str, tmp_path: Path):
             }
         )
 
-        executable = scripts / ("nomicous.exe" if os.name == "nt" else "nomicous")
-        assert executable.is_file(), "the wheel did not install a `nomicous` console script"
+        executable = scripts / ("nomikos.exe" if os.name == "nt" else "nomikos")
+        assert executable.is_file(), "the wheel did not install a `nomikos` console script"
         return Agent(
             executable=executable,
             python=python,
@@ -416,8 +416,8 @@ def claim(platform: Platform, *, device_token: str, agent_version: str) -> tuple
         f"{platform.base_url}/device/v1/jobs/claim",
         {"wait_seconds": 0},
         {
-            "X-Nomicous-Device-Token": device_token,
-            "X-Nomicous-Agent-Version": agent_version,
+            "X-Nomikos-Device-Token": device_token,
+            "X-Nomikos-Agent-Version": agent_version,
         },
     )
 
@@ -536,7 +536,7 @@ def test_an_upgrade_that_did_not_take_stops_instead_of_re_execing_forever(
     agent = agent_at(AGENT_OLD)
 
     completed = agent.run(
-        "upgrade", "--api-url", platform.base_url, extra={"NOMICOUS_UPGRADED_FROM": "0.0.9"}
+        "upgrade", "--api-url", platform.base_url, extra={"NOMIKOS_UPGRADED_FROM": "0.0.9"}
     )
 
     assert completed.returncode != 0, completed.stdout
@@ -560,12 +560,12 @@ def test_a_source_checkout_is_told_to_install_rather_than_upgraded(platform_at, 
     environment.update(
         {
             "PYTHONPATH": str(REPO_ROOT),
-            "NOMICOUS_HOME": str(tmp_path / "home"),
+            "NOMIKOS_HOME": str(tmp_path / "home"),
             "PYTHONUNBUFFERED": "1",
         }
     )
-    environment.pop("NOMICOUS_API_URL", None)
-    environment.pop("NOMICOUS_UPGRADED_FROM", None)
+    environment.pop("NOMIKOS_API_URL", None)
+    environment.pop("NOMIKOS_UPGRADED_FROM", None)
 
     completed = subprocess.run(
         [sys.executable, "-m", "inference.cli", "upgrade", "--api-url", platform.base_url],
@@ -602,7 +602,7 @@ def test_a_platform_that_cannot_be_reached_does_not_stop_the_agent(agent_at) -> 
 # Both installers, because both are real install paths
 # ---------------------------------------------------------------------------
 def test_an_environment_with_pip_upgrades_with_pip(agent_at, platform_at) -> None:
-    """`pip install nomicous-inference` leaves a pip behind, and it is the
+    """`pip install nomikos-inference` leaves a pip behind, and it is the
     installer that owns that environment."""
     platform = platform_at(minimum="0.5.0", latest=AGENT_NEW)
     agent = agent_at(AGENT_OLD, with_pip=True)
@@ -632,6 +632,6 @@ def test_an_environment_with_pip_upgrades_with_pip(agent_at, platform_at) -> Non
 # `test_asking_for_the_floor_takes_nothing_from_the_queue` and
 # `test_an_agent_that_states_no_version_is_refused_by_the_floor_endpoint` stood here. Both
 # were raw `urllib` calls against a platform endpoint with no CLI involved at all, and the
-# second was a verbatim duplicate of `tests/nomicous/integration/test_agent_version_floor.py::
+# second was a verbatim duplicate of `tests/nomikos/integration/test_agent_version_floor.py::
 # test_an_agent_that_does_not_say_what_it_is_is_refused`. That module owns this surface and
 # covers it in fifteen tests.

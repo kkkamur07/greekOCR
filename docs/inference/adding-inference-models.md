@@ -20,7 +20,7 @@ Train / export checkpoint
     → add InferenceModel row in Postgres
     → deploy platform API
     → release the published package so agents carry the new entry
-    → first run downloads weights into ~/.nomicous/hf/cache/
+    → first run downloads weights into ~/.nomikos/hf/cache/
 ```
 
 **Where the Registry lives at runtime:** an **inference agent** reads the
@@ -251,14 +251,14 @@ Update or add coverage as needed:
 | Area | Tests |
 |------|-------|
 | Registry parsing | `tests/inference/unit/test_registry.py` |
-| Hosted registry endpoint | `tests/nomicous/integration/test_inference_registry.py` |
+| Hosted registry endpoint | `tests/nomikos/integration/test_inference_registry.py` |
 | Hub resolve / prefetch | `tests/hf/` |
-| Platform catalog | `tests/nomicous/integration/test_inference_catalog.py` |
-| ML integration (optional) | `tests/nomicous/integration/ml/` |
+| Platform catalog | `tests/nomikos/integration/test_inference_catalog.py` |
+| ML integration (optional) | `tests/nomikos/integration/ml/` |
 
 ```bash
 uv run --group inference --group export pytest tests/inference tests/hf -q
-uv run --group platform --group inference pytest tests/nomicous/integration/test_inference_registry.py -q
+uv run --group platform --group inference pytest tests/nomikos/integration/test_inference_registry.py -q
 ```
 
 ---
@@ -280,7 +280,7 @@ uv run --group platform --group inference pytest tests/nomicous/integration/test
    upgrading the package on its host. It runs the same wheel a laptop does.
 
 4. **Local inference** - researchers pick the model up with
-   `uv tool upgrade nomicous-inference`, or automatically at the next **launch
+   `uv tool upgrade nomikos-inference`, or automatically at the next **launch
    check** if you raise the platform's **version floor**
    (`INFERENCE_AGENT_MIN_VERSION`) past the last release without it. Weights
    download on the first run that needs them.
@@ -289,7 +289,7 @@ uv run --group platform --group inference pytest tests/nomicous/integration/test
    the tree rather than from an installed wheel:
 
    ```bash
-   NOMICOUS_API_URL=http://localhost:8000 \
+   NOMIKOS_API_URL=http://localhost:8000 \
      uv run --group inference python -m inference.cli run --exit-when-empty
    ```
 
@@ -301,7 +301,7 @@ uv run --group platform --group inference pytest tests/nomicous/integration/test
 - [ ] Authenticated `GET /inference/models` lists the new **InferenceModel**
 - [ ] `host_eligibility` in the shipped `registry.yaml` matches what the model can actually run on
 - [ ] Cloud job: hosted agent claims a segment/transcribe page → job completes with expected output
-- [ ] Local path: with **host preference** on and a paired machine running `nomicous run`, the job announces the local host, completes, and leaves weights under `~/.nomicous/hf/cache/<registry_model_id>/stable/`
+- [ ] Local path: with **host preference** on and a paired machine running `nomikos run`, the job announces the local host, completes, and leaves weights under `~/.nomikos/hf/cache/<registry_model_id>/stable/`
 
 ---
 

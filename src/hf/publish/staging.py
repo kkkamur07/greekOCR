@@ -114,7 +114,7 @@ library_name: {ref.architecture}
 
 # {title} ({ref.architecture})
 
-{usage_description} Published from the nomicous **Hub staging tree**.
+{usage_description} Published from the nomikos **Hub staging tree**.
 
 | Field | Value |
 |-------|-------|
@@ -247,7 +247,7 @@ def build_dataset_readme(
   namespace: str,
   script: str,
   crop_format: str = "Image line crops with UTF-8 transcriptions",
-  provenance: str = "Curated from nomicous annotation exports.",
+  provenance: str = "Curated from nomikos annotation exports.",
 ) -> str:
   return f"""---
 language:

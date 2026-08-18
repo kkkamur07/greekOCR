@@ -1,14 +1,14 @@
 # Frontend Content-Security-Policy
 
-Applies to the SPA at `app.nomicous.com`. The policy is served as a static
-header from [`nomicous/frontend/vercel.json`](../../nomicous/frontend/vercel.json).
+Applies to the SPA at `app.nomikos.app`. The policy is served as a static
+header from [`nomikos/frontend/vercel.json`](../../nomikos/frontend/vercel.json).
 
 ## `connect-src` names no loopback origin at all
 
 The policy grants exactly two origins:
 
 ```
-connect-src 'self' https://api.nomicous.com
+connect-src 'self' https://api.nomikos.app
 ```
 
 It used to end with `http://127.0.0.1:8001`, and before that with
@@ -36,7 +36,7 @@ that would be worse than the gap.
 
 Next.js 16 (App Router, `output: "standalone"`) emits inline `<script>` blocks
 that carry the React Server Components flight payload. Built output from
-`next build` at `nomicous/frontend/.next/server/app/index.html` contains five
+`next build` at `nomikos/frontend/.next/server/app/index.html` contains five
 inline scripts, none of which has a `nonce` attribute:
 
 ```
@@ -66,7 +66,7 @@ Two consequences:
 
 ### The fix, when it is scheduled
 
-Move the policy from `vercel.json` into `nomicous/frontend/middleware.ts`:
+Move the policy from `vercel.json` into `nomikos/frontend/middleware.ts`:
 generate 16 random bytes per request, set
 `script-src 'self' 'nonce-<value>' 'strict-dynamic'`, and forward the nonce on
 the request headers so Next.js can apply it. `output: "standalone"` means
@@ -81,8 +81,8 @@ place and limit what an injected inline script can escalate to.
 ## `frame-src 'self' blob:` - why the inline PDF preview needs it
 
 The transcription PDF preview
-([`PageEditorTranscriptionPdfPane`](../../nomicous/frontend/src/components/page-editor/PageEditorTranscriptionPdfPane.tsx)
-and [`PublicCanvasPdfView`](../../nomicous/frontend/src/components/public/PublicCanvasPdfView.tsx))
+([`PageEditorTranscriptionPdfPane`](../../nomikos/frontend/src/components/page-editor/PageEditorTranscriptionPdfPane.tsx)
+and [`PublicCanvasPdfView`](../../nomikos/frontend/src/components/public/PublicCanvasPdfView.tsx))
 fetches the PDF over the API, wraps the response in `URL.createObjectURL`, and
 embeds the resulting `blob:` URL. Both components used to embed it with
 `<object data={blobUrl} type="application/pdf">`, which `object-src 'none'`

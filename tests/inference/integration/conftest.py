@@ -17,7 +17,7 @@ one module ever needed.
 
 Each module keeps its own database, for the reason each of them documented
 separately: a server held open across a module cannot have the ground moved
-under it by ``tests/nomicous/integration/conftest.py``'s truncation.
+under it by ``tests/nomikos/integration/conftest.py``'s truncation.
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ import pytest
 from tests.fixtures.paths import REPO_ROOT
 
 POSTGRES_DSN = "postgresql://postgres:dev@localhost:5433"
-APP_ORIGIN = "https://app.nomicous.test"
+APP_ORIGIN = "https://app.nomikos.test"
 JWT_SECRET = "test-secret-not-for-production-at-least-32-bytes"
 #: A dedicated key, as production requires: keying device tokens off
 #: ``JWT_SECRET`` is what ADR 0001 decision 5 refuses to allow.
@@ -72,7 +72,7 @@ def require_uv() -> str:
 # ---------------------------------------------------------------------------
 def psql(sql: str) -> subprocess.CompletedProcess:
     return subprocess.run(
-        ["docker", "exec", "nomicous-db-1", "psql", "-U", "postgres", "-c", sql],
+        ["docker", "exec", "nomikos-db-1", "psql", "-U", "postgres", "-c", sql],
         capture_output=True,
         text=True,
     )
@@ -92,7 +92,7 @@ def migrate_database(database: str) -> str:
     environment["JWT_SECRET"] = JWT_SECRET
     migrated = subprocess.run(
         [sys.executable, "-m", "alembic", "-c", "infrastructure/alembic.ini", "upgrade", "head"],
-        cwd=REPO_ROOT / "nomicous",
+        cwd=REPO_ROOT / "nomikos",
         env=environment,
         capture_output=True,
         text=True,
@@ -159,7 +159,7 @@ def platform_environment(database_url: str, **overrides: str) -> dict[str, str]:
             "ENVIRONMENT": "development",
             # The platform imports `inference.contracts`, so the repository root
             # is on the path alongside the application package.
-            "PYTHONPATH": os.pathsep.join([str(REPO_ROOT / "nomicous"), str(REPO_ROOT)]),
+            "PYTHONPATH": os.pathsep.join([str(REPO_ROOT / "nomikos"), str(REPO_ROOT)]),
             "INFERENCE_REGISTRY_PATH": str(REPO_ROOT / "inference" / "registry.yaml"),
         }
     )
@@ -202,7 +202,7 @@ def start_platform(
                 "--log-level",
                 log_level,
             ],
-            cwd=REPO_ROOT / "nomicous",
+            cwd=REPO_ROOT / "nomikos",
             env=platform_environment(database_url, **overrides),
             stdout=log_file,
             stderr=subprocess.STDOUT,
@@ -264,7 +264,7 @@ def build_and_install_cli(
         [uv, "build", "--wheel", "-o", str(dist)], cwd=REPO_ROOT, capture_output=True, text=True
     )
     assert build.returncode == 0, build.stderr
-    wheels = sorted(dist.glob("nomicous_inference-*.whl"))
+    wheels = sorted(dist.glob("nomikos_inference-*.whl"))
     assert len(wheels) == 1, f"expected exactly one wheel, got {wheels}"
 
     subprocess.run(
@@ -283,8 +283,8 @@ def build_and_install_cli(
         )
         assert installed.returncode == 0, installed.stderr
 
-    executable = scripts / ("nomicous.exe" if os.name == "nt" else "nomicous")
-    assert executable.is_file(), "the wheel did not install a `nomicous` console script"
+    executable = scripts / ("nomikos.exe" if os.name == "nt" else "nomikos")
+    assert executable.is_file(), "the wheel did not install a `nomikos` console script"
     return {"executable": executable, "wheel": wheels[0], "workspace": workspace}
 
 
@@ -304,7 +304,7 @@ def cli_environment(
     environment = dict(os.environ)
     for inherited in drop:
         environment.pop(inherited, None)
-    environment["NOMICOUS_HOME"] = str(home)
+    environment["NOMIKOS_HOME"] = str(home)
     environment["PYTHONUNBUFFERED"] = "1"
     environment.update(extra or {})
     return environment

@@ -1,16 +1,16 @@
-"""`nomicous version` - what this build is, and what it will tell the platform.
+"""`nomikos version` - what this build is, and what it will tell the platform.
 
 The number printed here is not a decoration. Issue 055 put a **version floor**
 on the **claim** path: every claim states its version in
-`X-Nomicous-Agent-Version`, and an agent below the floor is refused with `426`
+`X-Nomikos-Agent-Version`, and an agent below the floor is refused with `426`
 before it is authenticated - so it also stops reporting **capacity**. That makes
 "which version am I running" the first question worth asking when a machine
 stops taking work, and this subcommand is the answer to it.
 
 The floor itself is deliberately not shown, but not because it cannot be: since
 `read_agent_floor`, `GET /device/v1/agent/version` answers it without a
-credential and without touching a queue, and `nomicous upgrade` - which this same
-package runs before every `nomicous run` - asks it there. This subcommand stays
+credential and without touching a queue, and `nomikos upgrade` - which this same
+package runs before every `nomikos run` - asks it there. This subcommand stays
 offline anyway. It is the thing a researcher runs when the network is the
 suspect, and a version report that needs the platform to answer cannot report
 the version of a machine that cannot reach it.
@@ -24,7 +24,7 @@ from importlib.metadata import PackageNotFoundError, version
 
 from inference.cli import console as ui
 
-DISTRIBUTION_NAME = "nomicous-inference"
+DISTRIBUTION_NAME = "nomikos-inference"
 SOURCE_CHECKOUT_VERSION = "0+unknown"
 
 
@@ -78,7 +78,7 @@ def run(args: argparse.Namespace) -> int:
         table.add_row("Paired", ui.value(f"unreadable credential - {exc}"))
     else:
         if credential is None:
-            table.add_row("Paired", ui.value("no - run `nomicous pair`"))
+            table.add_row("Paired", ui.value("no - run `nomikos pair`"))
         else:
             table.add_row(
                 "Paired", ui.value(f"{credential.account_email} at {credential.platform_url}")

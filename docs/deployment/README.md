@@ -19,7 +19,7 @@ Deploy configs outside `docs/`:
 
 There is no inference deploy config. Since ADR 0002 there is no inference
 service to deploy: the one **published package** is installed from PyPI, and a
-hosted worker runs the same `nomicous run` a researcher does, with a service
+hosted worker runs the same `nomikos run` a researcher does, with a service
 credential instead of a device token.
 
 Back to [docs index](../README.md).

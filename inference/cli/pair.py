@@ -1,4 +1,4 @@
-"""`nomicous pair` - authorise this machine against a researcher's account.
+"""`nomikos pair` - authorise this machine against a researcher's account.
 
 The order of what this prints is the design, not the presentation:
 
@@ -71,7 +71,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--api-url",
         metavar="URL",
-        help="Platform to pair against. Defaults to $NOMICOUS_API_URL, then the hosted API.",
+        help="Platform to pair against. Defaults to $NOMIKOS_API_URL, then the hosted API.",
     )
     parser.add_argument(
         "--name",
@@ -108,7 +108,7 @@ def run(args: argparse.Namespace) -> int:
         existing = load_credential()
     except CredentialError as exc:
         errors.print(f"[red]{exc}[/red]")
-        errors.print(f"Delete {credential_path()} and run `nomicous pair` again to replace it.")
+        errors.print(f"Delete {credential_path()} and run `nomikos pair` again to replace it.")
         return ui.EXIT_FAILED
 
     if existing is not None and not args.force:
@@ -136,7 +136,7 @@ def _report_existing(
             f"[red]This machine is paired with {credential.platform_url}, not {base_url}.[/red]"
         )
         errors.print(
-            "One credential is stored per machine. Run `nomicous pair --force` to replace it."
+            "One credential is stored per machine. Run `nomikos pair --force` to replace it."
         )
         return ui.EXIT_FAILED
 
@@ -180,7 +180,7 @@ def _report_rejected(errors, credential: DeviceCredential) -> int:
         errors.print("[red]This machine's device token has expired.[/red]")
         errors.print(
             f"It ran out on {_format_timestamp(credential.token_expires_at)}. "
-            "Run `nomicous pair --force` to pair again."
+            "Run `nomikos pair --force` to pair again."
         )
         return ui.EXIT_FAILED
 
@@ -192,7 +192,7 @@ def _report_rejected(errors, credential: DeviceCredential) -> int:
     errors.print()
     errors.print(
         "Nothing here can undo that: revocation is a decision made on the account, "
-        "and only pairing again reverses it. Run [bold]nomicous pair --force[/bold] "
+        "and only pairing again reverses it. Run [bold]nomikos pair --force[/bold] "
         "if that is what you want."
     )
     return ui.EXIT_FAILED
@@ -251,7 +251,7 @@ def _pair(console, errors, client: PlatformClient, args: argparse.Namespace) -> 
     console.print(table)
     console.print()
     console.print(
-        "Run [bold]nomicous run[/bold] to start taking work, or remove this machine "
+        "Run [bold]nomikos run[/bold] to start taking work, or remove this machine "
         "from your account settings to revoke it."
     )
     return ui.EXIT_OK
@@ -323,19 +323,19 @@ def _wait_for_approval(console, errors, client: PlatformClient, started: Started
                 errors.print("[red]The request was refused.[/red]")
                 errors.print(
                     "Either it was denied in the browser, or this pairing code has "
-                    "already been used. Run `nomicous pair` to start a new one."
+                    "already been used. Run `nomikos pair` to start a new one."
                 )
                 return None
             if poll.status == STATUS_EXPIRED:
                 errors.print("[red]The pairing request expired before it was approved.[/red]")
-                errors.print("Run `nomicous pair` to start a new one.")
+                errors.print("Run `nomikos pair` to start a new one.")
                 return None
             if poll.status not in (STATUS_AUTHORIZATION_PENDING, STATUS_SLOW_DOWN):
                 errors.print(f"[red]The platform answered an unknown state: {poll.status!r}[/red]")
                 return None
             if time.monotonic() >= deadline:
                 errors.print("[red]Gave up waiting for approval.[/red]")
-                errors.print("Run `nomicous pair` to start a new one.")
+                errors.print("Run `nomikos pair` to start a new one.")
                 return None
 
 

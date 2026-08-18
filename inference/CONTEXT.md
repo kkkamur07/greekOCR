@@ -35,7 +35,7 @@ A URI telling the inference service where to find checkpoint files for one regis
 _Avoid_: artifact path, model path
 
 **Hub model repo**:
-A Hugging Face **model** repository holding inference weights and a model card for one **registry model id** (e.g. `nomicous/greek-htr-calamari` for `greek-calamari-v1` or `nomicous/segmentation-blla` for `blla-segment`).
+A Hugging Face **model** repository holding inference weights and a model card for one **registry model id** (e.g. `nomikos/greek-htr-calamari` for `greek-calamari-v1` or `nomikos/segmentation-blla` for `blla-segment`).
 _Avoid_: model folder, checkpoint repo
 
 **Hub dataset slug**:
@@ -59,7 +59,7 @@ The required 64-character SHA-256 digest for the architecture-native **Hub artif
 _Avoid_: directory hash alone, unverified download
 
 **Local bundled weights**:
-Checkpoint files under `src/hf/local/` used for offline dev and Docker without Hub access. Referenced by `file://local/...` **weights source** URIs relative to `src/hf/`. A source-checkout affordance only: they are not shipped in the published package, which resolves weights by `hf://`. Override the root with `NOMICOUS_LOCAL_WEIGHTS_ROOT`.
+Checkpoint files under `src/hf/local/` used for offline dev and Docker without Hub access. Referenced by `file://local/...` **weights source** URIs relative to `src/hf/`. A source-checkout affordance only: they are not shipped in the published package, which resolves weights by `hf://`. Override the root with `NOMIKOS_LOCAL_WEIGHTS_ROOT`.
 _Avoid_: dev weights, inference/weights
 
 **Hub staging tree**:
@@ -67,7 +67,7 @@ Publish-ready **Hub artifact**s under `src/hf/staging/` (models and datasets) be
 _Avoid_: hf repo (ambiguous with Hub remote repo)
 
 **Hub cache**:
-Downloaded **Hub artifact**s at runtime under `~/.nomicous/hf/cache/<registry_model_id>/<registry_tag>/` (override: `HF_CACHE_ROOT`). It lives in the researcher's home directory, not beside the code, because **Hub integration** ships inside the installed package. Reused only when required files exist and a manifest matches the immutable **Hub revision** and **artifact SHA-256**.
+Downloaded **Hub artifact**s at runtime under `~/.nomikos/hf/cache/<registry_model_id>/<registry_tag>/` (override: `HF_CACHE_ROOT`). It lives in the researcher's home directory, not beside the code, because **Hub integration** ships inside the installed package. Reused only when required files exist and a manifest matches the immutable **Hub revision** and **artifact SHA-256**.
 _Avoid_: runtime weight cache, inference/weights/cache, src/hf/cache (pre-package layout)
 
 **Hub cache manifest**:
@@ -79,7 +79,7 @@ Python code at `inference/hub/` that resolves `hf://` URIs, checks **Hub cache**
 _Avoid_: huggingface module (too generic), src/hf/resolve (pre-package location)
 
 **Published package**:
-The one distribution, `nomicous-inference`, carrying the inference library, **Hub integration**, and the `nomicous` console entry point. A researcher's laptop and a hosted worker install the same package (ADR 0002), so there is no version-compatibility matrix between components that always ship together. Built from the repository root; the wheel is now the whole of `inference/`, because the loopback HTTP surfaces it used to exclude were deleted (#60) rather than merely held out of the build.
+The one distribution, `nomikos-inference`, carrying the inference library, **Hub integration**, and the `nomikos` console entry point. A researcher's laptop and a hosted worker install the same package (ADR 0002), so there is no version-compatibility matrix between components that always ship together. Built from the repository root; the wheel is now the whole of `inference/`, because the loopback HTTP surfaces it used to exclude were deleted (#60) rather than merely held out of the build.
 _Avoid_: helper bundle (frozen-installer era), library package vs CLI package (there is one)
 
 **Inference host**:
@@ -123,7 +123,7 @@ How long a claimed page stays with the **inference agent** that took it before t
 _Avoid_: timeout (ambiguous with the platform-wide job timeout), lock (nothing is held in the database between requests)
 
 **Device credential file**:
-Where one paired machine keeps its **device token**: `~/.nomicous/device.json`, mode `0600` in a `0700` directory (override the root with `NOMICOUS_HOME`). Owner-only is the only control the client side of ADR 0001's accepted risk actually owns - per-account scope and revocation are the platform's. It also records which platform minted the token, because a credential is only meaningful against that one.
+Where one paired machine keeps its **device token**: `~/.nomikos/device.json`, mode `0600` in a `0700` directory (override the root with `NOMIKOS_HOME`). Owner-only is the only control the client side of ADR 0001's accepted risk actually owns - per-account scope and revocation are the platform's. It also records which platform minted the token, because a credential is only meaningful against that one.
 _Avoid_: config file (it holds a credential, not settings), keychain entry (nothing uses one), token in the environment
 
 **Confirmation code**:
@@ -151,7 +151,7 @@ The account-level setting "use my computer when it is available", the only resea
 _Avoid_: per-job execution mode, `local_only` (retired by ADR 0002), routing rule
 
 **Hub namespace**:
-The Hugging Face account or org that owns **Hub model repos** and **Hub dataset repos**. Starts under a personal username; may later move to the `nomicous` org without changing repo slugs.
+The Hugging Face account or org that owns **Hub model repos** and **Hub dataset repos**. Starts under a personal username; may later move to the `nomikos` org without changing repo slugs.
 _Avoid_: org (when meaning the namespace generically)
 
 ## Relationships
@@ -160,8 +160,8 @@ _Avoid_: org (when meaning the namespace generically)
 - One **Hub model repo** corresponds to one task/architecture pair; HTR uses `{script}-htr-{architecture}` and BLLA segmentation uses `segmentation-blla`
 - **Registry model id** = `{script}-{architecture}-{model_version}`; maps to one **Hub repo slug** + **model version**
 - Local **Hub staging tree**: `src/hf/staging/models/{script}/{architecture}/{model_version}/{registry_tag}/`
-- **Hub cache**: `~/.nomicous/hf/cache/{registry_model_id}/{registry_tag}/`
-- **Device credential file**: `~/.nomicous/device.json` - the same home-directory root as the **Hub cache**, one **device token** per machine
+- **Hub cache**: `~/.nomikos/hf/cache/{registry_model_id}/{registry_tag}/`
+- **Device credential file**: `~/.nomikos/device.json` - the same home-directory root as the **Hub cache**, one **device token** per machine
 - **Local bundled weights**: `src/hf/local/{script}/{architecture}/{model_version}/{registry_tag}/`
 - The **Hub staging tree** and **Local bundled weights** live under `src/hf/`; the **Hub cache** is in the researcher's home directory and **Hub integration** code is in the package
 - **Hub cache** reuse requires matching **Hub cache manifest** hash, not just present files
@@ -187,7 +187,7 @@ _Avoid_: org (when meaning the namespace generically)
 ## Flagged ambiguities
 
 - "data" was used to mean both weights and training material - resolved: use **Hub model repo** vs **Hub dataset repo**.
-- "kalamos" vs "nomicous" as public product name - resolved for Hub: product is **nomicous**; **Hub namespace** may be personal until the org exists.
+- "kalamos" vs "nomikos" as public product name - resolved for Hub: product is **nomikos**; **Hub namespace** may be personal until the org exists.
 - Checkpoint filename at repo root - resolved: use runtime artifact names (**Hub artifact**), e.g. Calamari `best.onnx` and BLLA `blla.onnx`, published beside the `best.pt` / `blla.safetensors` they were exported from.
 - Calamari and BLLA runtime **Hub artifact** format is ONNX (`best.onnx`, `blla.onnx`). PyTorch was the runtime from 2026-08-04 to 2026-08-05 and is now the *exporter*: the trained artifact and the run artifact are different files again, and the parity between them is asserted by `tests/export/` rather than assumed away. The 445 MB that buys off a researcher's install is why. See ADR 0006, which supersedes ADR 0004.
 - Legacy registry ids (`greek-calamariv1`) - resolved: migrate to `{script}-{architecture}-{model_version}` (e.g. `greek-calamari-v1`); **Hub repo slug** is task-specific.
@@ -201,13 +201,13 @@ _Avoid_: org (when meaning the namespace generically)
 - Queued jobs: the platform owns the only queue (ADR 0003). `inference` holds no database, ORM, or claim loop of its own.
 - **Claim**: `POST /device/v1/jobs/claim` on the platform - the one endpoint this layer adds (ADR 0005). Completion and failure are the existing `POST /internal/inference/job-complete` with a `JobCallbackRequest`; abandonment is the existing stale sweep. There is no heartbeat and no release endpoint.
 - **Signed page image link**: `page_image_url` / `page_image_expires_at` on the claimed page. Minted by the media store, so Supabase signs a Storage URL and the local filesystem backend signs a path the platform serves at `/media/signed/{image_key}` - a route with no credential dependency, which refuses to answer unless `STORAGE_BACKEND=local`.
-- **Version floor**: every claim sends `X-Nomicous-Agent-Version`. Below the floor the platform answers `426` with `error.code = AGENT_VERSION_UNSUPPORTED`, `reason` (`below_floor` / `missing` / `malformed`), `minimum_version`, `latest_version`, `package`, and `retryable: false`. At or above it, the 200 response carries an `agent` notice with `outdated`. Configured by `INFERENCE_AGENT_MIN_VERSION` / `INFERENCE_AGENT_LATEST_VERSION` on the platform (`backend/ml/domain/agent_version.py`, `backend/ml/api/agent_version.py`).
+- **Version floor**: every claim sends `X-Nomikos-Agent-Version`. Below the floor the platform answers `426` with `error.code = AGENT_VERSION_UNSUPPORTED`, `reason` (`below_floor` / `missing` / `malformed`), `minimum_version`, `latest_version`, `package`, and `retryable: false`. At or above it, the 200 response carries an `agent` notice with `outdated`. Configured by `INFERENCE_AGENT_MIN_VERSION` / `INFERENCE_AGENT_LATEST_VERSION` on the platform (`backend/ml/domain/agent_version.py`, `backend/ml/api/agent_version.py`).
 - **Launch check**: `GET /device/v1/agent/version` answers the same 426 or the same notice with nothing taken from the queue - unauthenticated, because the version dependency resolves before any credential is looked at. The CLI half is `inference/cli/upgrade.py`, wired into `main.py` for the commands that claim and nowhere else; it upgrades with whichever installer already owns the environment (`pip` if this interpreter has one, otherwise `uv pip`) and re-execs through `os.execve`.
 - Architectures implemented: **Calamari** (`inference/architectures/calamari/`) and native **BLLA segment** (`inference/architectures/blla/`)
 - **Calamari runtime**: local ONNX Runtime session + local preprocessing; no TensorFlow, no PyTorch, and no vendored `calamari_ocr` import at inference time.
 - Weight resolution: `file://`, `hf://`, and `package://` (see `inference/weights/__init__.py` and `inference/hub/`)
-- Runtime cache: `~/.nomicous/hf/cache/<registry_model_id>/<registry_tag>/`
-- **CLI** (`inference/cli/`): the only entry point a researcher has. `nomicous pair` and `nomicous version` (#56), `nomicous run` (#57), `nomicous upgrade` (#58). `pair` runs the pairing protocol above and writes the **device credential file**; `version` reports what the **version floor** will read, and asks the platform nothing; `upgrade` is the **launch check** run on demand, and prints nothing when this agent is current. `run` is the **claim** loop: one page in flight, fetched through the **signed page image link**, executed by the same `run_model` the platform's own worker calls, and ended through the existing job callback - `--exit-when-empty` for a script, waiting otherwise. `run` is also the only command that claims, so it is the only one the launch check gates, and it runs that check before its first claim and never again. A hosted **inference agent** runs the same loop with a **service credential** in `NOMICOUS_SERVICE_TOKEN` and a short poll. The platform base URL comes from `NOMICOUS_API_URL` or `--api-url`.
+- Runtime cache: `~/.nomikos/hf/cache/<registry_model_id>/<registry_tag>/`
+- **CLI** (`inference/cli/`): the only entry point a researcher has. `nomikos pair` and `nomikos version` (#56), `nomikos run` (#57), `nomikos upgrade` (#58). `pair` runs the pairing protocol above and writes the **device credential file**; `version` reports what the **version floor** will read, and asks the platform nothing; `upgrade` is the **launch check** run on demand, and prints nothing when this agent is current. `run` is the **claim** loop: one page in flight, fetched through the **signed page image link**, executed by the same `run_model` the platform's own worker calls, and ended through the existing job callback - `--exit-when-empty` for a script, waiting otherwise. `run` is also the only command that claims, so it is the only one the launch check gates, and it runs that check before its first claim and never again. A hosted **inference agent** runs the same loop with a **service credential** in `NOMIKOS_SERVICE_TOKEN` and a short poll. The platform base URL comes from `NOMIKOS_API_URL` or `--api-url`.
 
 ### Hub layout (`src/hf/`)
 
@@ -217,6 +217,6 @@ _Avoid_: org (when meaning the namespace generically)
 | Publish staging validation, model cards, collection sync | `src/hf/publish/` |
 | Local bundled weights for offline dev | `src/hf/local/` |
 | Publish-ready staging tree | `src/hf/staging/` |
-| Hub runtime cache | `~/.nomicous/hf/cache/` |
+| Hub runtime cache | `~/.nomikos/hf/cache/` |
 | Collection metadata | `src/hf/publish/collection.yaml` |
 | CLI entrypoints | `scripts/hf/` |

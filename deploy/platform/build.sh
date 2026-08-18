@@ -11,8 +11,8 @@ if [[ "$DEST" == "/" ]]; then
     exit 1
 fi
 
-rm -rf "$DEST/nomicous" "$DEST/inference"
-mkdir -p "$DEST/nomicous" "$DEST/inference"
+rm -rf "$DEST/nomikos" "$DEST/inference"
+mkdir -p "$DEST/nomikos" "$DEST/inference"
 
 python - "$ROOT" "$DEST" <<'PY'
 import fnmatch
@@ -42,13 +42,13 @@ def ignore_backend(directory: str, names: list[str]) -> set[str]:
 
 
 shutil.copytree(
-    root / "nomicous" / "backend",
-    dest / "nomicous" / "backend",
+    root / "nomikos" / "backend",
+    dest / "nomikos" / "backend",
     ignore=ignore_backend,
 )
 shutil.copytree(
-    root / "nomicous" / "infrastructure",
-    dest / "nomicous" / "infrastructure",
+    root / "nomikos" / "infrastructure",
+    dest / "nomikos" / "infrastructure",
     ignore=ignore_deploy_artifacts,
 )
 shutil.copy2(root / "inference" / "__init__.py", dest / "inference" / "__init__.py")
@@ -65,5 +65,5 @@ shutil.copytree(
     dest / "inference" / "registry",
     ignore=ignore_deploy_artifacts,
 )
-shutil.copy2(root / "nomicous" / "VERSION", dest / "nomicous" / "VERSION")
+shutil.copy2(root / "nomikos" / "VERSION", dest / "nomikos" / "VERSION")
 PY

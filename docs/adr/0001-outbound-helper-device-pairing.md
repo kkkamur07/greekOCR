@@ -10,13 +10,13 @@
 ## Context
 
 The inference helper is a PyInstaller-frozen background process on a researcher's laptop.
-Today the browser calls it over loopback: an HTTPS page at `app.nomicous.com` issuing
+Today the browser calls it over loopback: an HTTPS page at `app.nomikos.app` issuing
 `fetch("http://127.0.0.1:8001/...")`.
 
 That is the worst transport the web platform offers. It has to be won on four independently
 breakable fronts at once: a CORS allowlist, Chromium's `allow_private_network`, Chromium's
 `targetAddressSpace` local-network access gate, and a hand-maintained `connect-src` in
-`nomicous/frontend/vercel.json`. Only Chromium passes all four. Safari and Firefox detect the
+`nomikos/frontend/vercel.json`. Only Chromium passes all four. Safari and Firefox detect the
 helper with a simple `GET` and then fail every preflighted `POST`, which is worse than not
 detecting it, because the UI promises local inference and then breaks.
 
@@ -34,7 +34,7 @@ closed tab or a sleeping laptop loses the job.
 ## Decision
 
 Invert the direction. The helper stops listening and starts calling. It pairs once against
-`api.nomicous.com`, then long-polls a claim endpoint, runs the job, and posts the ordinary
+`api.nomikos.app`, then long-polls a claim endpoint, runs the job, and posts the ordinary
 `JobCallbackRequest` back. The browser never touches loopback, so the entire four-front
 transport problem is deleted rather than patched.
 
@@ -47,7 +47,7 @@ Requiring network connectivity to *receive* work is a real change, since today t
 no network at all beyond the browser on the same machine.
 
 The question was put to the owner directly, and the answer is that researchers almost always
-have access to `api.nomicous.com`. Fully-offline archive work is not a workflow this product
+have access to `api.nomikos.app`. Fully-offline archive work is not a workflow this product
 serves today. The outbound claim loop is therefore viable, and this is settled. It is recorded
 here so it does not get re-litigated, not so it can be reopened.
 
@@ -63,7 +63,7 @@ RFC 8628 needs a `user_code` because a TV cannot open a browser. Ours can. `webb
 is available on every platform the helper ships to, and it is the only affordance the helper
 has, since it is `LSUIElement=true`, has no dock icon and no window, and `pystray` was
 deliberately removed and is asserted against at
-`tests/nomicous/unit/test_deployment_hardening.py`.
+`tests/nomikos/unit/test_deployment_hardening.py`.
 
 A 6 to 8 character typable code carries 30 to 40 bits and is the only brute-forceable surface
 such a protocol has. Not having one beats defending one. Both secrets are
@@ -110,7 +110,7 @@ nothing and costs roughly 100 ms on a path a helper hits on every renewal.
 
 There is no index on `token_hash`, because we never search by digest.
 
-### 4. A dedicated `X-Nomicous-Device-Token` header, not `Authorization: Bearer`
+### 4. A dedicated `X-Nomikos-Device-Token` header, not `Authorization: Bearer`
 
 `get_current_user` runs `HTTPBearer` then `decode_access_token`, so a device token in
 `Authorization` would already fail JWT decode. A separate header removes the question entirely,
@@ -132,7 +132,7 @@ having the setting at all: every production deployment would have keyed device t
 `JWT_SECRET` and nobody would have known until a routine rotation unpaired every laptop. So:
 
 - `DEVICE_TOKEN_HMAC_SECRET` is in `.env.compose.example` and
-  `nomicous/backend/core/.env.production.example`, with the blast radius spelled out next to
+  `nomikos/backend/core/.env.production.example`, with the blast radius spelled out next to
   it;
 - in production, `DeviceSettings` refuses to construct when the secret is unset or equal to
   `JWT_SECRET` *and* pairing is enabled. `create_app()` resolves it before mounting anything,
@@ -212,7 +212,7 @@ harmless.
 ### 13. A confirmation code, because the consent screen had nothing checkable on it
 
 Everything the consent screen showed was supplied by whoever started the pairing: `device_name`,
-`platform`, `helper_version`. An attacker sets those to `"MacBook Pro - Nomicous Helper"`,
+`platform`, `helper_version`. An attacker sets those to `"MacBook Pro - Nomikos Helper"`,
 `"darwin-arm64"`, `"0.2.0"` and the screen looks exactly like the honest case. The one field
 that was not attacker-supplied, `same_network`, was inert (see below). So the screen asked for
 consent and gave the researcher nothing to base it on.
@@ -295,8 +295,8 @@ already controls. Only revocation helps.
 The consent link is transferable, and this layer cannot make it otherwise.
 
 The attack, concretely and without softening: someone with no account on the platform POSTs
-`/device/v1/pairings` with `device_name = "MacBook Pro - Nomicous Helper"`, gets back
-`https://app.nomicous.com/pair#<verification_token>`, and emails that link to a researcher. If
+`/device/v1/pairings` with `device_name = "MacBook Pro - Nomikos Helper"`, gets back
+`https://app.nomikos.app/pair#<verification_token>`, and emails that link to a researcher. If
 the researcher is logged in and clicks approve, the platform mints a 180-day device token bound
 to the researcher's account, for the attacker's process. That credential can claim that
 researcher's local-eligible jobs and read the page images for them, until someone revokes it.
@@ -379,9 +379,9 @@ log.
 > As built (issue 056). There is no helper and no log file, because ADR 0002 made the client a
 > CLI, so the code is printed to the terminal, before the wait and before any
 > `webbrowser.open()`. The pairing URL is printed before it too, so a browser that cannot open,
-> or opens on the wrong machine over SSH, now costs nothing. `nomicous pair` prints neither the
+> or opens on the wrong machine over SSH, now costs nothing. `nomikos pair` prints neither the
 > `device_code` nor the device token, and the `verification_token` is unavoidably inside the URL
-> a researcher has to be shown. The token is written to `~/.nomicous/device.json` at `0600` in a
+> a researcher has to be shown. The token is written to `~/.nomikos/device.json` at `0600` in a
 > `0700` directory, which is the mode this record's consequences section requires.
 >
 > The `/pair` page requirements below are still unbuilt, and `DEVICE_PAIRING_ENABLED` should
@@ -407,7 +407,7 @@ log.
   `alembic autogenerate` would have emitted `drop_table` for both.
 - Migration `003_helper_devices` (`005_helper_devices` before the second squash) chains from
   `002_service_roles` and has a working `downgrade()`. It issues its own `GRANT` to
-  `nomicous_api`, because `002_service_roles` grants `ON ALL TABLES`, which is point-in-time, and
+  `nomikos_api`, because `002_service_roles` grants `ON ALL TABLES`, which is point-in-time, and
   `ALTER DEFAULT PRIVILEGES`, which only covers tables created by the role that ran it. Neither
   is guaranteed to reach a table created here, and the failure mode is a permission error on the
   first pairing request.

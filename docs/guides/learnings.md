@@ -1,6 +1,6 @@
 # Learnings
 
-Operational notes and frequent errors from building and running Kalamos / Nomicous. For step-by-step setup, see [local development](local-development.md) and [deployment/supabase.md](../deployment/supabase.md).
+Operational notes and frequent errors from building and running Kalamos / Nomikos. For step-by-step setup, see [local development](local-development.md) and [deployment/supabase.md](../deployment/supabase.md).
 
 ---
 
@@ -48,7 +48,7 @@ Supabase exposes multiple Postgres endpoints. We use:
 ### Quick start (Supabase profile)
 
 ```bash
-cp nomicous/backend/core/.env.supabase.example nomicous/backend/core/.env.supabase
+cp nomikos/backend/core/.env.supabase.example nomikos/backend/core/.env.supabase
 # fill DATABASE_URL, MIGRATOR_DATABASE_URL, SUPABASE_* keys
 ./scripts/platform/migrate_supabase.sh
 docker compose -f docker-compose.yml -f docker-compose.supabase.yml up --build
@@ -60,7 +60,7 @@ Full guide: [`docs/deployment/supabase.md`](../deployment/supabase.md).
 
 ## Serverless API (Vercel)
 
-Production ships the platform API as a **Vercel Python serverless function** (`deploy/platform/` → `api.nomicous.com`). This works for REST + JWT + Supabase, but **not** for background workers or SSE listeners.
+Production ships the platform API as a **Vercel Python serverless function** (`deploy/platform/` → `api.nomikos.app`). This works for REST + JWT + Supabase, but **not** for background workers or SSE listeners.
 
 ### What must run elsewhere
 
@@ -95,7 +95,7 @@ We plan a **persistent Docker deployment** (API + workers on one host) where `JO
 | Jobs stuck in `pending` | `platform-worker` not running | Deploy worker on Docker; keep `JOB_WORKER_ENABLED=false` on Vercel API |
 | Jobs stuck in `waiting` | No inference agent finished the page it claimed | Check the agent is running and its callback URL is reachable |
 | SSE never connects on production | Expected on Vercel | Polling fallback should still complete jobs |
-| CORS errors from `app.nomicous.com` | Missing origin | Set `CORS_ORIGINS=https://app.nomicous.com` on API |
+| CORS errors from `app.nomikos.app` | Missing origin | Set `CORS_ORIGINS=https://app.nomikos.app` on API |
 | Wrong scheme / redirect loops | Proxy headers | Set `BEHIND_PROXY=true` only with an explicit `FORWARDED_ALLOW_IPS` proxy IP/CIDR list |
 | Media 404 | Local storage on serverless | `STORAGE_BACKEND=supabase` + bucket configured |
 | Function too large / timeout | ML code in API bundle | Inference stays in separate Docker image only |
@@ -116,12 +116,12 @@ The fixes were configuration changes, not application workarounds:
 | Placeholder/missing inference secret | Production callbacks require a real shared secret | Store `INFERENCE_WEBHOOK_SECRET` as an encrypted Vercel variable |
 | Only `VITE_*` frontend variables | The frontend migrated from Vite to Next.js | Use `NEXT_PUBLIC_*` names |
 
-The API is deployed at **`https://api.nomicous.com`** and pinned to Vercel's
+The API is deployed at **`https://api.nomikos.app`** and pinned to Vercel's
 Frankfurt region (`fra1`). The landing page and frontend remain globally served.
 After configuration changes, verify the API before testing application flows:
 
 ```bash
-curl -sS https://api.nomicous.com/health
+curl -sS https://api.nomikos.app/health
 # {"status":"ok","database":"ok"}
 ```
 
@@ -133,7 +133,7 @@ nothing listens on the laptop, so no browser's local-network policy, no
 loopback CORS contract and no mixed-content rule is on the path. The frontend's
 old probe order, the loopback `connect-src` entries and the
 `Access-Control-Allow-Private-Network` preflight were all deleted by #60;
-`tests/nomicous/unit/test_deployment_hardening.py` now asserts the CSP grants
+`tests/nomikos/unit/test_deployment_hardening.py` now asserts the CSP grants
 no loopback origin.
 
 The Vercel API never dials out to an inference host, which is what removed a

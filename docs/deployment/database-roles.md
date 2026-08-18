@@ -1,20 +1,20 @@
 # Database service roles
 
-Nomicous uses four PostgreSQL **NOLOGIN group roles**. Provider-managed login
+Nomikos uses four PostgreSQL **NOLOGIN group roles**. Provider-managed login
 principals receive one group role each; their connection URLs live only in the
 provider's secret store. No role password belongs in Git, an Alembic revision,
 or a Docker image.
 
 | Group role | Used by | Database scope |
 |---|---|---|
-| `nomicous_migrator` | one-off Alembic operator | schema usage/create plus application tables, sequences, and types |
-| `nomicous_api` | platform API | application-table CRUD, sequence usage, and type usage |
-| `nomicous_platform_worker` | persistent platform worker | claim/update `jobs`; read job-input tables |
-| `nomicous_inference_worker` | nothing, retained only so `002_service_roles` finds all four groups | none; `002` creates the group and grants it nothing |
+| `nomikos_migrator` | one-off Alembic operator | schema usage/create plus application tables, sequences, and types |
+| `nomikos_api` | platform API | application-table CRUD, sequence usage, and type usage |
+| `nomikos_platform_worker` | persistent platform worker | claim/update `jobs`; read job-input tables |
+| `nomikos_inference_worker` | nothing, retained only so `002_service_roles` finds all four groups | none; `002` creates the group and grants it nothing |
 
 The platform API does not need the migrator connection at runtime. An inference
 agent needs no database credential at all: it reaches the platform over HTTP
-(ADR 0003). Drop `nomicous_inference_worker` once no login principal is a
+(ADR 0003). Drop `nomikos_inference_worker` once no login principal is a
 member of it.
 
 ## Bootstrap
@@ -35,9 +35,9 @@ member of it.
 5. Grant exactly one service group to each LOGIN principal. For example:
 
    ```sql
-   GRANT nomicous_api TO <provider-managed-api-login>;
-   GRANT nomicous_platform_worker TO <provider-managed-platform-worker-login>;
-   GRANT nomicous_migrator TO <provider-managed-migrator-login>;
+   GRANT nomikos_api TO <provider-managed-api-login>;
+   GRANT nomikos_platform_worker TO <provider-managed-platform-worker-login>;
+   GRANT nomikos_migrator TO <provider-managed-migrator-login>;
    ```
 
 6. Store the connection URLs in the appropriate provider services:
@@ -73,13 +73,13 @@ Run these checks as the operator after rollout:
 ```sql
 SELECT rolname, rolcanlogin, rolsuper, rolcreaterole
 FROM pg_roles
-WHERE rolname LIKE 'nomicous_%'
+WHERE rolname LIKE 'nomikos_%'
 ORDER BY rolname;
 
 SELECT grantee, privilege_type
 FROM information_schema.role_table_grants
 WHERE table_schema = 'public'
-  AND grantee LIKE 'nomicous_%'
+  AND grantee LIKE 'nomikos_%'
 ORDER BY grantee, table_name, privilege_type;
 ```
 

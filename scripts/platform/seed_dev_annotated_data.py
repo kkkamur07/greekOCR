@@ -46,12 +46,12 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-from _bootstrap import ensure_nomicous_on_path
+from _bootstrap import ensure_nomikos_on_path
 from PIL import Image
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-ensure_nomicous_on_path()
+ensure_nomikos_on_path()
 
 from backend.annotation.infrastructure.orm_models import AnnotationHistorySnapshot
 from backend.core.settings._env import REPO_ROOT

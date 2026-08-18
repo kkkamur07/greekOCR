@@ -1,4 +1,4 @@
-# Nomicous documentation
+# Nomikos documentation
 
 **Picking the work back up?** Read
 [`final-code-review-2026-08-06.md`](final-code-review-2026-08-06.md) first. It is the
@@ -11,7 +11,7 @@ Start with the audience-appropriate guide:
 | Doc                                                     | Use it when                                                                              |
 | ------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
 | [Root README](../README.md)                             | You want the product overview and a quick start                                          |
-| [Use and host Nomicous](guides/using-and-hosting.md)    | You want Docker, local inference, Supabase, or deployment steps                          |
+| [Use and host Nomikos](guides/using-and-hosting.md)    | You want Docker, local inference, Supabase, or deployment steps                          |
 | [Models and datasets](inference/models-and-datasets.md) | You want the runtime catalog, HTR/segmentation models, or dataset workflow               |
 | [Technical architecture](architecture.md)               | You want the system design, stack rationale, jobs, notifications, or security boundaries |
 
@@ -43,13 +43,13 @@ Start with the audience-appropriate guide:
 
 ## Platform references
 
-- [`nomicous/CONTEXT.md`](../nomicous/CONTEXT.md) — domain terminology and
+- [`nomikos/CONTEXT.md`](../nomikos/CONTEXT.md) — domain terminology and
   annotation semantics
 - [`database-design.md`](database-design.md) — schema, ownership, pooling,
   job state, `NOTIFY`, SSE, and polling
-- [`nomicous/backend/README.md`](../nomicous/backend/README.md) — backend
+- [`nomikos/backend/README.md`](../nomikos/backend/README.md) — backend
   bounded contexts and routes
-- [`nomicous/frontend/README.md`](../nomicous/frontend/README.md) — editor
+- [`nomikos/frontend/README.md`](../nomikos/frontend/README.md) — editor
   development and generated API client
 
 ## Status, handoff, and reviews

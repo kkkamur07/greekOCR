@@ -106,7 +106,7 @@ Default CI and local dry-runs do **not** call the Hub upload API unless `--uploa
 4. **Point the Registry** at the published revision in [`inference/registry.yaml`](../inference/registry.yaml), for example:
 
    ```yaml
-   weights_source: hf://nomicous/greek-htr-calamari@stable
+   weights_source: hf://nomikos/greek-htr-calamari@stable
    hub_revision: <40-character-commit-created-by-the-upload>
    artifact_sha256: <sha256-of-best.onnx>
    ```
@@ -125,7 +125,7 @@ Default CI and local dry-runs do **not** call the Hub upload API unless `--uploa
 
 6. **Update the collection** — add the model slug to `src/hf/publish/collection.yaml` and run `sync_collection.py` after setting `hub_slug` (see below).
 
-Override `--namespace` if the **Hub namespace** is not yet `nomicous`. Use `--registry-model-id` when the legacy id differs from the default `{script}-{architecture}{model_version}` derivation.
+Override `--namespace` if the **Hub namespace** is not yet `nomikos`. Use `--registry-model-id` when the legacy id differs from the default `{script}-{architecture}{model_version}` derivation.
 
 ## Dataset publish
 
@@ -157,7 +157,7 @@ Source of truth: [`src/hf/publish/collection.yaml`](../src/hf/publish/collection
 **First-time collection setup**
 
 1. Create the `nomos` collection on Hugging Face (or note the slug returned by the Hub UI).
-2. Set `hub_slug` in `src/hf/publish/collection.yaml` to the full slug (e.g. `nomicous/nomos-abc123`).
+2. Set `hub_slug` in `src/hf/publish/collection.yaml` to the full slug (e.g. `nomikos/nomos-abc123`).
 3. List model and dataset slugs under `models:` / `datasets:`.
 4. Sync:
 

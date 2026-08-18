@@ -1,6 +1,6 @@
-# Use and host Nomicous
+# Use and host Nomikos
 
-Nomicous lets researchers upload manuscript pages, segment written lines,
+Nomikos lets researchers upload manuscript pages, segment written lines,
 generate model transcription drafts, correct them, collaborate, publish
 selected documents, and export paired line images and text.
 
@@ -53,7 +53,7 @@ Open <http://localhost:5173>. Development seed credentials are
 Compose runs no inference service. Models run in an **inference agent** you
 start yourself (below), which reaches the platform outbound and needs no
 published port. The first inference run downloads public weights into
-`~/.nomicous/hf/cache`.
+`~/.nomikos/hf/cache`.
 
 ```bash
 docker compose ps
@@ -69,14 +69,14 @@ Docker for Postgres:
 
 ```bash
 uv sync --group platform --group inference
-cp nomicous/backend/core/.env.example nomicous/backend/core/.env
+cp nomikos/backend/core/.env.example nomikos/backend/core/.env
 docker compose up db -d
 ```
 
 Start the platform API:
 
 ```bash
-cd nomicous
+cd nomikos
 uv run --project .. --group platform \
   alembic -c infrastructure/alembic.ini upgrade head
 uv run --project .. --group platform \
@@ -86,7 +86,7 @@ uv run --project .. --group platform \
 Start the frontend:
 
 ```bash
-cd nomicous/frontend
+cd nomikos/frontend
 npm install
 cp .env.local.example .env.local
 npm run dev
@@ -98,14 +98,14 @@ too, and an **inference agent**, when testing queued jobs.
 ## Local inference agent
 
 Models run in the **inference agent**: one command-line program, distributed as
-the **published package** `nomicous-inference`, that a researcher starts in a
+the **published package** `nomikos-inference`, that a researcher starts in a
 terminal. A hosted worker runs the same package (ADR 0002), so there is no
 separate local build and no per-OS installer.
 
 ```bash
-uv tool install nomicous-inference
-nomicous pair          # links this machine to your account
-nomicous run           # takes pages from the queue until you stop it
+uv tool install nomikos-inference
+nomikos pair          # links this machine to your account
+nomikos run           # takes pages from the queue until you stop it
 ```
 
 No flags and no uv version floor: ADR 0006 replaced PyTorch with ONNX Runtime,
@@ -117,15 +117,15 @@ The agent opens no port and accepts no connection. It asks the platform for a
 page, downloads that one page image through a short-lived signed link, runs the
 model, and reports the result through the platform's job callback - all
 outbound, so nothing on the researcher's machine has to be reachable from a
-browser, a proxy, or a VPN. Weights are cached under `~/.nomicous/hf/cache`;
-the device credential lives at `~/.nomicous/device.json`.
+browser, a proxy, or a VPN. Weights are cached under `~/.nomikos/hf/cache`;
+the device credential lives at `~/.nomikos/device.json`.
 
-Point it at a platform other than the hosted one with `NOMICOUS_API_URL` or
+Point it at a platform other than the hosted one with `NOMIKOS_API_URL` or
 `--api-url`:
 
 ```bash
-NOMICOUS_API_URL=http://localhost:8000 nomicous pair
-NOMICOUS_API_URL=http://localhost:8000 nomicous run
+NOMIKOS_API_URL=http://localhost:8000 nomikos pair
+NOMIKOS_API_URL=http://localhost:8000 nomikos run
 ```
 
 From a source checkout, `uv run --group inference python -m inference.cli run`
@@ -141,7 +141,7 @@ failure: the job goes to the cloud and says so.
 
 1. Create a Supabase project.
 2. Create a private Storage bucket named `document-media`.
-3. Fill `nomicous/backend/core/.env.supabase.example`.
+3. Fill `nomikos/backend/core/.env.supabase.example`.
 4. Set service secrets in the repository-root `.env`.
 5. Provision the least-privilege roles in
    [`../deployment/database-roles.md`](../deployment/database-roles.md).
@@ -182,7 +182,7 @@ inference agent   -> claims pages from the platform, runs models, calls back
 ```
 
 The hosted agent is the same package a laptop runs, with a **service
-credential** in `NOMICOUS_SERVICE_TOKEN` instead of a device token. It needs no
+credential** in `NOMIKOS_SERVICE_TOKEN` instead of a device token. It needs no
 inbound address and no database access.
 
 Cloud inference is disabled in the documented Vercel defaults. Enable it only

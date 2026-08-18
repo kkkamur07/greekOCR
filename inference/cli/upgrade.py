@@ -30,7 +30,7 @@ itself claimable stops instead of continuing quietly.
 Accepted risk, recorded rather than mitigated
 ---------------------------------------------
 Auto-upgrade executes newly fetched code without asking. A compromised
-`nomicous-inference` on the index this machine installs from therefore reaches
+`nomikos-inference` on the index this machine installs from therefore reaches
 every researcher's laptop at its next launch, with no human in the loop.
 Mitigable by pinning to published hashes; not eliminable, because the point of
 the feature is to install something nobody has approved yet. Two things narrow
@@ -41,10 +41,10 @@ platform can choose is the *version* of this one distribution; and the installer
 is whichever one already owns this environment, so the index is the one the
 researcher configured, not one the platform picked.
 
-What is left is the index. A compromised `nomicous-inference` there still
+What is left is the index. A compromised `nomikos-inference` there still
 reaches every laptop. What is no longer possible is the platform pointing this
 process at some *other* distribution - which was code execution by a different
-route, because an sdist runs its build hooks and a wheel declaring a `nomicous`
+route, because an sdist runs its build hooks and a wheel declaring a `nomikos`
 console script replaces the entry point `_re_exec` is about to run.
 
 The alternative - a notice telling researchers to upgrade themselves - was
@@ -99,7 +99,7 @@ to reject a floor without asking anyone. Narrower than PEP 440 on purpose, for
 the same reason the platform's is - anything outside it is refused rather than
 guessed at."""
 
-UPGRADED_FROM_ENV = "NOMICOUS_UPGRADED_FROM"
+UPGRADED_FROM_ENV = "NOMIKOS_UPGRADED_FROM"
 """Set on the process an upgrade re-execs into, holding the version it came
 from. Its presence is what stops a second upgrade: if the new build is *still*
 below the floor - an index with nothing newer on it, a floor above the newest
@@ -118,13 +118,13 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         metavar="URL",
         help=(
             "Platform to ask for the version floor. Defaults to the one this machine "
-            "is paired with, then $NOMICOUS_API_URL, then the hosted API."
+            "is paired with, then $NOMIKOS_API_URL, then the hosted API."
         ),
     )
 
 
 def run(args: argparse.Namespace) -> int:
-    """`nomicous upgrade` - the launch check, run on demand.
+    """`nomikos upgrade` - the launch check, run on demand.
 
     Deliberately the same code path and the same output as the check that runs
     before claiming, down to printing nothing when this agent is current. A
@@ -238,7 +238,7 @@ def _reject_unexpected_target(errors, floor: AgentFloor) -> bool:
     is not an upgrade, and running an installer on it would hand the platform
     the choice of what executes on the researcher's machine. There is no
     legitimate reason for the two to differ, including for a self-hosted
-    platform: the agent it is talking to is `nomicous-inference` whatever the
+    platform: the agent it is talking to is `nomikos-inference` whatever the
     platform is called.
 
     ``minimum_version`` is held to the platform's own version grammar. It is

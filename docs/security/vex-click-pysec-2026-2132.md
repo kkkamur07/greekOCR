@@ -27,7 +27,7 @@ not leave with it - the two paths above keep it resolved regardless.
 
 ## Reachability
 
-- `grep -rn "click.edit"` across `nomicous/` and `src/` finds no callers:
+- `grep -rn "click.edit"` across `nomikos/` and `src/` finds no callers:
   nothing in this codebase invokes `click.edit()`.
 - Product and inference runtime entrypoints (`uvicorn` apps, job workers, helper
   `/run`) do not call it either - `uvicorn[standard]` uses Click only for its
