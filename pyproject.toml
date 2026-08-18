@@ -9,7 +9,7 @@
 # wheel is built explicitly (`uv build`), not installed into every dev venv.
 [project]
 name = "nomikos-inference"
-version = "0.3.0"
+version = "0.2.0"
 description = "Manuscript segmentation and transcription runtime for the nomikos platform"
 readme = "inference/README.md"
 requires-python = ">=3.11,<3.13"

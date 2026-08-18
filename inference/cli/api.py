@@ -30,7 +30,7 @@ from urllib.parse import urlsplit
 
 from inference.cli.version import installed_version
 
-DEFAULT_PLATFORM_URL = "https://api.nomikos.com"
+DEFAULT_PLATFORM_URL = "https://api.nomikos.app"
 PLATFORM_URL_ENV = "NOMIKOS_API_URL"
 
 DEVICE_TOKEN_HEADER = "X-Nomikos-Device-Token"  # noqa: S105 - a header name, not a token
