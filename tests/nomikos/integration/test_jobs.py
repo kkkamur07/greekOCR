@@ -471,7 +471,19 @@ def test_reading_a_job_releases_a_stale_callback_claim(
 
 
 @pytest.mark.integration
-def test_reclaimed_job_rejects_the_zombie_workers_terminal_write():
+def test_reclaimed_job_rejects_the_zombie_workers_terminal_write(monkeypatch):
+    # The session-scoped client's lifespan worker claims any pending job (this
+    # suite leaves JOB_WORKER_CLAIM_TEST_ONLY unset), so it races this test for
+    # the row twice: at the claim below, and again once the reclaim re-pends it.
+    # The worker re-reads the shared settings singleton every tick, so excluding
+    # test payloads for the duration makes both windows deterministic.
+    from backend.core.settings.job import get_job_settings
+
+    monkeypatch.setattr(get_job_settings(), "job_worker_claim_test_only", False)
+    # A tick that read the unpatched settings can still be in flight; one poll
+    # interval lets it finish before the pending row exists.
+    time.sleep(get_job_settings().job_poll_interval_seconds)
+
     job_id = uuid.uuid4()
     with sync_system_session() as session:
         session.add(
