@@ -69,7 +69,7 @@ decision made in the browser, and only `--force` reverses it.
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `NOMIKOS_API_URL` | `https://api.nomikos.app` | Platform to pair against (`--api-url` wins) |
+| `NOMIKOS_API_URL` | `https://api.nomikos.com` | Platform to pair against (`--api-url` wins) |
 | `NOMIKOS_HOME` | `~/.nomikos` | Where the device credential is kept |
 
 ```bash

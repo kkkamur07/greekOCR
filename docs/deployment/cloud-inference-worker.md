@@ -1,7 +1,7 @@
 # Hosted cloud inference worker
 
 How to run a persistent **inference agent** that claims `cloud` work from
-`api.nomikos.app`. It is the same **published package** a researcher runs on a
+`api.nomikos.com`. It is the same **published package** a researcher runs on a
 laptop ([ADR 0002](../adr/0002-inference-cli-replaces-loopback-helper.md)),
 differing only by the credential it presents: a **service credential**
 (`NOMIKOS_SERVICE_TOKEN`) instead of a **device token**
@@ -20,7 +20,7 @@ Terminology: [`inference/CONTEXT.md`](../../inference/CONTEXT.md).
 - A persistent Linux host. CPU-only ONNX Runtime is the shipped runtime
   ([ADR 0006](../adr/0006-onnx-runtime-is-the-inference-runtime.md)); no GPU is
   required. GPU acceleration is a follow-up, not part of this runbook.
-- Outbound HTTPS to `api.nomikos.app` and `huggingface.co` (for weight
+- Outbound HTTPS to `api.nomikos.com` and `huggingface.co` (for weight
   download).
 - Enough memory for N workers. Measured on an 8-core / 15 GiB box: one page
   peaks ~3 GB and segmentation is **segment-bound** at ~48 s/page, single-threaded
@@ -98,7 +98,7 @@ Vercel environment variables do **not** hot-apply: after changing them you must
 ```bash
 sudo mkdir -p /etc/nomikos
 sudo tee /etc/nomikos/worker.env > /dev/null <<'EOF'
-NOMIKOS_API_URL=https://api.nomikos.app
+NOMIKOS_API_URL=https://api.nomikos.com
 NOMIKOS_SERVICE_TOKEN=<the service token from §2>
 EOF
 sudo chmod 600 /etc/nomikos/worker.env
@@ -132,7 +132,7 @@ processes, each with its own worker name.
 
 ```ini
 [Unit]
-Description=Nomikos cloud inference worker %i (claims from api.nomikos.app)
+Description=Nomikos cloud inference worker %i (claims from api.nomikos.com)
 After=network-online.target
 Wants=network-online.target
 StartLimitIntervalSec=0

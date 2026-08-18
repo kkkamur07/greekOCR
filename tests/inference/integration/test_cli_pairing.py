@@ -105,7 +105,7 @@ def installed_cli(tmp_path_factory: pytest.TempPathFactory) -> dict[str, object]
 
 
 def _wheel_version(wheel: Path) -> str:
-    # `nomikos_inference-0.2.0-py3-none-any.whl`
+    # `nomikos_inference-0.3.0-py3-none-any.whl`
     return wheel.name.split("-")[1]
 
 
