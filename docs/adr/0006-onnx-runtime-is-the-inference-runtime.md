@@ -21,7 +21,7 @@ and its own "Costs accepted" section is where the case falls apart:
   `nvidia-*` and `triton` wheels that no researcher's laptop can use.
 - The CPU pin **cannot be expressed in package metadata**. No PEP 621 field names an index and
   `tool.uv.sources` is ignored when a package is consumed from a registry, so ADR 0004 pushed
-  the pin onto the user as `uv tool install nomicous-inference --torch-backend=cpu` — and
+  the pin onto the user as `uv tool install nomikos-inference --torch-backend=cpu` — and
   recorded two residual risks it could not solve: plain `pip` gets the 4.8 GB tree, and uv
   0.7.x reads `UV_TORCH_BACKEND=cpu` and then silently installs the CUDA tree anyway.
 - **Peak RSS on a page more than doubled**, 3.0 GB to 7.0 GB, which ADR 0004 called "the
@@ -130,7 +130,7 @@ with a cold cache, measured 2026-08-05 — the same method ADR 0004 used for its
 | **Installed closure**    | **817 MB**       | **372 MB**              | **−445 MB, −54%** |
 | Runtime package itself   | `torch` 475 MB   | `onnxruntime` 70 MB     | −405 MB |
 | Built wheel              | 112 KB           | 108 KB                  | — |
-| Install command          | `uv tool install nomicous-inference --torch-backend=cpu` | `uv tool install nomicous-inference` | flag gone |
+| Install command          | `uv tool install nomikos-inference --torch-backend=cpu` | `uv tool install nomikos-inference` | flag gone |
 
 What is left is no longer dominated by the runtime. The five largest entries are now
 OpenCV (98 MB), SciPy (70 MB), onnxruntime (70 MB), NumPy (46 MB) and scikit-image (25 MB) —
@@ -170,7 +170,7 @@ still reports on it.
 
 ## Consequences
 
-- `uv tool install nomicous-inference` is the whole install command. There is no
+- `uv tool install nomikos-inference` is the whole install command. There is no
   `--torch-backend=cpu`, no uv version floor for it to be honoured, and no 4.8 GB failure mode
   behind plain `pip`. `onnxruntime` publishes one CPU wheel per platform and there is no CUDA
   variant to resolve by accident.

@@ -1,4 +1,4 @@
-"""`nomicous run` - the **claim** loop: take a page, run it here, report it, repeat.
+"""`nomikos run` - the **claim** loop: take a page, run it here, report it, repeat.
 
 This closes the four-step path ADR 0003 is built around - enqueue, claim, run,
 callback - across one database and one HTTP hop, with no inbound connection and
@@ -28,7 +28,7 @@ code path kept in parity by discipline.
 
 Nothing at module scope imports the model runtime. `inference/cli/main.py`
 imports this module to build its parser, so a top-level `run_model` import would
-make `nomicous version` on a laptop with no weights pay for Torch to answer.
+make `nomikos version` on a laptop with no weights pay for Torch to answer.
 """
 
 from __future__ import annotations
@@ -57,13 +57,13 @@ from inference.cli.api import (
 from inference.cli.credentials import CredentialError, credential_path, load_credential
 from inference.cli.version import installed_version
 
-SERVICE_TOKEN_ENV = "NOMICOUS_SERVICE_TOKEN"  # noqa: S105 - an env var name, not a token
+SERVICE_TOKEN_ENV = "NOMIKOS_SERVICE_TOKEN"  # noqa: S105 - an env var name, not a token
 """A hosted worker's **service credential**, read from the environment and never
 from a flag. A token passed on the command line is a token in `ps` output and in
 shell history, and this one is not bounded by a single account the way a device
 token is."""
 
-WORKER_NAME_ENV = "NOMICOUS_WORKER_NAME"
+WORKER_NAME_ENV = "NOMIKOS_WORKER_NAME"
 
 LAPTOP_WAIT_SECONDS = 25
 """A researcher's page should start within a second of being submitted, so a
@@ -136,7 +136,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--api-url",
         metavar="URL",
-        help="Platform to claim from. Defaults to $NOMICOUS_API_URL, then the hosted API.",
+        help="Platform to claim from. Defaults to $NOMIKOS_API_URL, then the hosted API.",
     )
     parser.add_argument(
         "--exit-when-empty",
@@ -225,19 +225,19 @@ def _resolve_identity(base_url: str) -> AgentIdentity:
         credential = load_credential()
     except CredentialError as exc:
         raise RunSetupError(
-            f"{exc}\nDelete {credential_path()} and run `nomicous pair` again to replace it."
+            f"{exc}\nDelete {credential_path()} and run `nomikos pair` again to replace it."
         ) from exc
     if credential is None:
         raise RunSetupError(
             "This machine is not paired, so it has nothing to claim work with.\n"
-            "Run `nomicous pair` to authorise it against your account."
+            "Run `nomikos pair` to authorise it against your account."
         )
     if credential.platform_url != base_url:
         # The credential is only meaningful against the platform that minted it,
         # and presenting it elsewhere is a 401 with no explanation attached.
         raise RunSetupError(
             f"This machine is paired with {credential.platform_url}, not {base_url}.\n"
-            "Run `nomicous pair --force` to pair it with this platform instead."
+            "Run `nomikos pair --force` to pair it with this platform instead."
         )
 
     return AgentIdentity(
@@ -252,7 +252,7 @@ def _resolve_identity(base_url: str) -> AgentIdentity:
 
 
 def _announce(console, identity: AgentIdentity, base_url: str) -> None:
-    console.print(f"[bold]nomicous run[/bold] {installed_version()}")
+    console.print(f"[bold]nomikos run[/bold] {installed_version()}")
     console.print()
     table = ui.detail_table()
     table.add_row("Platform", ui.value(base_url))
@@ -543,7 +543,7 @@ def _execute(page: ClaimedPage, image_bytes: bytes):
     """Call the same `run_model` the platform's own worker calls.
 
     Imported here rather than at module scope: this is the only line in the CLI
-    that needs Torch, and `nomicous version` must not pay for it.
+    that needs Torch, and `nomikos version` must not pay for it.
     """
     from inference.contracts.common import InferenceTask
     from inference.jobs.runner import run_model

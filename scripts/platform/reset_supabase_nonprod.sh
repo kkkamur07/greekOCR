@@ -20,7 +20,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-ENV_FILE="${SUPABASE_ENV_FILE:-$ROOT/nomicous/backend/core/.env.supabase}"
+ENV_FILE="${SUPABASE_ENV_FILE:-$ROOT/nomikos/backend/core/.env.supabase}"
 
 # Captured before the merge so an env file cannot confirm its own destruction.
 CONFIRM_INPUT="${CONFIRM_SUPABASE_RESET:-}"
@@ -51,7 +51,7 @@ done
 
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "Missing env file: $ENV_FILE" >&2
-  echo "Copy nomicous/backend/core/.env.supabase.example and fill in credentials." >&2
+  echo "Copy nomikos/backend/core/.env.supabase.example and fill in credentials." >&2
   exit 1
 fi
 
@@ -250,7 +250,7 @@ SQL
 
 cd "$ROOT"
 ./scripts/platform/migrate_supabase.sh
-uv run python scripts/platform/seed_dev_nomicous.py
+uv run python scripts/platform/seed_dev_nomikos.py
 
 echo "Supabase schema reset and migrations applied for $TARGET."
 echo "Storage objects are not deleted; clear the disposable bucket separately if needed."

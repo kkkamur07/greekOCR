@@ -1,4 +1,4 @@
-"""`nomicous run`, the **claim** loop, driven as the installed console script.
+"""`nomikos run`, the **claim** loop, driven as the installed console script.
 
 Everything here is live, and on this issue that is not a stylistic preference.
 Every claim the run loop makes is about behaviour *between* processes: that a
@@ -8,7 +8,7 @@ holding. None of that is observable from inside one interpreter, and a test that
 imported `inference.cli.run` and called it would be asserting about its own
 mocks.
 
-So: the CLI is the real `nomicous` executable from a real wheel with its real
+So: the CLI is the real `nomikos` executable from a real wheel with its real
 dependency closure installed, the platform is a real uvicorn process serving the
 real `create_app()`, the database is real Postgres migrated by alembic, and the
 models are the real **Hub artifact**s - ONNX graphs under ADR 0006, resolved
@@ -27,7 +27,7 @@ docstring.
 The scaffolding all three CLI integration modules share - Postgres, alembic,
 uvicorn, the wheel build, the hand-rolled HTTP client - is in
 `tests/inference/integration/conftest.py`. This module keeps its own database
-rather than the one `tests/nomicous/integration/conftest.py` truncates between
+rather than the one `tests/nomikos/integration/conftest.py` truncates between
 tests, so a server held open across it cannot have the ground moved under it.
 """
 
@@ -80,9 +80,9 @@ INHERITED_TO_DROP = (
     "SSH_CONNECTION",
     "SSH_TTY",
     "BROWSER",
-    "NOMICOUS_API_URL",
-    "NOMICOUS_SERVICE_TOKEN",
-    "NOMICOUS_WORKER_NAME",
+    "NOMIKOS_API_URL",
+    "NOMIKOS_SERVICE_TOKEN",
+    "NOMIKOS_WORKER_NAME",
 )
 
 
@@ -161,7 +161,7 @@ def _put(url: str, body: dict, headers: dict) -> tuple[int, object]:
 def _upload_part(base: str, document_id: str, headers: dict[str, str], image: bytes) -> str:
     """Multipart upload, hand-built. The stdlib has no client for it, and adding
     an HTTP library to reach one endpoint is not worth it."""
-    boundary = f"----nomicous{uuid.uuid4().hex}"
+    boundary = f"----nomikos{uuid.uuid4().hex}"
     body = b"".join(
         [
             f"--{boundary}\r\n".encode(),
@@ -254,7 +254,7 @@ def _register(platform_url: str, home: Path) -> Researcher:
 
 
 # ---------------------------------------------------------------------------
-# Pairing this machine, through the real `nomicous pair`
+# Pairing this machine, through the real `nomikos pair`
 # ---------------------------------------------------------------------------
 def _pair(installed_cli: dict, platform_url: str, researcher: Researcher) -> str:
     """Authorise `researcher.home` by running the console script and approving it.
@@ -282,7 +282,7 @@ def _pair(installed_cli: dict, platform_url: str, researcher: Researcher) -> str
             process.wait(timeout=PAIRING_TIMEOUT_SECONDS)
         except subprocess.TimeoutExpired:  # pragma: no cover - a hung CLI is the failure
             process.kill()
-            raise AssertionError(f"`nomicous pair` hung:\n{stdout_path.read_text()}") from None
+            raise AssertionError(f"`nomikos pair` hung:\n{stdout_path.read_text()}") from None
 
     assert process.returncode == 0, stdout_path.read_text()
     return json.loads((researcher.home / "device.json").read_text())["device_id"]
@@ -298,7 +298,7 @@ def _announce_capacity(platform_url: str, home: Path) -> None:
     status, body = _post(
         f"{platform_url}/device/v1/jobs/claim",
         {"wait_seconds": 0},
-        {"X-Nomicous-Device-Token": token, "X-Nomicous-Agent-Version": "1.0.0"},
+        {"X-Nomikos-Device-Token": token, "X-Nomikos-Agent-Version": "1.0.0"},
     )
     assert status == 200, body
 
@@ -306,7 +306,7 @@ def _announce_capacity(platform_url: str, home: Path) -> None:
 @pytest.fixture
 def agent(installed_cli, platform_url, tmp_path) -> Researcher:
     """A registered researcher with this machine paired and ready to take work."""
-    home = tmp_path / "nomicous-home"
+    home = tmp_path / "nomikos-home"
     researcher = _register(platform_url, home)
     _pair(installed_cli, platform_url, researcher)
     _announce_capacity(platform_url, home)
@@ -315,10 +315,10 @@ def agent(installed_cli, platform_url, tmp_path) -> Researcher:
 
 
 # ---------------------------------------------------------------------------
-# Driving `nomicous run`
+# Driving `nomikos run`
 # ---------------------------------------------------------------------------
 class RunProcess:
-    """One `nomicous run` invocation, readable while it is still running."""
+    """One `nomikos run` invocation, readable while it is still running."""
 
     def __init__(self, process: subprocess.Popen, stdout: Path, stderr: Path):
         self.process = process
@@ -357,7 +357,7 @@ class RunProcess:
         except subprocess.TimeoutExpired:  # pragma: no cover - a hung loop is the failure
             self.process.kill()
             self.process.wait()
-            raise AssertionError(f"`nomicous run` did not finish:\n{self.output}") from None
+            raise AssertionError(f"`nomikos run` did not finish:\n{self.output}") from None
 
 
 def _start_run(
@@ -639,7 +639,7 @@ def test_ctrl_c_reports_the_page_in_flight_before_exiting(
 
 # `test_a_killed_process_leaves_a_page_the_lease_later_releases` stood here. The lease
 # semantics it asserted - an expired lease re-pends a page rather than failing it, and
-# hands it to a different agent - are `tests/nomicous/integration/test_device_lease.py::
+# hands it to a different agent - are `tests/nomikos/integration/test_device_lease.py::
 # test_an_expired_lease_is_re_pended_and_never_failed` and
 # `::test_an_expired_lease_returns_the_page_to_a_different_agent`, tested against the
 # platform that implements them. The CLI increment was "SIGKILL cannot be caught", which
@@ -704,8 +704,8 @@ def test_a_hosted_worker_runs_the_same_loop_with_a_service_credential(
     home.mkdir(parents=True)
     researcher = _register(platform_url, home)
     worker = {
-        "NOMICOUS_SERVICE_TOKEN": SERVICE_TOKEN,
-        "NOMICOUS_WORKER_NAME": "test-worker",
+        "NOMIKOS_SERVICE_TOKEN": SERVICE_TOKEN,
+        "NOMIKOS_WORKER_NAME": "test-worker",
         "INFERENCE_REGISTRY_PATH": str(_broken_registry(tmp_path / "registry.yaml")),
     }
 
@@ -716,9 +716,9 @@ def test_a_hosted_worker_runs_the_same_loop_with_a_service_credential(
         f"{platform_url}/device/v1/jobs/claim",
         {"wait_seconds": 0},
         {
-            "X-Nomicous-Service-Token": SERVICE_TOKEN,
-            "X-Nomicous-Worker-Name": "test-worker",
-            "X-Nomicous-Agent-Version": "1.0.0",
+            "X-Nomikos-Service-Token": SERVICE_TOKEN,
+            "X-Nomikos-Worker-Name": "test-worker",
+            "X-Nomikos-Agent-Version": "1.0.0",
         },
     )
     assert status == 200, body
@@ -758,4 +758,4 @@ def test_an_unpaired_machine_is_told_to_pair_rather_than_left_polling(
 
     assert run.returncode != 0, run.output
     assert "not paired" in run.stderr.lower()
-    assert "nomicous pair" in run.stderr
+    assert "nomikos pair" in run.stderr

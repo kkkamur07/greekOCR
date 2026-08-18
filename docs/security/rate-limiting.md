@@ -1,7 +1,7 @@
 # Rate limiting and client attribution
 
-Code: [`nomicous/backend/users/api/rate_limit.py`](../../nomicous/backend/users/api/rate_limit.py),
-[`nomicous/backend/core/api/client_failures.py`](../../nomicous/backend/core/api/client_failures.py).
+Code: [`nomikos/backend/users/api/rate_limit.py`](../../nomikos/backend/users/api/rate_limit.py),
+[`nomikos/backend/core/api/client_failures.py`](../../nomikos/backend/core/api/client_failures.py).
 
 ## The problem: the TCP peer is not the client
 
@@ -104,14 +104,14 @@ or a platform-level WAF rule. It is an open risk, not a solved one.
 
 ### Device pairing has its own throttle, not `throttle_auth_attempts`
 
-`POST /device/v1/pairings` (`nomicous/backend/ml/api/device_pairing.py`) used to
+`POST /device/v1/pairings` (`nomikos/backend/ml/api/device_pairing.py`) used to
 sit under `throttle_auth_attempts`. Its body carries no `email`, so it had no
 account dimension to fall back on: every honest pairing start shared the one
 `unattributable:/device/v1/pairings` bucket, and one attacker filling that
-bucket locked every researcher out of `nomicous pair`.
+bucket locked every researcher out of `nomikos pair`.
 
 It is now charged against a dedicated dependency,
-`throttle_device_pairing_starts` (`nomicous/backend/users/api/rate_limit.py`).
+`throttle_device_pairing_starts` (`nomikos/backend/users/api/rate_limit.py`).
 That dependency keys on `attributable_client_ip(request)`: when the address
 identifies one client, it charges a per-client bucket
 (`device-pairing:<addr>`, `device_pairing_rate_limit_requests` per window);

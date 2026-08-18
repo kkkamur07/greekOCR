@@ -25,8 +25,8 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--namespace",
-        default="nomicous",
-        help="Hub namespace (default: nomicous)",
+        default="nomikos",
+        help="Hub namespace (default: nomikos)",
     )
     parser.add_argument(
         "--task",

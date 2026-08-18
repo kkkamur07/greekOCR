@@ -35,20 +35,20 @@ repos:
         entry: uv run --locked --group dev ruff format
         language: system
         types_or: [python, pyi]
-        files: ^(nomicous/backend|inference|scripts/platform|tests/nomicous|tests/inference|tests/export|tests/hf|src/model/inference_export)/
+        files: ^(nomikos/backend|inference|scripts/platform|tests/nomikos|tests/inference|tests/export|tests/hf|src/model/inference_export)/
 
       - id: frontend-eslint
         name: Frontend ESLint checks
-        entry: npm --prefix nomicous/frontend run lint
+        entry: npm --prefix nomikos/frontend run lint
         language: system
-        files: ^nomicous/frontend/.*\.(?:[cm]?[jt]sx?)$
+        files: ^nomikos/frontend/.*\.(?:[cm]?[jt]sx?)$
         pass_filenames: false
 
       - id: frontend-prettier
         name: Frontend Prettier formatting
-        entry: npm --prefix nomicous/frontend exec -- prettier --write
+        entry: npm --prefix nomikos/frontend exec -- prettier --write
         language: system
-        files: ^nomicous/frontend/.*\.(?:[cm]?[jt]sx?|json|css|html|md|ya?ml)$
+        files: ^nomikos/frontend/.*\.(?:[cm]?[jt]sx?|json|css|html|md|ya?ml)$
 
       # When Platform API routes/schemas change, refresh openapi.json + schema.d.ts
       # so commits cannot drift from CI `check:api`. Uses non-production secrets
@@ -59,7 +59,7 @@ repos:
           env
           JWT_SECRET=test-secret-not-for-production-at-least-32-bytes
           INFERENCE_WEBHOOK_SECRET=test-inference-webhook-secret
-          npm --prefix nomicous/frontend run generate:api
+          npm --prefix nomikos/frontend run generate:api
         language: system
-        files: ^(nomicous/backend/.*\.py|scripts/platform/export_openapi\.py)$
+        files: ^(nomikos/backend/.*\.py|scripts/platform/export_openapi\.py)$
         pass_filenames: false

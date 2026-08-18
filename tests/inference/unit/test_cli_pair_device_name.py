@@ -24,7 +24,7 @@ from inference.cli.api import DEVICE_NAME_LIMIT, PlatformError
 class _RecordingClient:
     """Accepts a pairing start, records the name, then stops the flow."""
 
-    base_url = "https://api.nomicous.com"
+    base_url = "https://api.nomikos.app"
 
     def __init__(self) -> None:
         self.device_names: list[str] = []

@@ -1,4 +1,4 @@
-"""The published `nomicous-inference` package, exercised as an installed wheel.
+"""The published `nomikos-inference` package, exercised as an installed wheel.
 
 Everything here runs against a real wheel installed into a real, empty virtual
 environment, in a subprocess whose working directory is outside the repository.
@@ -71,7 +71,7 @@ def installed_package(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Pat
         capture_output=True,
         text=True,
     )
-    wheels = sorted(dist.glob("nomicous_inference-*.whl"))
+    wheels = sorted(dist.glob("nomikos_inference-*.whl"))
     assert len(wheels) == 1, f"expected exactly one wheel, got {wheels}"
 
     subprocess.run(
@@ -276,7 +276,7 @@ def test_every_target_platform_resolves_without_an_accelerator_wheel(
     output = _run_installed(
         installed_package,
         "import json; from importlib.metadata import metadata;"
-        " print(json.dumps(metadata('nomicous-inference').get_all('Requires-Dist')))",
+        " print(json.dumps(metadata('nomikos-inference').get_all('Requires-Dist')))",
     )
     requirements = tmp_path / f"{platform}.in"
     requirements.write_text("\n".join(json.loads(output.strip().splitlines()[-1])) + "\n")

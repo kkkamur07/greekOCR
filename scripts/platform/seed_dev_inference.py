@@ -10,10 +10,10 @@ default so script-specific models are attached per project when available.
 import asyncio
 import os
 
-from _bootstrap import ensure_nomicous_on_path
+from _bootstrap import ensure_nomikos_on_path
 from sqlalchemy import select
 
-ensure_nomicous_on_path()
+ensure_nomikos_on_path()
 
 from backend.ml.infrastructure.orm_models import (  # noqa: E402
     InferenceModel,

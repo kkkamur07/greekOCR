@@ -52,7 +52,7 @@ def _no_sleeping(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def _identity() -> run_module.AgentIdentity:
     return run_module.AgentIdentity(
-        credential={"X-Nomicous-Device-Token": "secret"},
+        credential={"X-Nomikos-Device-Token": "secret"},
         account="researcher@example.com",
         execution_target="local",
         default_wait_seconds=25,
@@ -171,7 +171,7 @@ def test_a_version_refusal_still_leaves_the_loop() -> None:
         agent_version="0.1.0",
         minimum_version="0.4.0",
         latest_version="0.4.0",
-        upgrade_command="uv tool upgrade nomicous-inference",
+        upgrade_command="uv tool upgrade nomikos-inference",
     )
     client = StubClient([refusal])
 

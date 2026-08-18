@@ -17,7 +17,7 @@ curl --fail "$LOCUST_HOST/health"
 Then run a small headless test:
 
 ```bash
-LOCUST_HOST=https://api.nomicous.com \
+LOCUST_HOST=https://api.nomikos.app \
 uv run --group load-testing locust \
   -f tests/load/locustfile.py \
   --headless \
@@ -29,7 +29,7 @@ uv run --group load-testing locust \
 Use the Locust dashboard when tuning a test:
 
 ```bash
-LOCUST_HOST=https://api.nomicous.com \
+LOCUST_HOST=https://api.nomikos.app \
 LOCUST_PROJECT_ID="$TEST_PROJECT_ID" \
 LOCUST_DOCUMENT_ID="$TEST_DOCUMENT_ID" \
 LOCUST_PART_ID="$TEST_PART_ID" \
@@ -58,7 +58,7 @@ source tests/load/get-token.sh
 Prefer a pre-created, dedicated load-test user's token:
 
 ```bash
-LOCUST_HOST=https://api.nomicous.com \
+LOCUST_HOST=https://api.nomikos.app \
 LOCUST_ACCESS_TOKEN="$ACCESS_TOKEN" \
 LOCUST_PROJECT_ID="$TEST_PROJECT_ID" \
 uv run --group load-testing locust \

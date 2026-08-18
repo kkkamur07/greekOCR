@@ -1,14 +1,14 @@
-# Nomicous
+# Nomikos
 
 > AI-assisted annotation platform for historical manuscripts. Models draft segments and transcriptions. Researchers review and edit. Open HTR models on Hugging Face. Part of the NOMOS research ecosystem.
 
-Nomicous is open research tooling for manuscript HTR workflows: page annotation, model-assisted transcription, local or cloud inference, and export of training-ready line data.
+Nomikos is open research tooling for manuscript HTR workflows: page annotation, model-assisted transcription, local or cloud inference, and export of training-ready line data.
 
 ## Site
 
-- [Home](https://nomicous.com/): Product overview, features, and published models
-- [App](https://app.nomicous.com/): Hosted annotation platform
-- [llms.txt](https://nomicous.com/llms.txt): This file
+- [Home](https://nomikos.app/): Product overview, features, and published models
+- [App](https://app.nomikos.app/): Hosted annotation platform
+- [llms.txt](https://nomikos.app/llms.txt): This file
 
 ## Models
 
@@ -20,8 +20,8 @@ Nomicous is open research tooling for manuscript HTR workflows: page annotation,
 
 ## Project
 
-- [NOMOS project](https://nomosproject.de): Research context for Nomicous
+- [NOMOS project](https://nomosproject.de): Research context for Nomikos
 
 ## Optional
 
-- [Sitemap](https://nomicous.com/sitemap.xml): Machine-readable page list
+- [Sitemap](https://nomikos.app/sitemap.xml): Machine-readable page list

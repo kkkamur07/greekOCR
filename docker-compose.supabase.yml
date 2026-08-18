@@ -1,14 +1,14 @@
 # Docker Compose override: Supabase Postgres + Storage (no local db container).
 #
 # Prereq: fill the platform environment file:
-# - nomicous/backend/core/.env.supabase (see .env.supabase.example)
+# - nomikos/backend/core/.env.supabase (see .env.supabase.example)
 #
 # Usage:
 #   docker compose -f docker-compose.yml -f docker-compose.supabase.yml up --build
 #
 # Open http://localhost:5173 — login dev@example.com / dev-pass-123
 
-name: nomicous
+name: nomikos
 
 services:
   # Local Postgres is not used in this profile.
@@ -17,10 +17,10 @@ services:
 
   api:
     env_file:
-      - ./nomicous/backend/core/.env.supabase
+      - ./nomikos/backend/core/.env.supabase
     # !override drops base compose DATABASE_URL (local db:5432/kalamos) so env_file wins.
     environment: !override
-      NOMICOUS_APP_ROOT: /app
+      NOMIKOS_APP_ROOT: /app
       # Authenticates the inbound job callback an inference agent posts. Source
       # it from the repository-root Compose .env instead of duplicating it
       # across environment files.
@@ -34,7 +34,7 @@ services:
     # keep a dangling dependency on an undefined service.
     depends_on: !reset null
     volumes:
-      - ./nomicous/backend:/app/backend
+      - ./nomikos/backend:/app/backend
       - ./scripts/platform:/app/scripts/platform
       - ./inference:/app/inference
       - ./data:/data:ro
@@ -42,12 +42,12 @@ services:
     # In-container alembic uses MIGRATOR_DATABASE_URL (direct host) which often fails
     # from Docker (IPv6 / network). Seed only on API start.
     command: >
-      sh -c "python scripts/platform/seed_dev_nomicous.py
+      sh -c "python scripts/platform/seed_dev_nomikos.py
       && uvicorn backend.core.main:app --host 0.0.0.0 --port 8000 --workers 1 --reload --reload-dir /app/backend"
 
   platform-worker:
     env_file:
-      - ./nomicous/backend/core/.env.supabase
+      - ./nomikos/backend/core/.env.supabase
     environment: !override
       INFERENCE_WEBHOOK_SECRET: ${INFERENCE_WEBHOOK_SECRET:?set INFERENCE_WEBHOOK_SECRET in the repository-root .env}
       INFERENCE_MAX_DECODED_IMAGE_BYTES: "104857600"

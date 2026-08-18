@@ -1,21 +1,21 @@
-# Nomicous
+# Nomikos
 
-Nomicous is an open-source platform for transcribing, annotating, sharing, and publishing
+Nomikos is an open-source platform for transcribing, annotating, sharing, and publishing
 historical manuscripts. It is being developed for the Nomos research ecosystem, with a focus
 on Syriac, Coptic, Armenian, Byzantine Greek, and related scripts.
 
 It combines a browser manuscript editor, model-assisted segmentation and handwritten-text
 recognition (HTR), collaboration, publication, and a training-data workflow in one platform.
 
-Links: [Website](https://nomicous.com) ·
-[Application](https://app.nomicous.com) ·
+Links: [Website](https://nomikos.app) ·
+[Application](https://app.nomikos.app) ·
 [Hugging Face](https://huggingface.co/kkkamur07) ·
 [GitHub](https://github.com/kkkamur07/greekOCR) ·
 [Documentation index](docs/README.md)
 
 ## What it does
 
-Nomicous turns manuscript page images into editable, reviewable research data:
+Nomikos turns manuscript page images into editable, reviewable research data:
 
 1. Upload or open a manuscript page.
 2. Segment the page into written lines.
@@ -29,13 +29,13 @@ publication or future model training.
 
 ## Why use it?
 
-Nomicous is for researchers, universities, libraries, and projects that need more control than
+Nomikos is for researchers, universities, libraries, and projects that need more control than
 a closed transcription service provides. The platform is open source and can be adapted to
 your own institution, data policy, language, annotation conventions, and infrastructure.
 
 You can:
 
-- run supported inference on a researcher's own computer through the `nomicous` agent;
+- run supported inference on a researcher's own computer through the `nomikos` agent;
 - keep application data behind an API you control;
 - collaborate through projects and document sharing;
 - correct model output instead of treating it as automatic ground truth;
@@ -94,7 +94,7 @@ Open [http://localhost:5173](http://localhost:5173). Development seed credential
 | API docs     | [http://localhost:8000/docs](http://localhost:8000/docs) |
 | Postgres     | `127.0.0.1:5433`                                         |
 
-The first inference request downloads public weights into `~/.nomicous/hf/cache`.
+The first inference request downloads public weights into `~/.nomikos/hf/cache`.
 
 ```bash
 docker compose ps
@@ -111,20 +111,20 @@ migrations, plus a persistent Docker host for the workers if remote inference is
 is not a one-click full-stack hosting product today.
 
 Local inference is a command-line agent rather than a background service (ADR 0002). It is the
-one published package, `nomicous-inference`, and a hosted worker installs that same package.
+one published package, `nomikos-inference`, and a hosted worker installs that same package.
 It runs BLLA and Calamari on the researcher's CPU and caches weights under
-`~/.nomicous/hf/cache`.
+`~/.nomikos/hf/cache`.
 
 ```bash
-uv tool install nomicous-inference   # or: pip install nomicous-inference
-nomicous pair          # links this machine to your account
-nomicous run           # takes pages from the queue until you stop it
+uv tool install nomikos-inference   # or: pip install nomikos-inference
+nomikos pair          # links this machine to your account
+nomikos run           # takes pages from the queue until you stop it
 ```
 
 It opens no port. The agent asks the platform for work, downloads the one page image it was
 handed through a short-lived signed link, runs the model, and reports the result back. Nothing
 on the researcher's machine has to be reachable from a browser, a proxy, or a VPN. Point it at
-a different platform with `NOMICOUS_API_URL` or `--api-url`.
+a different platform with `NOMIKOS_API_URL` or `--api-url`.
 
 Where a job runs is decided once, when it is submitted, from the account setting "use my
 computer when it is available" and whether that computer has been seen recently. Every job
@@ -139,7 +139,7 @@ flowchart LR
     Editor --> API["FastAPI platform API"]
     API --> Data[("Postgres + private storage")]
     API --> Jobs["Durable job state"]
-    Jobs --> Agent["nomicous agent (researcher's machine)"]
+    Jobs --> Agent["nomikos agent (researcher's machine)"]
     Agent --> LocalModels["CPU model cache"]
     Jobs --> Worker["Hosted worker (same package)"]
     Worker --> Models["BLLA + Calamari"]
@@ -156,7 +156,7 @@ notification provider in the current implementation.
 
 ## Read next
 
-- [Use and host Nomicous](docs/guides/using-and-hosting.md)
+- [Use and host Nomikos](docs/guides/using-and-hosting.md)
 - [Models and datasets](docs/inference/models-and-datasets.md)
 - [Technical architecture](docs/architecture.md)
 - [Inference service reference](inference/README.md)

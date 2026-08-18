@@ -1,6 +1,6 @@
-# Nomicous technical architecture
+# Nomikos technical architecture
 
-Nomicous separates the browser editor, platform API, persistence, and
+Nomikos separates the browser editor, platform API, persistence, and
 CPU-intensive inference. The same workflow can use local inference, optional
 remote inference, or a future model host.
 
@@ -13,8 +13,8 @@ flowchart LR
     API --> DB[("Postgres")]
     API --> Storage[("Private page storage")]
     API --> Jobs["Durable platform jobs"]
-    LocalAgent["nomicous agent (researcher's machine)"] -->|"claim"| Jobs
-    HostedAgent["nomicous agent (hosted worker)"] -->|"claim"| Jobs
+    LocalAgent["nomikos agent (researcher's machine)"] -->|"claim"| Jobs
+    HostedAgent["nomikos agent (hosted worker)"] -->|"claim"| Jobs
     LocalAgent --> Models["BLLA + Calamari (ONNX Runtime CPU)"]
     HostedAgent --> Models
     LocalAgent -->|"job callback"| API
@@ -108,7 +108,7 @@ make retries idempotent.
 
 ## Job notifications
 
-Nomicous does not currently provide email, push, SMS, or third-party
+Nomikos does not currently provide email, push, SMS, or third-party
 notifications. Job progress uses Postgres `NOTIFY`, an API-local SSE fan-out,
 and polling fallback:
 
@@ -139,7 +139,7 @@ project authorization, no storage credentials - and no listening socket:
 
 ```mermaid
 sequenceDiagram
-    participant A as NomicousAgent
+    participant A as NomikosAgent
     participant API as PlatformAPI
     participant M as LocalModels
 
@@ -154,7 +154,7 @@ sequenceDiagram
 ```
 
 It reads the registry, downloads weights lazily, and caches them at
-`~/.nomicous/hf/cache`. Nothing is exposed: there is no port to secure, no CORS
+`~/.nomikos/hf/cache`. Nothing is exposed: there is no port to secure, no CORS
 allowlist to maintain, and no browser permission to depend on. Before its first
 claim it performs the **launch check** - asking the platform for the **version
 floor** and replacing itself if it is below it - and never again while work is

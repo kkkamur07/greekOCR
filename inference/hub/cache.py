@@ -21,12 +21,12 @@ _COMMIT_SHA_PATTERN = re.compile(r"[0-9a-f]{40}")
 _SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
 
 # The **Hub cache** lives under the researcher's home directory, not beside the
-# code. This module ships inside the published `nomicous-inference` wheel, so
+# code. This module ships inside the published `nomikos-inference` wheel, so
 # the old repository-relative default (`src/hf/cache/`) would have written
 # downloaded weights into site-packages: unwritable for a system install,
 # silently discarded on upgrade, and invisible to anyone looking for them.
-# `~/.nomicous/` is the same root the CLI keeps its device credential under.
-DEFAULT_CACHE_ROOT = Path.home() / ".nomicous" / "hf" / "cache"
+# `~/.nomikos/` is the same root the CLI keeps its device credential under.
+DEFAULT_CACHE_ROOT = Path.home() / ".nomikos" / "hf" / "cache"
 CACHE_ROOT_ENV = "HF_CACHE_ROOT"
 
 

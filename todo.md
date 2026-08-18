@@ -10,7 +10,7 @@ The `feat/todo-sweep` branch is merged to `main`; what follows is the open backl
 
 | suite | result |
 |---|---|
-| `pytest tests/nomicous` (incl. integration) | 746 passed, 1 skipped |
+| `pytest tests/nomikos` (incl. integration) | 746 passed, 1 skipped |
 | `pytest tests/export tests/inference tests/hf` | 316 passed, 7 skipped |
 | frontend `vitest` | 51 files, 252 passed |
 | `tsc --noEmit` / `eslint .` | clean / 0 errors, 2 pre-existing warnings |
@@ -112,7 +112,7 @@ it is a deliberate reduction of defence-in-depth on the auth path, made against 
 
 To confirm in Safari Web Inspector, signed in, against the deployed hosts:
 
-1. **Storage → Cookies** on `app.nomicous.com` *and* `api.nomicous.com`. Is `greekocr-csrf`
+1. **Storage → Cookies** on `app.nomikos.app` *and* `api.nomikos.app`. Is `greekocr-csrf`
    present under each, and do the values match? That distinguishes blocked / partitioned / fine.
 2. **Console** on `app.`: does `document.cookie` show `greekocr-csrf`? That is the exact
    read the old code depended on.
@@ -174,12 +174,12 @@ CI was audited and none of them can pass while failing.
 - `.pub-pdf-view__actions` uses inline styles; `theme-shell.css` is its proper home.
 - `docs/deployment/production.md` §3 could now point at `oldest_pending_job_seconds` as the
   way to tell whether the manual worker step was actually done.
-- `JOB_QUEUE_STALL_WARNING_SECONDS` is not in `nomicous/backend/core/.env.example` —
+- `JOB_QUEUE_STALL_WARNING_SECONDS` is not in `nomikos/backend/core/.env.example` —
   consistent with the other sweep knobs, which are also absent.
 - A full-history `gitleaks detect` has never completed; two attempts ran ~45–50 minutes
   against large historical blobs and were killed. The A1 finding was located by pickaxe
   search instead. Worth one authoritative run on an idle machine.
-- Adding a local `nomicous/backend/core/.env` would stop settings falling through to
+- Adding a local `nomikos/backend/core/.env` would stop settings falling through to
   `.env.supabase` (the live pooler) by default. The truncate guard now makes the dangerous
   half of this safe, but the fallback itself is still surprising.
 

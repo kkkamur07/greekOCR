@@ -1,11 +1,11 @@
 # Platform API - Vercel deploy
 
-Serverless FastAPI bundle for **api.nomicous.com**. Full production runbook: [`docs/deployment/production.md`](../../docs/deployment/production.md).
+Serverless FastAPI bundle for **api.nomikos.app**. Full production runbook: [`docs/deployment/production.md`](../../docs/deployment/production.md).
 Vercel-specific build and bundle notes: [`docs/deployment/vercel-platform-api.md`](../../docs/deployment/vercel-platform-api.md).
 
 ## What this folder is
 
-Vercel's **Root Directory** for the `nomicous-api` project. At build time `build.sh` copies the platform backend and inference registry metadata into this tree; generated artifacts are gitignored.
+Vercel's **Root Directory** for the `nomikos-api` project. At build time `build.sh` copies the platform backend and inference registry metadata into this tree; generated artifacts are gitignored.
 
 | Path | Purpose |
 |------|---------|
@@ -19,7 +19,7 @@ Vercel's **Root Directory** for the `nomicous-api` project. At build time `build
 ```bash
 cd deploy/platform
 bash build.sh
-PYTHONPATH=".:nomicous" python -c "from api.index import app; print(app.title)"
+PYTHONPATH=".:nomikos" python -c "from api.index import app; print(app.title)"
 ```
 
 ## Vercel project settings
@@ -31,13 +31,13 @@ PYTHONPATH=".:nomicous" python -c "from api.index import app; print(app.title)"
 | Install Command | *(empty / default)* |
 | Build Command | `bash build.sh` |
 | Output Directory | `.` |
-| Domain | `api.nomicous.com` |
+| Domain | `api.nomikos.app` |
 
-Copy environment variables from [`nomicous/backend/core/.env.production.example`](../../nomicous/backend/core/.env.production.example) into the Vercel project (Production).
+Copy environment variables from [`nomikos/backend/core/.env.production.example`](../../nomikos/backend/core/.env.production.example) into the Vercel project (Production).
 
 Set `JOB_WORKER_ENABLED=false` and `JOB_SSE_NOTIFICATIONS_ENABLED=false` on the
-Vercel API. Run [`backend.jobs.worker_main`](../../nomicous/backend/jobs/worker_main.py)
-on a persistent host instead (see [`deploy/inference/README.md`](../inference/README.md)).
+Vercel API. Run [`backend.jobs.worker_main`](../../nomikos/backend/jobs/worker_main.py)
+on a persistent host instead (see [`docs/deployment/cloud-inference-worker.md`](../../docs/deployment/cloud-inference-worker.md)).
 `FORWARDED_ALLOW_IPS` must be an explicit proxy IP/CIDR allowlist; never use
 `*`, and leave `BEHIND_PROXY=false` when the provider has no stable source range.
 
@@ -46,5 +46,5 @@ on a persistent host instead (see [`deploy/inference/README.md`](../inference/RE
 After deploy:
 
 ```bash
-curl -s https://api.nomicous.com/health
+curl -s https://api.nomikos.app/health
 ```

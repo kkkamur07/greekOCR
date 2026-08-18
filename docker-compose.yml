@@ -1,10 +1,10 @@
-name: nomicous
+name: nomikos
 
 x-api-build: &api-build
   context: .
-  dockerfile: nomicous/Dockerfile
+  dockerfile: nomikos/Dockerfile
   args:
-    APP_VERSION: ${NOMICOUS_VERSION:-0.3.3}
+    APP_VERSION: ${NOMIKOS_VERSION:-0.3.3}
 
 services:
   db:
@@ -24,7 +24,7 @@ services:
       retries: 5
 
   api:
-    image: nomicous-api:latest
+    image: nomikos-api:latest
     build: *api-build
     ports:
       - "127.0.0.1:8000:8000"
@@ -36,7 +36,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:?copy .env.compose.example to .env and set JWT_SECRET}
       CORS_ORIGINS: http://localhost:3000,http://localhost:5173
       MEDIA_ROOT: /app/backend/media
-      NOMICOUS_APP_ROOT: /app
+      NOMIKOS_APP_ROOT: /app
       CLOUD_INFERENCE_ENABLED: "true"
       INFERENCE_WEBHOOK_SECRET: ${INFERENCE_WEBHOOK_SECRET:?copy .env.compose.example to .env and set INFERENCE_WEBHOOK_SECRET}
       # API hosts remain request/response only; Compose runs platform-worker separately.
@@ -44,8 +44,8 @@ services:
       JOB_SSE_NOTIFICATIONS_ENABLED: "false"
       ANNOTATED_DATA_ROOT: /data/annotated/data
     volumes:
-      - ./nomicous/backend/media:/app/backend/media
-      - ./nomicous/backend:/app/backend
+      - ./nomikos/backend/media:/app/backend/media
+      - ./nomikos/backend:/app/backend
       - ./scripts/platform:/app/scripts/platform
       - ./inference:/app/inference
       - ./data:/data:ro
@@ -66,14 +66,14 @@ services:
       start_period: 30s
     command: >
       sh -c "alembic -c infrastructure/alembic.ini upgrade head
-      && python scripts/platform/seed_dev_nomicous.py
+      && python scripts/platform/seed_dev_nomikos.py
       && uvicorn backend.core.main:app --host 0.0.0.0 --port 8000 --workers 1 --reload --reload-dir /app/backend"
     # Seed runs on API container start only (never restarts Postgres). If you wipe or
     # recreate the DB volume while the API keeps running, hit /health or restart api -
     # development health checks recreate the dev login user when it is missing.
 
   platform-worker:
-    image: nomicous-api:latest
+    image: nomikos-api:latest
     build: *api-build
     environment:
       ENVIRONMENT: development
@@ -82,7 +82,7 @@ services:
       JOB_WORKER_ENABLED: "true"
       JOB_SSE_NOTIFICATIONS_ENABLED: "false"
     volumes:
-      - ./nomicous/backend:/app/backend
+      - ./nomikos/backend:/app/backend
       - ./inference:/app/inference
     depends_on:
       db:
@@ -90,13 +90,13 @@ services:
     command: python -m backend.jobs.worker_main
 
   frontend:
-    image: nomicous-frontend:latest
+    image: nomikos-frontend:latest
     build:
-      context: ./nomicous
+      context: ./nomikos
       dockerfile: frontend/Dockerfile
       target: dev
       args:
-        APP_VERSION: ${NOMICOUS_VERSION:-0.3.3}
+        APP_VERSION: ${NOMIKOS_VERSION:-0.3.3}
         NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
     ports:
       - "127.0.0.1:5173:5173"
@@ -104,7 +104,7 @@ services:
       NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
     command: npm run dev -- --hostname 0.0.0.0
     volumes:
-      - ./nomicous/frontend:/app
+      - ./nomikos/frontend:/app
       - frontend_node_modules:/app/node_modules
     depends_on:
       - api

@@ -1,4 +1,4 @@
-"""HTTP headers shared between nomicous and the inference runtime.
+"""HTTP headers shared between nomikos and the inference runtime.
 
 One header, and it names the direction that survives: the platform calling its
 own job-callback receiver. ``X-Inference-Service-Secret`` authenticated callers

@@ -141,7 +141,7 @@ not a reason to reverse it. It is a reason to bound the input, and
 "Install size" above was one dependency's installed size on a development machine. What a
 researcher actually pays is the whole closure of the published package, and it was measured
 when that package first existed (issue 050), from an empty `uv` cache, on a fast connection.
-`nomicous-inference` and its twelve declared dependencies:
+`nomikos-inference` and its twelve declared dependencies:
 
 |                                        | installed | bytes fetched | cold install |
 | -------------------------------------- | --------- | ------------- | ------------ |
@@ -162,7 +162,7 @@ The CPU-only pin cannot be expressed in package metadata. No PEP 621 field names
 repository's lock and nothing downstream. A plain resolve on either Linux architecture
 therefore pulls sixteen `nvidia-*` and `triton` wheels behind `torch`, which is the 4801 MB
 row. The pin is restated at install time instead, and the documented command is
-`uv tool install nomicous-inference --torch-backend=cpu`.
+`uv tool install nomikos-inference --torch-backend=cpu`.
 `tests/inference/integration/test_published_package.py` resolves the wheel's own metadata on
 all four target platforms and fails if any of them admits a CUDA wheel.
 

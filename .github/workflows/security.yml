@@ -28,9 +28,9 @@ jobs:
         with:
           node-version: "20"
           cache: npm
-          cache-dependency-path: nomicous/frontend/package-lock.json
-      - run: npm ci --prefix nomicous/frontend
-      - run: npm audit --prefix nomicous/frontend --omit=dev --audit-level=high
+          cache-dependency-path: nomikos/frontend/package-lock.json
+      - run: npm ci --prefix nomikos/frontend
+      - run: npm audit --prefix nomikos/frontend --omit=dev --audit-level=high
       # Remaining pip-audit ignores are owned, time-bounded VEX (not silent CI green):
       # - PYSEC-2026-2132 (Click <8.3.3): the lockfile resolves Click 8.2.1
       #   through typer (via huggingface-hub) and through uvicorn[standard]

@@ -1,6 +1,6 @@
 # Vercel platform API deployment notes
 
-This note records the deploy lessons from shipping **api.nomicous.com** from
+This note records the deploy lessons from shipping **api.nomikos.app** from
 `deploy/platform/`. It is intentionally practical: use it when a Vercel build
 or runtime import fails.
 
@@ -13,7 +13,7 @@ or runtime import fails.
 | Install Command | *(empty / default)* |
 | Build Command | `bash build.sh` |
 | Output Directory | `.` |
-| Domain | `api.nomicous.com` |
+| Domain | `api.nomikos.app` |
 | Function region | `fra1` (Frankfurt, Europe) |
 
 Do not set a custom install command. Vercel's Python runtime installs from the
@@ -43,7 +43,7 @@ Vercel 3.12 are both valid.
 
 ## Build bundle shape
 
-The generated copy under `deploy/platform/nomicous/` and
+The generated copy under `deploy/platform/nomikos/` and
 `deploy/platform/inference/` is a build artifact. It is gitignored and recreated
 by `bash build.sh`.
 
@@ -52,9 +52,9 @@ image does not include `rsync`.
 
 The platform API needs only:
 
-- `nomicous/backend/`
-- `nomicous/infrastructure/`
-- `nomicous/VERSION`
+- `nomikos/backend/`
+- `nomikos/infrastructure/`
+- `nomikos/VERSION`
 - `inference/registry.yaml`
 - `inference/admission.py`
 - `inference/settings.py`
@@ -108,8 +108,8 @@ entirely.
 
 This change affects only approved line artifact export:
 
-- `nomicous/backend/annotation/application/processing.py`
-- `nomicous/backend/annotation/application/export_service.py`
+- `nomikos/backend/annotation/application/processing.py`
+- `nomikos/backend/annotation/application/export_service.py`
 - `POST /{document_id}/parts/{part_id}/export`
 
 It does not affect inference on any host: an **inference agent** runs from the
@@ -181,7 +181,7 @@ PY
 After Vercel deploy:
 
 ```bash
-curl -s https://api.nomicous.com/health
+curl -s https://api.nomikos.app/health
 ```
 
 The first production smoke test must also cover authentication, a bounded
@@ -215,7 +215,7 @@ were fixed in this order:
    was changed to `false`; forwarded headers are not trusted until Vercel's
    source range is explicitly allowlisted.
 3. Production required an HTTPS `INFERENCE_URL`. The optional cloud endpoint
-   was set to `https://inference.nomicous.com`.
+   was set to `https://inference.nomikos.app`.
 4. Production validation required non-placeholder
    `INFERENCE_WEBHOOK_SECRET` and `INFERENCE_SERVICE_SECRET`. Both were added
    to Vercel as encrypted Production variables from the local ignored secret
@@ -236,10 +236,10 @@ The API function is pinned to Frankfurt with `"regions": ["fra1"]` in
 only the API function is region-pinned.
 
 Local OCR needs nothing from this deployment. The **inference agent** runs on
-the researcher's machine and calls `api.nomicous.com`:
+the researcher's machine and calls `api.nomikos.app`:
 
 ```text
-nomicous agent on the user's machine → https://api.nomicous.com
+nomikos agent on the user's machine → https://api.nomikos.app
 ```
 
 That direction is what removed the whole class of problem this section used to

@@ -19,14 +19,14 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: nomicous/frontend
+        working-directory: nomikos/frontend
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "20"
           cache: npm
-          cache-dependency-path: nomicous/frontend/package-lock.json
+          cache-dependency-path: nomikos/frontend/package-lock.json
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
@@ -58,16 +58,16 @@ jobs:
       # the ruff-format pre-commit hook, which deliberately leaves `src/` alone
       # (vendored Calamari fork - reformatting it would fork it from upstream).
       # If the two ever disagree, CI rejects what the hook just produced.
-      - run: uv run --locked --group dev ruff format --check nomicous/backend inference scripts/platform tests/nomicous tests/inference tests/export tests/hf src/model/inference_export
+      - run: uv run --locked --group dev ruff format --check nomikos/backend inference scripts/platform tests/nomikos tests/inference tests/export tests/hf src/model/inference_export
       # Types. Non-blocking on purpose - mypy was introduced against an untyped
       # codebase, so this reports the error count on every pull request without
       # gating merges. The runtime groups are installed so the check runs against
       # real pydantic/SQLAlchemy/FastAPI types rather than `Any`. Drop
       # `continue-on-error` once the count reaches zero; see [tool.mypy] in
       # pyproject.toml for the order the strictness knobs get turned on.
-      - run: uv run --locked --group dev --group platform --group inference mypy nomicous/backend inference
+      - run: uv run --locked --group dev --group platform --group inference mypy nomikos/backend inference
         continue-on-error: true
-      - run: uv run --locked --group test --group platform --group inference pytest tests/nomicous/unit tests/inference/unit tests/hf
+      - run: uv run --locked --group test --group platform --group inference pytest tests/nomikos/unit tests/inference/unit tests/hf
 
   postgres-integration:
     name: Postgres integration tests
@@ -98,8 +98,8 @@ jobs:
         with:
           python-version: "3.11"
           enable-cache: true
-      - run: PYTHONPATH=nomicous uv run --locked --group platform alembic -c nomicous/infrastructure/alembic.ini upgrade head
-      - run: uv run --locked --group test --group platform --group inference pytest tests/nomicous/integration tests/inference/integration -m "not ml"
+      - run: PYTHONPATH=nomikos uv run --locked --group platform alembic -c nomikos/infrastructure/alembic.ini upgrade head
+      - run: uv run --locked --group test --group platform --group inference pytest tests/nomikos/integration tests/inference/integration -m "not ml"
 
   ml-real-weights:
     name: ML real weights
@@ -146,8 +146,8 @@ jobs:
         with:
           python-version: "3.11"
           enable-cache: true
-      - run: PYTHONPATH=nomicous uv run --locked --group platform alembic -c nomicous/infrastructure/alembic.ini upgrade head
-      # `tests/nomicous` used to be in this path list and carries no `ml` marker
+      - run: PYTHONPATH=nomikos uv run --locked --group platform alembic -c nomikos/infrastructure/alembic.ini upgrade head
+      # `tests/nomikos` used to be in this path list and carries no `ml` marker
       # at all - the platform hands a page to an agent, it does not run a model
       # (see the `test-ml` task in pyproject.toml, which already says so). All
       # naming it here bought was collecting the entire platform suite to select
@@ -206,9 +206,9 @@ jobs:
         with:
           node-version: "20"
           cache: npm
-          cache-dependency-path: nomicous/frontend/package-lock.json
-      - run: npm ci --prefix nomicous/frontend
-      - run: npm run check:api --prefix nomicous/frontend
+          cache-dependency-path: nomikos/frontend/package-lock.json
+      - run: npm ci --prefix nomikos/frontend
+      - run: npm run check:api --prefix nomikos/frontend
       # `--group test` is required: the inference group has no pytest, so without
       # it `pytest` resolves from the runner PATH (unpinned, or absent).
       - run: uv run --locked --group test --group inference pytest tests/inference/unit/test_contracts_roundtrip.py

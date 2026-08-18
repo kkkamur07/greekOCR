@@ -75,7 +75,7 @@ longer hold, and should stay anyway, because a CLI has no business growing a tra
 
 ### One published package, not two
 
-`nomicous-inference` carries the library and the CLI entry point. The hosted worker installs
+`nomikos-inference` carries the library and the CLI entry point. The hosted worker installs
 the same package. Two packages would buy a version-compatibility matrix between components that
 always ship together.
 
@@ -94,7 +94,7 @@ outside `inference/`.
 > As built (issue 050): the wheel is `inference/` minus `inference/api` and `inference/helper`,
 > the loopback HTTP surfaces this record deletes, so the published closure carries no web
 > server. `hf` resolution moved in as `inference/hub`, and the Hub cache moved with it, from
-> beside the code to `~/.nomicous/hf/cache`, because inside a wheel "beside the code" is
+> beside the code to `~/.nomikos/hf/cache`, because inside a wheel "beside the code" is
 > site-packages. The repository root is the project, because a build backend cannot reach
 > outside its own root and the package it publishes is `inference/`.
 
@@ -158,7 +158,7 @@ object and one minute.
 ### Agent only; standalone inference deferred
 
 The CLI claims platform jobs. It does not yet accept local files
-(`nomicous transcribe pages/*.jpg`). The package boundary above makes that a thin wrapper over
+(`nomikos transcribe pages/*.jpg`). The package boundary above makes that a thin wrapper over
 `run_model()` whenever it is wanted, but shipping it now would force an output-format decision,
 since researchers will want ALTO or PageXML rather than our JSON contract, and that is a
 separate commitment.

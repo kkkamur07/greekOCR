@@ -1,6 +1,6 @@
-"""`nomicous pair` and `nomicous version`, run as the installed console script.
+"""`nomikos pair` and `nomikos version`, run as the installed console script.
 
-Everything here is live. The CLI is the real `nomicous` executable from a real
+Everything here is live. The CLI is the real `nomikos` executable from a real
 wheel in its own virtual environment; the platform is a real uvicorn process
 serving the real `create_app()`; the database is real Postgres, migrated by
 alembic. Nothing is patched, faked, or substituted - the approval that unblocks
@@ -16,7 +16,7 @@ that the credential lands on disk readable by nobody else. A test that imported
 The scaffolding all three CLI integration modules share - Postgres, alembic,
 uvicorn, the wheel build, the hand-rolled HTTP client - is in
 `tests/inference/integration/conftest.py`. This module keeps its own database
-(`kalamos_056_cli`) rather than the one `tests/nomicous/integration/conftest.py`
+(`kalamos_056_cli`) rather than the one `tests/nomikos/integration/conftest.py`
 truncates between tests, so a server held open across it cannot have the ground
 moved under it.
 """
@@ -59,7 +59,7 @@ POLL_INTERVAL_SECONDS = "1"
 #: tests observe. `PYTHONPATH` is deliberately *not* dropped: this module's wheel
 #: is installed with `--no-deps`, and what it can import is `test_published_package.py`'s
 #: question rather than this one's.
-INHERITED_TO_DROP = ("SSH_CONNECTION", "SSH_TTY", "BROWSER", "NOMICOUS_API_URL")
+INHERITED_TO_DROP = ("SSH_CONNECTION", "SSH_TTY", "BROWSER", "NOMIKOS_API_URL")
 
 
 # ---------------------------------------------------------------------------
@@ -105,14 +105,14 @@ def installed_cli(tmp_path_factory: pytest.TempPathFactory) -> dict[str, object]
 
 
 def _wheel_version(wheel: Path) -> str:
-    # `nomicous_inference-0.2.0-py3-none-any.whl`
+    # `nomikos_inference-0.2.0-py3-none-any.whl`
     return wheel.name.split("-")[1]
 
 
 @pytest.fixture
 def home(tmp_path: Path) -> Path:
     """Where this test's CLI keeps its credential. Never the real one."""
-    return tmp_path / "nomicous-home"
+    return tmp_path / "nomikos-home"
 
 
 def _cli_environment(home: Path, *, extra: dict[str, str] | None = None) -> dict[str, str]:
@@ -137,10 +137,10 @@ def researcher(platform_url: str) -> dict[str, str]:
 
 
 # ---------------------------------------------------------------------------
-# Driving `nomicous pair` while approving it from outside
+# Driving `nomikos pair` while approving it from outside
 # ---------------------------------------------------------------------------
 class PairRun:
-    """One `nomicous pair` invocation and everything observable about it."""
+    """One `nomikos pair` invocation and everything observable about it."""
 
     def __init__(
         self,
@@ -235,7 +235,7 @@ def _run_pair(
             process.kill()
             process.wait()
             raise AssertionError(
-                f"`nomicous pair` did not finish.\n{stdout_path.read_text()}\n"
+                f"`nomikos pair` did not finish.\n{stdout_path.read_text()}\n"
                 f"{stderr_path.read_text()}"
             ) from None
 
@@ -362,7 +362,7 @@ def test_the_credential_is_written_with_owner_only_permissions(
 
 # `test_the_stored_token_actually_authenticates_this_machine` stood here and redeemed the
 # stored token against `/device/v1/self`. Mint-redeem-then-authenticate is
-# `tests/nomicous/integration/test_device_pairing.py::test_mint_redeem_then_authenticate`,
+# `tests/nomikos/integration/test_device_pairing.py::test_mint_redeem_then_authenticate`,
 # and that the token in `device.json` is the real one is implied by every `pair`-then-`run`
 # test in `test_cli_run.py`, which claims real pages with it.
 
@@ -459,7 +459,7 @@ def test_a_platform_that_cannot_be_reached_is_not_reported_as_a_revocation(
 
 
 # ---------------------------------------------------------------------------
-# `nomicous version`
+# `nomikos version`
 # ---------------------------------------------------------------------------
 def test_the_version_subcommand_reports_the_installed_package_version(installed_cli, home) -> None:
     """Read from installed metadata, so it is the version that is really on disk."""
@@ -473,13 +473,13 @@ def test_the_version_subcommand_reports_the_installed_package_version(installed_
 
     assert completed.returncode == 0, completed.stderr
     expected = _wheel_version(installed_cli["wheel"])
-    assert f"nomicous-inference {expected}" in completed.stdout
+    assert f"nomikos-inference {expected}" in completed.stdout
     # Not a source checkout: the whole point of reading metadata.
     assert "0+unknown" not in completed.stdout
 
 
 # Two more `version` tests stood here. One asserted the help text names
-# `X-Nomicous-Agent-Version`; the header actually sent is `AGENT_VERSION_HEADER` in
+# `X-Nomikos-Agent-Version`; the header actually sent is `AGENT_VERSION_HEADER` in
 # `inference/cli/api.py`, which that test never touched. The other reported whether this
 # machine is paired, and its one load-bearing line - a version report is never a way to
 # read the credential out - is already asserted against `run.output` by

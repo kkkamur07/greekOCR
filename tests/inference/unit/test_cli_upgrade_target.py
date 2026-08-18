@@ -5,7 +5,7 @@ platform sends. Both are therefore attacker-controlled in the threat model the
 module's docstring accepts, and the accepted risk is only the one it names - a
 compromised *index* serving the right package - if the platform cannot redirect
 the installer to some *other* package. Naming the package is choosing what
-executes: an sdist runs its build hooks, and a wheel declaring a `nomicous`
+executes: an sdist runs its build hooks, and a wheel declaring a `nomikos`
 console script replaces the entry point `_re_exec` runs next.
 
 These are unit tests on purpose. The end-to-end upgrade lives in
@@ -60,10 +60,10 @@ def installer_that_must_not_run(monkeypatch: pytest.MonkeyPatch) -> list[list[st
     "package",
     [
         "attacker-pkg",
-        "nomicous-inferance",  # a typosquat of the real name
-        "nomicous_inference",  # underscore, not the distribution name
-        "nomicous-inference[extra]",
-        "nomicous-inference --index-url http://example.invalid/simple",
+        "nomikos-inferance",  # a typosquat of the real name
+        "nomikos_inference",  # underscore, not the distribution name
+        "nomikos-inference[extra]",
+        "nomikos-inference --index-url http://example.invalid/simple",
         "",
         "../../../etc/passwd",
     ],

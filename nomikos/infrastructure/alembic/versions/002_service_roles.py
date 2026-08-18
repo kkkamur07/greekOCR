@@ -1,0 +1,148 @@
+"""Create least-privilege service role groups and grants.
+
+Provider-managed LOGIN principals and their memberships remain outside this
+migration. On providers that do not grant CREATEROLE to the migrator, the
+operator should run scripts/platform/provision_database_roles.sql after the
+schema migration.
+
+``nomikos_inference_worker`` is created and granted nothing. ADR 0003 collapsed
+the inference service's own queue into ``jobs``, so the group has no table to
+reach; it is retained only until no login principal is a member of it, and both
+this migration and the bootstrap script expect to find all four groups. What the
+squashed history used to express as "002 grants it the queue, 006 revokes
+everything" is now simply an absence.
+
+Ordering: this runs *before* ``003_helper_devices`` deliberately, matching the
+history it replaces. ``GRANT ... ON ALL TABLES`` is point-in-time, so the tables
+003 creates are granted by 003 itself rather than here.
+"""
+
+from collections.abc import Sequence
+
+from alembic import op
+
+revision: str = "002_service_roles"
+down_revision: str | None = "001_initial_schema"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
+
+
+def upgrade() -> None:
+    op.execute(
+        """
+        DO $$
+        DECLARE
+          can_create_roles boolean;
+          role_name text;
+          roles_ready boolean;
+        BEGIN
+          SELECT rolsuper OR rolcreaterole
+          INTO can_create_roles
+          FROM pg_roles
+          WHERE rolname = current_user;
+
+          IF coalesce(can_create_roles, false) THEN
+            FOREACH role_name IN ARRAY ARRAY[
+              'nomikos_migrator',
+              'nomikos_api',
+              'nomikos_platform_worker',
+              'nomikos_inference_worker'
+            ]
+            LOOP
+              IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = role_name) THEN
+                EXECUTE format(
+                  'CREATE ROLE %I NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION',
+                  role_name
+                );
+              END IF;
+            END LOOP;
+          END IF;
+
+          SELECT bool_and(EXISTS (
+            SELECT 1 FROM pg_roles WHERE rolname = required_role
+          ))
+          INTO roles_ready
+          FROM unnest(ARRAY[
+            'nomikos_migrator',
+            'nomikos_api',
+            'nomikos_platform_worker',
+            'nomikos_inference_worker'
+          ]) AS required_role;
+
+          IF NOT coalesce(roles_ready, false) THEN
+            RAISE NOTICE
+              'Service role groups were not created; run the provider role bootstrap separately.';
+            RETURN;
+          END IF;
+
+          REVOKE ALL ON SCHEMA public FROM PUBLIC;
+          REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC;
+          REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC;
+
+          GRANT USAGE, CREATE ON SCHEMA public TO nomikos_migrator;
+          GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO nomikos_migrator;
+          GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO nomikos_migrator;
+
+          GRANT USAGE ON SCHEMA public TO nomikos_api;
+          GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO nomikos_api;
+          GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO nomikos_api;
+
+          GRANT USAGE ON SCHEMA public TO nomikos_platform_worker;
+          GRANT SELECT, UPDATE ON TABLE jobs TO nomikos_platform_worker;
+          GRANT SELECT ON TABLE documents, document_parts, blocks, lines,
+            model_bindings, inference_models TO nomikos_platform_worker;
+
+          -- nomikos_inference_worker is deliberately granted nothing; see the
+          -- module docstring.
+
+          ALTER DEFAULT PRIVILEGES IN SCHEMA public
+            GRANT ALL PRIVILEGES ON TABLES TO nomikos_migrator;
+          ALTER DEFAULT PRIVILEGES IN SCHEMA public
+            GRANT ALL PRIVILEGES ON SEQUENCES TO nomikos_migrator;
+
+          ALTER DEFAULT PRIVILEGES IN SCHEMA public
+            GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO nomikos_api;
+          ALTER DEFAULT PRIVILEGES IN SCHEMA public
+            GRANT USAGE, SELECT ON SEQUENCES TO nomikos_api;
+
+          ALTER DEFAULT PRIVILEGES IN SCHEMA public
+            REVOKE ALL ON TABLES FROM PUBLIC;
+          ALTER DEFAULT PRIVILEGES IN SCHEMA public
+            REVOKE ALL ON SEQUENCES FROM PUBLIC;
+        END
+        $$;
+        """
+    )
+
+
+def downgrade() -> None:
+    op.execute(
+        """
+        DO $$
+        DECLARE
+          role_name text;
+        BEGIN
+          -- Both name generations: a downgrade that already passed through
+          -- 004_rename_service_roles has renamed the roles back to nomicous_*,
+          -- so revoking only the nomikos_* names would silently skip them all.
+          FOREACH role_name IN ARRAY ARRAY[
+            'nomikos_migrator',
+            'nomikos_api',
+            'nomikos_platform_worker',
+            'nomikos_inference_worker',
+            'nomicous_migrator',
+            'nomicous_api',
+            'nomicous_platform_worker',
+            'nomicous_inference_worker'
+          ]
+          LOOP
+            IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = role_name) THEN
+              EXECUTE format('REVOKE ALL ON ALL TABLES IN SCHEMA public FROM %I', role_name);
+              EXECUTE format('REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM %I', role_name);
+              EXECUTE format('REVOKE ALL ON SCHEMA public FROM %I', role_name);
+            END IF;
+          END LOOP;
+        END
+        $$;
+        """
+    )

@@ -22,7 +22,7 @@ class PlatformApiUser(HttpUser):
     """Exercise platform API reads and their database-backed dependencies."""
 
     wait_time = between(1, 3)
-    host = _env("LOCUST_HOST") or "https://api.nomicous.com"
+    host = _env("LOCUST_HOST") or "https://api.nomikos.app"
 
     def on_start(self) -> None:
         self.access_token = _env("LOCUST_ACCESS_TOKEN")

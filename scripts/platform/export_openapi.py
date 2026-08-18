@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""Export OpenAPI schema from the FastAPI app to nomicous/frontend/openapi/openapi.json."""
+"""Export OpenAPI schema from the FastAPI app to nomikos/frontend/openapi/openapi.json."""
 
 from __future__ import annotations
 
 import json
 import sys
 
-from _bootstrap import ensure_nomicous_on_path, nomicous_root
+from _bootstrap import ensure_nomikos_on_path, nomikos_root
 
 
 def main() -> int:
-    ensure_nomicous_on_path()
+    ensure_nomikos_on_path()
     from backend.core.app import create_app
 
-    output = nomicous_root() / "frontend" / "openapi" / "openapi.json"
+    output = nomikos_root() / "frontend" / "openapi" / "openapi.json"
     schema = create_app().openapi()
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(

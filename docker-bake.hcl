@@ -19,9 +19,9 @@ group "default" {
 
 target "api" {
   context    = "."
-  dockerfile = "nomicous/Dockerfile"
+  dockerfile = "nomikos/Dockerfile"
   target     = "runtime"
-  tags       = ["nomicous-api:latest"]
+  tags       = ["nomikos-api:latest"]
   args = {
     APP_VERSION = APP_VERSION
   }
@@ -30,10 +30,10 @@ target "api" {
 }
 
 target "frontend-dev" {
-  context    = "nomicous"
+  context    = "nomikos"
   dockerfile = "frontend/Dockerfile"
   target     = "dev"
-  tags       = ["nomicous-frontend:latest"]
+  tags       = ["nomikos-frontend:latest"]
   args = {
     APP_VERSION              = APP_VERSION
     NEXT_PUBLIC_API_BASE_URL = NEXT_PUBLIC_API_BASE_URL
@@ -45,5 +45,5 @@ target "frontend-dev" {
 target "frontend-prod" {
   inherits = ["frontend-dev"]
   target   = "runner"
-  tags     = ["nomicous-frontend:prod"]
+  tags     = ["nomikos-frontend:prod"]
 }

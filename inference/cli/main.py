@@ -1,4 +1,4 @@
-"""Argument parsing and dispatch for the `nomicous` console entry point."""
+"""Argument parsing and dispatch for the `nomikos` console entry point."""
 
 from __future__ import annotations
 
@@ -12,13 +12,13 @@ from inference.cli import upgrade as upgrade_command
 from inference.cli import version as version_command
 from inference.cli.version import DISTRIBUTION_NAME, SOURCE_CHECKOUT_VERSION, installed_version
 
-PROGRAM_NAME = "nomicous"
+PROGRAM_NAME = "nomikos"
 
-_DESCRIPTION = "Run nomicous manuscript segmentation and transcription on this machine."
+_DESCRIPTION = "Run nomikos manuscript segmentation and transcription on this machine."
 
 _COMMANDS = {
     "pair": (
-        "authorise this machine against your nomicous account",
+        "authorise this machine against your nomikos account",
         pair_command.add_arguments,
         pair_command.run,
     ),

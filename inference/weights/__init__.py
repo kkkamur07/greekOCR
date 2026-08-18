@@ -6,7 +6,7 @@ and `file://...` relative to the inference tree. Whichever it is, a pinned
 `artifact_sha256` is verified before the path is handed back.
 
 Nothing here is a cache layout of its own - `inference/hub/cache.py` owns the one
-directory that is written to, under the researcher's `~/.nomicous`. This module
+directory that is written to, under the researcher's `~/.nomikos`. This module
 only decides which file the runtime should open.
 """
 
@@ -20,7 +20,7 @@ INFERENCE_ROOT = Path(__file__).resolve().parents[1]
 
 DEFAULT_WEIGHTS_ROOT = INFERENCE_ROOT / "weights"
 LOCAL_BUNDLED_PREFIX = "local/"
-LOCAL_BUNDLED_ROOT_ENV = "NOMICOUS_LOCAL_WEIGHTS_ROOT"
+LOCAL_BUNDLED_ROOT_ENV = "NOMIKOS_LOCAL_WEIGHTS_ROOT"
 
 
 def local_bundled_root() -> Path:

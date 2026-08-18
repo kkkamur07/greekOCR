@@ -1,4 +1,4 @@
-"""The `nomicous` console entry point.
+"""The `nomikos` console entry point.
 
 ADR 0002 replaced the loopback helper with a CLI installed from PyPI. This
 package is that CLI: `pair` authorises a machine against a researcher's account
@@ -8,7 +8,7 @@ credential exists for, `version` reports the string this agent presents to the
 to that floor before it claims anything.
 
 Nothing here imports the model runtime at module scope - `run` reaches for it
-one line deep, inside the call that needs it. `nomicous version` on a laptop
+one line deep, inside the call that needs it. `nomikos version` on a laptop
 with no weights and nothing to run should not pay for Torch to answer.
 """
 

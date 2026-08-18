@@ -47,10 +47,9 @@ src/**
 !src/hf/resolve/
 !src/hf/resolve/**
 
-# Frontend is built from nomicous/ context; exclude from repo-root API/inference builds
-nomicous/frontend/
-nomicous/backend/media
-nomicous/data/
+# Frontend is built from nomikos/ context; exclude from repo-root API/inference builds
+nomikos/frontend/
+nomikos/backend/media
+nomikos/data/
 
-# Dev-only paths under nomicous
-nomicous/backend/tests
+# Dev-only paths under nomikos

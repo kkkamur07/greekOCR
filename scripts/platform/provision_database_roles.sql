@@ -10,10 +10,10 @@ DECLARE
   role_name text;
 BEGIN
   FOREACH role_name IN ARRAY ARRAY[
-    'nomicous_migrator',
-    'nomicous_api',
-    'nomicous_platform_worker',
-    'nomicous_inference_worker'
+    'nomikos_migrator',
+    'nomikos_api',
+    'nomikos_platform_worker',
+    'nomikos_inference_worker'
   ]
   LOOP
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = role_name) THEN
@@ -30,33 +30,33 @@ REVOKE ALL ON SCHEMA public FROM PUBLIC;
 REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC;
 REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC;
 
-GRANT USAGE, CREATE ON SCHEMA public TO nomicous_migrator;
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO nomicous_migrator;
-GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO nomicous_migrator;
+GRANT USAGE, CREATE ON SCHEMA public TO nomikos_migrator;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO nomikos_migrator;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO nomikos_migrator;
 
-GRANT USAGE ON SCHEMA public TO nomicous_api;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO nomicous_api;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO nomicous_api;
+GRANT USAGE ON SCHEMA public TO nomikos_api;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO nomikos_api;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO nomikos_api;
 
-GRANT USAGE ON SCHEMA public TO nomicous_platform_worker;
-GRANT SELECT, UPDATE ON TABLE jobs TO nomicous_platform_worker;
+GRANT USAGE ON SCHEMA public TO nomikos_platform_worker;
+GRANT SELECT, UPDATE ON TABLE jobs TO nomikos_platform_worker;
 GRANT SELECT ON TABLE documents, document_parts, blocks, lines, model_bindings, inference_models
-  TO nomicous_platform_worker;
+  TO nomikos_platform_worker;
 
--- nomicous_inference_worker is still created above so migration 002 finds all
+-- nomikos_inference_worker is still created above so migration 002 finds all
 -- four groups and applies its grants, but it is granted nothing: the queue it
 -- read was deleted in 006 (ADR 0003). Drop the group once no LOGIN principal is
 -- a member of it.
 
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  GRANT ALL PRIVILEGES ON TABLES TO nomicous_migrator;
+  GRANT ALL PRIVILEGES ON TABLES TO nomikos_migrator;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  GRANT ALL PRIVILEGES ON SEQUENCES TO nomicous_migrator;
+  GRANT ALL PRIVILEGES ON SEQUENCES TO nomikos_migrator;
 
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO nomicous_api;
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO nomikos_api;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  GRANT USAGE, SELECT ON SEQUENCES TO nomicous_api;
+  GRANT USAGE, SELECT ON SEQUENCES TO nomikos_api;
 
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
   REVOKE ALL ON TABLES FROM PUBLIC;

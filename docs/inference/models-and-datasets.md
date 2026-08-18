@@ -1,6 +1,6 @@
 # Models and datasets
 
-Nomicous separates training and data preparation from production inference.
+Nomikos separates training and data preparation from production inference.
 Training tools live in `src/`; the deployable runtime reads the verified
 catalog in [`inference/registry.yaml`](../../inference/registry.yaml).
 
@@ -9,7 +9,7 @@ catalog in [`inference/registry.yaml`](../../inference/registry.yaml).
 ### BLLA segmentation
 
 `blla-segment` runs an inference-owned BLLA topology on ONNX Runtime to identify
-line candidates on a page. Nomicous converts those candidates into editable
+line candidates on a page. Nomikos converts those candidates into editable
 geometry, preserves the legacy `kraken_ceiling` field, simplifies polygons,
 and can optionally refine or split candidates with Otsu-based processing.
 
