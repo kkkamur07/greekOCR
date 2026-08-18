@@ -28,6 +28,7 @@ LABEL org.opencontainers.image.title="nomikos-api" \
 WORKDIR /app
 
 RUN apt-get update \
+  && apt-get upgrade -y \
   && apt-get install -y --no-install-recommends fonts-dejavu-core \
   && rm -rf /var/lib/apt/lists/* \
   && groupadd --system appuser \
