@@ -49,6 +49,8 @@ def main(cfg: DictConfig) -> None:
         n_augmentations=int(cfg.augmentation.n_augmentations),
         augmentation_probability=float(cfg.augmentation.probability),
         ema_decay=float(cfg.training.ema_decay),
+        logging_steps=int(cfg.logging.steps),
+        warmup_ratio=float(cfg.training.warmup_ratio),
     )
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "config.yaml").write_text(OmegaConf.to_yaml(cfg, resolve=True), encoding="utf-8")
@@ -66,7 +68,7 @@ def main(cfg: DictConfig) -> None:
         with metrics_file.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(metrics, sort_keys=True) + "\n")
         if run is not None:
-            run.log(metrics)
+            run.log(metrics, step=int(metrics["step"]))
 
     try:
         _, _, best = train_calamari(data_root, output_dir, settings, report=report)

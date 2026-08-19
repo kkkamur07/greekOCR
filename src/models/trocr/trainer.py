@@ -12,7 +12,7 @@ import torch
 from transformers import Seq2SeqTrainer, TrainerCallback
 
 from .encoder.lora import LoRALinear
-from .metrics import compute_token_metrics
+from .token_metrics import compute_token_metrics
 
 
 OCR_METRIC_NAMES = (

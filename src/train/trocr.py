@@ -17,7 +17,7 @@ from transformers import Seq2SeqTrainingArguments
 from ..logging.local import configure_file_logging
 from ..models.trocr.augmentation import LineAugmentation
 from ..models.trocr.dataloader import LineDataset, TrOCRCollator
-from ..models.trocr.metrics import compute_token_metrics
+from ..models.trocr.token_metrics import compute_token_metrics
 from ..models.trocr.model_builder import build_model
 from ..models.trocr.tokenizer import build_processor, load_tokenizer, resolve_tokenizer_path
 from ..models.trocr.trainer import MetricsCsvCallback, TrOCRTrainer

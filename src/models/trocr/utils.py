@@ -1,8 +1,6 @@
-"""Backward-compatible imports for legacy callers.
+"""Backward-compatible imports for legacy callers."""
 
-Metric implementations are centralized in :mod:`src.models.trocr.metrics`.
-"""
-
-from .metrics import character_error_rate, edit_distance
+from ...metrics import edit_distance
+from .token_metrics import character_error_rate
 
 __all__ = ["character_error_rate", "edit_distance"]

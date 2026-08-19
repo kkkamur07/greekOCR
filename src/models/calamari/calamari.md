@@ -332,17 +332,19 @@ classifier vocabulary.
 The function builds datasets and loaders for the configured splits, selects
 CUDA when `device="auto"` and it is available (otherwise CPU), and runs a
 sample batch through the model before creating AdamW. This materializes the
-lazy LSTM and classifier so the optimizer sees all trainable parameters.
+lazy LSTM and classifier so the optimizer sees all trainable parameters. The
+optimizer uses cosine decay with the configured warmup ratio.
 
 Each epoch performs the following:
 
 1. switches the model to training mode;
 2. computes a CTC loss for every batch;
 3. clears gradients, backpropagates, clips the global gradient norm to `5.0`,
-   and updates AdamW;
-4. evaluates the full validation loader;
-5. reports epoch metrics if a callback was provided; and
-6. saves `best.pt` when validation character error rate (`cer`) improves.
+   updates AdamW, and advances the learning-rate scheduler;
+4. reports training loss and OCR metrics every `logging_steps`;
+5. evaluates the full evaluation loader and reports evaluation metrics;
+6. reports the epoch training loss and latest training OCR metrics; and
+7. saves `best.pt` when evaluation character error rate (`eval_cer`) improves.
 
 The saved best model is temporarily moved to CPU, then returned to the chosen
 runtime device. Selection is based on CER, not training loss.
@@ -357,10 +359,11 @@ provided, it returns a zero scalar so the same helper can support pure
 inference-style evaluation.
 
 `evaluate_model()` switches to evaluation mode and disables gradients. It
-collects all decoded lines and references, calculates text metrics, and adds
-mean CTC loss when a loss function was requested.
+collects all decoded lines and references, calculates CER, WER, exact-match,
+and SROIE precision/recall/F1, and adds mean CTC loss when a loss function was
+requested.
 
-## `metrics.py`: dependency-free text accuracy metrics
+## `src/metrics.py`: shared dependency-free text accuracy metrics
 
 `edit_distance()` is a dynamic-programming Levenshtein distance
 implementation. It compares arbitrary sequences, so it works for character
@@ -368,13 +371,15 @@ lists/strings and word lists alike. It holds only the previous and current
 rows of the matrix, reducing memory use from a full two-dimensional matrix to
 linear in prediction length.
 
-`compute_text_metrics(predictions, references)` validates that corresponding
+`compute_text_metrics(references, predictions)` validates that corresponding
 lists have equal length and returns:
 
 - `cer`: total character edit distance divided by total reference characters;
-- `wer`: total word edit distance divided by total reference words; and
+- `wer`: total word edit distance divided by total reference words;
 - `exact_match`: the fraction of lines whose prediction exactly equals the
-  reference.
+  reference; and
+- `sroie_precision`, `sroie_recall`, and `sroie_f1`: whitespace-token
+  precision, recall, and F1 using the SROIE matching rule.
 
 The denominators use `max(total, 1)`, so evaluating an empty reference set
 does not cause division by zero. That keeps metrics numeric, although a
@@ -427,8 +432,8 @@ the codec and input dataset correctly.
 5. resolves `auto` to CUDA when available; and
 6. calls `trainer.evaluate_model()` with CTC loss enabled.
 
-It returns the same CER, WER, exact-match, and mean-loss dictionary that
-training validation uses. Keeping checkpoint evaluation on the shared
+It returns the same CER, WER, exact-match, SROIE, and mean-loss dictionary that
+training evaluation uses. Keeping checkpoint evaluation on the shared
 evaluation helper ensures that training-time and standalone metrics use the
 same decoding and formulas.
 

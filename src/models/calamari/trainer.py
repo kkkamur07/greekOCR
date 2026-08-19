@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -10,14 +11,24 @@ from pathlib import Path
 import torch
 from torch import Tensor, nn
 from torch.optim import AdamW
+from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data import DataLoader, Dataset
 
 from .checkpoint import load_calamari_checkpoint, save_calamari_checkpoint
 from .codec import CharacterCodec
 from .config import default_model_config
 from .data import CalamariAugmentedDataset, CalamariLineDataset, collect_samples, collate_ctc
-from .metrics import compute_text_metrics
+from ...metrics import compute_text_metrics
 from .model import CalamariTorchModel
+
+
+TRAIN_OCR_METRIC_NAMES = ("cer", "wer", "exact_match")
+EVAL_OCR_METRIC_NAMES = (
+    *TRAIN_OCR_METRIC_NAMES,
+    "sroie_precision",
+    "sroie_recall",
+    "sroie_f1",
+)
 
 
 @dataclass(frozen=True)
@@ -37,6 +48,8 @@ class CalamariTrainingSettings:
     n_augmentations: int = 0
     augmentation_probability: float = 1.0
     ema_decay: float = 0.99
+    logging_steps: int = 10
+    warmup_ratio: float = 0.09
 
 
 class ExponentialMovingAverage:
@@ -88,6 +101,11 @@ def train_calamari(
     validation_dataset = CalamariLineDataset(
         data_root, settings.validation_split, codec, settings.line_height
     )
+    if settings.logging_steps <= 0:
+        raise ValueError("Calamari logging_steps must be greater than zero.")
+    if not 0.0 <= settings.warmup_ratio < 1.0:
+        raise ValueError("Calamari warmup_ratio must be greater than or equal to zero and less than one.")
+
     train_loader = _loader(train_dataset, settings, shuffle=True)
     validation_loader = _loader(validation_dataset, settings, shuffle=False)
     device = _resolve_device(settings.device)
@@ -96,29 +114,73 @@ def train_calamari(
     # Lazy recurrent/classifier layers must exist before the optimizer sees them.
     _materialize_model(model, next(iter(train_loader)), device)
     optimizer = AdamW(model.parameters(), lr=settings.learning_rate, weight_decay=settings.weight_decay)
+    total_steps = max(settings.epochs * len(train_loader), 1)
+    scheduler = LambdaLR(
+        optimizer,
+        lr_lambda=_cosine_warmup_lambda(total_steps, settings.warmup_ratio),
+    )
     loss_function = nn.CTCLoss(blank=0, zero_infinity=True)
     ema = ExponentialMovingAverage(model, settings.ema_decay)
     best_metrics: dict[str, float] | None = None
     best_state: dict[str, Tensor] | None = None
+    global_step = 0
     output_dir.mkdir(parents=True, exist_ok=True)
 
     for epoch in range(1, settings.epochs + 1):
         model.train()
-        losses: list[float] = []
-        for batch in train_loader:
-            loss, _, _ = _batch_loss(model, batch, codec, device, loss_function)
+        epoch_losses: list[float] = []
+        pending_losses: list[float] = []
+        last_train_metrics: dict[str, float] | None = None
+        steps_per_epoch = len(train_loader)
+        for batch_index, batch in enumerate(train_loader, start=1):
+            loss, decoded, texts = _batch_loss(model, batch, codec, device, loss_function)
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
             optimizer.step()
             ema.update(model)
-            losses.append(float(loss.detach().cpu()))
+            scheduler.step()
+            global_step += 1
+            loss_value = float(loss.detach().cpu())
+            epoch_losses.append(loss_value)
+            pending_losses.append(loss_value)
+            last_train_metrics = compute_text_metrics(texts, decoded)
+            at_epoch_end = batch_index == steps_per_epoch
+            if (
+                report is not None
+                and global_step % settings.logging_steps == 0
+                and not at_epoch_end
+            ):
+                report(
+                    _training_metrics(
+                        epoch=float(epoch - 1 + batch_index / steps_per_epoch),
+                        step=global_step,
+                        learning_rate=scheduler.get_last_lr()[0],
+                        loss=sum(pending_losses) / len(pending_losses),
+                        text_metrics=last_train_metrics,
+                    )
+                )
+                pending_losses.clear()
 
-        metrics = evaluate_model(ema.model, validation_loader, codec, device, loss_function)
-        metrics.update({"epoch": float(epoch), "loss": sum(losses) / max(len(losses), 1)})
+        eval_metrics = evaluate_model(ema.model, validation_loader, codec, device, loss_function)
+        metrics = {
+            "epoch": float(epoch),
+            "step": float(global_step),
+            "learning_rate": scheduler.get_last_lr()[0],
+            "train_loss": sum(epoch_losses) / max(len(epoch_losses), 1),
+            "eval_loss": eval_metrics["loss"],
+            **{
+                f"train_{name}": last_train_metrics[name]
+                for name in TRAIN_OCR_METRIC_NAMES
+            },
+            **{
+                f"eval_{name}": eval_metrics[name]
+                for name in EVAL_OCR_METRIC_NAMES
+            },
+        }
         if report is not None:
             report(metrics)
-        if best_metrics is None or metrics["cer"] < best_metrics["cer"]:
+        if best_metrics is None or metrics["eval_cer"] < best_metrics["eval_cer"]:
             best_metrics = dict(metrics)
             best_state = {
                 name: value.detach().cpu().clone() for name, value in ema.model.state_dict().items()
@@ -133,7 +195,7 @@ def train_calamari(
             ema.model.to(device)
 
     if best_metrics is None or best_state is None:
-        raise RuntimeError("Calamari training did not produce validation metrics.")
+        raise RuntimeError("Calamari training did not produce evaluation metrics.")
     ema.model.load_state_dict(best_state)
     ema.model.eval()
     return ema.model, codec, best_metrics
@@ -158,7 +220,7 @@ def evaluate_model(
         references.extend(texts)
         if loss_function is not None:
             losses.append(float(loss.cpu()))
-    metrics = compute_text_metrics(predictions, references)
+    metrics = compute_text_metrics(references, predictions)
     if losses:
         metrics["loss"] = sum(losses) / len(losses)
     return metrics
@@ -186,6 +248,39 @@ def _initial_model(samples, settings: CalamariTrainingSettings) -> tuple[Calamar
         ),
         codec,
     )
+
+
+def _cosine_warmup_lambda(total_steps: int, warmup_ratio: float) -> Callable[[int], float]:
+    warmup_steps = int(total_steps * warmup_ratio)
+
+    def schedule(step: int) -> float:
+        if warmup_steps and step < warmup_steps:
+            return max(step, 1) / warmup_steps
+        progress = (step - warmup_steps) / max(total_steps - warmup_steps, 1)
+        progress = min(max(progress, 0.0), 1.0)
+        return 0.5 * (1.0 + math.cos(math.pi * progress))
+
+    return schedule
+
+
+def _training_metrics(
+    *,
+    epoch: float,
+    step: int,
+    learning_rate: float,
+    loss: float,
+    text_metrics: dict[str, float],
+) -> dict[str, float]:
+    return {
+        "epoch": epoch,
+        "step": float(step),
+        "learning_rate": float(learning_rate),
+        "train_loss": loss,
+        **{
+            f"train_{name}": text_metrics[name]
+            for name in TRAIN_OCR_METRIC_NAMES
+        },
+    }
 
 
 def _loader(

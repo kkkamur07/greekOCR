@@ -2,3 +2,4 @@
 
 learning_rate: 1.0e-4
 weight_decay: 0.0
+warmup_ratio: 0.09

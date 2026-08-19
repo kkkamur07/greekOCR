@@ -13,7 +13,7 @@ from PIL import Image
 from transformers import TrOCRProcessor
 
 from .dataloader import read_ground_truth
-from .metrics import edit_distance
+from ...metrics import edit_distance
 from .model_builder import load_model
 
 
