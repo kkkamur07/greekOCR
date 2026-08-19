@@ -88,3 +88,5 @@ imp.md
 need.md
 *.log
 archive/
+trocr_checkpoints/
+tests/calamari/
