@@ -1,21 +1,25 @@
 import { useRef } from "react";
 
 type UploadZoneProps = {
-  onUpload: (file: File) => void | Promise<void>;
+  onUpload: (files: File[]) => void | Promise<void>;
   disabled?: boolean;
   loading?: boolean;
+  /** Narration for a long batch ("Splitting scan.pdf · page 3/12"). */
+  progress?: string | null;
 };
 
 export function UploadZone({
   onUpload,
   disabled = false,
   loading = false,
+  progress = null,
 }: UploadZoneProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleFile = async (file: File | undefined) => {
-    if (!file) return;
-    await onUpload(file);
+  const handleFiles = async (list: FileList | null) => {
+    const files = Array.from(list ?? []);
+    if (files.length === 0) return;
+    await onUpload(files);
     if (inputRef.current) inputRef.current.value = "";
   };
 
@@ -24,10 +28,11 @@ export function UploadZone({
       <input
         ref={inputRef}
         type="file"
-        accept="image/*"
+        accept="image/*,application/pdf,.pdf"
+        multiple
         className="visually-hidden"
         disabled={disabled || loading}
-        onChange={(e) => void handleFile(e.target.files?.[0])}
+        onChange={(e) => void handleFiles(e.target.files)}
         aria-hidden="true"
         tabIndex={-1}
       />
@@ -35,7 +40,7 @@ export function UploadZone({
         type="button"
         className="upload-zone"
         disabled={disabled || loading}
-        aria-label="Upload page images, JPEG, PNG, TIFF, max 50 MB"
+        aria-label="Upload page images or PDFs; JPEG, PNG, TIFF, or PDF split into one page per sheet"
         onClick={() => inputRef.current?.click()}
       >
         <svg
@@ -52,8 +57,13 @@ export function UploadZone({
             d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"
           />
         </svg>
-        <p>{loading ? "Uploading…" : "Upload page images"}</p>
-        <p className="hint">JPEG, PNG, TIFF, max 50 MB</p>
+        <p>
+          {loading ? (progress ?? "Uploading…") : "Upload page images or PDFs"}
+        </p>
+        <p className="hint">
+          Drop files anywhere · JPEG, PNG, TIFF — a PDF becomes one page per
+          sheet
+        </p>
       </button>
     </>
   );
