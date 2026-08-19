@@ -1,8 +1,8 @@
 defaults:
-  - data: default
+  - data: pretraining/combined
   - model: default
   - augmentation: default
-  - training: default
+  - training: pretraining
   - optimizer: default
   - logging: default
   - logging@wandb: wand

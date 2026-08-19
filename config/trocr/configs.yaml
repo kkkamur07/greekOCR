@@ -1,5 +1,5 @@
 defaults:
-  - training: default
+  - training: pretraining
   - encoder: small
   - optimizer: default
   - logging: default
@@ -12,10 +12,8 @@ defaults:
   - evaluation: default
   - preparation: default
   - wanbd_sweep: experiments
+  - data: pretraining/combined
   - _self_
-
-data:
-  dir: data/processed/combined/pretraining
 
 hydra:
   job:

@@ -1,0 +1,14 @@
+# @package _global_
+
+training:
+  mode: finetune
+  # Required at runtime, for example:
+  # training.checkpoint=var/runs/calamari/pretraining/best.pt
+  checkpoint: null
+  epochs: 100
+  batch_size: 16
+  num_workers: 4
+  seed: 1111
+  device: auto
+  ema_decay: 0.99
+  checkpoint_top_k: 1

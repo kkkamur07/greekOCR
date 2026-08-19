@@ -1,8 +1,8 @@
 # @package _global_
 
 model:
-  name: microsoft/trocr-small-handwritten
-  checkpoint_dir: trocr_checkpoints/trocr-small-handwritten
+  name: microsoft/trocr-base-handwritten
+  checkpoint_dir: trocr_checkpoints/trocr-base-handwritten
   freeze_encoder: false
 
 training:
