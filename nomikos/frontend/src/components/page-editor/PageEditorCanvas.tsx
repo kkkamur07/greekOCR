@@ -677,7 +677,10 @@ export function PageEditorCanvas({
         limitToBounds={false}
         wheel={{
           step: 0.06,
-          smoothStep: 0.006,
+          // smoothStep multiplies |deltaY|, and a mouse wheel notch is 120:
+          // 0.0006 gives ~±7% per notch for precise annotation zooming. The
+          // old 0.006 meant ±72% - two notches spanned the whole scale range.
+          smoothStep: 0.0006,
           wheelDisabled: false,
           touchPadDisabled: false,
         }}
