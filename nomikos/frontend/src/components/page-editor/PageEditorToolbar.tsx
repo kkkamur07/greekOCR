@@ -9,6 +9,7 @@ import { PageEditorBackLink } from "./PageEditorNavHeader";
 import { editorButton } from "./editorButton";
 import { PageEditorModelSelect } from "./PageEditorModelSelect";
 import { PageEditorSharingMenu } from "./PageEditorSharingMenu";
+import { PageEditorPageXmlButton } from "./PageEditorPageXmlButton";
 import { SettingsIcon } from "./EditorIcons";
 import { PageEditorSettingsPanel } from "./PageEditorSettingsPanel";
 import { PageEditorInferenceStatus } from "./PageEditorInferenceStatus";
@@ -75,6 +76,7 @@ type PageEditorToolbarProps = {
 export function PageEditorToolbar({
   projectId,
   documentId,
+  partId,
   document,
   partIndex,
   editorMode,
@@ -488,6 +490,14 @@ export function PageEditorToolbar({
           >
             PDF
           </button>
+          {projectId && documentId && (
+            <PageEditorPageXmlButton
+              projectId={projectId}
+              documentId={documentId}
+              partId={partId}
+              downloadFilename={`${document.name.replace(/\s+/g, "_")}_page_${partIndex}.xml`}
+            />
+          )}
           <div className="pe-dropdown-wrap" ref={settingsRef}>
             <button
               type="button"
