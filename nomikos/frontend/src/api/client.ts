@@ -746,6 +746,11 @@ export const api = {
       { method: "POST" },
     ),
 
+  getPageXml: (projectId: string, documentId: string, partId: string) =>
+    fetchBinaryApi(
+      `/projects/${projectId}/documents/${documentId}/parts/${partId}/page-xml`,
+    ),
+
   segmentPart: (
     projectId: string,
     documentId: string,
