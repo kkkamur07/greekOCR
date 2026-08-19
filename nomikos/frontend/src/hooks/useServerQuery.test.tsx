@@ -11,6 +11,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { queryClient } from "../api/queryClient";
+import { clearAccessToken } from "../auth/storage";
 import { useServerQuery } from "./useServerQuery";
 
 const KEY = ["test-read"];
@@ -138,5 +139,36 @@ describe("useServerQuery", () => {
 
     await waitFor(() => expect(failing.result.current.error).toBe("boom"));
     expect(failing.result.current.data).toBeNull();
+  });
+
+  it("survives a session boundary landing while the first read is in flight", async () => {
+    // The public document page's exact startup: its reads leave before the
+    // AuthProvider's session restore settles, and the restore's
+    // clearAccessToken() resets the query cache mid-flight. clear() used to
+    // destroy the in-flight query and leave the spinner up forever.
+    let resolveFirst!: (value: string) => void;
+    let served = 0;
+    const read = vi.fn(() => {
+      served += 1;
+      if (served === 1) {
+        return new Promise<string>((resolve) => {
+          resolveFirst = resolve;
+        });
+      }
+      return Promise.resolve(`value ${served}`);
+    });
+    const { view } = renderRead(read);
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+
+    act(() => {
+      clearAccessToken();
+    });
+    resolveFirst("value 1");
+
+    await waitFor(() => expect(view.result.current.loading).toBe(false));
+    // The first read's value belonged to the session that just ended; what is
+    // on screen must come from the refetch that ran after the boundary.
+    expect(view.result.current.data).toBe("value 2");
+    expect(view.result.current.error).toBeNull();
   });
 });

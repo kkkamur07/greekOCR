@@ -37,9 +37,14 @@ export function clearCsrfToken(): void {
 export function setAccessToken(token: string): void {
   accessToken = token;
   // Retained reads belong to whoever was signed in when they were made, so a new
-  // session must not be able to see them.
+  // session must not be able to see them. Reset rather than clear: clear()
+  // destroys in-flight queries and strands their mounted observers in `pending`
+  // forever - the public document page wedged on its spinner whenever the
+  // AuthProvider's startup refresh settled while its reads were still in
+  // flight. resetQueries() drops the data just the same, but refetches every
+  // query something on screen is watching, now under the new session.
   invalidateAuthGetCache();
-  queryClient.clear();
+  void queryClient.resetQueries();
 }
 
 export function clearAccessToken(): void {
@@ -48,7 +53,10 @@ export function clearAccessToken(): void {
   // CSRF token behind would let the next sign-in start by presenting the
   // previous session's token.
   csrfToken = null;
+  // Same reset-not-clear reasoning as `setAccessToken`: an anonymous visitor's
+  // failed session restore lands here while the page's first reads are still
+  // in flight.
   invalidateAuthGetCache();
-  queryClient.clear();
+  void queryClient.resetQueries();
   clearImageCache();
 }
