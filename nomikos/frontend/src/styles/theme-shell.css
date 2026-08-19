@@ -1571,6 +1571,38 @@ button {
   text-align: center;
 }
 
+/* ─── File drop overlay ──────────────────────────────────────────── */
+.drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  background: rgba(26, 26, 26, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  /* The window listeners own the drag; the overlay must not steal the
+     dragleave/drop events from under the pointer. */
+  pointer-events: none;
+}
+.drop-overlay__panel {
+  border: 2px dashed var(--navy);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 36px 48px;
+  text-align: center;
+}
+.drop-overlay__panel p {
+  font-size: 1rem;
+  color: var(--text-2);
+  margin: 0;
+}
+.drop-overlay__panel .hint {
+  font-size: 0.8125rem;
+  color: var(--text-4);
+  margin-top: 4px;
+}
+
 /* ─── Modal ──────────────────────────────────────────────────────── */
 .modal-overlay {
   position: fixed;

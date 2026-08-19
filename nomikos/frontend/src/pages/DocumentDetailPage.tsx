@@ -17,11 +17,14 @@ import { AppPageShell } from "../components/layout/AppPageShell";
 import { ContentRegionLoading } from "../components/layout/ContentRegionLoading";
 import { DocumentLiveSharingPanel } from "../components/sharing/DocumentLiveSharingPanel";
 import { WorkflowBadge } from "../components/WorkflowBadge";
+import { useFileDrop } from "../hooks/useFileDrop";
 import { useServerQuery } from "../hooks/useServerQuery";
 import {
   prepareDirectUpload,
   type DirectUploadPayload,
 } from "../utils/encodePartImage";
+import { renderPdfToPageFiles } from "../utils/pdfToPages";
+import { compareFilenames, isPdfFile } from "../utils/uploadBatch";
 
 const ENABLE_TEST_JOBS = process.env.NEXT_PUBLIC_ENABLE_TEST_JOBS === "true";
 
@@ -44,6 +47,7 @@ export function DocumentDetailPage() {
   const { projectId, documentId } =
     useParams<{ projectId: string; documentId: string }>() ?? {};
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<string | null>(null);
   const [reordering, setReordering] = useState(false);
   const [reviewUpdatingPartId, setReviewUpdatingPartId] = useState<
     string | null
@@ -104,62 +108,124 @@ export function DocumentDetailPage() {
 
   const parts = [...(document?.parts ?? [])].sort((a, b) => a.order - b.order);
 
-  const handleUpload = async (file: File) => {
-    if (!projectId || !documentId) return;
+  const uploadOnePart = async (file: File) => {
+    // Prefer the direct-to-storage path: get a presigned Supabase URL, PUT the
+    // bytes straight to storage, then finalize. This bypasses Vercel's 4.5 MB
+    // function-body cap that a manuscript scan would hit. The payload is never
+    // lossy: natively displayable formats upload as the user's original bytes,
+    // everything else is transcoded to lossless PNG. If the backend cannot
+    // presign (local storage) or the browser cannot decode the file at all,
+    // fall back to the legacy multipart upload.
+    let payload: DirectUploadPayload | undefined;
+    try {
+      payload = await prepareDirectUpload(file);
+    } catch {
+      payload = undefined;
+    }
+
+    if (payload) {
+      const begin = await api.beginPartUpload(projectId!, documentId!, {
+        filename: payload.filename,
+        size: payload.blob.size,
+      });
+      if (begin.upload_url && begin.part_id) {
+        const put = await fetch(begin.upload_url, {
+          method: "PUT",
+          body: payload.blob,
+          headers: { "Content-Type": payload.contentType },
+        });
+        if (!put.ok) {
+          throw new Error("Storage upload failed");
+        }
+        await api.finalizePartUpload(projectId!, documentId!, begin.part_id, {
+          image_key: begin.image_key,
+          width: payload.width ?? null,
+          height: payload.height ?? null,
+        });
+        return;
+      }
+      // upload_url is null -> the backend is local storage; use the multipart path.
+    }
+
+    await api.uploadPart(projectId!, documentId!, file);
+  };
+
+  const handleUpload = async (files: File[]) => {
+    if (!projectId || !documentId || files.length === 0) return;
     setUploading(true);
     try {
-      // Prefer the direct-to-storage path: get a presigned Supabase URL, PUT the
-      // bytes straight to storage, then finalize. This bypasses Vercel's 4.5 MB
-      // function-body cap that a manuscript scan would hit. The payload is never
-      // lossy: natively displayable formats upload as the user's original bytes,
-      // everything else is transcoded to lossless PNG. If the backend cannot
-      // presign (local storage) or the browser cannot decode the file at all,
-      // fall back to the legacy multipart upload.
-      let payload: DirectUploadPayload | undefined;
-      try {
-        payload = await prepareDirectUpload(file);
-      } catch {
-        payload = undefined;
-      }
-
-      if (payload) {
-        const begin = await api.beginPartUpload(projectId, documentId, {
-          filename: payload.filename,
-          size: payload.blob.size,
-        });
-        if (begin.upload_url && begin.part_id) {
-          const put = await fetch(begin.upload_url, {
-            method: "PUT",
-            body: payload.blob,
-            headers: { "Content-Type": payload.contentType },
-          });
-          if (!put.ok) {
-            throw new Error("Storage upload failed");
-          }
-          await api.finalizePartUpload(projectId, documentId, begin.part_id, {
-            image_key: begin.image_key,
-            width: payload.width ?? null,
-            height: payload.height ?? null,
-          });
-          toast.success("Part uploaded");
-          invalidateAfter.documentPartsChanged(projectId, documentId);
-          await reloadDocument();
-          return;
+      // Page order comes from filenames; a PDF holds the slot its name sorts
+      // into and expands to its pages in document order.
+      const ordered = [...files].sort((a, b) =>
+        compareFilenames(a.name, b.name),
+      );
+      const pages: File[] = [];
+      const unreadable: string[] = [];
+      for (const file of ordered) {
+        if (!isPdfFile(file)) {
+          pages.push(file);
+          continue;
         }
-        // upload_url is null -> the backend is local storage; use the multipart path.
+        try {
+          setUploadProgress(`Splitting ${file.name}…`);
+          pages.push(
+            ...(await renderPdfToPageFiles(file, (done, total) =>
+              setUploadProgress(
+                `Splitting ${file.name} · page ${done}/${total}`,
+              ),
+            )),
+          );
+        } catch {
+          unreadable.push(file.name);
+        }
       }
 
-      await api.uploadPart(projectId, documentId, file);
-      toast.success("Part uploaded");
-      invalidateAfter.documentPartsChanged(projectId, documentId);
-      await reloadDocument();
-    } catch (err) {
-      const msg = err instanceof ApiError ? err.message : "Upload failed";
-      toast.error(msg);
+      let uploaded = 0;
+      const failed: string[] = [];
+      let firstFailure: string | null = null;
+      for (const [index, file] of pages.entries()) {
+        setUploadProgress(
+          pages.length > 1
+            ? `Uploading page ${index + 1}/${pages.length}`
+            : "Uploading…",
+        );
+        try {
+          await uploadOnePart(file);
+          uploaded += 1;
+        } catch (err) {
+          failed.push(file.name);
+          firstFailure ??=
+            err instanceof ApiError ? err.message : "Upload failed";
+        }
+      }
+
+      if (uploaded > 0) {
+        toast.success(
+          uploaded === 1 ? "Part uploaded" : `${uploaded} pages uploaded`,
+        );
+        invalidateAfter.documentPartsChanged(projectId, documentId);
+        await reloadDocument();
+      }
+      for (const name of unreadable) {
+        toast.error(`Could not read ${name} as a PDF`);
+      }
+      if (failed.length === 1) {
+        toast.error(firstFailure ?? "Upload failed");
+      } else if (failed.length > 1) {
+        toast.error(`Upload failed for ${failed.length} pages`);
+      }
     } finally {
       setUploading(false);
+      setUploadProgress(null);
     }
   };
+
+  // Whole-window drop target; the UploadZone button stays as the
+  // click-to-pick alternative.
+  const dragActive = useFileDrop(
+    (files) => void handleUpload(files),
+    Boolean(document) && !uploading && !loading,
+  );
 
   const persistOrder = async (partIds: string[]) => {
     if (!projectId || !documentId) return;
@@ -292,7 +358,19 @@ export function DocumentDetailPage() {
               onUpload={handleUpload}
               disabled={loading}
               loading={uploading}
+              progress={uploadProgress}
             />
+          )}
+
+          {dragActive && (
+            <div className="drop-overlay" role="presentation">
+              <div className="drop-overlay__panel">
+                <p>Drop to upload</p>
+                <p className="hint">
+                  Images become pages · a PDF becomes one page per sheet
+                </p>
+              </div>
+            </div>
           )}
 
           {document && (
