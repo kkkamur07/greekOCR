@@ -6,9 +6,11 @@ import csv
 import json
 import math
 import shutil
+from collections.abc import Callable
 from pathlib import Path
 
 import torch
+from torch.utils.data import Dataset
 from transformers import Seq2SeqTrainer, TrainerCallback
 
 from .encoder.lora import LoRALinear
@@ -79,28 +81,29 @@ class MetricsCsvCallback(TrainerCallback):
     def on_log(self, args, state, control, logs=None, **kwargs):
         if not state.is_world_process_zero or not logs:
             return control
-        self.latest_train_loss = logs.get("loss", self.latest_train_loss)
+        self.latest_train_loss = logs.get("train_loss", self.latest_train_loss)
         self.latest_encoder_grad_norm = logs.get(
-            "encoder_grad_norm", self.latest_encoder_grad_norm
+            "train_encoder_grad_norm", self.latest_encoder_grad_norm
         )
         self.latest_encoder_lora_grad_norm = logs.get(
-            "encoder_lora_grad_norm", self.latest_encoder_lora_grad_norm
+            "train_encoder_lora_grad_norm", self.latest_encoder_lora_grad_norm
         )
         self.latest_decoder_grad_norm = logs.get(
-            "decoder_grad_norm", self.latest_decoder_grad_norm
+            "train_decoder_grad_norm", self.latest_decoder_grad_norm
         )
         self.latest_decoder_input_embedding_grad_norm = logs.get(
-            "decoder_input_embedding_grad_norm",
+            "train_decoder_input_embedding_grad_norm",
             self.latest_decoder_input_embedding_grad_norm,
         )
         for position in self.latest_decoder_layer_grad_norms:
-            metric_name = f"DL_layer_{position}_grad_norm"
+            metric_name = f"train_DL_layer_{position}_grad_norm"
             self.latest_decoder_layer_grad_norms[position] = logs.get(
                 metric_name, self.latest_decoder_layer_grad_norms[position]
             )
         for name in TRAIN_OCR_METRIC_NAMES:
+            metric_name = f"train_{name}"
             self.latest_train_ocr_metrics[name] = logs.get(
-                name, self.latest_train_ocr_metrics[name]
+                metric_name, self.latest_train_ocr_metrics[name]
             )
         self.latest_learning_rate = logs.get("learning_rate", self.latest_learning_rate)
         if "eval_loss" in logs and self.writer is not None:
@@ -149,7 +152,14 @@ class TrOCRTrainer(Seq2SeqTrainer):
         "eval_runtime",
     })
 
-    def __init__(self, *args, checkpoint_top_k: int = 2, **kwargs) -> None:
+    def __init__(
+        self,
+        *args,
+        checkpoint_top_k: int = 2,
+        language_eval_datasets: dict[str, Dataset] | None = None,
+        metric_reporter: Callable[[dict[str, float], int], None] | None = None,
+        **kwargs,
+    ) -> None:
         super().__init__(*args, **kwargs)
         if checkpoint_top_k not in (1, 2):
             raise ValueError("checkpoint_top_k must be either 1 or 2.")
@@ -158,6 +168,8 @@ class TrOCRTrainer(Seq2SeqTrainer):
         self._pending_train_metrics: dict[str, float] = {}
         self._latest_checkpoint_metric: float | None = None
         self._ranked_checkpoint_metrics: list[float] = []
+        self.language_eval_datasets = language_eval_datasets or {}
+        self.metric_reporter = metric_reporter
         self._load_checkpoint_ranking()
 
     @property
@@ -273,7 +285,29 @@ class TrOCRTrainer(Seq2SeqTrainer):
         if "loss" in filtered and self._pending_train_metrics:
             filtered = {**self._pending_train_metrics, **filtered}
             self._pending_train_metrics.clear()
+        if "loss" in filtered:
+            filtered["train_loss"] = filtered.pop("loss")
+        self._report_metrics(filtered)
         super().log(filtered, start_time)
+
+    def evaluate(self, *args, **kwargs) -> dict[str, float]:
+        """Evaluate the combined split and each language subset."""
+        metrics = super().evaluate(*args, **kwargs)
+        language_metrics: dict[str, float] = {}
+        for language, dataset in self.language_eval_datasets.items():
+            language_metrics.update(
+                self.predict(dataset, metric_key_prefix=f"eval_{language}").metrics
+            )
+        if language_metrics:
+            self.log(language_metrics)
+            metrics.update(language_metrics)
+        return metrics
+
+    def _report_metrics(self, metrics: dict[str, float]) -> None:
+        """Forward standard metric names through the configured reporter."""
+        if not self.state.is_world_process_zero or self.metric_reporter is None:
+            return
+        self.metric_reporter(metrics, step=int(self.state.global_step))
 
     def _gradient_norm(self, parameters) -> float:
         squared_norm = sum(
@@ -300,15 +334,15 @@ class TrOCRTrainer(Seq2SeqTrainer):
             for parameter in (*module.lora_a.parameters(), *module.lora_b.parameters())
         )
         metrics = {
-            "encoder_grad_norm": self._gradient_norm(self.model.encoder.parameters()),
-            "encoder_lora_grad_norm": self._gradient_norm(lora_parameters),
-            "decoder_grad_norm": self._gradient_norm(self.model.decoder.parameters()),
-            "decoder_input_embedding_grad_norm": self._gradient_norm(
+            "train_encoder_grad_norm": self._gradient_norm(self.model.encoder.parameters()),
+            "train_encoder_lora_grad_norm": self._gradient_norm(lora_parameters),
+            "train_decoder_grad_norm": self._gradient_norm(self.model.decoder.parameters()),
+            "train_decoder_input_embedding_grad_norm": self._gradient_norm(
                 self.model.decoder.get_input_embeddings().parameters()
             ),
         }
         for position, layer in enumerate(decoder_layers[-4:], start=1):
-            metrics[f"DL_layer_{position}_grad_norm"] = self._gradient_norm(
+            metrics[f"train_DL_layer_{position}_grad_norm"] = self._gradient_norm(
                 layer.parameters()
             )
         return metrics
@@ -335,7 +369,7 @@ class TrOCRTrainer(Seq2SeqTrainer):
             )
             metrics.update(
                 {
-                    name: batch_metrics[name]
+                    f"train_{name}": batch_metrics[name]
                     for name in TRAIN_OCR_METRIC_NAMES
                 }
             )

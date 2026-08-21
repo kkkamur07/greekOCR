@@ -11,6 +11,8 @@ from PIL import Image
 from torch.utils.data import Dataset
 from transformers import PreTrainedTokenizerBase, TrOCRProcessor
 
+from ...metrics.languages import language_labels
+
 
 def read_ground_truth(path: Path) -> list[tuple[str, str]]:
     """Read ``image-name<TAB>transcription`` manifest rows."""
@@ -32,6 +34,9 @@ class LineDataset(Dataset):
     ) -> None:
         self.image_dir = data_dir / "image"
         self.samples = read_ground_truth(data_dir / f"gt_{split}.txt")
+        self.languages = language_labels(
+            data_dir, split, [image_name for image_name, _ in self.samples]
+        )
         self.augmentation = augmentation
 
     def __len__(self) -> int:
@@ -43,6 +48,39 @@ class LineDataset(Dataset):
         if self.augmentation is not None:
             image = self.augmentation(image)
         return {"image": image, "text": text}
+
+
+class TrOCRAugmentedDataset(Dataset):
+    """Expose one original and multiple independently augmented line images."""
+
+    def __init__(
+        self,
+        dataset: Dataset,
+        augmentation: Callable[[Image.Image], Image.Image],
+        n_augmentations: int,
+    ) -> None:
+        if n_augmentations < 0:
+            raise ValueError("TrOCR n_augmentations must be zero or greater.")
+        self.dataset = dataset
+        self.augmentation = augmentation
+        self.n_augmentations = n_augmentations
+
+    def __len__(self) -> int:
+        return len(self.dataset) * self._variants_per_sample
+
+    def __getitem__(self, index: int) -> dict[str, object]:
+        sample_index, variant = divmod(index, self._variants_per_sample)
+        sample = dict(self.dataset[sample_index])
+        if variant:
+            image = sample["image"]
+            if not isinstance(image, Image.Image):
+                raise TypeError("TrOCR augmentation requires PIL images.")
+            sample["image"] = self.augmentation(image)
+        return sample
+
+    @property
+    def _variants_per_sample(self) -> int:
+        return self.n_augmentations + 1
 
 
 @dataclass

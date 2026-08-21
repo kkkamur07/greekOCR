@@ -11,6 +11,7 @@ from PIL import Image
 from torch import Tensor
 from torch.utils.data import Dataset
 
+from ...metrics.languages import language_labels
 from .augmentation import augment_legacy_line_image
 from .codec import CharacterCodec
 
@@ -22,6 +23,7 @@ _IMAGE_EXTENSIONS = frozenset({".png", ".jpg", ".jpeg", ".tif", ".tiff"})
 class LineSample:
     image_path: Path
     text: str
+    language: str
 
 
 class CalamariLineDataset(Dataset[dict[str, object]]):
@@ -43,6 +45,7 @@ class CalamariLineDataset(Dataset[dict[str, object]]):
             "image": _load_line_image(sample.image_path, self.line_height),
             "targets": self.codec.encode(sample.text),
             "text": sample.text,
+            "language": sample.language,
         }
 
 
@@ -87,12 +90,12 @@ def collect_samples(root: Path, split: str) -> list[LineSample]:
     manifest = root / f"gt_{split}.txt"
     trocr_images = root / "image"
     if manifest.is_file() and trocr_images.is_dir():
-        samples = []
+        samples: list[tuple[Path, str]] = []
         for line in manifest.read_text(encoding="utf-8").splitlines():
             if line:
                 image_name, text = line.split("\t", 1)
-                samples.append(LineSample(image_path=trocr_images / image_name, text=text))
-        return samples
+                samples.append((trocr_images / image_name, text))
+        return _with_languages(root, split, samples)
 
     flat_split = root / split
     images_dir = flat_split if flat_split.is_dir() else root / "images" / split
@@ -100,14 +103,22 @@ def collect_samples(root: Path, split: str) -> list[LineSample]:
     if not images_dir.is_dir() or not labels_dir.is_dir():
         return []
 
-    samples: list[LineSample] = []
+    samples = []
     for image_path in sorted(images_dir.iterdir()):
         if image_path.suffix.lower() not in _IMAGE_EXTENSIONS:
             continue
         label_path = labels_dir / f"{image_path.stem}.gt.txt"
         if label_path.is_file():
-            samples.append(LineSample(image_path=image_path, text=label_path.read_text(encoding="utf-8")))
-    return samples
+            samples.append((image_path, label_path.read_text(encoding="utf-8")))
+    return _with_languages(root, split, samples)
+
+
+def _with_languages(root: Path, split: str, samples: list[tuple[Path, str]]) -> list[LineSample]:
+    languages = language_labels(root, split, [image_path.name for image_path, _ in samples])
+    return [
+        LineSample(image_path=image_path, text=text, language=language)
+        for (image_path, text), language in zip(samples, languages, strict=True)
+    ]
 
 
 def _resolve_virtual_root(root: Path) -> Path:
@@ -136,14 +147,24 @@ def collate_ctc(samples: list[dict[str, object]]) -> dict[str, object]:
     widths = torch.tensor([image.shape[0] for image in typed_images], dtype=torch.long)
     height = typed_images[0].shape[1]
     batch = torch.zeros((len(typed_images), int(widths.max()), height, 1), dtype=torch.float32)
+    labels = torch.zeros(
+        (len(typed_targets), max(target.numel() for target in typed_targets)),
+        dtype=torch.long,
+    )
     for index, image in enumerate(typed_images):
         batch[index, : image.shape[0]] = image
+    for index, target in enumerate(typed_targets):
+        labels[index, : target.numel()] = target
     return {
         "image": batch,
         "image_lengths": widths,
         "targets": torch.cat(typed_targets),
         "target_lengths": torch.tensor([target.numel() for target in typed_targets], dtype=torch.long),
+        # Padded labels are used solely by Hugging Face Trainer's evaluation
+        # loop; CTC loss continues to consume the concatenated targets above.
+        "labels": labels,
         "texts": [str(sample["text"]) for sample in samples],
+        "languages": [str(sample["language"]) for sample in samples],
     }
 
 

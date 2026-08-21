@@ -18,7 +18,7 @@ from openpyxl import load_workbook
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-PROCESSED_ROOT = REPO_ROOT / "data" / "trocr_processed"
+PROCESSED_ROOT = REPO_ROOT / "data" / "processed"
 ESTEBAN_ROOT = REPO_ROOT / "data" / "raw" / "greek_estaban"
 LABELLED_ROOT = REPO_ROOT / "data" / "raw" / "greek_labelled_data"
 TARGETS = (

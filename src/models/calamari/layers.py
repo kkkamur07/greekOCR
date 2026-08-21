@@ -60,7 +60,7 @@ class LazyBiLSTM(nn.Module):
             raise ValueError(f"Unsupported BiLSTM merge mode: {config.merge_mode}")
         self.lstm: nn.LSTM | None = None
 
-    def forward(self, value: Tensor) -> Tensor:
+    def forward(self, value: Tensor, sequence_lengths: Tensor | None = None) -> Tensor:
         if self.lstm is None:
             self.lstm = nn.LSTM(
                 input_size=value.shape[-1],
@@ -68,7 +68,29 @@ class LazyBiLSTM(nn.Module):
                 batch_first=True,
                 bidirectional=True,
             ).to(device=value.device, dtype=value.dtype)
-        return self.lstm(value)[0]
+        if sequence_lengths is None:
+            return self.lstm(value)[0]
+        if sequence_lengths.ndim != 1 or sequence_lengths.shape[0] != value.shape[0]:
+            raise ValueError(
+                "BiLSTM sequence lengths must contain one positive length per batch item."
+            )
+        if torch.any(sequence_lengths <= 0) or torch.any(sequence_lengths > value.shape[1]):
+            raise ValueError(
+                "BiLSTM sequence lengths must be positive and no greater than the time dimension."
+            )
+        packed = nn.utils.rnn.pack_padded_sequence(
+            value,
+            sequence_lengths.detach().to(device="cpu", dtype=torch.long),
+            batch_first=True,
+            enforce_sorted=False,
+        )
+        packed_output, _ = self.lstm(packed)
+        output, _ = nn.utils.rnn.pad_packed_sequence(
+            packed_output,
+            batch_first=True,
+            total_length=value.shape[1],
+        )
+        return output
 
 
 def cnn_to_sequence(value: Tensor) -> Tensor:

@@ -8,6 +8,9 @@ from .builder import build_processor, load_tokenizer
 _BUNDLED_TOKENIZER_DIRECTORIES = {
     "gpt": "gpt_tokenizer",
     "gpt_tokenizer": "gpt_tokenizer",
+    "gpt_armenian_500": "gpt_armenian_500",
+    "gpt_greek_500": "gpt_greek_500",
+    "gpt_syriac_500": "gpt_syriac_500",
     "trocr": "trocr",
 }
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]

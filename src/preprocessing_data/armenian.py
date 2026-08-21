@@ -29,7 +29,7 @@ SOURCE_NAMES = (
     "Ms_P_172-CanonsDvin719-Partaw768-Dvin644-Karin_complete",
 )
 RAW_ROOT = REPO_ROOT / "data" / "raw" / "armenian"
-PROCESSED_ROOT = REPO_ROOT / "data" / "trocr_processed"
+PROCESSED_ROOT = REPO_ROOT / "data" / "processed"
 ARMENIAN_ROOT = PROCESSED_ROOT / "armenian"
 COMBINED_ROOT = PROCESSED_ROOT / "combined"
 SEED = 1111

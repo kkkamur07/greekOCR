@@ -103,3 +103,54 @@ def compute_text_metrics(
         "sroie_recall": sroie_recall,
         "sroie_f1": sroie_f1,
     }
+
+
+def compute_sequence_length_metrics(
+    references: Sequence[str],
+    predictions: Sequence[str],
+    *,
+    bins: int = 10,
+) -> dict[str, float]:
+    """Measure character errors across equal-width reference-length bins.
+
+    Every bin reports its sample count, reference-character count, edit count,
+    and CER. Bin names contain their inclusive character-length bounds, which
+    keeps the resulting metrics interpretable in scalar logging systems.
+    """
+    if len(references) != len(predictions):
+        raise ValueError("references and predictions must have the same length.")
+    if bins < 1:
+        raise ValueError("bins must be at least one.")
+    if not references:
+        return {}
+
+    lengths = [len(reference) for reference in references]
+    minimum = min(lengths)
+    maximum = max(lengths)
+    width = max(1, -(-(maximum - minimum + 1) // bins))
+    metrics: dict[str, float] = {}
+    for lower in range(minimum, maximum + 1, width):
+        upper = min(maximum, lower + width - 1)
+        selected = [
+            (reference, prediction)
+            for reference, prediction in zip(references, predictions, strict=True)
+            if lower <= len(reference) <= upper
+        ]
+        if not selected:
+            continue
+        character_edits = sum(
+            edit_distance(reference, prediction) for reference, prediction in selected
+        )
+        reference_characters = sum(len(reference) for reference, _ in selected)
+        prefix = f"sequence_length_{lower:03d}_{upper:03d}"
+        metrics.update(
+            {
+                f"{prefix}_samples": float(len(selected)),
+                f"{prefix}_reference_characters": float(reference_characters),
+                f"{prefix}_character_errors": float(character_edits),
+                f"{prefix}_cer": (
+                    character_edits / reference_characters if reference_characters else 0.0
+                ),
+            }
+        )
+    return metrics

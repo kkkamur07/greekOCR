@@ -1,4 +1,6 @@
 """Tokenizer-aware OCR metric adapters for TrOCR."""
+#! for decoding strategy
+
 
 from __future__ import annotations
 
@@ -7,7 +9,7 @@ from typing import Any
 import torch
 from transformers import PreTrainedTokenizerBase
 
-from ...metrics import compute_text_metrics
+from ...metrics.metrics import compute_sequence_length_metrics, compute_text_metrics
 
 
 def decode_predictions_and_labels(
@@ -42,12 +44,16 @@ def compute_token_metrics(
     tokenizer: PreTrainedTokenizerBase,
     *,
     prefix: str = "",
+    include_sequence_length_metrics: bool = False,
 ) -> dict[str, float]:
     """Decode token IDs and return every shared OCR metric."""
     references, hypotheses = decode_predictions_and_labels(predictions, labels, tokenizer)
+    metrics = compute_text_metrics(references, hypotheses)
+    if include_sequence_length_metrics:
+        metrics.update(compute_sequence_length_metrics(references, hypotheses))
     return {
         f"{prefix}{name}": value
-        for name, value in compute_text_metrics(references, hypotheses).items()
+        for name, value in metrics.items()
     }
 
 

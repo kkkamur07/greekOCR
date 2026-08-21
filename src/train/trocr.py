@@ -12,11 +12,14 @@ import hydra
 import torch
 from hydra.utils import to_absolute_path
 from omegaconf import DictConfig, OmegaConf
+from torch.utils.data import Dataset, Subset
 from transformers import Seq2SeqTrainingArguments
 
 from ..logging.local import configure_file_logging
+from ..logging.wandb import WandbLogger
+from ..metrics.languages import language_indices
 from ..models.trocr.augmentation import LineAugmentation
-from ..models.trocr.dataloader import LineDataset, TrOCRCollator
+from ..models.trocr.dataloader import LineDataset, TrOCRAugmentedDataset, TrOCRCollator
 from ..models.trocr.token_metrics import compute_token_metrics
 from ..models.trocr.model_builder import build_model
 from ..models.trocr.tokenizer import build_processor, load_tokenizer, resolve_tokenizer_path
@@ -37,8 +40,8 @@ def log_training_summary(
     model,
     tokenizer,
     processor,
-    train_dataset: LineDataset,
-    eval_dataset: LineDataset,
+    train_dataset: Dataset,
+    eval_dataset: Dataset,
     training_args: Seq2SeqTrainingArguments,
 ) -> None:
     """Log the resolved training setup and actual model sizes as a table."""
@@ -103,9 +106,13 @@ def log_training_summary(
         ("LoRA", "Encoder layers", f"Last {cfg.lora_adaptors.num_layers}"),
         ("LoRA", "Attention targets", ", ".join(cfg.lora_adaptors.target_modules)),
         ("Augmentation", "Probability", str(cfg.augmentation.probability)),
-        ("Augmentation", "Mode", str(cfg.augmentation.mode)),
+        ("Augmentation", "Augmented variants per image", str(cfg.augmentation.n_augmentations)),
         ("Augmentation", "Operations per image", str(cfg.augmentation.num_operations)),
-        ("Augmentation", "Magnitude", str(cfg.augmentation.magnitude)),
+        (
+            "Augmentation",
+            "Maximum rotation (degrees)",
+            str(cfg.augmentation.max_rotation_degrees),
+        ),
     ]
     widths = [max(len(str(row[index])) for row in rows + [("Section", "Setting", "Value")]) for index in range(3)]
     separator = "+-" + "-+-".join("-" * width for width in widths) + "-+"
@@ -117,25 +124,6 @@ def log_training_summary(
         for row in rows
     ]
     LOGGER.info("Training configuration:\n%s\n%s\n%s\n%s", separator, header, separator, "\n".join(body + [separator]))
-
-
-def configure_wandb(cfg: DictConfig, log_dir: Path) -> list[str]:
-    """Configure Hugging Face's optional W&B integration from Hydra settings."""
-    if not cfg.wandb.enabled:
-        return []
-
-    os.environ["WANDB_PROJECT"] = str(cfg.wandb.project)
-    os.environ["WANDB_MODE"] = str(cfg.wandb.mode)
-    os.environ["WANDB_DIR"] = str(log_dir)
-    if cfg.wandb.entity is not None:
-        os.environ["WANDB_ENTITY"] = str(cfg.wandb.entity)
-    else:
-        os.environ.pop("WANDB_ENTITY", None)
-    if cfg.wandb.name is not None:
-        os.environ["WANDB_NAME"] = str(cfg.wandb.name)
-    else:
-        os.environ.pop("WANDB_NAME", None)
-    return ["wandb"]
 
 
 def apply_sweep_experiment(cfg: DictConfig, experiment_name: str) -> None:
@@ -158,23 +146,26 @@ def apply_sweep_experiment(cfg: DictConfig, experiment_name: str) -> None:
     LOGGER.info("Applied W&B sweep experiment %s: %s", experiment_name, overrides)
 
 
-def initialize_run(cfg: DictConfig, log_dir: Path) -> str:
+def initialize_run(cfg: DictConfig, log_dir: Path) -> tuple[str, WandbLogger]:
     """Initialize W&B when enabled and return a unique run directory name."""
-    if not cfg.wandb.enabled:
+    resolved_config = OmegaConf.to_container(cfg, resolve=True)
+    if not isinstance(resolved_config, dict):
+        raise TypeError("Resolved TrOCR configuration must be a mapping.")
+    logger = WandbLogger(
+        enabled=bool(cfg.wandb.enabled),
+        project=str(cfg.wandb.project),
+        entity=str(cfg.wandb.entity) if cfg.wandb.entity is not None else None,
+        name=str(cfg.wandb.name) if cfg.wandb.name is not None else None,
+        mode=str(cfg.wandb.mode),
+        save_dir=log_dir,
+        config=resolved_config,
+    )
+    run = logger.run
+    if run is None:
         run_name = str(cfg.wandb.name or "tr_ocr")
         run_id = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
         safe_name = re.sub(r"[^A-Za-z0-9._-]+", "-", run_name).strip("-")
-        return f"{safe_name or 'tr_ocr'}-{run_id}"
-
-    configure_wandb(cfg, log_dir)
-    import wandb
-
-    run = wandb.init(
-        project=str(cfg.wandb.project),
-        entity=str(cfg.wandb.entity) if cfg.wandb.entity is not None else None,
-        mode=str(cfg.wandb.mode),
-        dir=str(log_dir),
-    )
+        return f"{safe_name or 'tr_ocr'}-{run_id}", logger
     if "WANDB_SWEEP_ID" in os.environ:
         unknown_parameters = set(run.config.keys()) - _SWEEP_PARAMETER_PATHS
         if unknown_parameters:
@@ -184,8 +175,12 @@ def initialize_run(cfg: DictConfig, log_dir: Path) -> str:
             )
         apply_sweep_experiment(cfg, str(run.config["experiment"]))
 
+    resolved_config = OmegaConf.to_container(cfg, resolve=True)
+    if not isinstance(resolved_config, dict):
+        raise TypeError("Resolved TrOCR configuration must be a mapping.")
+    logger.update_config(resolved_config)
     safe_name = re.sub(r"[^A-Za-z0-9._-]+", "-", run.name).strip("-")
-    return f"{safe_name or 'tr_ocr'}-{run.id}"
+    return f"{safe_name or 'tr_ocr'}-{run.id}", logger
 
 
 @hydra.main(version_base=None, config_path="../../config/trocr", config_name="configs")
@@ -196,7 +191,7 @@ def main(cfg: DictConfig) -> None:
         / "trocr"
         / initial_output_dir.name
     )
-    run_directory = initialize_run(cfg, initial_log_dir)
+    run_directory, wandb_logger = initialize_run(cfg, initial_log_dir)
     OmegaConf.update(
         cfg,
         "output.root",
@@ -249,20 +244,28 @@ def main(cfg: DictConfig) -> None:
     )
 
     augmentation = LineAugmentation(
-        probability=cfg.augmentation.probability,
-        mode=str(cfg.augmentation.mode),
+        probability=float(cfg.augmentation.probability),
         num_operations=int(cfg.augmentation.num_operations),
-        magnitude=cfg.augmentation.magnitude,
-        exclude_groups=tuple(cfg.augmentation.exclude_groups),
-        exclude_operations=tuple(cfg.augmentation.exclude_operations),
+        max_rotation_degrees=float(cfg.augmentation.max_rotation_degrees),
     )
     data_dir = Path(to_absolute_path(cfg.data.dir)).expanduser().resolve()
-    train_dataset = LineDataset(data_dir, "train", augmentation=augmentation)
+    train_dataset = TrOCRAugmentedDataset(
+        LineDataset(data_dir, "train"),
+        augmentation,
+        n_augmentations=int(cfg.augmentation.n_augmentations),
+    )
     eval_dataset = LineDataset(data_dir, "val")
 
     def compute_metrics(prediction) -> dict[str, float]:
         predictions, labels = prediction
-        return compute_token_metrics(predictions, labels, tokenizer)
+        return compute_token_metrics(
+            predictions, labels, tokenizer, include_sequence_length_metrics=True
+        )
+
+    language_eval_datasets = {
+        language: Subset(eval_dataset, indices)
+        for language, indices in language_indices(eval_dataset.languages).items()
+    }
 
     training_args = Seq2SeqTrainingArguments(
         output_dir=str(output_dir),
@@ -287,7 +290,9 @@ def main(cfg: DictConfig) -> None:
         fp16=torch.cuda.is_available() and not cfg.training.no_fp16,
         dataloader_num_workers=cfg.training.num_workers,
         remove_unused_columns=False,
-        report_to=configure_wandb(cfg, log_dir),
+        # TrOCRTrainer sends the same flat metric names as Calamari directly
+        # to the W&B run initialized above.
+        report_to=[],
         run_name=cfg.wandb.name,
         seed=cfg.training.seed,
     )
@@ -310,12 +315,17 @@ def main(cfg: DictConfig) -> None:
         compute_metrics=compute_metrics,
         callbacks=[MetricsCsvCallback(log_dir / "metrics.csv")],
         checkpoint_top_k=int(cfg.training.checkpoint_top_k),
+        language_eval_datasets=language_eval_datasets,
+        metric_reporter=wandb_logger.log_metrics,
     )
     resume_checkpoint = str(model_root) if is_resume_checkpoint else None
-    trainer.train(resume_from_checkpoint=resume_checkpoint)
-    final_dir = output_dir / "final"
-    trainer.save_model(str(final_dir))
-    processor.image_processor.save_pretrained(final_dir)
+    try:
+        trainer.train(resume_from_checkpoint=resume_checkpoint)
+        final_dir = output_dir / "final"
+        trainer.save_model(str(final_dir))
+        processor.image_processor.save_pretrained(final_dir)
+    finally:
+        wandb_logger.finish()
 
 
 if __name__ == "__main__":

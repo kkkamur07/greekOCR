@@ -12,12 +12,12 @@ from omegaconf import DictConfig
 from PIL import Image
 from transformers import TrOCRProcessor
 
-from .dataloader import read_ground_truth
-from ...metrics import edit_distance
-from .model_builder import load_model
+from ..metrics.metrics import edit_distance
+from ..models.trocr.dataloader import read_ground_truth
+from ..models.trocr.model_builder import load_model
 
 
-@hydra.main(version_base=None, config_path="../../../config/trocr", config_name="configs")
+@hydra.main(version_base=None, config_path="../../config/trocr", config_name="configs")
 def main(cfg: DictConfig) -> None:
     data_dir = Path(to_absolute_path(cfg.data.dir)).expanduser().resolve()
     checkpoint = Path(to_absolute_path(cfg.evaluation.checkpoint)).expanduser().resolve()

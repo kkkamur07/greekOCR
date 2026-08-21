@@ -44,11 +44,14 @@ class CalamariTorchModel(nn.Module):
             image_lengths = torch.full(
                 (value.shape[0],), value.shape[1], dtype=torch.long, device=value.device
             )
+        output_lengths = self.config.downscaled_sequence_lengths(image_lengths)
 
         value = value.permute(0, 3, 1, 2)
         for layer in self.layers:
             if isinstance(layer, LazyBiLSTM):
-                value = layer(cnn_to_sequence(value))
+                if value.ndim == 4:
+                    value = cnn_to_sequence(value)
+                value = layer(value, output_lengths)
             else:
                 value = layer(value)
         if value.ndim == 4:
@@ -61,5 +64,5 @@ class CalamariTorchModel(nn.Module):
         return {
             "blank_last_logits": blank_last_logits,
             "logits": logits,
-            "out_len": self.config.downscaled_sequence_lengths(image_lengths),
+            "out_len": output_lengths,
         }

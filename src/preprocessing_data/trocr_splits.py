@@ -15,7 +15,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-PROCESSED_ROOT = REPO_ROOT / "data" / "trocr_processed"
+PROCESSED_ROOT = REPO_ROOT / "data" / "processed"
 LANGUAGES = ("greek", "syriac", "armenian")
 PARTITIONS = ("pretraining", "finetuning")
 SPLITS = ("train", "val", "test")

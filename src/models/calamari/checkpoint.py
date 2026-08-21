@@ -25,6 +25,7 @@ class CalamariCheckpointMetadata:
     charset: tuple[str, ...]
     blank_index: int = 0
     temperature: float = -1.0
+    lstm_layers: int = 1
 
 
 def save_calamari_checkpoint(
@@ -47,6 +48,7 @@ def save_calamari_checkpoint(
             "charset": list(charset),
             "blank_index": 0,
             "temperature": temperature,
+            "lstm_layers": sum(layer.kind == "bilstm" for layer in model.config.layers),
             "state_dict": model.state_dict(),
         },
         checkpoint_path,
@@ -74,7 +76,11 @@ def load_calamari_checkpoint(
         raise CalamariCheckpointError("Invalid Calamari checkpoint state dictionary.")
 
     model = CalamariTorchModel(
-        default_model_config(classes=metadata.classes, temperature=metadata.temperature)
+        default_model_config(
+            classes=metadata.classes,
+            temperature=metadata.temperature,
+            lstm_layers=metadata.lstm_layers,
+        )
     )
     with torch.no_grad():
         model(
@@ -97,6 +103,7 @@ def _metadata_from_checkpoint(checkpoint: Mapping[str, object]) -> CalamariCheck
     charset = checkpoint.get("charset")
     temperature = checkpoint.get("temperature", -1.0)
     blank_index = checkpoint.get("blank_index", 0)
+    lstm_layers = checkpoint.get("lstm_layers", 1)
     if (
         not isinstance(classes, int)
         or isinstance(classes, bool)
@@ -112,6 +119,9 @@ def _metadata_from_checkpoint(checkpoint: Mapping[str, object]) -> CalamariCheck
         or not isinstance(temperature, (int, float))
         or isinstance(temperature, bool)
         or not math.isfinite(float(temperature))
+        or not isinstance(lstm_layers, int)
+        or isinstance(lstm_layers, bool)
+        or lstm_layers not in {1, 2}
     ):
         raise CalamariCheckpointError("Invalid Calamari checkpoint metadata.")
     return CalamariCheckpointMetadata(
@@ -120,4 +130,5 @@ def _metadata_from_checkpoint(checkpoint: Mapping[str, object]) -> CalamariCheck
         charset=tuple(charset),
         blank_index=0,
         temperature=float(temperature),
+        lstm_layers=lstm_layers,
     )

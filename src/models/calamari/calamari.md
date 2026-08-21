@@ -299,10 +299,11 @@ CTC supports variable sequence lengths, whereas dense tensors in a batch need
 equal dimensions. `collate_ctc()` right-pads every line image to the widest
 one with zeros, while preserving each original width as `image_lengths`.
 
-It does **not** pad text targets. PyTorch `nn.CTCLoss` expects a single
-concatenated target vector and a matching tensor of target lengths, which this
-function produces. Its output also retains the source `texts`, allowing
-evaluation to compare decoded predictions with references.
+For CTC loss, it produces a single concatenated target vector and matching
+target lengths. It also produces zero-padded per-line `labels` for Hugging
+Face Trainer's evaluation loop; blank is ID `0`, so those labels cannot be
+confused with a real character target. The source `texts` are retained for
+training-time metric logging.
 
 ## `trainer.py`: training, fine-tuning, validation, and checkpoint selection
 
@@ -329,25 +330,23 @@ model and persisted charset. Fine-tuning is rejected if:
 These checks prevent loading weights into an incompatible input geometry or
 classifier vocabulary.
 
-The function builds datasets and loaders for the configured splits, selects
-CUDA when `device="auto"` and it is available (otherwise CPU), and runs a
-sample batch through the model before creating AdamW. This materializes the
-lazy LSTM and classifier so the optimizer sees all trainable parameters. The
-optimizer uses cosine decay with the configured warmup ratio.
+The function uses Hugging Face's base `Trainer` with a CTC-specific adapter.
+It materializes lazy layers before Trainer creates its optimizer, then uses
+AdamW, cosine scheduling with the configured warmup ratio, gradient clipping,
+and Trainer's standard device, mixed-precision, logging, and distributed
+training lifecycle.
 
-Each epoch performs the following:
+Trainer evaluates after every epoch and selects the checkpoint with the lowest
+`eval_cer`. Each `checkpoint-N` contains Trainer's model, optimizer,
+scheduler, RNG, and state files, plus Calamari's EMA weights and codec
+metadata. Passing such a directory as `training.checkpoint` in `mode="train"`
+resumes the complete training state after a Slurm time-limit cancellation.
+`best.pt` remains a portable Calamari checkpoint for existing inference and
+fine-tuning workflows.
 
-1. switches the model to training mode;
-2. computes a CTC loss for every batch;
-3. clears gradients, backpropagates, clips the global gradient norm to `5.0`,
-   updates AdamW, and advances the learning-rate scheduler;
-4. reports training loss and OCR metrics every `logging_steps`;
-5. evaluates the full evaluation loader and reports evaluation metrics;
-6. reports the epoch training loss and latest training OCR metrics; and
-7. saves `best.pt` when evaluation character error rate (`eval_cer`) improves.
-
-The saved best model is temporarily moved to CPU, then returned to the chosen
-runtime device. Selection is based on CER, not training loss.
+Evaluation runs against EMA weights, while the raw model remains in the
+Trainer checkpoint for an exact optimizer-state resume. The best EMA state is
+used to write `best.pt`.
 
 ### Batch loss and evaluation helpers
 
