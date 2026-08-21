@@ -1,13 +1,5 @@
 # @package augmentation
-probability: 0.0
-mode: random
+probability: 1.0
+n_augmentations: 3
 num_operations: 3
-magnitude: null
-exclude_groups:
-  - geometry
-exclude_operations:
-  - Invert
-  - MotionBlur
-  - Snow
-  - Fog
-rotate: 10
+max_rotation_degrees: 5.0

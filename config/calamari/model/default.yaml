@@ -1,5 +1,4 @@
 # @package _global_
-
 model:
   line_height: 48
   temperature: -1.0

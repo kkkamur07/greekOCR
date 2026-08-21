@@ -1,5 +1,5 @@
 # @package training
 
-learning_rate: 1.0e-4
+learning_rate: 1.0e-3
 weight_decay: 0.0
 warmup_ratio: 0.09

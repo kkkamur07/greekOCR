@@ -88,5 +88,12 @@ imp.md
 need.md
 *.log
 archive/
+var/
+wandb/
+kraken_architecture.md
+tokenizer/
+tools/
+tr_ocr_checkpoints/
 trocr_checkpoints/
-tests/calamari/
+tests/
+instruction.md

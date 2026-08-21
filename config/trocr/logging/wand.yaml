@@ -2,7 +2,7 @@
 
 
 enabled: true
-project: OCR
+project: OCR_pretraining
 entity: personal-space-astha
 name: tr_ocr_full_finetune
 

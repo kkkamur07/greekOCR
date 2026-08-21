@@ -1,5 +1,5 @@
 name: trocr-encoder-decoder-ablation
-project: OCR
+project: OCR_pretraining
 entity: personal-space-astha
 method: grid
 
