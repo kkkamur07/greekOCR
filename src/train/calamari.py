@@ -1,93 +1,92 @@
-#!/usr/bin/env python3
+"""Train or fine-tune the Calamari CTC recognizer with Hydra."""
+
 from __future__ import annotations
 
-from datetime import datetime
+import json
+import random
 from pathlib import Path
 
 import hydra
+import numpy
+import torch
 from hydra.utils import to_absolute_path
 from omegaconf import DictConfig, OmegaConf
 
 from ..logging.wandb import WandbLogger
-from ..trainutils import build_calamari_train_command, stream_process, validate_pack
+from ..models.calamari.trainer import CalamariTrainingSettings, train_calamari
 
 
-@hydra.main(version_base=None, config_path="../config/calamari", config_name="train")
+def _set_seed(seed: int) -> None:
+    random.seed(seed)
+    numpy.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
+@hydra.main(version_base=None, config_path="../../config/calamari", config_name="configs")
 def main(cfg: DictConfig) -> None:
-    pack_dir = Path(to_absolute_path(cfg.data.pack_dir)).expanduser().resolve()
+    _set_seed(int(cfg.training.seed))
+    data_root = Path(to_absolute_path(cfg.data.dir)).expanduser().resolve()
     output_dir = Path(to_absolute_path(cfg.output.root)).expanduser().resolve()
-    train_images, val_images = validate_pack(pack_dir)
-
+    checkpoint = (
+        Path(to_absolute_path(cfg.training.checkpoint)).expanduser().resolve()
+        if cfg.training.checkpoint is not None
+        else None
+    )
+    settings = CalamariTrainingSettings(
+        mode=str(cfg.training.mode),
+        checkpoint=checkpoint,
+        epochs=int(cfg.training.epochs),
+        batch_size=int(cfg.training.batch_size),
+        workers=int(cfg.training.num_workers),
+        learning_rate=float(cfg.training.learning_rate),
+        weight_decay=float(cfg.training.weight_decay),
+        line_height=int(cfg.model.line_height),
+        device=str(cfg.training.device),
+        temperature=float(cfg.model.temperature),
+        train_split=str(cfg.data.train_split),
+        validation_split=str(cfg.data.validation_split),
+        n_augmentations=int(cfg.augmentation.n_augmentations),
+        augmentation_probability=float(cfg.augmentation.probability),
+        ema_decay=float(cfg.training.ema_decay),
+        logging_steps=int(cfg.logging.steps),
+        warmup_ratio=float(cfg.training.warmup_ratio),
+        checkpoint_top_k=int(cfg.training.checkpoint_top_k),
+    )
+    output_dir.mkdir(parents=True, exist_ok=True)
+    (output_dir / "config.yaml").write_text(OmegaConf.to_yaml(cfg, resolve=True), encoding="utf-8")
     log_dir = (
         Path(to_absolute_path(cfg.logging.root)).expanduser().resolve()
         / "calamari"
         / output_dir.name
     )
     log_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_file = log_dir / f"train_{timestamp}.log"
-    run_name = str(cfg.wandb.name) if cfg.wandb.name is not None else f"calamari-train-{timestamp}"
-
-    base_cmd, cmd_env = build_calamari_train_command()
-    cmd = base_cmd + [
-        "--network",
-        str(cfg.model.network),
-        "--n_augmentations",
-        str(cfg.training.n_augmentations),
-        "--trainer.output_dir",
-        str(output_dir),
-        "--trainer.epochs",
-        str(cfg.training.epochs),
-        "--early_stopping.n_to_go",
-        str(cfg.training.early_stopping_patience),
-        "--early_stopping.frequency",
-        str(cfg.training.early_stopping_frequency),
-        "--train.gt_extension",
-        ".gt.txt",
-        "--val.gt_extension",
-        ".gt.txt",
-        "--train.images",
-        *train_images,
-        "--val.images",
-        *val_images,
-    ]
-    if cfg.training.gpu is not None and str(cfg.training.gpu) != "":
-        cmd.extend(["--device.gpus", str(cfg.training.gpu)])
-
-    header = [
-        "=" * 40,
-        f"Calamari training started: {datetime.now()}",
-        f"  Pack:              {pack_dir}",
-        f"  Output:            {output_dir}",
-        f"  Train images:      {len(train_images)}",
-        f"  Val images:        {len(val_images)}",
-        f"  Network:           {cfg.model.network}",
-        f"  Epochs:            {cfg.training.epochs}",
-        f"  Augmentations:     {cfg.training.n_augmentations}",
-        f"  Early stopping:    {cfg.training.early_stopping_patience}",
-        f"  GPU:               {cfg.training.gpu if cfg.training.gpu is not None else 'CPU'}",
-        "=" * 40,
-    ]
-    with log_file.open("w", encoding="utf-8") as handle:
-        for line in header:
-            print(line)
-            handle.write(line + "\n")
-
+    resolved_config = OmegaConf.to_container(cfg, resolve=True)
+    if not isinstance(resolved_config, dict):
+        raise TypeError("Resolved Calamari configuration must be a mapping.")
     wandb_logger = WandbLogger(
         enabled=bool(cfg.wandb.enabled),
         project=str(cfg.wandb.project),
-        entity=cfg.wandb.entity,
-        name=run_name,
+        entity=str(cfg.wandb.entity) if cfg.wandb.entity is not None else None,
+        name=str(cfg.wandb.name) if cfg.wandb.name is not None else None,
         mode=str(cfg.wandb.mode),
         save_dir=log_dir,
-        config=OmegaConf.to_container(cfg, resolve=True),
+        config=resolved_config,
     )
+    metrics_file = log_dir / "metrics.jsonl"
+
+    def report(metrics: dict[str, float]) -> None:
+        print(json.dumps(metrics, sort_keys=True))
+        with metrics_file.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(metrics, sort_keys=True) + "\n")
+        wandb_logger.log_metrics(metrics, step=int(metrics["step"]))
+
     try:
-        stream_process(cmd, log_file, env=cmd_env)
+        _, _, best = train_calamari(data_root, output_dir, settings, report=report)
     finally:
         wandb_logger.finish()
-    print(f"Log saved to: {log_file}")
-    print(f"Checkpoints under: {output_dir}")
+    print(json.dumps({"best": best, "checkpoint": str(output_dir / "best.pt")}, sort_keys=True))
 
 
 if __name__ == "__main__":
