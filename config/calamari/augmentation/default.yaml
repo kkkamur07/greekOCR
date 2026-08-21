@@ -1,5 +1,3 @@
 # @package augmentation
 probability: 1.0
 n_augmentations: 3
-num_operations: 3
-max_rotation_degrees: 5.0
