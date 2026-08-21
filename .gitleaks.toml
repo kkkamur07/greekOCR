@@ -85,5 +85,8 @@ regexes = [
 ]
 
 [allowlist]
-description = "Shared JWT test fixture; strong by construction so the settings validator accepts it"
-regexes = ['''xQ7v2Kd9RmZ4pB6wLt1yHs3nCf8jUa5eG0oV''']
+description = "Shared test literals and scanner false positives"
+regexes = [
+  '''xQ7v2Kd9RmZ4pB6wLt1yHs3nCf8jUa5eG0oV''',
+  '''(?m)^\s*tokenizer=gpt_syriac_500(?:\s*\\)?\s*$''',
+]
