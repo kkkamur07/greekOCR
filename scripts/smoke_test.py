@@ -129,24 +129,24 @@ def smoke_calamari(
             opt = torch.optim.AdamW(model.parameters(), lr=1e-3)
 
             def _cal_step(
-                bs: int = bs,
-                opt: torch.optim.Optimizer = opt,
-                model: CalamariTorchModel = model,
+                _bs: int = bs,
+                _opt: torch.optim.Optimizer = opt,
+                _model: CalamariTorchModel = model,
             ) -> float:
                 x = torch.randint(
-                    0, 256, (bs, image_width, image_height, 1),
+                    0, 256, (_bs, image_width, image_height, 1),
                     dtype=torch.uint8, device=device,
                 )
-                lengths = torch.full((bs,), image_width, dtype=torch.long, device=device)
-                tgt = torch.randint(1, num_classes, (bs * 10,), device=device)
-                tgt_lens = torch.full((bs,), 10, dtype=torch.long, device=device)
+                lengths = torch.full((_bs,), image_width, dtype=torch.long, device=device)
+                tgt = torch.randint(1, num_classes, (_bs * 10,), device=device)
+                tgt_lens = torch.full((_bs,), 10, dtype=torch.long, device=device)
                 t0 = time.perf_counter()
-                opt.zero_grad(set_to_none=True)
-                out = model(x, lengths)
+                _opt.zero_grad(set_to_none=True)
+                out = _model(x, lengths)
                 log_probs = out["logits"].log_softmax(-1).permute(1, 0, 2)
                 loss = loss_fn(log_probs, tgt, out["out_len"], tgt_lens)
                 loss.backward()
-                opt.step()
+                _opt.step()
                 torch.cuda.synchronize()
                 return time.perf_counter() - t0
 
@@ -227,22 +227,22 @@ def smoke_trocr(
             opt = torch.optim.AdamW(trainable, lr=1e-5)
 
             def _trocr_step(
-                bs: int = bs,
-                opt: torch.optim.Optimizer = opt,
-                model: VisionEncoderDecoderModel = model,
+                _bs: int = bs,
+                _opt: torch.optim.Optimizer = opt,
+                _model: VisionEncoderDecoderModel = model,
             ) -> float:
                 pixel_values = torch.randn(
-                    bs, 3, 384, 384, device=device, dtype=torch.float16
+                    _bs, 3, 384, 384, device=device, dtype=torch.float16
                 )
-                labels = torch.randint(0, real_vocab, (bs, label_seq_len), device=device)
+                labels = torch.randint(0, real_vocab, (_bs, label_seq_len), device=device)
                 labels[:, label_seq_len // 2 :] = -100
                 t0 = time.perf_counter()
-                opt.zero_grad(set_to_none=True)
+                _opt.zero_grad(set_to_none=True)
                 with torch.autocast("cuda", dtype=torch.float16):
-                    out = model(pixel_values=pixel_values, labels=labels)
+                    out = _model(pixel_values=pixel_values, labels=labels)
                 out.loss.backward()
                 torch.nn.utils.clip_grad_norm_(trainable, 1.0)
-                opt.step()
+                _opt.step()
                 torch.cuda.synchronize()
                 return time.perf_counter() - t0
 
