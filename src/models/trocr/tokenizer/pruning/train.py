@@ -1,10 +1,11 @@
-"""Train a compact Greek/Syriac byte-level BPE tokenizer from GPT's base bytes.
+"""Train language-specific compact GPT byte-level BPE tokenizers.
 
 The existing GPT tokenizer has a 50k-token vocabulary.  BPE merges only add
 tokens, so it cannot be extended and then reduced to 1,700 entries.  This
 script instead reuses its GPT-2 byte-level pre-tokenization, byte fallback, and
-special-token configuration, then learns a fresh set of merges from the 256
-base byte tokens on all processed pretraining and finetuning transcriptions.
+special-token configuration, then learns a fresh set of merges from the 256 base
+byte tokens on each language's processed pretraining and finetuning
+transcriptions.
 """
 
 from __future__ import annotations
@@ -16,16 +17,26 @@ from pathlib import Path
 
 from transformers import PreTrainedTokenizerBase
 
-from .. import bundled_tokenizer_path
-from ..builder import load_tokenizer
+from ... import TOKENIZER_ROOT, bundled_tokenizer_path
+from ...builder import load_tokenizer
 
 
-DEFAULT_CORPUS_DIRECTORIES = (
-    Path("data/trocr_processed/greek/pretraining"),
-    Path("data/trocr_processed/greek/finetuning"),
-    Path("data/trocr_processed/syriac/pretraining"),
-    Path("data/trocr_processed/syriac/finetuning"),
-)
+DEFAULT_VOCABULARY_SIZE = 500
+LANGUAGE_CORPUS_DIRECTORIES: dict[str, tuple[Path, Path]] = {
+    "armenian": (
+        Path("data/processed/armenian/pretraining"),
+        Path("data/processed/armenian/finetuning"),
+    ),
+    "greek": (
+        Path("data/processed/greek/pretraining"),
+        Path("data/processed/greek/finetuning"),
+    ),
+    "syriac": (
+        Path("data/processed/syriac/pretraining"),
+        Path("data/processed/syriac/finetuning"),
+    ),
+}
+SUPPORTED_LANGUAGES = tuple(LANGUAGE_CORPUS_DIRECTORIES)
 
 
 @dataclass(frozen=True)
@@ -36,6 +47,24 @@ class TokenizationStatistics:
     tokens: int
     unknown_tokens: int
     maximum_length: int
+
+
+@dataclass(frozen=True)
+class LanguageTrainingResult:
+    """Validation result and destination for one language tokenizer."""
+
+    language: str
+    output_directory: Path
+    statistics: TokenizationStatistics
+
+
+def corpus_directories_for_language(language: str) -> tuple[Path, Path]:
+    """Return processed pretraining and finetuning directories for ``language``."""
+    try:
+        return LANGUAGE_CORPUS_DIRECTORIES[language]
+    except KeyError as error:
+        available = ", ".join(SUPPORTED_LANGUAGES)
+        raise ValueError(f"Unsupported language {language!r}; choose one of: {available}") from error
 
 
 def iter_transcriptions(corpus_directories: Sequence[Path]) -> Iterator[str]:
@@ -63,7 +92,7 @@ def train_byte_bpe(
     corpus_directories: Sequence[Path],
     *,
     source_tokenizer_directory: Path,
-    vocabulary_size: int = 2000,
+    vocabulary_size: int = DEFAULT_VOCABULARY_SIZE,
 ) -> PreTrainedTokenizerBase:
     """Train byte-level GPT BPE merges while retaining its base byte alphabet."""
     if vocabulary_size < 259:
@@ -120,7 +149,7 @@ def train_and_save(
     *,
     source_tokenizer_directory: Path,
     output_directory: Path,
-    vocabulary_size: int = 1700,
+    vocabulary_size: int = DEFAULT_VOCABULARY_SIZE,
     overwrite: bool = False,
 ) -> TokenizationStatistics:
     """Train, validate, and save a compact byte-level BPE tokenizer."""
@@ -141,15 +170,70 @@ def train_and_save(
     return statistics
 
 
+def train_language(
+    language: str,
+    *,
+    source_tokenizer_directory: Path,
+    output_root: Path = TOKENIZER_ROOT,
+    vocabulary_size: int = DEFAULT_VOCABULARY_SIZE,
+    overwrite: bool = False,
+) -> LanguageTrainingResult:
+    """Train and save a tokenizer for one language's complete processed corpus."""
+    corpus_directories = corpus_directories_for_language(language)
+    output_directory = output_root / f"gpt_{language}_{vocabulary_size}"
+    statistics = train_and_save(
+        corpus_directories,
+        source_tokenizer_directory=source_tokenizer_directory,
+        output_directory=output_directory,
+        vocabulary_size=vocabulary_size,
+        overwrite=overwrite,
+    )
+    return LanguageTrainingResult(language, output_directory, statistics)
+
+
+def train_languages(
+    languages: Sequence[str],
+    *,
+    source_tokenizer_directory: Path,
+    output_root: Path = TOKENIZER_ROOT,
+    vocabulary_size: int = DEFAULT_VOCABULARY_SIZE,
+    overwrite: bool = False,
+) -> list[LanguageTrainingResult]:
+    """Train independent tokenizers for every requested supported language."""
+    selected_languages = SUPPORTED_LANGUAGES if "all" in languages else tuple(languages)
+    invalid_languages = set(selected_languages).difference(SUPPORTED_LANGUAGES)
+    if invalid_languages:
+        invalid = ", ".join(sorted(invalid_languages))
+        raise ValueError(f"Unsupported language selection: {invalid}")
+    if not selected_languages:
+        raise ValueError("Choose at least one language or 'all'")
+    return [
+        train_language(
+            language,
+            source_tokenizer_directory=source_tokenizer_directory,
+            output_root=output_root,
+            vocabulary_size=vocabulary_size,
+            overwrite=overwrite,
+        )
+        for language in selected_languages
+    ]
+
+
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments for BPE tokenizer training."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
+        "--language",
+        choices=(*SUPPORTED_LANGUAGES, "all"),
+        nargs="+",
+        default=["all"],
+        help="Languages to train independently (default: all).",
+    )
+    parser.add_argument(
         "--corpus",
         type=Path,
         nargs="+",
-        default=list(DEFAULT_CORPUS_DIRECTORIES),
-        help="Processed Greek/Syriac pretraining and finetuning directories.",
+        help="Custom corpus directories containing gt_*.txt manifests.",
     )
     parser.add_argument(
         "--source-tokenizer",
@@ -157,32 +241,65 @@ def parse_args() -> argparse.Namespace:
         default=bundled_tokenizer_path("gpt_tokenizer"),
         help="Current GPT tokenizer used as the byte-level template.",
     )
-    parser.add_argument("--output", type=Path, required=True, help="Directory for the trained tokenizer.")
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="Directory for one tokenizer trained from --corpus.",
+    )
+    parser.add_argument(
+        "--output-root",
+        type=Path,
+        default=TOKENIZER_ROOT,
+        help="Parent directory for language-specific tokenizer outputs.",
+    )
     parser.add_argument(
         "--vocab-size",
         type=int,
-        default=1700,
-        help="Total vocabulary size including base bytes and special tokens (default: 1700).",
+        default=DEFAULT_VOCABULARY_SIZE,
+        help="Total vocabulary size including base bytes and special tokens (default: 500).",
     )
     parser.add_argument("--overwrite", action="store_true", help="Allow replacing files in --output.")
     return parser.parse_args()
 
 
 def main() -> None:
-    """Train and save the compact Greek/Syriac GPT BPE tokenizer."""
+    """Train and save compact language-specific GPT BPE tokenizers."""
     args = parse_args()
-    statistics = train_and_save(
-        args.corpus,
-        source_tokenizer_directory=args.source_tokenizer,
-        output_directory=args.output,
-        vocabulary_size=args.vocab_size,
-        overwrite=args.overwrite,
-    )
-    print(
-        f"Saved {args.vocab_size:,}-token byte-level BPE tokenizer to {args.output}; "
-        f"{statistics.records:,} records, {statistics.tokens:,} tokens, "
-        f"{statistics.unknown_tokens} unknowns, max length {statistics.maximum_length}"
-    )
+    if args.corpus:
+        if args.output is None:
+            raise ValueError("--output is required when --corpus is supplied")
+        statistics = train_and_save(
+            args.corpus,
+            source_tokenizer_directory=args.source_tokenizer,
+            output_directory=args.output,
+            vocabulary_size=args.vocab_size,
+            overwrite=args.overwrite,
+        )
+        results = [
+            LanguageTrainingResult(
+                language="custom",
+                output_directory=args.output,
+                statistics=statistics,
+            )
+        ]
+    elif args.output is not None:
+        raise ValueError("--output can only be used together with --corpus")
+    else:
+        results = train_languages(
+            args.language,
+            source_tokenizer_directory=args.source_tokenizer,
+            output_root=args.output_root,
+            vocabulary_size=args.vocab_size,
+            overwrite=args.overwrite,
+        )
+
+    for result in results:
+        statistics = result.statistics
+        print(
+            f"Saved {args.vocab_size:,}-token {result.language} byte-level BPE tokenizer to "
+            f"{result.output_directory}; {statistics.records:,} records, {statistics.tokens:,} "
+            f"tokens, {statistics.unknown_tokens} unknowns, max length {statistics.maximum_length}"
+        )
 
 
 if __name__ == "__main__":

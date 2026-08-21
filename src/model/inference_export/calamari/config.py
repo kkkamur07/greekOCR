@@ -1,4 +1,4 @@
-"""Layer configuration for the Calamari inference graph."""
+"""Configuration primitives for the PyTorch Calamari CNN–BiLSTM."""
 
 from __future__ import annotations
 
@@ -44,6 +44,37 @@ class CalamariTorchConfig:
         return lengths
 
 
+def default_model_config(
+    *, classes: int, temperature: float = -1.0, lstm_layers: int = 2
+) -> CalamariTorchConfig:
+    """Return the established Calamari CNN–BiLSTM topology."""
+    if lstm_layers not in {1, 2}:
+        raise ValueError("Calamari supports one or two bidirectional LSTM layers.")
+    recurrent_layers = (
+        CalamariTorchLayerConfig("bilstm", "lstm_0", hidden_nodes=200, merge_mode="concat"),
+        CalamariTorchLayerConfig("dropout", "dropout_0", rate=0.3),
+    )
+    if lstm_layers == 2:
+        recurrent_layers += (
+            CalamariTorchLayerConfig("bilstm", "lstm_1", hidden_nodes=200, merge_mode="concat"),
+        )
+    return CalamariTorchConfig(
+        layers=(
+            CalamariTorchLayerConfig("conv2d", "conv2d_0", 40, (3, 3), (1, 1), "same", "relu"),
+            CalamariTorchLayerConfig(
+                "maxpool2d", "maxpool2d_0", pool_size=(2, 2), strides=(-1, -1), padding="same"
+            ),
+            CalamariTorchLayerConfig("conv2d", "conv2d_1", 60, (3, 3), (1, 1), "same", "relu"),
+            CalamariTorchLayerConfig(
+                "maxpool2d", "maxpool2d_1", pool_size=(2, 2), strides=(-1, -1), padding="same"
+            ),
+            *recurrent_layers,
+        ),
+        classes=classes,
+        temperature=temperature,
+    )
+
+
 def maxpool_strides(config: CalamariTorchLayerConfig) -> tuple[int, int]:
     pool_size = require_tuple(config.pool_size, config.name, "pool_size")
     raw_strides = require_tuple(config.strides, config.name, "strides")
@@ -59,9 +90,7 @@ def require_int(value: int | None, layer_name: str, field_name: str) -> int:
 
 
 def require_tuple(
-    value: tuple[int, int] | None,
-    layer_name: str,
-    field_name: str,
+    value: tuple[int, int] | None, layer_name: str, field_name: str
 ) -> tuple[int, int]:
     if value is None:
         raise ValueError(f"{layer_name}.{field_name} is required")
