@@ -8,7 +8,6 @@ from typing import Literal
 import torch
 from torch import Tensor
 
-
 LayerKind = Literal["conv2d", "maxpool2d", "bilstm", "dropout"]
 
 

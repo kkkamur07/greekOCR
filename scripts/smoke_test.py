@@ -99,6 +99,7 @@ def smoke_calamari(
     Returns (recommended_batch_size, seconds_per_step).
     """
     from src.models.calamari.config import default_model_config
+
     from src.models.calamari.model import CalamariTorchModel
 
     print(f"\n{'Calamari  CNN+BiLSTM':^70}")
@@ -127,7 +128,11 @@ def smoke_calamari(
         try:
             opt = torch.optim.AdamW(model.parameters(), lr=1e-3)
 
-            def _cal_step() -> float:
+            def _cal_step(
+                bs: int = bs,
+                opt: torch.optim.Optimizer = opt,
+                model: CalamariTorchModel = model,
+            ) -> float:
                 x = torch.randint(
                     0, 256, (bs, image_width, image_height, 1),
                     dtype=torch.uint8, device=device,
@@ -221,7 +226,11 @@ def smoke_trocr(
         try:
             opt = torch.optim.AdamW(trainable, lr=1e-5)
 
-            def _trocr_step() -> float:
+            def _trocr_step(
+                bs: int = bs,
+                opt: torch.optim.Optimizer = opt,
+                model: VisionEncoderDecoderModel = model,
+            ) -> float:
                 pixel_values = torch.randn(
                     bs, 3, 384, 384, device=device, dtype=torch.float16
                 )
@@ -351,7 +360,7 @@ def main() -> None:
     props = torch.cuda.get_device_properties(0)
 
     print("=" * 70)
-    print(f"  VRAM SMOKE TEST")
+    print("  VRAM SMOKE TEST")
     print(f"  GPU    : {props.name}")
     print(f"  VRAM   : {_VRAM_TOTAL_MB:,} MB")
     print(f"  PyTorch: {torch.__version__}")
