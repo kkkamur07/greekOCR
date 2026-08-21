@@ -61,9 +61,13 @@ def default_model_config(
     return CalamariTorchConfig(
         layers=(
             CalamariTorchLayerConfig("conv2d", "conv2d_0", 40, (3, 3), (1, 1), "same", "relu"),
-            CalamariTorchLayerConfig("maxpool2d", "maxpool2d_0", pool_size=(2, 2), strides=(-1, -1), padding="same"),
+            CalamariTorchLayerConfig(
+                "maxpool2d", "maxpool2d_0", pool_size=(2, 2), strides=(-1, -1), padding="same"
+            ),
             CalamariTorchLayerConfig("conv2d", "conv2d_1", 60, (3, 3), (1, 1), "same", "relu"),
-            CalamariTorchLayerConfig("maxpool2d", "maxpool2d_1", pool_size=(2, 2), strides=(-1, -1), padding="same"),
+            CalamariTorchLayerConfig(
+                "maxpool2d", "maxpool2d_1", pool_size=(2, 2), strides=(-1, -1), padding="same"
+            ),
             *recurrent_layers,
         ),
         classes=classes,
