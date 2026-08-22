@@ -4,6 +4,7 @@ import {
   TransformWrapper,
   type ReactZoomPanPinchRef,
 } from "react-zoom-pan-pinch";
+import { resetPanVelocityTracking } from "../../utils/zoomPanVelocity";
 
 type PublicZoomSurfaceProps = {
   children: ReactNode;
@@ -55,6 +56,8 @@ export function PublicZoomSurface({
           sensitivity: 1,
           animationTime: 350,
         }}
+        // A click after a wheel zoom must not fling the page: see zoomPanVelocity.
+        onPanningStart={resetPanVelocityTracking}
         onTransformed={(ref) => setZoomLevel(ref.state.scale)}
       >
         {() => (

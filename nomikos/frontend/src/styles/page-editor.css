@@ -584,12 +584,6 @@
   color: var(--text-4);
 }
 
-.pe-dd-range-hint {
-  font-size: 0.6875rem;
-  color: var(--text-4);
-  font-variant-numeric: tabular-nums;
-}
-
 .pe-dd-model {
   display: block;
   padding: 5px 10px 7px;

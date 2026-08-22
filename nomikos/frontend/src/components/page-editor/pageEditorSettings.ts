@@ -1,17 +1,17 @@
 const STORAGE_KEY = "nomikos_page_editor_settings";
 
 /**
- * react-zoom-pan-pinch scales a wheel event by `smoothStep * |deltaY|`, and a
- * physical mouse-wheel notch reports deltaY 120, so at 1× one notch zooms by
- * roughly 0.0006 * 120 = 7%. That is deliberately gentle for precise annotation
- * work; `wheelZoomSpeed` lets a reader who wants to fly across a page turn it
- * up without anyone else inheriting the old runaway behaviour.
+ * react-zoom-pan-pinch adds `smoothStep * |deltaY|` to the scale per wheel
+ * event. 0.006 is the value the editor shipped with; it was cut tenfold on
+ * 2026-08-19 to fix a "page flies off" symptom that was really a stale
+ * pan-velocity bug (see utils/zoomPanVelocity.ts), which left trackpad zooming
+ * crawling. The original is the 1× default again; `wheelZoomSpeed` scales it,
+ * and 0.1× is the tamed value for a mouse wheel that reports big deltas.
  */
-export const BASE_WHEEL_SMOOTH_STEP = 0.0006;
+export const BASE_WHEEL_SMOOTH_STEP = 0.006;
 export const BASE_WHEEL_STEP = 0.06;
-export const WHEEL_ZOOM_SPEED_MIN = 0.5;
-export const WHEEL_ZOOM_SPEED_MAX = 6;
-const MOUSE_WHEEL_NOTCH_DELTA = 120;
+export const WHEEL_ZOOM_SPEED_MIN = 0.1;
+export const WHEEL_ZOOM_SPEED_MAX = 2;
 
 export type PageEditorCanvasSettings = {
   /** Multiplier for segment/block overlay stroke width (0.5-4). */
@@ -24,7 +24,7 @@ export type PageEditorCanvasSettings = {
   handleSize: number;
   showLayoutBlocks: boolean;
   showBaselines: boolean;
-  /** Multiplier on how far one wheel notch or trackpad step zooms (0.5-6). */
+  /** Multiplier on how far one wheel notch or trackpad step zooms (0.1-2). */
   wheelZoomSpeed: number;
 };
 
@@ -47,13 +47,6 @@ export function wheelZoomConfig(wheelZoomSpeed: number): {
     step: BASE_WHEEL_STEP * wheelZoomSpeed,
     smoothStep: BASE_WHEEL_SMOOTH_STEP * wheelZoomSpeed,
   };
-}
-
-/** Approximate zoom change, in percent, for one mouse-wheel notch at a speed. */
-export function wheelZoomPercentPerNotch(wheelZoomSpeed: number): number {
-  return Math.round(
-    BASE_WHEEL_SMOOTH_STEP * wheelZoomSpeed * MOUSE_WHEEL_NOTCH_DELTA * 100,
-  );
 }
 
 function clampNumber(

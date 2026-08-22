@@ -33,6 +33,7 @@ import {
   type PageEditorCanvasSettings,
 } from "./pageEditorSettings";
 import { segmentNumbersById, segmentsInNumberOrder } from "./segmentNumbering";
+import { resetPanVelocityTracking } from "../../utils/zoomPanVelocity";
 
 const ZOOM_ANIMATION_MS = 220;
 const ZOOM_BUTTON_STEP = 0.12;
@@ -679,8 +680,8 @@ export function PageEditorCanvas({
         centerOnInit={false}
         limitToBounds={false}
         wheel={{
-          // ~±7% per mouse-wheel notch at the default speed; the settings
-          // panel scales both steps together. See pageEditorSettings.ts.
+          // The editor's original wheel sensitivity at 1x; the settings panel
+          // scales both steps together. See pageEditorSettings.ts.
           ...wheelZoomConfig(settings.wheelZoomSpeed),
           wheelDisabled: false,
           touchPadDisabled: false,
@@ -716,6 +717,8 @@ export function PageEditorCanvas({
           sizeY: 0,
           animationTime: ZOOM_ANIMATION_MS,
         }}
+        // A click after a wheel zoom must not fling the page: see zoomPanVelocity.
+        onPanningStart={resetPanVelocityTracking}
         onTransformed={(ref) => setZoomLevel(ref.state.scale)}
       >
         {({ resetTransform, centerView }) => (
