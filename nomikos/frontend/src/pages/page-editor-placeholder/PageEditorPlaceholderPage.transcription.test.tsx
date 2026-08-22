@@ -116,6 +116,16 @@ describe("PageEditorPlaceholderPage transcription", () => {
     expect(
       await screen.findByText("Pairing progress: 1/2 Lines paired"),
     ).toBeTruthy();
+    // The typing panel closes once the text is saved; the segment stays selected.
+    await waitFor(() => {
+      expect(
+        screen.queryByLabelText(/approved text for selected segment/i),
+      ).toBeNull();
+    });
+    expect(screen.getByLabelText(/^Segment 1/)).toHaveAttribute(
+      "aria-current",
+      "true",
+    );
   });
 
   it("switches to Transcription edit mode and saves Ground truth text for the selected Segment", async () => {

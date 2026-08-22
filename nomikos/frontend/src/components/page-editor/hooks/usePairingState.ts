@@ -162,11 +162,14 @@ export function usePairingState({
     }
   }
 
-  async function saveApprovedText() {
-    if (!projectId || !documentId || !partId || !selectedSegmentId) return;
+  /** Resolves true when the text was saved, false when the save failed. */
+  async function saveApprovedText(): Promise<boolean> {
+    if (!projectId || !documentId || !partId || !selectedSegmentId) {
+      return false;
+    }
     if (!groundTruthTranscriptionId) {
       setPairingError("Ground truth transcription layer is not available.");
-      return;
+      return false;
     }
     try {
       const updated = await api.updateGroundTruthLineText(
@@ -191,10 +194,12 @@ export function usePairingState({
       setPairingProgress(pairing.pairing_progress);
       notePartContentChanged();
       setPairingError(null);
+      return true;
     } catch (err) {
       setPairingError(
         err instanceof Error ? err.message : "Failed to save approved text.",
       );
+      return false;
     }
   }
 
@@ -208,14 +213,17 @@ export function usePairingState({
     }
   }
 
-  async function saveGroundTruthText() {
-    if (!projectId || !documentId || !partId || !selectedSegmentId) return;
+  /** Resolves true when the text was saved, false when the save failed. */
+  async function saveGroundTruthText(): Promise<boolean> {
+    if (!projectId || !documentId || !partId || !selectedSegmentId) {
+      return false;
+    }
     if (
       !groundTruthTranscriptionId ||
       selectedTranscriptionLayer?.kind !== "ground_truth"
     ) {
       setPairingError("Only Ground truth can be edited.");
-      return;
+      return false;
     }
     try {
       const updated = await api.updateGroundTruthLineText(
@@ -241,6 +249,7 @@ export function usePairingState({
       notePartContentChanged();
       setPairingError(null);
       setTranscriptionSaveMessage(statusMessage("Ground truth text saved"));
+      return true;
     } catch (err) {
       setTranscriptionSaveMessage(null);
       setPairingError(
@@ -248,6 +257,7 @@ export function usePairingState({
           ? err.message
           : "Failed to save Ground truth text.",
       );
+      return false;
     }
   }
 

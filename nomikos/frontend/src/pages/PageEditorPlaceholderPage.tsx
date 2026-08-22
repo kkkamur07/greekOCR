@@ -532,7 +532,9 @@ export function PageEditorPlaceholderPage() {
             selectedTranscriptionLayer={selectedTranscriptionLayer}
             approvedTextDraft={approvedTextDraft}
             onApprovedTextDraftChange={setApprovedTextDraft}
-            onSaveGroundTruthText={saveGroundTruthText}
+            onSaveGroundTruthText={async () => {
+              if (await saveGroundTruthText()) setStripDismissed(true);
+            }}
             onPromoteSelectedSegmentToGroundTruth={
               promoteSelectedSegmentToGroundTruth
             }
@@ -541,7 +543,9 @@ export function PageEditorPlaceholderPage() {
             onDismiss={() => setStripDismissed(true)}
             lines={lines}
             selectedSegmentId={selectedSegmentId}
-            onSaveApprovedText={saveApprovedText}
+            onSaveApprovedText={async () => {
+              if (await saveApprovedText()) setStripDismissed(true);
+            }}
             transcribeModels={transcribeModels}
             selectedTranscribeModelId={selectedTranscribeModelId}
             onSelectedTranscribeModelIdChange={setSelectedTranscribeModelId}
