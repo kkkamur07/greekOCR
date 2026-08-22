@@ -751,6 +751,12 @@ export const api = {
       `/projects/${projectId}/documents/${documentId}/parts/${partId}/page-xml`,
     ),
 
+  /** Zip of the PAGE XML next to the full-resolution page image it describes. */
+  getPageXmlBundle: (projectId: string, documentId: string, partId: string) =>
+    fetchBinaryApi(
+      `/projects/${projectId}/documents/${documentId}/parts/${partId}/page-xml-bundle`,
+    ),
+
   segmentPart: (
     projectId: string,
     documentId: string,
@@ -840,6 +846,16 @@ export const api = {
   getPublicPageXml: (projectId: string, documentId: string, partId: string) =>
     fetchBinaryApi(
       `/public/projects/${projectId}/documents/${documentId}/parts/${partId}/page-xml`,
+      { skipAuth: true },
+    ),
+
+  getPublicPageXmlBundle: (
+    projectId: string,
+    documentId: string,
+    partId: string,
+  ) =>
+    fetchBinaryApi(
+      `/public/projects/${projectId}/documents/${documentId}/parts/${partId}/page-xml-bundle`,
       { skipAuth: true },
     ),
 

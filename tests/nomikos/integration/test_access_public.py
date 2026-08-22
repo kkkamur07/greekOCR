@@ -174,6 +174,12 @@ def test_anonymous_can_download_published_part_artifacts(client, published_docum
     assert xml.headers["content-type"] == "application/xml"
     assert xml.content.startswith(b"<?xml")
 
+    bundle = client.get(f"{base}/page-xml-bundle")
+    assert bundle.status_code == 200
+    assert bundle.headers["content-type"] == "application/zip"
+    assert bundle.content.startswith(b"PK")
+    assert bundle.headers["content-disposition"].endswith('_page_1.zip"')
+
     draft_pdf = client.get(
         f"/projects/{project_id}/documents/{document_id}/parts/{part_id}/transcription-pdf"
     )

@@ -2,24 +2,25 @@ import { useEffect, useState } from "react";
 import { api } from "../../api/client";
 import { ApiError } from "../../api/errors";
 import { toast } from "../ui/toast";
+import { exportFileStem } from "../../utils/exportFilename";
 
 type PublicDocumentExportsProps = {
   projectId: string;
   documentId: string;
+  documentName: string;
   partId: string;
   partIndex: number;
 };
 
-function downloadFilename(partIndex: number, extension: string): string {
-  return `page-${partIndex}.${extension}`;
-}
-
 export function PublicDocumentExports({
   projectId,
   documentId,
+  documentName,
   partId,
   partIndex,
 }: PublicDocumentExportsProps) {
+  const downloadFilename = (extension: string) =>
+    `${exportFileStem(documentName, partIndex)}.${extension}`;
   const [open, setOpen] = useState(false);
   const [downloading, setDownloading] = useState<"pdf" | "xml" | null>(null);
 
@@ -46,7 +47,7 @@ export function PublicDocumentExports({
       const url = URL.createObjectURL(blob);
       const anchor = globalThis.document.createElement("a");
       anchor.href = url;
-      anchor.download = downloadFilename(partIndex, "pdf");
+      anchor.download = downloadFilename("pdf");
       anchor.click();
       URL.revokeObjectURL(url);
       setOpen(false);
@@ -62,17 +63,23 @@ export function PublicDocumentExports({
   async function handleDownloadXml() {
     setDownloading("xml");
     try {
-      const blob = await api.getPublicPageXml(projectId, documentId, partId);
+      const blob = await api.getPublicPageXmlBundle(
+        projectId,
+        documentId,
+        partId,
+      );
       const url = URL.createObjectURL(blob);
       const anchor = globalThis.document.createElement("a");
       anchor.href = url;
-      anchor.download = downloadFilename(partIndex, "xml");
+      anchor.download = downloadFilename("zip");
       anchor.click();
       URL.revokeObjectURL(url);
       setOpen(false);
     } catch (err) {
       const message =
-        err instanceof ApiError ? err.message : "Failed to download PAGE XML";
+        err instanceof ApiError
+          ? err.message
+          : "Failed to download PAGE XML and page image";
       toast.error(message);
     } finally {
       setDownloading(null);
@@ -115,7 +122,7 @@ export function PublicDocumentExports({
             disabled={downloading !== null}
             onClick={() => void handleDownloadXml()}
           >
-            {downloading === "xml" ? "Downloading XML…" : "PAGE XML"}
+            {downloading === "xml" ? "Downloading XML…" : "PAGE XML + image"}
           </button>
         </div>
       )}

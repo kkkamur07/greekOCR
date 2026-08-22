@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 from io import BytesIO
 from xml.etree import ElementTree
+from zipfile import ZipFile
 
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -218,6 +219,124 @@ def test_outsider_cannot_export_page_xml(
 
     response = client.get(
         f"{base}/{document_id}/parts/{part_id}/page-xml",
+        headers=outsider_headers,
+    )
+
+    assert response.status_code in (403, 404)
+
+
+# --- PAGE XML bundle ---
+# Tests the zip pairs the XML with the full-resolution page image under one shared
+# stem, and that the XML points at that sibling file. Does not validate against an XSD.
+
+PAGE_NS = {"page": "http://schema.primaresearch.org/PAGE/gts/pagecontent/2019-07-15"}
+
+
+def test_member_exports_page_xml_bundle_with_full_resolution_image(
+    client: TestClient, owner_headers: dict[str, str], owner_project: dict
+) -> None:
+    project_id, document_id, part_id, _line_ids = _create_document_part_with_segments(
+        client, owner_headers, owner_project
+    )
+    base = documents_url(project_id)
+
+    response = client.get(
+        f"{base}/{document_id}/parts/{part_id}/page-xml-bundle",
+        headers=owner_headers,
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/zip"
+    # The document was created as "PDF codex" above; the stem is the document name with
+    # whitespace collapsed plus the 1-based page position, shared by every file.
+    assert response.headers["content-disposition"] == 'attachment; filename="PDF_codex_page_1.zip"'
+
+    with ZipFile(BytesIO(response.content)) as archive:
+        assert sorted(archive.namelist()) == ["PDF_codex_page_1.webp", "PDF_codex_page_1.xml"]
+        # S314: parsing the response this test just asked the app to render, in-process.
+        root = ElementTree.fromstring(archive.read("PDF_codex_page_1.xml"))  # noqa: S314
+        image_bytes = archive.read("PDF_codex_page_1.webp")
+
+    page = root.find("page:Page", PAGE_NS)
+    assert page is not None
+    assert page.attrib["imageFilename"] == "PDF_codex_page_1.webp"
+    assert page.attrib["imageWidth"] == "160"
+    assert page.attrib["imageHeight"] == "90"
+    assert root.find(".//page:TextLine", PAGE_NS) is not None
+
+    # The stored full-resolution object, not a thumbnail: same pixel grid the XML
+    # coordinates were drawn on.
+    with Image.open(BytesIO(image_bytes)) as image:
+        assert image.format == "WEBP"
+        assert image.size == (160, 90)
+
+
+def test_bare_page_xml_names_the_image_by_its_bundle_basename(
+    client: TestClient, owner_headers: dict[str, str], owner_project: dict
+) -> None:
+    project_id, document_id, part_id, _line_ids = _create_document_part_with_segments(
+        client, owner_headers, owner_project
+    )
+    base = documents_url(project_id)
+
+    response = client.get(f"{base}/{document_id}/parts/{part_id}/page-xml", headers=owner_headers)
+
+    assert response.status_code == 200
+    root = ElementTree.fromstring(response.content)  # noqa: S314
+    page = root.find("page:Page", PAGE_NS)
+    assert page is not None
+    # A basename a PAGE consumer can resolve next to the XML, never the storage key.
+    assert page.attrib["imageFilename"] == "PDF_codex_page_1.webp"
+
+
+def test_page_xml_bundle_numbers_pages_by_position_not_by_order_value(
+    client: TestClient, owner_headers: dict[str, str], owner_project: dict
+) -> None:
+    project_id, document_id, first_part_id, _line_ids = _create_document_part_with_segments(
+        client, owner_headers, owner_project
+    )
+    base = documents_url(project_id)
+    upload = client.post(
+        f"{base}/{document_id}/parts",
+        headers=owner_headers,
+        files={"file": ("page2.png", _png_bytes(), "image/png")},
+    )
+    assert upload.status_code == 201
+    second_part_id = upload.json()["id"]
+
+    second = client.get(
+        f"{base}/{document_id}/parts/{second_part_id}/page-xml-bundle", headers=owner_headers
+    )
+    assert second.status_code == 200
+    assert second.headers["content-disposition"] == 'attachment; filename="PDF_codex_page_2.zip"'
+
+    # Deleting the first page leaves the second with order=1 but position 1: the name
+    # follows what the reader sees in the page list, not the stored order value.
+    deleted = client.delete(f"{base}/{document_id}/parts/{first_part_id}", headers=owner_headers)
+    assert deleted.status_code == 204
+
+    renumbered = client.get(
+        f"{base}/{document_id}/parts/{second_part_id}/page-xml-bundle", headers=owner_headers
+    )
+    assert renumbered.status_code == 200
+    assert (
+        renumbered.headers["content-disposition"] == 'attachment; filename="PDF_codex_page_1.zip"'
+    )
+
+
+def test_outsider_cannot_export_page_xml_bundle(
+    client: TestClient,
+    owner_headers: dict[str, str],
+    outsider_headers: dict[str, str],
+    owner_project: dict,
+) -> None:
+    project_id, document_id, part_id, _line_ids = _create_document_part_with_segments(
+        client, owner_headers, owner_project
+    )
+    base = documents_url(project_id)
+
+    response = client.get(
+        f"{base}/{document_id}/parts/{part_id}/page-xml-bundle",
         headers=outsider_headers,
     )
 

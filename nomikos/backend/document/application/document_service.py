@@ -18,7 +18,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.document.application.document_access import DocumentAccess
+from backend.document.application.document_access import DocumentAccess, PartContext
 from backend.document.application.document_catalog import DocumentCatalog
 from backend.document.application.ground_truth import GroundTruthText
 from backend.document.application.layout_service import LayoutService
@@ -84,6 +84,13 @@ class DocumentService:
         self, session: AsyncSession, project_id: UUID, document_id: UUID, part_id: UUID
     ) -> DocumentPart:
         return await self.catalog.get_published_part(session, project_id, document_id, part_id)
+
+    async def get_published_part_context(
+        self, session: AsyncSession, project_id: UUID, document_id: UUID, part_id: UUID
+    ) -> PartContext:
+        return await self.catalog.get_published_part_context(
+            session, project_id, document_id, part_id
+        )
 
     # --- Parts ---
 

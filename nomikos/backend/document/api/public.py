@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 from uuid import UUID
 
@@ -11,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.annotation.application.page_xml_export_service import PageXmlExportService
 from backend.annotation.application.transcription_pdf_service import TranscriptionPdfService
+from backend.core.api.content_disposition import attachment_disposition
 from backend.core.api.pagination import MAX_CURSOR_LENGTH, decode_cursor, paginate_rows
 from backend.document.api.public_rate_limit import throttle_public_export, throttle_public_read
 from backend.document.api.responses import document_with_parts_response
@@ -50,6 +52,12 @@ XML_RESPONSE: dict[int | str, dict[str, Any]] = {
     200: {
         "content": {"application/xml": {"schema": {"type": "string", "format": "binary"}}},
         "description": "PAGE XML bytes",
+    }
+}
+ZIP_RESPONSE: dict[int | str, dict[str, Any]] = {
+    200: {
+        "content": {"application/zip": {"schema": {"type": "string", "format": "binary"}}},
+        "description": "Zip of the PAGE XML and the full-resolution page image it describes",
     }
 }
 
@@ -197,4 +205,31 @@ async def get_published_page_xml(
         content=xml_bytes,
         media_type="application/xml",
         headers={"Content-Disposition": 'attachment; filename="page.xml"'},
+    )
+
+
+@router.get(
+    "/projects/{project_id}/documents/{document_id}/parts/{part_id}/page-xml-bundle",
+    response_class=Response,
+    responses=ZIP_RESPONSE,
+    dependencies=[Depends(throttle_public_export)],
+)
+async def get_published_page_xml_bundle(
+    project_id: UUID,
+    document_id: UUID,
+    part_id: UUID,
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """The PAGE XML zipped next to the full-resolution page image it describes."""
+    bundle = await _page_xml_export_service.export_part_bundle_public(
+        db,
+        project_id,
+        document_id,
+        part_id,
+    )
+    zip_bytes = await asyncio.to_thread(bundle.to_zip)
+    return Response(
+        content=zip_bytes,
+        media_type="application/zip",
+        headers={"Content-Disposition": attachment_disposition(bundle.zip_filename)},
     )

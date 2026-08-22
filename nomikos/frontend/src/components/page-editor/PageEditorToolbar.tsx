@@ -10,6 +10,7 @@ import { editorButton } from "./editorButton";
 import { PageEditorModelSelect } from "./PageEditorModelSelect";
 import { PageEditorSharingMenu } from "./PageEditorSharingMenu";
 import { PageEditorPageXmlButton } from "./PageEditorPageXmlButton";
+import { exportFileStem } from "../../utils/exportFilename";
 import { SettingsIcon } from "./EditorIcons";
 import { PageEditorSettingsPanel } from "./PageEditorSettingsPanel";
 import { PageEditorInferenceStatus } from "./PageEditorInferenceStatus";
@@ -495,7 +496,7 @@ export function PageEditorToolbar({
               projectId={projectId}
               documentId={documentId}
               partId={partId}
-              downloadFilename={`${document.name.replace(/\s+/g, "_")}_page_${partIndex}.xml`}
+              downloadFilename={`${exportFileStem(document.name, partIndex)}.zip`}
             />
           )}
           <div className="pe-dropdown-wrap" ref={settingsRef}>

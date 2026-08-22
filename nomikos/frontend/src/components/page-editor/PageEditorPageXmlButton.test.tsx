@@ -12,7 +12,7 @@ vi.mock("../../api/client", async (importOriginal) => {
     ...actual,
     api: {
       ...actual.api,
-      getPageXml: vi.fn(),
+      getPageXmlBundle: vi.fn(),
     },
   };
 });
@@ -21,19 +21,19 @@ vi.mock("../ui/toast", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
-const mockedGetPageXml = api.getPageXml as ReturnType<typeof vi.fn>;
+const mockedGetPageXmlBundle = api.getPageXmlBundle as ReturnType<typeof vi.fn>;
 
 describe("PageEditorPageXmlButton", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockedGetPageXml.mockResolvedValue(
-      new Blob(["<PcGts/>"], { type: "application/xml" }),
+    mockedGetPageXmlBundle.mockResolvedValue(
+      new Blob(["PK"], { type: "application/zip" }),
     );
   });
 
-  it("downloads the PAGE XML for the current part", async () => {
+  it("downloads the PAGE XML bundle for the current part", async () => {
     vi.stubGlobal("URL", {
-      createObjectURL: vi.fn(() => "blob:xml"),
+      createObjectURL: vi.fn(() => "blob:zip"),
       revokeObjectURL: vi.fn(),
     });
     const clicked: { href: string | null; download: string }[] = [];
@@ -51,20 +51,20 @@ describe("PageEditorPageXmlButton", () => {
         projectId="project-1"
         documentId="doc-1"
         partId="part-1"
-        downloadFilename="My_Doc_page_1.xml"
+        downloadFilename="My_Doc_page_1.zip"
       />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: /download page xml/i }));
 
     await waitFor(() => {
-      expect(mockedGetPageXml).toHaveBeenCalledWith(
+      expect(mockedGetPageXmlBundle).toHaveBeenCalledWith(
         "project-1",
         "doc-1",
         "part-1",
       );
       expect(clicked).toEqual([
-        { href: "blob:xml", download: "My_Doc_page_1.xml" },
+        { href: "blob:zip", download: "My_Doc_page_1.zip" },
       ]);
     });
 
@@ -73,14 +73,14 @@ describe("PageEditorPageXmlButton", () => {
   });
 
   it("surfaces API errors as a toast and re-enables the button", async () => {
-    mockedGetPageXml.mockRejectedValue(new ApiError("Forbidden", 403));
+    mockedGetPageXmlBundle.mockRejectedValue(new ApiError("Forbidden", 403));
 
     render(
       <PageEditorPageXmlButton
         projectId="project-1"
         documentId="doc-1"
         partId="part-1"
-        downloadFilename="My_Doc_page_1.xml"
+        downloadFilename="My_Doc_page_1.zip"
       />,
     );
 

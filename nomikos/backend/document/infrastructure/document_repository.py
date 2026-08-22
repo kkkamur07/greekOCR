@@ -321,6 +321,23 @@ class DocumentRepository:
         )
         return result.scalar_one_or_none()
 
+    async def part_page_number(self, session: AsyncSession, part: DocumentPart) -> int:
+        """1-based position of ``part`` among its document's parts, in display order.
+
+        Computed from the rows rather than read off ``part.order`` because orders are
+        allowed to have gaps: ``next_part_order`` hands out max+1, so deleting a middle
+        part leaves a hole, and the UI numbers pages by position, not by order value.
+        """
+        result = await session.execute(
+            select(func.count())
+            .select_from(DocumentPart)
+            .where(
+                DocumentPart.document_id == part.document_id,
+                DocumentPart.order < part.order,
+            )
+        )
+        return int(result.scalar_one()) + 1
+
     async def next_part_order(self, session: AsyncSession, document_id: UUID) -> int:
         await session.execute(
             select(Document.id).where(Document.id == document_id).with_for_update()
