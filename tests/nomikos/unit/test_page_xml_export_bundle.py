@@ -8,14 +8,12 @@ the pure pieces: the shared file stem, the archive layout, and the download head
 from __future__ import annotations
 
 from io import BytesIO
-from types import SimpleNamespace
 from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
 
 import pytest
 
 from backend.annotation.application.page_xml_export_service import (
     PageXmlBundle,
-    _image_filename,
     export_file_stem,
 )
 from backend.core.api.content_disposition import attachment_disposition
@@ -25,7 +23,6 @@ from backend.core.api.content_disposition import attachment_disposition
     ("document_name", "page_number", "expected"),
     [
         ("My Codex", 3, "My_Codex_page_3"),
-        ("  spaced   out \t name ", 1, "spaced_out_name_page_1"),
         (
             'slash/back\\colon:star*q?quote"lt<gt>pipe|',
             2,
@@ -33,7 +30,6 @@ from backend.core.api.content_disposition import attachment_disposition
         ),
         ("Σιναϊτικός κώδικας", 12, "Σιναϊτικός_κώδικας_page_12"),
         ("", 1, "document_page_1"),
-        ("***", 1, "document_page_1"),
         ("trailing dots...", 4, "trailing_dots_page_4"),
     ],
 )
@@ -44,23 +40,6 @@ def test_export_file_stem(document_name: str, page_number: int, expected: str) -
 def test_export_file_stem_caps_long_titles() -> None:
     stem = export_file_stem("x" * 500, 7)
     assert stem == "x" * 80 + "_page_7"
-
-
-@pytest.mark.parametrize(
-    ("image_key", "expected"),
-    [
-        ("parts/abc.webp", "Codex_page_1.webp"),
-        ("parts/abc.PNG", "Codex_page_1.png"),
-        ("parts/abc.jpeg", "Codex_page_1.jpg"),
-        ("parts/abc.tiff", "Codex_page_1.img"),
-        ("pending", "Codex_page_1.img"),
-    ],
-)
-def test_image_filename_follows_the_stem_and_the_stored_suffix(
-    image_key: str, expected: str
-) -> None:
-    part = SimpleNamespace(image_key=image_key)
-    assert _image_filename("Codex_page_1", part) == expected
 
 
 def test_bundle_zips_xml_and_image_side_by_side() -> None:

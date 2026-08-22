@@ -270,23 +270,12 @@ def test_member_exports_page_xml_bundle_with_full_resolution_image(
         assert image.format == "WEBP"
         assert image.size == (160, 90)
 
-
-def test_bare_page_xml_names_the_image_by_its_bundle_basename(
-    client: TestClient, owner_headers: dict[str, str], owner_project: dict
-) -> None:
-    project_id, document_id, part_id, _line_ids = _create_document_part_with_segments(
-        client, owner_headers, owner_project
-    )
-    base = documents_url(project_id)
-
-    response = client.get(f"{base}/{document_id}/parts/{part_id}/page-xml", headers=owner_headers)
-
-    assert response.status_code == 200
-    root = ElementTree.fromstring(response.content)  # noqa: S314
-    page = root.find("page:Page", PAGE_NS)
-    assert page is not None
-    # A basename a PAGE consumer can resolve next to the XML, never the storage key.
-    assert page.attrib["imageFilename"] == "PDF_codex_page_1.webp"
+    # The bare XML export names the same sibling basename, never the storage key.
+    bare = client.get(f"{base}/{document_id}/parts/{part_id}/page-xml", headers=owner_headers)
+    assert bare.status_code == 200
+    bare_page = ElementTree.fromstring(bare.content).find("page:Page", PAGE_NS)  # noqa: S314
+    assert bare_page is not None
+    assert bare_page.attrib["imageFilename"] == "PDF_codex_page_1.webp"
 
 
 def test_page_xml_bundle_numbers_pages_by_position_not_by_order_value(
