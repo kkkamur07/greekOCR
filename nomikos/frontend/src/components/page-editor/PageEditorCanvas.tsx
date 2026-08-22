@@ -28,7 +28,10 @@ import {
   rectanglePoints,
   removePolygonVertex,
 } from "./canvasGeometry";
-import type { PageEditorCanvasSettings } from "./pageEditorSettings";
+import {
+  wheelZoomConfig,
+  type PageEditorCanvasSettings,
+} from "./pageEditorSettings";
 import { segmentNumbersById, segmentsInNumberOrder } from "./segmentNumbering";
 
 const ZOOM_ANIMATION_MS = 220;
@@ -676,11 +679,9 @@ export function PageEditorCanvas({
         centerOnInit={false}
         limitToBounds={false}
         wheel={{
-          step: 0.06,
-          // smoothStep multiplies |deltaY|, and a mouse wheel notch is 120:
-          // 0.0006 gives ~±7% per notch for precise annotation zooming. The
-          // old 0.006 meant ±72% - two notches spanned the whole scale range.
-          smoothStep: 0.0006,
+          // ~±7% per mouse-wheel notch at the default speed; the settings
+          // panel scales both steps together. See pageEditorSettings.ts.
+          ...wheelZoomConfig(settings.wheelZoomSpeed),
           wheelDisabled: false,
           touchPadDisabled: false,
         }}

@@ -2,7 +2,12 @@ import {
   HOST_PREFERENCE_HINT,
   HOST_PREFERENCE_LABEL,
 } from "../../inference/hostPreference";
-import type { PageEditorCanvasSettings } from "./pageEditorSettings";
+import {
+  WHEEL_ZOOM_SPEED_MAX,
+  WHEEL_ZOOM_SPEED_MIN,
+  wheelZoomPercentPerNotch,
+  type PageEditorCanvasSettings,
+} from "./pageEditorSettings";
 
 type PageEditorSettingsPanelProps = {
   settings: PageEditorCanvasSettings;
@@ -53,6 +58,43 @@ export function PageEditorSettingsPanel({
             : " Nothing is running on this computer right now, so jobs go to the cloud."
         }`}
       </p>
+
+      <div className="pe-dd-section">Navigation</div>
+      <p className="pe-dd-model">
+        How far the page zooms per mouse-wheel notch or trackpad step. Zoom
+        buttons and pinch are unaffected.
+      </p>
+      <div className="pe-dd-field pe-dd-field--stack">
+        <label htmlFor="pe-wheel-zoom-speed">
+          Scroll zoom speed{" "}
+          <strong>{settings.wheelZoomSpeed.toFixed(2)}×</strong>
+          <span className="pe-dd-range-hint">
+            {" "}
+            (≈{wheelZoomPercentPerNotch(settings.wheelZoomSpeed)}% per notch)
+          </span>
+        </label>
+        <input
+          id="pe-wheel-zoom-speed"
+          type="range"
+          min={WHEEL_ZOOM_SPEED_MIN}
+          max={WHEEL_ZOOM_SPEED_MAX}
+          step={0.25}
+          value={settings.wheelZoomSpeed}
+          onChange={(event) =>
+            onSettingsChange({
+              ...settings,
+              wheelZoomSpeed: Number(event.target.value),
+            })
+          }
+          onClick={(event) => event.stopPropagation()}
+        />
+        <div className="pe-dd-range-labels" aria-hidden="true">
+          <span>Precise</span>
+          <span>Fast</span>
+        </div>
+      </div>
+
+      <div className="pe-dd-divider" />
 
       <div className="pe-dd-section">Canvas overlays</div>
       <p className="pe-dd-model">

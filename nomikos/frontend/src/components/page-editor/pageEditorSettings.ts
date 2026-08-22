@@ -1,5 +1,18 @@
 const STORAGE_KEY = "nomikos_page_editor_settings";
 
+/**
+ * react-zoom-pan-pinch scales a wheel event by `smoothStep * |deltaY|`, and a
+ * physical mouse-wheel notch reports deltaY 120, so at 1× one notch zooms by
+ * roughly 0.0006 * 120 = 7%. That is deliberately gentle for precise annotation
+ * work; `wheelZoomSpeed` lets a reader who wants to fly across a page turn it
+ * up without anyone else inheriting the old runaway behaviour.
+ */
+export const BASE_WHEEL_SMOOTH_STEP = 0.0006;
+export const BASE_WHEEL_STEP = 0.06;
+export const WHEEL_ZOOM_SPEED_MIN = 0.5;
+export const WHEEL_ZOOM_SPEED_MAX = 6;
+const MOUSE_WHEEL_NOTCH_DELTA = 120;
+
 export type PageEditorCanvasSettings = {
   /** Multiplier for segment/block overlay stroke width (0.5-4). */
   overlayStrokeWidth: number;
@@ -11,6 +24,8 @@ export type PageEditorCanvasSettings = {
   handleSize: number;
   showLayoutBlocks: boolean;
   showBaselines: boolean;
+  /** Multiplier on how far one wheel notch or trackpad step zooms (0.5-6). */
+  wheelZoomSpeed: number;
 };
 
 export const DEFAULT_PAGE_EDITOR_SETTINGS: PageEditorCanvasSettings = {
@@ -20,7 +35,26 @@ export const DEFAULT_PAGE_EDITOR_SETTINGS: PageEditorCanvasSettings = {
   handleSize: 0.75,
   showLayoutBlocks: true,
   showBaselines: false,
+  wheelZoomSpeed: 1,
 };
+
+/** The `wheel` config for the editor's TransformWrapper at a given speed. */
+export function wheelZoomConfig(wheelZoomSpeed: number): {
+  step: number;
+  smoothStep: number;
+} {
+  return {
+    step: BASE_WHEEL_STEP * wheelZoomSpeed,
+    smoothStep: BASE_WHEEL_SMOOTH_STEP * wheelZoomSpeed,
+  };
+}
+
+/** Approximate zoom change, in percent, for one mouse-wheel notch at a speed. */
+export function wheelZoomPercentPerNotch(wheelZoomSpeed: number): number {
+  return Math.round(
+    BASE_WHEEL_SMOOTH_STEP * wheelZoomSpeed * MOUSE_WHEEL_NOTCH_DELTA * 100,
+  );
+}
 
 function clampNumber(
   value: unknown,
@@ -71,6 +105,12 @@ export function loadPageEditorSettings(): PageEditorCanvasSettings {
         typeof parsed.showBaselines === "boolean"
           ? parsed.showBaselines
           : DEFAULT_PAGE_EDITOR_SETTINGS.showBaselines,
+      wheelZoomSpeed: clampNumber(
+        parsed.wheelZoomSpeed,
+        WHEEL_ZOOM_SPEED_MIN,
+        WHEEL_ZOOM_SPEED_MAX,
+        DEFAULT_PAGE_EDITOR_SETTINGS.wheelZoomSpeed,
+      ),
     };
   } catch {
     return DEFAULT_PAGE_EDITOR_SETTINGS;
