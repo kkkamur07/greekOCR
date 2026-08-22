@@ -110,9 +110,9 @@ def test_training_and_serving_produce_the_same_model_input(mode: str, image_byte
 # instead of by behaviour. It went red on `src/models/trocr/augmentation/weather.py`,
 # whose grayscale is a luminance intermediate inside a fog composite that never becomes
 # a model input tensor -- a false positive answerable only by growing the allowlist.
-# Extending the same scan to `inference/` would have needed two more entries on
-# identical terms (`preprocessing/geometry.py`, `preprocessing/segment_refinement.py`),
-# both measuring geometry rather than producing model input.
+# Extending the same scan to `inference/` would have needed another entry on
+# identical terms (`architectures/calamari/preprocessing/geometry.py`), which
+# measures geometry rather than producing model input.
 #
 # The property it was reaching for -- training and serving derive the same luminance
 # from the same bytes -- is enforced above by

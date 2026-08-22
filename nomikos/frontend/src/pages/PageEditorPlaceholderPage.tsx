@@ -158,10 +158,6 @@ export function PageEditorPlaceholderPage() {
     setSaveMessage,
     mutationError,
     segmenting,
-    useOtsuRefinement,
-    setUseOtsuRefinement,
-    otsuSphereRadius,
-    setOtsuSphereRadius,
     segmentMessage,
     moveSelectedBaseline,
     saveSelectedLine,
@@ -381,10 +377,6 @@ export function PageEditorPlaceholderPage() {
             onResetSelectedLine={resetSelectedLine}
             actionsOpen={actionsOpen}
             onActionsOpenChange={setActionsOpen}
-            useOtsuRefinement={useOtsuRefinement}
-            onUseOtsuRefinementChange={setUseOtsuRefinement}
-            otsuSphereRadius={otsuSphereRadius}
-            onOtsuSphereRadiusChange={setOtsuSphereRadius}
             segmenting={segmenting}
             ocrRunning={ocrRunning}
             ocrScope={ocrScope}

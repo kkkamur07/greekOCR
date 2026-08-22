@@ -488,7 +488,7 @@ async def test_no_binding_anywhere_still_enqueues_with_a_null_model(method: str)
 
 async def test_request_params_override_an_explicit_models_defaults() -> None:
     owner_id = uuid.uuid4()
-    model = _model(InferenceTask.segment, {"min_iou": 0.97, "split_large_lines": True})
+    model = _model(InferenceTask.segment, {"heatmap_threshold": 0.17, "model_default": True})
     service, project, document, part, _lines, _inference = _fixture(owner_id=owner_id, model=model)
 
     job = await service.enqueue_segment_part(
@@ -498,17 +498,17 @@ async def test_request_params_override_an_explicit_models_defaults() -> None:
         document.id,
         part.id,
         model_id=model.id,
-        ml_params={"min_iou": 0.5},
+        ml_params={"heatmap_threshold": 0.5},
         execution=CLOUD_AVAILABLE,
     )
 
-    assert job.payload["ml_params"] == {"min_iou": 0.5, "split_large_lines": True}
+    assert job.payload["ml_params"] == {"heatmap_threshold": 0.5, "model_default": True}
 
 
 async def test_request_params_override_a_bindings_effective_params() -> None:
     owner_id = uuid.uuid4()
     model = _model(InferenceTask.segment)
-    resolved = _binding(model, {"min_iou": 0.97, "target_max_points": 80})
+    resolved = _binding(model, {"heatmap_threshold": 0.17, "binding_default": 80})
     service, project, document, part, _lines, _inference = _fixture(
         owner_id=owner_id, resolved=resolved
     )
@@ -519,17 +519,17 @@ async def test_request_params_override_a_bindings_effective_params() -> None:
         project.id,
         document.id,
         part.id,
-        ml_params={"min_iou": 0.5},
+        ml_params={"heatmap_threshold": 0.5},
         execution=CLOUD_AVAILABLE,
     )
 
-    assert job.payload["ml_params"] == {"min_iou": 0.5, "target_max_points": 80}
+    assert job.payload["ml_params"] == {"heatmap_threshold": 0.5, "binding_default": 80}
 
 
 async def test_the_payload_params_are_a_copy_of_the_catalog_row() -> None:
     """The job payload is a per-run snapshot; mutating it must not edit the shared model."""
     owner_id = uuid.uuid4()
-    model = _model(InferenceTask.segment, {"min_iou": 0.97})
+    model = _model(InferenceTask.segment, {"heatmap_threshold": 0.17})
     service, project, document, part, _lines, _inference = _fixture(owner_id=owner_id, model=model)
 
     job = await service.enqueue_segment_part(
@@ -541,6 +541,6 @@ async def test_the_payload_params_are_a_copy_of_the_catalog_row() -> None:
         model_id=model.id,
         execution=CLOUD_AVAILABLE,
     )
-    job.payload["ml_params"]["min_iou"] = 0.1
+    job.payload["ml_params"]["heatmap_threshold"] = 0.1
 
-    assert model.default_params == {"min_iou": 0.97}
+    assert model.default_params == {"heatmap_threshold": 0.17}

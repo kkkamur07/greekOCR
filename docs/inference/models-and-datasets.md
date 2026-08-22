@@ -10,8 +10,7 @@ catalog in [`inference/registry.yaml`](../../inference/registry.yaml).
 
 `blla-segment` runs an inference-owned BLLA topology on ONNX Runtime to identify
 line candidates on a page. Nomikos converts those candidates into editable
-geometry, preserves the legacy `kraken_ceiling` field, simplifies polygons,
-and can optionally refine or split candidates with Otsu-based processing.
+geometry, preserves the legacy `kraken_ceiling` field, and simplifies polygons.
 
 ### Calamari HTR
 

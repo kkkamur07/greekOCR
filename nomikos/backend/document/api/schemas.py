@@ -307,15 +307,6 @@ class TranscribePartRequest(BaseModel):
 
 class SegmentPartRequest(BaseModel):
     model_id: UUID | None = None
-    use_otsu_refinement: bool = False
-    otsu_sphere_radius: float = Field(default=4.0, gt=0, le=128)
-    # Stays at or below the stored-geometry bound so segmentation cannot produce lines
-    # the platform (or the inference service) would later refuse.
-    target_max_points: int = Field(default=80, gt=3, le=MAX_LINE_GEOMETRY_POINTS)
-    min_iou: float = Field(default=0.97, gt=0, le=1)
-    min_area_ratio: float = Field(default=0.95, gt=0, le=2)
-    split_large_lines: bool = True
-    split_vertical_gap_px: float = Field(default=12.0, gt=0, le=256)
 
 
 class LayoutResponse(BaseModel):
