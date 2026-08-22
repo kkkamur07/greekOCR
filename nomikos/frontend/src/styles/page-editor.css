@@ -111,6 +111,12 @@
   width: 100%;
   background: var(--canvas-bg);
 }
+/* The pan/zoom library rewrites this layer's `transform` every frame; promoting
+   it keeps the full-resolution scan and its overlay on the compositor instead
+   of repainting them on each step. */
+.pe-canvas-host .react-transform-component {
+  will-change: transform;
+}
 
 .pe-toolbar__sep {
   width: 1px;

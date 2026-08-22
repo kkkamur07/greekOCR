@@ -1,17 +1,12 @@
 const STORAGE_KEY = "nomikos_page_editor_settings";
 
 /**
- * react-zoom-pan-pinch adds `smoothStep * |deltaY|` to the scale per wheel
- * event. 0.006 is the value the editor shipped with; it was cut tenfold on
- * 2026-08-19 to fix a "page flies off" symptom that was really a stale
- * pan-velocity bug (see utils/zoomPanVelocity.ts), which left trackpad zooming
- * crawling. The original is the 1× default again; `wheelZoomSpeed` scales it,
- * and 0.1× is the tamed value for a mouse wheel that reports big deltas.
+ * Multiplier on the wheel zoom rate (see canvasZoom.ts). At 1× one mouse-wheel
+ * notch zooms by about 20%, and a trackpad glides in small steps; the range
+ * covers a quarter of that to three times it.
  */
-export const BASE_WHEEL_SMOOTH_STEP = 0.006;
-export const BASE_WHEEL_STEP = 0.06;
-export const WHEEL_ZOOM_SPEED_MIN = 0.1;
-export const WHEEL_ZOOM_SPEED_MAX = 2;
+export const WHEEL_ZOOM_SPEED_MIN = 0.25;
+export const WHEEL_ZOOM_SPEED_MAX = 3;
 
 export type PageEditorCanvasSettings = {
   /** Multiplier for segment/block overlay stroke width (0.5-4). */
@@ -24,7 +19,7 @@ export type PageEditorCanvasSettings = {
   handleSize: number;
   showLayoutBlocks: boolean;
   showBaselines: boolean;
-  /** Multiplier on how far one wheel notch or trackpad step zooms (0.1-2). */
+  /** Multiplier on how far one wheel notch or trackpad step zooms (0.25-3). */
   wheelZoomSpeed: number;
 };
 
@@ -37,17 +32,6 @@ export const DEFAULT_PAGE_EDITOR_SETTINGS: PageEditorCanvasSettings = {
   showBaselines: false,
   wheelZoomSpeed: 1,
 };
-
-/** The `wheel` config for the editor's TransformWrapper at a given speed. */
-export function wheelZoomConfig(wheelZoomSpeed: number): {
-  step: number;
-  smoothStep: number;
-} {
-  return {
-    step: BASE_WHEEL_STEP * wheelZoomSpeed,
-    smoothStep: BASE_WHEEL_SMOOTH_STEP * wheelZoomSpeed,
-  };
-}
 
 function clampNumber(
   value: unknown,

@@ -60,21 +60,20 @@ export function PageEditorSettingsPanel({
 
       <div className="pe-dd-section">Navigation</div>
       <p className="pe-dd-model">
-        How far the page zooms per mouse-wheel notch or trackpad step. 1× is the
-        editor's original speed; turn it down for a mouse wheel that zooms in
-        big jumps. Zoom buttons and pinch are unaffected.
+        How far the page zooms per mouse-wheel notch or trackpad step. Zoom
+        buttons and pinch are unaffected.
       </p>
       <div className="pe-dd-field pe-dd-field--stack">
         <label htmlFor="pe-wheel-zoom-speed">
           Scroll zoom speed{" "}
-          <strong>{settings.wheelZoomSpeed.toFixed(1)}×</strong>
+          <strong>{settings.wheelZoomSpeed.toFixed(2)}×</strong>
         </label>
         <input
           id="pe-wheel-zoom-speed"
           type="range"
           min={WHEEL_ZOOM_SPEED_MIN}
           max={WHEEL_ZOOM_SPEED_MAX}
-          step={0.1}
+          step={0.25}
           value={settings.wheelZoomSpeed}
           onChange={(event) =>
             onSettingsChange({
