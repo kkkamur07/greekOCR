@@ -183,6 +183,7 @@ export function PublicDocumentPage() {
               <PublicDocumentExports
                 projectId={projectId}
                 documentId={documentId}
+                documentName={document?.name ?? ""}
                 partId={activePart.id}
                 partIndex={activePartIndex}
               />

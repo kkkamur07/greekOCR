@@ -37,7 +37,7 @@ vi.mock("../api/client", async (importOriginal) => {
       getPublicDocument: vi.fn(),
       getPublicLayout: vi.fn(),
       getPublicTranscriptionPdf: vi.fn(),
-      getPublicPageXml: vi.fn(),
+      getPublicPageXmlBundle: vi.fn(),
     },
   };
 });
@@ -123,8 +123,8 @@ describe("PublicDocumentPage", () => {
     vi.mocked(api.getPublicTranscriptionPdf).mockResolvedValue(
       new Blob(["pdf"], { type: "application/pdf" }),
     );
-    vi.mocked(api.getPublicPageXml).mockResolvedValue(
-      new Blob(["xml"], { type: "application/xml" }),
+    vi.mocked(api.getPublicPageXmlBundle).mockResolvedValue(
+      new Blob(["PK"], { type: "application/zip" }),
     );
   });
 

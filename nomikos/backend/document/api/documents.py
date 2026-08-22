@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -11,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.annotation.application.export_service import AnnotationExportService
 from backend.annotation.application.page_xml_export_service import PageXmlExportService
 from backend.annotation.application.transcription_pdf_service import TranscriptionPdfService
+from backend.core.api.content_disposition import attachment_disposition
 from backend.core.api.pagination import MAX_CURSOR_LENGTH, decode_cursor, paginate_rows
 from backend.core.exceptions import ValidationError
 from backend.document.api.line_responses import line_response
@@ -91,6 +93,12 @@ XML_RESPONSE: dict[int | str, dict[str, Any]] = {
     200: {
         "content": {"application/xml": {"schema": {"type": "string", "format": "binary"}}},
         "description": "PAGE XML bytes",
+    }
+}
+ZIP_RESPONSE: dict[int | str, dict[str, Any]] = {
+    200: {
+        "content": {"application/zip": {"schema": {"type": "string", "format": "binary"}}},
+        "description": "Zip of the PAGE XML and the full-resolution page image it describes",
     }
 }
 
@@ -702,6 +710,36 @@ async def export_part_page_xml(
         content=xml_bytes,
         media_type="application/xml",
         headers={"Content-Disposition": 'attachment; filename="page.xml"'},
+    )
+
+
+@router.get(
+    "/{document_id}/parts/{part_id}/page-xml-bundle",
+    response_class=Response,
+    responses=ZIP_RESPONSE,
+)
+async def export_part_page_xml_bundle(
+    project_id: UUID,
+    document_id: UUID,
+    part_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> Response:
+    """The PAGE XML zipped next to the full-resolution page image it describes."""
+    bundle = await _page_xml_export_service.export_part_bundle(
+        db,
+        current_user,
+        project_id,
+        document_id,
+        part_id,
+    )
+    # Zipping a full manuscript scan is a memcpy plus a deflate of the XML; small,
+    # but off the event loop like every other byte-shuffling export here.
+    zip_bytes = await asyncio.to_thread(bundle.to_zip)
+    return Response(
+        content=zip_bytes,
+        media_type="application/zip",
+        headers={"Content-Disposition": attachment_disposition(bundle.zip_filename)},
     )
 
 

@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.api.pagination import PageCursor
 from backend.core.exceptions import AccessDeniedError, ValidationError
-from backend.document.application.document_access import DocumentAccess
+from backend.document.application.document_access import DocumentAccess, PartContext
 from backend.document.application.patch_fields import (
     DOCUMENT_UPDATE_FIELDS,
     reject_unknown_fields,
@@ -123,6 +123,20 @@ class DocumentCatalog:
     ) -> DocumentPart:
         context = await self._access.require_part(session, None, project_id, document_id, part_id)
         return context.part
+
+    async def get_published_part_context(
+        self,
+        session: AsyncSession,
+        project_id: UUID,
+        document_id: UUID,
+        part_id: UUID,
+    ) -> PartContext:
+        """The published part *and* its document, for callers that need both.
+
+        Exports name their files after the document, and a second ``get_document_public``
+        would repeat the access check this one already made.
+        """
+        return await self._access.require_part(session, None, project_id, document_id, part_id)
 
     async def update_document(
         self,
