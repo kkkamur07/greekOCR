@@ -7,7 +7,6 @@ import {
   loadPageEditorSettings,
   savePageEditorSettings,
   wheelZoomConfig,
-  wheelZoomPercentPerNotch,
 } from "./pageEditorSettings";
 
 describe("pageEditorSettings", () => {
@@ -22,9 +21,9 @@ describe("pageEditorSettings", () => {
   it("round-trips a saved wheel zoom speed", () => {
     savePageEditorSettings({
       ...DEFAULT_PAGE_EDITOR_SETTINGS,
-      wheelZoomSpeed: 3,
+      wheelZoomSpeed: 1.5,
     });
-    expect(loadPageEditorSettings().wheelZoomSpeed).toBe(3);
+    expect(loadPageEditorSettings().wheelZoomSpeed).toBe(1.5);
   });
 
   it("keeps settings saved before the wheel zoom speed existed", () => {
@@ -41,7 +40,7 @@ describe("pageEditorSettings", () => {
     );
   });
 
-  it.each([0, 7, "3"])(
+  it.each([0, 3, "1"])(
     "ignores an out-of-range or non-numeric wheel zoom speed (%j)",
     (value) => {
       localStorage.setItem(
@@ -63,11 +62,5 @@ describe("pageEditorSettings", () => {
       step: BASE_WHEEL_STEP * 2.5,
       smoothStep: BASE_WHEEL_SMOOTH_STEP * 2.5,
     });
-  });
-
-  it("describes one mouse-wheel notch in percent", () => {
-    // 0.0006 * 120 = 7.2% at the default speed: the value the PR 85 fix was tuned to.
-    expect(wheelZoomPercentPerNotch(1)).toBe(7);
-    expect(wheelZoomPercentPerNotch(4)).toBe(29);
   });
 });
