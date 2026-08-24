@@ -1,9 +1,7 @@
 """Map inference segment output onto the platform's canonical segment DTOs.
 
-This used to hang off the HTTP client that submitted jobs to the inference
-service. That client is gone (ADR 0003), but the mapping is not about transport
-at all: it is how a wire ``SegmentRunResponse`` — from a job callback or from a
-locally executed run — becomes something the merge services can apply.
+Converts a wire ``SegmentRunResponse`` (from a job callback or a locally
+executed run) into the form the merge services apply.
 """
 
 from __future__ import annotations

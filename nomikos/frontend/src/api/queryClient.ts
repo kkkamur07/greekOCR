@@ -26,11 +26,11 @@ export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: RESOURCE_FRESH_MS,
-      // The hand-rolled layer never retried, and the pages map a failure onto
-      // their own banner text immediately. Retrying would delay that banner.
+      // Pages map a failure onto their own banner text immediately; retrying
+      // would delay that.
       retry: false,
-      // Respects `staleTime`, so returning to a tab within the freshness window
-      // still costs nothing. This is the one behaviour the old layer lacked.
+      // Respects `staleTime`, so returning to a tab within the freshness
+      // window still costs nothing.
       refetchOnWindowFocus: true,
       refetchOnReconnect: true,
     },

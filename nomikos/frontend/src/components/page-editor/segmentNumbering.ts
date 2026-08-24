@@ -50,7 +50,7 @@ export function segmentNumberFor(
 /**
  * The `order` to persist for a newly drawn Segment: after every Segment already
  * on the Page, and never colliding with one, however gapped the stored orders
- * are. The Segment count cannot answer this - deleting a Segment leaves a hole,
+ * are. The Segment count cannot answer this: deleting a Segment leaves a hole,
  * not a shorter tail.
  */
 export function nextSegmentOrder(segments: NumberableSegment[]): number {

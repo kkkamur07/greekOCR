@@ -17,11 +17,11 @@ def sha256_file(path: Path) -> str:
 class ArtifactIntegrityError(ValueError):
     """A weights artifact does not match its pinned SHA-256 digest.
 
-    Subclasses ``ValueError`` for reach - the adapters raise and sort on
-    ``ValueError`` - but callers must never treat it as a bad request: nothing
+    Subclasses ``ValueError`` because the adapters raise and sort on
+    ``ValueError``, but callers must never treat it as a bad request: nothing
     about the submitted job is wrong, the weights on this machine are. The agent
-    reports it as a failed page with its own reason, and any surface that maps
-    exceptions to statuses owes it a service error rather than a client one.
+    reports it as a failed page with its own reason, and any surface mapping
+    exceptions to statuses owes it a service error, not a client one.
     """
 
 
@@ -71,16 +71,13 @@ def verify_artifact_sha256(path: Path, expected_sha256: str) -> None:
 def find_hub_artifact(cache_dir: Path, *, architecture: str | None) -> Path:
     """Locate the one runtime **Hub artifact** in a cache directory.
 
-    There is exactly one runtime format under ADR 0006 and it is ``.onnx`` for
-    both architectures. The rule that matters is *one* format, not which one:
-    this function used to rank two per architecture, which meant a directory
-    holding both silently decided which runtime ran.
-
-    That is not hypothetical here. ``snapshot_download`` fetches the whole repo
-    revision, and these repos publish the native checkpoint beside the graph -
-    so every cache directory holds a ``.pt`` or ``.safetensors`` this runtime
-    must not pick up. Naming only ``.onnx`` is what keeps the choice from being
-    made by directory contents.
+    There is exactly one runtime format under ADR 0006, ``.onnx`` for both
+    architectures. Ranking multiple candidate formats per architecture is a
+    real risk here: ``snapshot_download`` fetches the whole repo revision, and
+    these repos publish the native checkpoint beside the graph, so every cache
+    directory also holds a ``.pt`` or ``.safetensors`` this runtime must not
+    pick up. Naming only ``.onnx`` keeps the choice from being made by
+    directory contents instead of by design.
     """
     if architecture == "calamari":
         for name in ("best.onnx", "stable.onnx", "model.onnx"):

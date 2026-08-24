@@ -1,4 +1,4 @@
-"""Configuration primitives for the PyTorch Calamari CNN–BiLSTM."""
+"""Configuration primitives for the PyTorch Calamari CNN-BiLSTM."""
 
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ class CalamariTorchConfig:
 def default_model_config(
     *, classes: int, temperature: float = -1.0, lstm_layers: int = 2
 ) -> CalamariTorchConfig:
-    """Return the established Calamari CNN–BiLSTM topology."""
+    """Return the established Calamari CNN-BiLSTM topology."""
     if lstm_layers not in {1, 2}:
         raise ValueError("Calamari supports one or two bidirectional LSTM layers.")
     recurrent_layers = (

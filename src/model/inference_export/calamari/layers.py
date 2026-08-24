@@ -1,10 +1,7 @@
 """PyTorch layers matching the Calamari TensorFlow graph.
 
-Export-time code under ADR 0006: this graph is traced into ``best.onnx``, which
-is what a researcher actually runs. It was briefly the production runtime under
-ADR 0004, and before that it lived at
-``src/model/inference_export/calamari/layers.py`` and fed the same exporter it
-feeds again now.
+Export-time code under ADR 0006: this graph is traced into ``best.onnx``,
+which is what a researcher actually runs.
 """
 
 from __future__ import annotations
@@ -99,8 +96,6 @@ def pad_same(
     # exported graph would then pad every line to the width of the one dummy
     # input it was traced on. ``_shape_as_tensor`` keeps the time axis dynamic,
     # which is the whole reason the artifact accepts a variable-length line.
-    # Restored with the exporter by ADR 0006; ADR 0004 dropped it as dead code
-    # when this file was runtime-only.
     if torch.onnx.is_in_onnx_export():
         shape = torch._shape_as_tensor(x)
         time_size: int | Tensor = shape[-2]

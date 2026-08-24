@@ -1,6 +1,6 @@
 """Page geometry: the blocks and lines drawn over a document part.
 
-One responsibility — where the writing is on the page. The *text* of a line belongs to the
+One responsibility: where the writing is on the page. The *text* of a line belongs to the
 transcription module; the only reason this one knows ground truth exists at all is
 ``replace_part_lines``, which accepts an ``approved_text`` alongside each polygon so the
 editor can save a redrawn page and its corrections in one request. That single crossing is
@@ -8,7 +8,7 @@ served by an injected :class:`GroundTruthText`, not by inheriting it.
 
 ``manual_geometry`` is the through-line. Every single-shape edit here asserts human
 authorship, because a later model run must not silently overwrite a shape a researcher
-drew. The two bulk paths — ``replace_part_lines`` and ``reset_part_layout`` — deliberately
+drew. The two bulk paths, ``replace_part_lines`` and ``reset_part_layout``, deliberately
 do not, since they exist to hand geometry back to the model.
 """
 

@@ -1,4 +1,4 @@
-"""FastAPI application factory - wires routers from core and bounded contexts."""
+"""FastAPI application factory: wires routers from core and bounded contexts."""
 
 import logging
 import uuid
@@ -218,15 +218,11 @@ def _register_exception_handlers(app: FastAPI) -> None:
     async def agent_version_refused_handler(
         request: Request, exc: AgentVersionRefusedError
     ) -> JSONResponse:
-        """The one error on this platform that keeps its detail.
+        """The one error handler that returns detail instead of a fixed public message.
 
-        Every other handler above substitutes a fixed public message, because a
-        browser client has a human behind it and a leaked internal string helps
-        nobody. This response has a *program* behind it: an agent that cannot
-        read which version it needs cannot upgrade itself, and ADR 0002 makes
-        self-upgrade the mechanism that keeps stale agents off the claim path.
-        Nothing here is secret - the floor is a published number, and the CLI
-        must be able to learn it.
+        The caller here is an agent, not a browser: it needs the actual version
+        and reason to self-upgrade (ADR 0002). Nothing here is secret, the
+        version floor is public and the CLI needs to read it.
         """
         logger.info(
             "agent_version_refused reason=%s presented=%r minimum=%s path=%s",
@@ -339,9 +335,8 @@ def create_app() -> FastAPI:
     if ml_settings.cloud_inference_enabled or job_settings.job_worker_enabled:
         ml_settings.require_callback_receiver_configuration()
     get_storage_settings()
-    # The interactive docs and the OpenAPI document enumerate every route, body
-    # schema, and auth requirement. That is a development aid, not something an
-    # unauthenticated caller needs in production.
+    # Docs/OpenAPI expose every route, body schema, and auth requirement, a dev
+    # aid that shouldn't be reachable by unauthenticated callers in production.
     docs_enabled = not infrastructure_settings.is_production
     app = FastAPI(
         title="greekOCR Platform",
@@ -378,23 +373,21 @@ def create_app() -> FastAPI:
     app.include_router(media_router)
     app.include_router(public_router)
     app.include_router(public_media_router)
-    # The signed page image link's landing site on the local storage backend. It
-    # carries no authentication dependency on purpose: the signature *is* the
-    # authorization (ADR 0002), and it refuses to answer at all unless
-    # STORAGE_BACKEND=local.
+    # Landing site for signed page image links on the local storage backend. No
+    # auth dependency by design: the signature is the authorization (ADR 0002),
+    # and it only responds when STORAGE_BACKEND=local.
     app.include_router(signed_media_router)
     app.include_router(ml_models_router)
     app.include_router(ml_registry_router)
     app.include_router(execution_preference_router)
     # Always mounted; each device router carries require_device_pairing_enabled,
-    # so DEVICE_PAIRING_ENABLED turns the surface off per request rather than at
-    # boot. Off by default in production until the /pair consent page exists.
+    # so DEVICE_PAIRING_ENABLED turns the surface off per request, not at boot.
+    # Off by default in production until the /pair consent page exists.
     app.include_router(device_pairing_router)
     app.include_router(devices_router)
     app.include_router(device_self_router)
-    # The claim endpoint. It is a device route by credential and a job route by
-    # subject, and it carries the same DEVICE_PAIRING_ENABLED gate as the rest of
-    # the device surface - one switch turns the whole outbound agent layer on.
+    # Device route by credential, job route by subject. Same DEVICE_PAIRING_ENABLED
+    # gate as the rest of the device surface: one switch for the whole agent layer.
     app.include_router(device_claim_router)
     # The version floor on its own, so an agent can learn it is too old at launch
     # instead of finding out by claiming a page it would then have to hold while

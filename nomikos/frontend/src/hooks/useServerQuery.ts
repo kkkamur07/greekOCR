@@ -33,9 +33,9 @@ export type ServerQueryOptions<T, E = string> = {
    * Identity of this read, and the cache entry it fills.
    *
    * `null` disables the query: nothing is fetched and no state transition
-   * happens at all. That is what the page loaders' early `return`s did before -
-   * a missing route param or an absent access token leaves `loading` true while
-   * a redirect is under way, rather than flashing an empty page.
+   * happens at all. A missing route param or an absent access token leaves
+   * `loading` true while a redirect is under way, instead of flashing an
+   * empty page.
    */
   key: ResourceKey | null;
   /** What this read depends on, so a write can declare it stale. */

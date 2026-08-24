@@ -35,10 +35,8 @@ def _sanitize_log_field(value: str, *, max_len: int) -> str:
 async def _throttle_client_failure(request: Request) -> None:
     """Rate-limit before body validation (route dependency).
 
-    Shares the auth limiter's Postgres-backed store. The previous in-process
-    dictionary reset on every serverless cold start and was divided by the
-    worker count everywhere else, which is exactly the failure mode the auth
-    limiter was written to avoid.
+    Shares the auth limiter's Postgres-backed store: an in-process dict would
+    reset on every serverless cold start and wouldn't be shared across workers.
     """
     client_ip = attributable_client_ip(request)
     if client_ip:

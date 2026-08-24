@@ -1,7 +1,7 @@
 """Writing ground-truth text onto a line.
 
-Three use cases converge here — the bulk line replace, page-transcription pairing, and
-editing a ground-truth line directly — and all three need the same two invariants held:
+Three use cases converge here: the bulk line replace, page-transcription pairing, and
+editing a ground-truth line directly. All three need the same two invariants held:
 
 * a document has exactly **one** ground-truth layer, created on first write rather than
   by migration, because documents predate the layer and a document created through the

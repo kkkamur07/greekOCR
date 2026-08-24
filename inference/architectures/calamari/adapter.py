@@ -1,16 +1,10 @@
 """Calamari transcription on the ONNX Runtime CPU runtime (ADR 0006).
 
-Restored by ADR 0006 from the adapter ADR 0004 retired.
-The archived adapter carried its own copies of ``TranscribeLineFailure``,
-``_decode_greedy`` and ``_response_from_decoded`` because a Torch adapter held
-the originals; there is one adapter again, so they are simply here. What the
-archive did *not* have, and this does, is ``resolve_artifact`` (the digest is
-verified before the artifact is opened) and ``reraise_if_none_survived`` (an
-all-failed batch is a failed run, not a page of per-line errors).
-
-The **Hub artifact** is ``best.onnx``: the graph carries its own codec, line
-height and blank index in ``metadata_props``, which is why the runtime needs
-neither the ``.pt`` checkpoint nor a sidecar to decode.
+The Hub artifact is ``best.onnx``: the graph carries its own codec, line
+height and blank index in ``metadata_props``, so the runtime needs neither the
+``.pt`` checkpoint nor a sidecar to decode. ``resolve_artifact`` verifies the
+digest before the artifact is opened; ``reraise_if_none_survived`` treats an
+all-failed batch as a failed run rather than a page of per-line errors.
 """
 
 from __future__ import annotations
@@ -210,12 +204,11 @@ def run_calamari_transcribe_many(
     checkpoint_path: Path,
     artifact_sha256: str | None = None,
 ) -> list[TranscribeRunResponse | TranscribeLineFailure]:
-    # The request is checked before the artifact. ``architectures.artifact``
-    # spends a docstring on why its own three failures are ordered, and the same
-    # reasoning puts this ahead of them: an empty batch is a client error (422)
-    # whatever the state of the weights on disk, and running the preflight first
-    # would report a missing artifact (503) for a request that was never
-    # runnable in the first place.
+    # Checked before the artifact: an empty batch is a client error (422)
+    # regardless of the weights on disk, and running the artifact preflight
+    # first would report a missing artifact (503) for a request that was
+    # never runnable to begin with. See ``architectures.artifact`` for why its
+    # own failures are ordered the same way.
     if not line_images:
         raise ValueError("at least one line image is required")
 

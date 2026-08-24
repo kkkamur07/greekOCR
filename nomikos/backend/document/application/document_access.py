@@ -1,11 +1,10 @@
 """One question per endpoint: hand me the document (or part) this caller may touch.
 
-Before this module every read and write in the document context opened with the same
-three or four steps — load the project, decide membership or fall back to the published
-exception, load the document and confirm it really belongs to that project, then load the
-part and confirm it belongs to the document. Thirty-odd application methods repeated some
-prefix of that, so the rule was written thirty-odd times, a new endpoint could silently
-omit a step, and none of it could be exercised without going through HTTP.
+Every read and write in the document context needs the same three or four steps: load
+the project, decide membership or fall back to the published exception, load the document
+and confirm it belongs to that project, then load the part and confirm it belongs to the
+document. Centralizing them here means the rule is written once, a new endpoint cannot
+silently skip a step, and it can be exercised without going through HTTP.
 
 ``user is None`` selects the anonymous audience, and that is not a convenience overload:
 the public routers carry no authentication dependency at all, so ``None`` is the only
@@ -24,8 +23,8 @@ The status codes are behaviour, not detail, and are preserved exactly:
 
 Two loaders, deliberately. The project-scoped entry points use ``get_by_id``/``get_part``,
 which eager-load parts, lines and transcriptions because their callers go straight on to
-use them. :meth:`require_part_by_id` — the media hot path, one request per page image —
-uses the row-only ``get_by_id_for_authz``/``get_part_row``, because serving bytes needs
+use them. :meth:`require_part_by_id` (the media hot path, one request per page image) uses
+the row-only ``get_by_id_for_authz``/``get_part_row``, because serving bytes needs
 ``image_key`` and nothing else.
 """
 
@@ -51,7 +50,7 @@ class DocumentContext:
     """A document the caller is allowed to see, with the project it was authorized against.
 
     The project is returned rather than dropped because the callers that need a *second*
-    decision — publishing requires ownership, not mere membership — would otherwise have
+    decision (publishing requires ownership, not mere membership) would otherwise have
     to load it again.
     """
 
@@ -172,7 +171,7 @@ class DocumentAccess:
     async def part_in_document(
         self, session: AsyncSession, document: Document, part_id: UUID
     ) -> DocumentPart:
-        """A part that must belong to ``document`` — same containment rule as above."""
+        """A part that must belong to ``document``: same containment rule as above."""
         part = await self._documents.get_part(session, part_id)
         if part is None or part.document_id != document.id:
             raise NotFoundError("Part not found")

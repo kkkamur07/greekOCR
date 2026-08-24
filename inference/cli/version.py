@@ -1,19 +1,16 @@
-"""`nomikos version` - what this build is, and what it will tell the platform.
+"""`nomikos version`: what this build is, and what it will tell the platform.
 
-The number printed here is not a decoration. Issue 055 put a **version floor**
-on the **claim** path: every claim states its version in
-`X-Nomikos-Agent-Version`, and an agent below the floor is refused with `426`
-before it is authenticated - so it also stops reporting **capacity**. That makes
-"which version am I running" the first question worth asking when a machine
-stops taking work, and this subcommand is the answer to it.
+Issue 055 put a **version floor** on the **claim** path: every claim states
+its version in `X-Nomikos-Agent-Version`, and an agent below the floor is
+refused with `426` before it is authenticated, so it also stops reporting
+**capacity**. Useful for checking "which version am I running" when a machine
+stops taking work.
 
-The floor itself is deliberately not shown, but not because it cannot be: since
-`read_agent_floor`, `GET /device/v1/agent/version` answers it without a
-credential and without touching a queue, and `nomikos upgrade` - which this same
-package runs before every `nomikos run` - asks it there. This subcommand stays
-offline anyway. It is the thing a researcher runs when the network is the
-suspect, and a version report that needs the platform to answer cannot report
-the version of a machine that cannot reach it.
+The floor itself isn't shown here, though it's not secret: `GET
+/device/v1/agent/version` (via `read_agent_floor`) answers it without a
+credential, and `nomikos upgrade` checks it there before every `nomikos run`.
+This subcommand stays offline on purpose, for when the network itself is the
+suspect.
 """
 
 from __future__ import annotations
@@ -42,17 +39,16 @@ def installed_version() -> str:
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
-    """No options. A version report that takes flags is a version report that
-    can be asked the wrong question."""
+    """No options: this report should not depend on flags that could make it
+    answer a different question."""
 
 
 def run(args: argparse.Namespace) -> int:
     # Imported here to break a cycle, not to defer a cost: `api` imports
-    # `installed_version` from this module at *its* module scope, so a top-level
-    # import of `api` here - or of `credentials`, which imports `api` - fails on
-    # a partially initialised module and takes every subcommand with it. There is
-    # nothing to defer either way; `main` has already imported both through the
-    # other three commands by the time this runs.
+    # `installed_version` from this module at its own module scope, so importing
+    # `api` (or `credentials`, which imports `api`) at the top of this file fails
+    # on a partially initialised module and breaks every subcommand. Nothing is
+    # actually deferred: `main` has already imported both by the time this runs.
     from inference.cli.api import AGENT_VERSION_HEADER
     from inference.cli.credentials import CredentialError, credential_path, load_credential
 

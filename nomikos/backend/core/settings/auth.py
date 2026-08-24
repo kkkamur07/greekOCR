@@ -11,24 +11,23 @@ from backend.core.settings._env import env_settings_config
 
 _PLACEHOLDER_SECRET_VALUES = {"change-me", "change-me-in-production", "replace-me"}
 
-#: A signing key shorter than the HMAC-SHA256 block-equivalent output is padded
-#: by the algorithm, so it never contributes more than 256 bits regardless. 32
-#: bytes is the smallest key that cannot be brute-forced faster than the digest.
+#: HMAC-SHA256 pads any key shorter than its block-equivalent output, so a
+#: shorter key never contributes more than 256 bits anyway. 32 bytes is the
+#: smallest key that can't be brute-forced faster than the digest itself.
 MIN_JWT_SECRET_BYTES = 32
 
 #: Floor on ``zxcvbn``'s log10 estimate of the guesses needed to reach the secret.
 #:
-#: Measured rather than derived. Over 5000 draws each, the weakest generator worth
+#: Measured, not derived. Over 5000 draws each, the weakest generator worth
 #: admitting bottomed out at 27.45 (``secrets.token_hex(16)``); ``token_urlsafe(32)``
-#: at 40.49. The strongest *memorable* strings of the same length top out far below
-#: that - ``"correcthorsebatterystaple1234567"`` scores 16.9 and
-#: ``"change-me-in-production-abcdefgh"`` 16.8. 22 sits in the middle of that gap,
-#: with ~5 decades of margin before a legitimate secret is rejected, which matters:
-#: a false rejection here is a failed production boot.
+#: at 40.49. The strongest memorable strings of the same length score far lower:
+#: ``"correcthorsebatterystaple1234567"`` is 16.9, ``"change-me-in-production-abcdefgh"``
+#: is 16.8. 22 sits in the middle of that gap, with ~5 decades of margin before a
+#: legitimate secret is rejected (a false rejection here fails production boot).
 #:
-#: Deliberately NOT zxcvbn's 0-4 ``score``. That saturates at 4 for anything past
-#: ~10^10 guesses, which both of the memorable strings above clear - it is tuned for
-#: "is this an acceptable human password", a much lower bar than a signing key.
+#: Deliberately not zxcvbn's 0-4 ``score``: that saturates at 4 for anything past
+#: ~10^10 guesses, which both memorable strings above clear. It's tuned for "is
+#: this an acceptable human password", a much lower bar than a signing key.
 MIN_JWT_SECRET_GUESSES_LOG10 = 22.0
 
 
@@ -44,11 +43,9 @@ def _is_placeholder_secret(value: str) -> bool:
 def secret_guesses_log10(value: str) -> float:
     """log10 of the guesses zxcvbn estimates an attacker needs to reach ``value``.
 
-    zxcvbn is a real estimator rather than a character-frequency proxy: it matches
-    against common passwords, names, dates, keyboard walks, l33t substitutions and
-    repeats, so it sees the structure that a distribution-only measure cannot. That
-    is the whole reason to use it here instead of counting characters - the failure
-    mode this gate exists to catch is a human-chosen secret that *looks* varied.
+    zxcvbn matches against common passwords, names, dates, keyboard walks, l33t
+    substitutions, and repeats, so it catches structure a character-frequency
+    count would miss, e.g. a human-chosen secret that only looks varied.
     """
     if not value:
         return 0.0
@@ -76,11 +73,10 @@ class AuthSettings(BaseSettings):
         default=60,
         alias="AUTH_RATE_LIMIT_WINDOW_SECONDS",
     )
-    # `POST /device/v1/pairings` is capped per client address on its own budget:
-    # a researcher pairing a second laptop must not spend the sign-in budget, and
-    # a deployment that pairs many machines from one office NAT has to be able to
-    # raise this without also raising what online password guessing gets. It is a
-    # setting rather than a constant for the same reason every limit beside it is.
+    # `POST /device/v1/pairings` has its own rate limit budget, separate from
+    # sign-in, so pairing a second laptop doesn't eat into login attempts. A
+    # setting (not a constant) so a deployment pairing many devices from one
+    # NAT can raise it without also raising the password-guessing budget.
     device_pairing_rate_limit_requests: int = Field(
         default=10,
         alias="DEVICE_PAIRING_RATE_LIMIT_REQUESTS",

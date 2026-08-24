@@ -49,9 +49,9 @@ class TranscribeBatchLineResult(BaseModel):
     line_id: str | None = None
     line_index: int = Field(ge=0)
     # Exactly one of ``output``/``error`` is set. ``error`` is absent on every
-    # successful line, so a consumer written against the old shape still sees
-    # ``output`` on everything it used to see it on - what it must now handle is
-    # the new case where one line of a page failed and the rest did not.
+    # successful line, so a consumer that only reads ``output`` still gets it
+    # on every line that succeeded; it only needs to handle the case where one
+    # line of a page failed and the rest did not.
     output: TranscribeRunResponse | None = None
     error: str | None = None
 

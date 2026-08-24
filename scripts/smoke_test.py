@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""VRAM smoke test — find the sweet-spot batch size for Calamari and TrOCR on RTX 3090.
+"""VRAM smoke test: find the sweet-spot batch size for Calamari and TrOCR on RTX 3090.
 
 Also estimates total training time for every cluster training script.
 
@@ -196,7 +196,7 @@ def smoke_trocr(
     device = torch.device("cuda")
     best_bs, best_step_s = batch_sizes[0], 0.0
 
-    # Load model ONCE — avoid re-paying disk I/O + CUDA kernel compilation per batch
+    # Load model once, so we don't re-pay disk I/O and kernel compilation per batch
     print("  loading model …", flush=True)
     model = VisionEncoderDecoderModel.from_pretrained(str(checkpoint))
     dec_cfg = model.config.decoder
@@ -369,10 +369,10 @@ def main() -> None:
     trocr_base  = REPO_ROOT / "trocr_checkpoints" / "trocr-base-handwritten"
     trocr_small = REPO_ROOT / "trocr_checkpoints" / "trocr-small-handwritten"
 
-    # ── 1. Calamari — probe every 64 images up to 512 ────────────────────────
+    # ── 1. Calamari: probe every 64 images up to 512 ─────────────────────────
     cal_bs, cal_step_s = smoke_calamari(batch_sizes=[64, 128, 256, 320, 448, 512])
 
-    # ── 2. TrOCR-base (full fine-tune — all cluster pretraining scripts) ─────
+    # ── 2. TrOCR-base (full fine-tune, all cluster pretraining scripts) ──────
     trocr_base_bs, trocr_base_step_s = (0, 0.0)
     if trocr_base.exists():
         trocr_base_bs, trocr_base_step_s = smoke_trocr(

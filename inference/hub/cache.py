@@ -27,10 +27,9 @@ _COMMIT_SHA_PATTERN = re.compile(r"[0-9a-f]{40}")
 _SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
 
 # The **Hub cache** lives under the researcher's home directory, not beside the
-# code. This module ships inside the published `nomikos-inference` wheel, so
-# the old repository-relative default (`src/hf/cache/`) would have written
-# downloaded weights into site-packages: unwritable for a system install,
-# silently discarded on upgrade, and invisible to anyone looking for them.
+# code, because this module ships inside the published `nomikos-inference`
+# wheel: a repository-relative path would write into site-packages, which is
+# unwritable for a system install and gets silently discarded on upgrade.
 # `~/.nomikos/` is the same root the CLI keeps its device credential under.
 DEFAULT_CACHE_ROOT = Path.home() / ".nomikos" / "hf" / "cache"
 CACHE_ROOT_ENV = "HF_CACHE_ROOT"
@@ -72,10 +71,9 @@ def _validate_provenance(
 ) -> tuple[str, str]:
     """Both pins, proven present and well-formed, or ``ValueError``.
 
-    Returns them rather than returning ``None`` so the caller gets the narrowing
-    from the signature. It used to return ``None`` and the caller re-stated the
-    same facts as two ``assert`` statements, which `python -O` strips - leaving
-    the download to run against whatever unpinned revision was passed.
+    Returns them instead of ``None`` so the caller gets narrowing from the
+    signature rather than needing its own ``assert`` calls, which `python -O`
+    strips (and would silently allow an unpinned download).
     """
     if not hub_revision or not _COMMIT_SHA_PATTERN.fullmatch(hub_revision):
         raise ValueError(

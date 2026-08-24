@@ -4,16 +4,11 @@ The inference helper does not listen on loopback; it authenticates outbound with
 an opaque device token. These two tables hold the credential *hashes* and the
 short-lived pairing requests that mint them. No raw secret is ever stored.
 
-``helper_devices.inference_host`` is folded in from what used to be
-``007_execution_target``: a hosted worker is a device like any other (ADR 0003),
-so capacity is one query over one table instead of a device check plus a separate
-notion of cloud uptime. ``local`` is the right default - every device paired
-before the column existed was a researcher's own computer paired from a browser.
-
-The ``_has_table`` guards the pre-squash version carried are gone. They existed
-for databases stamped while 001 was still regenerated from ORM metadata, and no
-such database is left; a partial replay would now fail in 001's unguarded
-``CREATE TABLE`` long before reaching this revision anyway.
+``helper_devices.inference_host`` reflects ADR 0003: a hosted worker is a
+device like any other, so capacity is one query over one table instead of a
+device check plus a separate notion of cloud uptime. ``local`` is the right
+default since every device paired before this column existed was a
+researcher's own computer paired from a browser.
 """
 
 from collections.abc import Sequence
@@ -68,8 +63,7 @@ def _create_helper_devices() -> None:
             server_default=sa.text("now()"),
             nullable=False,
         ),
-        # Which host a paired device *is*. Last, matching the column order the
-        # nine-revision chain produced when 007 added it with ALTER TABLE.
+        # Which host a paired device *is*.
         sa.Column(
             "inference_host",
             EXECUTION_TARGET,

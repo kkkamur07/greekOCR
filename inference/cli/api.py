@@ -1,18 +1,17 @@
-"""The CLI's side of the platform protocols, over plain HTTP.
+"""HTTP client for the platform's device protocols.
 
-Two protocols, one client. Pairing is RFC 8628's device authorization grant with
-the typable `user_code` removed (`backend/ml/api/device_pairing.py`); the
-**claim** loop is the one endpoint ADR 0003 costs, plus the platform's existing
-job callback (`backend/jobs/api/device_claim.py`,
-`backend/jobs/api/internal_inference.py`). Nothing here designs anything - it is
-the client for wire contracts that are already settled, and the shapes below are
-the platform's DTOs read back.
+Pairing is RFC 8628's device authorization grant with the typable `user_code`
+removed (`backend/ml/api/device_pairing.py`); the **claim** loop is the one
+endpoint ADR 0003 costs, plus the platform's existing job callback
+(`backend/jobs/api/device_claim.py`, `backend/jobs/api/internal_inference.py`).
+This is a client for wire contracts that are already settled, not a design
+surface, and the shapes below are the platform's DTOs read back.
 
-`urllib.request` rather than an HTTP library, because `[project].dependencies` is
-the closure that reaches a researcher's laptop, and neither protocol needs
-streaming, connection reuse, or an authentication scheme to negotiate. One page
-per claim (ADR 0002) is what keeps that true: there is no long-lived transfer to
-manage, only a request per page.
+`urllib.request` rather than an HTTP library, because `[project].dependencies`
+is the closure that reaches a researcher's laptop, and neither protocol needs
+streaming, connection reuse, or a negotiated auth scheme. One page per claim
+(ADR 0002) keeps that true: no long-lived transfer to manage, just a request
+per page.
 """
 
 from __future__ import annotations
@@ -35,17 +34,16 @@ PLATFORM_URL_ENV = "NOMIKOS_API_URL"
 
 DEVICE_TOKEN_HEADER = "X-Nomikos-Device-Token"  # noqa: S105 - a header name, not a token
 AGENT_VERSION_HEADER = "X-Nomikos-Agent-Version"
-"""Which build of the agent is calling. The **version floor** judges it on the
+"""Which build of the agent is calling. Checked by the **version floor** on the
 **claim** path and on `GET /device/v1/agent/version`
-(`backend/ml/api/agent_version.py`); the constant lives here so the run loop and
-the launch check both state the same version this CLI reports."""
+(`backend/ml/api/agent_version.py`); defined here so the run loop and the
+launch check report the same version."""
 
 SERVICE_TOKEN_HEADER = "X-Nomikos-Service-Token"  # noqa: S105 - a header name, not a token
-"""A hosted worker's **service credential**. A separate header from the device
-token because the two resolve to different scopes (ADR 0005, decision 1): a
-device token claims `local` work on one account, this claims `cloud` work for the
-platform. Two credentials that must never be interchangeable by accident do not
-share a header."""
+"""A hosted worker's **service credential**, in its own header because it
+resolves to a different scope than the device token (ADR 0005, decision 1): a
+device token claims `local` work on one account, this claims `cloud` work for
+the platform. The two must never be interchangeable by accident."""
 
 WORKER_NAME_HEADER = "X-Nomikos-Worker-Name"
 """Which hosted worker is calling. Names its device row; not a secret."""
@@ -55,16 +53,16 @@ CALLBACK_PATH = "/internal/inference/job-complete"
 
 AGENT_VERSION_REFUSED_STATUS = 426
 AGENT_VERSION_UNSUPPORTED = "AGENT_VERSION_UNSUPPORTED"
-"""The one error code the CLI matches on, from the run loop and the launch check
-alike. Stable by contract - the platform's own module says changing it breaks
-every agent - and the only refusal that arrives machine-readable, because the
-error envelope replaces `HTTPException.detail` with a fixed public string
-everywhere else."""
+"""The one error code the CLI matches on, in the run loop and the launch check
+alike. Stable by contract (the platform's own module says changing it breaks
+every agent), and the only refusal that arrives machine-readable, since the
+error envelope otherwise replaces `HTTPException.detail` with a fixed public
+string."""
 
 IMAGE_TIMEOUT_SECONDS = 120.0
-"""A manuscript scan on a bad connection, not a JSON round trip. Still bounded:
-the **signed page image link** dies in about a minute anyway, so a fetch that has
-not finished long after that is not going to."""
+"""Generous because this fetches a scan, not a JSON round trip, but still
+bounded: the **signed page image link** dies in about a minute anyway, so a
+fetch that hasn't finished well past that isn't going to."""
 
 MAX_PAGE_IMAGE_BYTES_ENV = "NOMIKOS_MAX_PAGE_IMAGE_BYTES"
 
@@ -72,11 +70,11 @@ MAX_PAGE_IMAGE_BYTES_ENV = "NOMIKOS_MAX_PAGE_IMAGE_BYTES"
 def max_page_image_bytes() -> int:
     """Ceiling on a downloaded page image, loose and overridable.
 
-    A signed link names exactly one object and expires in about a minute, so the
-    practical bound is the platform's own upload cap, not this number. It exists
-    only to stop a slow-drip or hostile response from exhausting memory, so the
-    default is deliberately generous and any operator expecting larger objects
-    raises it via ``NOMIKOS_MAX_PAGE_IMAGE_BYTES``.
+    A signed link names exactly one object and expires in about a minute, so
+    the practical bound is the platform's own upload cap, not this number. It
+    exists only to stop a slow-drip or hostile response from exhausting memory,
+    so the default is generous; raise it via ``NOMIKOS_MAX_PAGE_IMAGE_BYTES``
+    if needed.
     """
     raw = os.environ.get(MAX_PAGE_IMAGE_BYTES_ENV)
     if raw is None:
@@ -88,19 +86,18 @@ def max_page_image_bytes() -> int:
     return max(1, parsed)
 
 
-# The platform caps these on the way in (`PairingStartRequest`). Truncating here
-# rather than sending an over-long value keeps a long hostname from turning into
-# a 422 a researcher cannot act on.
+# The platform caps these on the way in (`PairingStartRequest`). Truncating
+# here keeps a long hostname from turning into a 422 the researcher can't act on.
 DEVICE_NAME_LIMIT = 120
 PLATFORM_LIMIT = 32
 VERSION_LIMIT = 32
 
 REQUEST_TIMEOUT_SECONDS = 30.0
 
-# Pairing states, as the platform names them (`backend/ml/domain/devices.py`).
-# Every one of them arrives inside a 200 body - the platform's error envelope
-# replaces `HTTPException.detail` with a fixed public string, so a
-# machine-readable protocol state cannot survive a non-2xx response.
+# Pairing states, named as the platform names them (`backend/ml/domain/devices.py`).
+# All arrive inside a 200 body: the platform's error envelope replaces
+# `HTTPException.detail` with a fixed public string, so a machine-readable
+# state can't survive a non-2xx response.
 STATUS_AUTHORIZATION_PENDING = "authorization_pending"
 STATUS_SLOW_DOWN = "slow_down"
 STATUS_ACCESS_DENIED = "access_denied"
@@ -111,11 +108,11 @@ STATUS_APPROVED = "approved"
 LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 """The only hosts this CLI will talk to without TLS.
 
-Every request on this surface carries a bearer credential - the 180-day **device
-token**, or a **service credential** with wider scope than that - in a header.
-Over cleartext HTTP those are readable by anything on the path, so the scheme is
-checked once, where the client is built, rather than trusted per call. Loopback
-is the exception because nothing leaves the machine: it is what lets the
+Every request on this surface carries a bearer credential (the 180-day
+**device token**, or a **service credential** with wider scope) in a header.
+Over cleartext HTTP those are readable by anything on the path, so the scheme
+is checked once, where the client is built, rather than per call. Loopback is
+the exception because nothing leaves the machine: it's what lets the
 integration suite stand up a platform on `http://127.0.0.1:<port>`.
 """
 
@@ -131,9 +128,9 @@ class InsecurePlatformURL(PlatformError):
 class CredentialRefused(PlatformError):
     """The platform will not accept this agent's credential (401).
 
-    Its own exception because it is the one **claim** failure that backing off
-    cannot fix. A revoked, expired, or unknown credential answers 401 forever, so
-    a loop that retried it would hammer the platform until someone noticed;
+    Its own exception because it's the one **claim** failure that backing off
+    can't fix: a revoked, expired, or unknown credential answers 401 forever.
+    A loop that retried it would hammer the platform until someone noticed;
     stopping and saying `nomikos pair` is the only useful response.
     """
 
@@ -141,20 +138,20 @@ class CredentialRefused(PlatformError):
 class PageLeaseLost(PlatformError):
     """The platform says this agent is no longer holding the page it is reporting.
 
-    Its own exception for the mirror of the reason above: a 403 on the callback
-    is terminal for *this* agent. The **lease** expired, the page went back to
-    the queue, and someone else may already own it - so retrying the report is
-    at best noise and at worst a race with the agent that now holds it.
+    Its own exception, mirroring the reason above: a 403 on the callback is
+    terminal for *this* agent. The **lease** expired, the page went back to the
+    queue, and someone else may already own it, so retrying the report is at
+    best noise and at worst a race with the agent that now holds it.
     """
 
 
 class AgentVersionRefused(PlatformError):
     """This build is below the **version floor** and may not claim (issue 055).
 
-    Deliberately its own exception rather than a status code the loop inspects.
-    `retryable` is always false on the wire: no amount of backing off turns this
-    into work, so a claim loop that treats it as a transient failure would spin
-    forever against a platform that has already told it what to do.
+    Its own exception rather than a status code the loop inspects. `retryable`
+    is always false on the wire: no amount of backing off turns this into
+    work, so a claim loop that treated it as transient would spin forever
+    against a platform that already said what to do.
     """
 
     def __init__(
@@ -204,11 +201,11 @@ class PairingPoll:
 class AgentFloor:
     """What the platform makes of this agent's version, asked at launch.
 
-    One shape for both answers. A refusal and a notice carry the same four facts
-    - what was presented, the floor, the latest, and the package to install - and
-    differ only in whether work would have been handed over, so collapsing them
-    into one record with two booleans keeps the caller from having to catch an
-    exception to learn something the platform stated plainly.
+    One shape for both answers: a refusal and a notice carry the same four
+    facts (what was presented, the floor, the latest, the package to install)
+    and differ only in whether work would have been handed over. Collapsing
+    them into one record with two booleans keeps the caller from having to
+    catch an exception to learn something the platform already stated.
     """
 
     agent_version: str
@@ -244,9 +241,9 @@ class DeviceIdentity:
 class AgentNotice:
     """What the platform makes of this build, delivered *with* the work.
 
-    On every claim response, page or no page, so an idle agent still learns it
-    is behind. **Outdated** is not the same state as being below the **version
-    floor**: this one is served normally and merely told.
+    Arrives on every claim response, page or no page, so an idle agent still
+    learns it is behind. **Outdated** is not the same state as being below the
+    **version floor**: this one is served normally and merely noted.
     """
 
     agent_version: str
@@ -259,7 +256,7 @@ class AgentNotice:
 class ClaimedPage:
     """One page of work, and everything needed to run and report it.
 
-    The run fields are a flattened `JobSubmitRequest` - the contract the
+    The run fields are a flattened `JobSubmitRequest`, the same contract the
     inference runtime already takes, which is what keeps a laptop and a hosted
     worker literally the same program (ADR 0003).
     """
@@ -281,9 +278,9 @@ class ClaimedPage:
     def image_link_expired(self, *, now: datetime | None = None) -> bool:
         """Whether the **signed page image link** is already dead.
 
-        Checked before the fetch rather than after the 403, so a page whose link
-        died - a lid closed mid-claim, a machine that swapped - fails with the
-        reason instead of with a status the route deliberately makes ambiguous.
+        Checked before the fetch rather than after the 403, so a page whose
+        link died (a lid closed mid-claim, a machine that swapped) fails with
+        the reason instead of a status the route deliberately makes ambiguous.
         """
         if self.page_image_expires_at is None:
             return False
@@ -292,9 +289,9 @@ class ClaimedPage:
     def lease_expired(self, *, now: datetime | None = None) -> bool:
         """Whether this agent's **lease** has run out on the local clock.
 
-        Only ever used to *explain*, never to skip the callback: the platform is
-        the authority on who holds a page, and a laptop with a skewed clock must
-        not talk itself out of reporting work it actually finished.
+        Only used to *explain*, never to skip the callback: the platform is the
+        authority on who holds a page, and a laptop with a skewed clock must not
+        talk itself out of reporting work it actually finished.
         """
         if self.lease_expires_at is None:
             return False
@@ -318,8 +315,8 @@ def default_platform_url(environ: dict[str, str] | None = None) -> str:
 
 
 def _is_loopback(host: str | None) -> bool:
-    """Whether a hostname names this machine. `urlsplit` has already lowercased
-    it and stripped the brackets off an IPv6 literal."""
+    """Whether a hostname names this machine. `urlsplit` has already
+    lowercased it and stripped the brackets off an IPv6 literal."""
     return bool(host) and host in LOOPBACK_HOSTS
 
 
@@ -335,9 +332,9 @@ def require_secure_platform_url(base_url: str) -> str:
     """The trimmed URL, or `InsecurePlatformURL` if it would leak a credential.
 
     Enforced once, where a client is built, rather than at each call site that
-    supplies a URL - `--api-url`, `$NOMIKOS_API_URL`, and the stored credential
-    are three doors into the same room, and a check on one of them is a check on
-    none of them.
+    supplies a URL: `--api-url`, `$NOMIKOS_API_URL`, and the stored credential
+    are three doors into the same room, and a check on one of them is a check
+    on none of them.
     """
     trimmed = base_url.rstrip("/")
     if is_secure_platform_url(trimmed):
@@ -353,9 +350,9 @@ def require_secure_platform_url(base_url: str) -> str:
 def this_machine_name() -> str:
     """What the consent screen will call this computer.
 
-    Self-reported and rendered as inert text by the `/pair` page, which says so:
-    a convincing name is not evidence, and the **confirmation code** is what a
-    researcher actually checks.
+    Self-reported and rendered as inert text by the `/pair` page: a convincing
+    name is not evidence, and the **confirmation code** is what a researcher
+    actually checks.
     """
     name = socket.gethostname().strip() or "unnamed machine"
     return name[:DEVICE_NAME_LIMIT]
@@ -427,13 +424,13 @@ class PlatformClient:
     ) -> tuple[int, Any]:
         """Send one request; return `(status, decoded body)`.
 
-        Non-2xx statuses are returned rather than raised, because on this surface
+        Non-2xx statuses are returned rather than raised, since on this surface
         they are answers: a 401 from `/device/v1/self` is how a revoked device
         finds out. Only a failure to reach the platform at all is an exception.
 
-        `timeout` overrides the client's default for the one call that needs it:
-        a long poll is *expected* to hold the socket open, so the deadline that
-        suits a JSON round trip would abort it every time.
+        `timeout` overrides the client's default for the one call that needs
+        it: a long poll is *expected* to hold the socket open, so the deadline
+        that suits a JSON round trip would abort it every time.
         """
         deadline = self.timeout if timeout is None else timeout
         url = f"{self.base_url}{path}"
@@ -529,10 +526,10 @@ class PlatformClient:
     def read_self(self, *, device_token: str) -> DeviceIdentity | None:
         """Confirm a stored credential. `None` means the platform refused it.
 
-        The platform answers every rejection - unknown, expired, revoked - with
-        the same 401 and the same public message, so this cannot say *why*. The
-        caller pairs it with the stored expiry, which is the one thing it does
-        know locally, to name the likely cause.
+        The platform answers every rejection (unknown, expired, revoked) with
+        the same 401 and the same public message, so this can't say *why*. The
+        caller pairs it with the stored expiry, the one thing it knows
+        locally, to name the likely cause.
         """
         status, body = self._request(
             "GET", "/device/v1/self", headers={DEVICE_TOKEN_HEADER: device_token}
@@ -559,17 +556,17 @@ class PlatformClient:
     def claim_page(self, *, credential: dict[str, str], wait_seconds: int) -> Claim:
         """Take at most one page of work, or come back empty.
 
-        The credential decides the **execution target** and the caller cannot
-        ask for a different one, so there is nothing to send but how long this
-        agent is willing to wait. `wait_seconds` is clamped by the platform, not
-        here: the ceiling is an operational dial and belongs to whoever is
-        running it.
+        The credential decides the **execution target** and the caller can't
+        ask for a different one, so there's nothing to send but how long this
+        agent is willing to wait. `wait_seconds` is clamped by the platform,
+        not here: the ceiling is an operational dial that belongs to whoever
+        is running it.
 
-        The socket deadline is therefore the *requested* wait plus the ordinary
-        request budget, not the ordinary budget alone. A long poll that asks the
-        platform to hold the connection for its own ceiling and then hangs up
-        first would time out every claim it made, and the flag that asked for it
-        would read as broken rather than as unsupported.
+        The socket deadline is the *requested* wait plus the ordinary request
+        budget, not the budget alone. A long poll that asked the platform to
+        hold the connection for its own ceiling and then hung up first would
+        time out every claim it made, and the flag that asked for it would
+        read as broken rather than unsupported.
         """
         wait = max(0, int(wait_seconds))
         status, body = self._request(
@@ -606,17 +603,17 @@ class PlatformClient:
     def fetch_page_image(self, url: str) -> bytes:
         """Download the one page image a claim points at.
 
-        **No credential is attached, deliberately.** The signature in the URL is
-        the authorization (ADR 0002); sending the device token here would imply
-        the link needed it, and the link reaches exactly one object either way.
-        It is also why this bypasses `_request`: that method adds headers this
-        request has no business carrying, and the answer is bytes rather than
-        JSON.
+        **No credential is attached, deliberately.** The signature in the URL
+        is the authorization (ADR 0002); sending the device token here would
+        imply the link needed it, and the link reaches exactly one object
+        either way. That's also why this bypasses `_request`: that method adds
+        headers this request has no business carrying, and the answer is
+        bytes rather than JSON.
 
-        The URL is server-controlled end to end, so its scheme is checked before
-        it reaches the opener. `urlopen` is not an HTTP client - the default
-        opener also services `file:`, which would turn "here is your page image"
-        into a read of any path the researcher's account can open.
+        The URL is server-controlled end to end, so its scheme is checked
+        before it reaches the opener. `urlopen` is not an HTTP client: the
+        default opener also services `file:`, which would turn "here is your
+        page image" into a read of any path the researcher's account can open.
         """
         self._require_fetchable(url)
         # S310 (here and on the `urlopen` below): `_require_fetchable` above
@@ -648,10 +645,10 @@ class PlatformClient:
         """Refuse a page image link that is not an HTTPS URL.
 
         Plain HTTP is allowed only when this client is itself pointed at a
-        loopback platform, which is the integration suite and nothing else. The
-        page image carries no credential, so the objection is not eavesdropping:
-        it is that a URL the platform chose must not be able to name a scheme
-        that reads this machine instead of the network.
+        loopback platform (the integration suite, and nothing else). The page
+        image carries no credential, so this isn't about eavesdropping: it's
+        that a URL the platform chose must not be able to name a scheme that
+        reads this machine instead of the network.
         """
         parts = urlsplit(url)
         if parts.scheme == "https":
@@ -673,10 +670,11 @@ class PlatformClient:
     ) -> None:
         """End the page, one way or the other.
 
-        Not a new endpoint: this is the platform's existing `JobCallbackRequest`
-        (ADR 0003), authorised by the same credential the page was claimed with
-        and narrowed to the page this agent is actually holding. A researcher's
-        laptop has no webhook secret and must not be given one.
+        Not a new endpoint: this is the platform's existing
+        `JobCallbackRequest` (ADR 0003), authorised by the same credential the
+        page was claimed with and narrowed to the page this agent is actually
+        holding. A researcher's laptop has no webhook secret and must not be
+        given one.
         """
         payload: dict[str, Any] = {
             "inference_job_id": page.inference_job_id,
@@ -708,14 +706,14 @@ class PlatformClient:
     def read_agent_floor(self, *, agent_version: str) -> AgentFloor:
         """Ask what this version is allowed to do, without asking for work.
 
-        The same comparison the **claim** path runs, on an endpoint that touches
-        no queue. That separation is the point: an agent learns it is below the
-        floor at its launch moment, when nothing is in flight and replacing its
-        own code is safe, rather than while holding a page it has already been
+        Runs the same comparison the **claim** path runs, on an endpoint that
+        touches no queue. That separation is the point: an agent learns it's
+        below the floor at launch, when nothing is in flight and replacing its
+        own code is safe, rather than while holding a page it's already been
         handed.
 
-        No credential is sent, and none is needed - the platform resolves the
-        version before it looks at one. So this answers on a machine that has
+        No credential is sent or needed: the platform resolves the version
+        before it looks at one. So this also answers for a machine that has
         never paired, which is exactly the machine most likely to be stale.
         """
         status, body = self._request(
@@ -784,8 +782,8 @@ def _version_refusal(body: Any, base_url: str) -> AgentVersionRefused:
     """Read a 426 back into an exception the run loop can print.
 
     The refusal is the one failure on this platform that keeps its detail, so
-    every field below really is there - but a 426 from something that is not the
-    platform is still possible, and reading it must not raise a `KeyError` on
+    every field below really is there, but a 426 from something that isn't the
+    platform is still possible, so reading it must not raise a `KeyError` on
     top of the refusal.
     """
     error = body.get("error") if isinstance(body, dict) else None
@@ -803,9 +801,9 @@ def _version_refusal(body: Any, base_url: str) -> AgentVersionRefused:
 def _refusal_floor(base_url: str, agent_version: str, body: Any) -> AgentFloor:
     """Read a 426 body into the same record a 200 produces.
 
-    A 426 that does not carry the contract is a bug on the platform, not a stale
-    agent, and it must not be reported as one - an agent told to upgrade with no
-    version to upgrade to would fail loudly for the wrong reason.
+    A 426 that doesn't carry the contract is a bug on the platform, not a
+    stale agent, and it must not be reported as one: an agent told to upgrade
+    with no version to upgrade to would fail loudly for the wrong reason.
     """
     error = body.get("error") if isinstance(body, dict) else None
     if not isinstance(error, dict) or error.get("code") != AGENT_VERSION_UNSUPPORTED:

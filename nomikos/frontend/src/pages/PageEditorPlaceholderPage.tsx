@@ -352,9 +352,9 @@ export function PageEditorPlaceholderPage() {
                 current ? { ...current, workflow } : current,
               );
               // Publishing is the one write in this editor that changes what a
-              // reader can reach at all. This handler used to stop at the local
-              // copy above, so the document list, the detail page and the
-              // public page went on showing the old status.
+              // reader can reach at all, so the local copy above isn't
+              // enough: without this, the document list, detail page and
+              // public page would keep showing the old status.
               if (projectId && documentId) {
                 invalidateAfter.documentUpdated(projectId, documentId);
               }

@@ -1,19 +1,19 @@
 """Enqueue ML jobs for document parts.
 
-One responsibility — turning "segment this page" or "transcribe these lines" into a
+One responsibility: turning "segment this page" or "transcribe these lines" into a
 ``pending`` row an inference agent will claim. It is the only module in this context that
 knows about the ML catalog, and the only one that writes ``jobs``.
 
 Model resolution is the substance behind the small interface: an explicit ``model_id``
 wins and contributes its defaults, otherwise the nearest binding (part, then document,
-then project) is consulted, and *no* binding is not an error — the job goes out with a
+then project) is consulted, and *no* binding is not an error: the job goes out with a
 null model and the agent's own default applies. That last part is why ``NotFoundError``
 from the resolver is swallowed here rather than propagated.
 
 **Execution target** is fixed here, and only here, because this is the first moment all
 three inputs exist at once: the caller's account preference and the **capacity** reading
 arrive as an :class:`ExecutionRequest` from the route, and **host eligibility** is only
-knowable once the model has been resolved. The request is a value, not a collaborator —
+knowable once the model has been resolved. The request is a value, not a collaborator:
 capacity is read once at the top of submission and then carried down, so nothing further
 along can re-decide. When no eligible host has capacity this raises instead of writing a
 row: a job created for a host nobody claims from has no terminal outcome.

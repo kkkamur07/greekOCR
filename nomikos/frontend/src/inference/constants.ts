@@ -1,15 +1,14 @@
 /**
  * How a researcher installs and starts the **inference agent**.
  *
- * These are commands, not download links, and that is the whole change ADR 0002
- * made here. This file used to publish four per-OS installer URLs pointing at
- * `releases/latest/download/…`; the workflow that built those assets is gone,
- * so the first release cut after that would have turned every one of them into
- * a 404. A command a researcher types cannot rot the same way, and there is one
- * set of them for every platform because there is one **published package**.
+ * These are commands, not download links (ADR 0002): a per-OS installer URL
+ * pointing at `releases/latest/download/…` breaks the moment the release
+ * workflow that built it changes, while a command a researcher types cannot
+ * rot the same way. There is one set of them for every platform because
+ * there is one **published package**.
  *
  * Nothing here is fetched by the browser. The page says what to run and then
- * stops - the agent talks to the platform outbound, and this tab learns it is
+ * stops: the agent talks to the platform outbound, and this tab learns it is
  * running from **capacity** on the account's execution-target response, never
  * by probing the machine it happens to be displayed on.
  */

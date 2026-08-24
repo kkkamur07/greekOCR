@@ -28,7 +28,7 @@ const LABELS: Record<StatusVariant, string> = {
 
 /**
  * These read as **capacity**, not as a promise. Nothing here claims where a
- * given job ran - the job says that itself, which is the whole point of the
+ * given job ran: the job says that itself, which is the whole point of the
  * announcement line.
  */
 const TITLES: Record<StatusVariant, string> = {

@@ -3,23 +3,24 @@
 The order of what this prints is the design, not the presentation:
 
 1. **The pairing URL, first and always.** ADR 0002 demotes `webbrowser.open()`
-   from *the only affordance the process has* to a convenience, because opening
-   a browser is actively wrong over SSH. The printed URL is the thing that makes
-   the flow work everywhere; the browser is layered on top of it and may fail
-   silently without costing anything.
+   from *the only affordance the process has* to a convenience, since opening
+   a browser is actively wrong over SSH. The printed URL is what makes the
+   flow work everywhere; the browser is layered on top and may fail silently
+   without costing anything.
 2. **The confirmation code, before the wait begins.** ADR 0001 decision 13
-   derived a code for the consent screen and noted that nothing displayed it on
-   the client, which left the screen asking for consent with nothing checkable
-   on it - every other field there is supplied by whoever started the pairing.
-   Printing it is the whole mitigation: a researcher who was sent a phishing
-   link sees a code their own terminal never showed.
+   derived a code for the consent screen, noting that nothing displayed it on
+   the client, which left the screen asking for consent with nothing
+   checkable on it (every other field there is supplied by whoever started
+   the pairing). Printing it is the whole mitigation: a researcher sent a
+   phishing link sees a code their own terminal never showed.
 
-Two states end this command without a new device row. A machine that is already
-paired says so, because silently starting a second pairing would leave an orphan
-device on the account with no explanation for it. A machine whose credential the
-platform no longer accepts reports that and exits non-zero, because revocation is
-a decision someone made in a browser (ADR 0001, decision 11) and re-pairing over
-it without saying so would undo that decision quietly.
+Two states end this command without a new device row. A machine that's
+already paired says so, since silently starting a second pairing would leave
+an orphan device on the account with no explanation. A machine whose
+credential the platform no longer accepts reports that and exits non-zero,
+since revocation is a decision someone made in a browser (ADR 0001, decision
+11), and re-pairing over it without saying so would undo that decision
+quietly.
 """
 
 from __future__ import annotations
@@ -55,16 +56,16 @@ from inference.cli.credentials import (
 )
 from inference.cli.version import installed_version
 
-# What this machine tells the platform it can do. The **execution target** a job
-# runs on is decided at submission from **host eligibility** and **capacity**,
-# not from this - it is recorded for support, and for the day a second runtime
-# exists to distinguish.
+# What this machine tells the platform it can do. The **execution target** a
+# job runs on is decided at submission from **host eligibility** and
+# **capacity**, not from this - it's recorded for support, and for the day a
+# second runtime exists to distinguish.
 CAPABILITIES = {"runtime": "torch"}
 
 _MINIMUM_POLL_SECONDS = 1
 _POLL_MARGIN_SECONDS = 5
 """Kept polling this far past the advertised expiry, so the platform is what
-declares a pairing dead rather than the client's own clock."""
+declares a pairing dead, not the client's own clock."""
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
@@ -171,10 +172,10 @@ def _report_existing(
 def _report_rejected(errors, credential: DeviceCredential) -> int:
     """The platform refused the stored credential. Say which cause is likely.
 
-    Every rejection - unknown, expired, revoked - comes back as the same 401
-    with the same public message, so the platform cannot be asked which one it
-    was. The stored expiry is the one fact available locally, and it separates
-    the two cases a researcher would act on differently.
+    Every rejection (unknown, expired, revoked) comes back as the same 401
+    with the same public message, so the platform can't be asked which one
+    it was. The stored expiry is the one fact available locally, and it
+    separates the two cases a researcher would act on differently.
     """
     if credential.is_expired():
         errors.print("[red]This machine's device token has expired.[/red]")
@@ -202,10 +203,11 @@ def _report_rejected(errors, credential: DeviceCredential) -> int:
 # The pairing itself
 # ---------------------------------------------------------------------------
 def _pair(console, errors, client: PlatformClient, args: argparse.Namespace) -> int:
-    # Truncated after the choice, not inside `this_machine_name()`: the platform
-    # caps the field on the way in, and a `--name` over the cap is the same 422
-    # the cap exists to keep a long hostname from producing. Either source can be
-    # too long, so the limit belongs where the name is settled.
+    # Truncated after the choice, not inside `this_machine_name()`: the
+    # platform caps the field on the way in, and a `--name` over the cap is
+    # the same 422 the cap exists to keep a long hostname from producing.
+    # Either source can be too long, so the limit belongs where the name is
+    # settled.
     device_name = ((args.name or this_machine_name()).strip() or this_machine_name())[
         :DEVICE_NAME_LIMIT
     ]
@@ -281,7 +283,7 @@ def _maybe_open_browser(console, started: StartedPairing, *, no_browser: bool) -
     if no_browser:
         return
     if _looks_like_ssh():
-        # Over SSH a browser either does not open or opens on the wrong machine.
+        # Over SSH a browser either doesn't open or opens on the wrong machine.
         console.print("[dim]Not opening a browser: this looks like an SSH session.[/dim]")
         return
     try:
@@ -301,10 +303,10 @@ def _looks_like_ssh() -> bool:
 def _wait_for_approval(console, errors, client: PlatformClient, started: StartedPairing):
     """Poll until the browser decides, the request dies, or its lifetime runs out.
 
-    The cadence comes from the platform on every response, not from a constant
-    here: `DEVICE_PAIRING_POLL_INTERVAL_SECONDS` is an operational dial, and
-    `slow_down` returns a doubled interval that this must honour or the pairing
-    row starts burning attempts.
+    The cadence comes from the platform on every response, not from a
+    constant here: `DEVICE_PAIRING_POLL_INTERVAL_SECONDS` is an operational
+    dial, and `slow_down` returns a doubled interval that this must honour or
+    the pairing row starts burning attempts.
     """
     interval = max(started.interval_seconds, _MINIMUM_POLL_SECONDS)
     deadline = time.monotonic() + started.expires_in + _POLL_MARGIN_SECONDS

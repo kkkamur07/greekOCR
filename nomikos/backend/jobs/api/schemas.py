@@ -42,14 +42,13 @@ class JobResponse(BaseModel):
     # field: the host is stated whatever the status.
     execution_target: ExecutionTarget
     preferred_execution_target: ExecutionTarget
-    # The preferred host had no **capacity**, so the job went to the other one.
-    # Announced on the job, never in a transient toast — a researcher who looks
-    # away must still be able to read where their work went. Issue 059 renders
-    # it; this issue only has to make it true and readable.
+    # The preferred host had no capacity, so the job went to the other one.
+    # Announced on the job, never in a transient toast, so a researcher who
+    # looks away can still read where their work went.
     execution_target_substituted: bool = False
-    # Retained for clients written against the pre-execution-target API. Now
-    # derived from the column rather than the payload, so there is one source of
-    # truth. ``local_only`` was never a value here and is not one now.
+    # Retained for clients written against the pre-execution-target API,
+    # derived from the column rather than the payload so there is one source
+    # of truth. ``local_only`` was never a value here.
     execution: Literal["local", "cloud"] | None = None
 
     model_config = {"from_attributes": True}

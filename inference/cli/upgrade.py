@@ -1,54 +1,57 @@
 """Self-upgrade at launch, and only at launch.
 
-A CLI has something a daemon does not: a launch moment with no in-flight work.
-Before it claims anything, the agent asks the platform what it must be running
-(`GET /device/v1/agent/version`), and there are exactly three answers:
+A CLI has something a daemon doesn't: a launch moment with no in-flight work.
+Before it claims anything, the agent asks the platform what it must be
+running (`GET /device/v1/agent/version`), and there are exactly three
+answers:
 
-* **below the floor** - install a newer build, then re-exec into it and go on to
-  claim. This is the only moment at which the process may replace its own code.
-* **outdated** - print a notice and claim anyway. Most upgrades are not urgent,
-  and refusing them would turn every release into an outage for anyone who had
-  not restarted.
+* **below the floor** - install a newer build, then re-exec into it and go on
+  to claim. This is the only moment at which the process may replace its own
+  code.
+* **outdated** - print a notice and claim anyway. Most upgrades aren't
+  urgent, and refusing them would turn every release into an outage for
+  anyone who hadn't restarted.
 * **current** - print nothing and claim.
 
 Never mid-session
 -----------------
-There is one call site, in `main()`, before the command is dispatched. Nothing
-in a claim loop may call back into this module: a process that swaps its own
-code while a page is in flight is running one version's model on another
-version's downloaded weights, having already told the platform which version it
-was. The **lease** would return the page to the queue, but the wrong output
-would already have been posted.
+There is one call site, in `main()`, before the command is dispatched.
+Nothing in a claim loop may call back into this module: a process that swaps
+its own code while a page is in flight would run one version's model on
+another version's downloaded weights, having already told the platform which
+version it was. The **lease** would return the page to the queue, but the
+wrong output would already have been posted.
 
 A failed upgrade is loud and fatal
 ----------------------------------
-Non-zero exit, a message naming what to do, and no claiming. The failure worth
-engineering against is not a crash - it is a researcher watching a terminal that
-looks busy while nothing is being transcribed, so an agent that cannot make
-itself claimable stops instead of continuing quietly.
+Non-zero exit, a message naming what to do, and no claiming. The failure
+worth guarding against is not a crash but a researcher watching a terminal
+that looks busy while nothing is being transcribed, so an agent that can't
+make itself claimable stops instead of continuing quietly.
 
 Accepted risk, recorded rather than mitigated
 ---------------------------------------------
 Auto-upgrade executes newly fetched code without asking. A compromised
-`nomikos-inference` on the index this machine installs from therefore reaches
-every researcher's laptop at its next launch, with no human in the loop.
-Mitigable by pinning to published hashes; not eliminable, because the point of
-the feature is to install something nobody has approved yet. Two things narrow
-it rather than close it: the platform names neither a command to run nor *which*
-package to install - the name is pinned to `DISTRIBUTION_NAME` here and a
-mismatch is fatal (`_reject_unexpected_target`), so the only thing a compromised
-platform can choose is the *version* of this one distribution; and the installer
-is whichever one already owns this environment, so the index is the one the
+`nomikos-inference` on the index this machine installs from therefore
+reaches every researcher's laptop at its next launch, with no human in the
+loop. Mitigable by pinning to published hashes; not eliminable, since the
+point of the feature is to install something nobody has approved yet. Two
+things narrow the risk rather than close it: the platform names neither a
+command to run nor *which* package to install (the name is pinned to
+`DISTRIBUTION_NAME` here, and a mismatch is fatal via
+`_reject_unexpected_target`, so the only thing a compromised platform can
+choose is the *version* of this one distribution); and the installer is
+whichever one already owns this environment, so the index is the one the
 researcher configured, not one the platform picked.
 
-What is left is the index. A compromised `nomikos-inference` there still
-reaches every laptop. What is no longer possible is the platform pointing this
-process at some *other* distribution - which was code execution by a different
-route, because an sdist runs its build hooks and a wheel declaring a `nomikos`
-console script replaces the entry point `_re_exec` is about to run.
+What's left is the index: a compromised `nomikos-inference` there still
+reaches every laptop. What's no longer possible is the platform pointing this
+process at some *other* distribution, which would be code execution by a
+different route - an sdist runs its build hooks, and a wheel declaring a
+`nomikos` console script replaces the entry point `_re_exec` is about to run.
 
-The alternative - a notice telling researchers to upgrade themselves - was
-rejected. It is safer and it is ignorable, and stale agents are exactly the
+A notice telling researchers to upgrade themselves was considered and
+rejected: it's safer and it's ignorable, and stale agents are exactly the
 population that ignores notices (ADR 0002).
 """
 
@@ -75,7 +78,7 @@ from inference.cli.version import DISTRIBUTION_NAME, SOURCE_CHECKOUT_VERSION, in
 
 MAX_FLOOR_VERSION_LENGTH = 32
 """Mirrors ``MAX_AGENT_VERSION_LENGTH`` on the platform side. A floor longer
-than the column that records a version is not a version."""
+than the column that records a version isn't a version."""
 
 _FLOOR_VERSION_PATTERN = re.compile(
     r"""
@@ -89,27 +92,26 @@ _FLOOR_VERSION_PATTERN = re.compile(
     """,
     re.VERBOSE,
 )
-"""The same grammar ``backend/ml/domain/agent_version.py`` accepts, restated on
-this side of the wire.
+"""The same grammar ``backend/ml/domain/agent_version.py`` accepts, restated
+on this side of the wire.
 
-Deliberately a copy rather than an import: this package ships to a researcher's
-laptop and the platform's domain module does not travel with it. The value it
-guards is interpolated into an installer argument, so the client has to be able
-to reject a floor without asking anyone. Narrower than PEP 440 on purpose, for
-the same reason the platform's is - anything outside it is refused rather than
-guessed at."""
+Deliberately a copy rather than an import: this package ships to a
+researcher's laptop and the platform's domain module doesn't travel with it.
+The value it guards is interpolated into an installer argument, so the client
+has to be able to reject a floor without asking anyone. Narrower than PEP 440
+on purpose, for the same reason the platform's is: anything outside it is
+refused rather than guessed at."""
 
 UPGRADED_FROM_ENV = "NOMIKOS_UPGRADED_FROM"
 """Set on the process an upgrade re-execs into, holding the version it came
-from. Its presence is what stops a second upgrade: if the new build is *still*
-below the floor - an index with nothing newer on it, a floor above the newest
-release - then upgrading again would fetch the same wheel and exec again, for as
-long as the machine is powered on. One attempt, then a fatal error naming both
-numbers."""
+from. Its presence stops a second upgrade: if the new build is *still* below
+the floor (an index with nothing newer, a floor above the newest release),
+upgrading again would fetch the same wheel and exec again for as long as the
+machine is powered on. One attempt, then a fatal error naming both numbers."""
 
 INSTALL_TIMEOUT_SECONDS = 600.0
 """A wheel and its closure over a slow connection. Long enough not to fail a
-researcher on hotel wifi, short enough that a hung index is not indefinite."""
+researcher on hotel wifi, short enough that a hung index isn't indefinite."""
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
@@ -126,8 +128,8 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 def run(args: argparse.Namespace) -> int:
     """`nomikos upgrade` - the launch check, run on demand.
 
-    Deliberately the same code path and the same output as the check that runs
-    before claiming, down to printing nothing when this agent is current. A
+    Deliberately the same code path and output as the check that runs before
+    claiming, down to printing nothing when this agent is current. A
     subcommand that reported *more* than the launch check would be a second
     implementation of the one thing here that must not have two.
     """
@@ -137,9 +139,9 @@ def run(args: argparse.Namespace) -> int:
 def check_before_claiming(args: argparse.Namespace) -> int:
     """Bring this agent up to the platform's floor, or refuse to claim.
 
-    Returns `EXIT_OK` when claiming may begin. Does not return at all when an
-    upgrade succeeded: the process is replaced by the new build, which runs this
-    same check and finds itself current.
+    Returns `EXIT_OK` when claiming may begin. Doesn't return at all when an
+    upgrade succeeded: the process is replaced by the new build, which runs
+    this same check and finds itself current.
     """
     console = ui.out()
     errors = ui.err()
@@ -148,15 +150,15 @@ def check_before_claiming(args: argparse.Namespace) -> int:
     try:
         floor = _ask(args, agent_version)
     except InsecurePlatformURL as exc:
-        # Unlike an unreachable platform, this is not something the next command
-        # would fail on with a better message - it would fail with this same one.
-        # Saying it once, here, is what keeps it from reading as a network blip.
+        # Unlike an unreachable platform, the next command wouldn't fail with
+        # a better message here - it would fail with this same one. Saying it
+        # once, here, keeps it from reading as a network blip.
         errors.print(f"[red]{exc}[/red]")
         return ui.EXIT_FAILED
     except PlatformError as exc:
-        # Not a reason to stop. A researcher on a train has not been refused, and
-        # whatever they were about to do will fail on its own terms with a better
-        # message than this one could give.
+        # Not a reason to stop. A researcher on a train hasn't been refused,
+        # and whatever they were about to do will fail on its own terms with
+        # a better message than this one could give.
         _verbatim(errors, f"{exc} Continuing as {agent_version}.")
         return ui.EXIT_OK
 
@@ -168,7 +170,7 @@ def check_before_claiming(args: argparse.Namespace) -> int:
                 "upgrade when convenient:"
             )
             # A hint for a human to read, and the one string here the platform
-            # supplies whole. It is printed, never executed.
+            # supplies whole. Printed, never executed.
             _verbatim(
                 console,
                 f"  {floor.upgrade_command or f'uv tool upgrade {floor.package}'}",
@@ -190,11 +192,12 @@ def _ask(args: argparse.Namespace, agent_version: str) -> AgentFloor:
 def platform_url_for(args: argparse.Namespace) -> str:
     """Which platform decides. Explicit flag, then the paired one, then default.
 
-    The credential comes second rather than first because `--api-url` is how a
-    researcher points a machine at a staging platform, and it would be strange
-    for the floor to come from one platform while the **claim** went to another.
-    An unreadable credential is not this check's problem to report - the command
-    that needs it will say so - so it falls through to the default here.
+    The credential comes second rather than first because `--api-url` is how
+    a researcher points a machine at a staging platform, and it would be
+    strange for the floor to come from one platform while the **claim** went
+    to another. An unreadable credential isn't this check's problem to
+    report (the command that needs it will say so), so it falls through to
+    the default here.
     """
     explicit = getattr(args, "api_url", None)
     if explicit:
@@ -214,12 +217,12 @@ def platform_url_for(args: argparse.Namespace) -> str:
 def _verbatim(console, raw: str, *, style: str = "dim") -> None:
     """Print something this program did not write, exactly as it is.
 
-    Installer output, filesystem paths and the platform's own sentences all end
-    up here, and none of them is trusted to be Rich markup - `pip` alone emits
-    lines like `[notice] A new release of pip is available`, which as markup is
-    an unknown style and an exception rather than a line of text. Never wrapped
-    either: a command a researcher is meant to be able to re-run must arrive in
-    one piece.
+    Installer output, filesystem paths, and the platform's own sentences all
+    end up here, and none of them is trusted to be Rich markup: `pip` alone
+    emits lines like `[notice] A new release of pip is available`, which as
+    markup is an unknown style and an exception rather than a line of text.
+    Never wrapped either, since a command a researcher is meant to re-run
+    must arrive in one piece.
     """
     text = ui.value(raw)
     if style:
@@ -230,21 +233,21 @@ def _verbatim(console, raw: str, *, style: str = "dim") -> None:
 def _reject_unexpected_target(errors, floor: AgentFloor) -> bool:
     """True when the floor names something this agent must not install.
 
-    Two fields off the wire reach an installer argument, and both are checked
-    here before anything else in the upgrade path looks at them.
+    Two fields off the wire reach an installer argument, and both are
+    checked here before anything else in the upgrade path looks at them.
 
-    ``package`` is pinned to `DISTRIBUTION_NAME`. Upgrading *this* agent means
-    installing a newer build of the distribution it already is; any other name
-    is not an upgrade, and running an installer on it would hand the platform
-    the choice of what executes on the researcher's machine. There is no
-    legitimate reason for the two to differ, including for a self-hosted
-    platform: the agent it is talking to is `nomikos-inference` whatever the
-    platform is called.
+    ``package`` is pinned to `DISTRIBUTION_NAME`. Upgrading *this* agent
+    means installing a newer build of the distribution it already is; any
+    other name is not an upgrade, and running an installer on it would hand
+    the platform the choice of what executes on the researcher's machine.
+    There's no legitimate reason for the two to differ, including for a
+    self-hosted platform: the agent it's talking to is `nomikos-inference`
+    whatever the platform is called.
 
-    ``minimum_version`` is held to the platform's own version grammar. It is
+    ``minimum_version`` is held to the platform's own version grammar. It's
     interpolated into ``package>=version``, and a requirement specifier is a
-    small language of its own - a floor of ``0 --index-url http://…`` is not a
-    version, and neither is anything else the grammar does not admit.
+    small language of its own - a floor of ``0 --index-url http://…`` is not
+    a version, and neither is anything else the grammar doesn't admit.
     """
     if floor.package != DISTRIBUTION_NAME:
         errors.print(
@@ -272,19 +275,19 @@ def _reject_unexpected_target(errors, floor: AgentFloor) -> bool:
 
 
 def _upgrade_or_stop(console, errors, floor: AgentFloor, agent_version: str) -> int:
-    # The platform's own sentence, printed rather than reworded so a researcher
-    # and the server logs say the same thing - and printed inertly, because it
-    # arrived over the wire.
+    # The platform's own sentence, printed rather than reworded so a
+    # researcher and the server logs say the same thing, and printed inertly
+    # since it arrived over the wire.
     _verbatim(console, floor.message, style="yellow")
 
-    # Before any branch below quotes these fields or builds a requirement out of
-    # them. This is the boundary: past it, `floor.package` is known to be this
+    # Boundary check, before any branch below quotes these fields or builds a
+    # requirement out of them: past here, `floor.package` is known to be this
     # distribution and `floor.minimum_version` is known to be a version.
     if _reject_unexpected_target(errors, floor):
         return ui.EXIT_FAILED
 
     if agent_version == SOURCE_CHECKOUT_VERSION:
-        # There is no distribution here to replace, and installing one over a
+        # No distribution here to replace, and installing one over a
         # checkout would leave two copies of the CLI on the path.
         errors.print(
             f"[red]This is a source checkout, not an installed {DISTRIBUTION_NAME}.[/red] "
@@ -317,9 +320,9 @@ def _upgrade_or_stop(console, errors, floor: AgentFloor, agent_version: str) -> 
         return ui.EXIT_FAILED
 
     console.print(f"Upgrading {requirement} ...")
-    # Which installer, printed before it runs. It is the one fact support needs
-    # when an upgrade lands somewhere the researcher did not expect, and it is
-    # not knowable afterwards from anything the CLI leaves behind.
+    # Which installer, printed before it runs: the one fact support needs
+    # when an upgrade lands somewhere unexpected, and not knowable afterwards
+    # from anything the CLI leaves behind.
     _verbatim(console, f"  {' '.join(command)}")
     completed = _install(command)
     if completed.returncode != 0:
@@ -347,14 +350,15 @@ def _upgrade_or_stop(console, errors, floor: AgentFloor, agent_version: str) -> 
 def _installer_command(requirement: str) -> list[str] | None:
     """Whichever installer already owns this environment, asked for one package.
 
-    pip first: if this interpreter has it, it is how the environment was built
-    and it installs exactly where this code is running from. A `uv tool install`
-    environment has no pip in it at all, which is why uv is the fallback and not
-    an afterthought - it is the installer the documented install path uses.
+    pip first: if this interpreter has it, it's how the environment was built
+    and it installs exactly where this code is running from. A `uv tool
+    install` environment has no pip in it at all, which is why uv is the
+    fallback and not an afterthought - it's the installer the documented
+    install path uses.
 
-    `--python sys.executable` on the uv branch, because a `uv` on `$PATH` has no
-    other reason to touch this virtual environment and would otherwise resolve
-    one from the working directory.
+    `--python sys.executable` on the uv branch, because a `uv` on `$PATH` has
+    no other reason to touch this virtual environment and would otherwise
+    resolve one from the working directory.
     """
     if importlib.util.find_spec("pip") is not None:
         return [sys.executable, "-m", "pip", "install", "--upgrade", requirement]
@@ -366,12 +370,12 @@ def _installer_command(requirement: str) -> list[str] | None:
 
 def _install(command: list[str]) -> subprocess.CompletedProcess:
     try:
-        # S603: `command` is built by `_install_command` as a fixed argv list -
+        # S603: `command` is built by `_install_command` as a fixed argv list,
         # no shell, no interpolation. Its only variable part is `requirement`,
-        # whose package half is pinned to `DISTRIBUTION_NAME` and whose version
-        # half must match `_FLOOR_VERSION_PATTERN` under `MAX_FLOOR_VERSION_LENGTH`
-        # (see `_refuses_floor`), so the platform cannot smuggle a second
-        # argument such as `--index-url` through it.
+        # whose package half is pinned to `DISTRIBUTION_NAME` and whose
+        # version half must match `_FLOOR_VERSION_PATTERN` under
+        # `MAX_FLOOR_VERSION_LENGTH` (see `_refuses_floor`), so the platform
+        # can't smuggle a second argument such as `--index-url` through it.
         return subprocess.run(  # noqa: S603
             command,
             capture_output=True,
@@ -392,11 +396,11 @@ def _install(command: list[str]) -> subprocess.CompletedProcess:
 def _re_exec(previous_version: str) -> None:
     """Restart into the build that was just installed, with the same arguments.
 
-    `exec` rather than a child process, so there is one agent on this machine
-    and not two - the platform counts **capacity** by device, and a parent
+    `exec` rather than a child process, so there's one agent on this machine
+    and not two: the platform counts **capacity** by device, and a parent
     waiting on a child would be a second process holding the same credential.
 
-    A running interpreter cannot pick up a package it has already imported, so
+    A running interpreter can't pick up a package it's already imported, so
     the new code only exists after the image is replaced. Everything the new
     process needs to know about the old one travels in the environment.
     """
@@ -405,12 +409,13 @@ def _re_exec(previous_version: str) -> None:
 
     script = sys.argv[0]
     if script and os.path.isfile(script) and os.access(script, os.X_OK):
-        # The console script the researcher actually ran. It points at this same
-        # interpreter, so it starts the build that was just installed into it.
+        # The console script the researcher actually ran. It points at this
+        # same interpreter, so it starts the build just installed into it.
         arguments = [script, *sys.argv[1:]]
     else:
-        # Started as `python -m inference.cli`, or through something that left no
-        # usable `argv[0]`. The module path resolves to the new code just as well.
+        # Started as `python -m inference.cli`, or through something that
+        # left no usable `argv[0]`. The module path resolves to the new code
+        # just as well.
         script = sys.executable
         arguments = [sys.executable, "-m", "inference.cli", *sys.argv[1:]]
 
@@ -418,8 +423,8 @@ def _re_exec(previous_version: str) -> None:
     sys.stderr.flush()
     try:
         # S606: no shell and no `$PATH` lookup - `script` is either this
-        # process's own `argv[0]`, checked to be an executable file just above,
-        # or `sys.executable`. `arguments` is this process's own argv.
+        # process's own `argv[0]`, checked to be an executable file above, or
+        # `sys.executable`. `arguments` is this process's own argv.
         os.execve(script, arguments, environment)  # noqa: S606
     except OSError:
         return

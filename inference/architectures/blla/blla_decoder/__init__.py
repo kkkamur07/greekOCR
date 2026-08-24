@@ -27,7 +27,7 @@ __all__ = ["DecodedBLLALine", "decode_blla_heatmaps"]
 
 
 def _sigmoid(values: np.ndarray) -> np.ndarray:
-    """The NumPy half of what used to be the decoder's ``torch_free`` branch."""
+    """Sigmoid, computed without a torch dependency."""
 
     return np.reciprocal(np.add(1.0, np.exp(-values), dtype=np.float32))
 
@@ -106,12 +106,12 @@ def _decode_reference_pipeline(
     ]
 
     decoded: list[DecodedBLLALine] = []
-    # Polygonization is per-line geometry work and it raises by design: a
-    # baseline whose environment closes into an invalid polygon, or whose ray
-    # never meets a boundary, is a ``ValueError`` from ``polygon``. Under
-    # ``architectures.isolation`` that must cost its own line and not the other
-    # thirty-nine on the page, so the first failure is held for the all-failed
-    # verdict rather than propagated on the spot.
+    # Polygonization raises by design: a baseline whose environment closes into
+    # an invalid polygon, or whose ray never meets a boundary, raises
+    # ``ValueError`` from ``polygon``. Under ``architectures.isolation`` a
+    # failure must cost only its own line, not the rest of the page, so the
+    # first failure is held for the all-failed verdict instead of propagated
+    # immediately.
     first_failure: Exception | None = None
     for index, baseline in enumerate(baselines):
         try:

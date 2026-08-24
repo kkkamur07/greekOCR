@@ -5,11 +5,9 @@ Loading a pickled checkpoint executes code, so this module never unpickles:
 verified the **artifact SHA-256** through ``architectures.artifact`` before the
 path reaches here.
 
-This file was the loader half of the retired ONNX exporter
-(``src/model/inference_export/calamari/export.py``). Under ADR 0004 the Torch
-graph *is* the runtime, so the loader moved into the inference package and the
-exporter was archived. ADR 0006 reversed that: the graph runs as ``.onnx``, and
-both this loader and the exporter beside it are export-time code again.
+Export-time code under ADR 0006: the runtime graph runs as ``.onnx``, and this
+loader, alongside the exporter beside it, supports that path rather than
+serving inference directly.
 """
 
 from __future__ import annotations
@@ -32,14 +30,12 @@ from src.model.inference_export.calamari.model import CalamariTorchModel
 class CalamariCheckpointError(ValueError):
     """A checkpoint this runtime cannot use.
 
-    The three subclasses exist because the caller has to tell them apart, and
-    it used to do that by matching substrings of the message. That is a trap
-    here: "invalid Calamari checkpoint metadata or state dictionary" contains
-    the words "state dictionary" and was raised for a charset defect, so a
-    checkpoint whose codec did not match its class count was reported as an
-    incompatible state dictionary. The distinction is what a deployment reads
-    to know which half of the export to go and look at, so it is carried by
-    type from here on.
+    The three subclasses let callers tell failures apart by type instead of
+    matching substrings of the message: "invalid Calamari checkpoint metadata
+    or state dictionary" contains the words "state dictionary" and was once
+    raised for a charset defect, misreporting it as a bad state dict. The
+    distinction is what a deployment reads to know which half of the export
+    to look at.
     """
 
 

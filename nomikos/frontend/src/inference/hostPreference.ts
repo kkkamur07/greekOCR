@@ -29,12 +29,10 @@ export type HostPreference = {
   /**
    * Whether this account's own computer can take work right now.
    *
-   * Read from the platform's **capacity** answer, not from this browser. The
-   * page used to learn this by opening a connection to `127.0.0.1` and asking
-   * whatever answered to identify itself; ADR 0002 deleted that, and the honest
-   * source was always the platform anyway - it is the thing an agent reports to,
-   * and the thing that decides an **execution target** at submission. A browser
-   * probe could disagree with the decision the platform was about to make.
+   * Read from the platform's **capacity** answer, not from this browser: the
+   * platform is what an agent reports to and what decides an **execution
+   * target** at submission (ADR 0002). A browser probe against `127.0.0.1`
+   * could disagree with the decision the platform is about to make.
    */
   hasLocalCapacity: boolean;
   loading: boolean;

@@ -286,7 +286,7 @@ class DocumentRepository:
         return int(result.scalar_one())
 
     async def count_paired_ground_truth_lines(self, session: AsyncSession, part_id: UUID) -> int:
-        """Lines carrying non-blank ground-truth text — the denominator of pairing progress."""
+        """Lines carrying non-blank ground-truth text: the denominator of pairing progress."""
         result = await session.execute(
             select(func.count(func.distinct(Line.id)))
             .select_from(Line)

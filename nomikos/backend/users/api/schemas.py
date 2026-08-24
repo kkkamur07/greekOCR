@@ -56,24 +56,20 @@ class LoginRequest(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"  # noqa: S105 - the OAuth2 scheme name, not a token
-    #: The browser session's CSRF token, delivered here *as well as* in the
+    #: The browser session's CSRF token, delivered here as well as in the
     #: readable ``greekocr-csrf`` cookie.
     #:
-    #: The cookie is set on the API host with ``Domain=.nomikos.app`` so that
-    #: script on ``app.nomikos.app`` can read it back and echo it in
-    #: ``X-CSRF-Token``. That sibling-subdomain read is the fragile step -
-    #: Safari's tracking prevention is reported to interfere with it - and when
-    #: it fails the client has no way to build the header at all, so every
-    #: ``POST /auth/refresh`` answers 403. Handing the same value back in the
-    #: body gives the client a second, script-visible channel that does not
-    #: depend on cookie policy. The cookie is still set exactly as before.
+    #: The cookie is set on the API host with ``Domain=.nomikos.app`` so script
+    #: on ``app.nomikos.app`` can read it back into ``X-CSRF-Token``. Safari's
+    #: tracking prevention is reported to break that sibling-subdomain read,
+    #: which would make every ``POST /auth/refresh`` answer 403 with no way to
+    #: build the header. This field gives the client a second, script-visible
+    #: channel that doesn't depend on cookie policy.
     #:
-    #: Optional in the schema, always populated by the server. The frontend
-    #: deploys separately from the API, so a client built against this contract
-    #: can be talking to an instance that predates it; the field is typed the
-    #: way a client has to treat it rather than the way the server writes it.
-    #: ``test_token_response_always_carries_the_csrf_token`` pins the server
-    #: side.
+    #: Optional and typed that way because the frontend deploys separately from
+    #: the API: a client built against this contract may talk to an older
+    #: instance that predates the field. Always populated by the server;
+    #: ``test_token_response_always_carries_the_csrf_token`` pins that.
     csrf_token: str | None = None
 
 

@@ -11,13 +11,13 @@ import { HOST_PREFERENCE_HINT } from "../../inference/hostPreference";
 /**
  * What this computer can currently take, and nothing about where a job went.
  *
- * Nothing here can fail a run: with `local_only` retired there is no setting
- * under which an absent agent means "your work does not happen", so absence
- * reads as an ordinary announced state (ADR 0002).
+ * Nothing here can fail a run: with `local_only` retired, no setting means an
+ * absent agent implies "your work does not happen", so absence reads as an
+ * ordinary announced state (ADR 0002).
  *
- * "Running" is the platform's answer, not this browser's. It is **capacity** on
- * the account - a device seen recently - which is the same fact submission uses
- * to fix an **execution target**. A loopback probe could have disagreed with it.
+ * "Running" is the platform's answer, not this browser's: it is **capacity**
+ * on the account (a device seen recently), the same fact submission uses to
+ * fix an **execution target**. A loopback probe could disagree with it.
  */
 function agentStatusText(
   preferLocalInference: boolean,

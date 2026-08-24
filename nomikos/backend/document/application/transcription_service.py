@@ -1,6 +1,6 @@
 """The text of a page: imported page transcriptions, pairing, and ground truth.
 
-One responsibility — what a line *says*, as opposed to where it is. Three routes into the
+One responsibility: what a line *says*, as opposed to where it is. Three routes into the
 same place, and they are one module because they all write the same rows and have to agree
 about them:
 

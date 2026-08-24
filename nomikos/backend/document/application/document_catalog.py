@@ -1,6 +1,6 @@
 """The documents in a project: their existence, their names, and their workflow state.
 
-One responsibility — a document's life from creation to deletion, plus the reads that
+One responsibility: a document's life from creation to deletion, plus the reads that
 expose it. Page images, geometry and transcription text are three other modules; this one
 only ever touches the ``documents`` and ``transcriptions`` rows.
 

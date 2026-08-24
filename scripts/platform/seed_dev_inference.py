@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Seed inference models and optional project-level segment bindings.
+"""Seed inference models and an optional project-level segment binding.
 
-Does not create a separate "Dev inference defaults" project. When
-``BINDING_PROJECT_SLUG`` (default: byzantine-greek-manuscripts) exists,
-attaches a project-level segment binding. Transcribe bindings are skipped by
-default so script-specific models are attached per project when available.
+Binds to the project named by ``BINDING_PROJECT_SLUG`` (default:
+byzantine-greek-manuscripts) if it exists. Transcribe bindings are skipped by
+default since script-specific models get attached per project when available.
 """
 
 import asyncio
