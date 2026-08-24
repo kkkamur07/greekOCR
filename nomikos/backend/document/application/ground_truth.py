@@ -17,6 +17,7 @@ by injection rather than by inheritance.
 
 from __future__ import annotations
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.document.infrastructure.document_repository import DocumentRepository
@@ -46,8 +47,20 @@ class GroundTruthText:
             name="Ground truth",
             kind=TranscriptionKind.ground_truth,
         )
-        session.add(transcription)
-        await session.flush()
+        # Two first writes for the same document both see no layer and both
+        # insert one; the partial unique index ``uq_transcriptions_one_ground_truth``
+        # then rejects the loser with IntegrityError. Insert inside a SAVEPOINT so
+        # that rejection rolls back only this insert, not the caller's whole
+        # transaction, and adopt the winner's row instead of surfacing a 500.
+        try:
+            async with session.begin_nested():
+                session.add(transcription)
+                await session.flush()
+        except IntegrityError:
+            existing = await self._documents.get_ground_truth_transcription(session, document.id)
+            if existing is None:
+                raise
+            return existing
         return transcription
 
     async def write(

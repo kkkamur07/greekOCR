@@ -106,6 +106,9 @@ class _Store:
         self.reads.append(image_key)
         return self.blobs[image_key]
 
+    def size(self, image_key: str) -> int:
+        return len(self.blobs[image_key])
+
     def delete(self, image_key: str) -> None:
         self.blobs.pop(image_key, None)
 

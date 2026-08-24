@@ -273,6 +273,14 @@ class DocumentPartService:
         return part
 
     def _read_part_image_size_with_key(self, image_key: str) -> tuple[int, int]:
+        # Reject an over-cap blob from storage metadata *before* downloading it.
+        # A direct upload PUTs straight to storage past the API's body cap, so
+        # without this check any project member could point finalize at a
+        # multi-GB object and force the API process to buffer the whole thing
+        # into memory. The post-read check stays as a backstop for backends
+        # whose metadata size is unavailable.
+        if self._media.size(image_key) > MAX_PART_UPLOAD_BYTES:
+            raise ValidationError("Uploaded image exceeds the maximum allowed size")
         data = self._media.read(image_key)
         if len(data) > MAX_PART_UPLOAD_BYTES:
             raise ValidationError("Uploaded image exceeds the maximum allowed size")

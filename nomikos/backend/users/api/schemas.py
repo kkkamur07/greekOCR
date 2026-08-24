@@ -13,10 +13,23 @@ def _validate_bcrypt_password(value: str) -> str:
     return value
 
 
+def _normalize_email(value: str) -> str:
+    # Canonicalise to lowercase so ``victim@x.com`` and ``Victim@X.com`` are one
+    # account. Postgres ``=`` on the plain email column is case-sensitive, so
+    # without this the uniqueness check and its index treat case variants as
+    # distinct and let a caller register the same address twice.
+    return value.strip().lower()
+
+
 class RegisterRequest(BaseModel):
     email: EmailStr
     username: str = Field(min_length=1, max_length=150)
     password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        return _normalize_email(value)
 
     @field_validator("password")
     @classmethod
@@ -28,6 +41,11 @@ class LoginRequest(BaseModel):
     email: EmailStr
     # Login accepts legacy short passwords; registration enforces the current minimum.
     password: str = Field(min_length=1, max_length=128)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        return _normalize_email(value)
 
     @field_validator("password")
     @classmethod

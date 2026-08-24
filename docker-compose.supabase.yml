@@ -6,7 +6,11 @@
 # Usage:
 #   docker compose -f docker-compose.yml -f docker-compose.supabase.yml up --build
 #
-# Open http://localhost:5173 — login dev@example.com / dev-pass-123
+# Open http://localhost:5173. This profile does NOT auto-seed the dev login: it
+# targets a persistent external database, and seeding a published-password account
+# on every boot is a backdoor if the env file ever points at real data. Seed once,
+# by hand, when you actually want it:
+#   docker compose exec api python scripts/platform/seed_dev_user.py
 
 name: nomikos
 
@@ -40,10 +44,9 @@ services:
       - ./data:/data:ro
     # Migrations: run `./scripts/platform/migrate_supabase.sh` on the host first.
     # In-container alembic uses MIGRATOR_DATABASE_URL (direct host) which often fails
-    # from Docker (IPv6 / network). Seed only on API start.
+    # from Docker (IPv6 / network). No auto-seed here (see header).
     command: >
-      sh -c "python scripts/platform/seed_dev_nomikos.py
-      && uvicorn backend.core.main:app --host 0.0.0.0 --port 8000 --workers 1 --reload --reload-dir /app/backend"
+      uvicorn backend.core.main:app --host 0.0.0.0 --port 8000 --workers 1 --reload --reload-dir /app/backend
 
   platform-worker:
     env_file:

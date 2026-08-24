@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.users.infrastructure.orm_models import User
@@ -14,7 +14,12 @@ class UserRepository:
         return result.scalar_one_or_none()
 
     async def get_by_email(self, session: AsyncSession, email: str) -> User | None:
-        result = await session.execute(select(User).where(User.email == email))
+        # Case-insensitive so the uniqueness check catches case variants and any
+        # caller that did not pass through the request schema's normalisation
+        # (device pairing, legacy mixed-case rows) still resolves to one account.
+        result = await session.execute(
+            select(User).where(func.lower(User.email) == func.lower(email))
+        )
         return result.scalar_one_or_none()
 
     async def get_by_username(self, session: AsyncSession, username: str) -> User | None:

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { type LayoutPoint, type LinePoint } from "../api/client";
 import { invalidateAfter } from "../api/resources";
@@ -189,6 +189,11 @@ export function PageEditorPlaceholderPage() {
     selectSegment,
     navigateSegment,
   } = pairing;
+
+  // Latest selection, readable after an await: a save may resolve after the user
+  // has switched segments, and the strip must not be dismissed on the new one.
+  const selectedSegmentIdRef = useRef(selectedSegmentId);
+  selectedSegmentIdRef.current = selectedSegmentId;
 
   const pairedIds = useMemo(() => segmentIdsWithGroundTruth(lines), [lines]);
   const stripVisible = Boolean(selectedSegment) && !stripDismissed;
@@ -509,7 +514,13 @@ export function PageEditorPlaceholderPage() {
             approvedTextDraft={approvedTextDraft}
             onApprovedTextDraftChange={setApprovedTextDraft}
             onSaveGroundTruthText={async () => {
-              if (await saveGroundTruthText()) setStripDismissed(true);
+              const savedSegmentId = selectedSegmentId;
+              if (
+                (await saveGroundTruthText()) &&
+                selectedSegmentIdRef.current === savedSegmentId
+              ) {
+                setStripDismissed(true);
+              }
             }}
             onPromoteSelectedSegmentToGroundTruth={
               promoteSelectedSegmentToGroundTruth
@@ -520,7 +531,13 @@ export function PageEditorPlaceholderPage() {
             lines={lines}
             selectedSegmentId={selectedSegmentId}
             onSaveApprovedText={async () => {
-              if (await saveApprovedText()) setStripDismissed(true);
+              const savedSegmentId = selectedSegmentId;
+              if (
+                (await saveApprovedText()) &&
+                selectedSegmentIdRef.current === savedSegmentId
+              ) {
+                setStripDismissed(true);
+              }
             }}
             transcribeModels={transcribeModels}
             selectedTranscribeModelId={selectedTranscribeModelId}

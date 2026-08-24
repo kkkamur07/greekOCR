@@ -304,18 +304,35 @@ def test_callback_error_falls_back_when_nothing_survives_redaction():
 
 
 class _FakeLine:
-    def __init__(self, part_id: uuid.UUID) -> None:
+    def __init__(self, part_id: uuid.UUID, line_id: uuid.UUID) -> None:
         self.part_id = part_id
+        self.id = line_id
+
+
+class _ScalarResult:
+    def __init__(self, rows: list[_FakeLine]) -> None:
+        self._rows = rows
+
+    def scalars(self) -> _ScalarResult:
+        return self
+
+    def all(self) -> list[_FakeLine]:
+        return self._rows
 
 
 class _LineLookupSession:
-    """Returns a line owned by ``part_id`` for any id the merge loop asks for."""
+    """Returns a line owned by ``part_id`` for every id the batched lookup asks for."""
 
     def __init__(self, part_id: uuid.UUID) -> None:
         self._part_id = part_id
 
-    def get(self, _model, _pk):
-        return _FakeLine(self._part_id)
+    def execute(self, statement, *_args, **_kwargs) -> _ScalarResult:
+        ids: list[uuid.UUID] = []
+        for value in statement.compile().params.values():
+            for item in value if isinstance(value, (list, tuple)) else [value]:
+                if isinstance(item, uuid.UUID):
+                    ids.append(item)
+        return _ScalarResult([_FakeLine(self._part_id, line_id) for line_id in ids])
 
 
 def _batch(part_id: uuid.UUID, entries: list[tuple[int, str | None]]):

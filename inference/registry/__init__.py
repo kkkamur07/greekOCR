@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 from pathlib import Path
 
 import yaml
@@ -63,11 +64,19 @@ class RegistryDocument(BaseModel):
     models: dict[str, RegistryModelEntry] = Field(min_length=1)
 
 
-def load_registry(path: Path | None = None) -> RegistryDocument:
-    registry_path = path or DEFAULT_REGISTRY_PATH
-    raw = yaml.safe_load(registry_path.read_text(encoding="utf-8"))
-
+@lru_cache(maxsize=8)
+def _load_registry_cached(resolved_path: str, mtime_ns: int) -> RegistryDocument:
+    """Parse + validate one registry file. Keyed on path and mtime so an edited
+    ``registry.yaml`` is re-read, but the common hot path (unchanged file read
+    once per page) skips the YAML parse and full Pydantic validation entirely.
+    """
+    raw = yaml.safe_load(Path(resolved_path).read_text(encoding="utf-8"))
     return RegistryDocument.model_validate(raw)
+
+
+def load_registry(path: Path | None = None) -> RegistryDocument:
+    registry_path = (path or DEFAULT_REGISTRY_PATH).resolve()
+    return _load_registry_cached(str(registry_path), registry_path.stat().st_mtime_ns)
 
 
 def get_model_entry(

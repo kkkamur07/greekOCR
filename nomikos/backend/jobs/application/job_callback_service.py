@@ -69,10 +69,26 @@ class _MergeContext:
     document_id: uuid.UUID | None
     document_part_id: uuid.UUID | None
     inference_job_id: uuid.UUID
+    #: When a "transcribe selected lines" job restricts itself to a subset via
+    #: ``payload["line_ids"]``, the callback must not merge results outside that
+    #: subset. ``None`` means the whole page was in scope.
+    allowed_line_ids: frozenset[uuid.UUID] | None = None
 
 
 def _job_type_for_task(task: WireInferenceTask) -> JobType:
     return JobType(task.value)
+
+
+def _allowed_line_ids(job: Job) -> frozenset[uuid.UUID] | None:
+    raw = (job.payload or {}).get("line_ids")
+    if not raw:
+        return None
+    try:
+        return frozenset(uuid.UUID(str(line_id)) for line_id in raw)
+    except (ValueError, TypeError):
+        # A malformed restriction is our own bad data, not the agent's; fall back
+        # to the part-scope check rather than 500 on every callback for this job.
+        return None
 
 
 def _segment_output(callback: JobCallbackRequest) -> SegmentRunResponse:
@@ -97,6 +113,7 @@ def _merge_context(job: Job, callback: JobCallbackRequest) -> _MergeContext:
         document_id=job.document_id,
         document_part_id=job.document_part_id,
         inference_job_id=callback.inference_job_id,
+        allowed_line_ids=_allowed_line_ids(job),
     )
 
 
@@ -129,8 +146,10 @@ def _apply_transcribe_merge_sync(
     if context.document_id is None or context.document_part_id is None:
         raise TranscribeJobHandlerError("Transcribe job is missing its target document part")
 
-    lines_with_output = []
-    failed_line_indexes: list[int] = []
+    # First pass: validate ids and enforce the job's own line scope, collecting
+    # the ids so every line is fetched in one query instead of one SELECT per
+    # line (a 50-line page was 50 sequential round trips under the locked job row).
+    parsed: list[tuple[object, uuid.UUID]] = []
     for result in sorted(output.lines, key=lambda item: item.line_index):
         if result.line_id is None:
             raise TranscribeJobHandlerError("Transcribe callback line is missing line_id")
@@ -138,7 +157,30 @@ def _apply_transcribe_merge_sync(
             line_id = uuid.UUID(result.line_id)
         except ValueError as exc:
             raise TranscribeJobHandlerError("Transcribe callback line_id is invalid") from exc
-        line = session.get(Line, line_id)
+        # A compromised or buggy agent holding this job could report lines the
+        # job never selected. The part check below stops cross-part writes; this
+        # stops cross-line writes within the part when the job was line-scoped.
+        if context.allowed_line_ids is not None and line_id not in context.allowed_line_ids:
+            raise TranscribeJobHandlerError("Transcribe callback line is outside the job's scope")
+        parsed.append((result, line_id))
+
+    lines_by_id = (
+        {
+            line.id: line
+            for line in session.execute(
+                select(Line).where(Line.id.in_([line_id for _, line_id in parsed]))
+            )
+            .scalars()
+            .all()
+        }
+        if parsed
+        else {}
+    )
+
+    lines_with_output = []
+    failed_line_indexes: list[int] = []
+    for result, line_id in parsed:
+        line = lines_by_id.get(line_id)
         if line is None or line.part_id != context.document_part_id:
             raise TranscribeJobHandlerError("Document line not found")
         # A batch may now be a partial success: the inference service isolates

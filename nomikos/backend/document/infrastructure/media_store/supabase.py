@@ -115,6 +115,33 @@ class SupabaseMediaStore:
                 raise FileNotFoundError(image_key) from exc
             raise
 
+    def size(self, image_key: str) -> int:
+        """Stored byte length from Storage metadata, no download.
+
+        Lets finalize reject an over-cap blob before ``read`` pulls the whole
+        object into the API process. Uses ``list`` with an exact-name search on
+        the object's own prefix and reads ``metadata.size``.
+        """
+        validate_image_key(image_key)
+        prefix, _, name = image_key.rpartition("/")
+        try:
+            entries = self._client.storage.from_(self._bucket).list(
+                path=prefix or None,
+                options={"search": name, "limit": 100},
+            )
+        except Exception as exc:
+            message = str(exc).lower()
+            if "not found" in message or "404" in message:
+                raise FileNotFoundError(image_key) from exc
+            raise
+        for entry in entries or []:
+            if entry.get("name") == name:
+                metadata = entry.get("metadata") or {}
+                stored = metadata.get("size", metadata.get("contentLength"))
+                if stored is not None:
+                    return int(stored)
+        raise FileNotFoundError(image_key)
+
     def delete(self, image_key: str) -> None:
         validate_image_key(image_key)
         self._client.storage.from_(self._bucket).remove([image_key])

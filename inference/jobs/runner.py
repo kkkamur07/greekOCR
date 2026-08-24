@@ -32,7 +32,17 @@ from inference.weights import resolve_weights_source
 logger = logging.getLogger(__name__)
 
 
-def _crop_line_image(image_bytes: bytes, points: list[list[float]] | None) -> bytes:
+def _crop_line_image(
+    image: Image.Image, image_bytes: bytes, points: list[list[float]] | None
+) -> bytes:
+    """Crop one line from an already-decoded page image.
+
+    Takes the open ``image`` so a page with N lines is decoded once, not N times:
+    ``Image.crop`` forces a full decode of the source on every call, so re-opening
+    the multi-megapixel scan per line was O(N) full decodes of the same bytes.
+    ``image_bytes`` is still returned verbatim for the whole-page fallback so the
+    downstream model sees the original encoding, not a re-encode.
+    """
     if not points:
         return image_bytes
 
@@ -41,19 +51,18 @@ def _crop_line_image(image_bytes: bytes, points: list[list[float]] | None) -> by
     if not xs or not ys:
         return image_bytes
 
-    with Image.open(BytesIO(image_bytes)) as image:
-        width, height = image.size
-        left = max(0, int(min(xs)))
-        top = max(0, int(min(ys)))
-        right = min(width, int(max(xs)))
-        bottom = min(height, int(max(ys)))
-        if right <= left or bottom <= top:
-            return image_bytes
+    width, height = image.size
+    left = max(0, int(min(xs)))
+    top = max(0, int(min(ys)))
+    right = min(width, int(max(xs)))
+    bottom = min(height, int(max(ys)))
+    if right <= left or bottom <= top:
+        return image_bytes
 
-        cropped = image.crop((left, top, right, bottom))
-        output = BytesIO()
-        cropped.save(output, format=image.format or "PNG")
-        return output.getvalue()
+    cropped = image.crop((left, top, right, bottom))
+    output = BytesIO()
+    cropped.save(output, format=image.format or "PNG")
+    return output.getvalue()
 
 
 def _line_regions_from_params(params: dict[str, Any] | None) -> list[TranscribeLineRegion]:
@@ -84,20 +93,24 @@ def _transcribe_batch(
     cropped_positions: list[int] = []
     errors: dict[int, str] = {}
 
-    for position, region in enumerate(line_regions):
-        try:
-            crop = _crop_line_image(image_bytes, region.points)
-        except Exception as error:  # noqa: BLE001 - one bad region is not a bad page
-            logger.warning(
-                "transcribe line crop failed (line_index=%s, line_id=%s)",
-                region.line_index,
-                region.line_id,
-                exc_info=error,
-            )
-            errors[position] = TRANSCRIBE_LINE_ERROR
-            continue
-        crops.append(crop)
-        cropped_positions.append(position)
+    # Decode the page once and crop every line from it. Re-opening the scan per
+    # line re-decoded the whole multi-megapixel image N times for an N-line page.
+    with Image.open(BytesIO(image_bytes)) as page_image:
+        page_image.load()
+        for position, region in enumerate(line_regions):
+            try:
+                crop = _crop_line_image(page_image, image_bytes, region.points)
+            except Exception as error:  # noqa: BLE001 - one bad region is not a bad page
+                logger.warning(
+                    "transcribe line crop failed (line_index=%s, line_id=%s)",
+                    region.line_index,
+                    region.line_id,
+                    exc_info=error,
+                )
+                errors[position] = TRANSCRIBE_LINE_ERROR
+                continue
+            crops.append(crop)
+            cropped_positions.append(position)
 
     if not crops:
         # No line even reached the model. Nothing here is worth returning as a

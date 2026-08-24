@@ -5,7 +5,13 @@ from __future__ import annotations
 import os
 import re
 import shutil
+from contextlib import contextmanager
 from pathlib import Path
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - non-POSIX; the research tooling is macOS/Linux
+    fcntl = None  # type: ignore[assignment]
 
 from inference.hub.artifacts import find_hub_artifact, verify_artifact_sha256
 from inference.hub.client import HubClient, _hub_error_message, get_default_hub_client
@@ -80,6 +86,29 @@ def _validate_provenance(
     return hub_revision, artifact_sha256
 
 
+@contextmanager
+def _cache_lock(cache_dir: Path):
+    """Serialize resolve of one ``(model, tag)`` across processes and threads.
+
+    Without it, two first-time resolves of the same model both see no manifest,
+    both ``rmtree`` the cache dir and both ``snapshot_download`` into it - one
+    deleting the other's half-written snapshot. The lock file lives *beside*
+    ``cache_dir`` (not inside it) because the resolve body ``rmtree``s the dir
+    itself. A no-op when ``fcntl`` is unavailable rather than a hard failure.
+    """
+    if fcntl is None:
+        yield
+        return
+    lock_path = cache_dir.parent / f".{cache_dir.name}.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(lock_path, "w") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
 def _snapshot_download(
     client: HubClient,
     repo_id: str,
@@ -119,41 +148,45 @@ def resolve_hf_weights_source(
     client = hub_client or get_default_hub_client()
     resolved_cache_root = cache_root or default_cache_root()
     cache_dir = cache_dir_for(registry_model_id, registry_tag, cache_root=resolved_cache_root)
-    manifest = load_manifest(cache_dir)
 
-    if manifest is not None and manifest_matches_expected(
-        manifest,
-        repo_id=parsed.repo_id,
-        hub_revision=hub_revision,
-        artifact_sha256=artifact_sha256,
-    ):
-        try:
-            artifact = find_hub_artifact(cache_dir, architecture=architecture)
-            if str(artifact.relative_to(cache_dir)) != manifest.artifact_path:
-                raise ValueError("cached Hub artifact path does not match its manifest")
-            verify_artifact_sha256(artifact, artifact_sha256)
-            return artifact
-        except (FileNotFoundError, ValueError):
-            pass
+    # Held across the whole check-then-download so a concurrent resolve of the
+    # same model cannot rmtree the snapshot this one is verifying or writing.
+    with _cache_lock(cache_dir):
+        manifest = load_manifest(cache_dir)
 
-    if cache_dir.exists():
-        shutil.rmtree(cache_dir)
+        if manifest is not None and manifest_matches_expected(
+            manifest,
+            repo_id=parsed.repo_id,
+            hub_revision=hub_revision,
+            artifact_sha256=artifact_sha256,
+        ):
+            try:
+                artifact = find_hub_artifact(cache_dir, architecture=architecture)
+                if str(artifact.relative_to(cache_dir)) != manifest.artifact_path:
+                    raise ValueError("cached Hub artifact path does not match its manifest")
+                verify_artifact_sha256(artifact, artifact_sha256)
+                return artifact
+            except (FileNotFoundError, ValueError):
+                pass
 
-    try:
-        _snapshot_download(client, parsed.repo_id, hub_revision, cache_dir)
-        artifact = find_hub_artifact(cache_dir, architecture=architecture)
-        verify_artifact_sha256(artifact, artifact_sha256)
-        save_manifest(
-            cache_dir,
-            HubCacheManifest(
-                repo_id=parsed.repo_id,
-                hub_revision=hub_revision,
-                artifact_path=str(artifact.relative_to(cache_dir)),
-                artifact_sha256=artifact_sha256,
-            ),
-        )
-        return artifact
-    except Exception:
         if cache_dir.exists():
             shutil.rmtree(cache_dir)
-        raise
+
+        try:
+            _snapshot_download(client, parsed.repo_id, hub_revision, cache_dir)
+            artifact = find_hub_artifact(cache_dir, architecture=architecture)
+            verify_artifact_sha256(artifact, artifact_sha256)
+            save_manifest(
+                cache_dir,
+                HubCacheManifest(
+                    repo_id=parsed.repo_id,
+                    hub_revision=hub_revision,
+                    artifact_path=str(artifact.relative_to(cache_dir)),
+                    artifact_sha256=artifact_sha256,
+                ),
+            )
+            return artifact
+        except Exception:
+            if cache_dir.exists():
+                shutil.rmtree(cache_dir)
+            raise

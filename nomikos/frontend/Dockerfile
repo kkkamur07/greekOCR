@@ -10,6 +10,10 @@ COPY frontend/package.json frontend/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm \
   npm ci
 
+# Drop root for the running dev server. `npm ci` above stays root so it can
+# populate the node_modules volume; `next dev` only reads it.
+USER node
+
 EXPOSE 5173
 
 CMD ["npm", "run", "dev", "--", "--hostname", "0.0.0.0"]

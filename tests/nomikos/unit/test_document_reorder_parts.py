@@ -13,6 +13,7 @@ import pytest
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql.dml import Update
+from sqlalchemy.sql.elements import Case
 from sqlalchemy.sql.selectable import Select
 
 from backend.document.infrastructure.document_repository import (
@@ -60,13 +61,21 @@ class _UniqueOrderSession:
         if isinstance(statement, Select):
             self.selects.append(statement)
         if isinstance(statement, Update):
-            params = statement.compile(dialect=postgresql.dialect()).params
-            if "id_1" in params:
-                target = next(part for part in self.parts if part.id == params["id_1"])
-                self._assign(target, params["order"])
+            order_value = next(
+                value for column, value in statement._values.items() if column.name == "order"
+            )
+            if isinstance(order_value, Case):
+                # Final bulk write: CASE document_parts.id WHEN <id> THEN <order>.
+                # Applied row by row like Postgres would, which is collision-free only
+                # because the offset below already vacated the target range.
+                target = {crit.value: result.value for crit, result in order_value.whens}
+                for part in self.parts:
+                    self._assign(part, target[part.id])
             else:
+                # Temporary offset: order = order + :offset, applied to every row.
+                offset = statement.compile(dialect=postgresql.dialect()).params["order_1"]
                 for part in sorted(self.parts, key=lambda part: part.order):
-                    self._assign(part, part.order + params["order_1"])
+                    self._assign(part, part.order + offset)
             return _Result([])
         return _Result(sorted(self.parts, key=lambda part: part.order))
 

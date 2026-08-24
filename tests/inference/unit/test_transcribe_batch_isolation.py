@@ -136,7 +136,7 @@ def test_uncroppable_line_geometry_is_isolated_from_the_batch(
     calamari_runner,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def crop(image_bytes: bytes, points: list[list[float]] | None) -> bytes:
+    def crop(image, image_bytes: bytes, points: list[list[float]] | None) -> bytes:
         if points and points[0][0] == 99.0:
             raise ValueError("degenerate polygon")
         return image_bytes
