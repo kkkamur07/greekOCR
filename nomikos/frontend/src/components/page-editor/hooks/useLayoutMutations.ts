@@ -503,6 +503,18 @@ export function useLayoutMutations({
    * `runAutoSegment`.
    */
   async function reloadAfterSegmentation(): Promise<number> {
+    // The segmentation already replaced every Segment on the server, so any
+    // edit still on the undo/redo stack now names a line id that reload is
+    // about to make up. Left there, a later undo pops it, applyCanvasEditInverse
+    // silently no-ops against the new lines array, and the paired
+    // patchPartLine/deletePartLine 404s into setLineError. Cleared the same
+    // way the route-change effect clears it, and unconditionally: the
+    // segmentation is already stored by the time a caller reaches this
+    // function, whether or not the reload below succeeds.
+    undoStackRef.current = [];
+    redoStackRef.current = [];
+    setEditUndoRevision((value) => value + 1);
+
     const [reloadedLines, reloadedLayout, pairing] = await Promise.all([
       api.listPartLines(projectId!, documentId!, partId!),
       api.getPartLayout(projectId!, documentId!, partId!),
