@@ -128,7 +128,22 @@ def test_the_comparison_goes_through_compare_digest_not_equality() -> None:
     ) as compare_digest:
         assert can_read_document(document, project, None, "whatever-was-sent") is True
 
-    compare_digest.assert_called_once_with(document.public_share_token, "whatever-was-sent")
+    compare_digest.assert_called_once_with(
+        document.public_share_token.encode("utf-8"), b"whatever-was-sent"
+    )
+
+
+@pytest.mark.parametrize("token", ["café", "тoken", "🙂", "tok\x00en"])
+def test_a_token_that_is_not_plain_ascii_is_rejected_rather_than_raising(token) -> None:
+    """``secrets.compare_digest`` raises ``TypeError`` on two strings unless both are
+    ASCII, and this value comes off the query string, so anyone can send one that is
+    not. Raising would answer a wrong guess with a 500 while every other wrong guess
+    gets a 404, which is both a crash and a signal.
+    """
+    project = _project()
+    document = _document(workflow=DocumentWorkflow.published)
+
+    assert can_read_document(document, project, None, token) is False
 
 
 # --- require_can_read: always 404, never 403, on the anonymous path ---

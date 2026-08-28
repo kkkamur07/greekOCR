@@ -17,7 +17,10 @@ vi.mock("../../api/client", async (importOriginal) => {
 
 const mockedUpdateDocument = api.updateDocument as ReturnType<typeof vi.fn>;
 
-function renderMenu(workflow: "draft" | "published" | "archived" = "draft") {
+function renderMenu(
+  workflow: "draft" | "published" | "archived" = "draft",
+  publicShareToken: string | null = null,
+) {
   const onWorkflowChange = vi.fn();
   render(
     <div role="menu">
@@ -25,6 +28,7 @@ function renderMenu(workflow: "draft" | "published" | "archived" = "draft") {
         projectId="project-1"
         documentId="doc-1"
         workflow={workflow}
+        publicShareToken={publicShareToken}
         onWorkflowChange={onWorkflowChange}
       />
     </div>,
@@ -61,14 +65,31 @@ describe("PageEditorSharingMenu", () => {
     });
   });
 
-  it("shows the public link when the document is published", () => {
-    renderMenu("published");
+  it("shows the public link, with its token, when the document is published", () => {
+    renderMenu("published", "share-token-1");
 
     expect(screen.getByLabelText(/public document url/i)).toHaveValue(
-      `${window.location.origin}/public/projects/project-1/documents/doc-1`,
+      `${window.location.origin}/public/projects/project-1/documents/doc-1?t=share-token-1`,
     );
     expect(
       screen.getByRole("link", { name: /open public view/i }),
-    ).toHaveAttribute("href", "/public/projects/project-1/documents/doc-1");
+    ).toHaveAttribute(
+      "href",
+      "/public/projects/project-1/documents/doc-1?t=share-token-1",
+    );
+  });
+
+  it("tells a collaborator the owner has to hand out the link, rather than offer one that 404s", () => {
+    renderMenu("published", null);
+
+    expect(
+      screen.getByText(/only the project owner can get the public share link/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText(/public document url/i),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /open public view/i }),
+    ).not.toBeInTheDocument();
   });
 });

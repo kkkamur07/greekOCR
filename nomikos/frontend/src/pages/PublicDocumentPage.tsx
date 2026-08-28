@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import {
   api,
   publicPartMediaUrl,
@@ -36,6 +36,11 @@ type PublicDocumentFailure =
 export function PublicDocumentPage() {
   const { projectId, documentId } =
     useParams<{ projectId: string; documentId: string }>() ?? {};
+  // Read once: the token belongs to this page's own link, not to anything a
+  // reader can change from inside the app, so there is no case where it
+  // should be re-read after mount.
+  const searchParams = useSearchParams();
+  const token = searchParams?.get("t") ?? null;
   const [activePartId, setActivePartId] = useState<string | null>(null);
   const [selectedLineIndex, setSelectedLineIndex] = useState<number | null>(
     null,
@@ -49,14 +54,14 @@ export function PublicDocumentPage() {
     PublicDocumentFailure
   >({
     key:
-      projectId && documentId
-        ? ["public-document", projectId, documentId]
+      projectId && documentId && token
+        ? ["public-document", projectId, documentId, token]
         : null,
     tags: [resourceTags.publicDocument(projectId ?? "", documentId ?? "")],
     read: async () => {
       const [document, layout] = await Promise.all([
-        api.getPublicDocument(projectId!, documentId!),
-        api.getPublicLayout(projectId!, documentId!),
+        api.getPublicDocument(projectId!, documentId!, token),
+        api.getPublicLayout(projectId!, documentId!, token),
       ]);
       return { document, layout };
     },
@@ -72,7 +77,10 @@ export function PublicDocumentPage() {
 
   const document = data?.document ?? null;
   const layout = data?.layout ?? null;
-  const notFound = error?.kind === "not-found";
+  // A missing token disables the query above, which would otherwise leave
+  // `loading` stuck true forever (see useServerQuery) - it is the same "not
+  // published, or never existed" state as a real 404, not a reason to spin.
+  const notFound = !token || error?.kind === "not-found";
   const errorMessage = error?.kind === "message" ? error.text : null;
 
   const parts = useMemo(
@@ -123,22 +131,22 @@ export function PublicDocumentPage() {
       ? selectedLineIndex + 1
       : null;
 
-  const imageUrl = activePart ? publicPartMediaUrl(activePart.id) : null;
+  const imageUrl = activePart ? publicPartMediaUrl(activePart.id, token) : null;
   const imageDimensions = {
     width: activePart?.width ?? 0,
     height: activePart?.height ?? 0,
   };
 
   let content;
-  if (loading) {
-    content = <ContentRegionLoading label="Loading document" />;
-  } else if (notFound) {
+  if (notFound) {
     content = (
       <div className="notice-banner" role="alert">
         <strong>Document not available</strong>
         This document is not published or does not exist.
       </div>
     );
+  } else if (loading) {
+    content = <ContentRegionLoading label="Loading document" />;
   } else if (errorMessage) {
     content = (
       <div className="notice-banner" role="alert">
@@ -186,6 +194,7 @@ export function PublicDocumentPage() {
                 documentName={document?.name ?? ""}
                 partId={activePart.id}
                 partIndex={activePartIndex}
+                token={token}
               />
             )}
           </div>
@@ -207,6 +216,7 @@ export function PublicDocumentPage() {
                 projectId={projectId}
                 documentId={documentId}
                 partId={activePart.id}
+                token={token}
                 downloadFilename={`page-${activePartIndex}.pdf`}
               />
             ) : imageUrl && imageDimensions.width > 0 ? (

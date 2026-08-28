@@ -185,6 +185,28 @@ class DocumentWithPartsResponse(DocumentResponse):
     parts: list[DocumentPartResponse]
 
 
+class PublicDocumentWithPartsResponse(BaseModel):
+    """What an anonymous reader is told a published document is.
+
+    A separate model rather than ``DocumentWithPartsResponse`` with the token stripped
+    at serialisation time: ``response_model_exclude`` keeps the value off the wire but
+    not out of the schema, so the generated OpenAPI - and every client generated from
+    it - went on advertising ``public_share_token`` on a body that never carries it.
+    The public contract should be readable as what it is.
+    """
+
+    id: UUID
+    project_id: UUID
+    name: str
+    workflow: DocumentWorkflow
+    part_count: int = 0
+    parts: list[DocumentPartResponse]
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class ReorderPartsRequest(BaseModel):
     part_ids: list[UUID] = Field(min_length=1, max_length=MAX_PART_IDS_PER_REQUEST)
 

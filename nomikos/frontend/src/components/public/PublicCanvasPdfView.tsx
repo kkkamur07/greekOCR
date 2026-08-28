@@ -7,6 +7,7 @@ type PublicCanvasPdfViewProps = {
   projectId: string;
   documentId: string;
   partId: string;
+  token: string | null;
   downloadFilename?: string;
 };
 
@@ -14,6 +15,7 @@ export function PublicCanvasPdfView({
   projectId,
   documentId,
   partId,
+  token,
   downloadFilename = "transcription.pdf",
 }: PublicCanvasPdfViewProps) {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
@@ -31,6 +33,7 @@ export function PublicCanvasPdfView({
           projectId,
           documentId,
           partId,
+          token,
         );
         if (!active) return;
         const url = URL.createObjectURL(blob);
@@ -61,7 +64,7 @@ export function PublicCanvasPdfView({
         return null;
       });
     };
-  }, [projectId, documentId, partId]);
+  }, [projectId, documentId, partId, token]);
 
   if (loading) {
     return (

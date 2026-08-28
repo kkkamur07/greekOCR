@@ -2809,6 +2809,48 @@ export interface components {
        */
       part_id: string;
     };
+    /**
+     * PublicDocumentWithPartsResponse
+     * @description What an anonymous reader is told a published document is.
+     *
+     *     A separate model rather than ``DocumentWithPartsResponse`` with the token stripped
+     *     at serialisation time: ``response_model_exclude`` keeps the value off the wire but
+     *     not out of the schema, so the generated OpenAPI - and every client generated from
+     *     it - went on advertising ``public_share_token`` on a body that never carries it.
+     *     The public contract should be readable as what it is.
+     */
+    PublicDocumentWithPartsResponse: {
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Name */
+      name: string;
+      /**
+       * Part Count
+       * @default 0
+       */
+      part_count: number;
+      /** Parts */
+      parts: components["schemas"]["DocumentPartResponse"][];
+      /**
+       * Project Id
+       * Format: uuid
+       */
+      project_id: string;
+      /**
+       * Updated At
+       * Format: date-time
+       */
+      updated_at: string;
+      workflow: components["schemas"]["DocumentWorkflow"];
+    };
     /** PublicLayoutResponse */
     PublicLayoutResponse: {
       /** Blocks */
@@ -10852,7 +10894,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["DocumentWithPartsResponse"];
+          "application/json": components["schemas"]["PublicDocumentWithPartsResponse"];
         };
       };
       /** @description Not authenticated */

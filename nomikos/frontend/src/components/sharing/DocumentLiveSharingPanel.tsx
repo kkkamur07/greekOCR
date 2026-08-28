@@ -9,6 +9,7 @@ type DocumentLiveSharingPanelProps = {
   documentId: string;
   name: string;
   workflow: DocumentWorkflow;
+  publicShareToken: string | null;
   onUpdated: (patch: { name?: string; workflow?: DocumentWorkflow }) => void;
 };
 
@@ -17,6 +18,7 @@ export function DocumentLiveSharingPanel({
   documentId,
   name,
   workflow,
+  publicShareToken,
   onUpdated,
 }: DocumentLiveSharingPanelProps) {
   const [draftName, setDraftName] = useState(name);
@@ -84,6 +86,7 @@ export function DocumentLiveSharingPanel({
           projectId={projectId}
           documentId={documentId}
           workflow={workflow}
+          publicShareToken={publicShareToken}
           onWorkflowChange={(nextWorkflow) =>
             onUpdated({ workflow: nextWorkflow })
           }

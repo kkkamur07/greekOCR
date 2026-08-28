@@ -33,7 +33,15 @@ def can_read_document(
         return False
     if document.public_share_token is None or token is None:
         return False
-    return secrets.compare_digest(document.public_share_token, token)
+    # Compared as UTF-8 bytes, not as ``str``: ``compare_digest`` refuses two strings
+    # unless both are pure ASCII, and this one arrives straight off the query string,
+    # where anyone can put a "é" in it. On text it would raise ``TypeError`` and turn a
+    # wrong guess into a 500, which both breaks the "reads exactly like it was never
+    # published" promise above and hands back a way to tell malformed guesses apart from
+    # merely wrong ones. Bytes keep the constant-time guarantee and accept anything.
+    return secrets.compare_digest(
+        document.public_share_token.encode("utf-8"), token.encode("utf-8")
+    )
 
 
 def require_can_read(

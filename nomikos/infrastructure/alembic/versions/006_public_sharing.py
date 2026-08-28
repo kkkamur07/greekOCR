@@ -21,8 +21,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "005_public_sharing"
-down_revision: str | None = "004_rename_service_roles"
+revision: str = "006_public_sharing"
+down_revision: str | None = "005_case_insensitive_email"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -44,6 +44,12 @@ def upgrade() -> None:
     )
 
 
+# Downgrading drops ``document_parts.published`` outright, and a later re-upgrade
+# brings every part back at the ``true`` server default. A page an owner deliberately
+# held back therefore becomes publicly reachable again, silently. Losing the token on
+# the way down fails closed - every existing link simply 404s - but this one fails
+# open, so a downgrade on a database with held-back pages needs those pages recorded
+# first and set back afterwards.
 def downgrade() -> None:
     op.drop_column("document_parts", "published")
     op.drop_index(op.f("ix_documents_public_share_token"), table_name="documents")

@@ -15,14 +15,14 @@ from backend.annotation.application.transcription_pdf_service import Transcripti
 from backend.core.api.content_disposition import attachment_disposition
 from backend.core.api.pagination import MAX_CURSOR_LENGTH, decode_cursor, paginate_rows
 from backend.document.api.public_rate_limit import throttle_public_export, throttle_public_read
-from backend.document.api.responses import document_with_parts_response
+from backend.document.api.responses import public_document_with_parts_response
 from backend.document.api.schemas import (
     DEFAULT_PUBLIC_LAYOUT_LINES,
     MAX_PUBLIC_LAYOUT_LINES,
     MAX_SHARE_TOKEN_LENGTH,
-    DocumentWithPartsResponse,
     LineTranscriptionResponse,
     PublicBlockResponse,
+    PublicDocumentWithPartsResponse,
     PublicLayoutResponse,
     PublicLineResponse,
     PublicTranscriptionLayerResponse,
@@ -84,18 +84,14 @@ def _public_line_response(line) -> PublicLineResponse:
 
 @router.get(
     "/projects/{project_id}/documents/{document_id}",
-    response_model=DocumentWithPartsResponse,
-    # ``document_response(..., public=True)`` already sets the field to ``None``, but a
-    # ``null`` value is still a key in the JSON body - this is what actually keeps the
-    # key off the wire, so a client parsing this response has no way to even ask.
-    response_model_exclude={"public_share_token"},
+    response_model=PublicDocumentWithPartsResponse,
 )
 async def get_published_document(
     project_id: UUID,
     document_id: UUID,
     db: AsyncSession = Depends(get_db),
     t: str | None = Query(default=None, max_length=MAX_SHARE_TOKEN_LENGTH),
-) -> DocumentWithPartsResponse:
+) -> PublicDocumentWithPartsResponse:
     # No dimension backfill here, deliberately. It is a *write* - up to 25 blob
     # downloads and a `session.commit()` - and this route answers anyone with the URL.
     # Parts uploaded since migration 004 carry their dimensions already; the legacy ones
@@ -103,7 +99,7 @@ async def get_published_document(
     # which is the path that has a caller to attribute the work to. Until then the
     # response carries `width: null`, which its schema has always allowed.
     document = await _service.get_document_public(db, project_id, document_id, token=t)
-    return document_with_parts_response(document, public=True)
+    return public_document_with_parts_response(document)
 
 
 @router.get(

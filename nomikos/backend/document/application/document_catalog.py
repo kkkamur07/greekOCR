@@ -103,6 +103,23 @@ class DocumentCatalog:
         context = await self._access.require_document(session, user, project_id, document_id)
         return context.document
 
+    async def owns_project(
+        self,
+        session: AsyncSession,
+        user: User,
+        project_id: UUID,
+    ) -> bool:
+        """Whether ``user`` owns ``project_id`` - the bar for seeing the share token.
+
+        Membership is not enough. A collaborator who can read the token can hand an
+        anonymous, working link to the whole document to anyone, and the owner has no
+        way to notice it happened; the only remedy left is rotation, which breaks every
+        link already sent. That is the same reason publishing and rotation are
+        owner-only, so reading the secret has to be too.
+        """
+        project = await self._access.require_project(session, user, project_id)
+        return is_owner(project, user.id)
+
     async def get_document_public(
         self,
         session: AsyncSession,

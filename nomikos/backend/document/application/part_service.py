@@ -375,9 +375,21 @@ class DocumentPartService:
         # so it is not a decision any collaborator gets to make on the owner's behalf.
         if not is_owner(project, user.id):
             raise AccessDeniedError("Only the project owner can change what is published")
+        # Resolved against the parts ``require_document`` already eager-loaded, not one
+        # ``get_part`` per entry: that reload pulls every line and transcription with it,
+        # and the request accepts up to ``MAX_PART_IDS_PER_REQUEST`` entries with no rule
+        # against repeating one. Two thousand copies of a single id measured 7.3s and
+        # roughly eight thousand round trips on one pooled connection. ``reorder_parts``
+        # next door already validates its id set up front; this now does the same.
+        by_id = {part.id: part for part in document.parts}
+        settled: dict[UUID, bool] = {}
         for part_id, published in updates:
-            part = await self._access.part_in_document(session, document, part_id)
-            part.published = published
+            if part_id not in by_id:
+                raise NotFoundError("Part not found")
+            # Last value wins, the way a repeated field in any other payload would.
+            settled[part_id] = published
+        for part_id, published in settled.items():
+            by_id[part_id].published = published
         await session.commit()
         return sorted(document.parts, key=lambda p: p.order)
 

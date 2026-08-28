@@ -2814,6 +2814,61 @@
         "title": "PublicBlockResponse",
         "type": "object"
       },
+      "PublicDocumentWithPartsResponse": {
+        "description": "What an anonymous reader is told a published document is.\n\nA separate model rather than ``DocumentWithPartsResponse`` with the token stripped\nat serialisation time: ``response_model_exclude`` keeps the value off the wire but\nnot out of the schema, so the generated OpenAPI - and every client generated from\nit - went on advertising ``public_share_token`` on a body that never carries it.\nThe public contract should be readable as what it is.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "part_count": {
+            "default": 0,
+            "title": "Part Count",
+            "type": "integer"
+          },
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentPartResponse"
+            },
+            "title": "Parts",
+            "type": "array"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "workflow": {
+            "$ref": "#/components/schemas/DocumentWorkflow"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "name",
+          "workflow",
+          "parts",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "PublicDocumentWithPartsResponse",
+        "type": "object"
+      },
       "PublicLayoutResponse": {
         "properties": {
           "blocks": {
@@ -14137,7 +14192,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DocumentWithPartsResponse"
+                  "$ref": "#/components/schemas/PublicDocumentWithPartsResponse"
                 }
               }
             },

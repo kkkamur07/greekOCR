@@ -359,3 +359,125 @@ def test_setting_published_flag_is_owner_only(client, outsider_headers, publishe
         json={"parts": [{"part_id": part_id, "published": False}]},
     )
     assert denied.status_code == 403
+
+
+# --- The share token is the owner's to hand out, not every collaborator's ---
+# Tests that a member who is not the owner never sees the secret on any owner-facing
+# read, while the owner does. Does not test rotation, which is covered above.
+
+
+@pytest.mark.integration
+def test_a_collaborator_never_sees_the_share_token(
+    client, owner_headers, collaborator_user, collaborator_headers, published_document
+):
+    """Anyone holding the token can hand an anonymous link to the whole document to
+    anyone at all, and the owner has no way to see that it happened - the only remedy
+    left is rotation, which breaks every link already sent. Publishing and rotating are
+    owner-only for exactly that reason, so reading the secret has to be too.
+    """
+    project_id = published_document["project_id"]
+    document_id = published_document["document_id"]
+    share = client.post(
+        f"/projects/{project_id}/share",
+        headers=owner_headers,
+        json={"username": collaborator_user["username"]},
+    )
+    assert share.status_code == 204
+
+    base = f"/projects/{project_id}/documents"
+    detail = client.get(f"{base}/{document_id}", headers=collaborator_headers)
+    assert detail.status_code == 200
+    assert detail.json()["public_share_token"] is None
+
+    listing = client.get(base, headers=collaborator_headers)
+    assert listing.status_code == 200
+    assert all(item["public_share_token"] is None for item in listing.json()["items"])
+
+    # A write the collaborator *is* allowed to make must not leak it on the way back.
+    renamed = client.patch(
+        f"{base}/{document_id}",
+        headers=collaborator_headers,
+        json={"name": "Renamed by collaborator"},
+    )
+    assert renamed.status_code == 200
+    assert renamed.json()["public_share_token"] is None
+
+    # The owner still gets it, or there would be no way to share the document at all.
+    owner_detail = client.get(f"{base}/{document_id}", headers=owner_headers)
+    assert owner_detail.status_code == 200
+    assert owner_detail.json()["public_share_token"] == published_document["token"]
+
+
+# --- The bulk published flag is bounded work ---
+# Tests that repeated ids collapse and that a foreign id is refused before any write.
+
+
+@pytest.mark.integration
+def test_repeating_a_part_id_in_the_published_batch_settles_on_the_last_value(
+    client, owner_headers, published_document
+):
+    """The request accepts thousands of entries and nothing stopped one part id being
+    named over and over, each repeat reloading that part with all of its lines and
+    transcriptions. Repeats now collapse the way a repeated field in any other payload
+    would, and the batch costs one pass over the parts already in memory.
+    """
+    project_id = published_document["project_id"]
+    document_id = published_document["document_id"]
+    part_id = published_document["part_id"]
+
+    response = client.patch(
+        f"/projects/{project_id}/documents/{document_id}/parts/published",
+        headers=owner_headers,
+        json={
+            "parts": [
+                {"part_id": part_id, "published": False},
+                {"part_id": part_id, "published": True},
+                {"part_id": part_id, "published": False},
+            ]
+        },
+    )
+    assert response.status_code == 200
+    assert [part["published"] for part in response.json()] == [False]
+
+
+@pytest.mark.integration
+def test_a_foreign_part_id_in_the_batch_writes_nothing_at_all(
+    client, owner_headers, published_document
+):
+    project_id = published_document["project_id"]
+    document_id = published_document["document_id"]
+    part_id = published_document["part_id"]
+
+    response = client.patch(
+        f"/projects/{project_id}/documents/{document_id}/parts/published",
+        headers=owner_headers,
+        json={
+            "parts": [
+                {"part_id": part_id, "published": False},
+                {"part_id": "00000000-0000-0000-0000-000000000001", "published": False},
+            ]
+        },
+    )
+    assert response.status_code == 404
+
+    # The valid half of the batch must not have landed.
+    detail = client.get(f"/projects/{project_id}/documents/{document_id}", headers=owner_headers)
+    assert detail.json()["parts"][0]["published"] is True
+
+
+# --- The public contract says what it means ---
+# Tests that the token is absent from the public schema, not merely stripped at
+# serialisation time.
+
+
+@pytest.mark.integration
+def test_the_public_document_schema_does_not_advertise_the_share_token(client):
+    """``response_model_exclude`` kept the value off the wire but left the field in the
+    OpenAPI, so every generated client was told a public body carries a secret it can
+    never contain.
+    """
+    schema = client.get("/openapi.json").json()
+    route = schema["paths"]["/public/projects/{project_id}/documents/{document_id}"]
+    ref = route["get"]["responses"]["200"]["content"]["application/json"]["schema"]["$ref"]
+    model = schema["components"]["schemas"][ref.rsplit("/", 1)[-1]]
+    assert "public_share_token" not in model["properties"]

@@ -13,6 +13,12 @@ type DocumentLiveSharingControlsProps = {
   projectId: string;
   documentId: string;
   workflow: DocumentWorkflow;
+  /**
+   * Set only in the owner-facing document response - a collaborator's copy
+   * carries `null` here even once the document is published, since the token
+   * is what makes the link work and only the owner may hand it out.
+   */
+  publicShareToken: string | null;
   onWorkflowChange: (workflow: DocumentWorkflow) => void;
   disabled?: boolean;
   compact?: boolean;
@@ -22,6 +28,7 @@ export function DocumentLiveSharingControls({
   projectId,
   documentId,
   workflow,
+  publicShareToken,
   onWorkflowChange,
   disabled = false,
   compact = false,
@@ -29,8 +36,12 @@ export function DocumentLiveSharingControls({
   const [publishing, setPublishing] = useState(false);
   const isPublished = workflow === "published";
   const isArchived = workflow === "archived";
-  const publicPath = publicDocumentPath(projectId, documentId);
-  const publicUrl = publicDocumentUrl(projectId, documentId);
+  const publicPath = publicShareToken
+    ? publicDocumentPath(projectId, documentId, publicShareToken)
+    : null;
+  const publicUrl = publicShareToken
+    ? publicDocumentUrl(projectId, documentId, publicShareToken)
+    : null;
   const busy = disabled || publishing;
 
   async function handlePublishToggle() {
@@ -61,6 +72,7 @@ export function DocumentLiveSharingControls({
   }
 
   async function handleCopyPublicLink() {
+    if (!publicUrl) return;
     try {
       await navigator.clipboard.writeText(publicUrl);
       toast.success("Public link copied");
@@ -83,7 +95,7 @@ export function DocumentLiveSharingControls({
         {!compact && <span className="entity-panel__status-label">Status</span>}
         <WorkflowBadge workflow={workflow} />
       </div>
-      {isPublished && (
+      {isPublished && publicUrl && publicPath && (
         <div className={compact ? "pe-dd-share" : "entity-panel__share-block"}>
           <label
             className="entity-panel__label"
@@ -118,6 +130,16 @@ export function DocumentLiveSharingControls({
             </Link>
           </div>
         </div>
+      )}
+      {/*
+        A collaborator's document response never carries the token - only the
+        owner may hand out the link - so there is nothing here to build. Say
+        so plainly rather than showing a link that 404s for whoever opens it.
+      */}
+      {isPublished && !publicShareToken && (
+        <p className={compact ? "pe-dd-share" : "entity-panel__hint"}>
+          Only the project owner can get the public share link.
+        </p>
       )}
       {!isArchived &&
         (compact ? (
