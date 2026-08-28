@@ -134,25 +134,49 @@ rather than a failure: the work goes to the cloud, and the page says so.
 ## Architecture in one picture
 
 ```mermaid
-flowchart LR
-    Researcher["Researcher"] --> Editor["Next.js editor"]
-    Editor --> API["FastAPI platform API"]
-    API --> Data[("Postgres + private storage")]
-    API --> Jobs["Durable job state"]
-    Jobs --> Agent["nomikos agent (researcher's machine)"]
-    Agent --> LocalModels["CPU model cache"]
-    Jobs --> Worker["Hosted worker (same package)"]
-    Worker --> Models["BLLA + Calamari"]
-    API -.-> Vercel["Vercel"]
-    Data -.-> Supabase["Supabase"]
-    Worker -.-> Docker["Docker host"]
+flowchart TB
+    subgraph browser["Browser"]
+        Editor["Editor<br/>segment, transcribe, review"]
+        Reader["Public reader<br/>read only"]
+    end
+
+    subgraph platform["Platform"]
+        API["FastAPI on Vercel<br/>auth, sharing, documents, job state"]
+        DB[("Postgres on Supabase")]
+        Blobs[("Private object storage")]
+    end
+
+    subgraph execution["Execution"]
+        Agent["nomikos agent<br/>researcher's own machine"]
+        Worker["Hosted worker<br/>same package, Docker host"]
+        LocalModels["CPU model cache"]
+        Models["BLLA + Calamari"]
+    end
+
+    Editor -->|"session token"| API
+    Reader -->|"secret share link"| API
+    API --> DB
+    API --> Blobs
+    Agent -->|"claims a job"| API
+    Worker -->|"claims a job"| API
+    Agent --> LocalModels
+    Worker --> Models
+    API -.->|"job state, SSE or polling"| Editor
 ```
 
-The browser never connects directly to Postgres or private Storage. The API owns
-authentication, authorization, project sharing, document state, and job state. Postgres
-`NOTIFY` wakes API listeners, which deliver job changes through SSE when a long-lived listener
-is available, and the frontend falls back to polling when it is not. There is no email or push
-notification provider in the current implementation.
+Nothing outside the platform box reaches Postgres or private storage. The API owns
+authentication, authorization, project sharing, document state and job state, and it is the
+only thing that reads a page image off disk. The public reader is the same API seen through a
+narrower door: it carries no session, and every route it can reach demands the document's
+secret share token or answers exactly as if the document did not exist.
+
+Where a job runs is decided once, at submission. Both execution hosts run the same package
+and claim work from the same durable job state, so a job that starts in the cloud and a job
+that starts on a laptop differ only in which host is recorded against it.
+
+Postgres `NOTIFY` wakes API listeners, which deliver job changes through SSE when a
+long-lived listener is available; the frontend falls back to polling when it is not. There is
+no email or push notification provider in the current implementation.
 
 ## Read next
 
