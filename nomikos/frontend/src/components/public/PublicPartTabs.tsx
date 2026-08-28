@@ -14,6 +14,7 @@ export function PublicPartTabs({
   variant = "default",
 }: PublicPartTabsProps) {
   const tabsRef = useRef<(HTMLButtonElement | null)[]>([]);
+  const scrolledToRef = useRef<string | null>(null);
 
   const selectTab = useCallback(
     (index: number) => {
@@ -35,9 +36,14 @@ export function PublicPartTabs({
     const idx = parts.findIndex((p) => p.id === activeId);
     if (idx < 0) return;
     selectTab(idx);
-    // No smooth-scroll behavior here on purpose: it is unnecessary motion, and
-    // some viewers set prefers-reduced-motion, so a plain jump keeps this a
-    // no-op for anyone who wants that. scrollIntoView is also absent in jsdom.
+    // Only on an actual change of page. The parts array is rebuilt on every
+    // parent render, so scrolling unconditionally here would drag the strip
+    // back to the open page while someone was scrolling it to look ahead.
+    if (scrolledToRef.current === activeId) return;
+    scrolledToRef.current = activeId;
+    // No smooth-scroll behavior on purpose: it is unnecessary motion, and a
+    // plain jump is already correct for anyone who sets prefers-reduced-motion.
+    // scrollIntoView is also absent in jsdom.
     const el = tabsRef.current[idx];
     if (typeof el?.scrollIntoView === "function") {
       el.scrollIntoView({ block: "nearest", inline: "nearest" });
