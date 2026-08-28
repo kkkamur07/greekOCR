@@ -11,10 +11,10 @@ architecture, and every case runs over both:
   lands in.
 
 The per-line isolation half of this file was removed: it stubbed the decoder
-*and* the refiner for BLLA and the whole ONNX batch seam for Calamari, leaving
-a single production ``for`` loop executing. Every claim it made is made against
-real code in ``test_transcribe_batch_isolation``,
-``test_blla_polygonization_isolation`` and ``test_segment_refinement``.
+for BLLA and the whole ONNX batch seam for Calamari, leaving a single
+production ``for`` loop executing. Every claim it made is made against real
+code in ``test_transcribe_batch_isolation`` and
+``test_blla_polygonization_isolation``.
 
 The two families are asserted by type, not by HTTP status. Until #60 they were
 read by ``run_errors.http_exception_for_run_error``, which turned a

@@ -46,10 +46,6 @@ type PageEditorToolbarProps = {
   onResetSelectedLine: () => void;
   actionsOpen: boolean;
   onActionsOpenChange: (open: boolean) => void;
-  useOtsuRefinement: boolean;
-  onUseOtsuRefinementChange: (value: boolean) => void;
-  otsuSphereRadius: number;
-  onOtsuSphereRadiusChange: (value: number) => void;
   segmenting: boolean;
   ocrRunning: boolean;
   ocrScope?: "segment" | "page" | null;
@@ -96,10 +92,6 @@ export function PageEditorToolbar({
   onResetSelectedLine,
   actionsOpen,
   onActionsOpenChange,
-  useOtsuRefinement,
-  onUseOtsuRefinementChange,
-  otsuSphereRadius,
-  onOtsuSphereRadiusChange,
   segmenting,
   ocrRunning,
   ocrScope = null,
@@ -375,45 +367,6 @@ export function PageEditorToolbar({
               <p className="pe-dd-model">
                 Engine <strong>blla-segment</strong> (fixed)
               </p>
-              <label className="pe-dd-check">
-                <input
-                  type="checkbox"
-                  checked={useOtsuRefinement}
-                  disabled={processing}
-                  aria-label="Refine Kraken segments with Otsu"
-                  onChange={(event) =>
-                    onUseOtsuRefinementChange(event.target.checked)
-                  }
-                  onClick={(event) => event.stopPropagation()}
-                />
-                Otsu refinement
-              </label>
-              <div className="pe-dd-field">
-                <label htmlFor="otsu-sphere-px">Sphere (px)</label>
-                <input
-                  id="otsu-sphere-px"
-                  type="number"
-                  className="pe-dd-field__input"
-                  aria-label="Otsu morphological sphere radius in pixels"
-                  min={1}
-                  step={1}
-                  value={otsuSphereRadius}
-                  disabled={!useOtsuRefinement || processing}
-                  onClick={(event) => event.stopPropagation()}
-                  onChange={(event) => {
-                    const next = event.target.valueAsNumber;
-                    if (Number.isFinite(next) && next > 0) {
-                      onOtsuSphereRadiusChange(next);
-                    }
-                  }}
-                  onBlur={(event) => {
-                    const next = event.target.valueAsNumber;
-                    if (!Number.isFinite(next) || next <= 0) {
-                      onOtsuSphereRadiusChange(4);
-                    }
-                  }}
-                />
-              </div>
               <button
                 type="button"
                 role="menuitem"

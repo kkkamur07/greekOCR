@@ -154,25 +154,18 @@ def test_accepts_thousands_of_full_page_transcribe_lines() -> None:
     assert len(request.params["lines"]) == 2_000
 
 
-# --- BLLA refinement knobs ---------------------------------------------------
+# --- BLLA segmentation knobs -------------------------------------------------
 
 
 @pytest.mark.parametrize(
     "params",
     [
-        # A radius this large becomes a multi-thousand-pixel morphology kernel.
-        {"use_otsu_refinement": True, "otsu_sphere_radius": 4_096},
-        # Ratios that no mask comparison can ever satisfy.
-        {"min_iou": 1.5},
-        {"min_area_ratio": 12.0},
-        # Past the stored-geometry cap the extra vertices are unusable.
-        {"target_max_points": 100_000},
-        {"split_vertical_gap_px": 100_000.0},
-        # Non-positive values are refused at the same seam, matching the
-        # platform's SegmentPartRequest bounds.
-        {"otsu_sphere_radius": 0},
-        {"min_iou": -1},
-        {"target_max_points": 3},
+        # The decoder requires a threshold strictly between zero and one, and
+        # the runtime clamps to 0.99.
+        {"heatmap_threshold": 1.5},
+        # Non-positive values are refused at the same seam.
+        {"heatmap_threshold": 0},
+        {"heatmap_threshold": -1},
     ],
 )
 def test_rejects_out_of_range_segment_params(params: dict) -> None:
@@ -183,18 +176,9 @@ def test_rejects_out_of_range_segment_params(params: dict) -> None:
 
 def test_accepts_segment_params_at_their_upper_bound() -> None:
     """The bound is inclusive, and an in-range request is a valid submission."""
-    request = _segment_job(
-        params={
-            "use_otsu_refinement": True,
-            "otsu_sphere_radius": 128,
-            "min_iou": 1.0,
-            "min_area_ratio": 2.0,
-            "target_max_points": 256,
-            "split_vertical_gap_px": 256,
-        }
-    )
+    request = _segment_job(params={"heatmap_threshold": 0.99})
 
-    assert request.params["otsu_sphere_radius"] == 128
+    assert request.params["heatmap_threshold"] == 0.99
 
 
 def test_the_same_bounds_guard_the_runtime_the_agent_calls() -> None:
@@ -204,4 +188,4 @@ def test_the_same_bounds_guard_the_runtime_the_agent_calls() -> None:
     the platform is not the only thing that ever built one.
     """
     with pytest.raises(ValueError, match=CLIENT_INPUT_ERROR):
-        validate_request_params({"otsu_sphere_radius": 10_000}, InferenceSettings(_env_file=None))
+        validate_request_params({"heatmap_threshold": 10_000}, InferenceSettings(_env_file=None))

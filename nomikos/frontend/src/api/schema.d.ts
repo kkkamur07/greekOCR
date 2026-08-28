@@ -2882,43 +2882,8 @@ export interface components {
     };
     /** SegmentPartRequest */
     SegmentPartRequest: {
-      /**
-       * Min Area Ratio
-       * @default 0.95
-       */
-      min_area_ratio: number;
-      /**
-       * Min Iou
-       * @default 0.97
-       */
-      min_iou: number;
       /** Model Id */
       model_id?: string | null;
-      /**
-       * Otsu Sphere Radius
-       * @default 4
-       */
-      otsu_sphere_radius: number;
-      /**
-       * Split Large Lines
-       * @default true
-       */
-      split_large_lines: boolean;
-      /**
-       * Split Vertical Gap Px
-       * @default 12
-       */
-      split_vertical_gap_px: number;
-      /**
-       * Target Max Points
-       * @default 80
-       */
-      target_max_points: number;
-      /**
-       * Use Otsu Refinement
-       * @default false
-       */
-      use_otsu_refinement: boolean;
     };
     /** SegmentRunResponse */
     SegmentRunResponse: {

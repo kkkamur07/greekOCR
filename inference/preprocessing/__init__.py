@@ -1,1 +1,1 @@
-"""Shared preprocessing (rectify, segment refinement) for inference runners."""
+"""Shared preprocessing (segment geometry) for inference runners."""

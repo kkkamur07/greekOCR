@@ -16,34 +16,14 @@ from pydantic_settings import BaseSettings
 CLIENT_INPUT_ERROR = "Invalid inference request"
 REQUEST_LIMIT_ERROR = "Request exceeds configured limits"
 
-# Upper bounds for the BLLA refinement knobs, mirroring ``SegmentPartRequest`` in
-# the platform API. They cannot only live there: ``run_model`` is reached from
-# both sides of a **claim** - the platform's own submission path and an
-# **inference agent** running the model on a laptop - so the seam that bounds an
-# allocation has to sit next to the runtime, not next to one caller. Each bound
-# is the value at which the parameter stops meaning anything - see the per-key
-# notes - and the lower bound is 0 everywhere because the runtime already treats
+# Upper bounds for the BLLA segmentation knobs. They cannot live in the platform
+# API alone: ``run_model`` is reached from both sides of a **claim** - the
+# platform's own submission path and an **inference agent** running the model on
+# a laptop - so the seam that bounds a value has to sit next to the runtime, not
+# next to one caller. Each bound is the value at which the parameter stops
+# meaning anything, and the lower bound is 0 because the runtime already treats
 # non-positive values as "use the default".
 SEGMENT_PARAM_BOUNDS: dict[str, tuple[float, float]] = {
-    # ``margin_px`` becomes a (2r+1)x(2r+1) morphology kernel in
-    # ``otsu_band_contours``: the allocation and the dilation cost are quadratic
-    # in the radius, and a dilation wider than a line's own height merges the
-    # neighbouring lines it is supposed to separate.
-    "otsu_sphere_radius": (0.0, 128.0),
-    # Compared against a mask IoU in ``candidate_quality``. IoU is bounded by
-    # 1.0, so a higher gate can never be satisfied - every line would silently
-    # come back unsimplified.
-    "min_iou": (0.0, 1.0),
-    # Simplified-over-reference polygon area. Simplification usually shrinks the
-    # area but can grow it where it cuts across a concavity, so the ceiling is
-    # not 1.0; twice the original area is already far outside what
-    # ``approxPolyDP`` can produce from the same contour.
-    "min_area_ratio": (0.0, 2.0),
-    # Vertical gap that splits an over-merged band into separate lines. Past a
-    # couple of hundred pixels - several manuscript line heights - the
-    # clustering degenerates into "never split", which is what
-    # ``split_large_lines: false`` already expresses.
-    "split_vertical_gap_px": (0.0, 256.0),
     # Decoder emission gate. The decoder requires a threshold strictly between
     # zero and one, and the runtime clamps to 0.99, so the admission ceiling
     # matches that clamp rather than leaving a caller to trigger the decoder's
@@ -270,19 +250,9 @@ def _validate_bounded_param(
 
 
 def validate_segment_params(params: dict[str, Any], settings: AdmissionSettings) -> None:
-    """Bound the BLLA refinement knobs before they size allocations or geometry."""
+    """Bound the BLLA segmentation knobs before they reach the decoder."""
     for key, (minimum, maximum) in SEGMENT_PARAM_BOUNDS.items():
         _validate_bounded_param(params, key, minimum=minimum, maximum=maximum)
-    # A refined polygon denser than the stored-geometry cap could never be
-    # written back through the platform's line contract, and the simplifier stops
-    # as soon as it is under target, so a larger budget only buys vertices that
-    # get rejected downstream. Below four points there is no polygon at all.
-    _validate_bounded_param(
-        params,
-        "target_max_points",
-        minimum=3.0,
-        maximum=float(settings.inference_max_geometry_points),
-    )
 
 
 def validate_request_params(params: dict[str, Any], settings: AdmissionSettings) -> int:

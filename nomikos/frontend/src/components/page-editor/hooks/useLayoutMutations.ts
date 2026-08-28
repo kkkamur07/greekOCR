@@ -112,8 +112,6 @@ export function useLayoutMutations({
   // going, and must not report the page as idle on the way out.
   const [segmentRunCount, setSegmentRunCount] = useState(0);
   const segmenting = segmentRunCount > 0;
-  const [useOtsuRefinement, setUseOtsuRefinement] = useState(false);
-  const [otsuSphereRadius, setOtsuSphereRadius] = useState(4);
   const [segmentMessage, setSegmentMessage] = useState<StatusMessage | null>(
     null,
   );
@@ -529,9 +527,7 @@ export function useLayoutMutations({
    * twice, in two places, with two sources, is how they come to disagree.
    */
   function segmentationMessage(segmentCount: number): string {
-    return useOtsuRefinement
-      ? `Kraken segmentation completed with Otsu refinement (${otsuSphereRadius}px sphere, ${segmentCount} Segment(s)).`
-      : `Kraken segmentation completed using raw Kraken boundaries (${segmentCount} Segment(s)).`;
+    return `Kraken segmentation completed using raw Kraken boundaries (${segmentCount} Segment(s)).`;
   }
 
   async function runAutoSegment() {
@@ -555,10 +551,7 @@ export function useLayoutMutations({
     };
 
     try {
-      const enqueued = await api.segmentPart(projectId, documentId, partId, {
-        use_otsu_refinement: useOtsuRefinement,
-        otsu_sphere_radius: otsuSphereRadius,
-      });
+      const enqueued = await api.segmentPart(projectId, documentId, partId, {});
       await trackJobAndWait(enqueued.job_id, jobMeta, {
         timeoutMs: INFERENCE_JOB_WAIT_CEILING_MS,
       });
@@ -596,10 +589,6 @@ export function useLayoutMutations({
     setSaveMessage,
     mutationError,
     segmenting,
-    useOtsuRefinement,
-    setUseOtsuRefinement,
-    otsuSphereRadius,
-    setOtsuSphereRadius,
     segmentMessage,
     moveSelectedBaseline,
     saveSelectedLine,

@@ -33,7 +33,6 @@ from backend.document.api.schemas import (
     LineTranscriptionPatchRequest,
     LineUpsertRequest,
     ReorderPartsRequest,
-    SegmentPartRequest,
     TranscribePartRequest,
 )
 from backend.document.application.document_catalog import PublicLayoutPage
@@ -107,13 +106,6 @@ def test_upsert_rejects_unbounded_kraken_ceiling() -> None:
 def test_point_pair_validation_still_applies() -> None:
     with pytest.raises(PydanticValidationError):
         LineCreateRequest(order=0, points=[[0, 0], [1, 1], [2, 2], [3, 3, 3]])
-
-
-def test_segmentation_cannot_request_more_points_than_the_platform_stores() -> None:
-    SegmentPartRequest(target_max_points=MAX_LINE_GEOMETRY_POINTS)
-
-    with pytest.raises(PydanticValidationError):
-        SegmentPartRequest(target_max_points=MAX_LINE_GEOMETRY_POINTS + 1)
 
 
 # --- Public layout read surface ---

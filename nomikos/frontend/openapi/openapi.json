@@ -3039,20 +3039,6 @@
       },
       "SegmentPartRequest": {
         "properties": {
-          "min_area_ratio": {
-            "default": 0.95,
-            "exclusiveMinimum": 0.0,
-            "maximum": 2.0,
-            "title": "Min Area Ratio",
-            "type": "number"
-          },
-          "min_iou": {
-            "default": 0.97,
-            "exclusiveMinimum": 0.0,
-            "maximum": 1.0,
-            "title": "Min Iou",
-            "type": "number"
-          },
           "model_id": {
             "anyOf": [
               {
@@ -3064,37 +3050,6 @@
               }
             ],
             "title": "Model Id"
-          },
-          "otsu_sphere_radius": {
-            "default": 4.0,
-            "exclusiveMinimum": 0.0,
-            "maximum": 128.0,
-            "title": "Otsu Sphere Radius",
-            "type": "number"
-          },
-          "split_large_lines": {
-            "default": true,
-            "title": "Split Large Lines",
-            "type": "boolean"
-          },
-          "split_vertical_gap_px": {
-            "default": 12.0,
-            "exclusiveMinimum": 0.0,
-            "maximum": 256.0,
-            "title": "Split Vertical Gap Px",
-            "type": "number"
-          },
-          "target_max_points": {
-            "default": 80,
-            "exclusiveMinimum": 3.0,
-            "maximum": 256.0,
-            "title": "Target Max Points",
-            "type": "integer"
-          },
-          "use_otsu_refinement": {
-            "default": false,
-            "title": "Use Otsu Refinement",
-            "type": "boolean"
           }
         },
         "title": "SegmentPartRequest",

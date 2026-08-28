@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class DecodedBLLALine:
-    """A decoded line before contract and Otsu refinement conversion."""
+    """A decoded line before conversion to the segment contract."""
 
     baseline: list[list[float]]
     polygon: list[list[float]]
