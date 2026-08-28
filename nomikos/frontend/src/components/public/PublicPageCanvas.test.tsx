@@ -44,7 +44,90 @@ function stubNaturalSize(img: HTMLImageElement, width: number, height: number) {
   });
 }
 
+/**
+ * A box before a decode, the way a real browser gives one.
+ *
+ * The `<img>` is laid out from the page's aspect ratio the moment it is in the
+ * DOM, so its ResizeObserver fires with a real size while the bytes are still
+ * arriving. jsdom lays nothing out and never fires one, which is why the other
+ * tests here reach `imageLoaded` and `displaySize` in the same step and cannot
+ * tell which of the two is holding the overlay back. This produces the state
+ * where they disagree.
+ */
+function withUndecodedLayoutBox(width: number, height: number) {
+  const observers = globalThis.ResizeObserver;
+  const proto = globalThis.HTMLElement.prototype;
+  const widthDescriptor = Object.getOwnPropertyDescriptor(proto, "clientWidth");
+  const heightDescriptor = Object.getOwnPropertyDescriptor(
+    proto,
+    "clientHeight",
+  );
+
+  Object.defineProperty(proto, "clientWidth", {
+    value: width,
+    configurable: true,
+  });
+  Object.defineProperty(proto, "clientHeight", {
+    value: height,
+    configurable: true,
+  });
+  globalThis.ResizeObserver = class {
+    constructor(private readonly callback: ResizeObserverCallback) {}
+    observe() {
+      this.callback([], this as unknown as ResizeObserver);
+    }
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver;
+
+  return () => {
+    globalThis.ResizeObserver = observers;
+    if (widthDescriptor)
+      Object.defineProperty(proto, "clientWidth", widthDescriptor);
+    if (heightDescriptor)
+      Object.defineProperty(proto, "clientHeight", heightDescriptor);
+  };
+}
+
 describe("PublicPageCanvas", () => {
+  it("keeps the overlay off an image that has a box but no pixels yet", () => {
+    const restore = withUndecodedLayoutBox(640, 900);
+    try {
+      render(
+        <PublicPageCanvas
+          imageUrl="/page-1.jpg"
+          layoutWidth={640}
+          layoutHeight={900}
+          regions={REGIONS}
+          selectedRegionId={null}
+          onSelectRegion={vi.fn()}
+        />,
+      );
+
+      // This is the whole bug: `displaySize` is already real and `coordSize`
+      // already holds the layout dimensions from the props, so every condition
+      // except "has the image actually loaded" is satisfied. Drawing here puts
+      // polygons over blank space, and over the wrong box the moment the real
+      // image reports a natural size that differs from the layout's.
+      expect(
+        screen.queryByRole("button", { name: "Line 1" }),
+      ).not.toBeInTheDocument();
+
+      const img = screen.getByAltText("Manuscript page") as HTMLImageElement;
+      stubNaturalSize(img, 1280, 1800);
+      fireEvent.load(img);
+
+      const line = screen.getByRole("button", { name: "Line 1" });
+      // And it is drawn against the decoded image's own coordinates, not the
+      // layout figures it was holding a moment earlier.
+      expect(line.closest("svg")?.getAttribute("viewBox")).toBe(
+        "0 0 1280 1800",
+      );
+    } finally {
+      restore();
+    }
+  });
+
   it("does not render polygons before the image loads, and does after", () => {
     render(
       <PublicPageCanvas
