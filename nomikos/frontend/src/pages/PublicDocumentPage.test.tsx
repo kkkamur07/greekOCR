@@ -101,7 +101,7 @@ function renderPublicPage() {
   window.history.replaceState(
     {},
     "",
-    "/public/projects/project-1/documents/doc-1",
+    "/public/projects/project-1/documents/doc-1?t=share-token-1",
   );
   return render(<PublicDocumentPage />);
 }
@@ -180,5 +180,36 @@ describe("PublicDocumentPage", () => {
     expect(screen.getByTestId("public-page-canvas")).toHaveTextContent(
       "Selected: 1",
     );
+  });
+
+  it("sends the token from its own URL on every public request", async () => {
+    renderPublicPage();
+    await screen.findByRole("heading", { name: "MS Or. 1445 - Genesis" });
+
+    expect(api.getPublicDocument).toHaveBeenCalledWith(
+      "project-1",
+      "doc-1",
+      "share-token-1",
+    );
+    expect(api.getPublicLayout).toHaveBeenCalledWith(
+      "project-1",
+      "doc-1",
+      "share-token-1",
+    );
+  });
+
+  it("shows the not-found state rather than spinning forever with no token", () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/public/projects/project-1/documents/doc-1",
+    );
+    render(<PublicDocumentPage />);
+
+    expect(screen.getByText("Document not available")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("status", { name: "Loading document" }),
+    ).not.toBeInTheDocument();
+    expect(api.getPublicDocument).not.toHaveBeenCalled();
   });
 });

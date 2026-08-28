@@ -42,6 +42,9 @@ MAX_PART_IDS_PER_REQUEST = 10_000
 # geometry a document may have. The cursor is how a client reads the rest.
 DEFAULT_PUBLIC_LAYOUT_LINES = 500
 MAX_PUBLIC_LAYOUT_LINES = 500
+# Matches ``documents.public_share_token``'s column width. Bounding the query parameter
+# here means an oversized ``t`` is a 422 before it ever reaches a comparison.
+MAX_SHARE_TOKEN_LENGTH = 64
 
 #: Optional list of line ids, bounded. Declared once so a new route cannot accept an
 #: unbounded one by forgetting a per-route check - the same reason ``GeometryPoints``
@@ -104,6 +107,11 @@ class DocumentResponse(BaseModel):
     name: str
     workflow: DocumentWorkflow
     part_count: int = 0
+    # Owner-facing only. ``responses.document_response`` is the single place that
+    # decides whether this is populated or forced to ``None`` - see its ``public`` flag.
+    # ``None`` until a document is first published, and again after nothing has
+    # regenerated it; never re-derive "is this shared" from anything but this field.
+    public_share_token: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -123,6 +131,7 @@ class DocumentPartResponse(BaseModel):
     width: int | None
     height: int | None
     reviewed: bool
+    published: bool
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -137,6 +146,17 @@ class DocumentPartUpdateRequest(BaseModel):
         if value is None:
             raise ValueError("must not be null")
         return value
+
+
+class PartPublishedUpdate(BaseModel):
+    part_id: UUID
+    published: bool
+
+
+class PartsPublishedUpdateRequest(BaseModel):
+    """Bulk per-part publish flag: one call for the pages a chapter goes live with."""
+
+    parts: list[PartPublishedUpdate] = Field(min_length=1, max_length=MAX_PART_IDS_PER_REQUEST)
 
 
 class PartUploadBeginRequest(BaseModel):
@@ -163,6 +183,28 @@ class PartUploadFinalizeRequest(BaseModel):
 
 class DocumentWithPartsResponse(DocumentResponse):
     parts: list[DocumentPartResponse]
+
+
+class PublicDocumentWithPartsResponse(BaseModel):
+    """What an anonymous reader is told a published document is.
+
+    A separate model rather than ``DocumentWithPartsResponse`` with the token stripped
+    at serialisation time: ``response_model_exclude`` keeps the value off the wire but
+    not out of the schema, so the generated OpenAPI - and every client generated from
+    it - went on advertising ``public_share_token`` on a body that never carries it.
+    The public contract should be readable as what it is.
+    """
+
+    id: UUID
+    project_id: UUID
+    name: str
+    workflow: DocumentWorkflow
+    part_count: int = 0
+    parts: list[DocumentPartResponse]
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
 
 
 class ReorderPartsRequest(BaseModel):

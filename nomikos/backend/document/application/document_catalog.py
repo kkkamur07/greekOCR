@@ -12,6 +12,7 @@ published-workflow rule in two places again.
 
 from __future__ import annotations
 
+import secrets
 from typing import NamedTuple
 from uuid import UUID
 
@@ -102,16 +103,37 @@ class DocumentCatalog:
         context = await self._access.require_document(session, user, project_id, document_id)
         return context.document
 
+    async def owns_project(
+        self,
+        session: AsyncSession,
+        user: User,
+        project_id: UUID,
+    ) -> bool:
+        """Whether ``user`` owns ``project_id`` - the bar for seeing the share token.
+
+        Membership is not enough. A collaborator who can read the token can hand an
+        anonymous, working link to the whole document to anyone, and the owner has no
+        way to notice it happened; the only remedy left is rotation, which breaks every
+        link already sent. That is the same reason publishing and rotation are
+        owner-only, so reading the secret has to be too.
+        """
+        project = await self._access.require_project(session, user, project_id)
+        return is_owner(project, user.id)
+
     async def get_document_public(
         self,
         session: AsyncSession,
         project_id: UUID,
         document_id: UUID,
+        *,
+        token: str | None = None,
     ) -> Document:
         # ``None`` is the whole difference: the public router has no authentication
         # dependency, so there is no caller to check membership for, and the seam falls
-        # through to the published-workflow rule.
-        context = await self._access.require_document(session, None, project_id, document_id)
+        # through to the published-workflow-and-token rule.
+        context = await self._access.require_document(
+            session, None, project_id, document_id, token=token
+        )
         return context.document
 
     async def get_published_part(
@@ -120,8 +142,12 @@ class DocumentCatalog:
         project_id: UUID,
         document_id: UUID,
         part_id: UUID,
+        *,
+        token: str | None = None,
     ) -> DocumentPart:
-        context = await self._access.require_part(session, None, project_id, document_id, part_id)
+        context = await self._access.require_part(
+            session, None, project_id, document_id, part_id, token=token
+        )
         return context.part
 
     async def get_published_part_context(
@@ -130,13 +156,17 @@ class DocumentCatalog:
         project_id: UUID,
         document_id: UUID,
         part_id: UUID,
+        *,
+        token: str | None = None,
     ) -> PartContext:
         """The published part *and* its document, for callers that need both.
 
         Exports name their files after the document, and a second ``get_document_public``
         would repeat the access check this one already made.
         """
-        return await self._access.require_part(session, None, project_id, document_id, part_id)
+        return await self._access.require_part(
+            session, None, project_id, document_id, part_id, token=token
+        )
 
     async def update_document(
         self,
@@ -158,7 +188,35 @@ class DocumentCatalog:
             # whoever owns the project, not for anyone they shared it with.
             if workflow is DocumentWorkflow.published and not is_owner(project, user.id):
                 raise AccessDeniedError("Only the project owner can publish a document")
+            if workflow is DocumentWorkflow.published and document.public_share_token is None:
+                # Minted once, the first time a document goes live. A later draft ->
+                # published round trip keeps the same link rather than silently
+                # breaking whatever was already shared - rotating is a separate,
+                # explicit operation the owner reaches for on purpose.
+                fields = {**fields, "public_share_token": secrets.token_urlsafe(32)}
         return await self._documents.update(session, document, **fields)
+
+    async def rotate_share_token(
+        self,
+        session: AsyncSession,
+        user: User,
+        project_id: UUID,
+        document_id: UUID,
+    ) -> Document:
+        """Mint a fresh share token, invalidating every link built from the old one.
+
+        Same gate as publishing itself: only the owner may create or destroy a standing
+        public link, not just any collaborator. This does not touch ``workflow`` - a
+        document can be rotated whether or not it is currently published, since nothing
+        stops an owner from pre-arming a link before they flip it live.
+        """
+        context = await self._access.require_document(session, user, project_id, document_id)
+        project, document = context.project, context.document
+        if not is_owner(project, user.id):
+            raise AccessDeniedError("Only the project owner can rotate the share link")
+        return await self._documents.update(
+            session, document, public_share_token=secrets.token_urlsafe(32)
+        )
 
     async def delete_document(
         self,
@@ -187,8 +245,12 @@ class DocumentCatalog:
         session: AsyncSession,
         project_id: UUID,
         document_id: UUID,
+        *,
+        token: str | None = None,
     ) -> list[Transcription]:
-        document = await self.get_document_public(session, project_id, document_id)
+        # Transcription *layers* only - id, name, kind - never a part's lines or their
+        # text, so this needs no published-part filtering of its own.
+        document = await self.get_document_public(session, project_id, document_id, token=token)
         return await self._documents.list_transcriptions(session, document.id)
 
     async def list_document_layout_public(
@@ -199,6 +261,7 @@ class DocumentCatalog:
         *,
         limit: int,
         cursor: PageCursor | None = None,
+        token: str | None = None,
     ) -> PublicLayoutPage:
         """Bounded layout read for anonymous callers.
 
@@ -212,8 +275,11 @@ class DocumentCatalog:
         exactly ``limit`` rows is indistinguishable from a document that has exactly
         that many blocks: a published page silently lost the rest of its regions with
         nothing in the response a client could notice.
+
+        Both repository reads filter to the document's *published* parts - the document
+        itself being public does not mean every page on it is.
         """
-        document = await self.get_document_public(session, project_id, document_id)
+        document = await self.get_document_public(session, project_id, document_id, token=token)
         blocks: list[Block] = []
         blocks_truncated = False
         if cursor is None:

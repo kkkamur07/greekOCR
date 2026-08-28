@@ -10,6 +10,7 @@ type PublicDocumentExportsProps = {
   documentName: string;
   partId: string;
   partIndex: number;
+  token: string | null;
 };
 
 export function PublicDocumentExports({
@@ -18,6 +19,7 @@ export function PublicDocumentExports({
   documentName,
   partId,
   partIndex,
+  token,
 }: PublicDocumentExportsProps) {
   const downloadFilename = (extension: string) =>
     `${exportFileStem(documentName, partIndex)}.${extension}`;
@@ -43,6 +45,7 @@ export function PublicDocumentExports({
         projectId,
         documentId,
         partId,
+        token,
       );
       const url = URL.createObjectURL(blob);
       const anchor = globalThis.document.createElement("a");
@@ -67,6 +70,7 @@ export function PublicDocumentExports({
         projectId,
         documentId,
         partId,
+        token,
       );
       const url = URL.createObjectURL(blob);
       const anchor = globalThis.document.createElement("a");

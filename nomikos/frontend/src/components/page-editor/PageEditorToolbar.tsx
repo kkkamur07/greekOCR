@@ -422,6 +422,7 @@ export function PageEditorToolbar({
                   projectId={projectId}
                   documentId={documentId}
                   workflow={document.workflow}
+                  publicShareToken={document.public_share_token ?? null}
                   onWorkflowChange={onDocumentWorkflowChange}
                   disabled={processing}
                 />

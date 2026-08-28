@@ -131,3 +131,103 @@ def test_migration_chain_matches_orm_metadata(migrated_scratch_database: str) ->
         "Add a migration for these changes instead of editing 001_initial_schema:\n"
         + "\n".join(repr(entry) for entry in diff)
     )
+
+
+@pytest.fixture
+def scratch_database_before_public_sharing() -> Iterator[str]:
+    """An empty database migrated to the revision *before* 006, and left there."""
+    base_url = get_infrastructure_settings().migrator_database_url
+    maintenance_url = _maintenance_url(base_url)
+    scratch_url = _with_database(base_url, _SCRATCH_DATABASE)
+
+    _run_ddl(maintenance_url, f'DROP DATABASE IF EXISTS "{_SCRATCH_DATABASE}" WITH (FORCE)')
+    _run_ddl(maintenance_url, f'CREATE DATABASE "{_SCRATCH_DATABASE}"')
+
+    previous = os.environ.get("MIGRATOR_DATABASE_URL")
+    os.environ["MIGRATOR_DATABASE_URL"] = scratch_url
+    get_infrastructure_settings.cache_clear()
+    try:
+        command.upgrade(Config(_ALEMBIC_INI), "005_case_insensitive_email")
+        yield scratch_url
+    finally:
+        if previous is None:
+            os.environ.pop("MIGRATOR_DATABASE_URL", None)
+        else:
+            os.environ["MIGRATOR_DATABASE_URL"] = previous
+        get_infrastructure_settings.cache_clear()
+        _run_ddl(maintenance_url, f'DROP DATABASE IF EXISTS "{_SCRATCH_DATABASE}" WITH (FORCE)')
+
+
+def test_006_gives_already_published_documents_a_share_token(
+    scratch_database_before_public_sharing: str,
+) -> None:
+    """Documents that were public before 006 must come out of it with a token.
+
+    Every ``/public/*`` route reads a null token as "this document is not shareable",
+    so without the backfill an owner whose chapter was already live would open the
+    sharing panel and be told that only the owner can get the link, while being the
+    owner. The links themselves cannot be rescued either way - a URL sent last week
+    carries no ``t`` at all - but the owner must have a working one to re-send without
+    unpublishing and republishing first.
+    """
+    engine = create_engine(scratch_database_before_public_sharing)
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO users (id, email, username, hashed_password) VALUES "
+                    "('11111111-1111-1111-1111-111111111111', 'a@example.com', 'a', 'x')"
+                )
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO projects (id, name, slug, owner_id) VALUES "
+                    "('22222222-2222-2222-2222-222222222222', 'P', 'p', "
+                    "'11111111-1111-1111-1111-111111111111')"
+                )
+            )
+            for document_id, workflow in (
+                ("33333333-3333-3333-3333-333333333333", "published"),
+                ("44444444-4444-4444-4444-444444444444", "published"),
+                ("55555555-5555-5555-5555-555555555555", "draft"),
+            ):
+                connection.execute(
+                    text(
+                        "INSERT INTO documents (id, project_id, name, workflow) VALUES "
+                        "(:id, '22222222-2222-2222-2222-222222222222', 'D', :workflow)"
+                    ),
+                    {"id": document_id, "workflow": workflow},
+                )
+    finally:
+        engine.dispose()
+
+    previous = os.environ.get("MIGRATOR_DATABASE_URL")
+    os.environ["MIGRATOR_DATABASE_URL"] = scratch_database_before_public_sharing
+    get_infrastructure_settings.cache_clear()
+    try:
+        command.upgrade(Config(_ALEMBIC_INI), "head")
+    finally:
+        if previous is None:
+            os.environ.pop("MIGRATOR_DATABASE_URL", None)
+        else:
+            os.environ["MIGRATOR_DATABASE_URL"] = previous
+        get_infrastructure_settings.cache_clear()
+
+    engine = create_engine(scratch_database_before_public_sharing)
+    try:
+        with engine.connect() as connection:
+            rows = connection.execute(
+                text("SELECT workflow::text, public_share_token FROM documents ORDER BY id")
+            ).fetchall()
+    finally:
+        engine.dispose()
+
+    published = [token for workflow, token in rows if workflow == "published"]
+    drafts = [token for workflow, token in rows if workflow == "draft"]
+
+    assert all(token for token in published), published
+    # Distinct, not merely present: the column is uniquely indexed, and one token
+    # shared between two documents would make one link open the other.
+    assert len(set(published)) == len(published) == 2
+    # A draft has nothing to link to yet, so it must come out with no token to leak.
+    assert drafts == [None]

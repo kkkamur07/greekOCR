@@ -79,9 +79,11 @@ class TranscriptionPdfService:
         project_id: UUID,
         document_id: UUID,
         part_id: UUID,
+        *,
+        token: str | None = None,
     ) -> bytes:
         part = await self._document_service.get_published_part(
-            session, project_id, document_id, part_id
+            session, project_id, document_id, part_id, token=token
         )
         width, height = await self._page_size(session, part)
         lines = self._pdf_lines(await self._documents.list_part_lines(session, part.id))

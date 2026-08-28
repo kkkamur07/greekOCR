@@ -876,6 +876,8 @@ def _publish_fixture(*, owner_id, collaborator_ids=()):
             self.project_id = project_id
             self.workflow = DocumentWorkflow.draft
             self.name = "Codex"
+            # Unset, like a real draft row - update_document mints one on first publish.
+            self.public_share_token = None
 
     project = _Project()
     document = _Document(project.id)

@@ -50,6 +50,7 @@ from backend.document.api.schemas import (
     PageTranscriptionTextLineResponse,
     PairingProgressResponse,
     PairTextLineRequest,
+    PartsPublishedUpdateRequest,
     PartUploadBeginRequest,
     PartUploadBeginResponse,
     PartUploadFinalizeRequest,
@@ -177,9 +178,14 @@ async def list_documents(
     part_counts = await _document_repo.count_parts_by_document_ids(
         db, [document.id for document in page]
     )
+    owns = await _catalog.owns_project(db, current_user, project_id)
     return DocumentPageResponse(
         items=[
-            document_response(document, part_count=part_counts.get(document.id, 0))
+            document_response(
+                document,
+                part_count=part_counts.get(document.id, 0),
+                share_token=document.public_share_token if owns else None,
+            )
             for document in page
         ],
         next_cursor=next_cursor,
@@ -206,7 +212,10 @@ async def get_document(
 ) -> DocumentWithPartsResponse:
     document = await _catalog.get_document(db, current_user, project_id, document_id)
     await _parts.backfill_part_dimensions(db, document.parts)
-    return document_with_parts_response(document)
+    owns = await _catalog.owns_project(db, current_user, project_id)
+    return document_with_parts_response(
+        document, share_token=document.public_share_token if owns else None
+    )
 
 
 @router.patch("/{document_id}", response_model=DocumentResponse)
@@ -220,7 +229,34 @@ async def update_document(
     updates = body.model_dump(exclude_unset=True)
     document = await _catalog.update_document(db, current_user, project_id, document_id, **updates)
     part_counts = await _document_repo.count_parts_by_document_ids(db, [document.id])
-    return document_response(document, part_count=part_counts.get(document.id, 0))
+    owns = await _catalog.owns_project(db, current_user, project_id)
+    return document_response(
+        document,
+        part_count=part_counts.get(document.id, 0),
+        share_token=document.public_share_token if owns else None,
+    )
+
+
+@router.post("/{document_id}/share-token/rotate", response_model=DocumentResponse)
+async def rotate_document_share_token(
+    project_id: UUID,
+    document_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> DocumentResponse:
+    """Mint a fresh share token, owner-only. Every link built from the old one 404s
+    from here on - see ``DocumentCatalog.rotate_share_token`` - regardless of who it
+    was shared with or how long ago.
+    """
+    document = await _catalog.rotate_share_token(db, current_user, project_id, document_id)
+    part_counts = await _document_repo.count_parts_by_document_ids(db, [document.id])
+    # Ownership is the gate on rotation itself, so reaching this line has already
+    # established it; there is nothing left to ask.
+    return document_response(
+        document,
+        part_count=part_counts.get(document.id, 0),
+        share_token=document.public_share_token,
+    )
 
 
 @router.get("/{document_id}/transcriptions", response_model=list[TranscriptionLayerResponse])
@@ -347,6 +383,29 @@ async def reorder_parts(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> list[DocumentPartResponse]:
     parts = await _parts.reorder_parts(db, current_user, project_id, document_id, body.part_ids)
+    return [part_response(p) for p in parts]
+
+
+@router.patch("/{document_id}/parts/published", response_model=list[DocumentPartResponse])
+async def update_parts_published(
+    project_id: UUID,
+    document_id: UUID,
+    body: PartsPublishedUpdateRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> list[DocumentPartResponse]:
+    """Owner-only: which pages of a published document are actually reachable publicly.
+
+    One request for the whole batch a UI toggles at once, rather than one PATCH per
+    page - see ``DocumentPartService.update_parts_published``.
+    """
+    parts = await _parts.update_parts_published(
+        db,
+        current_user,
+        project_id,
+        document_id,
+        updates=[(item.part_id, item.published) for item in body.parts],
+    )
     return [part_response(p) for p in parts]
 
 

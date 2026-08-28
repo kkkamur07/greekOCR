@@ -755,6 +755,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/projects/{project_id}/documents/{document_id}/parts/published": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * Update Parts Published
+     * @description Owner-only: which pages of a published document are actually reachable publicly.
+     *
+     *     One request for the whole batch a UI toggles at once, rather than one PATCH per
+     *     page - see ``DocumentPartService.update_parts_published``.
+     */
+    patch: operations["update_parts_published_projects__project_id__documents__document_id__parts_published_patch"];
+    trace?: never;
+  };
   "/projects/{project_id}/documents/{document_id}/parts/reorder": {
     parameters: {
       query?: never;
@@ -1165,6 +1188,28 @@ export interface paths {
     put?: never;
     /** Generate Transcription Pdf */
     post: operations["generate_transcription_pdf_projects__project_id__documents__document_id__parts__part_id__transcription_pdf_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/projects/{project_id}/documents/{document_id}/share-token/rotate": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Rotate Document Share Token
+     * @description Mint a fresh share token, owner-only. Every link built from the old one 404s
+     *     from here on - see ``DocumentCatalog.rotate_share_token`` - regardless of who it
+     *     was shared with or how long ago.
+     */
+    post: operations["rotate_document_share_token_projects__project_id__documents__document_id__share_token_rotate_post"];
     delete?: never;
     options?: never;
     head?: never;
@@ -1872,6 +1917,8 @@ export interface components {
       image_url: string;
       /** Order */
       order: number;
+      /** Published */
+      published: boolean;
       /** Reviewed */
       reviewed: boolean;
       /** Width */
@@ -1906,6 +1953,8 @@ export interface components {
        * Format: uuid
        */
       project_id: string;
+      /** Public Share Token */
+      public_share_token?: string | null;
       /**
        * Updated At
        * Format: date-time
@@ -1953,6 +2002,8 @@ export interface components {
        * Format: uuid
        */
       project_id: string;
+      /** Public Share Token */
+      public_share_token?: string | null;
       /**
        * Updated At
        * Format: date-time
@@ -2632,6 +2683,16 @@ export interface components {
       /** Token Expires At */
       token_expires_at?: string | null;
     };
+    /** PartPublishedUpdate */
+    PartPublishedUpdate: {
+      /**
+       * Part Id
+       * Format: uuid
+       */
+      part_id: string;
+      /** Published */
+      published: boolean;
+    };
     /**
      * PartUploadBeginRequest
      * @description Begin a direct-to-storage part upload: name the file, get a presigned URL.
@@ -2664,6 +2725,14 @@ export interface components {
       image_key: string;
       /** Width */
       width?: number | null;
+    };
+    /**
+     * PartsPublishedUpdateRequest
+     * @description Bulk per-part publish flag: one call for the pages a chapter goes live with.
+     */
+    PartsPublishedUpdateRequest: {
+      /** Parts */
+      parts: components["schemas"]["PartPublishedUpdate"][];
     };
     /** ProjectCreateRequest */
     ProjectCreateRequest: {
@@ -2739,6 +2808,48 @@ export interface components {
        * Format: uuid
        */
       part_id: string;
+    };
+    /**
+     * PublicDocumentWithPartsResponse
+     * @description What an anonymous reader is told a published document is.
+     *
+     *     A separate model rather than ``DocumentWithPartsResponse`` with the token stripped
+     *     at serialisation time: ``response_model_exclude`` keeps the value off the wire but
+     *     not out of the schema, so the generated OpenAPI - and every client generated from
+     *     it - went on advertising ``public_share_token`` on a body that never carries it.
+     *     The public contract should be readable as what it is.
+     */
+    PublicDocumentWithPartsResponse: {
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Name */
+      name: string;
+      /**
+       * Part Count
+       * @default 0
+       */
+      part_count: number;
+      /** Parts */
+      parts: components["schemas"]["DocumentPartResponse"][];
+      /**
+       * Project Id
+       * Format: uuid
+       */
+      project_id: string;
+      /**
+       * Updated At
+       * Format: date-time
+       */
+      updated_at: string;
+      workflow: components["schemas"]["DocumentWorkflow"];
     };
     /** PublicLayoutResponse */
     PublicLayoutResponse: {
@@ -6855,6 +6966,96 @@ export interface operations {
       };
     };
   };
+  update_parts_published_projects__project_id__documents__document_id__parts_published_patch: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: string;
+        document_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PartsPublishedUpdateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DocumentPartResponse"][];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
   reorder_parts_projects__project_id__documents__document_id__parts_reorder_patch: {
     parameters: {
       query?: never;
@@ -9612,6 +9813,92 @@ export interface operations {
       };
     };
   };
+  rotate_document_share_token_projects__project_id__documents__document_id__share_token_rotate_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: string;
+        document_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DocumentResponse"];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
   list_transcriptions_projects__project_id__documents__document_id__transcriptions_get: {
     parameters: {
       query?: never;
@@ -10492,6 +10779,7 @@ export interface operations {
     parameters: {
       query?: {
         w?: components["schemas"]["PublicThumbnailWidth"] | null;
+        t?: string | null;
       };
       header?: {
         "if-none-match"?: string | null;
@@ -10588,7 +10876,9 @@ export interface operations {
   };
   get_published_document_public_projects__project_id__documents__document_id__get: {
     parameters: {
-      query?: never;
+      query?: {
+        t?: string | null;
+      };
       header?: never;
       path: {
         project_id: string;
@@ -10604,7 +10894,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["DocumentWithPartsResponse"];
+          "application/json": components["schemas"]["PublicDocumentWithPartsResponse"];
         };
       };
       /** @description Not authenticated */
@@ -10675,6 +10965,7 @@ export interface operations {
       query?: {
         limit?: number;
         cursor?: string | null;
+        t?: string | null;
       };
       header?: never;
       path: {
@@ -10759,7 +11050,9 @@ export interface operations {
   };
   get_published_page_xml_public_projects__project_id__documents__document_id__parts__part_id__page_xml_get: {
     parameters: {
-      query?: never;
+      query?: {
+        t?: string | null;
+      };
       header?: never;
       path: {
         project_id: string;
@@ -10844,7 +11137,9 @@ export interface operations {
   };
   get_published_page_xml_bundle_public_projects__project_id__documents__document_id__parts__part_id__page_xml_bundle_get: {
     parameters: {
-      query?: never;
+      query?: {
+        t?: string | null;
+      };
       header?: never;
       path: {
         project_id: string;
@@ -10929,7 +11224,9 @@ export interface operations {
   };
   get_published_transcription_pdf_public_projects__project_id__documents__document_id__parts__part_id__transcription_pdf_get: {
     parameters: {
-      query?: never;
+      query?: {
+        t?: string | null;
+      };
       header?: never;
       path: {
         project_id: string;
@@ -11014,7 +11311,9 @@ export interface operations {
   };
   list_published_transcriptions_public_projects__project_id__documents__document_id__transcriptions_get: {
     parameters: {
-      query?: never;
+      query?: {
+        t?: string | null;
+      };
       header?: never;
       path: {
         project_id: string;

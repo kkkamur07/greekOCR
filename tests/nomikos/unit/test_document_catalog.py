@@ -157,6 +157,11 @@ def _user(user_id=None) -> User:
     )
 
 
+#: Passed explicitly by every anonymous-and-published test below, the same way a real
+#: caller would carry it on the query string.
+TOKEN = "s3cr3t-share-token"
+
+
 def _fixture(
     *,
     workflow: DocumentWorkflow = DocumentWorkflow.draft,
@@ -168,10 +173,20 @@ def _fixture(
     owner_id = owner_id or uuid.uuid4()
     project = Project(id=uuid.uuid4(), name="Codices", owner_id=owner_id)
     project.shared_users = []
-    document = Document(id=uuid.uuid4(), project_id=project.id, name="MS 1", workflow=workflow)
+    document = Document(
+        id=uuid.uuid4(),
+        project_id=project.id,
+        name="MS 1",
+        workflow=workflow,
+        public_share_token=TOKEN,
+    )
     document.parts = [
         DocumentPart(
-            id=uuid.uuid4(), document_id=document.id, order=index, image_key=f"page-{index}.webp"
+            id=uuid.uuid4(),
+            document_id=document.id,
+            order=index,
+            image_key=f"page-{index}.webp",
+            published=True,
         )
         for index in range(parts)
     ]
@@ -258,9 +273,21 @@ async def test_non_member_cannot_create_a_document_and_nothing_is_written() -> N
 
 async def test_public_read_serves_published_and_hides_draft() -> None:
     catalog, project, document, _repo = _fixture(workflow=DocumentWorkflow.published)
-    assert await catalog.get_document_public(_Session(), project.id, document.id) is document
+    assert (
+        await catalog.get_document_public(_Session(), project.id, document.id, token=TOKEN)
+        is document
+    )
 
     catalog, project, document, _repo = _fixture(workflow=DocumentWorkflow.draft)
+    with pytest.raises(NotFoundError):
+        await catalog.get_document_public(_Session(), project.id, document.id, token=TOKEN)
+
+
+async def test_public_read_with_the_wrong_token_is_not_found() -> None:
+    catalog, project, document, _repo = _fixture(workflow=DocumentWorkflow.published)
+
+    with pytest.raises(NotFoundError):
+        await catalog.get_document_public(_Session(), project.id, document.id, token="wrong")
     with pytest.raises(NotFoundError):
         await catalog.get_document_public(_Session(), project.id, document.id)
 
@@ -274,11 +301,16 @@ async def test_published_part_is_reachable_and_a_draft_part_is_not() -> None:
     catalog, project, document, _repo = _fixture(workflow=DocumentWorkflow.published, parts=1)
     part = document.parts[0]
 
-    assert await catalog.get_published_part(_Session(), project.id, document.id, part.id) is part
+    assert (
+        await catalog.get_published_part(_Session(), project.id, document.id, part.id, token=TOKEN)
+        is part
+    )
 
     catalog, project, document, _repo = _fixture(workflow=DocumentWorkflow.draft, parts=1)
     with pytest.raises(NotFoundError):
-        await catalog.get_published_part(_Session(), project.id, document.id, document.parts[0].id)
+        await catalog.get_published_part(
+            _Session(), project.id, document.id, document.parts[0].id, token=TOKEN
+        )
 
 
 async def test_transcription_layers_are_listed_for_the_authorized_document() -> None:
@@ -420,7 +452,9 @@ async def test_first_page_carries_blocks_capped_at_the_same_bound_as_lines() -> 
         workflow=DocumentWorkflow.published, blocks=blocks, lines=lines
     )
 
-    page = await catalog.list_document_layout_public(_Session(), project.id, document.id, limit=2)
+    page = await catalog.list_document_layout_public(
+        _Session(), project.id, document.id, limit=2, token=TOKEN
+    )
 
     assert len(page.blocks) == 2
     assert len(page.lines) == 3, "the probe row the router turns into a cursor"
@@ -442,10 +476,10 @@ async def test_dropped_blocks_are_reported_rather_than_silently_lost() -> None:
     )
 
     truncated = await catalog.list_document_layout_public(
-        _Session(), project.id, document.id, limit=2
+        _Session(), project.id, document.id, limit=2, token=TOKEN
     )
     complete = await catalog.list_document_layout_public(
-        _Session(), project.id, document.id, limit=5
+        _Session(), project.id, document.id, limit=5, token=TOKEN
     )
 
     assert truncated.blocks_truncated is True
@@ -466,7 +500,7 @@ async def test_a_resumed_page_carries_lines_only() -> None:
     cursor = PageCursor(created_at=base, id=uuid.UUID(int=0))
 
     page = await catalog.list_document_layout_public(
-        _Session(), project.id, document.id, limit=10, cursor=cursor
+        _Session(), project.id, document.id, limit=10, cursor=cursor, token=TOKEN
     )
 
     assert page.blocks == []

@@ -320,6 +320,7 @@ export function DocumentDetailPage() {
             documentId={documentId}
             name={document.name}
             workflow={document.workflow}
+            publicShareToken={document.public_share_token ?? null}
             onUpdated={(updated) => {
               patchDocument((current) => ({
                 ...current,

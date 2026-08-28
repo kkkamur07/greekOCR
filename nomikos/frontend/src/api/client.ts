@@ -434,8 +434,22 @@ export async function fetchBinaryApi(
   return response.blob();
 }
 
-export function publicPartMediaUrl(partId: string): string {
-  return `${API_BASE_URL}/public/media/parts/${partId}`;
+/**
+ * Every `/public/*` route 404s without `?t=<public_share_token>`, so each
+ * caller must merge it into whatever query string it already has rather than
+ * assume it is the only param.
+ */
+function withShareToken(path: string, token: string | null): string {
+  if (!token) return path;
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}t=${encodeURIComponent(token)}`;
+}
+
+export function publicPartMediaUrl(
+  partId: string,
+  token: string | null,
+): string {
+  return withShareToken(`${API_BASE_URL}/public/media/parts/${partId}`, token);
 }
 
 export const api = {
@@ -812,21 +826,42 @@ export const api = {
       { method: "POST", body },
     ),
 
-  getPublicDocument: (projectId: string, documentId: string) =>
+  getPublicDocument: (
+    projectId: string,
+    documentId: string,
+    token: string | null,
+  ) =>
     apiRequest<DocumentWithPartsResponse>(
-      `/public/projects/${projectId}/documents/${documentId}`,
+      withShareToken(
+        `/public/projects/${projectId}/documents/${documentId}`,
+        token,
+      ),
       { skipAuth: true },
     ),
 
-  getPublicLayout: (projectId: string, documentId: string) =>
+  getPublicLayout: (
+    projectId: string,
+    documentId: string,
+    token: string | null,
+  ) =>
     apiRequest<PublicLayoutResponse>(
-      `/public/projects/${projectId}/documents/${documentId}/layout`,
+      withShareToken(
+        `/public/projects/${projectId}/documents/${documentId}/layout`,
+        token,
+      ),
       { skipAuth: true },
     ),
 
-  listPublicTranscriptions: (projectId: string, documentId: string) =>
+  listPublicTranscriptions: (
+    projectId: string,
+    documentId: string,
+    token: string | null,
+  ) =>
     apiRequest<PublicTranscriptionLayerResponse[]>(
-      `/public/projects/${projectId}/documents/${documentId}/transcriptions`,
+      withShareToken(
+        `/public/projects/${projectId}/documents/${documentId}/transcriptions`,
+        token,
+      ),
       { skipAuth: true },
     ),
 
@@ -834,15 +869,27 @@ export const api = {
     projectId: string,
     documentId: string,
     partId: string,
+    token: string | null,
   ) =>
     fetchBinaryApi(
-      `/public/projects/${projectId}/documents/${documentId}/parts/${partId}/transcription-pdf`,
+      withShareToken(
+        `/public/projects/${projectId}/documents/${documentId}/parts/${partId}/transcription-pdf`,
+        token,
+      ),
       { skipAuth: true },
     ),
 
-  getPublicPageXml: (projectId: string, documentId: string, partId: string) =>
+  getPublicPageXml: (
+    projectId: string,
+    documentId: string,
+    partId: string,
+    token: string | null,
+  ) =>
     fetchBinaryApi(
-      `/public/projects/${projectId}/documents/${documentId}/parts/${partId}/page-xml`,
+      withShareToken(
+        `/public/projects/${projectId}/documents/${documentId}/parts/${partId}/page-xml`,
+        token,
+      ),
       { skipAuth: true },
     ),
 
@@ -850,9 +897,13 @@ export const api = {
     projectId: string,
     documentId: string,
     partId: string,
+    token: string | null,
   ) =>
     fetchBinaryApi(
-      `/public/projects/${projectId}/documents/${documentId}/parts/${partId}/page-xml-bundle`,
+      withShareToken(
+        `/public/projects/${projectId}/documents/${documentId}/parts/${partId}/page-xml-bundle`,
+        token,
+      ),
       { skipAuth: true },
     ),
 
