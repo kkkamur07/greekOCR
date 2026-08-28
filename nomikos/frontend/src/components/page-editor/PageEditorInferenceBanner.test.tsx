@@ -64,8 +64,11 @@ describe("PageEditorInferenceBanner", () => {
   });
 
   it("keeps showing the idle note when storage cannot be read", async () => {
+    // Spied on the global itself, not on `Storage.prototype`: the suite stubs
+    // `localStorage` with a plain object over a Map, so a prototype spy would
+    // intercept nothing and this test would pass without proving anything.
     const getItem = vi
-      .spyOn(Storage.prototype, "getItem")
+      .spyOn(window.localStorage, "getItem")
       .mockImplementation(() => {
         throw new Error("blocked");
       });
