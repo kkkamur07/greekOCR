@@ -24,6 +24,7 @@ const segmentPart = vi.fn();
 const listPartLines = vi.fn();
 const getPartLayout = vi.fn();
 const getPagePairing = vi.fn();
+const createPartLine = vi.fn();
 
 vi.mock("../../../api/client", () => ({
   api: {
@@ -31,6 +32,7 @@ vi.mock("../../../api/client", () => ({
     listPartLines: (...args: unknown[]) => listPartLines(...args),
     getPartLayout: (...args: unknown[]) => getPartLayout(...args),
     getPagePairing: (...args: unknown[]) => getPagePairing(...args),
+    createPartLine: (...args: unknown[]) => createPartLine(...args),
   },
 }));
 
@@ -182,5 +184,47 @@ describe("useLayoutMutations auto segment", () => {
     // The jobs panel already reported it.
     expect(setPairingError).not.toHaveBeenCalledWith(expect.any(String));
     expect(setSubmissionRefusal).not.toHaveBeenCalledWith(expect.any(String));
+  });
+
+  it("clears the undo and redo stacks once the segmentation reload replaces the Segments", async () => {
+    // The segmentation already replaced every Segment on the server by the
+    // time the reload runs. A stack entry from before it names a line id the
+    // reload just made up: an undo would pop it, applyCanvasEditInverse would
+    // silently no-op against the new lines, and the paired patchPartLine or
+    // deletePartLine call would 404.
+    createPartLine.mockResolvedValue({
+      id: "line-1",
+      order: 0,
+      kind: "rectangle",
+      points: [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+      ],
+      source: "manual",
+      manual_geometry: false,
+      line_transcriptions: [],
+    });
+    const { view } = setup();
+
+    await act(async () => {
+      await view.result.current.replaceWithManualLine("rectangle", [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+      ]);
+    });
+    expect(view.result.current.canUndo).toBe(true);
+    const revisionBeforeSegmentation = view.result.current.editUndoRevision;
+
+    await act(async () => {
+      await view.result.current.runAutoSegment();
+    });
+
+    expect(view.result.current.canUndo).toBe(false);
+    expect(view.result.current.canRedo).toBe(false);
+    expect(view.result.current.editUndoRevision).toBeGreaterThan(
+      revisionBeforeSegmentation,
+    );
   });
 });
