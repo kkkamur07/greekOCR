@@ -16,30 +16,30 @@ export function PublicPartTabs({
   const tabsRef = useRef<(HTMLButtonElement | null)[]>([]);
   const scrolledToRef = useRef<string | null>(null);
 
+  /**
+   * Selecting is only ever a report upwards. `aria-selected` and the roving
+   * `tabIndex` are already written declaratively from `activeId` in the JSX
+   * below, so the imperative sweep this used to do fought React for control of
+   * the same two attributes, and it ran on every parent render because `parts`
+   * is rebuilt inline by the caller. That made the component safe only because
+   * the one caller happened to guard against re-selecting the open page.
+   */
   const selectTab = useCallback(
     (index: number) => {
       const tab = parts[index];
-      if (!tab) return;
-      onChange(tab.id);
-      parts.forEach((_, i) => {
-        const el = tabsRef.current[i];
-        if (!el) return;
-        const selected = i === index;
-        el.setAttribute("aria-selected", String(selected));
-        el.tabIndex = selected ? 0 : -1;
-      });
+      if (tab) onChange(tab.id);
     },
     [parts, onChange],
   );
 
   useEffect(() => {
+    // Reveal the open tab, and nothing else. Only on an actual change of page:
+    // the parts array is rebuilt on every parent render, so scrolling
+    // unconditionally would drag the strip back while someone was scrolling it
+    // to look ahead.
+    if (scrolledToRef.current === activeId) return;
     const idx = parts.findIndex((p) => p.id === activeId);
     if (idx < 0) return;
-    selectTab(idx);
-    // Only on an actual change of page. The parts array is rebuilt on every
-    // parent render, so scrolling unconditionally here would drag the strip
-    // back to the open page while someone was scrolling it to look ahead.
-    if (scrolledToRef.current === activeId) return;
     scrolledToRef.current = activeId;
     // No smooth-scroll behavior on purpose: it is unnecessary motion, and a
     // plain jump is already correct for anyone who sets prefers-reduced-motion.
@@ -48,7 +48,7 @@ export function PublicPartTabs({
     if (typeof el?.scrollIntoView === "function") {
       el.scrollIntoView({ block: "nearest", inline: "nearest" });
     }
-  }, [activeId, parts, selectTab]);
+  }, [activeId, parts]);
 
   if (parts.length === 0) return null;
 

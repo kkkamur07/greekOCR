@@ -39,13 +39,29 @@ export function PublicPageCanvas({
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
 
-  useEffect(() => {
-    // Switching pages must not leave the previous page's overlay showing
-    // over the new (not yet loaded) image.
+  /**
+   * Reset during render, not in an effect.
+   *
+   * Switching pages hands this component a new `imageUrl` and the new page's
+   * `regions` in one commit, while `imageLoaded`, `displaySize` and
+   * `coordSize` still describe the page being left. An effect runs after the
+   * commit, so the browser can paint the new page's polygons scaled against
+   * the old page's box first: the same wrong-box defect this component exists
+   * to prevent, moved from first load to navigation. Adjusting state during
+   * render re-runs this component before anything is committed, so that frame
+   * never exists. (useLayoutEffect would also close it, but this page is
+   * server-rendered and it would warn there.)
+   */
+  const renderedUrlRef = useRef(imageUrl);
+  if (renderedUrlRef.current !== imageUrl) {
+    renderedUrlRef.current = imageUrl;
     setImageLoaded(false);
     setImageFailed(false);
     setDisplaySize(null);
-  }, [imageUrl]);
+    // coordSize has to go back to the props too. Left alone it would keep the
+    // previous page's natural size, which is the wrong viewBox for the new one.
+    setCoordSize({ width: layoutWidth, height: layoutHeight });
+  }
 
   const syncDisplaySize = useCallback(() => {
     const image = imageRef.current;
