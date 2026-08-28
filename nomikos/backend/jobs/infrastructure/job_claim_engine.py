@@ -1,10 +1,9 @@
-"""Sync claim/sweep/transition side of job persistence - SKIP LOCKED on ``sync_system_session()``.
+"""Sync claim/sweep/transition side of job persistence, using SKIP LOCKED on ``sync_system_session()``.
 
 Split out of ``job_repository`` because the two halves share nothing but the
 ``jobs`` table: this half runs on short-lived sync system sessions from the
 worker loop and the on-read stale sweep, while the repository's async half runs
-on the request-scoped session. Different session types, different lifecycles,
-different callers - and this sync half exists at all because ADR 0005 put the
+on the request-scoped session. This sync half exists because ADR 0005 put the
 claim/lease machinery on the platform side.
 """
 
@@ -35,18 +34,16 @@ POISON_PAGE_ERROR = "This page could not be completed by any inference agent"
 MAX_CLAIM_ATTEMPTS = 5
 """How many abandoned claims a page survives before it is failed.
 
-Both stale sweeps return an abandoned job to ``pending`` rather than failing it,
-and that is the right default: a closed laptop lid is not a failed job. But a
-page that reliably kills whatever runs it - a corrupt scan, an image the model
-crashes on - is abandoned for the same reason every time, so re-pending it is an
-infinite loop that never tells the researcher anything and burns one agent slot
-per lap. ``jobs.claim_attempts`` counts the laps and this is where they stop.
+Both stale sweeps re-pend an abandoned job by default (a closed laptop lid is
+not a failed job), but a page that reliably kills whatever runs it (a corrupt
+scan, an image the model crashes on) would otherwise loop forever, burning one
+agent slot per lap and never telling the researcher anything.
+``jobs.claim_attempts`` counts the laps and this is where they stop.
 
-A constant rather than an environment dial, unlike the two timeouts next to it.
-Those are operational: how long to wait before believing an agent is gone
-depends on the deployment. This is not - "a page that has already killed five
-agents will not be run by a sixth" is a property of the queue, and an operator
-who raises it is choosing a longer infinite loop.
+A constant rather than an environment dial, unlike the two timeouts next to it:
+those are operational (how long to wait before believing an agent is gone
+depends on the deployment), but "a page that has already killed five agents
+will not be run by a sixth" is a property of the queue, not the deployment.
 """
 
 
@@ -54,11 +51,9 @@ def poison_page_error(max_claim_attempts: int) -> str:
     """Reason recorded when a page exhausted its claim budget.
 
     Allowlisted static text, same rule as ``waiting_timeout_error``: nothing the
-    page itself produced reaches the client, because the whole reason this fires
-    is that no agent ever got far enough to report anything. Naming the count is
-    what separates "five agents took this page and none came back" from a
-    generic failure, so the UI can tell a researcher the page is the problem
-    rather than the platform.
+    page itself produced reaches the client, since no agent ever got far enough
+    to report anything. Naming the count tells the researcher the page is the
+    problem rather than the platform.
     """
     return f"{POISON_PAGE_ERROR} (abandoned {max_claim_attempts} times)"
 
@@ -67,35 +62,34 @@ def waiting_timeout_error(waiting_timeout_seconds: float) -> str:
     """Reason recorded when the inference service never called back.
 
     Allowlisted static text, same rule as ``worker._public_job_error``: no
-    exception detail reaches the client. Naming the deadline is what separates
-    "inference went silent for 240s" from every other failure, so the UI can say
-    something honest instead of a generic error. The ``WAITING_TIMEOUT_ERROR``
-    prefix stays stable so callers can still recognise the timeout.
+    exception detail reaches the client. Naming the deadline lets the UI say
+    "inference went silent for 240s" instead of a generic error. The
+    ``WAITING_TIMEOUT_ERROR`` prefix stays stable so callers can still recognise
+    the timeout.
 
-    **Currently unreachable in production** - see ``mark_job_waiting``.
+    Currently unreachable in production, see ``mark_job_waiting``.
     """
     return f"{WAITING_TIMEOUT_ERROR} after {int(waiting_timeout_seconds)}s"
 
 
-# The prefix ``jobs.claimed_by`` carries while an **inference agent** holds a page,
-# written by ``job_claim_service.agent_claim_owner``. It lives up here, above the
-# platform worker's own identity, because the one thing that must be true of both
-# is that neither can ever produce the other's shape - see ``worker_identity``.
+# Prefix ``jobs.claimed_by`` carries while an inference agent holds a page,
+# written by ``job_claim_service.agent_claim_owner``. Lives here, above the
+# platform worker's own identity, because neither may ever produce the other's
+# shape, see ``worker_identity``.
 AGENT_CLAIM_PREFIX = "agent:"
 
 # ``worker:`` namespaces the platform worker's id the way ``agent:`` namespaces a
 # device's. Without it the identity was ``{hostname}:{pid}``, and a host called
-# ``agent`` produced ``agent:12345`` - which ``_held_by_agent()`` classifies as an
-# agent-held page. That row would then be governed by the device lease instead of
-# the running timeout, and ``fail_stale_waiting_jobs`` would skip it forever. A
-# hostname cannot start with ``worker:``, so the two spaces are disjoint by
-# construction rather than by a rule about what machines may be called.
+# ``agent`` would produce ``agent:12345``, which ``_held_by_agent()`` classifies
+# as an agent-held page: it would then be governed by the device lease instead
+# of the running timeout, and ``fail_stale_waiting_jobs`` would skip it forever.
+# A hostname cannot start with ``worker:``, so the two namespaces are disjoint
+# by construction.
 _WORKER_IDENTITY = f"worker:{socket.gethostname()}/{os.getpid()}"
 
-# Checked with a raise rather than an `assert`: `python -O` strips asserts, and
-# this one is the only thing standing between a badly-named host and a page
-# governed by the wrong timeout. A self-check worth writing is worth keeping in
-# an optimised interpreter.
+# Raise instead of assert: `python -O` strips asserts, and this is the only
+# check standing between a badly-named host and a page governed by the wrong
+# timeout.
 if _WORKER_IDENTITY.startswith(AGENT_CLAIM_PREFIX):
     raise RuntimeError(
         f"the platform worker's identity {_WORKER_IDENTITY!r} collides with the "
@@ -110,7 +104,7 @@ def worker_identity() -> str:
 
 # Job types an inference agent claims for itself over HTTP. The platform worker
 # leaves them alone: with the second queue gone (ADR 0003) it has no way to run
-# them, and claiming one would only fail a job that an agent could have run.
+# them, and claiming one would only fail a job an agent could have run.
 AGENT_CLAIMED_JOB_TYPES = (JobType.segment, JobType.transcribe)
 
 
@@ -123,7 +117,7 @@ def _not_held_by_agent():
     """SQL for the complement, NULL included.
 
     ``NOT LIKE`` alone evaluates to NULL for an unclaimed row and would silently
-    exempt every job the platform itself dispatched - which is the whole
+    exempt every job the platform itself dispatched, which is the whole
     population the waiting timeout exists for.
     """
     return or_(Job.claimed_by.is_(None), ~Job.claimed_by.startswith(AGENT_CLAIM_PREFIX))
@@ -164,10 +158,9 @@ def claim_next_pending_job(*, test_only: bool | None = None) -> Job | None:
 def count_active_jobs(*, test_payload: bool | None = None) -> int:
     """Count pending, running, or waiting jobs (optionally filter by payload test flag).
 
-    Test support, and the only caller is the integration suite's drain helper -
-    "wait until the worker has finished everything this test queued". Nothing in
-    the application reads it. Kept because that helper needs exactly this query
-    and would otherwise reimplement it against the same three statuses.
+    Test support only, used by the integration suite's drain helper to wait
+    until the worker has finished everything a test queued. Nothing in the
+    application reads it.
     """
     from sqlalchemy import func
 
@@ -208,13 +201,12 @@ def reclaim_stale_running_jobs(
 
     Almost always that means re-pending, so another worker runs the job. A job
     whose claim has been abandoned ``max_claim_attempts`` times is failed
-    instead: see ``MAX_CLAIM_ATTEMPTS`` for why re-pending forever is not the
-    kinder option.
+    instead, see ``MAX_CLAIM_ATTEMPTS``.
 
-    ``FOR UPDATE SKIP LOCKED`` on the select, the same primitive the other two
-    sweeps use. It is not only concurrency control here - the split below needs
-    each row's ``claim_attempts``, and reading it unlocked would let a second
-    sweeper decide from the same stale count.
+    ``FOR UPDATE SKIP LOCKED`` on the select, same primitive the other sweeps
+    use. It's not just concurrency control here: the split below needs each
+    row's ``claim_attempts``, and an unlocked read would let a second sweeper
+    decide from the same stale count.
     """
     now = datetime.now(UTC)
     stale_before = now - timedelta(seconds=running_timeout_seconds)
@@ -269,9 +261,9 @@ def reclaim_stale_running_jobs(
             )
         session.commit()
         # A bulk update emits no per-job NOTIFY, so an SSE subscriber would sit on
-        # a job that just died. The re-pended rows are deliberately not announced:
-        # this sweep has never announced them, and pending is not a state anything
-        # renders differently from the running it replaces.
+        # a job that just died. Re-pended rows are deliberately not announced:
+        # pending isn't a state anything renders differently from the running
+        # it replaces.
         for job_id in exhausted:
             logger.warning("failing job %s: claim abandoned %s times", job_id, max_claim_attempts)
             notify_platform_job_status_changed(job_id, JobStatus.failed)
@@ -281,25 +273,25 @@ def reclaim_stale_running_jobs(
 def fail_stale_waiting_jobs(*, waiting_timeout_seconds: float) -> int:
     """Fail jobs stuck in ``waiting`` because the inference callback never arrived.
 
-    **This sweeps an empty population today.** Its subject is a job the platform
+    Sweeps an empty population today. Its subject is a job the platform
     dispatched to an inference service over HTTP, and that hop is gone (ADR
-    0003); ``mark_job_waiting``, the only thing that ever created such a row, has
-    no production caller. Kept as the other half of that seam, with the same
-    reasoning as ``mark_job_waiting`` - read that one first.
+    0003); ``mark_job_waiting``, the only thing that ever created such a row,
+    has no production caller. Kept as the other half of that seam, see
+    ``mark_job_waiting``.
 
-    Unlike a crashed *running* job there would be nothing to retry: the dispatch
-    already happened and the inference service went silent, so re-pending would
+    Unlike a crashed running job there's nothing to retry: the dispatch already
+    happened and the inference service went silent, so re-pending would
     duplicate work. Fail instead, with an error the user can act on.
 
-    **Agent-held pages are deliberately not in this population** - which, with
-    the dispatch hop gone, is why the population is empty rather than merely
-    small. ADR 0005 makes a claimed page ``waiting`` so ``JobCallbackService``
-    needs no change, which put a researcher's laptop under this timeout by
-    accident. The reasoning above does not hold for one: nothing was dispatched
-    anywhere, the page never left the queue, and a closed lid is not a silent
-    inference service. Those rows are governed by
-    ``release_expired_device_leases``, which re-pends instead of failing - see
-    ``AGENT_CLAIM_PREFIX``. Every waiting row is one of those today.
+    Agent-held pages are deliberately excluded, which (with the dispatch hop
+    gone) is why the population is empty rather than merely small. ADR 0005
+    makes a claimed page ``waiting`` so ``JobCallbackService`` needs no change,
+    which put a researcher's laptop under this timeout by accident. The
+    reasoning above doesn't hold there: nothing was dispatched anywhere, the
+    page never left the queue, and a closed lid isn't a silent inference
+    service. Those rows are governed by ``release_expired_device_leases``,
+    which re-pends instead of failing, see ``AGENT_CLAIM_PREFIX``. Every
+    waiting row is one of those today.
     """
     now = datetime.now(UTC)
     stale_before = now - timedelta(seconds=waiting_timeout_seconds)
@@ -339,39 +331,38 @@ def fail_stale_waiting_jobs(*, waiting_timeout_seconds: float) -> int:
 def release_expired_device_leases(
     *, lease_seconds: float, max_claim_attempts: int = MAX_CLAIM_ATTEMPTS
 ) -> int:
-    """Return pages whose **lease** expired to the queue, so another agent can take them.
+    """Return pages whose lease expired to the queue, so another agent can take them.
 
     A crash, a killed process, or a closed laptop lid leaves a page held by an
-    agent that will never report on it. There is no heartbeat to notice - work is
-    seconds-to-minutes, so the lease covers it with margin (ADR 0002) - and there
-    is no release endpoint, because a process that was killed cannot call one.
-    This sweep is the whole recovery mechanism.
+    agent that will never report on it. There's no heartbeat to notice (work is
+    seconds to minutes, so the lease covers it with margin, ADR 0002) and no
+    release endpoint, since a killed process can't call one. This sweep is the
+    whole recovery mechanism.
 
-    **It re-pends; it does not fail.** That is the difference from
-    ``fail_stale_waiting_jobs``, and it is the point of the lease. A researcher
-    who closes their lid mid-page should have that page picked up by the next
-    agent, not see it permanently failed and have to resubmit. Nothing was
-    dispatched to a third party, so there is no duplicate work to fear: the page
-    is still exactly where it started, in the platform's own queue.
+    It re-pends, not fails, unlike ``fail_stale_waiting_jobs``: a researcher who
+    closes their lid mid-page should have it picked up by the next agent, not
+    see it permanently failed. Nothing was dispatched to a third party, so
+    there's no duplicate work to fear, the page is still in the platform's own
+    queue.
 
-    **Except after ``max_claim_attempts`` laps.** Re-pending is right when the
-    agent is why the page came back; it is a loop when the *page* is. A scan the
-    model crashes on takes down every agent that claims it, so with no counter it
-    cycled ``pending -> waiting -> pending`` forever: never terminal, so never
-    reported to the researcher, and holding one claim slot on every lap. The
-    counter lives on the row (``jobs.claim_attempts``) so this bulk statement can
-    read and bump it without a per-row round trip. See ``MAX_CLAIM_ATTEMPTS``.
+    Except after ``max_claim_attempts`` laps: re-pending is right when the agent
+    is why the page came back, but a loop when the page is. A scan the model
+    crashes on takes down every agent that claims it, so with no counter it
+    would cycle ``pending -> waiting -> pending`` forever, never terminal, never
+    reported to the researcher, holding a claim slot each lap. The counter lives
+    on the row (``jobs.claim_attempts``) so this bulk statement can read and
+    bump it without a per-row round trip. See ``MAX_CLAIM_ATTEMPTS``.
 
-    The claim is cleared with it - ``claimed_by``, ``inference_job_id``,
-    ``started_at``, ``heartbeat_at`` - so that *any* agent may take the page next,
-    and so a woken zombie cannot report on it: the callback route matches
-    ``claimed_by``, and ``JobCallbackService`` matches ``inference_job_id``.
-    Neither matches once this has run.
+    The claim is cleared with it (``claimed_by``, ``inference_job_id``,
+    ``started_at``, ``heartbeat_at``) so any agent may take the page next, and a
+    woken zombie can't report on it: the callback route matches ``claimed_by``,
+    and ``JobCallbackService`` matches ``inference_job_id``. Neither matches
+    once this has run.
 
-    Concurrency is the same primitive the other sweeps use. ``FOR UPDATE SKIP
+    Concurrency uses the same primitive as the other sweeps: ``FOR UPDATE SKIP
     LOCKED`` in the same transaction as the update means a second sweeper skips
     rows already being released rather than releasing them twice, and the
-    ``status``/``claimed_by`` predicates are repeated on the update so a row that
+    ``status``/``claimed_by`` predicates repeat on the update so a row that
     changed hands between the two statements is left alone.
     """
     now = datetime.now(UTC)
@@ -411,10 +402,10 @@ def release_expired_device_leases(
                 or 0
             )
         if exhausted:
-            # The claim is cleared here too, for the same reason it is cleared on a
-            # re-pend: a woken zombie must not be able to report on the page. A
-            # terminal status alone would not stop it, because the callback path
-            # matches ``inference_job_id``, not ``status``.
+            # Claim cleared here too, same reason as the re-pend: a woken zombie
+            # must not be able to report on the page. Terminal status alone
+            # wouldn't stop it, since the callback path matches
+            # ``inference_job_id``, not ``status``.
             moved += (
                 session.execute(
                     update(Job)
@@ -513,31 +504,31 @@ def mark_job_waiting(
 ) -> None:
     """Move a non-terminal job to ``waiting``. No-op if already terminal.
 
-    Uses ``FOR UPDATE`` so a concurrent cancel cannot be overwritten by the
+    Uses ``FOR UPDATE`` so a concurrent cancel can't be overwritten by the
     status write after a stale unlocked read.
 
-    **Nothing in production calls this, and that is the root of a whole quiet
-    branch.** It is the only writer of ``waiting`` with a non-agent
-    ``claimed_by``: the platform used to POST a job into the inference service
-    over HTTP and call this to record that it was out for dispatch. ADR 0003
-    deleted that hop. Since then the only writer of ``waiting`` is
-    ``claim_one_page``, which always stamps ``agent:<device_id>``, so
-    ``_not_held_by_agent()`` excludes every waiting row by construction and the
-    population that ``fail_stale_waiting_jobs``, ``waiting_timeout_error``,
-    ``seconds_until_next_stale_waiting_job`` and ``worker._idle_wait_seconds``
-    all operate on is permanently empty.
+    Nothing in production calls this. It's the only writer of ``waiting`` with
+    a non-agent ``claimed_by``: the platform used to POST a job to the
+    inference service over HTTP and call this to record it was out for
+    dispatch. ADR 0003 deleted that hop. Since then the only writer of
+    ``waiting`` is ``claim_one_page``, which always stamps
+    ``agent:<device_id>``, so ``_not_held_by_agent()`` excludes every waiting
+    row by construction, and the population that
+    ``fail_stale_waiting_jobs``, ``waiting_timeout_error``,
+    ``seconds_until_next_stale_waiting_job``, and ``worker._idle_wait_seconds``
+    operate on is permanently empty.
 
-    It is kept rather than deleted because it is the seam a platform-side
-    dispatch comes back through, and because the deletion does not stop here: the
-    deadline it enforces is ``JOB_WORKER_WAITING_TIMEOUT_SECONDS`` in
+    Kept rather than deleted because it's the seam a platform-side dispatch
+    comes back through, and because removal wouldn't stop here: the deadline it
+    enforces is ``JOB_WORKER_WAITING_TIMEOUT_SECONDS`` in
     ``backend.core.settings.job``, and the credential that would call back with
     the result is ``INFERENCE_WEBHOOK_SECRET``, required in production by
-    ``backend.core.settings.ml`` and documented as such in ``docs/deployment``.
-    Removing the two functions and leaving a mandatory setting and a mandatory
-    secret behind them would be a worse lie than this docstring.
+    ``backend.core.settings.ml`` and documented in ``docs/deployment``. Deleting
+    these two functions but leaving a mandatory setting and secret behind them
+    would be worse than keeping this dead code.
 
-    So: this is a seam, not live code. Do not read the machinery below it as a
-    description of something the platform currently does.
+    This is a seam, not live code: the machinery below does not describe
+    something the platform currently does.
     """
     now = datetime.now(UTC)
     with sync_system_session() as session:
@@ -566,8 +557,8 @@ def _owned_by(statement, claimed_by: str | None):
 
     ``reclaim_stale_running_jobs`` clears ``claimed_by`` and re-pends the job, so
     a zombie worker that lost its lease no longer matches: either the column is
-    NULL (not yet re-claimed) or it holds the new owner's id. Status alone is not
-    enough, because the reclaimed job is legitimately non-terminal again.
+    NULL (not yet re-claimed) or it holds the new owner's id. Status alone isn't
+    enough, since the reclaimed job is legitimately non-terminal again.
     """
     return statement.where(Job.claimed_by.is_not_distinct_from(claimed_by))
 
@@ -607,10 +598,9 @@ def mark_job_done(job_id: uuid.UUID, result: dict | None = None, *, claimed_by: 
                 status=JobStatus.done,
                 result=result or {},
                 error=None,
-                # A page that finished is not a page anything struggled with. The
-                # counter is reset rather than left standing so a job that took
-                # four tries and then succeeded does not carry a one-lap budget
-                # into whatever re-pends it next.
+                # Reset rather than left standing, so a job that took four tries
+                # and then succeeded doesn't carry a one-lap budget into
+                # whatever re-pends it next.
                 claim_attempts=0,
                 completed_at=now,
                 updated_at=now,
@@ -625,14 +615,14 @@ _CANCELABLE = _NON_TERMINAL_STATUSES
 
 
 def _apply_cancellation(job: Job, now: datetime) -> None:
-    """Cancel the job *and* release the claim on it.
+    """Cancel the job and release the claim on it.
 
-    Clearing ``claimed_by`` and ``inference_job_id`` is not tidiness. A cancelled
+    Clearing ``claimed_by`` and ``inference_job_id`` isn't tidiness. A cancelled
     page left with both set is still, as far as the agent holding it knows, its
     page: it runs the whole thing and posts a callback that
-    ``JobCallbackService`` then discards on the terminal-status check. The
-    researcher cancelled, and a laptop kept working for minutes anyway. Cleared,
-    the agent's next callback is refused immediately - the callback route matches
+    ``JobCallbackService`` then discards on the terminal-status check, meaning a
+    laptop kept working for minutes after the researcher cancelled. Cleared, the
+    agent's next callback is refused immediately: the callback route matches
     ``claimed_by`` and the merge matches ``inference_job_id``, and neither
     matches once this has run. Same two columns, same reason, as
     ``release_expired_device_leases``.

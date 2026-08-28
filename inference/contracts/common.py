@@ -50,6 +50,12 @@ class HostEligibility(StrEnum):
 # enforces what admission promises, so a denser polygon or a longer text can
 # never be produced and written back to the platform.
 MAX_GEOMETRY_POINTS = 256
+# The Kraken ceiling is the raw pre-simplification decoder polygon, legitimately
+# denser than the simplified ``points`` (which is clamped to MAX_GEOMETRY_POINTS):
+# real lines reach a few hundred vertices. It still needs an upper bound so a
+# degenerate or hostile decode cannot ship an unbounded array; this generous cap
+# admits real ceilings while rejecting pathological ones.
+MAX_KRAKEN_CEILING_POINTS = 4_096
 MAX_LINE_TEXT_CHARS = 10_000
 MAX_TRANSCRIBE_LINES = 10_000
 MAX_SEGMENT_LINES = 10_000
@@ -93,6 +99,7 @@ __all__ = [
     "InferenceJobStatus",
     "InferenceTask",
     "MAX_GEOMETRY_POINTS",
+    "MAX_KRAKEN_CEILING_POINTS",
     "MAX_LINE_TEXT_CHARS",
     "MAX_SEGMENT_BLOCKS",
     "MAX_SEGMENT_LINES",

@@ -153,6 +153,11 @@ class _Store:
             raise FileNotFoundError(image_key)
         return self.blobs[image_key]
 
+    def size(self, image_key: str) -> int:
+        if image_key not in self.blobs:
+            raise FileNotFoundError(image_key)
+        return len(self.blobs[image_key])
+
     def write(self, image_key: str, data: bytes) -> None:
         self.blobs[image_key] = data
 

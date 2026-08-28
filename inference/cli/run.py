@@ -1,34 +1,34 @@
 """`nomikos run` - the **claim** loop: take a page, run it here, report it, repeat.
 
-This closes the four-step path ADR 0003 is built around - enqueue, claim, run,
-callback - across one database and one HTTP hop, with no inbound connection and
+This closes the four-step path ADR 0003 is built around (enqueue, claim, run,
+callback) across one database and one HTTP hop, with no inbound connection and
 no open port. Everything it talks to already existed except the claim itself:
-completion and failure are the platform's `JobCallbackRequest`, and abandonment
-is the stale sweep.
+completion and failure are the platform's `JobCallbackRequest`, and
+abandonment is the stale sweep.
 
-Three properties are the whole design.
+Three properties drive the design:
 
-**One page in flight, always.** A batch is N claims (ADR 0002), so the loop holds
-exactly one page between claiming it and reporting it. That is what makes a
-**lease** sufficient without a heartbeat, what makes progress free, and what
-bounds the damage of a closed lid to one page rather than a document.
+**One page in flight, always.** A batch is N claims (ADR 0002), so the loop
+holds exactly one page between claiming it and reporting it. That's what
+makes a **lease** sufficient without a heartbeat, what makes progress free,
+and what bounds the damage of a closed lid to one page rather than a document.
 
 **Every page ends, and ends terminally.** A page that fails to run here is
-reported *failed with its reason* and the loop moves on, because a researcher
+reported *failed with its reason* and the loop moves on, since a researcher
 watching a job must never be left waiting on a page that already died. Ctrl-C
-reports the page in flight before exiting for the same reason - a considerate
-shutdown leaves nothing stuck. What a crash leaves behind is covered by the
-lease, which re-queues the page rather than failing it: a closed lid is not a
-failed job.
+reports the page in flight before exiting for the same reason. What a crash
+leaves behind is covered by the lease, which re-queues the page rather than
+failing it: a closed lid is not a failed job.
 
-**Local and cloud are the same program.** A hosted worker runs this loop with a
-**service credential** and a short poll instead of a **device token** and a long
-one. That is the only difference, and it is two lines below rather than a second
-code path kept in parity by discipline.
+**Local and cloud are the same program.** A hosted worker runs this loop with
+a **service credential** and a short poll instead of a **device token** and a
+long one. That's the only difference, and it's two lines below rather than a
+second code path kept in parity by discipline.
 
 Nothing at module scope imports the model runtime. `inference/cli/main.py`
-imports this module to build its parser, so a top-level `run_model` import would
-make `nomikos version` on a laptop with no weights pay for Torch to answer.
+imports this module to build its parser, so a top-level `run_model` import
+would make `nomikos version` on a laptop with no weights pay for Torch to
+answer.
 """
 
 from __future__ import annotations
@@ -58,10 +58,10 @@ from inference.cli.credentials import CredentialError, credential_path, load_cre
 from inference.cli.version import installed_version
 
 SERVICE_TOKEN_ENV = "NOMIKOS_SERVICE_TOKEN"  # noqa: S105 - an env var name, not a token
-"""A hosted worker's **service credential**, read from the environment and never
-from a flag. A token passed on the command line is a token in `ps` output and in
-shell history, and this one is not bounded by a single account the way a device
-token is."""
+"""A hosted worker's **service credential**, read from the environment and
+never from a flag. A token passed on the command line ends up in `ps` output
+and shell history, and this one isn't bounded to a single account the way a
+device token is."""
 
 WORKER_NAME_ENV = "NOMIKOS_WORKER_NAME"
 
@@ -70,27 +70,27 @@ LAPTOP_WAIT_SECONDS = 25
 laptop long-polls. The platform clamps this to its own ceiling."""
 
 WORKER_WAIT_SECONDS = 0
-"""A hosted worker short-polls instead: it is never idle for long, it does not
-need the latency, and every second it waits is a request-handler slot held on a
+"""A hosted worker short-polls instead: it's never idle for long, doesn't need
+the latency, and every second it waits is a request-handler slot held on a
 serverless host (ADR 0003)."""
 
 INTERRUPTED_ERROR = "Stopped on the machine running it before the page finished"
 
 MAX_REASON_CHARS = 160
 """The platform prefixes the reason, redacts URLs and paths out of it, and
-truncates at 200. Staying well inside that is what keeps a reason readable
-instead of ending in a placeholder."""
+truncates at 200. Staying well inside that keeps a reason readable instead of
+ending in a placeholder."""
 
 CLAIM_RETRY_SECONDS = 2.0
 CLAIM_RETRY_CAP_SECONDS = 60.0
 MAX_CLAIM_FAILURES = 8
 """How many *consecutive* failed claims end the loop.
 
-A gateway restarting, a deploy, a laptop's wifi dropping in a lift: every one of
-those is a `PlatformError` and none of them means "stop working". The loop backs
-off instead, doubling to a cap so an agent left running overnight against a dead
-platform is not a load generator, and gives up only once the platform has failed
-this many times in a row - which is no longer a blip. One success resets it.
+A gateway restarting, a deploy, wifi dropping in a lift: every one of those is
+a `PlatformError` and none of them means "stop working". The loop backs off
+instead, doubling to a cap so an agent left running overnight against a dead
+platform isn't a load generator, and gives up only once the platform has
+failed this many times in a row. One success resets it.
 """
 
 REPORT_RETRY_SECONDS = 1.0
@@ -98,10 +98,11 @@ REPORT_RETRY_CAP_SECONDS = 8.0
 MAX_REPORT_ATTEMPTS = 4
 """How many times the terminal callback is posted before the page is let go.
 
-Shorter and more insistent than the claim backoff, because the stakes are not
-symmetric: a failed claim costs nothing, and a failed report throws away a page
-that has already been transcribed. Bounded anyway - past the **lease** the
-platform has re-queued the page, and posting into that is not persistence.
+Shorter and more insistent than the claim backoff: the stakes aren't
+symmetric, since a failed claim costs nothing but a failed report throws away
+a page that's already been transcribed. Bounded anyway, since past the
+**lease** the platform has re-queued the page and posting into that is not
+persistence.
 """
 
 
@@ -112,8 +113,8 @@ class RunSetupError(RuntimeError):
 class PageOutputError(RuntimeError):
     """One page's result cannot be made into a callback the platform will take.
 
-    A property of that page, not of this machine - so it fails the page and the
-    loop moves on, which is the opposite of what `RunSetupError` means.
+    A property of that page, not of this machine, so it fails the page and
+    the loop moves on: the opposite of what `RunSetupError` means.
     """
 
 
@@ -121,9 +122,9 @@ class PageOutputError(RuntimeError):
 class AgentIdentity:
     """Which credential this process claims with, and what that credential means.
 
-    The **execution target** is not negotiable and is not sent: the credential
-    fixes it (ADR 0005, decision 1). This records it only so the loop can say
-    out loud whose work it is about to take.
+    The **execution target** is not negotiable and is not sent: the
+    credential fixes it (ADR 0005, decision 1). This records it only so the
+    loop can say out loud whose work it is about to take.
     """
 
     credential: dict[str, str]
@@ -202,9 +203,9 @@ def _resolve_identity(base_url: str) -> AgentIdentity:
     """A **service credential** if one is in the environment, else this machine's.
 
     Service-first, matching the order the platform resolves them in
-    (`resolve_inference_agent`): a host that has been given a service token is a
-    hosted worker, and a stray `device.json` in its home directory must not
-    quietly turn it into somebody's laptop.
+    (`resolve_inference_agent`): a host given a service token is a hosted
+    worker, and a stray `device.json` in its home directory must not quietly
+    turn it into somebody's laptop.
     """
     version = installed_version()
     service_token = (os.environ.get(SERVICE_TOKEN_ENV) or "").strip()
@@ -233,8 +234,8 @@ def _resolve_identity(base_url: str) -> AgentIdentity:
             "Run `nomikos pair` to authorise it against your account."
         )
     if credential.platform_url != base_url:
-        # The credential is only meaningful against the platform that minted it,
-        # and presenting it elsewhere is a 401 with no explanation attached.
+        # The credential only means something against the platform that
+        # minted it; presenting it elsewhere is a 401 with no explanation.
         raise RunSetupError(
             f"This machine is paired with {credential.platform_url}, not {base_url}.\n"
             "Run `nomikos pair --force` to pair it with this platform instead."
@@ -285,21 +286,20 @@ def _claim_loop(
         try:
             claim = client.claim_page(credential=identity.credential, wait_seconds=wait_seconds)
         except KeyboardInterrupt:
-            # Nothing is in flight between claims, which is the entire reason the
-            # loop is shaped this way: there is no page here to report.
+            # Nothing is in flight between claims, which is the whole reason
+            # the loop is shaped this way: there's no page here to report.
             console.print()
             _summarise(console, done, failed, "Stopped.")
             return ui.EXIT_INTERRUPTED
         except (AgentVersionRefused, CredentialRefused):
-            # Neither is a blip. The floor is an instruction and a refused
-            # credential answers the same way however long this waits, so both
-            # leave the loop rather than being retried into a spin.
+            # Neither is a blip: the floor is an instruction, and a refused
+            # credential answers the same way no matter how long this waits.
+            # Both leave the loop rather than being retried into a spin.
             raise
         except PlatformError as exc:
-            # Everything else on this path is transient by construction: a
-            # timeout, an unreachable host, a gateway's 502. `--exit-when-empty`
-            # promises the loop keeps running without it, and one bad response is
-            # not an empty queue.
+            # Everything else here is transient by construction: a timeout, an
+            # unreachable host, a gateway's 502. One bad response isn't an
+            # empty queue.
             failures += 1
             if failures >= MAX_CLAIM_FAILURES:
                 errors.print(f"[red]{exc}[/red]")
@@ -350,11 +350,10 @@ def _claim_loop(
             outcome = _handle_page(console, errors, client, identity, claim.page, claimed + 1)
         except KeyboardInterrupt:
             # Reachable only before `_handle_page` has computed anything: it
-            # takes responsibility for the page on entry and reports whatever it
-            # has, so an interrupt that escapes it is one that arrived with no
-            # output to lose. Reporting failed here is therefore true, and it
-            # closes the one window in which a page could be claimed and never
-            # ended.
+            # takes responsibility for the page on entry and reports whatever
+            # it has, so an interrupt that escapes it arrived with no output
+            # to lose. Reporting failed here closes the one window in which a
+            # page could be claimed and never ended.
             console.print()
             _report(
                 console,
@@ -385,8 +384,8 @@ class PageOutcome:
 
     finished: bool
     stopped: bool
-    """A Ctrl-C arrived while this page was in flight. The page has already been
-    reported by the time this is read - stopping is the only thing left to do."""
+    """A Ctrl-C arrived while this page was in flight. The page has already
+    been reported by the time this is read; stopping is all that's left."""
 
 
 def _handle_page(
@@ -400,18 +399,17 @@ def _handle_page(
     """Run one page and report it, whatever happens to it.
 
     This deliberately never raises `KeyboardInterrupt`. Reporting the page is
-    the *last* thing that must survive an interrupt, so an exception that skips
-    past the callback would be the one bug this whole design exists to prevent -
-    a researcher left watching a page nobody is running any more.
+    the *last* thing that must survive an interrupt: an exception that skips
+    past the callback would leave a researcher watching a page nobody is
+    running any more, which is the one bug this whole design exists to
+    prevent.
 
-    The reporting call is therefore inside that protection rather than after it.
-    It used to sit outside, on the reading that the gap was a handful of
-    bytecodes; it is not. Between the model returning and the callback going out
-    there is a timing calculation and two console writes, and rich rendering to a
-    terminal is long enough to catch a Ctrl-C easily. An interrupt landing there
-    escaped to `_claim_loop`, which cannot see `output` and reports the page
-    *failed* - terminally, with the transcription already computed and sitting on
-    a stack frame about to be discarded.
+    The reporting call is inside that protection rather than after it, because
+    the gap between the model returning and the callback going out (a timing
+    calculation and two console writes, with rich rendering to a terminal) is
+    long enough to catch a Ctrl-C. An interrupt landing there would escape to
+    `_claim_loop`, which can't see `output` and would report the page *failed*
+    with the transcription already computed and about to be discarded.
     """
     output: dict | None = None
     reason: str | None = None
@@ -436,10 +434,10 @@ def _handle_page(
     except Exception as exc:  # noqa: BLE001 - one bad page is not a bad loop
         reason = _reason(exc)
 
-    # Past this point the page's fate is decided and only saying so is left. An
-    # interrupt here is recorded and swallowed rather than obeyed: `_report` has
-    # its own two-Ctrl-C bargain with the researcher, and reaching it is the
-    # whole point.
+    # Past this point the page's fate is decided and only saying so is left.
+    # An interrupt here is recorded and swallowed rather than obeyed: `_report`
+    # has its own two-Ctrl-C bargain with the researcher, and reaching it is
+    # the whole point.
     for first_pass in (True, False):
         try:
             if first_pass:
@@ -468,20 +466,20 @@ def _report(
 ) -> None:
     """Post the terminal callback, absorbing one Ctrl-C and retrying a bad hop.
 
-    The first extra interrupt is swallowed and explained, because a researcher
-    pressing Ctrl-C twice in a second means "stop", not "leave that page
-    half-reported". The second is honoured: at that point the **lease** is the
-    right mechanism, and it re-queues the page rather than failing it.
+    The first extra interrupt is swallowed and explained, because a
+    researcher pressing Ctrl-C twice in a second means "stop", not "leave
+    that page half-reported". The second is honoured: at that point the
+    **lease** is the right mechanism, and it re-queues the page rather than
+    failing it.
 
-    A `PlatformError` used to end this the same way, printed once and dropped.
-    That was the reverse of the trade the lease makes: the page was *finished*,
-    the only thing between a researcher and their transcription was one HTTP
-    request, and a 502 from a gateway threw the result away and waited for the
-    lease to expire. So a failed post is retried, backing off, up to
-    `MAX_REPORT_ATTEMPTS`.
+    A failed post is retried, backing off, up to `MAX_REPORT_ATTEMPTS`,
+    because the page is already *finished* at this point: the only thing
+    between a researcher and their transcription is one HTTP request, and a
+    502 from a gateway shouldn't throw the result away while waiting for the
+    lease to expire.
 
-    `PageLeaseLost` is the exception to the exception. A 403 means the platform
-    has already given the page to someone else, and there is nothing left here to
+    `PageLeaseLost` is the exception to that: a 403 means the platform has
+    already given the page to someone else, and there's nothing left here to
     deliver it to.
     """
     attempts = 0
@@ -542,8 +540,8 @@ def _report(
 def _execute(page: ClaimedPage, image_bytes: bytes):
     """Call the same `run_model` the platform's own worker calls.
 
-    Imported here rather than at module scope: this is the only line in the CLI
-    that needs Torch, and `nomikos version` must not pay for it.
+    Imported here rather than at module scope: this is the only line in the
+    CLI that needs Torch, and `nomikos version` must not pay for it.
     """
     from inference.contracts.common import InferenceTask
     from inference.jobs.runner import run_model
@@ -560,10 +558,10 @@ def _execute(page: ClaimedPage, image_bytes: bytes):
 def _job_output(page: ClaimedPage, result) -> dict:
     """Wrap the model's answer in the callback's discriminated union.
 
-    `kind` has to equal the task or the platform rejects the callback, so this
-    also catches the one shape mismatch that can happen honestly: a transcribe
-    page whose line regions did not survive, which comes back as a single-line
-    response where a batch was required.
+    `kind` has to equal the task or the platform rejects the callback, so
+    this also catches the one shape mismatch that can happen honestly: a
+    transcribe page whose line regions didn't survive, coming back as a
+    single-line response where a batch was required.
     """
     data = result.model_dump(mode="json")
     if page.task == "transcribe" and "lines" not in data:
@@ -574,10 +572,11 @@ def _job_output(page: ClaimedPage, result) -> dict:
 def _reason(error: BaseException) -> str:
     """Why this page failed, in a form the platform will still store as words.
 
-    It redacts URLs, paths, and anything token-shaped out of a callback error
-    before storing it, so a reason built from a traceback's worth of file paths
-    arrives as a row of placeholders. Collapsed, truncated, and falling back to
-    the exception's own name when it has nothing to say.
+    The platform redacts URLs, paths, and anything token-shaped out of a
+    callback error before storing it, so a reason built from a traceback's
+    worth of file paths arrives as a row of placeholders. This collapses
+    whitespace, truncates, and falls back to the exception's class name when
+    it has nothing to say.
     """
     text = " ".join(str(error).split())
     if not text:
@@ -602,8 +601,8 @@ def _report_refusal(errors, refusal: AgentVersionRefused) -> None:
 
 
 def _report_outdated(console, notice: AgentNotice) -> None:
-    """Said once per session, not once per claim: the notice rides every claim
-    response, and repeating it every few seconds would bury the work."""
+    """Printed once per session, not once per claim: the notice rides every
+    claim response, and repeating it every few seconds would bury the work."""
     console.print(
         f"[yellow]This agent is {notice.agent_version}; {notice.latest_version} is out.[/yellow] "
         f"It is still being served. Upgrade with [bold]{notice.upgrade_command}[/bold]."

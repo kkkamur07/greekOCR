@@ -348,10 +348,9 @@ export function useLayoutMutations({
       setLineError("A segment needs at least 3 points.");
       return;
     }
-    const previousLines = lines;
-    const before =
-      previousLines.find((line) => line.id === segmentId)?.points ?? null;
-    if (!before) return;
+    const previousSegment = lines.find((line) => line.id === segmentId);
+    if (!previousSegment) return;
+    const before = previousSegment.points;
     const pointsUnchanged =
       before.length === cleanedPoints.length &&
       before.every(
@@ -390,7 +389,15 @@ export function useLayoutMutations({
       notePartContentChanged();
       setLineError(null);
     } catch (err) {
-      applyLocalLines(previousLines);
+      // Revert only this segment, against the segments as they are now: an edit to
+      // a different segment that landed while the patch was in flight must survive.
+      applyLocalLines(
+        linesRef.current.map((line) =>
+          line.id === segmentId
+            ? { ...line, points: before, source: previousSegment.source }
+            : line,
+        ),
+      );
       setLineError(layoutMutationMessage(err));
     }
   }
@@ -417,8 +424,6 @@ export function useLayoutMutations({
     const deletedId = selectedSegmentId;
     const deletedLine = lines.find((line) => line.id === deletedId);
     if (!deletedLine) return;
-    const previousLines = lines;
-    const previousLayout = layout;
     const optimisticLines = lines.filter((line) => line.id !== deletedId);
     applyLocalLines(optimisticLines);
     setSelectedSegmentId(null);
@@ -431,8 +436,9 @@ export function useLayoutMutations({
       setTextLines(pairing.text_lines);
       setPairingProgress(pairing.pairing_progress);
     } catch (err) {
-      setLines(previousLines);
-      setLayout(previousLayout);
+      // Re-insert only the segment whose delete failed, into the segments as they
+      // are now, so a concurrent edit to another segment is not rolled back too.
+      applyLocalLines(mergeSavedLine(linesRef.current, deletedLine));
       setLineError(layoutMutationMessage(err));
     }
   }

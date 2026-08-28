@@ -36,9 +36,9 @@ def err() -> Console:
 def unbroken(console: Console, text: str) -> None:
     """Print something that must survive the terminal being narrower than it.
 
-    Rich wraps at the console width, and a wrapped pairing URL is a URL a
-    researcher cannot copy in one go. `soft_wrap` turns off wrapping *and*
-    cropping for this one line, so it runs on and the terminal decides.
+    Rich wraps at the console width, and a researcher can't copy a wrapped
+    pairing URL in one go. `soft_wrap` turns off wrapping *and* cropping for
+    this one line, so it runs on and the terminal decides.
     """
     console.print(text, soft_wrap=True)
 

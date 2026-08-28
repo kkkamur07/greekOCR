@@ -122,10 +122,10 @@ def _extend_boundaries(
             if len(boundary) > 3:
                 boundaries.append(geom.Polygon(boundary).simplify(0.01).buffer(0))
         except Exception as error:  # noqa: BLE001 - one bad region is not a bad page
-            # Skipped, not raised: a region shapely cannot close costs this line
-            # its boundary, not the page its segmentation. Logged because the
-            # silent version made a systematic tracing failure look like a page
-            # that simply had no extendable baselines.
+            # Skipped, not raised: a region shapely cannot close costs only its
+            # own boundary, not the page's segmentation. Logged so a systematic
+            # tracing failure doesn't look like a page with no extendable
+            # baselines.
             logger.debug("boundary tracing skipped a region: %s", error)
             continue
 

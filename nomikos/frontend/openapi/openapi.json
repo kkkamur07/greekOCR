@@ -2990,6 +2990,7 @@
                   },
                   "type": "array"
                 },
+                "maxItems": 4096,
                 "type": "array"
               },
               {

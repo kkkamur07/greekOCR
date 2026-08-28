@@ -7,7 +7,7 @@ import type { StatusMessage } from "./statusMessage";
  *
  * The effect is keyed on the message's token rather than its text, because
  * several of these sentences are constants and two saves in a row would
- * otherwise be one dependency that never changed - see `statusMessage`.
+ * otherwise be one dependency that never changed. See `statusMessage`.
  */
 function useSuccessToast(message: StatusMessage | null) {
   useEffect(() => {

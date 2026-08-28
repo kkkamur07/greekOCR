@@ -1,6 +1,6 @@
 """Document parts: the page images, their order, their review state, and their bytes.
 
-One responsibility — everything that treats a page as a *scan* rather than as geometry or
+One responsibility: everything that treats a page as a *scan* rather than as geometry or
 as text. That is what keeps the media store out of every other module in this context:
 this is the only place that writes to it, reads from it, or has to compensate when a
 write to it outlives the transaction that was supposed to record it.
@@ -273,6 +273,14 @@ class DocumentPartService:
         return part
 
     def _read_part_image_size_with_key(self, image_key: str) -> tuple[int, int]:
+        # Reject an over-cap blob from storage metadata *before* downloading it.
+        # A direct upload PUTs straight to storage past the API's body cap, so
+        # without this check any project member could point finalize at a
+        # multi-GB object and force the API process to buffer the whole thing
+        # into memory. The post-read check stays as a backstop for backends
+        # whose metadata size is unavailable.
+        if self._media.size(image_key) > MAX_PART_UPLOAD_BYTES:
+            raise ValidationError("Uploaded image exceeds the maximum allowed size")
         data = self._media.read(image_key)
         if len(data) > MAX_PART_UPLOAD_BYTES:
             raise ValidationError("Uploaded image exceeds the maximum allowed size")
@@ -303,7 +311,7 @@ class DocumentPartService:
         Dimensions only exist inside the stored blob, so migration 004 cannot backfill
         them in SQL. Read paths that expose dimensions decode the stored image once and
         persist the result; every later read is served from Postgres. Storage failures are
-        swallowed — a missing blob must not break listing the rest of the document.
+        swallowed: a missing blob must not break listing the rest of the document.
         """
         # A pending row has no stored blob yet (its key is the ``pending`` sentinel),
         # so trying to backfill it would only log a spurious warning per listing.

@@ -71,6 +71,12 @@ class LocalMediaStore:
             raise FileNotFoundError(image_key)
         return path.read_bytes()
 
+    def size(self, image_key: str) -> int:
+        path = self.absolute_path(image_key)
+        if not path.is_file():
+            raise FileNotFoundError(image_key)
+        return path.stat().st_size
+
     def delete(self, image_key: str) -> None:
         path = self.absolute_path(image_key)
         if path.is_file():

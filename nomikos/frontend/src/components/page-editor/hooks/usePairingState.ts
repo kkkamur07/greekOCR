@@ -103,11 +103,11 @@ export function usePairingState({
   }, [projectId, documentId, partId]);
 
   /**
-   * Called once per committed write, after the server has taken it.
+   * Called once per committed write, after the server has accepted it.
    *
-   * Text written here shows up on the page from this hook's own state, so the
-   * two cached reads that are also copies of it - the document, and the
-   * published page a reader sees - had nothing telling them they were stale.
+   * Text written here shows on the page from this hook's own state, so this
+   * invalidates the other cached reads of it (the document and the
+   * published page a reader sees).
    */
   function notePartContentChanged() {
     if (!projectId || !documentId) return;

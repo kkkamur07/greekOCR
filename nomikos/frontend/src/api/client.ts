@@ -100,13 +100,13 @@ export type TranscribeJobResult = {
  * `list[list[float]]`, so the schema can only say "an object" and
  * "number[][]". The canvas needs "an `[x, y]` pair" and "a point list, or an
  * object wrapping one", and every helper in `canvasGeometry.ts` is written
- * against those. The claim is checked where it is consumed rather than where
- * it arrives: `normalizeGeometryPoints` unwraps the object forms and drops
- * anything that is not a pair of numbers.
+ * against those. The claim is checked where it's consumed, not where it
+ * arrives: `normalizeGeometryPoints` unwraps the object forms and drops
+ * anything that isn't a pair of numbers.
  *
  * Nothing else about these payloads is asserted here. Every field below comes
  * from `schema.d.ts`, so a backend change reaches the frontend through
- * `codegen:api` and fails the typecheck, rather than being shadowed by a
+ * `codegen:api` and fails the typecheck instead of being shadowed by a
  * second copy of the type.
  */
 export type LinePoint = [number, number];
@@ -171,10 +171,9 @@ export type ResetPartLayoutRequest =
  * The editor's working copy of a layout, not a response shape.
  *
  * `GET .../layout` answers with whole blocks and lines, but the editor only
- * ever reads and rewrites their geometry, and `syncLayoutLinesFromSegments`
- * folds a segment edit back in as a line carrying geometry and nothing else.
- * The field names and types are the generated ones; the optionality is the
- * editor's own.
+ * reads and rewrites their geometry, and `syncLayoutLinesFromSegments` folds
+ * a segment edit back in as a line carrying geometry and nothing else. Field
+ * names and types are the generated ones; the optionality is the editor's own.
  */
 export type LayoutBlockResponse = Pick<BlockResponse, "id"> &
   Partial<Pick<BlockResponse, "box" | "manual_geometry">>;
@@ -251,14 +250,13 @@ function csrfCookieToken(): string | null {
 /**
  * The CSRF token to echo back, from whichever channel has it.
  *
- * The server sends the same value twice: in the `TokenResponse` body and in the
- * `greekocr-csrf` cookie. The body copy is preferred because it is the one a
- * cookie policy cannot take away - the cookie is set on `api.nomikos.app` for
- * `.nomikos.app` purely so that script on `app.nomikos.app` can read it, and
- * that sibling-subdomain read is what a stricter browser interferes with. The
- * cookie remains the fallback, which is what keeps a session established before
- * this code shipped - and a page that never called an auth route in this tab -
- * working exactly as it did.
+ * The server sends the same value twice: in the `TokenResponse` body and in
+ * the `greekocr-csrf` cookie. The body copy is preferred because a cookie
+ * policy can't take it away, the cookie is set on `api.nomikos.app` for
+ * `.nomikos.app` purely so script on `app.nomikos.app` can read it, and that
+ * sibling-subdomain read is what a stricter browser blocks. The cookie stays
+ * as the fallback for a session established before this code shipped, or a
+ * tab that never called an auth route.
  */
 function csrfToken(): string | null {
   return getCsrfToken() ?? csrfCookieToken();
@@ -281,13 +279,12 @@ function rememberCsrfToken(token: TokenResponse): TokenResponse {
 /**
  * POST one of the two routes that check CSRF, retrying once from the cookie.
  *
- * The in-memory token belongs to a single tab, and `/auth/refresh` rotates the
- * session's token for every tab at once - so a second tab's copy goes stale the
- * moment the first one refreshes, and would be answered 403. The cookie is
- * shared by every tab and is always the current one, so where the browser lets
- * script read it, one retry restores exactly the behaviour of reading the
- * cookie on every request. It is skipped when the cookie is unreadable or
- * already says what memory says, so the Safari case costs no extra request.
+ * The in-memory token belongs to a single tab, and `/auth/refresh` rotates
+ * the session's token for every tab at once, so a second tab's copy goes
+ * stale the moment the first one refreshes and gets a 403. The cookie is
+ * shared by every tab and always current, so one retry restores the same
+ * behavior as reading the cookie on every request. Skipped when the cookie
+ * is unreadable or already matches memory, so Safari costs no extra request.
  */
 async function postCsrfProtected<T>(path: string): Promise<T> {
   try {

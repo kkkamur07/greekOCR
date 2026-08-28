@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from uuid import UUID
 
-from sqlalchemy import func, select, tuple_, update
+from sqlalchemy import case, func, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -286,7 +286,7 @@ class DocumentRepository:
         return int(result.scalar_one())
 
     async def count_paired_ground_truth_lines(self, session: AsyncSession, part_id: UUID) -> int:
-        """Lines carrying non-blank ground-truth text — the denominator of pairing progress."""
+        """Lines carrying non-blank ground-truth text: the denominator of pairing progress."""
         result = await session.execute(
             select(func.count(func.distinct(Line.id)))
             .select_from(Line)
@@ -386,10 +386,18 @@ class DocumentRepository:
             .where(DocumentPart.document_id == document.id)
             .values(order=DocumentPart.order + temporary_offset)
         )
-        for index, part_id in enumerate(ordered_part_ids):
-            await session.execute(
-                update(DocumentPart).where(DocumentPart.id == part_id).values(order=index)
-            )
+        # One bulk write instead of a statement per part. Safe after the offset
+        # above cleared the [0, n) range: every row is remapped to a distinct final
+        # order, and set-equality was checked, so no row is left with a null order.
+        final_order = case(
+            {part_id: index for index, part_id in enumerate(ordered_part_ids)},
+            value=DocumentPart.id,
+        )
+        await session.execute(
+            update(DocumentPart)
+            .where(DocumentPart.document_id == document.id)
+            .values(order=final_order)
+        )
         await session.commit()
         result = await session.execute(
             select(DocumentPart)

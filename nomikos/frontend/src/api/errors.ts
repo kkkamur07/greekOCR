@@ -65,9 +65,9 @@ function extractRef(body: unknown, response: Response): string | null {
 /**
  * A request that stopped because its `AbortSignal` fired.
  *
- * Lives here rather than under `inference/` because that is no longer what it
- * is about: the local-run signals died with the loopback transport (ADR 0002),
- * and what still aborts is any tracked request the researcher cancelled.
+ * Lives here rather than under `inference/`: local-run signals died with the
+ * loopback transport (ADR 0002), so what still aborts is a tracked request
+ * the researcher cancelled.
  */
 export function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === "AbortError";

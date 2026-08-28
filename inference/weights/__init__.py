@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import os
 from importlib import resources
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 INFERENCE_ROOT = Path(__file__).resolve().parents[1]
 
@@ -76,7 +76,11 @@ def resolve_weights_source(
         package_name, _, resource_name = package_resource.partition("/")
         if not package_name or not resource_name:
             raise ValueError("package weights source must be package://<package>/<resource>")
-        if ".." in resource_name.split("/"):
+        # ``importlib.resources ... joinpath`` follows pathlib's absolute-override
+        # semantics: an absolute ``resource_name`` ("/etc/passwd") escapes the
+        # package root entirely, and the ``..`` check below never fires because
+        # there is no ``..`` segment. Reject both shapes before joining.
+        if PurePosixPath(resource_name).is_absolute() or ".." in resource_name.split("/"):
             raise ValueError("package weights source must stay within the package")
         if not artifact_sha256:
             raise ValueError("package weights source requires a pinned artifact_sha256")

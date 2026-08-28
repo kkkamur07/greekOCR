@@ -3,24 +3,23 @@
  *
  * A fragment is never sent to the server: it stays out of access logs, out of
  * `Referer`, and out of the RSC requests the App Router makes on navigation.
- * That property is only worth having if the token never reaches a query string
- * either - and it would, unprompted: an unauthenticated researcher opening the
- * link is bounced through `navigateToLogin`, which folds
- * `window.location.hash` into the `callbackUrl` *query* parameter of `/login`.
- * The token would arrive at the server on the very redirect meant to protect
- * the page.
+ * That property only matters if the token never reaches a query string, and
+ * it would unprompted: an unauthenticated researcher opening the link is
+ * bounced through `navigateToLogin`, which folds `window.location.hash` into
+ * the `callbackUrl` *query* parameter of `/login`. The token would arrive at
+ * the server on the very redirect meant to protect the page.
  *
- * So the fragment is taken out of the address bar as soon as the route renders,
- * before the session has finished restoring, and parked in `sessionStorage` -
- * per tab, same origin, never transmitted. It is dropped again the moment the
- * pairing it names is approved, denied, or found to be no longer valid.
+ * So the fragment is taken out of the address bar as soon as the route
+ * renders, before the session has finished restoring, and parked in
+ * `sessionStorage` (per tab, same origin, never transmitted). It is dropped
+ * again once the pairing it names is approved, denied, or found invalid.
  */
 const STORAGE_KEY = "nomikos.pairing-verification-token";
 
 /**
  * `sessionStorage` access throws outright in some blocked-cookie
  * configurations, so every use goes through here. Losing the parking space is
- * survivable - the token is still returned to the caller that took it from the
+ * survivable: the token is still returned to the caller that took it from the
  * URL, which is enough to finish pairing in a tab that never leaves the page.
  */
 function sessionStore(): Storage | null {

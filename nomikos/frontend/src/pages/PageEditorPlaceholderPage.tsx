@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { type LayoutPoint, type LinePoint } from "../api/client";
 import { invalidateAfter } from "../api/resources";
@@ -190,6 +190,11 @@ export function PageEditorPlaceholderPage() {
     navigateSegment,
   } = pairing;
 
+  // Latest selection, readable after an await: a save may resolve after the user
+  // has switched segments, and the strip must not be dismissed on the new one.
+  const selectedSegmentIdRef = useRef(selectedSegmentId);
+  selectedSegmentIdRef.current = selectedSegmentId;
+
   const pairedIds = useMemo(() => segmentIdsWithGroundTruth(lines), [lines]);
   const stripVisible = Boolean(selectedSegment) && !stripDismissed;
 
@@ -347,9 +352,9 @@ export function PageEditorPlaceholderPage() {
                 current ? { ...current, workflow } : current,
               );
               // Publishing is the one write in this editor that changes what a
-              // reader can reach at all. This handler used to stop at the local
-              // copy above, so the document list, the detail page and the
-              // public page went on showing the old status.
+              // reader can reach at all, so the local copy above isn't
+              // enough: without this, the document list, detail page and
+              // public page would keep showing the old status.
               if (projectId && documentId) {
                 invalidateAfter.documentUpdated(projectId, documentId);
               }
@@ -509,7 +514,13 @@ export function PageEditorPlaceholderPage() {
             approvedTextDraft={approvedTextDraft}
             onApprovedTextDraftChange={setApprovedTextDraft}
             onSaveGroundTruthText={async () => {
-              if (await saveGroundTruthText()) setStripDismissed(true);
+              const savedSegmentId = selectedSegmentId;
+              if (
+                (await saveGroundTruthText()) &&
+                selectedSegmentIdRef.current === savedSegmentId
+              ) {
+                setStripDismissed(true);
+              }
             }}
             onPromoteSelectedSegmentToGroundTruth={
               promoteSelectedSegmentToGroundTruth
@@ -520,7 +531,13 @@ export function PageEditorPlaceholderPage() {
             lines={lines}
             selectedSegmentId={selectedSegmentId}
             onSaveApprovedText={async () => {
-              if (await saveApprovedText()) setStripDismissed(true);
+              const savedSegmentId = selectedSegmentId;
+              if (
+                (await saveApprovedText()) &&
+                selectedSegmentIdRef.current === savedSegmentId
+              ) {
+                setStripDismissed(true);
+              }
             }}
             transcribeModels={transcribeModels}
             selectedTranscribeModelId={selectedTranscribeModelId}

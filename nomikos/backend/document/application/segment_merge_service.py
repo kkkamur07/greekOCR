@@ -95,11 +95,18 @@ class SegmentMergeService:
         )
 
     def _load_part(self, session: Session, part_id: UUID) -> DocumentPart:
+        # Lock the part row for the length of the merge. Two segment jobs on the
+        # same part each delete-then-reinsert its machine geometry; the callback's
+        # FOR UPDATE covers only the Job row, not the part, so without this lock
+        # the two merges interleave their delete/insert and leave a corrupted mix
+        # of both runs' blocks and lines. The second job blocks here until the
+        # first commits, then reads the fresh state and cleanly replaces it.
         result = session.execute(
             select(DocumentPart)
+            .where(DocumentPart.id == part_id)
+            .with_for_update()
             .options(selectinload(DocumentPart.blocks))
             .options(selectinload(DocumentPart.lines))
-            .where(DocumentPart.id == part_id)
         )
         part = result.scalar_one_or_none()
         if part is None:

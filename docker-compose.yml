@@ -69,7 +69,7 @@ services:
       && python scripts/platform/seed_dev_nomikos.py
       && uvicorn backend.core.main:app --host 0.0.0.0 --port 8000 --workers 1 --reload --reload-dir /app/backend"
     # Seed runs on API container start only (never restarts Postgres). If you wipe or
-    # recreate the DB volume while the API keeps running, hit /health or restart api -
+    # recreate the DB volume while the API keeps running, hit /health or restart api:
     # development health checks recreate the dev login user when it is missing.
 
   platform-worker:

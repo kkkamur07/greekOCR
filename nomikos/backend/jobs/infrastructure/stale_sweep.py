@@ -18,7 +18,7 @@ This module runs the same sweeps from ordinary job read paths instead:
 * throttled to at most one sweep per process per
   ``job_stale_sweep_min_interval_seconds`` so a hot endpoint cannot turn into a
   sweep loop;
-* serialized across API replicas with ``pg_try_advisory_xact_lock`` — a replica
+* serialized across API replicas with ``pg_try_advisory_xact_lock``: a replica
   that loses the race skips its turn rather than queueing, so a user request is
   never blocked waiting on another replica's sweep;
 * run through ``asyncio.to_thread`` because the sweeps use sync sessions;

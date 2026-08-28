@@ -1,21 +1,20 @@
-"""Where the **device token** lives on a researcher's machine, and who may read it.
+"""Where the device token lives on a researcher's machine, and who may read it.
 
-ADR 0001 states the risk this file *is*: a long-lived credential now sits on a
-laptop where none existed, and whoever can read it can claim that researcher's
-`local` work until the device is revoked. The one control this layer owns is the
-mode bits - `0600` in a `0700` directory - so another account on a shared machine
-cannot claim jobs as them. Everything else (per-user scope, revocation on the
-next call) is enforced by the platform.
+ADR 0001: a long-lived credential now sits on a laptop where none existed
+before, and whoever can read it can claim that researcher's `local` work until
+the device is revoked. The control this layer owns is the mode bits (`0600` in
+a `0700` directory), so another account on a shared machine cannot claim jobs
+as them. Everything else (per-user scope, revocation on the next call) is
+enforced by the platform.
 
-The file is written through a temporary file in the same directory, flushed and
-`fsync`ed, and only then renamed, so an interrupted write leaves the previous
-credential intact rather than a truncated one. Without the `fsync` that promise
-holds for a killed process and not for a lost power supply: `os.replace` orders
-the rename against the file's *metadata*, and a rename that reaches the disk
-before the bytes do leaves a zero-length `device.json` - which reads as a corrupt
-credential, not as an unpaired machine. `os.open` with `0o600` is not enough on
-its own either: the process umask is subtracted from that mode, so an `fchmod`
-follows it.
+The file is written through a temp file in the same directory, flushed and
+`fsync`ed, then renamed, so an interrupted write leaves the previous credential
+intact rather than a truncated one. That promise only covers a killed process,
+not a lost power supply: `os.replace` orders the rename against the file's
+metadata, so a rename that reaches disk before the bytes do leaves a
+zero-length `device.json`, which reads as a corrupt credential rather than an
+unpaired machine. `os.open` with `0o600` alone isn't enough either, since the
+process umask is subtracted from that mode, hence the `fchmod` that follows it.
 """
 
 from __future__ import annotations
@@ -160,11 +159,10 @@ def load_credential(path: Path | None = None) -> DeviceCredential | None:
 def save_credential(credential: DeviceCredential, path: Path | None = None) -> Path:
     """Write the credential owner-only, and return where it landed.
 
-    Refuses to persist a token bound to a platform this CLI would not be allowed
-    to send it to. A stored credential is not a passive record - `nomikos run`
-    reads `platform_url` back and claims against it - so writing one for a
-    cleartext remote host would launder a URL that was rejected at pairing time
-    into one that is trusted on every run afterwards.
+    Refuses to persist a token bound to a platform this CLI is not allowed to
+    send it to. `nomikos run` reads `platform_url` back and claims against it,
+    so writing one for a cleartext remote host would turn a URL rejected at
+    pairing time into one trusted on every run afterward.
     """
     if not is_secure_platform_url(credential.platform_url):
         raise InsecurePlatformURL(

@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from inference.contracts.common import (
     MAX_GEOMETRY_POINTS,
+    MAX_KRAKEN_CEILING_POINTS,
     MAX_SEGMENT_BLOCKS,
     MAX_SEGMENT_LINES,
 )
@@ -39,7 +40,9 @@ class SegmentLine(BaseModel):
     mask: dict[str, Any] | None = None
     kind: SegmentGeometryKind = SegmentGeometryKind.polygon
     points: list[list[float]] = Field(min_length=4, max_length=MAX_GEOMETRY_POINTS)
-    kraken_ceiling: list[list[float]] | None = None
+    kraken_ceiling: list[list[float]] | None = Field(
+        default=None, max_length=MAX_KRAKEN_CEILING_POINTS
+    )
     source_metadata: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("points")

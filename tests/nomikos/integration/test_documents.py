@@ -111,15 +111,18 @@ def test_outsider_cannot_access_documents(client, owner_headers, outsider_header
     assert create.status_code == 201
     document_id = create.json()["id"]
 
+    # An authenticated non-member is a 403 by the access seam's contract; only an
+    # anonymous caller against a draft gets 404. Accepting 404 here let a silent
+    # regression to existence-hiding pass unnoticed.
     read = client.get(f"{base}/{document_id}", headers=outsider_headers)
-    assert read.status_code in (403, 404)
+    assert read.status_code == 403
 
     mutate = client.patch(
         f"{base}/{document_id}",
         headers=outsider_headers,
         json={"name": "Hijacked"},
     )
-    assert mutate.status_code in (403, 404)
+    assert mutate.status_code == 403
 
 
 # --- Parts: upload, reorder, media ---

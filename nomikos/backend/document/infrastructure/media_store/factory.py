@@ -46,6 +46,14 @@ class MediaStore(Protocol):
 
     def read(self, image_key: str) -> bytes: ...
 
+    def size(self, image_key: str) -> int:
+        """Stored byte length of one object without downloading it.
+
+        Lets a caller reject an over-cap blob from metadata before pulling it
+        into memory. Raises ``FileNotFoundError`` if the object is absent.
+        """
+        ...
+
     def delete(self, image_key: str) -> None: ...
 
 

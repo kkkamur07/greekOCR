@@ -1,9 +1,9 @@
 """The narrow surface other bounded contexts call the document context through.
 
-This is deliberately **not** a sixth module. The document context is five —
+This is deliberately **not** a sixth module. The document context is five:
 :class:`DocumentCatalog`, :class:`DocumentPartService`, :class:`LayoutService`,
 :class:`TranscriptionService` and :class:`DocumentJobEnqueueService`, over the
-:class:`DocumentAccess` seam — and the routes in ``document/api`` call whichever one they
+:class:`DocumentAccess` seam, and the routes in ``document/api`` call whichever one they
 need directly. What survives here is the handful of methods that ``backend/annotation``
 and the dev seed script reach for, kept so that a bounded context outside this one does
 not have to know how this one is arranged internally.

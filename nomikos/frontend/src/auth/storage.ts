@@ -36,13 +36,14 @@ export function clearCsrfToken(): void {
 
 export function setAccessToken(token: string): void {
   accessToken = token;
-  // Retained reads belong to whoever was signed in when they were made, so a new
-  // session must not be able to see them. Reset rather than clear: clear()
-  // destroys in-flight queries and strands their mounted observers in `pending`
-  // forever - the public document page wedged on its spinner whenever the
-  // AuthProvider's startup refresh settled while its reads were still in
-  // flight. resetQueries() drops the data just the same, but refetches every
-  // query something on screen is watching, now under the new session.
+  // Retained reads belong to whoever was signed in when they were made, so a
+  // new session must not be able to see them. Reset rather than clear:
+  // clear() destroys in-flight queries and strands their mounted observers in
+  // `pending` forever (the public document page wedged on its spinner
+  // whenever the AuthProvider's startup refresh settled while its reads were
+  // still in flight). resetQueries() drops the data just the same, but
+  // refetches every query something on screen is watching, now under the new
+  // session.
   invalidateAuthGetCache();
   void queryClient.resetQueries();
 }

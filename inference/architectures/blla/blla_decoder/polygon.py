@@ -157,18 +157,17 @@ def _intersection_ring(roi_polygon: object, polygon: object) -> np.ndarray:
     """Reduce the ROI/polygon intersection to the ring of its largest part.
 
     A well-behaved line intersects its ROI in one ``Polygon``, whose
-    ``.boundary`` is the single ``LineString`` the caller wants. A line pinched
-    in two - by a gap in the ink, or by a neighbouring baseline cutting across
-    the environment - intersects in a ``MultiPolygon`` (or a
-    ``GeometryCollection``), whose ``.boundary`` is a ``MultiLineString`` with
-    no ``.coords`` at all and would raise. Keeping the largest part keeps the
-    line and discards the slivers the pinch cut off, which is strictly better
-    than losing the line to an ``AttributeError``.
+    ``.boundary`` is the ``LineString`` the caller wants. A line pinched in
+    two (a gap in the ink, or a neighbouring baseline cutting across the
+    environment) intersects in a ``MultiPolygon`` or ``GeometryCollection``,
+    whose ``.boundary`` is a ``MultiLineString`` with no ``.coords`` and would
+    raise. Keeping the largest part keeps the line and drops the slivers
+    instead of raising ``AttributeError``.
     """
     intersection = roi_polygon.intersection(polygon)
     if intersection.is_empty:
-        # Preserved from the single-``Polygon`` path: an empty intersection
-        # yields no ring, and the caller drops the line as too short.
+        # An empty intersection yields no ring; the caller drops the line as
+        # too short.
         return np.zeros((0, 2), dtype=int)
     if intersection.geom_type == "Polygon":
         parts = [intersection]
@@ -317,9 +316,8 @@ def calculate_polygonal_environment(
     """Extract one polygonal line environment."""
 
     line = geom.LineString(baseline)
-    # Was ``8 if topline is not None else 0``, which never took the else branch:
-    # ``topline`` is a ``bool`` with a default, so it is never ``None``. The
-    # offset the reference decoder uses is 8.
+    # ``topline`` is a ``bool`` with a default, never ``None``, so the offset
+    # is always 8: the reference decoder's own value.
     offset = 8
     offset_line = line.parallel_offset(offset, side="left" if topline else "right")
     line_array = np.asarray(line.coords, dtype=float)

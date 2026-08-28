@@ -1,14 +1,8 @@
 """BLLA segmentation on the ONNX Runtime CPU runtime (ADR 0006).
 
-Restored by ADR 0006: this is the adapter that ran here before ADR 0004 made
-PyTorch the runtime.
-Two things changed on the way back in:
-
-* it is no longer a *second* adapter beside a Torch one, so it keeps the plain
-  names (``BLLAUnavailableError``, ``run_blla_segment``) rather than the
-  ``Onnx``-suffixed ones it needed while both existed;
-* ``resolve_artifact`` verifies the **artifact SHA-256** before the file is
-  opened, which the archived adapter predates.
+Uses the plain names (``BLLAUnavailableError``, ``run_blla_segment``) since
+this is the only BLLA adapter here. ``resolve_artifact`` verifies the
+**artifact SHA-256** before the file is opened.
 
 The **Hub artifact** is ``blla.onnx``. Unlike a pickled ``.pt`` it carries no
 executable payload, but the digest is still checked: onnxruntime parses the

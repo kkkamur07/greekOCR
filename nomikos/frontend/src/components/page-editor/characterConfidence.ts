@@ -7,8 +7,8 @@ export type { CharacterConfidence };
 
 /**
  * A transcription plus per-character scores. The platform API has no such
- * field - `LineTranscriptionResponse` carries one confidence for the whole
- * line - so this is a client-side extension, declared once, here.
+ * field (`LineTranscriptionResponse` carries one confidence for the whole
+ * line), so this is a client-side extension, declared once, here.
  *
  * Nothing populates it today: a local run's `character_confidences` are sent
  * to the server by `persistLocalTranscribe` and are not returned, so every

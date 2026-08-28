@@ -8,6 +8,7 @@ three times through whichever endpoint happens to reach them.
 from __future__ import annotations
 
 import uuid
+from contextlib import asynccontextmanager
 
 import pytest
 
@@ -29,6 +30,12 @@ class _Session:
 
     def add(self, item: object) -> None:
         self.added.append(item)
+
+    @asynccontextmanager
+    async def begin_nested(self):
+        # SAVEPOINT stand-in: yield, and let an exception in the block propagate
+        # the way ``layer_for`` expects (it catches IntegrityError around this).
+        yield
 
     async def flush(self) -> None:
         self.flushes += 1

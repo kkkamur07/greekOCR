@@ -77,8 +77,6 @@ log = logging.getLogger("seed_dev_annotated_data")
 PROJECT_SLUG = os.environ.get("DEV_ANNOTATED_PROJECT_SLUG", "byzantine-greek-manuscripts")
 PROJECT_NAME = os.environ.get("DEV_ANNOTATED_PROJECT_NAME", "Byzantine Greek Manuscripts")
 PROJECT_GUIDELINES = os.environ.get(
-    # The prose used to sit here as the variable *name*, so the override could
-    # never fire; the default was the only reachable value.
     "DEV_ANNOTATED_PROJECT_GUIDELINES",
     "This is annotated data given by professor chitwood for byzantine greek.",
 )
@@ -113,10 +111,9 @@ def _configure_logging(*, verbose: bool) -> None:
     level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(level=level, format="%(message)s")
     logging.getLogger("sqlalchemy.engine").setLevel(logging.DEBUG if verbose else logging.ERROR)
-    # infrastructure.db turns echo on for development, and echo bypasses the
-    # logger level above (it logs through an InstanceLogger with its own level).
-    # Flip it on the engine instead. The previous workaround was to claim
-    # ENVIRONMENT=production at import time, which also disarmed the dev guard.
+    # infrastructure.db turns echo on for development; echo logs through its own
+    # InstanceLogger level, bypassing the logger level set above. Set it
+    # directly on the engine instead.
     engine.echo = verbose
 
 
@@ -600,10 +597,9 @@ async def _import_document(
 
 
 async def run_seed(*, force: bool, import_history: bool) -> ImportStats:
-    # Before any filesystem or database work: this seed creates the well-known
-    # dev account and writes fixture corpus data, so it must never touch a
-    # non-development deployment. The guard lives with the other dev bootstrap
-    # helpers so scripts cannot each invent their own weaker version.
+    # Creates the well-known dev account and writes fixture data, so this must
+    # never touch a non-development deployment. The guard lives with the other
+    # dev bootstrap helpers so scripts share one implementation, not their own.
     require_development_environment()
 
     if not ANNOTATED_DATA_ROOT.is_dir():

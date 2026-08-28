@@ -40,13 +40,12 @@ export const resourceTags = {
  * deletes a document.
  *
  * A caller that already folded the server's response into its own view with
- * `ServerQuery.patch` still declares the whole write. There used to be a
- * narrower `…InPlace` pair for that case, on the reasoning that invalidating a
- * view you just wrote to replaces it with an older value - it does not, because
- * the refetch reads the same server the response came from. What the narrower
- * pair did do was skip a tag, and the reads carrying that tag - the other
- * `includeArchived` variant of the dashboard, the copy of the document the page
- * editor holds - were left showing the value from before the write.
+ * `ServerQuery.patch` still declares the whole write. A narrower invalidation
+ * covering only that caller's own view would look safe (the refetch reads the
+ * same server the response came from, so it can't go stale) but would skip
+ * the tag, leaving other reads that carry it, the other `includeArchived`
+ * dashboard variant, the page editor's own copy of the document, showing the
+ * value from before the write.
  */
 export const invalidateAfter = {
   projectCreated: (): void => invalidateTags([resourceTags.projects]),

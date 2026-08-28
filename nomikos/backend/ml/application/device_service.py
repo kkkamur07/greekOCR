@@ -507,9 +507,8 @@ class DevicePairingService:
         pairing.approved_at = now
         pairing.device_id = device.id
         await session.commit()
-        # The audit line for a grant that is not otherwise recoverable: it names
-        # who approved what, under which name the helper presented itself, and
-        # the confirmation code the consent screen showed at the time.
+        # Audit line for a grant that can't otherwise be recovered: who approved
+        # what, under which presented name, and the confirmation code shown.
         logger.info(
             "device_pairing_approved pairing_id=%s device_id=%s user_id=%s name=%r "
             "platform=%s helper_version=%s confirmation_code=%s peer_ip=%s",

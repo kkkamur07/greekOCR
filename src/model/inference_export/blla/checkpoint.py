@@ -1,14 +1,10 @@
 """Load the native BLLA safetensors checkpoint into the Torch graph.
 
-This is ``_load_blla_model`` as it stood in
-``inference/architectures/blla/blla.py`` under ADR 0004, moved here by ADR 0006
-along with the graph it fills. It is export-time code now: the runtime loads
-``blla.onnx`` and never opens the checkpoint.
+Export-time code only: the runtime loads ``blla.onnx`` and never opens this
+checkpoint directly.
 
 safetensors carries tensors only and cannot execute code on load, which is why
-it is the published native format rather than a pickle - the exporter reads it
-on a maintainer's machine, but that is the same file a researcher would have
-been fetching under ADR 0004.
+it is the published native format rather than a pickle.
 """
 
 from __future__ import annotations

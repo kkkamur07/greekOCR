@@ -23,8 +23,8 @@ export const toast = {
     void api?.success(message, DISMISS_SECONDS);
   },
   error: (message: string): void => {
-    // Kept here rather than at the call sites so every surfaced error is
-    // reported, which is what the provider used to guarantee.
+    // Centralized here, not at call sites, so every surfaced error is
+    // reported.
     reportClientFailure(new Error(message), "toast");
     void api?.error(message, DISMISS_SECONDS);
   },

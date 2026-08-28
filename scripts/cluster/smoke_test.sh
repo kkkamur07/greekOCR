@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# VRAM smoke test — submit to the idle RTX 3090 node (cc-gpu-n03).
+# VRAM smoke test: submit to the idle RTX 3090 node (cc-gpu-n03).
 # Usage: sbatch scripts/cluster/smoke_test.sh
 #
 #SBATCH --job-name=smoke-test

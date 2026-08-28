@@ -35,8 +35,8 @@ export function PublicZoomSurface({
         centerZoomedOut
         // The wheel zoom per event is smoothStep * |deltaY|. A physical mouse
         // wheel notch is deltaY 120, so this must stay near the library's
-        // 0.001 default: 0.0012 makes one notch ~±14% - the old 0.012 made it
-        // ±144%, flinging the view between the scale limits in a tick or two.
+        // 0.001 default: 0.0012 makes one notch ~±14% (the old 0.012 made it
+        // ±144%, flinging the view between the scale limits in a tick or two).
         wheel={{ step: ZOOM_STEP, smoothStep: 0.0012 }}
         pinch={{ step: 6 }}
         doubleClick={{

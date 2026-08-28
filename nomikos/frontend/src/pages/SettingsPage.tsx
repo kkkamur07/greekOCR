@@ -13,11 +13,10 @@ import { AppPageShell } from "../components/layout/AppPageShell";
 import { useServerQuery } from "../hooks/useServerQuery";
 
 /**
- * The account section, which until now had nowhere to live.
- *
- * There is exactly one entry in it. It exists anyway so that `/settings/devices`
- * has a parent to breadcrumb back to, and so the next account-level screen has
- * an obvious home rather than another top-level route.
+ * The account section. There is exactly one entry in it: it exists so
+ * `/settings/devices` has a parent to breadcrumb back to, and so the next
+ * account-level screen has an obvious home rather than another top-level
+ * route.
  */
 export function SettingsPage() {
   const router = useRouter();

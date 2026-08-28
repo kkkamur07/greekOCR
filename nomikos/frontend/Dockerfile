@@ -10,6 +10,15 @@ COPY frontend/package.json frontend/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm \
   npm ci
 
+# Own the workdir so `next dev` can create its `.next` build cache under the
+# unprivileged user. node_modules stays root-owned: `npm ci` populates it as
+# root and `next dev` only reads it. Without this, next dev cannot write /app
+# and dies with EACCES wherever the bind mount is not remapped (any Linux host).
+RUN chown node:node /app
+
+# Drop root for the running dev server.
+USER node
+
 EXPOSE 5173
 
 CMD ["npm", "run", "dev", "--", "--hostname", "0.0.0.0"]

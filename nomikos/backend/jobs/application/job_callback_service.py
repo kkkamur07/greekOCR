@@ -69,10 +69,26 @@ class _MergeContext:
     document_id: uuid.UUID | None
     document_part_id: uuid.UUID | None
     inference_job_id: uuid.UUID
+    #: When a "transcribe selected lines" job restricts itself to a subset via
+    #: ``payload["line_ids"]``, the callback must not merge results outside that
+    #: subset. ``None`` means the whole page was in scope.
+    allowed_line_ids: frozenset[uuid.UUID] | None = None
 
 
 def _job_type_for_task(task: WireInferenceTask) -> JobType:
     return JobType(task.value)
+
+
+def _allowed_line_ids(job: Job) -> frozenset[uuid.UUID] | None:
+    raw = (job.payload or {}).get("line_ids")
+    if not raw:
+        return None
+    try:
+        return frozenset(uuid.UUID(str(line_id)) for line_id in raw)
+    except (ValueError, TypeError):
+        # A malformed restriction is our own bad data, not the agent's; fall back
+        # to the part-scope check rather than 500 on every callback for this job.
+        return None
 
 
 def _segment_output(callback: JobCallbackRequest) -> SegmentRunResponse:
@@ -97,6 +113,7 @@ def _merge_context(job: Job, callback: JobCallbackRequest) -> _MergeContext:
         document_id=job.document_id,
         document_part_id=job.document_part_id,
         inference_job_id=callback.inference_job_id,
+        allowed_line_ids=_allowed_line_ids(job),
     )
 
 
@@ -129,8 +146,10 @@ def _apply_transcribe_merge_sync(
     if context.document_id is None or context.document_part_id is None:
         raise TranscribeJobHandlerError("Transcribe job is missing its target document part")
 
-    lines_with_output = []
-    failed_line_indexes: list[int] = []
+    # First pass: validate ids and enforce the job's own line scope, collecting
+    # the ids so every line is fetched in one query instead of one SELECT per
+    # line (a 50-line page was 50 sequential round trips under the locked job row).
+    parsed: list[tuple[object, uuid.UUID]] = []
     for result in sorted(output.lines, key=lambda item: item.line_index):
         if result.line_id is None:
             raise TranscribeJobHandlerError("Transcribe callback line is missing line_id")
@@ -138,16 +157,39 @@ def _apply_transcribe_merge_sync(
             line_id = uuid.UUID(result.line_id)
         except ValueError as exc:
             raise TranscribeJobHandlerError("Transcribe callback line_id is invalid") from exc
-        line = session.get(Line, line_id)
+        # A compromised or buggy agent holding this job could report lines the
+        # job never selected. The part check below stops cross-part writes; this
+        # stops cross-line writes within the part when the job was line-scoped.
+        if context.allowed_line_ids is not None and line_id not in context.allowed_line_ids:
+            raise TranscribeJobHandlerError("Transcribe callback line is outside the job's scope")
+        parsed.append((result, line_id))
+
+    lines_by_id = (
+        {
+            line.id: line
+            for line in session.execute(
+                select(Line).where(Line.id.in_([line_id for _, line_id in parsed]))
+            )
+            .scalars()
+            .all()
+        }
+        if parsed
+        else {}
+    )
+
+    lines_with_output = []
+    failed_line_indexes: list[int] = []
+    for result, line_id in parsed:
+        line = lines_by_id.get(line_id)
         if line is None or line.part_id != context.document_part_id:
             raise TranscribeJobHandlerError("Document line not found")
-        # A batch may now be a partial success: the inference service isolates
-        # per-line failures instead of discarding the whole page, and sends those
-        # lines with ``error`` set and ``output`` absent. Merging one would pass
-        # ``None`` where the merge service dereferences ``.text``. Skip them, but
-        # count them - a page that silently transcribed 12 of 40 lines and
-        # reported plain success would be worse than the total failure this
-        # replaced.
+        # A batch can be a partial success: the inference service isolates
+        # per-line failures instead of discarding the whole page, and sends
+        # those lines with ``error`` set and ``output`` absent. Merging one
+        # would pass ``None`` where the merge service dereferences ``.text``.
+        # Skip them, but count them, since a page that silently transcribed
+        # 12 of 40 lines and reported plain success would be worse than a
+        # total failure.
         if result.output is None:
             failed_line_indexes.append(result.line_index)
             continue
@@ -252,7 +294,7 @@ def _mark_done_from_callback_sync(
     job.result = result
     job.error = None
     # The agent's claim was not abandoned, it was honoured. Clearing the counter
-    # keeps the two success paths - this one and ``mark_job_done`` - writing the
+    # keeps the two success paths (this one and ``mark_job_done``) writing the
     # same row, so ``jobs.claim_attempts`` means "abandoned since the last
     # success" whichever of them finished the job.
     job.claim_attempts = 0
@@ -264,12 +306,12 @@ def _mark_done_from_callback_sync(
 def _release_claim_as_failed(job_id: uuid.UUID, error: str) -> bool:
     """Fail a job whose merge transaction rolled back. Returns whether it moved.
 
-    Merge and finalize now share a transaction, so a failure in there leaves no
-    document rows behind - but the claim from ``_validate_callback`` committed in
-    its own transaction and is still on the row. Without this compensating write
-    the job sits ``waiting`` and uncancellable until the stale-claim sweep gets
-    to it, which is minutes of a user staring at a job that is already dead. The
-    guard keeps it a no-op if anything else already moved the row.
+    Merge and finalize now share a transaction, so a failure there leaves no
+    document rows behind, but the claim from ``_validate_callback`` committed
+    in its own transaction and is still on the row. Without this compensating
+    write the job sits ``waiting`` and uncancellable until the stale-claim
+    sweep gets to it, minutes of a user staring at a job that's already dead.
+    The guard keeps it a no-op if anything else already moved the row.
     """
     now = datetime.now(UTC)
     with sync_system_session() as session:
@@ -335,12 +377,12 @@ def _validate_callback(callback: JobCallbackRequest) -> tuple[bool, _MergeContex
 def _merge_and_finalize(context: _MergeContext, callback: JobCallbackRequest) -> bool:
     """Merge the document writes and complete the job in a single transaction.
 
-    The merge services are called with ``commit=False`` so the document rows, the
-    ``done`` status and the cleared claim land in one commit. Committing them
-    separately meant a crash - or any raise - between the two commits left merged
-    lines under a job still marked ``waiting``, which the compensation then
-    failed: a failed job sitting on top of successfully merged content, and a
-    retry that merged it a second time.
+    The merge services are called with ``commit=False`` so the document rows,
+    the ``done`` status, and the cleared claim land in one commit. Committing
+    them separately meant a crash (or any raise) between the two commits left
+    merged lines under a job still marked ``waiting``, which the compensation
+    then failed: a failed job sitting on top of successfully merged content,
+    and a retry that merged it a second time.
     """
     with sync_system_session() as session:
         # FOR UPDATE taken before the first document write and held to commit.

@@ -20,18 +20,11 @@ def _migrator_database_url() -> str:
 config.set_main_option("sqlalchemy.url", _migrator_database_url().replace("%", "%%"))
 
 if config.config_file_name is not None:
-    # disable_existing_loggers=False, and it is not cosmetic. fileConfig defaults
+    # disable_existing_loggers=False, and it is not cosmetic: fileConfig defaults
     # to True, which switches off every logger that already exists rather than
-    # merely reconfiguring the ones alembic.ini names.
-    #
-    # In-process that is destructive: this module is imported by the migration
-    # test, and from that point on the application's own loggers are dead for the
-    # rest of the session. Five unit tests asserting on log output saw an empty
-    # caplog and failed, in a run where they had done nothing wrong - and passed
-    # when their directory ran alone, which is what made it look like flake.
-    #
-    # It is also wrong outside the tests: a migration run inside any process that
-    # had already configured logging would silently take that logging with it.
+    # merely reconfiguring the ones alembic.ini names. In-process (this module
+    # imported by tests, or a migration run inside an app that already
+    # configured logging) that would silently kill the caller's loggers.
     fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata

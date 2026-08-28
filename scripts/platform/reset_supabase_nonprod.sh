@@ -2,12 +2,10 @@
 # Reset the application schema on a disposable, non-production Supabase project.
 #
 # Every guard below reads the env file directly instead of the process
-# environment. The previous version checked $SUPABASE_NON_PRODUCTION *after*
-# merging the file into the environment, so an `export SUPABASE_NON_PRODUCTION=true`
-# sitting in a shell profile satisfied a guard whose error message claimed to be
-# talking about the file - including when SUPABASE_ENV_FILE had been pointed at
-# production credentials. Provenance is the whole point of these checks, so the
-# file is parsed before anything is merged.
+# environment: an `export SUPABASE_NON_PRODUCTION=true` in a shell profile must
+# not satisfy a check whose error message claims to describe the file, even
+# when SUPABASE_ENV_FILE points at production credentials. Provenance is the
+# whole point of these checks, so the file is parsed before anything merges.
 #
 # Required *in the env file* (exporting them in your shell does nothing):
 #   SUPABASE_NON_PRODUCTION=true
@@ -190,13 +188,12 @@ set +a
 
 # Use the parsed value, not the merged environment: the merge only overrides
 # ambient state for keys the file actually declares.
-# Every table the chain creates has to be named here. CASCADE drops dependent FK
-# *constraints*, not dependent tables - so leaving helper_pairings/helper_devices
-# off this list left them standing with `inference_host` intact while
-# alembic_version went, and the replay then failed with "column already exists".
-# A second reset is the case that finds it; the first one always worked. The
-# squashed chain has no guarded CREATE TABLE left to paper over a partial drop,
-# so this list is now the only thing making a reset repeatable.
+#
+# Every table the chain creates must be listed here. CASCADE drops dependent FK
+# *constraints*, not dependent tables, so omitting helper_pairings/helper_devices
+# would leave them standing (with `inference_host` intact) once alembic_version
+# is gone, and the replay would fail with "column already exists". This list is
+# the only thing that makes a reset repeatable.
 psql "$FILE_MIGRATOR_URL" -v ON_ERROR_STOP=1 <<'SQL'
 DROP TABLE IF EXISTS
   auth_sessions,

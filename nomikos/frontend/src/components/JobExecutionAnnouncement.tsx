@@ -16,9 +16,9 @@ type JobExecutionAnnouncementProps = {
  * looked away must still be able to read where their work went, whether it is
  * queued, running, finished, or failed.
  *
- * `execution` is nullable because a job the browser has only just enqueued -
- * or a purely local task the platform never saw - has nothing to announce yet.
- * Rendering nothing is right there; inventing "cloud" would be a claim.
+ * `execution` is nullable because a job the browser has only just enqueued
+ * (or a purely local task the platform never saw) has nothing to announce
+ * yet. Rendering nothing is correct; inventing "cloud" would be a claim.
  */
 export function JobExecutionAnnouncement({
   execution,
