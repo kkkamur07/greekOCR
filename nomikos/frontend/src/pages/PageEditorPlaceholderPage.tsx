@@ -144,6 +144,7 @@ export function PageEditorPlaceholderPage() {
     onDrawComplete: () => setDrawMode("none"),
     setSubmissionRefusal,
     trackJobAndWait: jobQueue.trackAndWait,
+    subscribeToJobCompletion: jobQueue.subscribeToJobCompletion,
   });
 
   const {
