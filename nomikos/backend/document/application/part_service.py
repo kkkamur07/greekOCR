@@ -15,7 +15,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core.exceptions import NotFoundError, ValidationError
+from backend.core.exceptions import AccessDeniedError, NotFoundError, ValidationError
 from backend.document.application.document_access import DocumentAccess
 from backend.document.infrastructure.document_repository import DocumentRepository
 from backend.document.infrastructure.media_store import (
@@ -29,6 +29,7 @@ from backend.document.infrastructure.media_store import (
     validate_image_key,
 )
 from backend.document.infrastructure.orm_models import DocumentPart
+from backend.project.domain.access import is_owner
 from backend.project.infrastructure.project_repository import ProjectRepository
 from backend.users.infrastructure.orm_models import User
 
@@ -352,6 +353,34 @@ class DocumentPartService:
             raise ValidationError("part_ids must match all parts on the document")
         return parts
 
+    async def update_parts_published(
+        self,
+        session: AsyncSession,
+        user: User,
+        project_id: UUID,
+        document_id: UUID,
+        updates: list[tuple[UUID, bool]],
+    ) -> list[DocumentPart]:
+        """Bulk per-part publish flag, gated the same way publishing the document is.
+
+        One call for the whole batch rather than N single-part PATCHes: a chapter going
+        live is usually "these dozen pages, not those three yet", one UI action and one
+        commit, not a request per checkbox. Each id is validated against ``document`` the
+        same way any other part write is - via ``part_in_document`` - so naming a
+        foreign part's id here cannot flip a page on a document the caller does not own.
+        """
+        context = await self._access.require_document(session, user, project_id, document_id)
+        project, document = context.project, context.document
+        # Same rule as publishing the document itself: this is exposure, not editing,
+        # so it is not a decision any collaborator gets to make on the owner's behalf.
+        if not is_owner(project, user.id):
+            raise AccessDeniedError("Only the project owner can change what is published")
+        for part_id, published in updates:
+            part = await self._access.part_in_document(session, document, part_id)
+            part.published = published
+        await session.commit()
+        return sorted(document.parts, key=lambda p: p.order)
+
     async def update_part_review_status(
         self,
         session: AsyncSession,
@@ -393,8 +422,10 @@ class DocumentPartService:
         self,
         session: AsyncSession,
         part_id: UUID,
+        *,
+        token: str | None = None,
     ) -> DocumentPart:
-        context = await self._access.require_part_by_id(session, None, part_id)
+        context = await self._access.require_part_by_id(session, None, part_id, token=token)
         return context.part
 
     async def read_part_bytes(self, part: DocumentPart, *, width: int | None = None) -> bytes:

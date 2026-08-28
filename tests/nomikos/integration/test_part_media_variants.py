@@ -89,14 +89,22 @@ def test_public_part_media_requires_publication_before_conditional_cache(
     assert client.get(public_url).status_code == 404
     publish = client.patch(document_url, headers=owner_headers, json={"workflow": "published"})
     assert publish.status_code == 200
+    token = publish.json()["public_share_token"]
+    assert token
 
-    full = client.get(public_url)
+    # Publication alone is not enough: the share token gates the route too, so a
+    # request with no ?t= must keep reading exactly like the document is still a draft.
+    assert client.get(public_url).status_code == 404
+
+    full = client.get(public_url, params={"t": token})
     assert full.status_code == 200
     assert full.content == encode_part_image(source)
     assert full.headers["cache-control"] == "public, max-age=300, must-revalidate"
 
     etag = full.headers["etag"]
-    assert client.get(public_url, headers={"If-None-Match": etag}).status_code == 304
+    conditional = client.get(public_url, params={"t": token}, headers={"If-None-Match": etag})
+    assert conditional.status_code == 304
     unpublish = client.patch(document_url, headers=owner_headers, json={"workflow": "draft"})
     assert unpublish.status_code == 200
-    assert client.get(public_url, headers={"If-None-Match": etag}).status_code == 404
+    stale = client.get(public_url, params={"t": token}, headers={"If-None-Match": etag})
+    assert stale.status_code == 404

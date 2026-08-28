@@ -19,6 +19,7 @@ from backend.document.api.responses import document_with_parts_response
 from backend.document.api.schemas import (
     DEFAULT_PUBLIC_LAYOUT_LINES,
     MAX_PUBLIC_LAYOUT_LINES,
+    MAX_SHARE_TOKEN_LENGTH,
     DocumentWithPartsResponse,
     LineTranscriptionResponse,
     PublicBlockResponse,
@@ -84,11 +85,16 @@ def _public_line_response(line) -> PublicLineResponse:
 @router.get(
     "/projects/{project_id}/documents/{document_id}",
     response_model=DocumentWithPartsResponse,
+    # ``document_response(..., public=True)`` already sets the field to ``None``, but a
+    # ``null`` value is still a key in the JSON body - this is what actually keeps the
+    # key off the wire, so a client parsing this response has no way to even ask.
+    response_model_exclude={"public_share_token"},
 )
 async def get_published_document(
     project_id: UUID,
     document_id: UUID,
     db: AsyncSession = Depends(get_db),
+    t: str | None = Query(default=None, max_length=MAX_SHARE_TOKEN_LENGTH),
 ) -> DocumentWithPartsResponse:
     # No dimension backfill here, deliberately. It is a *write* - up to 25 blob
     # downloads and a `session.commit()` - and this route answers anyone with the URL.
@@ -96,7 +102,7 @@ async def get_published_document(
     # are filled by the member read of the same document (`GET .../documents/{id}`),
     # which is the path that has a caller to attribute the work to. Until then the
     # response carries `width: null`, which its schema has always allowed.
-    document = await _service.get_document_public(db, project_id, document_id)
+    document = await _service.get_document_public(db, project_id, document_id, token=t)
     return document_with_parts_response(document, public=True)
 
 
@@ -110,6 +116,7 @@ async def get_published_layout(
     db: AsyncSession = Depends(get_db),
     limit: int = Query(default=DEFAULT_PUBLIC_LAYOUT_LINES, ge=1, le=MAX_PUBLIC_LAYOUT_LINES),
     cursor: str | None = Query(default=None, max_length=MAX_CURSOR_LENGTH),
+    t: str | None = Query(default=None, max_length=MAX_SHARE_TOKEN_LENGTH),
 ) -> PublicLayoutResponse:
     page_cursor = decode_cursor(cursor) if cursor else None
     # The catalog probes one row past ``limit`` on both axes: for lines the extra row
@@ -120,6 +127,7 @@ async def get_published_layout(
         document_id,
         limit=limit,
         cursor=page_cursor,
+        token=t,
     )
     page, next_cursor = paginate_rows(
         layout.lines,
@@ -151,9 +159,10 @@ async def list_published_transcriptions(
     project_id: UUID,
     document_id: UUID,
     db: AsyncSession = Depends(get_db),
+    t: str | None = Query(default=None, max_length=MAX_SHARE_TOKEN_LENGTH),
 ) -> list[PublicTranscriptionLayerResponse]:
-    transcriptions = await _service.list_transcriptions_public(db, project_id, document_id)
-    return [PublicTranscriptionLayerResponse.model_validate(t) for t in transcriptions]
+    transcriptions = await _service.list_transcriptions_public(db, project_id, document_id, token=t)
+    return [PublicTranscriptionLayerResponse.model_validate(row) for row in transcriptions]
 
 
 @router.get(
@@ -169,12 +178,14 @@ async def get_published_transcription_pdf(
     document_id: UUID,
     part_id: UUID,
     db: AsyncSession = Depends(get_db),
+    t: str | None = Query(default=None, max_length=MAX_SHARE_TOKEN_LENGTH),
 ) -> Response:
     pdf_bytes = await _transcription_pdf_service.generate_part_pdf_public(
         db,
         project_id,
         document_id,
         part_id,
+        token=t,
     )
     return Response(
         content=pdf_bytes,
@@ -194,12 +205,14 @@ async def get_published_page_xml(
     document_id: UUID,
     part_id: UUID,
     db: AsyncSession = Depends(get_db),
+    t: str | None = Query(default=None, max_length=MAX_SHARE_TOKEN_LENGTH),
 ) -> Response:
     xml_bytes = await _page_xml_export_service.export_part_public(
         db,
         project_id,
         document_id,
         part_id,
+        token=t,
     )
     return Response(
         content=xml_bytes,
@@ -219,6 +232,7 @@ async def get_published_page_xml_bundle(
     document_id: UUID,
     part_id: UUID,
     db: AsyncSession = Depends(get_db),
+    t: str | None = Query(default=None, max_length=MAX_SHARE_TOKEN_LENGTH),
 ) -> Response:
     """The PAGE XML zipped next to the full-resolution page image it describes."""
     bundle = await _page_xml_export_service.export_part_bundle_public(
@@ -226,6 +240,7 @@ async def get_published_page_xml_bundle(
         project_id,
         document_id,
         part_id,
+        token=t,
     )
     zip_bytes = await asyncio.to_thread(bundle.to_zip)
     return Response(

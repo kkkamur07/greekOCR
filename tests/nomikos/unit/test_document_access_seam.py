@@ -69,12 +69,30 @@ class _DocumentRepository:
         return self._part
 
 
-def _fixture(*, workflow=DocumentWorkflow.draft, owner_id=None, shared=()):
+#: The fixture document's share secret. Every anonymous-and-published test below passes
+#: it explicitly, the same way a real caller would carry it on the query string - the
+#: fixture setting it is not itself proof that the seam checks it.
+TOKEN = "s3cr3t-share-token"
+
+
+def _fixture(*, workflow=DocumentWorkflow.draft, owner_id=None, shared=(), part_published=True):
     owner_id = owner_id or uuid.uuid4()
     project = Project(id=uuid.uuid4(), name="Codices", owner_id=owner_id)
     project.shared_users = list(shared)
-    document = Document(id=uuid.uuid4(), project_id=project.id, name="MS 1", workflow=workflow)
-    part = DocumentPart(id=uuid.uuid4(), document_id=document.id, order=0, image_key="k.webp")
+    document = Document(
+        id=uuid.uuid4(),
+        project_id=project.id,
+        name="MS 1",
+        workflow=workflow,
+        public_share_token=TOKEN,
+    )
+    part = DocumentPart(
+        id=uuid.uuid4(),
+        document_id=document.id,
+        order=0,
+        image_key="k.webp",
+        published=part_published,
+    )
     documents = _DocumentRepository(document, part)
     access = DocumentAccess(documents=documents, projects=_ProjectRepository(project))
     return access, project, document, part, documents
@@ -143,14 +161,14 @@ async def test_document_filed_under_another_project_reads_as_missing() -> None:
         await access.require_document(_Session(), _user(owner_id), project.id, document.id)
 
 
-# --- Anonymous reads: published only, and a draft must look absent ---
+# --- Anonymous reads: published *and* the matching token, or it must look absent ---
 
 
 @pytest.mark.asyncio
-async def test_anonymous_reads_a_published_document() -> None:
+async def test_anonymous_reads_a_published_document_with_the_right_token() -> None:
     access, project, document, _part, _repo = _fixture(workflow=DocumentWorkflow.published)
 
-    context = await access.require_document(_Session(), None, project.id, document.id)
+    context = await access.require_document(_Session(), None, project.id, document.id, token=TOKEN)
 
     assert context.document is document
 
@@ -161,7 +179,7 @@ async def test_anonymous_draft_is_not_found_rather_than_forbidden() -> None:
     access, project, document, _part, _repo = _fixture(workflow=DocumentWorkflow.draft)
 
     with pytest.raises(NotFoundError):
-        await access.require_document(_Session(), None, project.id, document.id)
+        await access.require_document(_Session(), None, project.id, document.id, token=TOKEN)
 
 
 @pytest.mark.asyncio
@@ -169,7 +187,39 @@ async def test_anonymous_archived_document_is_not_found() -> None:
     access, project, document, _part, _repo = _fixture(workflow=DocumentWorkflow.archived)
 
     with pytest.raises(NotFoundError):
+        await access.require_document(_Session(), None, project.id, document.id, token=TOKEN)
+
+
+@pytest.mark.asyncio
+async def test_anonymous_published_read_with_the_wrong_token_is_not_found() -> None:
+    """A wrong guess must read exactly like a document that was never published."""
+    access, project, document, _part, _repo = _fixture(workflow=DocumentWorkflow.published)
+
+    with pytest.raises(NotFoundError, match="Document not found"):
+        await access.require_document(
+            _Session(), None, project.id, document.id, token="wrong-token"
+        )
+
+
+@pytest.mark.asyncio
+async def test_anonymous_published_read_with_no_token_is_not_found() -> None:
+    access, project, document, _part, _repo = _fixture(workflow=DocumentWorkflow.published)
+
+    with pytest.raises(NotFoundError, match="Document not found"):
         await access.require_document(_Session(), None, project.id, document.id)
+
+
+@pytest.mark.asyncio
+async def test_anonymous_published_read_with_no_token_minted_yet_is_not_found() -> None:
+    """A document can be published with ``public_share_token`` still ``None`` in theory
+    (a row written before this feature, or a bug elsewhere) - the token comparison must
+    fail closed rather than treat "no secret to check" as "anyone may read this".
+    """
+    access, project, document, _part, _repo = _fixture(workflow=DocumentWorkflow.published)
+    document.public_share_token = None
+
+    with pytest.raises(NotFoundError, match="Document not found"):
+        await access.require_document(_Session(), None, project.id, document.id, token=TOKEN)
 
 
 # --- Parts reached through the project path ---
@@ -233,11 +283,52 @@ async def test_media_lookup_for_a_missing_part_is_not_found() -> None:
 @pytest.mark.asyncio
 async def test_anonymous_media_lookup_allows_published_and_hides_draft() -> None:
     access, _project, _document, part, _repo = _fixture(workflow=DocumentWorkflow.published)
-    assert (await access.require_part_by_id(_Session(), None, part.id)).part is part
+    assert (await access.require_part_by_id(_Session(), None, part.id, token=TOKEN)).part is part
 
     access, _project, _document, part, _repo = _fixture(workflow=DocumentWorkflow.draft)
     with pytest.raises(NotFoundError):
-        await access.require_part_by_id(_Session(), None, part.id)
+        await access.require_part_by_id(_Session(), None, part.id, token=TOKEN)
+
+
+@pytest.mark.asyncio
+async def test_anonymous_media_lookup_with_the_wrong_token_is_not_found() -> None:
+    access, _project, _document, part, _repo = _fixture(workflow=DocumentWorkflow.published)
+
+    with pytest.raises(NotFoundError):
+        await access.require_part_by_id(_Session(), None, part.id, token="wrong-token")
+
+
+# --- Held-back parts: a document can be public while one of its pages is not ---
+
+
+@pytest.mark.asyncio
+async def test_anonymous_reader_cannot_reach_an_unpublished_part() -> None:
+    access, project, document, part, _repo = _fixture(
+        workflow=DocumentWorkflow.published, part_published=False
+    )
+
+    with pytest.raises(NotFoundError, match="Part not found"):
+        await access.require_part(_Session(), None, project.id, document.id, part.id, token=TOKEN)
+
+    with pytest.raises(NotFoundError, match="Part not found"):
+        await access.require_part_by_id(_Session(), None, part.id, token=TOKEN)
+
+
+@pytest.mark.asyncio
+async def test_member_reaches_an_unpublished_part_regardless_of_the_flag() -> None:
+    """The flag drives the anonymous surface only - the owner's toggle UI needs every
+    part back, published or not, or it would have nothing to render a switch for.
+    """
+    owner_id = uuid.uuid4()
+    access, project, document, part, _repo = _fixture(
+        owner_id=owner_id, workflow=DocumentWorkflow.published, part_published=False
+    )
+
+    context = await access.require_part(
+        _Session(), _user(owner_id), project.id, document.id, part.id
+    )
+
+    assert context.part is part
 
 
 @pytest.mark.asyncio

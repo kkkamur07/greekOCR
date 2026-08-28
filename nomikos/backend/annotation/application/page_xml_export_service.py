@@ -119,9 +119,11 @@ class PageXmlExportService:
         project_id: UUID,
         document_id: UUID,
         part_id: UUID,
+        *,
+        token: str | None = None,
     ) -> bytes:
         context = await self._document_service.get_published_part_context(
-            session, project_id, document_id, part_id
+            session, project_id, document_id, part_id, token=token
         )
         return await self._render_xml(session, context.document, context.part)
 
@@ -131,9 +133,11 @@ class PageXmlExportService:
         project_id: UUID,
         document_id: UUID,
         part_id: UUID,
+        *,
+        token: str | None = None,
     ) -> PageXmlBundle:
         context = await self._document_service.get_published_part_context(
-            session, project_id, document_id, part_id
+            session, project_id, document_id, part_id, token=token
         )
         return await self._render_bundle(session, context.document, context.part)
 

@@ -791,6 +791,10 @@
             "title": "Order",
             "type": "integer"
           },
+          "published": {
+            "title": "Published",
+            "type": "boolean"
+          },
           "reviewed": {
             "title": "Reviewed",
             "type": "boolean"
@@ -815,6 +819,7 @@
           "width",
           "height",
           "reviewed",
+          "published",
           "created_at"
         ],
         "title": "DocumentPartResponse",
@@ -856,6 +861,17 @@
             "format": "uuid",
             "title": "Project Id",
             "type": "string"
+          },
+          "public_share_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Share Token"
           },
           "updated_at": {
             "format": "date-time",
@@ -927,6 +943,17 @@
             "format": "uuid",
             "title": "Project Id",
             "type": "string"
+          },
+          "public_share_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Share Token"
           },
           "updated_at": {
             "format": "date-time",
@@ -2477,6 +2504,22 @@
         "title": "PairingTokenResponse",
         "type": "object"
       },
+      "PartPublishedUpdate": {
+        "properties": {
+          "part_id": {
+            "format": "uuid",
+            "title": "Part Id",
+            "type": "string"
+          },
+          "published": {
+            "title": "Published",
+            "type": "boolean"
+          }
+        },
+        "required": ["part_id", "published"],
+        "title": "PartPublishedUpdate",
+        "type": "object"
+      },
       "PartUploadBeginRequest": {
         "description": "Begin a direct-to-storage part upload: name the file, get a presigned URL.",
         "properties": {
@@ -2576,6 +2619,23 @@
         },
         "required": ["image_key"],
         "title": "PartUploadFinalizeRequest",
+        "type": "object"
+      },
+      "PartsPublishedUpdateRequest": {
+        "description": "Bulk per-part publish flag: one call for the pages a chapter goes live with.",
+        "properties": {
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/PartPublishedUpdate"
+            },
+            "maxItems": 10000,
+            "minItems": 1,
+            "title": "Parts",
+            "type": "array"
+          }
+        },
+        "required": ["parts"],
+        "title": "PartsPublishedUpdateRequest",
         "type": "object"
       },
       "ProjectCreateRequest": {
@@ -8298,6 +8358,137 @@
         "tags": ["documents"]
       }
     },
+    "/projects/{project_id}/documents/{document_id}/parts/published": {
+      "patch": {
+        "description": "Owner-only: which pages of a published document are actually reachable publicly.\n\nOne request for the whole batch a UI toggles at once, rather than one PATCH per\npage - see ``DocumentPartService.update_parts_published``.",
+        "operationId": "update_parts_published_projects__project_id__documents__document_id__parts_published_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PartsPublishedUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DocumentPartResponse"
+                  },
+                  "title": "Response Update Parts Published Projects  Project Id  Documents  Document Id  Parts Published Patch",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict with current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Parts Published",
+        "tags": ["documents"]
+      }
+    },
     "/projects/{project_id}/documents/{document_id}/parts/reorder": {
       "patch": {
         "operationId": "reorder_parts_projects__project_id__documents__document_id__parts_reorder_patch",
@@ -12400,6 +12591,123 @@
         "tags": ["documents"]
       }
     },
+    "/projects/{project_id}/documents/{document_id}/share-token/rotate": {
+      "post": {
+        "description": "Mint a fresh share token, owner-only. Every link built from the old one 404s\nfrom here on - see ``DocumentCatalog.rotate_share_token`` - regardless of who it\nwas shared with or how long ago.",
+        "operationId": "rotate_document_share_token_projects__project_id__documents__document_id__share_token_rotate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict with current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Rotate Document Share Token",
+        "tags": ["documents"]
+      }
+    },
     "/projects/{project_id}/documents/{document_id}/transcriptions": {
       "get": {
         "operationId": "list_transcriptions_projects__project_id__documents__document_id__transcriptions_get",
@@ -13642,6 +13950,23 @@
             }
           },
           {
+            "in": "query",
+            "name": "t",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "T"
+            }
+          },
+          {
             "in": "header",
             "name": "if-none-match",
             "required": false,
@@ -13788,6 +14113,23 @@
               "title": "Document Id",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "t",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "T"
+            }
           }
         ],
         "responses": {
@@ -13921,6 +14263,23 @@
               ],
               "title": "Cursor"
             }
+          },
+          {
+            "in": "query",
+            "name": "t",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "T"
+            }
           }
         ],
         "responses": {
@@ -14034,6 +14393,23 @@
               "format": "uuid",
               "title": "Part Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "t",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "T"
             }
           }
         ],
@@ -14151,6 +14527,23 @@
               "title": "Part Id",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "t",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "T"
+            }
           }
         ],
         "responses": {
@@ -14266,6 +14659,23 @@
               "title": "Part Id",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "t",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "T"
+            }
           }
         ],
         "responses": {
@@ -14370,6 +14780,23 @@
               "format": "uuid",
               "title": "Document Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "t",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "T"
             }
           }
         ],

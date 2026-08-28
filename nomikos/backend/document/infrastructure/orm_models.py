@@ -62,6 +62,12 @@ class Document(Base):
         Enum(DocumentWorkflow, name="document_workflow"),
         default=DocumentWorkflow.draft,
     )
+    # Minted on first publish, never at creation - a draft has nothing to link to yet.
+    # Nullable and unique rather than a default-empty string, so "no link exists" and
+    # "this is the live link" can never be confused with each other or with a collision.
+    public_share_token: Mapped[str | None] = mapped_column(
+        String(64), unique=True, index=True, nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -95,6 +101,10 @@ class DocumentPart(Base):
     width: Mapped[int | None] = mapped_column(Integer, nullable=True)
     height: Mapped[int | None] = mapped_column(Integer, nullable=True)
     reviewed: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Defaults true (and every existing row is backfilled true by the migration) so
+    # publishing a document does not silently change behaviour for pages that were
+    # already live before per-page holdback existed.
+    published: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     document: Mapped[Document] = relationship("Document", back_populates="parts")

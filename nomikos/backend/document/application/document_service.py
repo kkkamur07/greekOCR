@@ -81,15 +81,29 @@ class DocumentService:
         return await self.catalog.get_document(session, user, project_id, document_id)
 
     async def get_published_part(
-        self, session: AsyncSession, project_id: UUID, document_id: UUID, part_id: UUID
+        self,
+        session: AsyncSession,
+        project_id: UUID,
+        document_id: UUID,
+        part_id: UUID,
+        *,
+        token: str | None = None,
     ) -> DocumentPart:
-        return await self.catalog.get_published_part(session, project_id, document_id, part_id)
+        return await self.catalog.get_published_part(
+            session, project_id, document_id, part_id, token=token
+        )
 
     async def get_published_part_context(
-        self, session: AsyncSession, project_id: UUID, document_id: UUID, part_id: UUID
+        self,
+        session: AsyncSession,
+        project_id: UUID,
+        document_id: UUID,
+        part_id: UUID,
+        *,
+        token: str | None = None,
     ) -> PartContext:
         return await self.catalog.get_published_part_context(
-            session, project_id, document_id, part_id
+            session, project_id, document_id, part_id, token=token
         )
 
     # --- Parts ---

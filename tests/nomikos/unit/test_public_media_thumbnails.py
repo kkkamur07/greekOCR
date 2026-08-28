@@ -20,7 +20,7 @@ class _StubService:
     def __init__(self) -> None:
         self.reads: list[int | None] = []
 
-    async def get_part_for_public_media(self, session, part_id):
+    async def get_part_for_public_media(self, session, part_id, *, token=None):
         return SimpleNamespace(id=part_id, image_key="page.webp")
 
     async def read_part_bytes(self, part, *, width=None) -> bytes:

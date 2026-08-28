@@ -1,4 +1,4 @@
-"""Public access policy — anonymous read of published documents only."""
+"""Public access policy - anonymous read of published documents, gated by share token."""
 
 import pytest
 
@@ -20,6 +20,8 @@ def published_document(client, owner_headers, owner_project):
         json={"workflow": "published"},
     )
     assert publish.status_code == 200
+    token = publish.json()["public_share_token"]
+    assert token
     upload = client.post(
         f"{base}/{document_id}/parts",
         headers=owner_headers,
@@ -31,29 +33,55 @@ def published_document(client, owner_headers, owner_project):
         "project_id": project_id,
         "document_id": document_id,
         "part_id": part_id,
+        "token": token,
     }
 
 
-# --- Anonymous read of published documents ---
-# Tests public document detail for published workflow. Does not allow draft access.
+# --- Anonymous read of published documents, correct token required ---
+# Tests public document detail for published workflow, with and without the share
+# token. Does not allow draft access.
 
 
 @pytest.mark.integration
-def test_anonymous_can_read_published_document(client, published_document):
+def test_anonymous_can_read_published_document_with_the_right_token(client, published_document):
     project_id = published_document["project_id"]
     document_id = published_document["document_id"]
+    token = published_document["token"]
     url = f"/public/projects/{project_id}/documents/{document_id}"
 
-    response = client.get(url)
+    response = client.get(url, params={"t": token})
     assert response.status_code == 200
     body = response.json()
     assert body["workflow"] == "published"
     assert len(body["parts"]) == 1
     assert body["parts"][0]["image_url"] == f"/public/media/parts/{published_document['part_id']}"
+    # The owner-only secret never rides along in a response anyone anonymous can reach.
+    assert "public_share_token" not in body
 
 
-# --- Draft documents stay private ---
-# Tests anonymous users get 404 for draft workflow. Does not test member-route access.
+@pytest.mark.integration
+def test_anonymous_read_with_the_wrong_token_is_not_found(client, published_document):
+    project_id = published_document["project_id"]
+    document_id = published_document["document_id"]
+    url = f"/public/projects/{project_id}/documents/{document_id}"
+
+    response = client.get(url, params={"t": "not-the-real-token"})
+    assert response.status_code == 404
+
+
+@pytest.mark.integration
+def test_anonymous_read_with_no_token_is_not_found(client, published_document):
+    project_id = published_document["project_id"]
+    document_id = published_document["document_id"]
+    url = f"/public/projects/{project_id}/documents/{document_id}"
+
+    response = client.get(url)
+    assert response.status_code == 404
+
+
+# --- Draft documents stay private even with a token ---
+# Tests anonymous users get 404 for draft workflow, no token minted yet. Does not test
+# member-route access.
 
 
 @pytest.mark.integration
@@ -63,6 +91,9 @@ def test_anonymous_cannot_read_draft_document(client, owner_headers, owner_proje
     create = client.post(base, headers=owner_headers, json={"name": "Secret draft"})
     assert create.status_code == 201
     document_id = create.json()["id"]
+    # A draft was never published, so it never had a token minted - there is nothing
+    # correct to send, which is itself the point: the link cannot exist yet.
+    assert create.json()["public_share_token"] is None
 
     response = client.get(f"/public/projects/{project_id}/documents/{document_id}")
     assert response.status_code == 404
@@ -88,7 +119,7 @@ def test_anonymous_cannot_mutate_published_document(client, published_document):
     assert upload.status_code == 401
 
 
-# --- Members can still edit published ---
+# --- Members can still edit published, and always see the token ---
 # Tests owners retain mutate access after publish. Does not test collaborator permissions.
 
 
@@ -102,38 +133,103 @@ def test_member_can_still_edit_published_document(client, owner_headers, publish
     assert patch.status_code == 200
     assert patch.json()["name"] == "Published but editable"
     assert patch.json()["workflow"] == "published"
+    assert patch.json()["public_share_token"] == published_document["token"]
 
 
 # --- Outsider vs public route ---
-# Tests outsiders use /public for read access. Does not grant member-route access.
+# Tests outsiders use /public (with the token) for read access, and never see the
+# token itself. Does not grant member-route access.
 
 
 @pytest.mark.integration
 def test_outsider_can_read_published_via_public_route(client, outsider_headers, published_document):
     project_id = published_document["project_id"]
     document_id = published_document["document_id"]
+    token = published_document["token"]
     member_url = f"/projects/{project_id}/documents/{document_id}"
     public_url = f"/public/projects/{project_id}/documents/{document_id}"
 
     denied = client.get(member_url, headers=outsider_headers)
     assert denied.status_code == 403
 
-    allowed = client.get(public_url)
+    allowed = client.get(public_url, params={"t": token})
     assert allowed.status_code == 200
 
+    # An authenticated outsider is not a member either - the token is still required.
+    no_token = client.get(public_url, headers=outsider_headers)
+    assert no_token.status_code == 404
 
-# --- Public layout ---
+
+# --- Members read without a token ---
+# Tests project membership alone is sufficient on the authenticated document route,
+# exactly as before this feature existed.
+
+
+@pytest.mark.integration
+def test_member_reads_the_authenticated_route_without_any_token(
+    client, owner_headers, published_document
+):
+    project_id = published_document["project_id"]
+    document_id = published_document["document_id"]
+    url = f"/projects/{project_id}/documents/{document_id}"
+
+    response = client.get(url, headers=owner_headers)
+    assert response.status_code == 200
+    assert response.json()["workflow"] == "published"
+
+
+# --- Rotating the share token invalidates the old link ---
+# Tests the rotate endpoint mints a new secret and the old one stops working immediately.
+
+
+@pytest.mark.integration
+def test_rotating_the_share_token_invalidates_the_old_link_and_the_new_one_works(
+    client, owner_headers, published_document
+):
+    project_id = published_document["project_id"]
+    document_id = published_document["document_id"]
+    old_token = published_document["token"]
+    public_url = f"/public/projects/{project_id}/documents/{document_id}"
+    rotate_url = f"/projects/{project_id}/documents/{document_id}/share-token/rotate"
+
+    assert client.get(public_url, params={"t": old_token}).status_code == 200
+
+    rotate = client.post(rotate_url, headers=owner_headers)
+    assert rotate.status_code == 200
+    new_token = rotate.json()["public_share_token"]
+    assert new_token
+    assert new_token != old_token
+
+    stale = client.get(public_url, params={"t": old_token})
+    assert stale.status_code == 404
+
+    fresh = client.get(public_url, params={"t": new_token})
+    assert fresh.status_code == 200
+
+
+@pytest.mark.integration
+def test_rotating_the_share_token_is_owner_only(client, outsider_headers, published_document):
+    project_id = published_document["project_id"]
+    document_id = published_document["document_id"]
+    rotate_url = f"/projects/{project_id}/documents/{document_id}/share-token/rotate"
+
+    denied = client.post(rotate_url, headers=outsider_headers)
+    assert denied.status_code == 403
+
+
+# --- Public layout and transcriptions require the token too ---
 # Tests anonymous access to layout and transcription layers. Public part media is
 # covered end to end in test_part_media_variants.py. Does not test export zip.
 
 
 @pytest.mark.integration
-def test_anonymous_gets_layout_and_transcriptions(client, published_document):
+def test_anonymous_gets_layout_and_transcriptions_with_the_token(client, published_document):
     project_id = published_document["project_id"]
     document_id = published_document["document_id"]
+    token = published_document["token"]
     base = f"/public/projects/{project_id}/documents/{document_id}"
 
-    layout = client.get(f"{base}/layout")
+    layout = client.get(f"{base}/layout", params={"t": token})
     assert layout.status_code == 200
     # `blocks_truncated` is part of the public layout contract as of ce74fdc: an
     # anonymous caller is told when the block list was cut short rather than
@@ -145,42 +241,121 @@ def test_anonymous_gets_layout_and_transcriptions(client, published_document):
         "next_cursor": None,
     }
 
-    over_limit = client.get(f"{base}/layout", params={"limit": 10_001})
+    no_token = client.get(f"{base}/layout")
+    assert no_token.status_code == 404
+
+    over_limit = client.get(f"{base}/layout", params={"t": token, "limit": 10_001})
     assert over_limit.status_code == 422
 
-    layers = client.get(f"{base}/transcriptions")
+    layers = client.get(f"{base}/transcriptions", params={"t": token})
     assert layers.status_code == 200
     assert layers.json()[0]["kind"] == "ground_truth"
 
+    layers_no_token = client.get(f"{base}/transcriptions")
+    assert layers_no_token.status_code == 404
 
-# --- Public artifact downloads ---
+
+# --- Public artifact downloads require the token too ---
 # Tests anonymous PDF/XML on public routes; member routes still require auth.
 
 
 @pytest.mark.integration
-def test_anonymous_can_download_published_part_artifacts(client, published_document, owner_headers):
+def test_anonymous_can_download_published_part_artifacts_with_the_token(
+    client, published_document, owner_headers
+):
     project_id = published_document["project_id"]
     document_id = published_document["document_id"]
     part_id = published_document["part_id"]
+    token = published_document["token"]
     base = f"/public/projects/{project_id}/documents/{document_id}/parts/{part_id}"
 
-    pdf = client.get(f"{base}/transcription-pdf")
+    pdf = client.get(f"{base}/transcription-pdf", params={"t": token})
     assert pdf.status_code == 200
     assert pdf.headers["content-type"] == "application/pdf"
     assert pdf.content.startswith(b"%PDF")
+    assert client.get(f"{base}/transcription-pdf").status_code == 404
 
-    xml = client.get(f"{base}/page-xml")
+    xml = client.get(f"{base}/page-xml", params={"t": token})
     assert xml.status_code == 200
     assert xml.headers["content-type"] == "application/xml"
     assert xml.content.startswith(b"<?xml")
+    assert client.get(f"{base}/page-xml").status_code == 404
 
-    bundle = client.get(f"{base}/page-xml-bundle")
+    bundle = client.get(f"{base}/page-xml-bundle", params={"t": token})
     assert bundle.status_code == 200
     assert bundle.headers["content-type"] == "application/zip"
     assert bundle.content.startswith(b"PK")
     assert bundle.headers["content-disposition"].endswith('_page_1.zip"')
+    assert client.get(f"{base}/page-xml-bundle").status_code == 404
 
     draft_pdf = client.get(
         f"/projects/{project_id}/documents/{document_id}/parts/{part_id}/transcription-pdf"
     )
     assert draft_pdf.status_code == 401
+
+
+# --- Per-page publishing: a page can be held back from an otherwise public document ---
+# Tests the bulk publish-flag endpoint and every public read path it must gate: the
+# document-with-parts response, the layout listing, and public media. Owner reads are
+# unaffected - the toggle exists so the owner can see and flip it.
+
+
+@pytest.mark.integration
+def test_unpublished_part_is_hidden_from_every_public_surface_but_visible_to_the_owner(
+    client, owner_headers, published_document
+):
+    project_id = published_document["project_id"]
+    document_id = published_document["document_id"]
+    part_id = published_document["part_id"]
+    token = published_document["token"]
+    parts_url = f"/projects/{project_id}/documents/{document_id}/parts/published"
+
+    hold_back = client.patch(
+        parts_url,
+        headers=owner_headers,
+        json={"parts": [{"part_id": part_id, "published": False}]},
+    )
+    assert hold_back.status_code == 200
+    assert hold_back.json()[0]["published"] is False
+
+    public_doc = client.get(
+        f"/public/projects/{project_id}/documents/{document_id}", params={"t": token}
+    )
+    assert public_doc.status_code == 200
+    assert public_doc.json()["parts"] == []
+
+    public_media = client.get(f"/public/media/parts/{part_id}", params={"t": token})
+    assert public_media.status_code == 404
+
+    owner_doc = client.get(f"/projects/{project_id}/documents/{document_id}", headers=owner_headers)
+    assert owner_doc.status_code == 200
+    owner_parts = owner_doc.json()["parts"]
+    assert len(owner_parts) == 1
+    assert owner_parts[0]["published"] is False
+
+    # Flip it back: the public surface recovers immediately, no republish needed.
+    restore = client.patch(
+        parts_url,
+        headers=owner_headers,
+        json={"parts": [{"part_id": part_id, "published": True}]},
+    )
+    assert restore.status_code == 200
+    assert restore.json()[0]["published"] is True
+
+    public_media_again = client.get(f"/public/media/parts/{part_id}", params={"t": token})
+    assert public_media_again.status_code == 200
+
+
+@pytest.mark.integration
+def test_setting_published_flag_is_owner_only(client, outsider_headers, published_document):
+    project_id = published_document["project_id"]
+    document_id = published_document["document_id"]
+    part_id = published_document["part_id"]
+    parts_url = f"/projects/{project_id}/documents/{document_id}/parts/published"
+
+    denied = client.patch(
+        parts_url,
+        headers=outsider_headers,
+        json={"parts": [{"part_id": part_id, "published": False}]},
+    )
+    assert denied.status_code == 403

@@ -10,16 +10,24 @@ silently skip a step, and it can be exercised without going through HTTP.
 the public routers carry no authentication dependency at all, so ``None`` is the only
 caller identity they can produce, and :func:`require_can_read` has only ever been reached
 with that value. Members read any workflow; anonymous callers read ``published`` and
-nothing else.
+nothing else - and, since the share token was added, only with the token that matches
+the document's current secret. ``token`` is threaded through every entry point below for
+that reason, and is simply ignored on the member branch, where it plays no role.
+
+A part additionally needs ``published`` on the anonymous branch: a document going public
+does not mean every one of its pages does, so ``require_part``/``require_part_by_id``
+apply that check themselves rather than leaving it to whichever public route remembers to.
 
 The status codes are behaviour, not detail, and are preserved exactly:
 
 * missing project, missing document, document filed under another project, missing part,
-  part filed under another document → ``NotFoundError`` (404);
+  part filed under another document, part held back from publication → ``NotFoundError``
+  (404);
 * authenticated non-member → ``AccessDeniedError`` (403). The authenticated surface
   already admits that the project exists, so masking it here would buy nothing;
-* anonymous caller against a *draft* → ``NotFoundError`` (404), never 403, so the public
-  surface never confirms that an unpublished document exists.
+* anonymous caller against a *draft*, or against a wrong/missing token → ``NotFoundError``
+  (404), never 403, so the public surface never confirms that an unpublished document, or
+  one it just guessed at, exists.
 
 Two loaders, deliberately. The project-scoped entry points use ``get_by_id``/``get_part``,
 which eager-load parts, lines and transcriptions because their callers go straight on to
@@ -101,14 +109,21 @@ class DocumentAccess:
         user: User | None,
         project_id: UUID,
         document_id: UUID,
+        *,
+        token: str | None = None,
     ) -> DocumentContext:
-        """The document at ``project_id/document_id``, if this caller may read it."""
+        """The document at ``project_id/document_id``, if this caller may read it.
+
+        ``token`` only ever matters on the anonymous branch below - a member's access
+        does not depend on the share link - so it is accepted here and ignored when
+        ``user`` is set.
+        """
         if user is None:
             project = await self._load_project(session, project_id)
             document = await self.document_in_project(session, project, document_id)
             # Ordered after the containment check on purpose: a document filed under a
             # different project must read as absent, not as forbidden.
-            require_can_read(document, project, None)
+            require_can_read(document, project, None, token)
             return DocumentContext(project=project, document=document)
         project = await self.require_project(session, user, project_id)
         document = await self.document_in_project(session, project, document_id)
@@ -121,14 +136,26 @@ class DocumentAccess:
         project_id: UUID,
         document_id: UUID,
         part_id: UUID,
+        *,
+        token: str | None = None,
     ) -> PartContext:
         """The part at ``project_id/document_id/part_id``, if this caller may read it."""
-        context = await self.require_document(session, user, project_id, document_id)
+        context = await self.require_document(session, user, project_id, document_id, token=token)
         part = await self.part_in_document(session, context.document, part_id)
+        if user is None and not part.published:
+            # A member sees every part regardless of the flag - that is how the owner's
+            # UI renders the per-page toggle. An anonymous reader gets no signal that a
+            # held-back page exists, the same treatment an unpublished document gets.
+            raise NotFoundError("Part not found")
         return PartContext(project=context.project, document=context.document, part=part)
 
     async def require_part_by_id(
-        self, session: AsyncSession, user: User | None, part_id: UUID
+        self,
+        session: AsyncSession,
+        user: User | None,
+        part_id: UUID,
+        *,
+        token: str | None = None,
     ) -> PartContext:
         """The part named by ``part_id`` alone, if this caller may read it.
 
@@ -147,7 +174,9 @@ class DocumentAccess:
             raise NotFoundError("Document not found")
         if user is None:
             project = await self._load_project(session, document.project_id)
-            require_can_read(document, project, None)
+            require_can_read(document, project, None, token)
+            if not part.published:
+                raise NotFoundError("Part not found")
         else:
             project = await self.require_project(session, user, document.project_id)
         return PartContext(project=project, document=document, part=part)

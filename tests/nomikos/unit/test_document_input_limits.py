@@ -130,7 +130,7 @@ class _FakeLayoutService:
         self.calls: list[dict] = []
 
     async def list_document_layout_public(
-        self, _session, _project_id, _document_id, *, limit, cursor=None
+        self, _session, _project_id, _document_id, *, limit, cursor=None, token=None
     ):
         self.calls.append({"limit": limit, "cursor": cursor})
         rows = self.lines

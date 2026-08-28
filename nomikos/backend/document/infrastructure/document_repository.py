@@ -199,10 +199,13 @@ class DocumentRepository:
     async def list_blocks_for_document(
         self, session: AsyncSession, document_id: UUID, *, limit: int
     ) -> list[Block]:
+        # Anonymous layout paging is the only caller of this method, and a document
+        # being published does not mean every one of its pages is - a held-back part's
+        # geometry must not leak through here even though the parent document is public.
         result = await session.execute(
             select(Block)
             .join(DocumentPart, Block.part_id == DocumentPart.id)
-            .where(DocumentPart.document_id == document_id)
+            .where(DocumentPart.document_id == document_id, DocumentPart.published.is_(True))
             .order_by(DocumentPart.order, Block.order, Block.created_at)
             .limit(limit)
         )
@@ -216,10 +219,13 @@ class DocumentRepository:
         limit: int,
         cursor: PageCursor | None = None,
     ) -> list[Line]:
-        """Keyset page over a document's lines.
+        """Keyset page over a document's *published* lines.
 
         Ordered by ``(created_at, id)`` so the shared ``PageCursor`` applies; clients
-        group by part and sort by ``order`` themselves.
+        group by part and sort by ``order`` themselves. Same reasoning as
+        ``list_blocks_for_document`` for the ``published`` filter: this is the anonymous
+        read, and a held-back part's lines (with their approved text) must not surface
+        here just because the document around them is public.
         """
         stmt = (
             select(Line)
@@ -227,7 +233,7 @@ class DocumentRepository:
                 selectinload(Line.transcriptions).selectinload(LineTranscription.transcription)
             )
             .join(DocumentPart, Line.part_id == DocumentPart.id)
-            .where(DocumentPart.document_id == document_id)
+            .where(DocumentPart.document_id == document_id, DocumentPart.published.is_(True))
             .order_by(Line.created_at, Line.id)
         )
         if cursor is not None:
