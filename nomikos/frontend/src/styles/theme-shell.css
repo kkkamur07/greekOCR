@@ -1028,7 +1028,18 @@ button {
   padding: 0;
 }
 .pub-workspace__tabs .tabs {
-  flex-wrap: wrap;
+  /* With every part rendered as a tab (no more +N overflow), the strip needs
+     to scroll horizontally instead of wrapping, or a document with many
+     parts would push the toolbar into multiple tall rows. */
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+}
+.pub-workspace__tabs .tab {
+  /* Prevents tabs from shrinking to unreadable widths once the row overflows. */
+  flex: none;
+  scroll-snap-align: start;
 }
 .pub-workspace__tools {
   display: flex;
@@ -1134,13 +1145,6 @@ button {
   border-bottom-color: var(--navy);
   font-weight: 500;
 }
-.tab-more {
-  padding: 8px 0 8px 10px;
-  font-size: 0.75rem;
-  color: var(--text-4);
-  align-self: center;
-}
-
 .pub-split {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 300px;
@@ -1404,11 +1408,25 @@ button {
   display: inline-block;
   width: min(100%, 960px);
 }
+.public-page-canvas__frame--loading {
+  /* Holds a neutral tinted box while the image decodes, instead of a blank
+     void, without inventing a new color outside the existing token set. */
+  background: var(--surface-2);
+  border-radius: var(--radius);
+  min-height: 200px;
+}
 .public-page-canvas__image {
   display: block;
   width: 100%;
   height: auto;
   user-select: none;
+}
+.public-page-canvas__error {
+  margin: 0;
+  padding: 48px 16px;
+  text-align: center;
+  color: var(--text-3);
+  font-size: 0.875rem;
 }
 .text-block__empty {
   color: var(--text-4);

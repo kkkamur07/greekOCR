@@ -3,6 +3,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type CSSProperties,
   type KeyboardEvent,
 } from "react";
 import type { Region } from "../../types";
@@ -33,6 +34,18 @@ export function PublicPageCanvas({
     width: layoutWidth,
     height: layoutHeight,
   });
+  // Gates the overlay on the actual decoded image, not just a pre-decode
+  // resize event, so polygons never get scaled against a transient box.
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
+
+  useEffect(() => {
+    // Switching pages must not leave the previous page's overlay showing
+    // over the new (not yet loaded) image.
+    setImageLoaded(false);
+    setImageFailed(false);
+    setDisplaySize(null);
+  }, [imageUrl]);
 
   const syncDisplaySize = useCallback(() => {
     const image = imageRef.current;
@@ -65,7 +78,13 @@ export function PublicPageCanvas({
       setCoordSize({ width: layoutWidth, height: layoutHeight });
     }
     syncDisplaySize();
+    setImageLoaded(true);
   };
+
+  const handleImageError = () => {
+    setImageFailed(true);
+  };
+
   const selectWithKeyboard = (
     event: KeyboardEvent<SVGPolygonElement>,
     regionId: number,
@@ -76,59 +95,88 @@ export function PublicPageCanvas({
     onSelectRegion(selected ? null : regionId);
   };
 
+  // Reserves the image's true box before it arrives, so the page does not
+  // jump when the browser finishes decoding it. Falls back to no
+  // aspect-ratio when the layout dimensions are missing or zero.
+  const imageStyle: CSSProperties | undefined =
+    layoutWidth > 0 && layoutHeight > 0
+      ? { aspectRatio: `${layoutWidth} / ${layoutHeight}` }
+      : undefined;
+
   return (
     <PublicZoomSurface ariaLabel="Manuscript page viewer">
-      <div className="public-page-canvas__frame">
-        <img
-          ref={imageRef}
-          src={imageUrl}
-          alt="Manuscript page"
-          draggable={false}
-          onLoad={handleImageLoad}
-          className="public-page-canvas__image"
-        />
-        {displaySize && coordSize.width > 0 && coordSize.height > 0 && (
-          <svg
-            className="public-page-canvas__overlay"
-            viewBox={`0 0 ${coordSize.width} ${coordSize.height}`}
-            preserveAspectRatio="none"
-            style={{
-              width: displaySize.width,
-              height: displaySize.height,
-            }}
-            aria-hidden={regions.length === 0}
-            role="group"
-            aria-label="Selectable transcription lines"
-          >
-            {regions.map((region) => {
-              const isSelected = region.id === selectedRegionId;
-              const points = region.boundary
-                .map(([x, y]) => `${x},${y}`)
-                .join(" ");
-              return (
-                <polygon
-                  key={region.id}
-                  role="button"
-                  tabIndex={0}
-                  points={points}
-                  aria-label={`Line ${region.id}`}
-                  aria-pressed={isSelected}
-                  fill={
-                    isSelected
-                      ? "rgba(13, 31, 60, 0.18)"
-                      : "rgba(82, 196, 26, 0.15)"
-                  }
-                  stroke={isSelected ? "var(--navy, #0d1f3c)" : "#52c41a"}
-                  strokeWidth={isSelected ? 2.5 : 2}
-                  style={{ pointerEvents: "all", cursor: "pointer" }}
-                  onClick={() => onSelectRegion(isSelected ? null : region.id)}
-                  onKeyDown={(event) =>
-                    selectWithKeyboard(event, region.id, isSelected)
-                  }
-                />
-              );
-            })}
-          </svg>
+      <div
+        className={`public-page-canvas__frame${
+          !imageLoaded && !imageFailed
+            ? " public-page-canvas__frame--loading"
+            : ""
+        }`}
+      >
+        {imageFailed ? (
+          <p className="public-page-canvas__error">
+            This page image could not be loaded.
+          </p>
+        ) : (
+          <>
+            <img
+              ref={imageRef}
+              src={imageUrl}
+              alt="Manuscript page"
+              draggable={false}
+              onLoad={handleImageLoad}
+              onError={handleImageError}
+              className="public-page-canvas__image"
+              style={imageStyle}
+            />
+            {imageLoaded &&
+              displaySize &&
+              coordSize.width > 0 &&
+              coordSize.height > 0 && (
+                <svg
+                  className="public-page-canvas__overlay"
+                  viewBox={`0 0 ${coordSize.width} ${coordSize.height}`}
+                  preserveAspectRatio="none"
+                  style={{
+                    width: displaySize.width,
+                    height: displaySize.height,
+                  }}
+                  aria-hidden={regions.length === 0}
+                  role="group"
+                  aria-label="Selectable transcription lines"
+                >
+                  {regions.map((region) => {
+                    const isSelected = region.id === selectedRegionId;
+                    const points = region.boundary
+                      .map(([x, y]) => `${x},${y}`)
+                      .join(" ");
+                    return (
+                      <polygon
+                        key={region.id}
+                        role="button"
+                        tabIndex={0}
+                        points={points}
+                        aria-label={`Line ${region.id}`}
+                        aria-pressed={isSelected}
+                        fill={
+                          isSelected
+                            ? "rgba(13, 31, 60, 0.18)"
+                            : "rgba(82, 196, 26, 0.15)"
+                        }
+                        stroke={isSelected ? "var(--navy, #0d1f3c)" : "#52c41a"}
+                        strokeWidth={isSelected ? 2.5 : 2}
+                        style={{ pointerEvents: "all", cursor: "pointer" }}
+                        onClick={() =>
+                          onSelectRegion(isSelected ? null : region.id)
+                        }
+                        onKeyDown={(event) =>
+                          selectWithKeyboard(event, region.id, isSelected)
+                        }
+                      />
+                    );
+                  })}
+                </svg>
+              )}
+          </>
         )}
       </div>
     </PublicZoomSurface>
