@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   AGENT_INSTALL_COMMAND,
@@ -105,11 +105,14 @@ export function PageEditorInferenceBanner({
   onRetry,
   onUseCloudInstead,
 }: PageEditorInferenceBannerProps) {
+  const bannerRef = useRef<HTMLDivElement | null>(null);
   const titleId = "pe-agent-install-title";
   const [modalOpen, setModalOpen] = useState(false);
   // Read on mount, not during the first render: the server has no
   // `localStorage`, and reading it inline would hydrate to different markup.
-  const [hintDismissed, setHintDismissed] = useState(false);
+  // `null` means "not read yet" so the banner is withheld for that first frame
+  // rather than shown and then yanked, which shifted the whole editor column.
+  const [hintDismissed, setHintDismissed] = useState<boolean | null>(null);
 
   useEffect(() => {
     setHintDismissed(readHintDismissed());
@@ -125,6 +128,10 @@ export function PageEditorInferenceBanner({
   const dismissable = !preferLocalInference;
 
   function handleDismissHint() {
+    // The button is about to unmount with the banner around it. Without this,
+    // focus falls to <body> and the next Tab restarts from the top of the
+    // editor with nothing announced.
+    bannerRef.current?.closest("main")?.focus?.();
     setHintDismissed(true);
     try {
       window.localStorage.setItem(HINT_DISMISSED_KEY, "1");

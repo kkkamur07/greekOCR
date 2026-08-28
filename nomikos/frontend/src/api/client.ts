@@ -647,10 +647,10 @@ export const api = {
   /**
    * Which pages of a published document the public reader can actually reach.
    *
-   * One call for the whole batch rather than one per page: a researcher holding
-   * back four pages of a chapter changes four flags in a single gesture, and
-   * sending four requests would let some of them land and others fail, leaving
-   * the chapter half in the state nobody asked for.
+   * Takes a batch because the endpoint does. The only caller today sends one
+   * page per click, deliberately: the response is authoritative for the whole
+   * document, so a request carrying rows this tab loaded minutes ago could
+   * overwrite a flag someone else has since changed.
    */
   updatePartsPublished: (
     projectId: string,

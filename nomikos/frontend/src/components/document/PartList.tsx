@@ -17,13 +17,6 @@ type PartListProps = {
   onTogglePublished?: (partId: string, published: boolean) => void;
   reviewUpdatingPartId?: string | null;
   publishUpdatingPartId?: string | null;
-  /**
-   * Whether the per-page show/hide state has any public effect yet. A page can
-   * be held back before the document goes live, so the control stays usable
-   * either way; this only decides whether the row explains that nothing is
-   * public yet.
-   */
-  documentPublished?: boolean;
   reordering?: boolean;
 };
 
@@ -39,7 +32,6 @@ export function PartList({
   onTogglePublished,
   reviewUpdatingPartId = null,
   publishUpdatingPartId = null,
-  documentPublished = false,
   reordering = false,
 }: PartListProps) {
   if (!loading && parts.length === 0) {
@@ -71,7 +63,6 @@ export function PartList({
           }
           reviewUpdating={reviewUpdatingPartId === part.id}
           publishUpdating={publishUpdatingPartId === part.id}
-          documentPublished={documentPublished}
           reordering={reordering}
         />
       ))}
@@ -92,7 +83,6 @@ type PartRowProps = {
   onTogglePublished?: (published: boolean) => void;
   reviewUpdating?: boolean;
   publishUpdating?: boolean;
-  documentPublished?: boolean;
   reordering?: boolean;
 };
 
@@ -109,7 +99,6 @@ function PartRow({
   onTogglePublished,
   reviewUpdating = false,
   publishUpdating = false,
-  documentPublished = false,
   reordering,
 }: PartRowProps) {
   const router = useRouter();
@@ -202,29 +191,31 @@ function PartRow({
         <div className="part-num-row">
           <span className="part-num">Part {index + 1}</span>
           <ReviewBadge reviewed={part.reviewed} />
-          {onTogglePublished && <PublishBadge published={part.published} />}
+          <PublishBadge published={part.published} />
         </div>
         <div className="part-desc">
           Page {index + 1} of {total}
         </div>
         <div className="part-dim">{dim}</div>
       </div>
-      <div className="part-actions" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="part-actions"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+      >
         {onTogglePublished && (
           <button
             type="button"
             className="btn btn-ghost btn-sm"
             disabled={publishUpdating}
+            aria-busy={publishUpdating}
             onClick={() => onTogglePublished(!part.published)}
-            title={
-              documentPublished
-                ? undefined
-                : "Takes effect when the document goes live"
-            }
             aria-label={
-              part.published
-                ? `Hide part ${index + 1} from the public page`
-                : `Show part ${index + 1} on the public page`
+              publishUpdating
+                ? `Updating part ${index + 1}`
+                : part.published
+                  ? `Hide part ${index + 1} from the public page`
+                  : `Show part ${index + 1} on the public page`
             }
           >
             {publishUpdating ? "…" : part.published ? "Hide" : "Show"}

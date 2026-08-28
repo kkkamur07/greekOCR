@@ -305,7 +305,7 @@ button {
 }
 .badge-hidden {
   background: var(--surface-2);
-  color: var(--text-3);
+  color: var(--text-2);
 }
 
 /* ─── Page shell ─────────────────────────────────────────────────── */
@@ -1462,9 +1462,11 @@ button {
   flex: 1 1 auto;
   min-width: 0;
 }
-/* Popconfirm clones its child rather than wrapping it, so the Clear history
-   button is a direct flex child here like the toggle is. */
-.project-jobs-panel__bar > button:not(.project-jobs-panel__toggle) {
+/* Selected by its own class, not by "the child that is not the toggle": antd
+   currently clones Popconfirm's child rather than wrapping it, but that is an
+   implementation detail, and a version that wraps again would silently
+   un-align this. */
+.project-jobs-panel__clear {
   flex: 0 0 auto;
   align-self: center;
   white-space: nowrap;
@@ -1767,5 +1769,7 @@ button {
   font-weight: 400;
   letter-spacing: 0;
   text-transform: none;
-  color: var(--text-4);
+  /* --text-4 measures 2.4:1 here. This sentence carries the answer to "how
+     much of this is public", so it is body text and needs body contrast. */
+  color: var(--text-3);
 }

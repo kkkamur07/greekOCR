@@ -251,7 +251,7 @@ export function ProjectJobsPanel({
           >
             <button
               type="button"
-              className="btn btn-outline btn-sm"
+              className="btn btn-outline btn-sm project-jobs-panel__clear"
               disabled={clearing}
             >
               {clearing ? "Clearing…" : "Clear history"}
