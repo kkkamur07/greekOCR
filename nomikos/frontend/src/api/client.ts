@@ -41,6 +41,8 @@ export type DocumentPartResponse =
   components["schemas"]["DocumentPartResponse"];
 export type DocumentPartUpdateRequest =
   components["schemas"]["DocumentPartUpdateRequest"];
+export type PartsPublishedUpdateRequest =
+  components["schemas"]["PartsPublishedUpdateRequest"];
 export type DocumentWorkflow = components["schemas"]["DocumentWorkflow"];
 export type ReorderPartsRequest = components["schemas"]["ReorderPartsRequest"];
 
@@ -639,6 +641,24 @@ export const api = {
   ) =>
     apiRequest<DocumentPartResponse>(
       `/projects/${projectId}/documents/${documentId}/parts/${partId}`,
+      { method: "PATCH", body },
+    ),
+
+  /**
+   * Which pages of a published document the public reader can actually reach.
+   *
+   * One call for the whole batch rather than one per page: a researcher holding
+   * back four pages of a chapter changes four flags in a single gesture, and
+   * sending four requests would let some of them land and others fail, leaving
+   * the chapter half in the state nobody asked for.
+   */
+  updatePartsPublished: (
+    projectId: string,
+    documentId: string,
+    body: PartsPublishedUpdateRequest,
+  ) =>
+    apiRequest<DocumentPartResponse[]>(
+      `/projects/${projectId}/documents/${documentId}/parts/published`,
       { method: "PATCH", body },
     ),
 

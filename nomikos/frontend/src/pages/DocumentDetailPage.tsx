@@ -52,6 +52,9 @@ export function DocumentDetailPage() {
   const [reviewUpdatingPartId, setReviewUpdatingPartId] = useState<
     string | null
   >(null);
+  const [publishUpdatingPartId, setPublishUpdatingPartId] = useState<
+    string | null
+  >(null);
   const [titlePanelOpen, setTitlePanelOpen] = useState(false);
 
   const signedIn = hasAccessToken();
@@ -289,6 +292,37 @@ export function DocumentDetailPage() {
     }
   };
 
+  const handleTogglePublished = async (partId: string, published: boolean) => {
+    if (!projectId || !documentId) return;
+    setPublishUpdatingPartId(partId);
+    try {
+      await api.updatePartsPublished(projectId, documentId, {
+        parts: [{ part_id: partId, published }],
+      });
+      toast.success(
+        published
+          ? "Page shown on the public page"
+          : "Page hidden from the public page",
+      );
+      // The public reader reads this flag, and so does the owner-facing parts
+      // list the editor holds; neither is the copy this page just wrote.
+      invalidateAfter.documentPartsChanged(projectId, documentId);
+      await reloadDocument();
+    } catch (err) {
+      const msg =
+        err instanceof ApiError && err.status === 403
+          ? "Only the project owner can choose which pages are public."
+          : err instanceof ApiError
+            ? err.message
+            : "Could not change which pages are public";
+      toast.error(msg);
+    } finally {
+      setPublishUpdatingPartId(null);
+    }
+  };
+
+  const shownCount = parts.filter((part) => part.published).length;
+
   const subtitle = document
     ? `${parts.length} part${parts.length === 1 ? "" : "s"} · updated ${formatUpdated(document.updated_at)}`
     : undefined;
@@ -378,6 +412,14 @@ export function DocumentDetailPage() {
             <>
               <p className="section-label" id="pages-label">
                 Pages
+                {parts.length > 0 && (
+                  <span className="section-label__aside">
+                    {shownCount} of {parts.length} shown publicly
+                    {document.workflow === "published"
+                      ? ""
+                      : " once the document is live"}
+                  </span>
+                )}
               </p>
               <PartList
                 parts={parts}
@@ -390,7 +432,12 @@ export function DocumentDetailPage() {
                 onToggleReview={(partId, reviewed) =>
                   void handleToggleReview(partId, reviewed)
                 }
+                onTogglePublished={(partId, published) =>
+                  void handleTogglePublished(partId, published)
+                }
                 reviewUpdatingPartId={reviewUpdatingPartId}
+                publishUpdatingPartId={publishUpdatingPartId}
+                documentPublished={document.workflow === "published"}
                 reordering={reordering}
               />
             </>

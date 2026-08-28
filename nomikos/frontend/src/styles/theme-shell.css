@@ -303,6 +303,10 @@ button {
   background: var(--amber-bg);
   color: var(--amber);
 }
+.badge-hidden {
+  background: var(--surface-2);
+  color: var(--text-3);
+}
 
 /* ─── Page shell ─────────────────────────────────────────────────── */
 .page {
@@ -1449,7 +1453,21 @@ button {
   margin: 0 0 8px;
 }
 .project-jobs-panel__bar {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
   margin-bottom: 0;
+}
+.project-jobs-panel__bar > .project-jobs-panel__toggle {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* Popconfirm clones its child rather than wrapping it, so the Clear history
+   button is a direct flex child here like the toggle is. */
+.project-jobs-panel__bar > button:not(.project-jobs-panel__toggle) {
+  flex: 0 0 auto;
+  align-self: center;
+  white-space: nowrap;
 }
 .project-jobs-panel__toggle {
   display: flex;
@@ -1739,4 +1757,15 @@ button {
   .session-restoring__spinner {
     animation: none;
   }
+}
+
+/* The "N of M shown publicly" aside that rides along with the Pages label. It
+   is a count, not a heading, so it drops the label's weight and casing. */
+.section-label__aside {
+  margin-left: 10px;
+  font-size: 0.75rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-4);
 }

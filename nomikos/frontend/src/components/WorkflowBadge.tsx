@@ -29,3 +29,19 @@ export function ReviewBadge({ reviewed }: { reviewed: boolean }) {
     </span>
   );
 }
+
+/**
+ * Whether one page of a live document is reachable by the public reader.
+ *
+ * Deliberately not the same words as {@link WorkflowBadge}: a document is
+ * "live", a page within it is "shown" or "hidden". Calling a page "draft" would
+ * collide with the document workflow of that name, which is a different switch
+ * with different consequences.
+ */
+export function PublishBadge({ published }: { published: boolean }) {
+  return (
+    <span className={`badge ${published ? "badge-live" : "badge-hidden"}`}>
+      {published ? "shown" : "hidden"}
+    </span>
+  );
+}

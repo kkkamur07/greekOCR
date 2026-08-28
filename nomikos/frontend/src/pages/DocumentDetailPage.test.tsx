@@ -34,6 +34,7 @@ vi.mock("../api/client", async (importOriginal) => {
       reorderParts: vi.fn(),
       deletePart: vi.fn(),
       updatePartReviewStatus: vi.fn(),
+      updatePartsPublished: vi.fn(),
       updateDocument: vi.fn(),
     },
   };
@@ -56,6 +57,7 @@ const DOCUMENT: DocumentWithPartsResponse = {
       width: 800,
       height: 1000,
       reviewed: false,
+      published: true,
       created_at: "2026-06-16T10:00:00Z",
     },
     {
@@ -66,6 +68,7 @@ const DOCUMENT: DocumentWithPartsResponse = {
       width: 640,
       height: 900,
       reviewed: false,
+      published: true,
       created_at: "2026-06-16T10:00:00Z",
     },
   ],
@@ -180,6 +183,54 @@ describe("DocumentDetailPage", () => {
         { reviewed: true },
       );
     });
+  });
+
+  it("hides one page from the public reader without touching the others", async () => {
+    vi.mocked(api.updatePartsPublished).mockResolvedValue([
+      { ...DOCUMENT.parts[1], published: false },
+    ]);
+
+    renderDocumentPage();
+
+    await screen.findByRole("heading", { name: "Grec 1360" });
+    expect(screen.getByText(/2 of 2 shown publicly/)).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /hide part 1 from the public page/i,
+      }),
+    );
+
+    // One request carrying only the page that changed. Sending the whole list
+    // would let an unrelated stale row overwrite a flag someone else just set.
+    await waitFor(() => {
+      expect(api.updatePartsPublished).toHaveBeenLastCalledWith(
+        "project-1",
+        "doc-1",
+        { parts: [{ part_id: "part-1", published: false }] },
+      );
+    });
+  });
+
+  it("leaves the page shown when the publish change is rejected", async () => {
+    vi.mocked(api.updatePartsPublished).mockRejectedValue(
+      new ApiError("Forbidden", 403),
+    );
+
+    renderDocumentPage();
+
+    await screen.findByRole("heading", { name: "Grec 1360" });
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /hide part 1 from the public page/i,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(api.updatePartsPublished).toHaveBeenCalled();
+    });
+    expect(screen.getAllByText("shown")).toHaveLength(2);
+    expect(screen.getByText(/2 of 2 shown publicly/)).toBeInTheDocument();
   });
 
   it("keeps review status when the API rejects the change", async () => {
