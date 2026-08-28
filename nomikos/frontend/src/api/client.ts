@@ -41,6 +41,8 @@ export type DocumentPartResponse =
   components["schemas"]["DocumentPartResponse"];
 export type DocumentPartUpdateRequest =
   components["schemas"]["DocumentPartUpdateRequest"];
+export type PartsPublishedUpdateRequest =
+  components["schemas"]["PartsPublishedUpdateRequest"];
 export type DocumentWorkflow = components["schemas"]["DocumentWorkflow"];
 export type ReorderPartsRequest = components["schemas"]["ReorderPartsRequest"];
 
@@ -639,6 +641,24 @@ export const api = {
   ) =>
     apiRequest<DocumentPartResponse>(
       `/projects/${projectId}/documents/${documentId}/parts/${partId}`,
+      { method: "PATCH", body },
+    ),
+
+  /**
+   * Which pages of a published document the public reader can actually reach.
+   *
+   * Takes a batch because the endpoint does. The only caller today sends one
+   * page per click, deliberately: the response is authoritative for the whole
+   * document, so a request carrying rows this tab loaded minutes ago could
+   * overwrite a flag someone else has since changed.
+   */
+  updatePartsPublished: (
+    projectId: string,
+    documentId: string,
+    body: PartsPublishedUpdateRequest,
+  ) =>
+    apiRequest<DocumentPartResponse[]>(
+      `/projects/${projectId}/documents/${documentId}/parts/published`,
       { method: "PATCH", body },
     ),
 

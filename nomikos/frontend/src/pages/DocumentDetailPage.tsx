@@ -39,6 +39,10 @@ function formatUpdated(iso: string): string {
 type DocumentDetailData = {
   username: string;
   projectName: string;
+  /** Both already fetched; kept so the page can answer "may I publish?". */
+  userId: string;
+  /** Null on a project with no recorded owner, which is nobody's match. */
+  projectOwnerId: string | null;
   document: DocumentWithPartsResponse;
 };
 
@@ -50,6 +54,9 @@ export function DocumentDetailPage() {
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
   const [reordering, setReordering] = useState(false);
   const [reviewUpdatingPartId, setReviewUpdatingPartId] = useState<
+    string | null
+  >(null);
+  const [publishUpdatingPartId, setPublishUpdatingPartId] = useState<
     string | null
   >(null);
   const [titlePanelOpen, setTitlePanelOpen] = useState(false);
@@ -84,6 +91,8 @@ export function DocumentDetailPage() {
       return {
         username: me.username,
         projectName: project.name,
+        userId: me.id,
+        projectOwnerId: project.owner_id,
         document: doc,
       };
     },
@@ -105,6 +114,12 @@ export function DocumentDetailPage() {
   const document = data?.document ?? null;
   const projectName = data?.projectName ?? null;
   const username = data?.username ?? null;
+  // Publishing is owner-only in the backend (DocumentPartService raises for
+  // anyone else), so offering the control to a collaborator would only earn
+  // them a red toast.
+  const isOwner = Boolean(
+    data && data.userId && data.projectOwnerId === data.userId,
+  );
 
   const parts = [...(document?.parts ?? [])].sort((a, b) => a.order - b.order);
 
@@ -285,9 +300,46 @@ export function DocumentDetailPage() {
             : "Review status update failed";
       toast.error(msg);
     } finally {
-      setReviewUpdatingPartId(null);
+      // Only if this part is still the one in flight. A slower earlier request
+      // resolving second would otherwise re-enable the button for a later one.
+      setReviewUpdatingPartId((current) =>
+        current === partId ? null : current,
+      );
     }
   };
+
+  const handleTogglePublished = async (partId: string, published: boolean) => {
+    if (!projectId || !documentId) return;
+    setPublishUpdatingPartId(partId);
+    try {
+      await api.updatePartsPublished(projectId, documentId, {
+        parts: [{ part_id: partId, published }],
+      });
+      toast.success(
+        published
+          ? "Page shown on the public page"
+          : "Page hidden from the public page",
+      );
+      // The public reader reads this flag, and so does the owner-facing parts
+      // list the editor holds; neither is the copy this page just wrote.
+      invalidateAfter.documentPartsChanged(projectId, documentId);
+      await reloadDocument();
+    } catch (err) {
+      const msg =
+        err instanceof ApiError && err.status === 403
+          ? "Only the project owner can choose which pages are public."
+          : err instanceof ApiError
+            ? err.message
+            : "Could not change which pages are public";
+      toast.error(msg);
+    } finally {
+      setPublishUpdatingPartId((current) =>
+        current === partId ? null : current,
+      );
+    }
+  };
+
+  const shownCount = parts.filter((part) => part.published).length;
 
   const subtitle = document
     ? `${parts.length} part${parts.length === 1 ? "" : "s"} · updated ${formatUpdated(document.updated_at)}`
@@ -376,8 +428,16 @@ export function DocumentDetailPage() {
 
           {document && (
             <>
-              <p className="section-label" id="pages-label">
-                Pages
+              <p className="section-label">
+                <span id="pages-label">Pages</span>
+                {parts.length > 0 && (
+                  <span className="section-label__aside">
+                    {shownCount} of {parts.length} shown publicly
+                    {document.workflow === "published"
+                      ? ""
+                      : " once the document is live"}
+                  </span>
+                )}
               </p>
               <PartList
                 parts={parts}
@@ -390,7 +450,14 @@ export function DocumentDetailPage() {
                 onToggleReview={(partId, reviewed) =>
                   void handleToggleReview(partId, reviewed)
                 }
+                onTogglePublished={
+                  isOwner
+                    ? (partId, published) =>
+                        void handleTogglePublished(partId, published)
+                    : undefined
+                }
                 reviewUpdatingPartId={reviewUpdatingPartId}
+                publishUpdatingPartId={publishUpdatingPartId}
                 reordering={reordering}
               />
             </>

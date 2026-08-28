@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PageEditorInferenceBanner } from "./PageEditorInferenceBanner";
 
@@ -28,6 +28,62 @@ function openInstructions() {
 }
 
 describe("PageEditorInferenceBanner", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it("lets a reader dismiss the idle note and remembers it", async () => {
+    const hint = /jobs run on this computer/i;
+    const { unmount } = renderBanner({ preferLocalInference: false });
+
+    expect(screen.getByText(hint)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /dismiss this note/i }));
+    expect(screen.queryByText(hint)).toBeNull();
+
+    // A note dismissed on one page that returns on the next has not been
+    // dismissed in any sense the reader would recognise.
+    unmount();
+    renderBanner({ preferLocalInference: false });
+    await waitFor(() => {
+      expect(screen.queryByText(hint)).toBeNull();
+    });
+  });
+
+  it("never offers to dismiss live agent status", () => {
+    renderBanner({ preferLocalInference: true, hasLocalCapacity: true });
+
+    // With the preference on, this line is where a researcher learns their
+    // agent stopped. Hiding it would hide the reason their jobs went to the
+    // cloud, so the control is not offered at all.
+    expect(
+      screen.queryByRole("button", { name: /dismiss this note/i }),
+    ).toBeNull();
+    expect(
+      screen.getByText(/the agent is running on this computer/i),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps showing the idle note when storage cannot be read", async () => {
+    // Spied on the global itself, not on `Storage.prototype`: the suite stubs
+    // `localStorage` with a plain object over a Map, so a prototype spy would
+    // intercept nothing and this test would pass without proving anything.
+    const getItem = vi
+      .spyOn(window.localStorage, "getItem")
+      .mockImplementation(() => {
+        throw new Error("blocked");
+      });
+    try {
+      renderBanner({ preferLocalInference: false });
+      await waitFor(() => {
+        expect(
+          screen.getByText(/jobs run on this computer/i),
+        ).toBeInTheDocument();
+      });
+    } finally {
+      getItem.mockRestore();
+    }
+  });
+
   it("hides the agent controls once the account prefers the cloud", () => {
     renderBanner({ preferLocalInference: false });
 

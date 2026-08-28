@@ -303,6 +303,10 @@ button {
   background: var(--amber-bg);
   color: var(--amber);
 }
+.badge-hidden {
+  background: var(--surface-2);
+  color: var(--text-2);
+}
 
 /* ─── Page shell ─────────────────────────────────────────────────── */
 .page {
@@ -1449,7 +1453,23 @@ button {
   margin: 0 0 8px;
 }
 .project-jobs-panel__bar {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
   margin-bottom: 0;
+}
+.project-jobs-panel__bar > .project-jobs-panel__toggle {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* Selected by its own class, not by "the child that is not the toggle": antd
+   currently clones Popconfirm's child rather than wrapping it, but that is an
+   implementation detail, and a version that wraps again would silently
+   un-align this. */
+.project-jobs-panel__clear {
+  flex: 0 0 auto;
+  align-self: center;
+  white-space: nowrap;
 }
 .project-jobs-panel__toggle {
   display: flex;
@@ -1739,4 +1759,17 @@ button {
   .session-restoring__spinner {
     animation: none;
   }
+}
+
+/* The "N of M shown publicly" aside that rides along with the Pages label. It
+   is a count, not a heading, so it drops the label's weight and casing. */
+.section-label__aside {
+  margin-left: 10px;
+  font-size: 0.75rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  /* --text-4 measures 2.4:1 here. This sentence carries the answer to "how
+     much of this is public", so it is body text and needs body contrast. */
+  color: var(--text-3);
 }

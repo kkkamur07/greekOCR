@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   AGENT_INSTALL_COMMAND,
@@ -79,6 +79,25 @@ type PageEditorInferenceBannerProps = {
   onUseCloudInstead: () => void;
 };
 
+/**
+ * Where a viewer's dismissal of the idle hint is remembered.
+ *
+ * Per browser rather than on the account: it carries no meaning for anyone
+ * else, and a round trip to store "I have read one sentence" would be a
+ * strange thing to spend a request on.
+ */
+const HINT_DISMISSED_KEY = "nomikos.inferenceHintDismissed";
+
+function readHintDismissed(): boolean {
+  try {
+    return window.localStorage.getItem(HINT_DISMISSED_KEY) === "1";
+  } catch {
+    // A private window, or a browser set to block site data. Not knowing means
+    // showing the hint, which is the state a first-time reader gets anyway.
+    return false;
+  }
+}
+
 export function PageEditorInferenceBanner({
   hasLocalCapacity,
   loading,
@@ -86,10 +105,40 @@ export function PageEditorInferenceBanner({
   onRetry,
   onUseCloudInstead,
 }: PageEditorInferenceBannerProps) {
+  const bannerRef = useRef<HTMLDivElement | null>(null);
   const titleId = "pe-agent-install-title";
   const [modalOpen, setModalOpen] = useState(false);
+  // Read on mount, not during the first render: the server has no
+  // `localStorage`, and reading it inline would hydrate to different markup.
+  // `null` means "not read yet" so the banner is withheld for that first frame
+  // rather than shown and then yanked, which shifted the whole editor column.
+  const [hintDismissed, setHintDismissed] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    setHintDismissed(readHintDismissed());
+  }, []);
 
   const shouldPrompt = !loading && !hasLocalCapacity && preferLocalInference;
+
+  /**
+   * Only the idle hint can be dismissed. With the preference on, this line is
+   * live status - whether the agent is up, and a Retry beside it - and hiding
+   * that would leave a researcher wondering where their jobs went.
+   */
+  const dismissable = !preferLocalInference;
+
+  function handleDismissHint() {
+    // The button is about to unmount with the banner around it. Without this,
+    // focus falls to <body> and the next Tab restarts from the top of the
+    // editor with nothing announced.
+    bannerRef.current?.closest("main")?.focus?.();
+    setHintDismissed(true);
+    try {
+      window.localStorage.setItem(HINT_DISMISSED_KEY, "1");
+    } catch {
+      // Dismissed for this page either way; it just will not be remembered.
+    }
+  }
 
   useEffect(() => {
     if (!shouldPrompt) setModalOpen(false);
@@ -180,34 +229,47 @@ export function PageEditorInferenceBanner({
           </div>
         </div>
       ) : null}
-      <div
-        className="pe-inference-banner"
-        role="group"
-        aria-label="Where inference runs"
-      >
-        <span className="pe-inference-banner__status" role="status">
-          {agentStatusText(preferLocalInference, loading, hasLocalCapacity)}{" "}
-          {preferLocalInference ? (
+      {dismissable && hintDismissed ? null : (
+        <div
+          className="pe-inference-banner"
+          role="group"
+          aria-label="Where inference runs"
+        >
+          <span className="pe-inference-banner__status" role="status">
+            {agentStatusText(preferLocalInference, loading, hasLocalCapacity)}{" "}
+            {preferLocalInference ? (
+              <button
+                type="button"
+                className="pe-inference-banner__action"
+                onClick={onRetry}
+                disabled={loading}
+              >
+                {loading ? "Checking…" : "Retry"}
+              </button>
+            ) : null}{" "}
+            {shouldPrompt ? (
+              <button
+                type="button"
+                className="pe-inference-banner__action"
+                onClick={() => setModalOpen(true)}
+              >
+                How to run it here
+              </button>
+            ) : null}
+          </span>
+          {dismissable ? (
             <button
               type="button"
-              className="pe-inference-banner__action"
-              onClick={onRetry}
-              disabled={loading}
+              className="pe-inference-banner__dismiss"
+              onClick={handleDismissHint}
+              aria-label="Dismiss this note"
+              title="Dismiss"
             >
-              {loading ? "Checking…" : "Retry"}
-            </button>
-          ) : null}{" "}
-          {shouldPrompt ? (
-            <button
-              type="button"
-              className="pe-inference-banner__action"
-              onClick={() => setModalOpen(true)}
-            >
-              How to run it here
+              ×
             </button>
           ) : null}
-        </span>
-      </div>
+        </div>
+      )}
     </>
   );
 }

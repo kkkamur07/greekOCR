@@ -80,6 +80,27 @@
 .pe-inference-banner__action:hover {
   background: #ecfdf5;
 }
+/* The banner is already a space-between row, so the dismiss button needs only
+   to stop itself from stretching and to keep a target big enough to hit. */
+.pe-inference-banner__dismiss {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.pe-inference-banner__dismiss:hover {
+  background: var(--surface-2);
+  color: var(--text-2);
+}
 .pe-status-bar {
   flex-shrink: 0;
   background: var(--green-banner-bg);

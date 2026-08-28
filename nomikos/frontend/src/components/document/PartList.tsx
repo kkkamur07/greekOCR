@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import type { DocumentPartResponse } from "../../api/client";
 import { prefetchPartImage } from "../../api/imageCache";
-import { ReviewBadge } from "../WorkflowBadge";
+import { PublishBadge, ReviewBadge } from "../WorkflowBadge";
 import { AuthenticatedImage } from "../AuthenticatedImage";
 
 type PartListProps = {
@@ -14,7 +14,9 @@ type PartListProps = {
   onMoveDown?: (index: number) => void;
   onDelete?: (partId: string) => void;
   onToggleReview?: (partId: string, reviewed: boolean) => void;
+  onTogglePublished?: (partId: string, published: boolean) => void;
   reviewUpdatingPartId?: string | null;
+  publishUpdatingPartId?: string | null;
   reordering?: boolean;
 };
 
@@ -27,7 +29,9 @@ export function PartList({
   onMoveDown,
   onDelete,
   onToggleReview,
+  onTogglePublished,
   reviewUpdatingPartId = null,
+  publishUpdatingPartId = null,
   reordering = false,
 }: PartListProps) {
   if (!loading && parts.length === 0) {
@@ -52,7 +56,13 @@ export function PartList({
               ? (reviewed) => onToggleReview(part.id, reviewed)
               : undefined
           }
+          onTogglePublished={
+            onTogglePublished
+              ? (published) => onTogglePublished(part.id, published)
+              : undefined
+          }
           reviewUpdating={reviewUpdatingPartId === part.id}
+          publishUpdating={publishUpdatingPartId === part.id}
           reordering={reordering}
         />
       ))}
@@ -70,7 +80,9 @@ type PartRowProps = {
   onMoveDown?: () => void;
   onDelete?: () => void;
   onToggleReview?: (reviewed: boolean) => void;
+  onTogglePublished?: (published: boolean) => void;
   reviewUpdating?: boolean;
+  publishUpdating?: boolean;
   reordering?: boolean;
 };
 
@@ -84,7 +96,9 @@ function PartRow({
   onMoveDown,
   onDelete,
   onToggleReview,
+  onTogglePublished,
   reviewUpdating = false,
+  publishUpdating = false,
   reordering,
 }: PartRowProps) {
   const router = useRouter();
@@ -177,13 +191,36 @@ function PartRow({
         <div className="part-num-row">
           <span className="part-num">Part {index + 1}</span>
           <ReviewBadge reviewed={part.reviewed} />
+          <PublishBadge published={part.published} />
         </div>
         <div className="part-desc">
           Page {index + 1} of {total}
         </div>
         <div className="part-dim">{dim}</div>
       </div>
-      <div className="part-actions" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="part-actions"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+      >
+        {onTogglePublished && (
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            disabled={publishUpdating}
+            aria-busy={publishUpdating}
+            onClick={() => onTogglePublished(!part.published)}
+            aria-label={
+              publishUpdating
+                ? `Updating part ${index + 1}`
+                : part.published
+                  ? `Hide part ${index + 1} from the public page`
+                  : `Show part ${index + 1} on the public page`
+            }
+          >
+            {publishUpdating ? "…" : part.published ? "Hide" : "Show"}
+          </button>
+        )}
         {onToggleReview && (
           <button
             type="button"

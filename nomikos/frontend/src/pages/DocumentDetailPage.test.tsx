@@ -11,7 +11,12 @@ import { ApiError } from "../api/errors";
 import { queryClient, taggedMeta } from "../api/queryClient";
 import { resourceTags } from "../api/resources";
 import * as session from "../auth/session";
+import { toast } from "../components/ui/toast";
 import { DocumentDetailPage } from "./DocumentDetailPage";
+
+vi.mock("../components/ui/toast", () => ({
+  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
+}));
 
 vi.mock("../components/AuthenticatedImage", () => ({
   AuthenticatedImage: ({ alt }: { alt: string }) => <img alt={alt} />,
@@ -34,6 +39,7 @@ vi.mock("../api/client", async (importOriginal) => {
       reorderParts: vi.fn(),
       deletePart: vi.fn(),
       updatePartReviewStatus: vi.fn(),
+      updatePartsPublished: vi.fn(),
       updateDocument: vi.fn(),
     },
   };
@@ -56,6 +62,7 @@ const DOCUMENT: DocumentWithPartsResponse = {
       width: 800,
       height: 1000,
       reviewed: false,
+      published: true,
       created_at: "2026-06-16T10:00:00Z",
     },
     {
@@ -66,6 +73,7 @@ const DOCUMENT: DocumentWithPartsResponse = {
       width: 640,
       height: 900,
       reviewed: false,
+      published: true,
       created_at: "2026-06-16T10:00:00Z",
     },
   ],
@@ -83,6 +91,26 @@ const DOCUMENT: DocumentWithPartsResponse = {
 function seedDocument() {
   let stored: DocumentWithPartsResponse = DOCUMENT;
   vi.mocked(api.getDocument).mockImplementation(async () => stored);
+  vi.mocked(api.updatePartsPublished).mockImplementation(
+    async (
+      _projectId: string,
+      _documentId: string,
+      body: { parts: { part_id: string; published: boolean }[] },
+    ) => {
+      const wanted = new Map(
+        body.parts.map((entry) => [entry.part_id, entry.published]),
+      );
+      stored = {
+        ...stored,
+        parts: stored.parts.map((part) =>
+          wanted.has(part.id)
+            ? { ...part, published: wanted.get(part.id)! }
+            : part,
+        ),
+      };
+      return stored.parts;
+    },
+  );
   vi.mocked(api.updateDocument).mockImplementation(
     async (
       _projectId: string,
@@ -180,6 +208,123 @@ describe("DocumentDetailPage", () => {
         { reviewed: true },
       );
     });
+  });
+
+  it("hides one page from the public reader without touching the others", async () => {
+    const publicDocumentKey = ["public-document", "project-1", "doc-1"];
+    await queryClient.fetchQuery({
+      queryKey: publicDocumentKey,
+      queryFn: () => Promise.resolve(DOCUMENT),
+      meta: taggedMeta([resourceTags.publicDocument("project-1", "doc-1")]),
+    });
+
+    renderDocumentPage();
+
+    await screen.findByRole("heading", { name: "Grec 1360" });
+    expect(screen.getByText(/2 of 2 shown publicly/)).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /hide part 1 from the public page/i,
+      }),
+    );
+
+    // One request carrying only the page that changed. Sending the whole list
+    // would let an unrelated stale row overwrite a flag someone else just set.
+    await waitFor(() => {
+      expect(api.updatePartsPublished).toHaveBeenLastCalledWith(
+        "project-1",
+        "doc-1",
+        { parts: [{ part_id: "part-1", published: false }] },
+      );
+    });
+
+    // The write is only half the job: the page has to go and read it back.
+    await waitFor(() => {
+      expect(screen.getByText(/1 of 2 shown publicly/)).toBeInTheDocument();
+    });
+    expect(screen.getByText("hidden")).toBeInTheDocument();
+
+    // The public reader holds its own copy of this flag under its own key, and
+    // this page never renders it, so only the invalidation reaches it.
+    await waitFor(() => {
+      expect(queryClient.getQueryState(publicDocumentKey)?.isInvalidated).toBe(
+        true,
+      );
+    });
+  });
+
+  it("toggles rather than navigating when the button is reached by keyboard", async () => {
+    renderDocumentPage();
+
+    await screen.findByRole("heading", { name: "Grec 1360" });
+
+    // The row itself is activatable and its keydown handler calls
+    // preventDefault() before navigating, so without a keydown stop on the
+    // actions wrapper this Enter opened the page editor and the page stayed
+    // public. A keyboard-only owner then had no way to hide a page at all.
+    const button = screen.getByRole("button", {
+      name: /hide part 1 from the public page/i,
+    });
+    fireEvent.keyDown(button, { key: "Enter", code: "Enter" });
+
+    expect(testRouter().push).not.toHaveBeenCalled();
+  });
+
+  it("offers no publish control to a member who does not own the project", async () => {
+    vi.mocked(api.getProject).mockResolvedValue({
+      id: "project-1",
+      name: "Test Project",
+      slug: "test-project",
+      owner_id: "someone-else",
+      guidelines: null,
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+      document_count: 1,
+    });
+
+    renderDocumentPage();
+
+    await screen.findByRole("heading", { name: "Grec 1360" });
+
+    // The backend refuses a non-owner outright, so a button here would only
+    // ever earn a red toast.
+    expect(
+      screen.queryByRole("button", {
+        name: /hide part 1 from the public page/i,
+      }),
+    ).toBeNull();
+    // The state itself is still worth seeing, and a collaborator has no other
+    // way to find it out.
+    expect(screen.getAllByText("shown")).toHaveLength(2);
+  });
+
+  it("leaves the page shown when the publish change is rejected", async () => {
+    vi.mocked(api.updatePartsPublished).mockRejectedValue(
+      new ApiError("Forbidden", 403),
+    );
+
+    renderDocumentPage();
+
+    await screen.findByRole("heading", { name: "Grec 1360" });
+    expect(screen.getByText(/2 of 2 shown publicly/)).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /hide part 1 from the public page/i,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(
+        "Only the project owner can choose which pages are public.",
+      );
+    });
+    // Nothing moved. The fake server here would have flipped the flag had the
+    // request reached it, so this is the rejection being honoured, not a
+    // fixture that could never change.
+    expect(screen.getAllByText("shown")).toHaveLength(2);
+    expect(screen.getByText(/2 of 2 shown publicly/)).toBeInTheDocument();
   });
 
   it("keeps review status when the API rejects the change", async () => {
