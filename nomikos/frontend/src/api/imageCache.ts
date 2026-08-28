@@ -127,7 +127,15 @@ function releaseClaim(path: string): void {
 let clientModule: Promise<typeof import("./client")> | null = null;
 
 function loadClient(): Promise<typeof import("./client")> {
-  clientModule ??= import("./client");
+  // A rejected promise is neither null nor undefined, so memoizing one would
+  // pin every later call to the same failure and break image loading for the
+  // life of the page. Dynamic imports do fail in production: a deploy can
+  // invalidate the chunk hash an open tab still points at. Forget the failure
+  // so the next caller gets a fresh attempt.
+  clientModule ??= import("./client").catch((error: unknown) => {
+    clientModule = null;
+    throw error;
+  });
   return clientModule;
 }
 

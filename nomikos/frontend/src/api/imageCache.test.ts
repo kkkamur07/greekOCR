@@ -134,27 +134,42 @@ describe("imageCache", () => {
     expect(revokeObjectURL).toHaveBeenCalled();
   });
 
-  it("holds an image claimed by a slow request against a later sweep", async () => {
+  /**
+   * The same invariant with the timing pinned down rather than left to the
+   * scheduler. Every request is resolved before any caller gets to run its
+   * continuation, so the first entry inserted is both the oldest in LRU order
+   * and still unreferenced when the last insertion triggers the sweep. That is
+   * exactly the state the claim exists to cover, and without it this evicts
+   * the very image the first caller is about to display.
+   */
+  it("evicts nothing while its callers are still waiting to take a reference", async () => {
     let issued = 0;
     createObjectURL.mockImplementation(() => `blob:image-${(issued += 1)}`);
+    const total = MAX_CACHED_PART_IMAGES + 4;
 
-    let resolveSlow: ((blob: Blob) => void) | null = null;
-    vi.mocked(fetchBinaryApi).mockImplementationOnce(
+    const resolvers: ((blob: Blob) => void)[] = [];
+    vi.mocked(fetchBinaryApi).mockImplementation(
       () =>
         new Promise<Blob>((resolve) => {
-          resolveSlow = resolve;
+          resolvers.push(resolve);
         }),
     );
 
-    const slow = acquirePartImage("/media/parts/part-slow");
-    // The bound is filled while the claimed request is still in flight.
-    for (let index = 0; index < MAX_CACHED_PART_IMAGES + 2; index += 1) {
-      await fetchPartImage(`/media/parts/filler-${index}`);
-    }
-    resolveSlow!(new Blob(["image"]));
-    const image = await slow;
+    const acquisitions = Array.from({ length: total }, (_unused, index) =>
+      acquirePartImage(`/media/parts/part-${index}`),
+    );
+    // Let the dynamic client import settle so every request is actually in
+    // flight and has registered its resolver.
+    await vi.waitFor(() => expect(resolvers).toHaveLength(total));
 
-    expect(revokeObjectURL).not.toHaveBeenCalledWith(image.objectUrl);
+    for (const resolve of resolvers) resolve(new Blob(["image"]));
+    const images = await Promise.all(acquisitions);
+
+    const shown = new Set(images.map((image) => image.objectUrl));
+    expect(shown.size).toBe(total);
+    for (const call of revokeObjectURL.mock.calls) {
+      expect(shown.has(call[0] as string)).toBe(false);
+    }
   });
 
   it("allows only same-origin part-image URLs", () => {
