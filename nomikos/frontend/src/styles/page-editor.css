@@ -473,6 +473,21 @@
 .pe-dd-item--action {
   margin-top: 4px;
 }
+/*
+  Only items that carry a trailing hint become rows, so the plain text items
+  keep the block layout they were written against.
+*/
+.pe-dd-item:has(.pe-dd-meta) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.pe-dd-meta {
+  font-size: 0.6875rem;
+  color: var(--text-4);
+  white-space: nowrap;
+}
 .pe-dd-divider {
   height: 1px;
   background: var(--border);

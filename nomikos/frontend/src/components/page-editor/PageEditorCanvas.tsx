@@ -38,6 +38,14 @@ import { PageEditorCanvasIsland } from "./PageEditorCanvasIsland";
 
 const ZOOM_ANIMATION_MS = 220;
 const ZOOM_BUTTON_STEP = 0.12;
+const MIN_SCALE = 0.15;
+const MAX_SCALE = 8;
+/**
+ * The island is 40px tall and sits 14px off the bottom edge. Fitting has to
+ * treat that strip as gone, or a fitted page parks its final lines behind it.
+ */
+const ISLAND_RESERVED_PX = 70;
+const FIT_PADDING_PX = 24;
 
 type CanvasSurfaceProps = {
   imageUrl: string;
@@ -740,6 +748,43 @@ export function PageEditorCanvas({
     else ref.zoomOut(ZOOM_BUTTON_STEP, ZOOM_ANIMATION_MS);
   };
 
+  /**
+   * Fit the whole folio into the visible canvas.
+   *
+   * centerView only re-centres at the current scale, which is not what a
+   * button called "Fit page to view" promises. This scales to the pane and
+   * keeps the island's own height out of the usable area, because the last
+   * line of a folio matters as much as the first and must not land under the
+   * toolbar the moment someone presses fit.
+   */
+  const fitToView = () => {
+    const ref = transformRef.current;
+    const wrapper = ref?.instance.wrapperComponent;
+    if (!ref || !wrapper) return;
+    const viewWidth = wrapper.offsetWidth;
+    const viewHeight = wrapper.offsetHeight;
+    if (!viewWidth || !viewHeight || !canvasWidth || !canvasHeight) return;
+
+    const usableWidth = Math.max(1, viewWidth - FIT_PADDING_PX * 2);
+    const usableHeight = Math.max(
+      1,
+      viewHeight - ISLAND_RESERVED_PX - FIT_PADDING_PX,
+    );
+    const scale = Math.min(
+      MAX_SCALE,
+      Math.max(
+        MIN_SCALE,
+        Math.min(usableWidth / canvasWidth, usableHeight / canvasHeight),
+      ),
+    );
+    ref.setTransform(
+      (viewWidth - canvasWidth * scale) / 2,
+      (viewHeight - ISLAND_RESERVED_PX - canvasHeight * scale) / 2,
+      scale,
+      ZOOM_ANIMATION_MS,
+    );
+  };
+
   return (
     <div
       className={`pe-canvas-host${spaceHeld ? " pe-canvas-host--panning" : ""}`}
@@ -748,8 +793,8 @@ export function PageEditorCanvas({
       <TransformWrapper
         ref={transformRef}
         initialScale={1}
-        minScale={0.15}
-        maxScale={8}
+        minScale={MIN_SCALE}
+        maxScale={MAX_SCALE}
         centerOnInit={false}
         limitToBounds={false}
         wheel={{
@@ -804,7 +849,7 @@ export function PageEditorCanvas({
         onPanningStart={resetPanVelocityTracking}
         onTransformed={(ref) => setZoomLevel(ref.state.scale)}
       >
-        {({ resetTransform, centerView }) => (
+        {({ resetTransform }) => (
           <>
             <PageEditorCanvasIsland
               tool={
@@ -821,7 +866,7 @@ export function PageEditorCanvas({
               zoomPercent={Math.round(zoomLevel * 100)}
               onZoomIn={() => zoomAnimated("in")}
               onZoomOut={() => zoomAnimated("out")}
-              onFitToView={() => centerView(undefined, ZOOM_ANIMATION_MS)}
+              onFitToView={fitToView}
               onResetZoom={() => resetTransform()}
               panOverride={spaceHeld}
             />

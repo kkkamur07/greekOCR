@@ -8,6 +8,8 @@ type PageEditorPageXmlButtonProps = {
   documentId: string;
   partId: string;
   downloadFilename: string;
+  /** Lets the button sit in the Workflow menu as well as in a toolbar. */
+  className?: string;
 };
 
 /**
@@ -22,8 +24,10 @@ export function PageEditorPageXmlButton({
   documentId,
   partId,
   downloadFilename,
+  className = "pe-tb-btn",
 }: PageEditorPageXmlButtonProps) {
   const [downloading, setDownloading] = useState(false);
+  const label = className.includes("pe-dd-item") ? "PAGE XML + image" : "XML";
 
   async function handleDownload() {
     setDownloading(true);
@@ -49,13 +53,13 @@ export function PageEditorPageXmlButton({
   return (
     <button
       type="button"
-      className="pe-tb-btn"
+      className={className}
       aria-label="Download PAGE XML with page image"
       title="Download PAGE XML with the page image (zip)"
       disabled={downloading}
       onClick={() => void handleDownload()}
     >
-      {downloading ? "XML…" : "XML"}
+      {downloading ? "Preparing XML…" : label}
     </button>
   );
 }

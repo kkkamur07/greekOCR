@@ -381,6 +381,40 @@ export function PageEditorToolbar({
               >
                 {ocrRunning ? "Transcribing…" : "Whole page"}
               </button>
+              {/*
+                Export is a workflow step, not a permanent fixture of the bar.
+                PDF and XML were two of the least-pressed controls in the
+                editor holding two of its most valuable slots, next to the
+                settings gear. In the menu they sit beside Sharing, which is
+                the same act at a different fidelity.
+              */}
+              <div className="pe-dd-divider" />
+              <div className="pe-dd-section">Export</div>
+              <button
+                type="button"
+                role="menuitemcheckbox"
+                className="pe-dd-item"
+                aria-checked={transcriptionPdfOpen}
+                onClick={() => {
+                  onActionsOpenChange(false);
+                  if (transcriptionPdfOpen) onCloseTranscriptionPdf();
+                  else onOpenTranscriptionPdf();
+                }}
+              >
+                Transcription PDF
+                <span className="pe-dd-meta">
+                  {transcriptionPdfOpen ? "open" : "preview"}
+                </span>
+              </button>
+              {projectId && documentId && (
+                <PageEditorPageXmlButton
+                  projectId={projectId}
+                  documentId={documentId}
+                  partId={partId}
+                  className="pe-dd-item"
+                  downloadFilename={`${exportFileStem(document.name, partIndex)}.zip`}
+                />
+              )}
               {projectId && documentId && (
                 <PageEditorSharingMenu
                   projectId={projectId}
@@ -409,27 +443,6 @@ export function PageEditorToolbar({
         </div>
 
         <div className="pe-toolbar__cluster">
-          <button
-            type="button"
-            className={`pe-tb-btn${transcriptionPdfOpen ? " pe-tb-btn--on" : ""}`}
-            aria-pressed={transcriptionPdfOpen}
-            aria-label="Toggle transcription PDF"
-            title="Toggle transcription PDF"
-            onClick={() => {
-              if (transcriptionPdfOpen) onCloseTranscriptionPdf();
-              else onOpenTranscriptionPdf();
-            }}
-          >
-            PDF
-          </button>
-          {projectId && documentId && (
-            <PageEditorPageXmlButton
-              projectId={projectId}
-              documentId={documentId}
-              partId={partId}
-              downloadFilename={`${exportFileStem(document.name, partIndex)}.zip`}
-            />
-          )}
           <div className="pe-dropdown-wrap" ref={settingsRef}>
             <button
               type="button"
