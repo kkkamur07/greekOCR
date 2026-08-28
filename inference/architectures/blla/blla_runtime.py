@@ -112,11 +112,11 @@ def build_blla_segment_response(
         # Clamp to the stored-geometry cap before the segment contract (which
         # enforces it with ``max_length``) rejects the line, so a denser ring is
         # coarsened rather than failing the whole page.
-        refined_points = clamp_polygon_vertices(
+        capped_points = clamp_polygon_vertices(
             simplified_points,
             max_points=MAX_GEOMETRY_POINTS,
         )
-        if len(refined_points) < 4:
+        if len(capped_points) < 4:
             first_failure = first_failure or ValueError(
                 "BLLA line simplified to fewer than four points"
             )
@@ -131,8 +131,8 @@ def build_blla_segment_response(
                 order=len(lines),
                 block_external_id=block.external_id,
                 baseline={"points": baseline},
-                mask={"points": refined_points},
-                points=refined_points,
+                mask={"points": capped_points},
+                points=capped_points,
                 kraken_ceiling=ceiling,
                 source_metadata=source_metadata,
             )

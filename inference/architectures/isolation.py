@@ -1,7 +1,7 @@
 """The per-line failure policy both architectures have to honour.
 
 Calamari transcribes a page one line crop at a time; BLLA decodes a page into
-one refined polygon at a time. Both must isolate a failed line - a single
+one polygon at a time. Both must isolate a failed line - a single
 undecodable crop or a single degenerate contour cannot be allowed to discard
 the other thirty-nine lines of the page - and both must stop short of the case
 where *nothing* survived.

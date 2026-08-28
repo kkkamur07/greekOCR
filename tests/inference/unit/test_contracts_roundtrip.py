@@ -101,7 +101,7 @@ def _submit_request(**overrides) -> JobSubmitRequest:
 
 
 def test_image_bytes_json_contract():
-    request = _submit_request(params={"refine": True})
+    request = _submit_request(params={"binarize": True})
     payload = _round_trip(request)
     assert payload["image_bytes"] == base64.b64encode(b"\x89PNG\r\n").decode()
 

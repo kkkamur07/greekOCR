@@ -94,7 +94,7 @@ export function JobsNotice({ enableTestJobs = false }: JobsNoticeProps) {
       ? `${activeCount} running`
       : trackedJobs.length > 0
         ? "All jobs complete"
-        : "Segment, transcribe, or refine layout";
+        : "Segment, transcribe, or edit layout";
 
   return (
     <div>
