@@ -152,6 +152,12 @@ export function useLayoutMutations({
     if (!partId || !subscribeToJobCompletion) return;
     return subscribeToJobCompletion((event) => {
       if (event.documentPartId !== partId) return;
+      // Only a segmentation that finished replaces the Segments, and with them
+      // the line ids an undo entry names. Transcription patches text onto
+      // lines that are already there, and a run that failed changed nothing at
+      // all; clearing the stacks for either would throw away a geometry edit
+      // the researcher can still legitimately take back.
+      if (event.kind !== "segmentation" || event.status !== "done") return;
       undoStackRef.current = [];
       redoStackRef.current = [];
       setEditUndoRevision((value) => value + 1);

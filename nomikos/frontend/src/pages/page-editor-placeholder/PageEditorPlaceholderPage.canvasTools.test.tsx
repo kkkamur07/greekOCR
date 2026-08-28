@@ -141,4 +141,41 @@ describe("PageEditorPlaceholderPage canvas tools", () => {
       ).toBeGreaterThan(0);
     });
   });
+
+  it("is one tab stop with arrow keys inside it, as role=toolbar promises", async () => {
+    mockedApi.getDocument.mockResolvedValue(DOCUMENT);
+
+    renderPageEditor();
+
+    const island = await screen.findByRole("toolbar", {
+      name: /canvas tools/i,
+    });
+    const select = screen.getByRole("button", { name: /select and pan/i });
+    const rectangle = screen.getByRole("button", {
+      name: /rectangle segment/i,
+    });
+
+    // Eight buttons floating over the canvas must not cost eight presses to
+    // get past, so exactly one of them is in the tab order at a time.
+    const stops = [...island.querySelectorAll("button")].filter(
+      (button) => button.tabIndex === 0,
+    );
+    expect(stops).toEqual([select]);
+
+    fireEvent.keyDown(island, { key: "ArrowRight" });
+    expect(globalThis.document.activeElement).toBe(rectangle);
+    expect(rectangle.tabIndex).toBe(0);
+    expect(select.tabIndex).toBe(-1);
+
+    // Delete is greyed out with nothing selected, so the arrow walk steps over
+    // it rather than parking the island's only tab stop somewhere unfocusable.
+    fireEvent.keyDown(island, { key: "ArrowRight" });
+    fireEvent.keyDown(island, { key: "ArrowRight" });
+    expect(globalThis.document.activeElement).toBe(
+      screen.getByRole("button", { name: /zoom out/i }),
+    );
+
+    fireEvent.keyDown(island, { key: "Home" });
+    expect(globalThis.document.activeElement).toBe(select);
+  });
 });

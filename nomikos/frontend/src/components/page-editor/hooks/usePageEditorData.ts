@@ -300,6 +300,19 @@ export function usePageEditorData(
     string | null
   >(null);
 
+  /**
+   * Which read of this part is the newest, counted across every effect that
+   * writes the part's state rather than per effect.
+   *
+   * Two of them do: the route-mount load below and the job-completion refresh
+   * after it, both filling the same setters from their own request. Guarding
+   * them separately leaves the case where a job finishes while the first load
+   * is still in flight - the refresh lands the new Segments, then the older
+   * response overwrites them, and the page sits on pre-job state until a hard
+   * reload. One counter, so the loser of that race stays quiet.
+   */
+  const contentGenerationRef = useRef(0);
+
   useEffect(() => {
     if (!projectId || !documentId || !partId) {
       setLoading(false);
@@ -312,8 +325,9 @@ export function usePageEditorData(
     }
 
     let cancelled = false;
+    const generation = ++contentGenerationRef.current;
     const apply = <T>(setter: (value: T) => void, value: T) => {
-      if (!cancelled) {
+      if (!cancelled && generation === contentGenerationRef.current) {
         setter(value);
       }
     };
@@ -397,10 +411,6 @@ export function usePageEditorData(
   }, [projectId, documentId, partId]);
 
   const { subscribeToJobCompletion } = useBackgroundJobs();
-  // A second, independent refresh, not a fresh count each render: two jobs
-  // finishing close together must not let the first one's late response
-  // clobber the second one's.
-  const refreshGenerationRef = useRef(0);
 
   /**
    * The gap this closes: the mount effect above re-syncs the page from a
@@ -429,9 +439,9 @@ export function usePageEditorData(
       // is mounted) gets its own event.
       if (event.documentPartId !== partId) return;
 
-      const generation = ++refreshGenerationRef.current;
+      const generation = ++contentGenerationRef.current;
       const apply = <T>(setter: (value: T) => void, value: T) => {
-        if (cancelled || generation !== refreshGenerationRef.current) return;
+        if (cancelled || generation !== contentGenerationRef.current) return;
         setter(value);
       };
 

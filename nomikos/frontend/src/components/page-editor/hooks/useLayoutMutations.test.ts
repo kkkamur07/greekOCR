@@ -331,4 +331,58 @@ describe("useLayoutMutations auto segment", () => {
 
     expect(view.result.current.canUndo).toBe(true);
   });
+
+  it("leaves the undo stack alone for a job that does not touch geometry", async () => {
+    createPartLine.mockResolvedValue({
+      id: "line-1",
+      order: 0,
+      kind: "rectangle",
+      points: [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+      ],
+      source: "manual",
+      manual_geometry: false,
+      line_transcriptions: [],
+    });
+    const { view, jobCompletionListeners } = setup();
+
+    await act(async () => {
+      await view.result.current.replaceWithManualLine("rectangle", [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+      ]);
+    });
+
+    // Transcription writes text onto lines that are already there and keeps
+    // their ids, and a segmentation that failed wrote nothing at all. Neither
+    // invalidates the entry above, so running OCR must not silently cost the
+    // researcher the geometry edit they just made.
+    act(() => {
+      for (const listener of jobCompletionListeners) {
+        listener({
+          jobId: "job-10",
+          kind: "transcription-page",
+          documentPartId: "part-1",
+          status: "done",
+        });
+        listener({
+          jobId: "job-11",
+          kind: "transcription-segment",
+          documentPartId: "part-1",
+          status: "done",
+        });
+        listener({
+          jobId: "job-12",
+          kind: "segmentation",
+          documentPartId: "part-1",
+          status: "failed",
+        });
+      }
+    });
+
+    expect(view.result.current.canUndo).toBe(true);
+  });
 });

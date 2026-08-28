@@ -163,4 +163,57 @@ describe("usePageEditorData job-completion refresh", () => {
 
     expect(listPartLines).toHaveBeenCalledTimes(1);
   });
+
+  it("does not let a slow first load overwrite a refresh that already landed", async () => {
+    // Opening a page whose job is about to finish runs two reads of the same
+    // part at once. The refresh is the newer of the two by definition, so the
+    // first load losing the race has to mean it stays quiet: landing its own
+    // response afterwards would put the page back on pre-job state, with no
+    // second announcement coming to correct it.
+    const staleLine = {
+      id: "line-stale",
+      order: 0,
+      kind: "rectangle",
+      points: [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+      ],
+      source: "machine",
+      manual_geometry: false,
+      line_transcriptions: [],
+    };
+    const freshLine = { ...staleLine, id: "line-fresh" };
+
+    let releaseFirstLoad = () => {};
+    listPartLines.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          releaseFirstLoad = () => resolve([staleLine]);
+        }),
+    );
+
+    const { result } = renderHook(() =>
+      usePageEditorData("project-1", "document-1", "part-1"),
+    );
+    await waitFor(() => expect(listPartLines).toHaveBeenCalledTimes(1));
+
+    listPartLines.mockResolvedValueOnce([freshLine]);
+    await act(async () => {
+      announce({
+        jobId: "job-mid-load",
+        kind: "segmentation",
+        documentPartId: "part-1",
+        status: "done",
+      });
+    });
+    await waitFor(() => expect(result.current.lines).toEqual([freshLine]));
+
+    await act(async () => {
+      releaseFirstLoad();
+      await Promise.resolve();
+    });
+
+    expect(result.current.lines).toEqual([freshLine]);
+  });
 });

@@ -412,6 +412,8 @@ export function PageEditorToolbar({
                   documentId={documentId}
                   partId={partId}
                   className="pe-dd-item"
+                  role="menuitem"
+                  onActivate={() => onActionsOpenChange(false)}
                   downloadFilename={`${exportFileStem(document.name, partIndex)}.zip`}
                 />
               )}

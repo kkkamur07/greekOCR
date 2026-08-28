@@ -1,3 +1,5 @@
+import { useCallback, useRef, useState, type KeyboardEvent } from "react";
+
 import { PAGE_EDITOR_SHORTCUTS } from "./pageEditorShortcuts";
 
 /**
@@ -35,6 +37,16 @@ function toolClass(active: boolean): string {
   return active ? "pe-island__btn pe-island__btn--active" : "pe-island__btn";
 }
 
+/**
+ * ``role="toolbar"`` promises one tab stop and arrow keys inside it, so the
+ * island has to keep that promise: eight separate tab stops floating over the
+ * canvas would put the page image eight presses away for anyone working from
+ * the keyboard.
+ */
+const ISLAND_BUTTON_COUNT = 8;
+/** The one button that can be disabled, and so the one that can lose focus. */
+const DELETE_BUTTON_INDEX = 3;
+
 export function PageEditorCanvasIsland({
   tool,
   onSelectTool,
@@ -48,15 +60,67 @@ export function PageEditorCanvasIsland({
   onResetZoom,
   panOverride,
 }: PageEditorCanvasIslandProps) {
+  const islandRef = useRef<HTMLDivElement>(null);
+  const [focusIndex, setFocusIndex] = useState(0);
+
+  const isFocusable = useCallback(
+    (index: number) => index !== DELETE_BUTTON_INDEX || canDelete,
+    [canDelete],
+  );
+  // Delete greys out with nothing selected. Were the tab stop left sitting on
+  // it the island would have no reachable stop at all, so it falls back to
+  // Select, which is never disabled.
+  const tabStop = isFocusable(focusIndex) ? focusIndex : 0;
+
+  const focusButton = useCallback((index: number) => {
+    const buttons = islandRef.current?.querySelectorAll("button");
+    buttons?.[index]?.focus();
+  }, []);
+
+  const handleKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLDivElement>) => {
+      const step =
+        event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+      if (step !== 0) {
+        event.preventDefault();
+        let next = focusIndex;
+        for (let hop = 0; hop < ISLAND_BUTTON_COUNT; hop += 1) {
+          next = (next + step + ISLAND_BUTTON_COUNT) % ISLAND_BUTTON_COUNT;
+          if (isFocusable(next)) break;
+        }
+        focusButton(next);
+        return;
+      }
+      if (event.key === "Home") {
+        event.preventDefault();
+        focusButton(0);
+      } else if (event.key === "End") {
+        event.preventDefault();
+        focusButton(ISLAND_BUTTON_COUNT - 1);
+      }
+    },
+    [focusIndex, isFocusable, focusButton],
+  );
+
+  // Focus is what moves; the roving tab stop follows it, whether it arrived by
+  // arrow key, by Tab or by click.
+  const rove = (index: number) => ({
+    tabIndex: index === tabStop ? 0 : -1,
+    onFocus: () => setFocusIndex(index),
+  });
+
   return (
     <div
+      ref={islandRef}
       className={`pe-island${panOverride ? " pe-island--panning" : ""}`}
       role="toolbar"
       aria-label="Canvas tools"
       aria-orientation="horizontal"
+      onKeyDown={handleKeyDown}
     >
       <button
         type="button"
+        {...rove(0)}
         className={toolClass(tool === "none")}
         aria-pressed={tool === "none"}
         aria-keyshortcuts={PAGE_EDITOR_SHORTCUTS.SELECT}
@@ -72,6 +136,7 @@ export function PageEditorCanvasIsland({
 
       <button
         type="button"
+        {...rove(1)}
         className={toolClass(tool === "rectangle")}
         aria-pressed={tool === "rectangle"}
         aria-keyshortcuts={PAGE_EDITOR_SHORTCUTS.RECTANGLE}
@@ -93,6 +158,7 @@ export function PageEditorCanvasIsland({
 
       <button
         type="button"
+        {...rove(2)}
         className={toolClass(tool === "polygon")}
         aria-pressed={tool === "polygon"}
         aria-keyshortcuts={PAGE_EDITOR_SHORTCUTS.POLYGON}
@@ -115,6 +181,7 @@ export function PageEditorCanvasIsland({
 
       <button
         type="button"
+        {...rove(3)}
         className="pe-island__btn"
         disabled={!canDelete}
         aria-keyshortcuts={PAGE_EDITOR_SHORTCUTS.DELETE}
@@ -139,6 +206,7 @@ export function PageEditorCanvasIsland({
 
       <button
         type="button"
+        {...rove(4)}
         className="pe-island__btn pe-island__btn--icon"
         onClick={onZoomOut}
         aria-label="Zoom out"
@@ -157,6 +225,7 @@ export function PageEditorCanvasIsland({
       </button>
       <button
         type="button"
+        {...rove(5)}
         className="pe-island__zoom"
         onClick={onResetZoom}
         aria-label={`Zoom ${zoomPercent}%. Reset to 100%`}
@@ -166,6 +235,7 @@ export function PageEditorCanvasIsland({
       </button>
       <button
         type="button"
+        {...rove(6)}
         className="pe-island__btn pe-island__btn--icon"
         onClick={onZoomIn}
         aria-label="Zoom in"
@@ -184,6 +254,7 @@ export function PageEditorCanvasIsland({
       </button>
       <button
         type="button"
+        {...rove(7)}
         className="pe-island__btn pe-island__btn--icon"
         onClick={onFitToView}
         aria-label="Fit page to view"
