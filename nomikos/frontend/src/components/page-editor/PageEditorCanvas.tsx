@@ -28,13 +28,11 @@ import {
   rectanglePoints,
   removePolygonVertex,
 } from "./canvasGeometry";
-import {
-  wheelZoomConfig,
-  type PageEditorCanvasSettings,
-} from "./pageEditorSettings";
+import type { PageEditorCanvasSettings } from "./pageEditorSettings";
 import { segmentNumbersById, segmentsInNumberOrder } from "./segmentNumbering";
 import { resetPanVelocityTracking } from "../../utils/zoomPanVelocity";
 import { PageEditorCanvasIsland } from "./PageEditorCanvasIsland";
+import { useSmoothWheelZoom } from "./useSmoothWheelZoom";
 
 const ZOOM_ANIMATION_MS = 220;
 const ZOOM_BUTTON_STEP = 0.12;
@@ -46,6 +44,10 @@ const MAX_SCALE = 8;
  */
 const ISLAND_RESERVED_PX = 70;
 const FIT_PADDING_PX = 24;
+/** Screen pixels a pressed vertex must travel before it starts to follow. */
+const VERTEX_DRAG_THRESHOLD_PX = 3;
+/** A press that travels this far (screen px) is a pan, not a click. */
+const PAN_CLICK_THRESHOLD_PX = 4;
 
 type CanvasSurfaceProps = {
   imageUrl: string;
@@ -93,8 +95,6 @@ type CanvasSurfaceProps = {
   onRemoveVertex: (vertexIndex: number) => void;
   onSelectVertex: (vertexIndex: number | null) => void;
 };
-
-const VERTEX_DRAG_THRESHOLD = 3;
 
 function CanvasSurfaceInner({
   imageUrl,
@@ -569,6 +569,9 @@ export function PageEditorCanvas({
     pendingVertexIndex: number | null;
   } | null>(null);
   const transformRef = useRef<ReactZoomPanPinchRef>(null);
+  const hostRef = useRef<HTMLDivElement>(null);
+  const panStartRef = useRef<{ x: number; y: number } | null>(null);
+  const panMovedRef = useRef(false);
   const vertexInteractingRef = useRef(false);
   const vertexEditRef = useRef(vertexEdit);
   vertexEditRef.current = vertexEdit;
@@ -740,6 +743,11 @@ export function PageEditorCanvas({
       window.removeEventListener("blur", releaseOnBlur);
     };
   }, []);
+  useSmoothWheelZoom(hostRef, transformRef, {
+    minScale: MIN_SCALE,
+    maxScale: MAX_SCALE,
+    speed: settings.wheelZoomSpeed,
+  });
 
   const zoomAnimated = (direction: "in" | "out") => {
     const ref = transformRef.current;
@@ -788,7 +796,20 @@ export function PageEditorCanvas({
   return (
     <div
       className={`pe-canvas-host${spaceHeld ? " pe-canvas-host--panning" : ""}`}
+      ref={hostRef}
       onContextMenu={(event) => event.preventDefault()}
+      // Every new press starts out as a click; only panning past the threshold
+      // below turns it into a drag.
+      onPointerDownCapture={() => {
+        panMovedRef.current = false;
+      }}
+      // A drag that panned the page ends in a click on whatever is under the
+      // pointer; swallow it so releasing over a segment does not select it.
+      onClickCapture={(event) => {
+        if (!panMovedRef.current) return;
+        panMovedRef.current = false;
+        event.stopPropagation();
+      }}
     >
       <TransformWrapper
         ref={transformRef}
@@ -797,13 +818,8 @@ export function PageEditorCanvas({
         maxScale={MAX_SCALE}
         centerOnInit={false}
         limitToBounds={false}
-        wheel={{
-          // The editor's original wheel sensitivity at 1x; the settings panel
-          // scales both steps together. See pageEditorSettings.ts.
-          ...wheelZoomConfig(settings.wheelZoomSpeed),
-          wheelDisabled: false,
-          touchPadDisabled: false,
-        }}
+        // Wheel zoom is handled by useSmoothWheelZoom (cursor-anchored glide).
+        wheel={{ disabled: true }}
         pinch={{ step: 5, disabled: isDrawing }}
         doubleClick={{
           disabled: isDrawing,
@@ -827,7 +843,11 @@ export function PageEditorCanvas({
           // tool, so neither can be mistaken for drawing.
           allowMiddleClickPan: true,
           allowRightClickPan: true,
-          excluded: ["pe-vertex-handle", "pe-segment-shape"],
+          // Only the vertex handles own their drags. A page under two hundred
+          // segments is nearly all segment, so excluding them too would leave
+          // almost nowhere to grab; the click that ends a pan is swallowed
+          // above instead, so releasing over a segment does not also select it.
+          excluded: ["pe-vertex-handle"],
         }}
         zoomAnimation={{
           disabled: false,
@@ -846,7 +866,32 @@ export function PageEditorCanvas({
           animationTime: ZOOM_ANIMATION_MS,
         }}
         // A click after a wheel zoom must not fling the page: see zoomPanVelocity.
-        onPanningStart={resetPanVelocityTracking}
+        onPanningStart={(ref, event) => {
+          resetPanVelocityTracking(ref);
+          panStartRef.current =
+            "clientX" in event
+              ? { x: event.clientX, y: event.clientY }
+              : event.touches.length > 0
+                ? { x: event.touches[0].clientX, y: event.touches[0].clientY }
+                : null;
+        }}
+        onPanning={(_ref, event) => {
+          const start = panStartRef.current;
+          if (!start || panMovedRef.current) return;
+          const point =
+            "clientX" in event
+              ? event
+              : event.touches.length > 0
+                ? event.touches[0]
+                : null;
+          if (!point) return;
+          if (
+            Math.hypot(point.clientX - start.x, point.clientY - start.y) >
+            PAN_CLICK_THRESHOLD_PX
+          ) {
+            panMovedRef.current = true;
+          }
+        }}
         onTransformed={(ref) => setZoomLevel(ref.state.scale)}
       >
         {({ resetTransform }) => (
@@ -943,9 +988,11 @@ export function PageEditorCanvas({
                       current.draggedIndex === null
                     ) {
                       const anchor = current.points[current.pendingVertexIndex];
+                      // The threshold is in screen pixels: in image units it
+                      // would grow into a dead zone as the page is zoomed in.
                       const moved =
                         Math.hypot(point[0] - anchor[0], point[1] - anchor[1]) >
-                        VERTEX_DRAG_THRESHOLD;
+                        VERTEX_DRAG_THRESHOLD_PX / Math.max(zoomLevel, 0.05);
                       if (!moved) return current;
                       return {
                         ...current,

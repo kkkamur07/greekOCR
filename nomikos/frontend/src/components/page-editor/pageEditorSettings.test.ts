@@ -1,12 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
-  BASE_WHEEL_SMOOTH_STEP,
-  BASE_WHEEL_STEP,
   DEFAULT_PAGE_EDITOR_SETTINGS,
   loadPageEditorSettings,
   savePageEditorSettings,
-  wheelZoomConfig,
 } from "./pageEditorSettings";
 
 describe("pageEditorSettings", () => {
@@ -40,7 +37,7 @@ describe("pageEditorSettings", () => {
     );
   });
 
-  it.each([0, 3, "1"])(
+  it.each([0, 4, "1"])(
     "ignores an out-of-range or non-numeric wheel zoom speed (%j)",
     (value) => {
       localStorage.setItem(
@@ -52,15 +49,4 @@ describe("pageEditorSettings", () => {
       );
     },
   );
-
-  it("scales both wheel steps together", () => {
-    expect(wheelZoomConfig(1)).toEqual({
-      step: BASE_WHEEL_STEP,
-      smoothStep: BASE_WHEEL_SMOOTH_STEP,
-    });
-    expect(wheelZoomConfig(2.5)).toEqual({
-      step: BASE_WHEEL_STEP * 2.5,
-      smoothStep: BASE_WHEEL_SMOOTH_STEP * 2.5,
-    });
-  });
 });

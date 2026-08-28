@@ -1329,6 +1329,9 @@ button {
   min-height: 480px;
   background: var(--surface-2);
 }
+.pub-zoom-surface .react-transform-component {
+  will-change: transform;
+}
 .pub-zoom-surface__wrapper {
   width: 100% !important;
   height: 100% !important;
