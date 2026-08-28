@@ -7,6 +7,19 @@ type CacheEntry = {
 /** Insertion order doubles as LRU order - see `touch`. */
 const entries = new Map<string, CacheEntry>();
 const pending = new Map<string, Promise<CacheEntry>>();
+/**
+ * Paths an `acquirePartImage` call is currently waiting on.
+ *
+ * A caller cannot take a reference until its fetch resolves, so between an
+ * entry being inserted and its own caller running `references += 1` there is a
+ * microtask window in which the entry looks unreferenced. A sibling request
+ * resolving inside that window would evict it and revoke an object URL that is
+ * about to become the `src` of a live img, which is why a document with more
+ * pages than the cache bound would show broken images for an arbitrary subset
+ * of its thumbnails after a reload. A claim is registered synchronously, before
+ * any await, so the window no longer exists.
+ */
+const claims = new Map<string, number>();
 let cacheGeneration = 0;
 
 /**
@@ -77,8 +90,10 @@ function touch(path: string, entry: CacheEntry): CacheEntry {
 /**
  * Drop least-recently-used entries until the cache is back inside its bound.
  *
- * An entry the UI is still showing is never dropped: its object URL is the
- * `src` of a live <img>, and revoking it would blank the image. The cache can
+ * An entry the UI is still showing, or is about to show, is never dropped: its
+ * object URL is the `src` of a live <img>, and revoking it would blank the
+ * image. That covers entries with live references and entries a caller has
+ * claimed but not yet referenced. The cache can
  * therefore sit above its bound while many images are on screen at once, and
  * shrinks again as they are released.
  */
@@ -86,10 +101,34 @@ function evictLeastRecentlyUsed(): void {
   if (entries.size <= MAX_CACHED_PART_IMAGES) return;
   for (const [path, entry] of entries) {
     if (entries.size <= MAX_CACHED_PART_IMAGES) return;
-    if (entry.references > 0) continue;
+    if (entry.references > 0 || claims.has(path)) continue;
     URL.revokeObjectURL(entry.objectUrl);
     entries.delete(path);
   }
+}
+
+function claim(path: string): void {
+  claims.set(path, (claims.get(path) ?? 0) + 1);
+}
+
+function releaseClaim(path: string): void {
+  const remaining = (claims.get(path) ?? 0) - 1;
+  if (remaining > 0) claims.set(path, remaining);
+  else claims.delete(path);
+}
+
+/**
+ * The API client is imported lazily to keep it out of the cache module's own
+ * import graph, but a page list mounting eighteen thumbnails at once would
+ * otherwise start eighteen dynamic imports of it. One memoized promise is
+ * enough, and it means the first thumbnail's import is the only one anything
+ * waits on.
+ */
+let clientModule: Promise<typeof import("./client")> | null = null;
+
+function loadClient(): Promise<typeof import("./client")> {
+  clientModule ??= import("./client");
+  return clientModule;
 }
 
 async function getEntry(path: string): Promise<CacheEntry> {
@@ -99,7 +138,7 @@ async function getEntry(path: string): Promise<CacheEntry> {
   let request = pending.get(path);
   if (!request) {
     const generation = cacheGeneration;
-    request = import("./client")
+    request = loadClient()
       .then(({ fetchBinaryApi }) => fetchBinaryApi(path))
       .then((blob) => {
         if (generation !== cacheGeneration) {
@@ -133,8 +172,17 @@ export async function acquirePartImage(
 ): Promise<{ objectUrl: string; release: () => void }> {
   const path = normalizePartImagePath(pathOrUrl);
   if (!path) throw new Error("Invalid protected part-image URL.");
-  const entry = await getEntry(path);
-  entry.references += 1;
+
+  // Claimed before the await, so no sweep can evict this path while the fetch
+  // is in flight or while the resolution is still queued behind other work.
+  claim(path);
+  let entry: CacheEntry;
+  try {
+    entry = await getEntry(path);
+    entry.references += 1;
+  } finally {
+    releaseClaim(path);
+  }
 
   let released = false;
   return {

@@ -85,6 +85,13 @@ export function AuthenticatedImage({
     );
   }
 
+  // A blob URL that resolved and was then revoked still assigns cleanly to
+  // src, and the browser answers with its own broken-image glyph rather than
+  // rejecting the acquire. Catching the element's error keeps that failure
+  // inside the component's own failed state, where it looks like every other
+  // missing image instead of like a broken page.
+  const handleError = () => setFailed(true);
+
   if (compact) {
     return (
       <img
@@ -92,6 +99,7 @@ export function AuthenticatedImage({
         alt={alt}
         className={className}
         onLoad={onLoad}
+        onError={handleError}
         style={style}
         decoding="async"
       />
@@ -105,6 +113,7 @@ export function AuthenticatedImage({
       className={className}
       width={width}
       onLoad={onLoad}
+      onError={handleError}
       style={style}
       decoding="async"
     />

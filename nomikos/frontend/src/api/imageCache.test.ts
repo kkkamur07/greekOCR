@@ -101,6 +101,62 @@ describe("imageCache", () => {
     expect(fetchBinaryApi).toHaveBeenCalledWith("/media/parts/part-held");
   });
 
+  /**
+   * A document page list mounts every thumbnail at once. When there are more
+   * pages than the cache bound, the sweep used to run while the callers that
+   * had just requested those images were still one microtask away from taking
+   * their reference, so it revoked object URLs that were about to be shown.
+   * The symptom was a broken-image glyph on an arbitrary subset of the grid,
+   * only after a reload, and only on documents longer than the bound.
+   */
+  it("keeps every concurrently requested image alive past the cache bound", async () => {
+    let issued = 0;
+    createObjectURL.mockImplementation(() => `blob:image-${(issued += 1)}`);
+    const total = MAX_CACHED_PART_IMAGES + 6;
+
+    const images = await Promise.all(
+      Array.from({ length: total }, (_unused, index) =>
+        acquirePartImage(`/media/parts/part-${index}`),
+      ),
+    );
+
+    expect(images).toHaveLength(total);
+    const shown = new Set(images.map((image) => image.objectUrl));
+    // Every image got its own URL, so a revoke can be attributed to one image.
+    expect(shown.size).toBe(total);
+    for (const call of revokeObjectURL.mock.calls) {
+      expect(shown.has(call[0] as string)).toBe(false);
+    }
+
+    // Releasing them all lets the cache fall back inside its bound, which is
+    // what stops the fix from turning into an unbounded cache.
+    for (const image of images) image.release();
+    expect(revokeObjectURL).toHaveBeenCalled();
+  });
+
+  it("holds an image claimed by a slow request against a later sweep", async () => {
+    let issued = 0;
+    createObjectURL.mockImplementation(() => `blob:image-${(issued += 1)}`);
+
+    let resolveSlow: ((blob: Blob) => void) | null = null;
+    vi.mocked(fetchBinaryApi).mockImplementationOnce(
+      () =>
+        new Promise<Blob>((resolve) => {
+          resolveSlow = resolve;
+        }),
+    );
+
+    const slow = acquirePartImage("/media/parts/part-slow");
+    // The bound is filled while the claimed request is still in flight.
+    for (let index = 0; index < MAX_CACHED_PART_IMAGES + 2; index += 1) {
+      await fetchPartImage(`/media/parts/filler-${index}`);
+    }
+    resolveSlow!(new Blob(["image"]));
+    const image = await slow;
+
+    expect(revokeObjectURL).not.toHaveBeenCalledWith(image.objectUrl);
+  });
+
   it("allows only same-origin part-image URLs", () => {
     expect(normalizePartImagePath("/media/parts/part-1?w=200")).toBe(
       "/media/parts/part-1?w=200",
