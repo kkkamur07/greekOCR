@@ -315,10 +315,17 @@ export function DocumentDetailPage() {
       await api.updatePartsPublished(projectId, documentId, {
         parts: [{ part_id: partId, published }],
       });
+      // On a draft nothing is public yet, and saying otherwise would be the one
+      // place in this flow that overstates what just happened.
+      const live = document?.workflow === "published";
       toast.success(
         published
-          ? "Page shown on the public page"
-          : "Page hidden from the public page",
+          ? live
+            ? "Page shown on the public page"
+            : "Page will be shown when the document goes live"
+          : live
+            ? "Page hidden from the public page"
+            : "Page will stay hidden when the document goes live",
       );
       // The public reader reads this flag, and so does the owner-facing parts
       // list the editor holds; neither is the copy this page just wrote.
