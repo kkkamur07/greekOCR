@@ -16,6 +16,7 @@ row gets ``true`` here - both the column default and this migration's backfill -
 already reachable through a published document goes dark the moment this ships.
 """
 
+import secrets
 from collections.abc import Sequence
 
 import sqlalchemy as sa
@@ -42,6 +43,27 @@ def upgrade() -> None:
         "document_parts",
         sa.Column("published", sa.Boolean(), server_default="true", nullable=False),
     )
+
+    # Mint a token for everything already published. Without this every document that
+    # was public before this ran keeps a null token, which the API reads as "not
+    # shareable" - so its owner would open the sharing panel and be told that only the
+    # owner can get the link, while being the owner. The links themselves cannot be
+    # saved either way, since a URL sent last week carries no ``t`` at all; the point is
+    # that the owner has a working one to re-send without having to unpublish and
+    # republish first. Generated per row in Python rather than in SQL because the
+    # database has no source of cryptographic randomness we can rely on being installed,
+    # and a share token guessable from a timestamp would defeat the whole revision.
+    connection = op.get_bind()
+    published = connection.execute(
+        sa.text(
+            "SELECT id FROM documents WHERE workflow = 'published' AND public_share_token IS NULL"
+        )
+    ).fetchall()
+    for (document_id,) in published:
+        connection.execute(
+            sa.text("UPDATE documents SET public_share_token = :token WHERE id = :id"),
+            {"token": secrets.token_urlsafe(32), "id": document_id},
+        )
 
 
 # Downgrading drops ``document_parts.published`` outright, and a later re-upgrade
