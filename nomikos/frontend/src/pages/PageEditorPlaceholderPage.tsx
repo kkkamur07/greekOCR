@@ -42,9 +42,6 @@ export function PageEditorPlaceholderPage() {
       partId: string;
     }>() ?? {};
 
-  const [editorMode, setEditorMode] = useState<"layout" | "transcription">(
-    "layout",
-  );
   const [drawMode, setDrawMode] = useState<"none" | "rectangle" | "polygon">(
     "none",
   );
@@ -68,7 +65,6 @@ export function PageEditorPlaceholderPage() {
   );
 
   const editorData = usePageEditorData(projectId, documentId, partId, () => {
-    setEditorMode("layout");
     setDrawMode("none");
     setDraftPolygon([]);
     setDraftStart(null);
@@ -148,6 +144,7 @@ export function PageEditorPlaceholderPage() {
     onDrawComplete: () => setDrawMode("none"),
     setSubmissionRefusal,
     trackJobAndWait: jobQueue.trackAndWait,
+    subscribeToJobCompletion: jobQueue.subscribeToJobCompletion,
   });
 
   const {
@@ -218,21 +215,19 @@ export function PageEditorPlaceholderPage() {
 
   const canvasHint = runState.processingLabel
     ? `${runState.processingLabel}…`
-    : editorMode === "layout" && drawMode === "polygon"
+    : drawMode === "polygon"
       ? draftPolygon.length === 0
-        ? "Polygon: click to place the first corner"
+        ? "Polygon: click to place the first corner · hold Space to pan"
         : `Polygon: ${draftPolygon.length} point${draftPolygon.length === 1 ? "" : "s"} · click to add · double-click or Enter to finish`
-      : editorMode === "layout" && selectedSegment && drawMode === "none"
-        ? selectedVertexIndex !== null
-          ? `Segment ${selectedSegmentNumber} · vertex ${selectedVertexIndex + 1} selected · Delete removes point · Esc deselects`
-          : `Segment ${selectedSegmentNumber} · click edge to add · click handle to select · Delete removes Segment · Esc deselects`
+      : drawMode === "rectangle"
+        ? "Rectangle: drag to draw a segment · hold Space to pan"
         : selectedSegment
-          ? `Segment ${selectedSegmentNumber} selected · ${
-              segmentHasGroundTruth(selectedSegment) ? "paired" : "unpaired"
-            }`
-          : editorMode === "layout"
-            ? "Select a segment · click edges/handles to edit shape · Esc to deselect"
-            : "Select a segment to view transcription";
+          ? selectedVertexIndex !== null
+            ? `Segment ${selectedSegmentNumber} · vertex ${selectedVertexIndex + 1} selected · Delete removes point · Esc deselects`
+            : `Segment ${selectedSegmentNumber} ${
+                segmentHasGroundTruth(selectedSegment) ? "paired" : "unpaired"
+              } · click edge to add · click handle to select · Esc deselects`
+          : "Drag to pan · scroll to zoom · select a segment to edit it";
 
   function pickDrawMode(nextMode: "rectangle" | "polygon") {
     setDrawMode((mode) => (mode === nextMode ? "none" : nextMode));
@@ -262,10 +257,8 @@ export function PageEditorPlaceholderPage() {
   }
 
   useKeyboardShortcuts({
-    onDrawBox:
-      editorMode === "layout" ? () => pickDrawMode("rectangle") : undefined,
-    onDrawPolygon:
-      editorMode === "layout" ? () => pickDrawMode("polygon") : undefined,
+    onDrawBox: () => pickDrawMode("rectangle"),
+    onDrawPolygon: () => pickDrawMode("polygon"),
     onDelete:
       selectedVertexIndex !== null && selectedSegmentId
         ? () => handleRemoveSelectedVertex()
@@ -279,9 +272,7 @@ export function PageEditorPlaceholderPage() {
     onUndo: () => void undoEdit(),
     onRedo: () => void redoEdit(),
     onEnter:
-      editorMode === "layout" &&
-      drawMode === "polygon" &&
-      draftPolygon.length >= 3
+      drawMode === "polygon" && draftPolygon.length >= 3
         ? completeDraftPolygon
         : undefined,
   });
@@ -346,19 +337,9 @@ export function PageEditorPlaceholderPage() {
             partId={part.id}
             document={document}
             partIndex={partIndex ?? 1}
-            editorMode={editorMode}
-            onEditorModeChange={(mode) => {
-              setEditorMode(mode);
-              setDrawMode("none");
-              setActionsOpen(false);
-            }}
-            drawMode={drawMode}
-            onPickDrawMode={pickDrawMode}
-            onPanSelect={handlePanSelect}
             lines={lines}
             pairingProgress={pairingProgress}
             selectedSegmentId={selectedSegmentId}
-            selectedLineId={selectedLineId}
             textLines={textLines}
             onPairTextLine={pairTextLine}
             onDocumentWorkflowChange={(workflow) => {
@@ -373,8 +354,6 @@ export function PageEditorPlaceholderPage() {
                 invalidateAfter.documentUpdated(projectId, documentId);
               }
             }}
-            onDeleteSelectedSegment={deleteSelectedSegment}
-            onResetSelectedLine={resetSelectedLine}
             actionsOpen={actionsOpen}
             onActionsOpenChange={setActionsOpen}
             segmenting={segmenting}
@@ -447,10 +426,15 @@ export function PageEditorPlaceholderPage() {
                 }}
                 onSelectSegment={handleSelectSegment}
                 segmentVertexEditEnabled={
-                  editorMode === "layout" &&
-                  drawMode === "none" &&
-                  Boolean(selectedSegmentId)
+                  drawMode === "none" && Boolean(selectedSegmentId)
                 }
+                onSelectTool={handlePanSelect}
+                onPickDrawMode={pickDrawMode}
+                canDelete={Boolean(selectedSegmentId || selectedLineId)}
+                onDeleteSelected={() => {
+                  if (selectedSegmentId) void deleteSelectedSegment();
+                  if (selectedLineId) void resetSelectedLine();
+                }}
                 selectedVertexIndex={selectedVertexIndex}
                 onSelectedVertexChange={setSelectedVertexIndex}
                 commitSignal={vertexCommitSignal}

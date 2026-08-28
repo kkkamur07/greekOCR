@@ -128,7 +128,7 @@ describe("PageEditorPlaceholderPage transcription", () => {
     );
   });
 
-  it("switches to Transcription edit mode and saves Ground truth text for the selected Segment", async () => {
+  it("saves Ground truth text for the selected Segment", async () => {
     mockedApi.getDocument.mockResolvedValue(DOCUMENT);
     mockedApi.listPartLines.mockResolvedValue([
       line({
@@ -182,13 +182,8 @@ describe("PageEditorPlaceholderPage transcription", () => {
 
     renderPageEditor();
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: /transcription edit/i }),
-    );
+    expect(await screen.findByText("ANNOTE PAGE WORKSPACE")).toBeTruthy();
     fireEvent.click(screen.getByLabelText(/^Segment 1/));
-    expect(
-      screen.getByRole("heading", { name: /transcription edit/i }),
-    ).toBeTruthy();
 
     const textArea = screen.getByLabelText(
       /ground truth text for selected segment/i,
@@ -322,9 +317,7 @@ describe("PageEditorPlaceholderPage transcription", () => {
 
     renderPageEditor();
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: /transcription edit/i }),
-    );
+    expect(await screen.findByText("ANNOTE PAGE WORKSPACE")).toBeTruthy();
     fireEvent.click(screen.getByLabelText(/^Segment 1/));
     const textArea = screen.getByLabelText(
       /ground truth text for selected segment/i,

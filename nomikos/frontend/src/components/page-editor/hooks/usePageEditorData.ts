@@ -1,4 +1,10 @@
-import { useEffect, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import {
   api,
   type DocumentPartResponse,
@@ -16,6 +22,7 @@ import {
   isUnauthorized,
   redirectToLogin,
 } from "../../../auth/session";
+import { useBackgroundJobs } from "../../../context/BackgroundJobsContext";
 
 function accessMessage(error: ApiError): string {
   if (error.status === 401) {
@@ -100,6 +107,155 @@ async function loadTranscribeModels(
   }
 }
 
+type PartContentSetters = {
+  setLayout: Dispatch<SetStateAction<PartLayoutResponse>>;
+  setLayoutError: Dispatch<SetStateAction<string | null>>;
+  setLines: Dispatch<SetStateAction<LineResponse[]>>;
+  setLineError: Dispatch<SetStateAction<string | null>>;
+  setTranscriptionLayers: Dispatch<
+    SetStateAction<TranscriptionLayerResponse[]>
+  >;
+  setGroundTruthTranscriptionId: Dispatch<SetStateAction<string | null>>;
+  setSelectedTranscriptionLayerId: Dispatch<SetStateAction<string | null>>;
+  setPairingError: Dispatch<SetStateAction<string | null>>;
+  setTextLines: Dispatch<
+    SetStateAction<
+      { order: number; text: string; paired_line_id: string | null }[]
+    >
+  >;
+  setPairingProgress: Dispatch<
+    SetStateAction<{
+      paired_lines: number;
+      total_lines: number;
+      percent: number;
+    }>
+  >;
+  setTranscribeModels: Dispatch<SetStateAction<InferenceModelResponse[]>>;
+  setSelectedTranscribeModelId: Dispatch<SetStateAction<string | null>>;
+};
+
+/**
+ * The layout/lines/transcriptions/pairing/models read for one part.
+ *
+ * Shared by the route-keyed mount effect below and the job-completion refresh
+ * effect: the first runs it once resolving a fresh part, the second re-runs it
+ * verbatim when a segmentation or OCR job finishes for the part already on
+ * screen. `apply` is the caller's own cancelled/stale guard - this function
+ * does not know or care which one it was given.
+ */
+async function fetchPartContent(
+  projectId: string,
+  documentId: string,
+  partId: string,
+  apply: <T>(setter: (value: T) => void, value: T) => void,
+  setters: PartContentSetters,
+): Promise<void> {
+  const [
+    layoutResult,
+    linesResult,
+    transcriptionsResult,
+    pairingResult,
+    modelsResult,
+  ] = await Promise.allSettled([
+    api.getPartLayout(projectId, documentId, partId),
+    api.listPartLines(projectId, documentId, partId),
+    api.listTranscriptions(projectId, documentId),
+    api.getPagePairing(projectId, documentId, partId),
+    loadTranscribeModels(projectId, documentId, partId),
+  ]);
+
+  if (layoutResult.status === "fulfilled") {
+    apply(setters.setLayout, layoutResult.value ?? { blocks: [], lines: [] });
+  } else {
+    const err = layoutResult.reason;
+    if (isUnauthorized(err)) {
+      redirectToLogin();
+      return;
+    }
+    apply(
+      setters.setLayoutError,
+      partialLoadMessage(
+        err,
+        "Layout editing is not available for this page.",
+        "Failed to load layout.",
+      ),
+    );
+  }
+
+  if (linesResult.status === "fulfilled") {
+    apply(setters.setLines, linesResult.value);
+  } else {
+    const err = linesResult.reason;
+    if (isUnauthorized(err)) {
+      redirectToLogin();
+      return;
+    }
+    apply(
+      setters.setLineError,
+      partialLoadMessage(
+        err,
+        "Segment geometry is not available for this page.",
+        "Failed to load Segment geometry.",
+      ),
+    );
+  }
+
+  if (transcriptionsResult.status === "fulfilled") {
+    const layers = transcriptionsResult.value;
+    const groundTruth = layers.find((layer) => layer.kind === "ground_truth");
+    apply(setters.setTranscriptionLayers, layers);
+    apply(setters.setGroundTruthTranscriptionId, groundTruth?.id ?? null);
+    apply(
+      setters.setSelectedTranscriptionLayerId,
+      groundTruth?.id ?? layers[0]?.id ?? null,
+    );
+  } else {
+    const err = transcriptionsResult.reason;
+    if (isUnauthorized(err)) {
+      redirectToLogin();
+      return;
+    }
+    apply(
+      setters.setPairingError,
+      partialLoadMessage(
+        err,
+        "Pairing is not available for this page.",
+        "Failed to load Pairing progress.",
+      ),
+    );
+  }
+
+  if (pairingResult.status === "fulfilled") {
+    apply(setters.setTextLines, pairingResult.value.text_lines);
+    apply(setters.setPairingProgress, pairingResult.value.pairing_progress);
+  } else {
+    const err = pairingResult.reason;
+    if (isUnauthorized(err)) {
+      redirectToLogin();
+      return;
+    }
+    apply(
+      setters.setPairingError,
+      partialLoadMessage(
+        err,
+        "Pairing is not available for this page.",
+        "Failed to load Pairing progress.",
+      ),
+    );
+  }
+
+  if (modelsResult.status === "fulfilled") {
+    apply(setters.setTranscribeModels, modelsResult.value.models);
+    apply(
+      setters.setSelectedTranscribeModelId,
+      modelsResult.value.selectedModelId,
+    );
+  } else {
+    apply(setters.setTranscribeModels, []);
+    apply(setters.setSelectedTranscribeModelId, null);
+  }
+}
+
 export function usePageEditorData(
   projectId: string | undefined,
   documentId: string | undefined,
@@ -144,6 +300,19 @@ export function usePageEditorData(
     string | null
   >(null);
 
+  /**
+   * Which read of this part is the newest, counted across every effect that
+   * writes the part's state rather than per effect.
+   *
+   * Two of them do: the route-mount load below and the job-completion refresh
+   * after it, both filling the same setters from their own request. Guarding
+   * them separately leaves the case where a job finishes while the first load
+   * is still in flight - the refresh lands the new Segments, then the older
+   * response overwrites them, and the page sits on pre-job state until a hard
+   * reload. One counter, so the loser of that race stays quiet.
+   */
+  const contentGenerationRef = useRef(0);
+
   useEffect(() => {
     if (!projectId || !documentId || !partId) {
       setLoading(false);
@@ -156,8 +325,9 @@ export function usePageEditorData(
     }
 
     let cancelled = false;
+    const generation = ++contentGenerationRef.current;
     const apply = <T>(setter: (value: T) => void, value: T) => {
-      if (!cancelled) {
+      if (!cancelled && generation === contentGenerationRef.current) {
         setter(value);
       }
     };
@@ -200,114 +370,22 @@ export function usePageEditorData(
 
         apply(setDocument, doc);
         apply(setPart, selectedPart);
-
-        const [
-          layoutResult,
-          linesResult,
-          transcriptionsResult,
-          pairingResult,
-          modelsResult,
-        ] = await Promise.allSettled([
-          api.getPartLayout(projectId, documentId, partId),
-          api.listPartLines(projectId, documentId, partId),
-          api.listTranscriptions(projectId, documentId),
-          api.getPagePairing(projectId, documentId, partId),
-          loadTranscribeModels(projectId, documentId, partId),
-        ]);
         if (cancelled) return;
 
-        if (layoutResult.status === "fulfilled") {
-          apply(setLayout, layoutResult.value ?? { blocks: [], lines: [] });
-        } else {
-          const err = layoutResult.reason;
-          if (isUnauthorized(err)) {
-            redirectToLogin();
-            return;
-          }
-          apply(
-            setLayoutError,
-            partialLoadMessage(
-              err,
-              "Layout editing is not available for this page.",
-              "Failed to load layout.",
-            ),
-          );
-        }
-
-        if (linesResult.status === "fulfilled") {
-          apply(setLines, linesResult.value);
-        } else {
-          const err = linesResult.reason;
-          if (isUnauthorized(err)) {
-            redirectToLogin();
-            return;
-          }
-          apply(
-            setLineError,
-            partialLoadMessage(
-              err,
-              "Segment geometry is not available for this page.",
-              "Failed to load Segment geometry.",
-            ),
-          );
-        }
-
-        if (transcriptionsResult.status === "fulfilled") {
-          const layers = transcriptionsResult.value;
-          const groundTruth = layers.find(
-            (layer) => layer.kind === "ground_truth",
-          );
-          apply(setTranscriptionLayers, layers);
-          apply(setGroundTruthTranscriptionId, groundTruth?.id ?? null);
-          apply(
-            setSelectedTranscriptionLayerId,
-            groundTruth?.id ?? layers[0]?.id ?? null,
-          );
-        } else {
-          const err = transcriptionsResult.reason;
-          if (isUnauthorized(err)) {
-            redirectToLogin();
-            return;
-          }
-          apply(
-            setPairingError,
-            partialLoadMessage(
-              err,
-              "Pairing is not available for this page.",
-              "Failed to load Pairing progress.",
-            ),
-          );
-        }
-
-        if (pairingResult.status === "fulfilled") {
-          apply(setTextLines, pairingResult.value.text_lines);
-          apply(setPairingProgress, pairingResult.value.pairing_progress);
-        } else {
-          const err = pairingResult.reason;
-          if (isUnauthorized(err)) {
-            redirectToLogin();
-            return;
-          }
-          apply(
-            setPairingError,
-            partialLoadMessage(
-              err,
-              "Pairing is not available for this page.",
-              "Failed to load Pairing progress.",
-            ),
-          );
-        }
-
-        if (modelsResult.status === "fulfilled") {
-          apply(setTranscribeModels, modelsResult.value.models);
-          apply(
-            setSelectedTranscribeModelId,
-            modelsResult.value.selectedModelId,
-          );
-        } else {
-          apply(setTranscribeModels, []);
-          apply(setSelectedTranscribeModelId, null);
-        }
+        await fetchPartContent(projectId, documentId, partId, apply, {
+          setLayout,
+          setLayoutError,
+          setLines,
+          setLineError,
+          setTranscriptionLayers,
+          setGroundTruthTranscriptionId,
+          setSelectedTranscriptionLayerId,
+          setPairingError,
+          setTextLines,
+          setPairingProgress,
+          setTranscribeModels,
+          setSelectedTranscribeModelId,
+        });
       } catch (err) {
         if (isUnauthorized(err)) {
           redirectToLogin();
@@ -331,6 +409,63 @@ export function usePageEditorData(
     // initialDocument is only read on first mount for the current route key.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- route-keyed reset only
   }, [projectId, documentId, partId]);
+
+  const { subscribeToJobCompletion } = useBackgroundJobs();
+
+  /**
+   * The gap this closes: the mount effect above re-syncs the page from a
+   * promise held by the one component instance whose button was clicked. If
+   * that continuation never runs against a live instance - the tab was
+   * backgrounded and its timers throttled, this component remounted, or the
+   * researcher navigated away and back mid-job - nothing else re-syncs, and
+   * only a hard reload recovers. A job going "done" is announced through
+   * BackgroundJobsContext regardless of who started it or whether they are
+   * still around to see it; this effect is what makes that announcement
+   * useful to whichever instance is mounted and showing the affected part
+   * right now.
+   */
+  useEffect(() => {
+    if (!projectId || !documentId || !partId) return;
+
+    let cancelled = false;
+
+    const unsubscribe = subscribeToJobCompletion((event) => {
+      if (cancelled) return;
+      // Only "done" says there is anything new to read; the context is not
+      // expected to announce failed or cancelled runs, but nothing here
+      // should rely on that rather than say so itself.
+      if (event.status !== "done") return;
+      // Not this part's job - the instance actually showing that part (if any
+      // is mounted) gets its own event.
+      if (event.documentPartId !== partId) return;
+
+      const generation = ++contentGenerationRef.current;
+      const apply = <T>(setter: (value: T) => void, value: T) => {
+        if (cancelled || generation !== contentGenerationRef.current) return;
+        setter(value);
+      };
+
+      void fetchPartContent(projectId, documentId, partId, apply, {
+        setLayout,
+        setLayoutError,
+        setLines,
+        setLineError,
+        setTranscriptionLayers,
+        setGroundTruthTranscriptionId,
+        setSelectedTranscriptionLayerId,
+        setPairingError,
+        setTextLines,
+        setPairingProgress,
+        setTranscribeModels,
+        setSelectedTranscribeModelId,
+      });
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [projectId, documentId, partId, subscribeToJobCompletion]);
 
   const partIndex =
     document && part

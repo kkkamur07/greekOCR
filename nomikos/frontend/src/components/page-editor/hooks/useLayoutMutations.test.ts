@@ -24,6 +24,7 @@ const segmentPart = vi.fn();
 const listPartLines = vi.fn();
 const getPartLayout = vi.fn();
 const getPagePairing = vi.fn();
+const createPartLine = vi.fn();
 
 vi.mock("../../../api/client", () => ({
   api: {
@@ -31,6 +32,7 @@ vi.mock("../../../api/client", () => ({
     listPartLines: (...args: unknown[]) => listPartLines(...args),
     getPartLayout: (...args: unknown[]) => getPartLayout(...args),
     getPagePairing: (...args: unknown[]) => getPagePairing(...args),
+    createPartLine: (...args: unknown[]) => createPartLine(...args),
   },
 }));
 
@@ -38,6 +40,18 @@ function setup() {
   const setPairingError = vi.fn();
   const setSubmissionRefusal = vi.fn();
   const trackJobAndWait = vi.fn().mockResolvedValue({ status: "done" });
+  // Captures the listener so a test can fire a completion that this hook did
+  // not start, which is the case the background refresh introduced.
+  const jobCompletionListeners: ((event: unknown) => void)[] = [];
+  const subscribeToJobCompletion = vi.fn(
+    (listener: (event: unknown) => void) => {
+      jobCompletionListeners.push(listener);
+      return () => {
+        const at = jobCompletionListeners.indexOf(listener);
+        if (at >= 0) jobCompletionListeners.splice(at, 1);
+      };
+    },
+  );
 
   const view = renderHook(() =>
     useLayoutMutations({
@@ -58,10 +72,17 @@ function setup() {
       onDrawComplete: vi.fn(),
       setSubmissionRefusal,
       trackJobAndWait,
+      subscribeToJobCompletion,
     }),
   );
 
-  return { view, setPairingError, setSubmissionRefusal, trackJobAndWait };
+  return {
+    view,
+    setPairingError,
+    setSubmissionRefusal,
+    trackJobAndWait,
+    jobCompletionListeners,
+  };
 }
 
 /**
@@ -182,5 +203,186 @@ describe("useLayoutMutations auto segment", () => {
     // The jobs panel already reported it.
     expect(setPairingError).not.toHaveBeenCalledWith(expect.any(String));
     expect(setSubmissionRefusal).not.toHaveBeenCalledWith(expect.any(String));
+  });
+
+  it("clears the undo and redo stacks once the segmentation reload replaces the Segments", async () => {
+    // The segmentation already replaced every Segment on the server by the
+    // time the reload runs. A stack entry from before it names a line id the
+    // reload just made up: an undo would pop it, applyCanvasEditInverse would
+    // silently no-op against the new lines, and the paired patchPartLine or
+    // deletePartLine call would 404.
+    createPartLine.mockResolvedValue({
+      id: "line-1",
+      order: 0,
+      kind: "rectangle",
+      points: [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+      ],
+      source: "manual",
+      manual_geometry: false,
+      line_transcriptions: [],
+    });
+    const { view } = setup();
+
+    await act(async () => {
+      await view.result.current.replaceWithManualLine("rectangle", [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+      ]);
+    });
+    expect(view.result.current.canUndo).toBe(true);
+    const revisionBeforeSegmentation = view.result.current.editUndoRevision;
+
+    await act(async () => {
+      await view.result.current.runAutoSegment();
+    });
+
+    expect(view.result.current.canUndo).toBe(false);
+    expect(view.result.current.canRedo).toBe(false);
+    expect(view.result.current.editUndoRevision).toBeGreaterThan(
+      revisionBeforeSegmentation,
+    );
+  });
+
+  it("clears the undo stack when a job this hook did not start replaces the Segments", async () => {
+    // The background refresh in usePageEditorData reloads the same lines from a
+    // sibling hook, so a job that finished while the tab was in the background
+    // leaves this stack naming line ids that refresh has already replaced.
+    createPartLine.mockResolvedValue({
+      id: "line-1",
+      order: 0,
+      kind: "rectangle",
+      points: [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+      ],
+      source: "manual",
+      manual_geometry: false,
+      line_transcriptions: [],
+    });
+    const { view, jobCompletionListeners } = setup();
+
+    await act(async () => {
+      await view.result.current.replaceWithManualLine("rectangle", [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+      ]);
+    });
+    expect(view.result.current.canUndo).toBe(true);
+    const revisionBefore = view.result.current.editUndoRevision;
+
+    act(() => {
+      for (const listener of jobCompletionListeners) {
+        listener({
+          jobId: "job-9",
+          kind: "segmentation",
+          documentPartId: "part-1",
+          status: "done",
+        });
+      }
+    });
+
+    expect(view.result.current.canUndo).toBe(false);
+    expect(view.result.current.canRedo).toBe(false);
+    expect(view.result.current.editUndoRevision).toBeGreaterThan(
+      revisionBefore,
+    );
+  });
+
+  it("leaves the undo stack alone for a job on another page", async () => {
+    createPartLine.mockResolvedValue({
+      id: "line-1",
+      order: 0,
+      kind: "rectangle",
+      points: [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+      ],
+      source: "manual",
+      manual_geometry: false,
+      line_transcriptions: [],
+    });
+    const { view, jobCompletionListeners } = setup();
+
+    await act(async () => {
+      await view.result.current.replaceWithManualLine("rectangle", [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+      ]);
+    });
+
+    act(() => {
+      for (const listener of jobCompletionListeners) {
+        listener({
+          jobId: "job-9",
+          kind: "segmentation",
+          documentPartId: "part-2",
+          status: "done",
+        });
+      }
+    });
+
+    expect(view.result.current.canUndo).toBe(true);
+  });
+
+  it("leaves the undo stack alone for a job that does not touch geometry", async () => {
+    createPartLine.mockResolvedValue({
+      id: "line-1",
+      order: 0,
+      kind: "rectangle",
+      points: [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+      ],
+      source: "manual",
+      manual_geometry: false,
+      line_transcriptions: [],
+    });
+    const { view, jobCompletionListeners } = setup();
+
+    await act(async () => {
+      await view.result.current.replaceWithManualLine("rectangle", [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+      ]);
+    });
+
+    // Transcription writes text onto lines that are already there and keeps
+    // their ids, and a segmentation that failed wrote nothing at all. Neither
+    // invalidates the entry above, so running OCR must not silently cost the
+    // researcher the geometry edit they just made.
+    act(() => {
+      for (const listener of jobCompletionListeners) {
+        listener({
+          jobId: "job-10",
+          kind: "transcription-page",
+          documentPartId: "part-1",
+          status: "done",
+        });
+        listener({
+          jobId: "job-11",
+          kind: "transcription-segment",
+          documentPartId: "part-1",
+          status: "done",
+        });
+        listener({
+          jobId: "job-12",
+          kind: "segmentation",
+          documentPartId: "part-1",
+          status: "failed",
+        });
+      }
+    });
+
+    expect(view.result.current.canUndo).toBe(true);
   });
 });

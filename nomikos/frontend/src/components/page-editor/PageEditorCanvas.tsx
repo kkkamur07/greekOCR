@@ -34,9 +34,18 @@ import {
 } from "./pageEditorSettings";
 import { segmentNumbersById, segmentsInNumberOrder } from "./segmentNumbering";
 import { resetPanVelocityTracking } from "../../utils/zoomPanVelocity";
+import { PageEditorCanvasIsland } from "./PageEditorCanvasIsland";
 
 const ZOOM_ANIMATION_MS = 220;
 const ZOOM_BUTTON_STEP = 0.12;
+const MIN_SCALE = 0.15;
+const MAX_SCALE = 8;
+/**
+ * The island is 40px tall and sits 14px off the bottom edge. Fitting has to
+ * treat that strip as gone, or a fitted page parks its final lines behind it.
+ */
+const ISLAND_RESERVED_PX = 70;
+const FIT_PADDING_PX = 24;
 
 type CanvasSurfaceProps = {
   imageUrl: string;
@@ -64,6 +73,12 @@ type CanvasSurfaceProps = {
   onSelectLine: (lineId: string) => void;
   onSelectSegment: (lineId: string) => void;
   segmentVertexEditEnabled: boolean;
+  /**
+   * Space is held, so the pointer belongs to the pan gesture no matter which
+   * tool is armed. Drawing handlers stand down rather than the tool switching,
+   * which is what makes the pan temporary instead of a mode change.
+   */
+  panOverride: boolean;
   suppressBaselineSegmentId: string | null;
   vertexEditPoints: LinePoint[] | null;
   draggedVertexIndex: number | null;
@@ -99,6 +114,7 @@ function CanvasSurfaceInner({
   onDraftPolygonCursor,
   settings,
   zoomLevel,
+  panOverride,
   onDraftStart,
   onDraftMove,
   onRectangleDrawn,
@@ -213,11 +229,13 @@ function CanvasSurfaceInner({
         aria-label="Page geometry canvas"
         viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
         onPointerDown={(event) => {
+          if (panOverride) return;
           if (!drawingRectangle) return;
           event.stopPropagation();
           onDraftStart(eventPoint(event));
         }}
         onPointerMove={(event) => {
+          if (panOverride) return;
           if (drawingPolygon) {
             onDraftPolygonCursor(eventPoint(event));
           }
@@ -231,16 +249,19 @@ function CanvasSurfaceInner({
           onDraftMove(eventPoint(event));
         }}
         onPointerUp={(event) => {
+          if (panOverride) return;
           if (!drawingRectangle || !draftStart) return;
           event.stopPropagation();
           onRectangleDrawn(eventPoint(event));
         }}
         onClick={(event) => {
+          if (panOverride) return;
           if (!drawingPolygon) return;
           event.stopPropagation();
           onPolygonPoint(eventPoint(event));
         }}
         onDoubleClick={(event) => {
+          if (panOverride) return;
           if (!drawingPolygon) return;
           event.stopPropagation();
           onPolygonComplete();
@@ -250,8 +271,9 @@ function CanvasSurfaceInner({
           inset: 0,
           width: canvasWidth,
           height: canvasHeight,
-          cursor:
-            drawingRectangle || drawingPolygon
+          cursor: panOverride
+            ? "grab"
+            : drawingRectangle || drawingPolygon
               ? "crosshair"
               : isVertexInteracting
                 ? "grabbing"
@@ -489,7 +511,13 @@ type PageEditorCanvasProps = Omit<
   | "draftPolygonCursor"
   | "onDraftPolygonCursor"
   | "onSelectVertex"
+  | "panOverride"
 > & {
+  /** Tool controls for the on-canvas island. */
+  onSelectTool: () => void;
+  onPickDrawMode: (mode: "rectangle" | "polygon") => void;
+  canDelete: boolean;
+  onDeleteSelected: () => void;
   selectedVertexIndex: number | null;
   onSelectedVertexChange: (vertexIndex: number | null) => void;
   commitSignal: number;
@@ -514,6 +542,10 @@ export function PageEditorCanvas({
   draftPolygon,
   settings,
   segmentVertexEditEnabled,
+  onSelectTool,
+  onPickDrawMode,
+  canDelete,
+  onDeleteSelected,
   selectedVertexIndex,
   onSelectedVertexChange,
   commitSignal,
@@ -526,6 +558,7 @@ export function PageEditorCanvas({
   onSegmentPointsChange,
 }: PageEditorCanvasProps) {
   const [zoomLevel, setZoomLevel] = useState(1);
+  const [spaceHeld, setSpaceHeld] = useState(false);
   const [draftEnd, setDraftEnd] = useState<LinePoint | null>(null);
   const [draftPolygonCursor, setDraftPolygonCursor] =
     useState<LinePoint | null>(null);
@@ -663,6 +696,51 @@ export function PageEditorCanvas({
     };
   }, [isVertexInteracting, onSegmentPointsChange, onSelectedVertexChange]);
 
+  /**
+   * Hold Space to pan from any tool.
+   *
+   * Without this the only way to reach another part of the page mid-drawing is
+   * to disarm the tool, pan, and arm it again, which is why a drawing tool and
+   * a pan gesture kept fighting over the left button. Every canvas tool a
+   * researcher already uses (Figma, Photoshop, Excalidraw, tldraw) binds Space
+   * to exactly this, so it costs nothing to learn.
+   *
+   * Typing a space into the transcription strip must not pan the page, hence
+   * the editable-target guard. preventDefault stops the browser scrolling the
+   * pane out from under the gesture.
+   */
+  useEffect(() => {
+    function isEditableTarget(target: EventTarget | null): boolean {
+      if (!(target instanceof HTMLElement)) return false;
+      if (target.isContentEditable) return true;
+      const tag = target.tagName;
+      return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+    }
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.code !== "Space" || event.repeat) return;
+      if (isEditableTarget(event.target)) return;
+      event.preventDefault();
+      setSpaceHeld(true);
+    }
+    function handleKeyUp(event: globalThis.KeyboardEvent) {
+      if (event.code !== "Space") return;
+      setSpaceHeld(false);
+    }
+    // Alt-tabbing away with Space down would otherwise leave the canvas stuck
+    // in pan override, because the keyup lands on another window.
+    function releaseOnBlur() {
+      setSpaceHeld(false);
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("blur", releaseOnBlur);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", releaseOnBlur);
+    };
+  }, []);
+
   const zoomAnimated = (direction: "in" | "out") => {
     const ref = transformRef.current;
     if (!ref) return;
@@ -670,13 +748,53 @@ export function PageEditorCanvas({
     else ref.zoomOut(ZOOM_BUTTON_STEP, ZOOM_ANIMATION_MS);
   };
 
+  /**
+   * Fit the whole folio into the visible canvas.
+   *
+   * centerView only re-centres at the current scale, which is not what a
+   * button called "Fit page to view" promises. This scales to the pane and
+   * keeps the island's own height out of the usable area, because the last
+   * line of a folio matters as much as the first and must not land under the
+   * toolbar the moment someone presses fit.
+   */
+  const fitToView = () => {
+    const ref = transformRef.current;
+    const wrapper = ref?.instance.wrapperComponent;
+    if (!ref || !wrapper) return;
+    const viewWidth = wrapper.offsetWidth;
+    const viewHeight = wrapper.offsetHeight;
+    if (!viewWidth || !viewHeight || !canvasWidth || !canvasHeight) return;
+
+    const usableWidth = Math.max(1, viewWidth - FIT_PADDING_PX * 2);
+    const usableHeight = Math.max(
+      1,
+      viewHeight - ISLAND_RESERVED_PX - FIT_PADDING_PX,
+    );
+    const scale = Math.min(
+      MAX_SCALE,
+      Math.max(
+        MIN_SCALE,
+        Math.min(usableWidth / canvasWidth, usableHeight / canvasHeight),
+      ),
+    );
+    ref.setTransform(
+      (viewWidth - canvasWidth * scale) / 2,
+      (viewHeight - ISLAND_RESERVED_PX - canvasHeight * scale) / 2,
+      scale,
+      ZOOM_ANIMATION_MS,
+    );
+  };
+
   return (
-    <div className="pe-canvas-host">
+    <div
+      className={`pe-canvas-host${spaceHeld ? " pe-canvas-host--panning" : ""}`}
+      onContextMenu={(event) => event.preventDefault()}
+    >
       <TransformWrapper
         ref={transformRef}
         initialScale={1}
-        minScale={0.15}
-        maxScale={8}
+        minScale={MIN_SCALE}
+        maxScale={MAX_SCALE}
         centerOnInit={false}
         limitToBounds={false}
         wheel={{
@@ -694,11 +812,21 @@ export function PageEditorCanvas({
           animationTime: ZOOM_ANIMATION_MS,
         }}
         panning={{
+          // A held Space outranks the drawing lockout: that is the whole point
+          // of the override. Vertex dragging still wins over both, or the page
+          // would slide while a handle is being moved.
           disabled:
-            isDrawing || isVertexInteracting || vertexInteractingRef.current,
+            (isDrawing && !spaceHeld) ||
+            isVertexInteracting ||
+            vertexInteractingRef.current,
           velocityDisabled: false,
           wheelPanning: false,
           allowLeftClickPan: true,
+          // Middle-drag is the mouse convention; right-drag is what an
+          // eScriptorium user reaches for. Both leave the left button to the
+          // tool, so neither can be mistaken for drawing.
+          allowMiddleClickPan: true,
+          allowRightClickPan: true,
           excluded: ["pe-vertex-handle", "pe-segment-shape"],
         }}
         zoomAnimation={{
@@ -721,49 +849,27 @@ export function PageEditorCanvas({
         onPanningStart={resetPanVelocityTracking}
         onTransformed={(ref) => setZoomLevel(ref.state.scale)}
       >
-        {({ resetTransform, centerView }) => (
+        {({ resetTransform }) => (
           <>
-            <div className="pe-zoom">
-              <button
-                type="button"
-                className="pe-zoom__btn"
-                onClick={() => zoomAnimated("out")}
-                aria-label="Zoom out"
-              >
-                −
-              </button>
-              <div className="pe-zoom__label" aria-live="polite">
-                {Math.round(zoomLevel * 100)}%
-              </div>
-              <button
-                type="button"
-                className="pe-zoom__btn"
-                onClick={() => zoomAnimated("in")}
-                aria-label="Zoom in"
-              >
-                +
-              </button>
-              <button
-                type="button"
-                className="pe-zoom__btn"
-                style={{ fontSize: "0.65rem" }}
-                onClick={() => centerView(undefined, ZOOM_ANIMATION_MS)}
-                aria-label="Fit page to view"
-                title="Fit to view"
-              >
-                ⊡
-              </button>
-              <button
-                type="button"
-                className="pe-zoom__btn"
-                style={{ fontSize: "0.65rem" }}
-                onClick={() => resetTransform()}
-                aria-label="Reset zoom"
-                title="Reset zoom"
-              >
-                ⟲
-              </button>
-            </div>
+            <PageEditorCanvasIsland
+              tool={
+                drawingRectangle
+                  ? "rectangle"
+                  : drawingPolygon
+                    ? "polygon"
+                    : "none"
+              }
+              onSelectTool={onSelectTool}
+              onPickDrawMode={onPickDrawMode}
+              canDelete={canDelete}
+              onDeleteSelected={onDeleteSelected}
+              zoomPercent={Math.round(zoomLevel * 100)}
+              onZoomIn={() => zoomAnimated("in")}
+              onZoomOut={() => zoomAnimated("out")}
+              onFitToView={fitToView}
+              onResetZoom={() => resetTransform()}
+              panOverride={spaceHeld}
+            />
             <TransformComponent
               wrapperStyle={{
                 width: "100%",
@@ -805,6 +911,7 @@ export function PageEditorCanvas({
                 onSelectLine={onSelectLine}
                 onSelectSegment={onSelectSegment}
                 segmentVertexEditEnabled={segmentVertexEditEnabled}
+                panOverride={spaceHeld}
                 suppressBaselineSegmentId={vertexEdit?.segmentId ?? null}
                 vertexEditPoints={vertexEditPoints}
                 draggedVertexIndex={vertexEdit?.draggedIndex ?? null}

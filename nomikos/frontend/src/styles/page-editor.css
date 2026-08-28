@@ -235,6 +235,14 @@
 .pe-infstat__state {
   font-weight: 600;
 }
+.pe-infstat--cloud {
+  color: var(--text-3);
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+.pe-infstat--cloud .pe-infstat__dot {
+  background: var(--text-4);
+}
 .pe-infstat--connected {
   color: var(--green);
   background: var(--green-bg);
@@ -317,33 +325,6 @@
 }
 .pe-toolbar__cluster:first-of-type {
   border-left: none;
-}
-
-.pe-toolbar__modes {
-  display: flex;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-}
-.pe-toolbar__mode {
-  padding: 5px 11px;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  border: none;
-  background: transparent;
-  color: var(--text-3);
-  cursor: pointer;
-}
-.pe-toolbar__mode:first-child {
-  border-right: 1px solid var(--border);
-}
-.pe-toolbar__mode--active {
-  background: var(--navy);
-  color: #fff;
-}
-.pe-toolbar__mode:focus-visible {
-  outline: 2px solid var(--navy);
-  outline-offset: 1px;
 }
 
 /* OCR model - always visible in toolbar */
@@ -442,12 +423,6 @@
   background: var(--surface);
 }
 .pe-tb-btn--active .pe-kbd,
-.pe-toolbar__mode--active .pe-kbd {
-  color: rgba(255, 255, 255, 0.75);
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.2);
-}
-
 .pe-dropdown-wrap {
   position: relative;
 }
@@ -497,6 +472,21 @@
 }
 .pe-dd-item--action {
   margin-top: 4px;
+}
+/*
+  Only items that carry a trailing hint become rows, so the plain text items
+  keep the block layout they were written against.
+*/
+.pe-dd-item:has(.pe-dd-meta) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.pe-dd-meta {
+  font-size: 0.6875rem;
+  color: var(--text-4);
+  white-space: nowrap;
 }
 .pe-dd-divider {
   height: 1px;
@@ -801,34 +791,126 @@
   border-color: var(--red);
 }
 
-.pe-zoom {
+/* ─── Canvas island - tools and zoom, floating over the page ─────
+   Bottom centre, because that is where a hand already rests after a
+   drag and it is the one edge the transcription strip does not fight
+   over (the strip is a flex sibling below the canvas host, not an
+   overlay). ─────────────────────────────────────────────────────── */
+.pe-island {
   position: absolute;
-  bottom: 12px;
-  left: 12px;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
+  padding: 5px;
   z-index: 5;
-}
-.pe-zoom__btn {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-2);
+  border-radius: 10px;
   background: var(--surface);
-  color: var(--text-2);
-  font-size: 0.875rem;
-  cursor: pointer;
-  box-shadow: var(--shadow-sm);
+  box-shadow:
+    0 1px 2px rgba(26, 26, 26, 0.06),
+    0 4px 16px rgba(26, 26, 26, 0.13);
+  max-width: calc(100% - 24px);
+  overflow-x: auto;
 }
-.pe-zoom__btn:focus-visible {
+/* Space is held: every tool is the pan tool, so the armed tool stops
+   claiming to be in charge. */
+.pe-island--panning .pe-island__btn--active {
+  background: var(--surface-2);
+  border-color: transparent;
+  color: var(--text-3);
+}
+
+.pe-island__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.pe-island__btn svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+.pe-island__btn:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+.pe-island__btn--active {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: #fff;
+}
+.pe-island__btn--active:hover:not(:disabled) {
+  background: var(--navy);
+}
+.pe-island__btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.pe-island__btn--icon {
+  width: 30px;
+  padding: 0;
+  justify-content: center;
+}
+.pe-island__btn:focus-visible,
+.pe-island__zoom:focus-visible {
   outline: 2px solid var(--navy);
   outline-offset: 2px;
 }
-.pe-zoom__label {
-  font-size: 0.6875rem;
-  color: var(--text-4);
+
+.pe-island__divider {
+  width: 1px;
+  height: 20px;
+  margin: 0 4px;
+  background: var(--border);
+  flex: none;
+}
+
+.pe-island__zoom {
+  min-width: 46px;
+  height: 30px;
   padding: 0 4px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.pe-island__zoom:hover {
+  background: var(--surface-2);
+  color: var(--text-2);
+}
+
+/* A held Space reads as pan everywhere, not only on the SVG surface. */
+.pe-canvas-host--panning {
+  cursor: grab;
+}
+
+@media (max-width: 720px) {
+  .pe-island__label {
+    display: none;
+  }
+  .pe-island__btn {
+    width: 30px;
+    padding: 0;
+    justify-content: center;
+  }
 }
 
 /* ─── PDF pane - collapsible + resizable ────────────────────────── */
@@ -1572,4 +1654,33 @@
 }
 .pe-job-item--cancelled .pe-job-item__status {
   color: var(--text-3);
+}
+
+/* ─── Toolbar quick runs (Segment / Transcribe) ──────────────────── */
+.pe-tb-btn__icon {
+  width: 13px;
+  height: 13px;
+  display: block;
+  flex: none;
+}
+.pe-tb-btn__scope {
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--text-4);
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--surface-2);
+}
+.pe-tb-btn:disabled .pe-tb-btn__scope {
+  background: transparent;
+}
+
+/* The inference state sits at the foot of the Workflow menu now. */
+.pe-dd-footer {
+  padding: 4px 6px 2px;
+}
+.pe-dd-footer .pe-infstat {
+  width: 100%;
+  justify-content: flex-start;
 }

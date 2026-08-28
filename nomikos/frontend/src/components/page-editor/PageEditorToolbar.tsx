@@ -6,7 +6,6 @@ import type {
   LineResponse,
 } from "../../api/client";
 import { PageEditorBackLink } from "./PageEditorNavHeader";
-import { editorButton } from "./editorButton";
 import { PageEditorModelSelect } from "./PageEditorModelSelect";
 import { PageEditorSharingMenu } from "./PageEditorSharingMenu";
 import { PageEditorPageXmlButton } from "./PageEditorPageXmlButton";
@@ -14,20 +13,13 @@ import { exportFileStem } from "../../utils/exportFilename";
 import { SettingsIcon } from "./EditorIcons";
 import { PageEditorSettingsPanel } from "./PageEditorSettingsPanel";
 import { PageEditorInferenceStatus } from "./PageEditorInferenceStatus";
-import { PAGE_EDITOR_SHORTCUTS } from "./pageEditorShortcuts";
 import type { PageEditorCanvasSettings } from "./pageEditorSettings";
-import { ToolbarKbd } from "./ToolbarKbd";
 
 type PageEditorToolbarProps = {
   projectId: string | undefined;
   documentId: string | undefined;
   document: DocumentWithPartsResponse;
   partIndex: number;
-  editorMode: "layout" | "transcription";
-  onEditorModeChange: (mode: "layout" | "transcription") => void;
-  drawMode: "none" | "rectangle" | "polygon";
-  onPickDrawMode: (mode: "rectangle" | "polygon") => void;
-  onPanSelect: () => void;
   lines: LineResponse[];
   pairingProgress: {
     paired_lines: number;
@@ -36,14 +28,11 @@ type PageEditorToolbarProps = {
   };
   partId: string;
   selectedSegmentId: string | null;
-  selectedLineId: string | null;
   textLines: { order: number; text: string; paired_line_id: string | null }[];
   onPairTextLine: (order: number) => void;
   onDocumentWorkflowChange: (
     workflow: DocumentWithPartsResponse["workflow"],
   ) => void;
-  onDeleteSelectedSegment: () => void;
-  onResetSelectedLine: () => void;
   actionsOpen: boolean;
   onActionsOpenChange: (open: boolean) => void;
   segmenting: boolean;
@@ -76,20 +65,12 @@ export function PageEditorToolbar({
   partId,
   document,
   partIndex,
-  editorMode,
-  onEditorModeChange,
-  drawMode,
-  onPickDrawMode,
-  onPanSelect,
   lines,
   pairingProgress,
   selectedSegmentId,
-  selectedLineId,
   textLines,
   onPairTextLine,
   onDocumentWorkflowChange,
-  onDeleteSelectedSegment,
-  onResetSelectedLine,
   actionsOpen,
   onActionsOpenChange,
   segmenting,
@@ -156,12 +137,22 @@ export function PageEditorToolbar({
         : "Transcribing"
       : null;
 
+  const selectedModelName =
+    transcribeModels.find((model) => model.id === selectedTranscribeModelId)
+      ?.name ?? "not selected";
+
+  // The quick button transcribes what the researcher is looking at: the
+  // selected segment if there is one, otherwise the page. Naming the scope on
+  // the button is what keeps a one-click run from being a guess.
+  const transcribeScope = selectedSegmentId ? "segment" : "page";
+  const canTranscribe =
+    !processing &&
+    Boolean(selectedTranscribeModelId) &&
+    (Boolean(selectedSegmentId) || lines.length > 0);
+
   return (
     <header className="pe-toolbar" role="banner">
       <span className="visually-hidden">ANNOTE PAGE WORKSPACE</span>
-      <h2 className="visually-hidden">
-        {editorMode === "layout" ? "Layout edit" : "Transcription edit"}
-      </h2>
       <span className="visually-hidden">
         Pairing progress: {pairingProgress.paired_lines}/
         {pairingProgress.total_lines} Lines paired
@@ -214,11 +205,6 @@ export function PageEditorToolbar({
       </div>
 
       <div className="pe-toolbar__center" aria-label="Page statistics">
-        <PageEditorInferenceStatus
-          loading={hostPreferenceLoading}
-          hasLocalCapacity={hasLocalCapacity}
-          preferLocalInference={preferLocalInference}
-        />
         {processingLabel && (
           <div
             className="pe-toolbar__processing"
@@ -257,85 +243,6 @@ export function PageEditorToolbar({
       </div>
 
       <div className="pe-toolbar__actions">
-        <div
-          className="pe-toolbar__modes"
-          role="group"
-          aria-label="Editor mode"
-        >
-          <button
-            type="button"
-            className={`pe-toolbar__mode ${editorMode === "layout" ? "pe-toolbar__mode--active" : ""}`}
-            aria-pressed={editorMode === "layout"}
-            onClick={() => onEditorModeChange("layout")}
-          >
-            Layout
-          </button>
-          <button
-            type="button"
-            className={`pe-toolbar__mode ${editorMode === "transcription" ? "pe-toolbar__mode--active" : ""}`}
-            aria-label="Transcription edit"
-            aria-pressed={editorMode === "transcription"}
-            onClick={() => onEditorModeChange("transcription")}
-          >
-            Transcription
-          </button>
-        </div>
-
-        <div
-          className="pe-toolbar__cluster"
-          role="group"
-          aria-label="Drawing tools"
-        >
-          <button
-            type="button"
-            onClick={onPanSelect}
-            className={editorButton(
-              drawMode === "none" && editorMode === "layout",
-            )}
-            title={`Select / pan (${PAGE_EDITOR_SHORTCUTS.SELECT})`}
-            aria-keyshortcuts={PAGE_EDITOR_SHORTCUTS.SELECT}
-          >
-            Select
-          </button>
-          <button
-            type="button"
-            aria-label={`Rectangle segment (${PAGE_EDITOR_SHORTCUTS.RECTANGLE})`}
-            aria-keyshortcuts={PAGE_EDITOR_SHORTCUTS.RECTANGLE}
-            title={`Draw rectangle segment (${PAGE_EDITOR_SHORTCUTS.RECTANGLE})`}
-            onClick={() => onPickDrawMode("rectangle")}
-            className={editorButton(drawMode === "rectangle")}
-          >
-            Rect
-            <ToolbarKbd>{PAGE_EDITOR_SHORTCUTS.RECTANGLE}</ToolbarKbd>
-          </button>
-          <button
-            type="button"
-            aria-label={`Polygon segment (${PAGE_EDITOR_SHORTCUTS.POLYGON})`}
-            aria-keyshortcuts={PAGE_EDITOR_SHORTCUTS.POLYGON}
-            title={`Draw polygon segment (${PAGE_EDITOR_SHORTCUTS.POLYGON})`}
-            onClick={() => onPickDrawMode("polygon")}
-            className={editorButton(drawMode === "polygon")}
-          >
-            Poly
-            <ToolbarKbd>{PAGE_EDITOR_SHORTCUTS.POLYGON}</ToolbarKbd>
-          </button>
-          <button
-            type="button"
-            aria-label={`Delete segment (${PAGE_EDITOR_SHORTCUTS.DELETE})`}
-            aria-keyshortcuts={PAGE_EDITOR_SHORTCUTS.DELETE}
-            disabled={!selectedSegmentId && !selectedLineId}
-            onClick={() => {
-              if (selectedSegmentId) void onDeleteSelectedSegment();
-              if (selectedLineId) void onResetSelectedLine();
-            }}
-            className="pe-tb-btn"
-            title={`Delete selected (${PAGE_EDITOR_SHORTCUTS.DELETE})`}
-          >
-            Del
-            <ToolbarKbd>{PAGE_EDITOR_SHORTCUTS.DELETE}</ToolbarKbd>
-          </button>
-        </div>
-
         <div className="pe-toolbar__cluster">
           <PageEditorModelSelect
             transcribeModels={transcribeModels}
@@ -347,6 +254,72 @@ export function PageEditorToolbar({
           />
         </div>
 
+        {/*
+          The two runs a researcher makes all day get their own buttons. Behind
+          a menu they taxed the most repeated action in the editor; the menu
+          keeps the variants that need a choice made first.
+        */}
+        <div
+          className="pe-toolbar__cluster"
+          role="group"
+          aria-label="Run inference"
+        >
+          <button
+            type="button"
+            className="pe-tb-btn"
+            disabled={processing}
+            onClick={() => {
+              onActionsOpenChange(false);
+              void onRunAutoSegment();
+            }}
+            title="Segment this page with blla-segment"
+          >
+            <svg
+              className="pe-tb-btn__icon"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              aria-hidden="true"
+            >
+              <rect x="2.2" y="2.6" width="11.6" height="3" rx="0.8" />
+              <rect x="2.2" y="6.9" width="11.6" height="3" rx="0.8" />
+              <path d="M2.2 12.6h7.4" />
+            </svg>
+            {segmenting ? "Segmenting…" : "Segment"}
+          </button>
+          <button
+            type="button"
+            className="pe-tb-btn"
+            disabled={!canTranscribe}
+            onClick={() => {
+              onActionsOpenChange(false);
+              if (selectedSegmentId) void onRunSegmentOcr();
+              else void onRunPageOcr();
+            }}
+            title={
+              selectedTranscribeModelId
+                ? `Transcribe the ${transcribeScope} with ${selectedModelName}`
+                : "Choose a model before transcribing"
+            }
+          >
+            <svg
+              className="pe-tb-btn__icon"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              aria-hidden="true"
+            >
+              <path d="M2.6 4.2h10.8M8 4.2v8.2M5.6 12.4h4.8" />
+            </svg>
+            {ocrRunning ? "Transcribing…" : "Transcribe"}
+            <span className="pe-tb-btn__scope">{transcribeScope}</span>
+          </button>
+        </div>
+
         <div className="pe-toolbar__cluster pe-dropdown-wrap" ref={dropdownRef}>
           <button
             type="button"
@@ -355,14 +328,10 @@ export function PageEditorToolbar({
             onClick={() => onActionsOpenChange(!actionsOpen)}
             className={`pe-tb-btn${actionsOpen ? " pe-tb-btn--on" : ""}`}
           >
-            Process ▾
+            Workflow ▾
           </button>
           {actionsOpen && (
-            <div
-              className="pe-dropdown"
-              role="menu"
-              aria-label="Processing actions"
-            >
+            <div className="pe-dropdown" role="menu" aria-label="Workflow">
               <div className="pe-dd-section">Segment</div>
               <p className="pe-dd-model">
                 Engine <strong>blla-segment</strong> (fixed)
@@ -380,14 +349,9 @@ export function PageEditorToolbar({
                 {segmenting ? "Segmenting…" : "Auto segment page"}
               </button>
               <div className="pe-dd-divider" />
-              <div className="pe-dd-section">HTR</div>
+              <div className="pe-dd-section">Transcribe</div>
               <p className="pe-dd-model">
-                Model{" "}
-                <strong>
-                  {transcribeModels.find(
-                    (m) => m.id === selectedTranscribeModelId,
-                  )?.name ?? "not selected"}
-                </strong>
+                Model <strong>{selectedModelName}</strong>
               </p>
               <button
                 type="button"
@@ -401,7 +365,7 @@ export function PageEditorToolbar({
                 }}
                 className="pe-dd-item"
               >
-                {ocrRunning ? "OCR…" : "OCR selected segment"}
+                {ocrRunning ? "Transcribing…" : "Selected segment"}
               </button>
               <button
                 type="button"
@@ -415,8 +379,44 @@ export function PageEditorToolbar({
                 }}
                 className="pe-dd-item"
               >
-                {ocrRunning ? "OCR…" : "OCR full page"}
+                {ocrRunning ? "Transcribing…" : "Whole page"}
               </button>
+              {/*
+                Export is a workflow step, not a permanent fixture of the bar.
+                PDF and XML were two of the least-pressed controls in the
+                editor holding two of its most valuable slots, next to the
+                settings gear. In the menu they sit beside Sharing, which is
+                the same act at a different fidelity.
+              */}
+              <div className="pe-dd-divider" />
+              <div className="pe-dd-section">Export</div>
+              <button
+                type="button"
+                role="menuitemcheckbox"
+                className="pe-dd-item"
+                aria-checked={transcriptionPdfOpen}
+                onClick={() => {
+                  onActionsOpenChange(false);
+                  if (transcriptionPdfOpen) onCloseTranscriptionPdf();
+                  else onOpenTranscriptionPdf();
+                }}
+              >
+                Transcription PDF
+                <span className="pe-dd-meta">
+                  {transcriptionPdfOpen ? "open" : "preview"}
+                </span>
+              </button>
+              {projectId && documentId && (
+                <PageEditorPageXmlButton
+                  projectId={projectId}
+                  documentId={documentId}
+                  partId={partId}
+                  className="pe-dd-item"
+                  role="menuitem"
+                  onActivate={() => onActionsOpenChange(false)}
+                  downloadFilename={`${exportFileStem(document.name, partIndex)}.zip`}
+                />
+              )}
               {projectId && documentId && (
                 <PageEditorSharingMenu
                   projectId={projectId}
@@ -426,32 +426,25 @@ export function PageEditorToolbar({
                   disabled={processing}
                 />
               )}
+              {/*
+                Where the work runs belongs with the menu that starts the work.
+                In the bar it announced the ordinary state permanently, which
+                teaches people to stop reading the one spot a real warning would
+                appear in. Here it is one glance away from the button that cares.
+              */}
+              <div className="pe-dd-divider" />
+              <div className="pe-dd-footer">
+                <PageEditorInferenceStatus
+                  loading={hostPreferenceLoading}
+                  hasLocalCapacity={hasLocalCapacity}
+                  preferLocalInference={preferLocalInference}
+                />
+              </div>
             </div>
           )}
         </div>
 
         <div className="pe-toolbar__cluster">
-          <button
-            type="button"
-            className={`pe-tb-btn${transcriptionPdfOpen ? " pe-tb-btn--on" : ""}`}
-            aria-pressed={transcriptionPdfOpen}
-            aria-label="Toggle transcription PDF"
-            title="Toggle transcription PDF"
-            onClick={() => {
-              if (transcriptionPdfOpen) onCloseTranscriptionPdf();
-              else onOpenTranscriptionPdf();
-            }}
-          >
-            PDF
-          </button>
-          {projectId && documentId && (
-            <PageEditorPageXmlButton
-              projectId={projectId}
-              documentId={documentId}
-              partId={partId}
-              downloadFilename={`${exportFileStem(document.name, partIndex)}.zip`}
-            />
-          )}
           <div className="pe-dropdown-wrap" ref={settingsRef}>
             <button
               type="button"

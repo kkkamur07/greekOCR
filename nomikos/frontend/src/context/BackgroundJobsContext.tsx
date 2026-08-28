@@ -38,6 +38,24 @@ export type TrackedBackgroundJob = {
   execution: JobExecution | null;
 };
 
+/**
+ * What a job leaving the "done" state announces to anyone that was not the
+ * one waiting on it.
+ *
+ * `trackAndWait`'s caller already gets the full `JobResponse` back from its
+ * own promise. This is for the other case: a page editor instance that is
+ * mounted right now but did not start the job (or started it but was
+ * unmounted, backgrounded, or navigated away when the promise continuation
+ * would have run). `documentPartId` is how a listener decides the result is
+ * its own to react to, without the context knowing anything about pages.
+ */
+export type JobCompletionEvent = {
+  jobId: string;
+  kind: PageEditorJobKind;
+  documentPartId: string | null;
+  status: JobStatus;
+};
+
 type BackgroundJobsContextValue = {
   jobs: TrackedBackgroundJob[];
   activeCount: number;
@@ -50,6 +68,14 @@ type BackgroundJobsContextValue = {
   ) => Promise<JobResponse>;
   cancelJob: (jobId: string) => Promise<void>;
   dismissCompleted: () => void;
+  /**
+   * Registers a listener for `JobCompletionEvent`s and returns the function
+   * that unregisters it. Fires for every job that reaches "done", regardless
+   * of who started it or whether that caller is still around to see it.
+   */
+  subscribeToJobCompletion: (
+    listener: (event: JobCompletionEvent) => void,
+  ) => () => void;
 };
 
 const COMPLETED_TTL_MS = 10_000;
@@ -78,6 +104,41 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
   const [jobs, setJobs] = useState<TrackedBackgroundJob[]>([]);
   const [panelExpanded, setPanelExpanded] = useState(false);
   const timersRef = useRef<Map<string, number>>(new Map());
+  // Read by applyJobUpdate to find the kind of a job that just went terminal,
+  // without making that callback depend on (and re-create on) `jobs`.
+  const jobsRef = useRef<TrackedBackgroundJob[]>(jobs);
+  jobsRef.current = jobs;
+  const completionListenersRef = useRef<
+    Set<(event: JobCompletionEvent) => void>
+  >(new Set());
+
+  const subscribeToJobCompletion = useCallback(
+    (listener: (event: JobCompletionEvent) => void) => {
+      completionListenersRef.current.add(listener);
+      return () => {
+        completionListenersRef.current.delete(listener);
+      };
+    },
+    [],
+  );
+
+  const announceJobCompletion = useCallback(
+    (jobId: string, kind: PageEditorJobKind, latest: JobResponse) => {
+      // Only "done" says new content landed. Failed and cancelled are terminal
+      // too, but there is nothing for a listener to go re-fetch.
+      if (latest.status !== "done") return;
+      const event: JobCompletionEvent = {
+        jobId,
+        kind,
+        documentPartId: latest.document_part_id,
+        status: latest.status,
+      };
+      for (const listener of completionListenersRef.current) {
+        listener(event);
+      }
+    },
+    [],
+  );
 
   const scheduleRemoval = useCallback((jobId: string, status?: JobStatus) => {
     // Keep cancelled jobs visible until the user clears them - they are part
@@ -104,6 +165,12 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
 
   const applyJobUpdate = useCallback(
     (jobId: string, latest: JobResponse) => {
+      // Read before the patch: `trackAndWait` calls this once from
+      // `waitForJob`'s onUpdate and once more with its own resolved value, so
+      // the same terminal status arrives here twice. Comparing against the
+      // status this job had *before* the patch is what makes the announcement
+      // fire on the transition into "done" rather than on every repeat of it.
+      const previous = jobsRef.current.find((job) => job.id === jobId);
       setJobs((current) =>
         current.map((job) =>
           job.id === jobId ? patchTrackedJob(job, latest) : job,
@@ -111,9 +178,12 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
       );
       if (isTerminalJobStatus(latest.status)) {
         scheduleRemoval(jobId, latest.status);
+        if (previous && !isTerminalJobStatus(previous.status)) {
+          announceJobCompletion(jobId, previous.kind, latest);
+        }
       }
     },
-    [scheduleRemoval],
+    [scheduleRemoval, announceJobCompletion],
   );
 
   const activeJobIds = useMemo(
@@ -130,9 +200,19 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
       for (const update of updates) {
         const index = next.findIndex((job) => job.id === update.id);
         if (index < 0) continue;
+        const previousStatus = next[index].status;
+        const kind = next[index].kind;
         next[index] = patchTrackedJob(next[index], update);
         if (isTerminalJobStatus(update.status)) {
           scheduleRemoval(update.id, update.status);
+          // This is the path a backgrounded tab or a remounted component
+          // relies on: the SSE stream that would have carried the update to
+          // the instance that started the job dropped, this poll is what
+          // catches it instead, and the announcement is what makes the catch
+          // visible to a *different* mounted instance.
+          if (!isTerminalJobStatus(previousStatus)) {
+            announceJobCompletion(update.id, kind, update);
+          }
         }
       }
       return next;
@@ -234,6 +314,7 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
       trackAndWait,
       cancelJob,
       dismissCompleted,
+      subscribeToJobCompletion,
     }),
     [
       jobs,
@@ -242,6 +323,7 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
       trackAndWait,
       cancelJob,
       dismissCompleted,
+      subscribeToJobCompletion,
     ],
   );
 

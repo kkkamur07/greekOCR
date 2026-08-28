@@ -14,6 +14,7 @@ import {
   type LineResponse,
   type PartLayoutResponse,
 } from "../../../api/client";
+import type { JobCompletionEvent } from "../../../context/BackgroundJobsContext";
 import { ApiError, isAbortError } from "../../../api/errors";
 import { invalidateAfter } from "../../../api/resources";
 import { submissionRefusalExplanation } from "../../../inference";
@@ -75,6 +76,9 @@ type LayoutMutationsInput = {
    * researcher has to act on, and a toast is gone before they can.
    */
   setSubmissionRefusal: Dispatch<SetStateAction<string | null>>;
+  subscribeToJobCompletion?: (
+    listener: (event: JobCompletionEvent) => void,
+  ) => () => void;
   trackJobAndWait: (
     jobId: string,
     meta: { label: string; kind: PageEditorJobKind },
@@ -99,6 +103,7 @@ export function useLayoutMutations({
   setApprovedTextDraft,
   onDrawComplete,
   setSubmissionRefusal,
+  subscribeToJobCompletion,
   trackJobAndWait,
 }: LayoutMutationsInput) {
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
@@ -131,6 +136,33 @@ export function useLayoutMutations({
     redoStackRef.current = [];
     setEditUndoRevision((value) => value + 1);
   }, [projectId, documentId, partId]);
+
+  /**
+   * A finished job replaces this page's Segments wherever the refresh comes
+   * from, and only two of those routes run inside this hook.
+   *
+   * ``reloadAfterSegmentation`` clears the stacks for the run this hook
+   * started. The background refresh in ``usePageEditorData`` reaches the same
+   * lines from a sibling hook, so an undo left over from before a job that
+   * finished while the tab was in the background would name a line id the
+   * refresh has already replaced. Listening to the completion directly keeps
+   * the stacks the responsibility of the hook that owns them.
+   */
+  useEffect(() => {
+    if (!partId || !subscribeToJobCompletion) return;
+    return subscribeToJobCompletion((event) => {
+      if (event.documentPartId !== partId) return;
+      // Only a segmentation that finished replaces the Segments, and with them
+      // the line ids an undo entry names. Transcription patches text onto
+      // lines that are already there, and a run that failed changed nothing at
+      // all; clearing the stacks for either would throw away a geometry edit
+      // the researcher can still legitimately take back.
+      if (event.kind !== "segmentation" || event.status !== "done") return;
+      undoStackRef.current = [];
+      redoStackRef.current = [];
+      setEditUndoRevision((value) => value + 1);
+    });
+  }, [partId, subscribeToJobCompletion]);
 
   /**
    * Called once per committed write, after the server has taken it.
@@ -503,6 +535,18 @@ export function useLayoutMutations({
    * `runAutoSegment`.
    */
   async function reloadAfterSegmentation(): Promise<number> {
+    // The segmentation already replaced every Segment on the server, so any
+    // edit still on the undo/redo stack now names a line id that reload is
+    // about to make up. Left there, a later undo pops it, applyCanvasEditInverse
+    // silently no-ops against the new lines array, and the paired
+    // patchPartLine/deletePartLine 404s into setLineError. Cleared the same
+    // way the route-change effect clears it, and unconditionally: the
+    // segmentation is already stored by the time a caller reaches this
+    // function, whether or not the reload below succeeds.
+    undoStackRef.current = [];
+    redoStackRef.current = [];
+    setEditUndoRevision((value) => value + 1);
+
     const [reloadedLines, reloadedLayout, pairing] = await Promise.all([
       api.listPartLines(projectId!, documentId!, partId!),
       api.getPartLayout(projectId!, documentId!, partId!),

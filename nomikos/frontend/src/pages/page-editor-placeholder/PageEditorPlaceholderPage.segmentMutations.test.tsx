@@ -109,7 +109,7 @@ describe("PageEditorPlaceholderPage segment mutations", () => {
     renderPageEditor();
 
     fireEvent.click(await screen.findByLabelText(/^Segment 1/));
-    fireEvent.click(screen.getByRole("button", { name: /delete segment/i }));
+    fireEvent.click(screen.getByRole("button", { name: /delete selected/i }));
 
     await waitFor(() => {
       expect(mockedApi.deletePartLine).toHaveBeenLastCalledWith(
@@ -133,7 +133,7 @@ describe("PageEditorPlaceholderPage segment mutations", () => {
     renderPageEditor();
 
     fireEvent.click(await screen.findByLabelText(/^Segment 1/));
-    fireEvent.click(screen.getByRole("button", { name: /delete segment/i }));
+    fireEvent.click(screen.getByRole("button", { name: /delete selected/i }));
 
     await flushPageEditorEffects();
     expect(mockedApi.deletePartLine).not.toHaveBeenCalled();
