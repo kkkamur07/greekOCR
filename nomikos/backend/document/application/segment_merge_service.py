@@ -8,6 +8,11 @@ imported page text writes a ``page_transcription_lines`` row. Neither sets
 single polygon being nudged looks, to a geometry-only guard, exactly like a page nobody
 has opened. The guard here is the union of the three signals: a line survives a re-segment
 if it has manual geometry, **or** approved text, **or** a pairing.
+
+Keeping a line is half of it. The segmenter does not know the line was kept and draws the
+same ink again, so a fully approved page would come back with every approved line sitting
+under a near-identical fresh twin. A fresh line whose polygon is mostly inside the kept
+lines is therefore not added: what it covers is already claimed.
 """
 
 from __future__ import annotations
@@ -15,6 +20,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from uuid import UUID
 
+from shapely.geometry import Polygon
+from shapely.ops import unary_union
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -43,6 +50,16 @@ class SegmentMergeSummary:
     # on or paired. Reported separately so a job result still says how many polygons
     # on the page are hand-drawn.
     preserved_transcribed_lines: int = 0
+    # Fresh lines the segmenter drew over ink a kept line already covers, and which were
+    # therefore not added. ``added_lines`` excludes them; ``lines_count`` does not.
+    skipped_covered_lines: int = 0
+
+
+# A fresh line at least this much inside the kept geometry is the same ink drawn again.
+# Half, not "almost all": a re-run rarely reproduces a polygon exactly, and a fresh line
+# that is half inside a kept one is not a new line either way. A kept numeral sitting
+# inside a fresh text line's polygon covers a small fraction of it and does not trip this.
+_COVERED_FRACTION = 0.5
 
 
 class SegmentMergeService:
@@ -63,12 +80,15 @@ class SegmentMergeService:
         preserved_manual_lines = 0
         preserved_transcribed_lines = 0
         pruned_lines = 0
+        kept_lines: list[Line] = []
         for line in list(part.lines):
             if line.manual_geometry:
                 preserved_manual_lines += 1
+                kept_lines.append(line)
                 continue
             if line.id in transcribed_ids:
                 preserved_transcribed_lines += 1
+                kept_lines.append(line)
                 continue
             session.delete(line)
             pruned_lines += 1
@@ -92,7 +112,14 @@ class SegmentMergeService:
             blocks_by_external_id[block_data.external_id] = block
         session.flush()
 
+        kept_geometry = _polygons(line.points for line in kept_lines)
+        added_lines = 0
+        skipped_covered_lines = 0
         for line_data in canonical_segment.lines:
+            if _mostly_covered(line_data.points, kept_geometry):
+                skipped_covered_lines += 1
+                continue
+            added_lines += 1
             source_metadata = {
                 **line_data.source_metadata,
                 "external_id": line_data.external_id,
@@ -122,10 +149,11 @@ class SegmentMergeService:
         return SegmentMergeSummary(
             blocks_count=len(canonical_segment.blocks),
             lines_count=len(canonical_segment.lines),
-            added_lines=len(canonical_segment.lines),
+            added_lines=added_lines,
             pruned_lines=pruned_lines,
             preserved_manual_lines=preserved_manual_lines,
             preserved_transcribed_lines=preserved_transcribed_lines,
+            skipped_covered_lines=skipped_covered_lines,
         )
 
     def _human_transcribed_line_ids(self, session: Session, part: DocumentPart) -> set[UUID]:
@@ -174,3 +202,37 @@ class SegmentMergeService:
         if part is None:
             raise NotFoundError("Part not found")
         return part
+
+
+def _polygons(point_lists) -> list[Polygon]:
+    polygons: list[Polygon] = []
+    for points in point_lists:
+        polygon = _polygon(points)
+        if polygon is not None:
+            polygons.append(polygon)
+    return polygons
+
+
+def _polygon(points: list[list[float]] | None) -> Polygon | None:
+    if not points or len(points) < 3:
+        return None
+    # buffer(0) repairs the self-touching rings kraken's simplification can leave; a
+    # polygon it cannot repair has no area and is treated as covering nothing.
+    polygon = Polygon(points).buffer(0)
+    if polygon.is_empty or polygon.area <= 0:
+        return None
+    return polygon
+
+
+def _mostly_covered(points: list[list[float]], kept: list[Polygon]) -> bool:
+    """Whether ``points`` lies at least ``_COVERED_FRACTION`` inside ``kept``."""
+    if not kept:
+        return False
+    fresh = _polygon(points)
+    if fresh is None:
+        return False
+    touching = [polygon for polygon in kept if polygon.intersects(fresh)]
+    if not touching:
+        return False
+    covered = unary_union(touching).intersection(fresh).area
+    return covered / fresh.area >= _COVERED_FRACTION
