@@ -339,8 +339,11 @@ class DocumentRepository:
         A lock only works if every writer takes it, so every path that rewrites
         a part's lines does: ``segment_merge_service`` before it replaces the
         machine geometry, ``SegmentHealthService._recompute`` before it derives
-        a fix from the list, and the four ``LayoutService`` write paths (patch,
-        delete, bulk replace, layout reset). Each reads the rows and writes back
+        a fix from the list, and every ``LayoutService`` method that commits.
+        That last one is a rule, not a list, and it is enforced as one in
+        ``test_every_layout_write_takes_the_part_lock``: enumerating the paths by
+        hand is what left ``create_part_line`` unlocked through a whole round of
+        review. Each reads the rows and writes back
         a decision made from them, so without a shared lock the one that commits
         second wins on rows it never read: newer geometry overwritten, a
         deleted line acted on, orders renumbered from a stale list.

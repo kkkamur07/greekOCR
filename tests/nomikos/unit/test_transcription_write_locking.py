@@ -170,3 +170,48 @@ async def test_a_ground_truth_text_edit_locks_the_line_s_part() -> None:
     )
 
     assert repository.locks == [line.part_id]
+
+
+# --- The invariant itself, rather than one more example of it ---
+
+
+def _committing_methods_without_a_lock(cls) -> list[str]:
+    """Names of ``cls`` methods that write and commit without taking the part lock."""
+    import inspect
+
+    offenders = []
+    for name, member in inspect.getmembers(cls, predicate=inspect.isfunction):
+        if name.startswith("__"):
+            continue
+        try:
+            source = inspect.getsource(member)
+        except OSError:  # pragma: no cover - source always available in-tree
+            continue
+        if "session.commit()" in source and "lock_part" not in source:
+            offenders.append(name)
+    return sorted(offenders)
+
+
+def test_every_layout_write_takes_the_part_lock() -> None:
+    """Enumerating the write paths by hand is what let this gap through twice.
+
+    Review found the layout writes unlocked, they were fixed, and then found
+    `create_part_line` still unlocked because it was missed when the list was
+    written out by hand. The rule is not "these seven methods": it is that a
+    method which commits a change to a part's layout holds the part while it
+    does. Asserting the rule catches the next method to be added, which is the
+    one nobody will remember to lock.
+    """
+    from backend.document.application.layout_service import LayoutService
+
+    assert _committing_methods_without_a_lock(LayoutService) == []
+
+
+def test_every_page_text_write_takes_the_part_lock() -> None:
+    """The same rule for the writers that decide whether a line carries work.
+
+    `copy_to_ground_truth` locks through `lock_parts`, because it is addressed
+    by document and can span every part in one transaction.
+    """
+    offenders = _committing_methods_without_a_lock(TranscriptionService)
+    assert offenders == [], f"unlocked writers: {offenders}"
