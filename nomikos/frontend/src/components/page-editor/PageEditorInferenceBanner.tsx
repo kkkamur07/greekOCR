@@ -128,10 +128,12 @@ export function PageEditorInferenceBanner({
   const dismissable = !preferLocalInference;
 
   function handleDismissHint() {
-    // The button is about to unmount with the banner around it. Without this,
-    // focus falls to <body> and the next Tab restarts from the top of the
-    // editor with nothing announced.
-    bannerRef.current?.closest("main")?.focus?.();
+    // The button is about to unmount with the banner around it, so focus would
+    // fall to <body> and the next Tab would restart from the top of the editor.
+    // The banner is a *sibling* of the editor's main region, not a descendant,
+    // so this looks across rather than up - `closest("main")` finds nothing.
+    const shell = bannerRef.current?.parentElement;
+    shell?.querySelector<HTMLElement>("main.pe-main")?.focus();
     setHintDismissed(true);
     try {
       window.localStorage.setItem(HINT_DISMISSED_KEY, "1");
@@ -229,8 +231,9 @@ export function PageEditorInferenceBanner({
           </div>
         </div>
       ) : null}
-      {dismissable && hintDismissed ? null : (
+      {dismissable && hintDismissed !== false ? null : (
         <div
+          ref={bannerRef}
           className="pe-inference-banner"
           role="group"
           aria-label="Where inference runs"

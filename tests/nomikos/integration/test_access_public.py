@@ -361,6 +361,79 @@ def test_setting_published_flag_is_owner_only(client, outsider_headers, publishe
     assert denied.status_code == 403
 
 
+@pytest.mark.integration
+def test_setting_published_flag_is_refused_to_a_collaborator(
+    client, owner_headers, collaborator_user, collaborator_headers, published_document
+):
+    """The owner check, not the membership check.
+
+    ``test_setting_published_flag_is_owner_only`` above uses an outsider, who is
+    already turned away by ``require_document`` before ownership is ever consulted -
+    delete the ``is_owner`` guard in ``DocumentPartService`` and that test still
+    passes. The share below is what makes this one different: the caller is a member,
+    so the request gets past ``require_project`` and reaches the guard, and this is
+    the only test that fails if the guard goes. The editor hides the control from
+    non-owners on the strength of it being enforced.
+    """
+    project_id = published_document["project_id"]
+    document_id = published_document["document_id"]
+    part_id = published_document["part_id"]
+
+    share = client.post(
+        f"/projects/{project_id}/share",
+        headers=owner_headers,
+        json={"username": collaborator_user["username"]},
+    )
+    assert share.status_code == 204
+
+    # Asserted, not assumed. No fixture makes the collaborator a member, so without
+    # the share above this reads 403 exactly like the outsider does, and the PATCH
+    # below would prove nothing about ownership.
+    member_read = client.get(
+        f"/projects/{project_id}/documents/{document_id}", headers=collaborator_headers
+    )
+    assert member_read.status_code == 200
+
+    denied = client.patch(
+        f"/projects/{project_id}/documents/{document_id}/parts/published",
+        headers=collaborator_headers,
+        json={"parts": [{"part_id": part_id, "published": False}]},
+    )
+    assert denied.status_code == 403
+
+
+@pytest.mark.integration
+def test_republishing_keeps_the_share_link_that_was_already_handed_out(
+    client, owner_headers, published_document
+):
+    """A draft round trip must not rotate the token.
+
+    ``update_document`` mints only when the token is null, and the comment there
+    promises exactly this. Nothing tested it: mutation testing flipped that
+    ``is None`` to ``is not None`` and every test still passed. If it ever
+    regressed, every link already sent would 404 the next time an owner toggled a
+    document off and back on, which is the one failure this whole feature exists to
+    prevent.
+    """
+    project_id = published_document["project_id"]
+    document_id = published_document["document_id"]
+    url = f"/projects/{project_id}/documents/{document_id}"
+    original = published_document["token"]
+
+    unpublish = client.patch(url, headers=owner_headers, json={"workflow": "draft"})
+    assert unpublish.status_code == 200
+
+    republish = client.patch(url, headers=owner_headers, json={"workflow": "published"})
+    assert republish.status_code == 200
+    assert republish.json()["public_share_token"] == original
+
+    # And the link itself still opens the document, not just the column.
+    still_live = client.get(
+        f"/public/projects/{project_id}/documents/{document_id}", params={"t": original}
+    )
+    assert still_live.status_code == 200
+
+
 # --- The share token is the owner's to hand out, not every collaborator's ---
 # Tests that a member who is not the owner never sees the secret on any owner-facing
 # read, while the owner does. Does not test rotation, which is covered above.

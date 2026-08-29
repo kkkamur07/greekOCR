@@ -67,7 +67,11 @@ export function PageEditorShell({
         </div>
       )}
 
-      <main className="pe-main">{children}</main>
+      {/* tabIndex -1 keeps it out of the tab order while letting code move
+          focus here when a dismissed banner takes the focused element with it. */}
+      <main className="pe-main" tabIndex={-1}>
+        {children}
+      </main>
     </div>
   );
 }

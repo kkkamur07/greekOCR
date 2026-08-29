@@ -49,6 +49,41 @@ describe("PageEditorInferenceBanner", () => {
     });
   });
 
+  it("hands focus to the editor when the dismissed banner takes it away", () => {
+    // The banner is a sibling of <main class="pe-main">, not a descendant, so
+    // an upward lookup finds nothing and focus lands on <body>: the next Tab
+    // restarts at the top of the editor with nothing announced.
+    const shell = globalThis.document.createElement("div");
+    globalThis.document.body.append(shell);
+    const main = globalThis.document.createElement("main");
+    main.className = "pe-main";
+    main.tabIndex = -1;
+
+    try {
+      render(
+        <PageEditorInferenceBanner
+          hasLocalCapacity={false}
+          loading={false}
+          preferLocalInference={false}
+          onRetry={vi.fn()}
+          onUseCloudInstead={vi.fn()}
+        />,
+        { container: shell },
+      );
+      shell.append(main);
+
+      const dismiss = screen.getByRole("button", {
+        name: /dismiss this note/i,
+      });
+      dismiss.focus();
+      fireEvent.click(dismiss);
+
+      expect(globalThis.document.activeElement).toBe(main);
+    } finally {
+      shell.remove();
+    }
+  });
+
   it("never offers to dismiss live agent status", () => {
     renderBanner({ preferLocalInference: true, hasLocalCapacity: true });
 

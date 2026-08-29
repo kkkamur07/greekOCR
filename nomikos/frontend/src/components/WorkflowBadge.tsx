@@ -41,6 +41,9 @@ export function ReviewBadge({ reviewed }: { reviewed: boolean }) {
 export function PublishBadge({ published }: { published: boolean }) {
   return (
     <span className={`badge ${published ? "badge-live" : "badge-hidden"}`}>
+      {/* Read in a row that already says "Part 1, unreviewed", a bare "shown"
+          has no subject. Sighted readers get that from the column it sits in. */}
+      <span className="sr-only">Publicly&nbsp;</span>
       {published ? "shown" : "hidden"}
     </span>
   );

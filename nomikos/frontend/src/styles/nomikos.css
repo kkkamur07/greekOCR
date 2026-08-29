@@ -92,7 +92,8 @@
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: var(--text-3);
+  /* --text-3 on --accent-bg measures 4.32:1, just under the floor. */
+  color: var(--text-2);
   font-size: 1rem;
   line-height: 1;
   cursor: pointer;
