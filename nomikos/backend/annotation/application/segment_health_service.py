@@ -15,12 +15,14 @@ exists, which is the failure a "here are the points, save them" endpoint invites
 
 **Nothing that carries human work is destroyed.** A merge keeps the primary
 row's id so its transcription and pairing survive. A delete refuses on any line
-with text or a pairing. Geometry this module writes is marked
+with text or a pairing. A pairing is read from ``page_transcription_lines``, not
+inferred from the transcription layers, because the two can disagree: see
+``_is_paired``. Geometry this module writes is marked
 ``manual_geometry`` so a later re-segment treats it as a human's work rather
 than kraken's, which is the flag re-segmentation reads before it clears a page.
 
-Both destructive paths re-check the text rule that `segment_health` already
-applied when it decided what to offer. Those second checks are backstops, not
+Both destructive paths re-check the has-someone-worked-on-this rule that
+`segment_health` already applied when it decided what to offer. Those second checks are backstops, not
 the live defence: as the finders stand today neither can fire, because a
 fragment or suspect carrying text is never offered in the first place. They are
 here so that relaxing a *flagging* rule cannot silently become permission to
@@ -100,7 +102,8 @@ class SegmentHealthService:
     ) -> SegmentHealthReport:
         part = await self._require_part(session, user, project_id, document_id, part_id)
         lines = await self._documents.list_part_lines(session, part_id)
-        segments = [self._to_segment(line) for line in lines]
+        paired_ids = await self._documents.paired_line_ids(session, part_id)
+        segments = [self._to_segment(line, paired_ids) for line in lines]
         usable = [segment for segment in segments if len(segment.points) >= 3]
 
         width, height, measured = self._page_size(part, usable)
@@ -144,7 +147,10 @@ class SegmentHealthService:
         line_id: UUID,
     ) -> list[Line]:
         """Cut a segment that swallowed two columns, at the gutter midpoint."""
-        report, lines = await self._recompute(session, user, project_id, document_id, part_id)
+        # No pairing set: neither path deletes a row, so neither can destroy one.
+        report, lines, _paired_ids = await self._recompute(
+            session, user, project_id, document_id, part_id
+        )
         split = next((item for item in report.spanning if item.line_id == str(line_id)), None)
         if split is None or not split.pieces:
             raise ValidationError("This segment is no longer offered a column split")
@@ -193,7 +199,9 @@ class SegmentHealthService:
         fragment_id: UUID,
     ) -> list[Line]:
         """Fold a fragment back into the line it broke off, primary keeps its id."""
-        report, lines = await self._recompute(session, user, project_id, document_id, part_id)
+        report, lines, paired_ids = await self._recompute(
+            session, user, project_id, document_id, part_id
+        )
         merge = next(
             (
                 item
@@ -213,10 +221,10 @@ class SegmentHealthService:
         # lookup above has already raised. Kept because this is the line that
         # actually deletes a row, and the rule that makes it safe lives in
         # another module that nothing forces to keep it.
-        if self._has_text(fragment):
+        if self._has_text(fragment) or self._is_paired(fragment, paired_ids):
             raise ValidationError(
-                "The fragment carries transcribed text; merging would delete it. "
-                "Move the text to the larger piece first."
+                "The fragment carries transcribed text or a pairing; merging would "
+                "delete it. Move the text to the larger piece first."
             )
 
         primary.points = merge.points
@@ -238,7 +246,10 @@ class SegmentHealthService:
         lower_id: UUID,
     ) -> list[Line]:
         """Cut two overlapping masks apart, midway between their baselines."""
-        report, lines = await self._recompute(session, user, project_id, document_id, part_id)
+        # No pairing set: neither path deletes a row, so neither can destroy one.
+        report, lines, _paired_ids = await self._recompute(
+            session, user, project_id, document_id, part_id
+        )
         trim = next(
             (
                 item
@@ -278,7 +289,9 @@ class SegmentHealthService:
         line_id: UUID,
     ) -> list[Line]:
         """Delete a flagged suspect, only ever on an explicit request."""
-        report, lines = await self._recompute(session, user, project_id, document_id, part_id)
+        report, lines, paired_ids = await self._recompute(
+            session, user, project_id, document_id, part_id
+        )
         if not any(item.line_id == str(line_id) for item in report.suspects):
             raise ValidationError("This segment is not flagged as a suspect")
 
@@ -289,7 +302,7 @@ class SegmentHealthService:
         # checks answer different questions, though. That one decides what to
         # show; this one decides what may be destroyed, and a future change to
         # the flagging rule must not quietly become a deletion rule.
-        if self._has_text(target) or self._is_paired(target):
+        if self._has_text(target) or self._is_paired(target, paired_ids):
             raise ValidationError("This line carries transcribed text and will not be deleted")
 
         await session.delete(target)
@@ -306,19 +319,35 @@ class SegmentHealthService:
         project_id: UUID,
         document_id: UUID,
         part_id: UUID,
-    ) -> tuple[SegmentHealthReport, list[Line]]:
+    ) -> tuple[SegmentHealthReport, list[Line], set[UUID]]:
+        """Re-derive the offer, under a lock held until the caller commits.
+
+        The lock is taken before anything is read. Recomputing already stops a
+        stale *client* from writing geometry measured against an older page, but
+        on its own it leaves the server's own window open: between this read and
+        the commit below, a re-segment or a second apply on the same part can
+        land, and the edit is then written over geometry it was never derived
+        from. Holding the part row from before the read makes the two wait for
+        each other instead.
+
+        Every apply path goes through here and then writes, so the lock lives
+        here rather than in the four callers: that is what makes it impossible
+        to add a fifth that forgets to take it.
+        """
+        await self._documents.lock_part(session, part_id)
         report = await self.report(session, user, project_id, document_id, part_id)
         lines = await self._documents.list_part_lines(session, part_id)
-        return report, lines
+        paired_ids = await self._documents.paired_line_ids(session, part_id)
+        return report, lines, paired_ids
 
-    def _to_segment(self, line: Line) -> Segment:
+    def _to_segment(self, line: Line, paired_ids: set[UUID]) -> Segment:
         return Segment(
             id=str(line.id),
             points=[list(point) for point in (line.points or [])],
             baseline=geometry_points(line.baseline),
             manual_geometry=bool(line.manual_geometry),
             has_text=self._has_text(line),
-            is_paired=self._is_paired(line),
+            is_paired=self._is_paired(line, paired_ids),
         )
 
     @staticmethod
@@ -335,7 +364,22 @@ class SegmentHealthService:
         )
 
     @staticmethod
-    def _is_paired(line: Line) -> bool:
+    def _is_paired(line: Line, paired_ids: set[UUID]) -> bool:
+        """A human's decision about this line, in either of the two places it lands.
+
+        A non-blank ground-truth transcription is the usual one. A row in
+        ``page_transcription_lines`` pointing here is the other, and the first
+        does not imply it: pairing writes the ground-truth row and un-pairing
+        removes it, so the two agree most of the time, but text imported and
+        paired before anyone approved it carries the pairing without the layer.
+        Reading only the layers would call such a line untouched and offer it up
+        for deletion, discarding the pairing with it.
+
+        ``segment_merge_service._protected_line_ids`` takes the same union for
+        the same reason, and re-segmentation trusts it to decide what to keep.
+        """
+        if line.id in paired_ids:
+            return True
         return any(
             entry.transcription is not None
             and entry.transcription.kind == TranscriptionKind.ground_truth

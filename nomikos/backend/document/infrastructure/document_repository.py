@@ -316,6 +316,38 @@ class DocumentRepository:
         )
         return list(result.scalars().all())
 
+    async def paired_line_ids(self, session: AsyncSession, part_id: UUID) -> set[UUID]:
+        """Lines a human has paired to a line of page transcription.
+
+        A pairing is a decision about a line recorded outside the transcription
+        layers, so a line can be paired while carrying no ground-truth text of
+        its own: text imported and paired before anyone approved it has the
+        pairing without the layer. Anything asking "has a person touched this
+        line" has to read this as well as the text.
+        """
+        result = await session.execute(
+            select(PageTranscriptionLine.paired_line_id).where(
+                PageTranscriptionLine.part_id == part_id,
+                PageTranscriptionLine.paired_line_id.is_not(None),
+            )
+        )
+        return {line_id for line_id in result.scalars().all() if line_id is not None}
+
+    async def lock_part(self, session: AsyncSession, part_id: UUID) -> None:
+        """Hold one part's geometry still until the caller commits.
+
+        ``segment_merge_service`` takes this same row lock before it deletes and
+        reinserts a part's machine geometry. Anything that reads a page's lines,
+        derives an edit from them and writes it back has to hold it across that
+        whole span, or a re-segment commits into the gap and the edit lands on a
+        page that no longer exists. Selecting the id alone keeps this a lock and
+        nothing else: no entity comes back, so there is no loaded instance to go
+        stale the way ``reorder_parts`` describes.
+        """
+        await session.execute(
+            select(DocumentPart.id).where(DocumentPart.id == part_id).with_for_update()
+        )
+
     async def get_page_transcription_line(
         self, session: AsyncSession, part_id: UUID, order: int
     ) -> PageTranscriptionLine | None:

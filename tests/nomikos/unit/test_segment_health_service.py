@@ -58,6 +58,8 @@ class _Repository:
     def __init__(self, part: _Part, lines: list[Line]) -> None:
         self._part = part
         self.lines = lines
+        self.paired: set[uuid.UUID] = set()
+        self.locks = 0
 
     async def list_part_lines(self, _session, _part_id) -> list[Line]:
         # Rows come back ordered, and a deleted row is gone. The service reads
@@ -66,6 +68,12 @@ class _Repository:
 
     async def get_part(self, _session, _part_id):
         return self._part
+
+    async def paired_line_ids(self, _session, _part_id) -> set[uuid.UUID]:
+        return self.paired
+
+    async def lock_part(self, _session, _part_id) -> None:
+        self.locks += 1
 
 
 class _DocumentService:
@@ -344,3 +352,97 @@ class TestApplyDelete:
         report = await _report(service, part)
 
         assert str(speck.id) not in {item.line_id for item in report.suspects}
+
+
+class TestPairing:
+    """A pairing lives in `page_transcription_lines`, not in the text layers.
+
+    Greptile's P1 on #109: reading only the transcriptions calls a line somebody
+    paired but never transcribed "untouched", and the suspect and fragment paths
+    then delete it, taking the human's pairing decision with it.
+    """
+
+    @pytest.mark.asyncio
+    async def test_a_line_paired_without_ground_truth_text_is_never_a_suspect(self) -> None:
+        lines = _two_column_page()
+        speck = _line(2300.0, 2340.0, 1000.0, order=len(lines), height=20.0)
+        lines.append(speck)
+        service, repo, part = _service(lines)
+
+        while_unpaired = await _report(service, part)
+        assert str(speck.id) in {item.line_id for item in while_unpaired.suspects}
+
+        repo.paired = {speck.id}
+        report = await _report(service, part)
+
+        assert str(speck.id) not in {item.line_id for item in report.suspects}
+
+    @pytest.mark.asyncio
+    async def test_a_paired_line_cannot_be_deleted_even_carrying_no_text(self) -> None:
+        lines = _two_column_page()
+        speck = _line(2300.0, 2340.0, 1000.0, order=len(lines), height=20.0)
+        lines.append(speck)
+        service, repo, part = _service(lines)
+        repo.paired = {speck.id}
+        session = _Session()
+
+        with pytest.raises(ValidationError):
+            await service.apply_delete(
+                session, object(), uuid.uuid4(), uuid.uuid4(), part.id, speck.id
+            )
+        assert session.deleted == []
+
+    @pytest.mark.asyncio
+    async def test_a_paired_fragment_is_not_offered_a_merge(self) -> None:
+        lines = _two_column_page()
+        primary = _line(300.0, 900.0, 2900.0, order=90)
+        fragment = _line(960.0, 1060.0, 2900.0, order=91)
+        lines += [primary, fragment]
+        service, repo, part = _service(lines)
+
+        offered = await _report(service, part)
+        assert (str(primary.id), str(fragment.id)) in {
+            (item.primary_id, item.fragment_id) for item in offered.fragments
+        }
+
+        repo.paired = {fragment.id}
+        session = _Session()
+        with pytest.raises(ValidationError):
+            await service.apply_merge(
+                session, object(), uuid.uuid4(), uuid.uuid4(), part.id, primary.id, fragment.id
+            )
+        assert session.deleted == []
+
+
+class TestLocking:
+    """Recomputing closes the stale-client window; the lock closes the server's own.
+
+    Greptile's second P1 on #109: between the recompute and the commit another
+    edit on the same part can land, and the apply then writes over geometry it
+    was never derived from.
+    """
+
+    @pytest.mark.asyncio
+    async def test_every_apply_path_locks_the_part_before_it_reads(self) -> None:
+        lines = _two_column_page()
+        crosser = _line(LEFT_COLUMN[0], RIGHT_COLUMN[1], 500.0, order=99)
+        speck = _line(2300.0, 2340.0, 1000.0, order=100, height=20.0)
+        primary = _line(300.0, 900.0, 2900.0, order=101)
+        fragment = _line(960.0, 1060.0, 2900.0, order=102)
+        lines += [crosser, speck, primary, fragment]
+        service, repo, part = _service(lines)
+        ids = (uuid.uuid4(), uuid.uuid4())
+
+        await service.apply_split(_Session(), object(), *ids, part.id, crosser.id)
+        assert repo.locks == 1
+        await service.apply_merge(_Session(), object(), *ids, part.id, primary.id, fragment.id)
+        assert repo.locks == 2
+        await service.apply_delete(_Session(), object(), *ids, part.id, speck.id)
+        assert repo.locks == 3
+
+    @pytest.mark.asyncio
+    async def test_reading_the_report_takes_no_lock(self) -> None:
+        """The GET is a read. Locking it would queue reviewers behind each other."""
+        service, repo, part = _service(_two_column_page())
+        await _report(service, part)
+        assert repo.locks == 0
