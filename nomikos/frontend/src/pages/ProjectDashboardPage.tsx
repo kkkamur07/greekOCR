@@ -35,6 +35,8 @@ export function ProjectDashboardPage() {
   const [includeArchived, setIncludeArchived] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [titlePanelOpen, setTitlePanelOpen] = useState(false);
+  // Incremented by the Share button so the panel puts the cursor in the box.
+  const [shareFocusToken, setShareFocusToken] = useState(0);
   const [creating, setCreating] = useState(false);
   const [deletingProject, setDeletingProject] = useState(false);
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(
@@ -206,7 +208,12 @@ export function ProjectDashboardPage() {
             />
             {/* The panel only opens for the owner (titleEditable), and the
                 collaborator list is owner-only on the API too. */}
-            {isOwner && <ProjectSharingPanel projectId={projectId} />}
+            {isOwner && (
+              <ProjectSharingPanel
+                projectId={projectId}
+                focusToken={shareFocusToken}
+              />
+            )}
           </>
         ) : null
       }
@@ -222,6 +229,25 @@ export function ProjectDashboardPage() {
               />
               Show archived
             </label>
+            {isOwner && (
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                aria-haspopup="dialog"
+                aria-expanded={titlePanelOpen}
+                onClick={(event) => {
+                  // The panel closes on any click outside itself, and this
+                  // button is outside it. Stop the event and set open rather
+                  // than toggling, so clicking Share twice re-focuses the box
+                  // instead of flickering the panel shut.
+                  event.stopPropagation();
+                  setTitlePanelOpen(true);
+                  setShareFocusToken((token) => token + 1);
+                }}
+              >
+                Share
+              </button>
+            )}
             {isOwner && (
               <button
                 type="button"
