@@ -142,9 +142,8 @@ architecture-beta
 
     group platform(cloud)[Platform]
     service api(server)[Nomikos API] in platform
-    service db(database)[Postgres] in platform
     service blobs(disk)[Object storage] in platform
-    junction stores in platform
+    service db(database)[Postgres] in platform
 
     group execution(cloud)[Execution]
     service agent(server)[Researcher agent] in execution
@@ -155,13 +154,12 @@ architecture-beta
     editor:R -- L:clients
     reader:L -- R:clients
     clients:B --> T:api
-    api:R --> L:stores
-    stores:R --> L:db
-    stores:B --> T:blobs
+    api:L --> R:blobs
+    api:R --> L:db
     agent:R -- L:hosts
-    worker:B -- T:hosts
-    models:T -- B:hosts
-    hosts:R --> L:api
+    worker:L -- R:hosts
+    hosts:T --> B:api
+    hosts:B --> T:models
 ```
 
 The editor reaches the API with a session token; the public reader reaches it with a secret
