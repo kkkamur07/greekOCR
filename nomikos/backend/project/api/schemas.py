@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 from pydantic.json_schema import SkipJsonSchema
 
 
@@ -27,7 +27,34 @@ class ProjectUpdateRequest(BaseModel):
 
 
 class ShareUserRequest(BaseModel):
-    username: str = Field(min_length=1, max_length=150)
+    """Who to share with: a username or an email address, exactly one of them.
+
+    Email is the address people actually know each other by; the username is
+    kept for callers that predate email sharing. Matching on email is
+    case-insensitive, like login.
+    """
+
+    username: str | None = Field(default=None, min_length=1, max_length=150)
+    email: EmailStr | None = None
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str | None) -> str | None:
+        return value.strip().lower() if value is not None else None
+
+    @model_validator(mode="after")
+    def exactly_one_identifier(self) -> "ShareUserRequest":
+        if (self.username is None) == (self.email is None):
+            raise ValueError("provide exactly one of username or email")
+        return self
+
+
+class ProjectCollaboratorResponse(BaseModel):
+    id: UUID
+    username: str
+    email: str
+
+    model_config = {"from_attributes": True}
 
 
 class ProjectResponse(BaseModel):

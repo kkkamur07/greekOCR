@@ -76,14 +76,26 @@ class ProjectService:
         self._require_owner(project, user.id)
         await self._projects.delete(session, project)
 
+    async def list_collaborators(
+        self, session: AsyncSession, user: User, project_id: UUID
+    ) -> list[User]:
+        """The users a project is shared with. Owner-only: it exposes emails."""
+        project = await self._load_or_404(session, project_id)
+        self._require_owner(project, user.id)
+        return sorted(project.shared_users, key=lambda shared: shared.username.lower())
+
     async def share_project(
-        self, session: AsyncSession, user: User, project_id: UUID, *, username: str
+        self,
+        session: AsyncSession,
+        user: User,
+        project_id: UUID,
+        *,
+        username: str | None = None,
+        email: str | None = None,
     ) -> None:
         project = await self._load_or_404(session, project_id)
         self._require_owner(project, user.id)
-        collaborator = await self._users.get_by_username(session, username)
-        if collaborator is None:
-            raise NotFoundError("User not found")
+        collaborator = await self._find_collaborator(session, username=username, email=email)
         if collaborator.id == project.owner_id:
             raise ConflictError("Cannot share project with the owner")
         if any(shared.id == collaborator.id for shared in project.shared_users):
@@ -101,6 +113,21 @@ class ProjectService:
         removed = await self._projects.remove_shared_user(session, project, collaborator)
         if not removed:
             raise NotFoundError("User is not shared on this project")
+
+    async def _find_collaborator(
+        self, session: AsyncSession, *, username: str | None, email: str | None
+    ) -> User:
+        if (username is None) == (email is None):
+            raise ValueError("share_project needs exactly one of username or email")
+        if email is not None:
+            collaborator = await self._users.get_by_email(session, email)
+            if collaborator is None:
+                raise NotFoundError(f"No account is registered under {email}")
+            return collaborator
+        collaborator = await self._users.get_by_username(session, username or "")
+        if collaborator is None:
+            raise NotFoundError("User not found")
+        return collaborator
 
     async def _load_or_404(self, session: AsyncSession, project_id: UUID) -> Project:
         project = await self._projects.get_by_id(session, project_id)

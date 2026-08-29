@@ -1327,7 +1327,8 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    get?: never;
+    /** List Project Collaborators */
+    get: operations["list_project_collaborators_projects__project_id__share_get"];
     put?: never;
     /** Share Project */
     post: operations["share_project_projects__project_id__share_post"];
@@ -2734,6 +2735,18 @@ export interface components {
       /** Parts */
       parts: components["schemas"]["PartPublishedUpdate"][];
     };
+    /** ProjectCollaboratorResponse */
+    ProjectCollaboratorResponse: {
+      /** Email */
+      email: string;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Username */
+      username: string;
+    };
     /** ProjectCreateRequest */
     ProjectCreateRequest: {
       /** Guidelines */
@@ -3003,10 +3016,19 @@ export interface components {
       /** Lines */
       lines?: components["schemas"]["SegmentLine"][];
     };
-    /** ShareUserRequest */
+    /**
+     * ShareUserRequest
+     * @description Who to share with: a username or an email address, exactly one of them.
+     *
+     *     Email is the address people actually know each other by; the username is
+     *     kept for callers that predate email sharing. Matching on email is
+     *     case-insensitive, like login.
+     */
     ShareUserRequest: {
+      /** Email */
+      email?: string | null;
       /** Username */
-      username: string;
+      username?: string | null;
     };
     /** TokenResponse */
     TokenResponse: {
@@ -10537,6 +10559,91 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ModelBindingResponse"];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
+  list_project_collaborators_projects__project_id__share_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ProjectCollaboratorResponse"][];
         };
       };
       /** @description Not authenticated */

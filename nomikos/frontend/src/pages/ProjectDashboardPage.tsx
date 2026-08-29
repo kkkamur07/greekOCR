@@ -19,6 +19,7 @@ import { ContentRegionLoading } from "../components/layout/ContentRegionLoading"
 import { DocumentsTable } from "../components/projects/DocumentsTable";
 import { ProjectJobsPanel } from "../components/projects/ProjectJobsPanel";
 import { ProjectSettingsPanel } from "../components/sharing/ProjectSettingsPanel";
+import { ProjectSharingPanel } from "../components/sharing/ProjectSharingPanel";
 import { FormModal } from "../components/ui/FormModal";
 import { useServerQuery } from "../hooks/useServerQuery";
 
@@ -181,27 +182,32 @@ export function ProjectDashboardPage() {
       titlePanelLabel="Project settings"
       titlePanel={
         project && projectId ? (
-          <ProjectSettingsPanel
-            projectId={projectId}
-            name={project.name}
-            guidelines={project.guidelines ?? null}
-            onUpdated={(updated) => {
-              patchDashboard((current) => ({
-                ...current,
-                project: {
-                  ...current.project,
-                  name: updated.name,
-                  guidelines: updated.guidelines,
-                },
-              }));
-              // The patch shows the new name at once; the invalidation is what
-              // reaches the reads the patch cannot. `includeArchived` is part
-              // of this query's key, so the variant the researcher is not
-              // looking at is a second cache entry, and the project list is a
-              // third.
-              invalidateAfter.projectUpdated(projectId);
-            }}
-          />
+          <>
+            <ProjectSettingsPanel
+              projectId={projectId}
+              name={project.name}
+              guidelines={project.guidelines ?? null}
+              onUpdated={(updated) => {
+                patchDashboard((current) => ({
+                  ...current,
+                  project: {
+                    ...current.project,
+                    name: updated.name,
+                    guidelines: updated.guidelines,
+                  },
+                }));
+                // The patch shows the new name at once; the invalidation is what
+                // reaches the reads the patch cannot. `includeArchived` is part
+                // of this query's key, so the variant the researcher is not
+                // looking at is a second cache entry, and the project list is a
+                // third.
+                invalidateAfter.projectUpdated(projectId);
+              }}
+            />
+            {/* The panel only opens for the owner (titleEditable), and the
+                collaborator list is owner-only on the API too. */}
+            {isOwner && <ProjectSharingPanel projectId={projectId} />}
+          </>
         ) : null
       }
       headerActions={

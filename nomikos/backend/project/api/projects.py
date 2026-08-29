@@ -12,6 +12,7 @@ from backend.jobs.api.schemas import JobPageResponse, job_response_from_orm
 from backend.jobs.application.job_service import JobService
 from backend.project.api.responses import project_response
 from backend.project.api.schemas import (
+    ProjectCollaboratorResponse,
     ProjectCreateRequest,
     ProjectPageResponse,
     ProjectResponse,
@@ -146,6 +147,16 @@ async def delete_project(
     await _service.delete_project(db, current_user, project_id)
 
 
+@router.get("/{project_id}/share", response_model=list[ProjectCollaboratorResponse])
+async def list_project_collaborators(
+    project_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> list[ProjectCollaboratorResponse]:
+    collaborators = await _service.list_collaborators(db, current_user, project_id)
+    return [ProjectCollaboratorResponse.model_validate(user) for user in collaborators]
+
+
 @router.post("/{project_id}/share", status_code=status.HTTP_204_NO_CONTENT)
 async def share_project(
     project_id: UUID,
@@ -153,7 +164,9 @@ async def share_project(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> None:
-    await _service.share_project(db, current_user, project_id, username=body.username)
+    await _service.share_project(
+        db, current_user, project_id, username=body.username, email=body.email
+    )
 
 
 @router.delete("/{project_id}/share/{username}", status_code=status.HTTP_204_NO_CONTENT)

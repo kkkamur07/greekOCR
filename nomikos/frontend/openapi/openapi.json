@@ -2638,6 +2638,26 @@
         "title": "PartsPublishedUpdateRequest",
         "type": "object"
       },
+      "ProjectCollaboratorResponse": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": ["id", "username", "email"],
+        "title": "ProjectCollaboratorResponse",
+        "type": "object"
+      },
       "ProjectCreateRequest": {
         "properties": {
           "guidelines": {
@@ -3194,15 +3214,34 @@
         "type": "object"
       },
       "ShareUserRequest": {
+        "description": "Who to share with: a username or an email address, exactly one of them.\n\nEmail is the address people actually know each other by; the username is\nkept for callers that predate email sharing. Matching on email is\ncase-insensitive, like login.",
         "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "format": "email",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
           "username": {
-            "maxLength": 150,
-            "minLength": 1,
-            "title": "Username",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 150,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
           }
         },
-        "required": ["username"],
         "title": "ShareUserRequest",
         "type": "object"
       },
@@ -13758,6 +13797,114 @@
       }
     },
     "/projects/{project_id}/share": {
+      "get": {
+        "operationId": "list_project_collaborators_projects__project_id__share_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProjectCollaboratorResponse"
+                  },
+                  "title": "Response List Project Collaborators Projects  Project Id  Share Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict with current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Project Collaborators",
+        "tags": ["projects"]
+      },
       "post": {
         "operationId": "share_project_projects__project_id__share_post",
         "parameters": [
