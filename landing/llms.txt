@@ -12,6 +12,7 @@ Nomikos is open research tooling for manuscript HTR workflows: page annotation, 
 
 ## Models
 
+- [segmentation-blla](https://huggingface.co/nomikos-project/segmentation-blla): Page segmentation (BLLA), published
 - [syriac-htr-calamari](https://huggingface.co/nomikos-project/syriac-htr-calamari): Syriac line HTR (Calamari), published
 - coptic-htr-calamari: Coptic line HTR (Calamari), coming soon
 - armenian-htr-calamari: Armenian line HTR (Calamari), coming soon
