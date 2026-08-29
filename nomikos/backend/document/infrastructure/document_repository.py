@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from uuid import UUID
 
 from sqlalchemy import case, func, select, tuple_, update
@@ -355,6 +355,25 @@ class DocumentRepository:
             select(DocumentPart.id).where(DocumentPart.id == part_id).with_for_update()
         )
 
+    async def lock_parts(self, session: AsyncSession, part_ids: Iterable[UUID]) -> None:
+        """``lock_part`` for an operation that spans several parts at once.
+
+        Locking many rows is where a deadlock becomes possible, so they are
+        taken in one statement ordered by id: two callers that overlap therefore
+        queue on the same row first instead of each holding what the other wants
+        next. Single-part callers cannot join such a cycle, because they take
+        one row and then wait for nothing.
+        """
+        ids = sorted(set(part_ids))
+        if not ids:
+            return
+        await session.execute(
+            select(DocumentPart.id)
+            .where(DocumentPart.id.in_(ids))
+            .order_by(DocumentPart.id)
+            .with_for_update()
+        )
+
     async def get_page_transcription_line(
         self, session: AsyncSession, part_id: UUID, order: int
     ) -> PageTranscriptionLine | None:
@@ -409,9 +428,15 @@ class DocumentRepository:
         # from ``part.order``, so without this it could be computed from orders a
         # concurrent reorder had already superseded, land on the range that transaction
         # wrote, and violate uq_document_parts_document_order - a 500 on a plain drag.
+        # ``order_by(id)`` is for the locking, not the reading: everything below
+        # works off a dict and set comparisons, so the order rows arrive in does
+        # not matter, but the order they are *locked* in does. ``lock_parts``
+        # takes the same one, so two transactions that overlap on this document
+        # queue on the same row rather than each holding what the other needs.
         result = await session.execute(
             select(DocumentPart)
             .where(DocumentPart.document_id == document.id)
+            .order_by(DocumentPart.id)
             .with_for_update()
             .execution_options(populate_existing=True)
         )

@@ -68,6 +68,9 @@ class TranscriptionService:
         text: str,
     ) -> tuple[list[PageTranscriptionLine], dict[str, int]]:
         context = await self._access.require_part(session, user, project_id, document_id, part_id)
+        # Reimport clears every pairing on the page, so it is the same race as
+        # `pair_page_text_line` with the sign flipped.
+        await self._documents.lock_part(session, part_id)
         part = context.part
         text_lines = self._split_page_transcription(text)
         if len(text_lines) > MAX_PAGE_TRANSCRIPTION_LINES:
@@ -126,6 +129,12 @@ class TranscriptionService:
         text_line_order: int,
     ) -> tuple[list[PageTranscriptionLine], dict[str, int]]:
         context = await self._access.require_part(session, user, project_id, document_id, part_id)
+        # Segment health derives a delete from a snapshot of which lines carry
+        # human work, and `page_transcription_lines.paired_line_id` is ON DELETE
+        # SET NULL: a pairing committed inside that snapshot's window is removed
+        # by the delete without an error, and nothing records that it existed.
+        # Holding the part makes the two wait for each other.
+        await self._documents.lock_part(session, part_id)
         part = context.part
         line = await self._line_or_404(session, part.id, line_id)
         text_line = await self._page_transcription_line_or_404(session, part.id, text_line_order)
@@ -166,6 +175,30 @@ class TranscriptionService:
             raise ConflictError("Copy to ground truth requires a model transcription layer")
 
         ground_truth = await self._ground_truth.layer_for(session, document)
+
+        # This route is addressed by document, so it can touch every part in
+        # one transaction. Take all of their locks up front and in one ordered
+        # statement (see ``lock_parts``) rather than as each part comes up:
+        # locks acquired mid-loop are the ones that deadlock. The set is read
+        # before it is locked, so a line added to a part not in it during that
+        # instant is not covered; the source layer's line set is fixed by this
+        # point, so that needs a concurrent OCR write to happen at all.
+        affected_parts = (
+            select(DocumentPart.id)
+            .join(Line, Line.part_id == DocumentPart.id)
+            .join(LineTranscription, LineTranscription.line_id == Line.id)
+            .where(
+                LineTranscription.transcription_id == source.id,
+                DocumentPart.document_id == document.id,
+            )
+            .distinct()
+        )
+        if line_ids is not None:
+            affected_parts = affected_parts.where(LineTranscription.line_id.in_(line_ids))
+        await self._documents.lock_parts(
+            session, (await session.execute(affected_parts)).scalars().all()
+        )
+
         stmt = (
             select(LineTranscription)
             .join(Line, LineTranscription.line_id == Line.id)
@@ -226,7 +259,11 @@ class TranscriptionService:
         transcription = await self._transcription_or_404(session, document, transcription_id)
         if transcription.kind != TranscriptionKind.ground_truth:
             raise ConflictError("Only Ground truth transcription lines can be edited")
-        await self._line_in_document_or_404(session, document, line_id)
+        line = await self._line_in_document_or_404(session, document, line_id)
+        # Ground-truth text is the other thing that makes a line untouchable by
+        # segment health, so writing it takes the same lock a delete holds. The
+        # part comes from the line because this route is addressed by document.
+        await self._documents.lock_part(session, line.part_id)
 
         result = await session.execute(
             select(LineTranscription).where(
