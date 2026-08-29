@@ -3,8 +3,8 @@
 :class:`DocumentTranscriptionPdfService` extends the per-page renderer rather than
 wrapping it, so a page in the chapter PDF is built from exactly the values a page in the
 single-page PDF is built from: the page size off the same row (with the same lazy
-backfill for parts uploaded before dimensions were persisted), the same ground-truth
-selection, the same font fitting.
+backfill for parts uploaded before dimensions were persisted), the same text selection
+(approved text in ink, a model's unapproved output in grey), the same font fitting.
 
 What is *not* reused is ``generate_part_pdf`` itself, and the reason is the dependency
 closure. That method returns a finished one-page PDF, and turning eighteen of those into
@@ -27,7 +27,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.annotation.application.transcription_pdf_service import (
     _PAGE_FILL,
-    _TEXT_FILL,
     TranscriptionPdfService,
     _ensure_font,
     _fit_font_size,
@@ -145,5 +144,5 @@ def _draw_page(pdf: canvas.Canvas, page: _PdfPage, *, font_path: Path, font_name
         box_h = max(y1 - y0, 1)
         font_size = _fit_font_size(line.text, font_path, box_w * 0.95, box_h * 0.85)
         pdf.setFont(font_name, font_size)
-        pdf.setFillColorRGB(*_TEXT_FILL)
+        pdf.setFillColorRGB(*line.fill)
         pdf.drawString(x0 + 2, page.height - y0 - font_size, line.text)

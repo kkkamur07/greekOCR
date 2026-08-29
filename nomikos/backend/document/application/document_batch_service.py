@@ -131,12 +131,11 @@ class DocumentBatchService:
     ) -> BatchEnqueueResult:
         """Queue a segment job per page in ``scope``.
 
-        ``SegmentScope.all`` destroys work. Segmentation replaces a page's lines, and a
-        line is what a transcription is attached to, so re-segmenting a page discards
-        every transcription on it - the model's output and the researcher's approved
-        ground truth alike, since only geometry edits are tracked as manual. There is no
-        undo. That is why the default is ``unsegmented`` and why the destructive scope
-        has to be named in the request body.
+        ``SegmentScope.all`` redraws every page. The merge keeps any line a human has
+        touched (hand-drawn or moved geometry, approved text, or a pairing) and replaces
+        the rest, so what is lost is the machine geometry nobody worked on and the model's
+        unapproved output on it. There is no undo for that. That is why the default is
+        ``unsegmented`` and why the destructive scope has to be named in the request body.
         """
         context = await self._access.require_document(session, user, project_id, document_id)
         document = context.document

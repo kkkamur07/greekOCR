@@ -170,6 +170,10 @@ platform-prod = [
     "sqlalchemy[asyncio]>=2.0.36",
     "pillow>=12.3.0",
     "reportlab>=5.0.0",
+    # Polygon coverage in the segment merge (a re-segment must not redraw a line a
+    # human kept). Also a runtime dependency of the model stack in
+    # [project].dependencies, which this image deliberately does not install.
+    "shapely>=2.1.0",
     "supabase>=2.13.0",
 ]
 # Nomikos platform API + Postgres + tests (deps only — repo is not installed as a package)

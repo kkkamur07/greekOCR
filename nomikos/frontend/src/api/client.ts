@@ -230,9 +230,10 @@ export type DocumentWorkflowCounts = {
  * Which pages a batch segment touches.
  *
  * `unsegmented` is the safe one: it skips any page that already has lines, so
- * nothing anybody has transcribed is thrown away. `all` re-runs every page and
- * discards the transcriptions on the pages it redraws, which is why the item
- * that sends it is confirmed at the call site.
+ * nothing anybody has transcribed is thrown away. `all` re-runs every page; lines
+ * a human touched (approved text, a pairing, hand-drawn geometry) survive, every
+ * other line is redrawn and the model's unapproved text on it is discarded, which
+ * is why the item that sends it is confirmed at the call site.
  */
 export type DocumentSegmentScope = "unsegmented" | "all";
 

@@ -796,11 +796,11 @@ export interface paths {
      *     ``scope="unsegmented"`` (the default) queues only pages that have no segments yet.
      *     Nothing already on the document can be lost to it.
      *
-     *     ``scope="all"`` re-segments **every** page, and that destroys work: segmentation
-     *     replaces a page's lines, transcriptions hang off those lines, so every transcription
-     *     on every page of this document is discarded - the model's output and the
-     *     researcher's approved ground truth alike. There is no undo. Ask for it by name, never
-     *     by default, and confirm it with the researcher before sending it.
+     *     ``scope="all"`` re-segments **every** page. A line survives that if a human has
+     *     touched it in any way: hand-drawn or moved geometry, approved text, or a pairing with
+     *     the imported page text. Every other line is redrawn, and the model's unapproved
+     *     output on those lines goes with them. There is no undo for that part. Ask for it by
+     *     name, never by default, and confirm it with the researcher before sending it.
      *
      *     Returns 202 with ``queued: 0`` when the scope matches no page, including on a
      *     document with no pages at all: a batch that had nothing to do has done what was

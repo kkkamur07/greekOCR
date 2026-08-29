@@ -105,7 +105,7 @@ export function DocumentWorkflowMenu({
             destructive
             busy={running}
             question={`Re-segment every page (${pageCountLabel(total)})?`}
-            detail="The transcriptions on every page are discarded. There is no undo, and pages nobody has re-typed are lost with the rest."
+            detail="Lines with approved text, a pairing or hand-drawn geometry stay. Every other line is redrawn and the model's unapproved text on it is discarded. There is no undo."
             confirmLabel={
               running ? "Queueing…" : `Yes, re-segment ${pageCountLabel(total)}`
             }
@@ -132,8 +132,8 @@ export function DocumentWorkflowMenu({
               onSelect={() => setConfirmingResegment(true)}
             />
             <ActionMenuWarning>
-              Re-segmenting discards the transcriptions on a page. Only the top
-              item is safe.
+              Re-segmenting discards unapproved machine text on lines nobody has
+              touched. Only the top item is safe.
             </ActionMenuWarning>
             <ActionMenuDivider />
             <ActionMenuSection>Transcribe</ActionMenuSection>
