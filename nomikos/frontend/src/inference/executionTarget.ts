@@ -14,7 +14,12 @@
  * of markup.
  */
 import { ApiError } from "../api/errors";
-import type { ExecutionTarget, JobResponse, JobStatus } from "../api/client";
+import type {
+  EnqueueJobResponse,
+  ExecutionTarget,
+  JobResponse,
+  JobStatus,
+} from "../api/client";
 
 /** Reads after a preposition: "Running **on your computer**". */
 export const INFERENCE_HOST_PHRASE: Record<ExecutionTarget, string> = {
@@ -55,6 +60,24 @@ export function jobExecution(job: JobResponse): JobExecution {
   };
 }
 
+/**
+ * The announcement a job carries from the moment it is submitted.
+ *
+ * The 202 from an enqueue route names the host the platform fixed for the
+ * job, so the announcement is composed here, before any status update: there
+ * is no window in which a submitted job shows no host. The status is
+ * "pending" because that is what a job is until an agent claims it, and the
+ * first update replaces the whole value rather than patching it.
+ */
+export function enqueuedExecution(enqueued: EnqueueJobResponse): JobExecution {
+  return {
+    execution_target: enqueued.execution_target,
+    preferred_execution_target: enqueued.preferred_execution_target,
+    execution_target_substituted: enqueued.execution_target_substituted,
+    status: "pending",
+  };
+}
+
 function hostClause(target: ExecutionTarget, status?: JobStatus): string {
   const where = INFERENCE_HOST_PHRASE[target];
   if (status === "failed") return `Failed ${where}.`;
@@ -81,6 +104,37 @@ export function executionAnnouncement(job: JobExecution): string {
   return `${chosen} You asked for ${
     INFERENCE_HOST_NOUN[job.preferred_execution_target]
   }, which had no capacity when this job was submitted.`;
+}
+
+/**
+ * One sentence for a batch of jobs queued together, or `null` when there is
+ * no one sentence to say.
+ *
+ * Every job in a batch was decided against the same capacity reading and the
+ * same account preference, so they nearly always share a host, and then the
+ * batch says it once. When they do not (a model bound to one page is eligible
+ * for one host only) each job still announces itself on the jobs list, and
+ * the batch says nothing rather than something that is only mostly true.
+ * `null` for an empty batch too: nothing was submitted, so nothing runs.
+ */
+export function batchExecutionAnnouncement(
+  jobs: readonly JobExecution[],
+): string | null {
+  const [first] = jobs;
+  if (!first) return null;
+  if (jobs.length === 1) return executionAnnouncement(first);
+  const oneHost = jobs.every(
+    (job) =>
+      job.execution_target === first.execution_target &&
+      job.preferred_execution_target === first.preferred_execution_target &&
+      job.execution_target_substituted === first.execution_target_substituted,
+  );
+  if (!oneHost) return null;
+  const where = INFERENCE_HOST_PHRASE[first.execution_target];
+  if (!first.execution_target_substituted) return `Running ${where}.`;
+  return `Running ${where}. You asked for ${
+    INFERENCE_HOST_NOUN[first.preferred_execution_target]
+  }, which had no capacity when these jobs were submitted.`;
 }
 
 /**

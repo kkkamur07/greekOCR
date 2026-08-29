@@ -16,7 +16,9 @@ The four submission outcomes, which are the whole of this issue:
 
 1. the preferred host has capacity - the job goes there and says so;
 2. the preferred host does not and the other does - the job goes to the other
-   *and says so*, never silently;
+   *and says so*, never silently, and says so **in the enqueue response itself**:
+   the target is fixed at submission, so it is announced at submission, not on
+   the first status update (issue 64);
 3. neither has capacity - submission is refused with a reason, rather than
    creating a job nobody will claim;
 4. a submitted job's target cannot be changed - not through the mapper, and not
@@ -85,6 +87,23 @@ def _stored_job(job_id: str) -> Job:
         return session.execute(select(Job).where(Job.id == uuid.UUID(job_id))).scalar_one()
 
 
+ANNOUNCEMENT_FIELDS = (
+    "execution_target",
+    "preferred_execution_target",
+    "execution_target_substituted",
+)
+
+
+def _announced(body: dict) -> dict:
+    """The three fields that make up the announcement, off any job-shaped body.
+
+    Both the 202 from an enqueue route and the job read back from ``/jobs/{id}``
+    carry them, and the test for "never disagree" is that these two dicts are
+    equal.
+    """
+    return {field: body[field] for field in ANNOUNCEMENT_FIELDS}
+
+
 # ---------------------------------------------------------------------------
 # Outcome 1: the preferred host has capacity
 # ---------------------------------------------------------------------------
@@ -101,15 +120,18 @@ def test_a_job_runs_on_the_preferred_host_when_it_has_capacity(
     response = _segment(client, owner_headers, owner_project, ids)
 
     assert response.status_code == 202, response.text
-    job_id = response.json()["job_id"]
+    enqueued = response.json()
+    job_id = enqueued["job_id"]
+    # The researcher is always told which host will run the job - including when
+    # nothing unusual happened - and told at submission, in the 202 itself.
+    assert _announced(enqueued) == {
+        "execution_target": "cloud",
+        "preferred_execution_target": "cloud",
+        "execution_target_substituted": False,
+    }
     read = client.get(f"/jobs/{job_id}", headers=owner_headers)
     assert read.status_code == 200
-    body = read.json()
-    # The researcher is always told which host will run the job - including when
-    # nothing unusual happened.
-    assert body["execution_target"] == "cloud"
-    assert body["preferred_execution_target"] == "cloud"
-    assert body["execution_target_substituted"] is False
+    assert _announced(read.json()) == _announced(enqueued)
     assert _stored_job(job_id).execution_target is ExecutionTarget.cloud
 
 
@@ -197,6 +219,79 @@ def test_an_unavailable_preferred_host_substitutes_and_the_job_reports_it(
     assert body["preferred_execution_target"] == "local"
     assert body["execution_target"] == "cloud"
     assert body["execution_target_substituted"] is True
+
+
+def test_the_substitution_is_announced_in_the_enqueue_response_itself(
+    client: TestClient, owner_user: dict[str, str], owner_headers: dict[str, str], owner_project
+) -> None:
+    """The researcher asked for their laptop; it is paired but has not checked in,
+    so the job goes to the cloud. That has to be said in the 202, not first on
+    the next poll: between the click and the first status update the interface
+    would otherwise have nothing to say about where the job went, and a
+    downgrade the researcher does not notice is the silent fallback ADR 0002
+    rejected, arrived at by another route.
+
+    The response and the job read back afterwards must agree: both are the
+    same three columns, mapped once."""
+    user_id = user_id_for_email(owner_user["email"])
+    pair_inference_device(user_id=user_id, host="local", seen_seconds_ago=_stale_seconds())
+    pair_inference_device(user_id=user_id, host="cloud", seen_seconds_ago=5)
+    client.put(
+        "/account/execution-target",
+        headers=owner_headers,
+        json={"prefer_local_inference": True},
+    )
+    ids = _make_part(client, owner_headers, owner_project)
+
+    response = _segment(client, owner_headers, owner_project, ids)
+
+    assert response.status_code == 202, response.text
+    enqueued = response.json()
+    assert _announced(enqueued) == {
+        "execution_target": "cloud",
+        "preferred_execution_target": "local",
+        "execution_target_substituted": True,
+    }
+    later = client.get(f"/jobs/{enqueued['job_id']}", headers=owner_headers).json()
+    assert _announced(later) == _announced(enqueued)
+
+
+def test_a_transcription_announces_its_host_at_submission_too(
+    client: TestClient, owner_user: dict[str, str], owner_headers: dict[str, str], owner_project
+) -> None:
+    """Same contract on the other enqueue route: the two share one mapping from
+    the job row, so neither can drift from the other or from ``/jobs/{id}``."""
+    user_id = user_id_for_email(owner_user["email"])
+    pair_inference_device(user_id=user_id, host="local", seen_seconds_ago=_stale_seconds())
+    pair_inference_device(user_id=user_id, host="cloud", seen_seconds_ago=5)
+    client.put(
+        "/account/execution-target",
+        headers=owner_headers,
+        json={"prefer_local_inference": True},
+    )
+    document_id, part_id = _make_part(client, owner_headers, owner_project)
+    base = documents_url(owner_project["id"])
+    # Transcription needs a line to transcribe; one hand-drawn rectangle will do.
+    drawn = client.post(
+        f"{base}/{document_id}/parts/{part_id}/lines",
+        headers=owner_headers,
+        json={"order": 0, "kind": "rectangle", "points": [[0, 0], [10, 0], [10, 5], [0, 5]]},
+    )
+    assert drawn.status_code == 201, drawn.text
+
+    response = client.post(
+        f"{base}/{document_id}/parts/{part_id}/transcribe", headers=owner_headers
+    )
+
+    assert response.status_code == 202, response.text
+    enqueued = response.json()
+    assert _announced(enqueued) == {
+        "execution_target": "cloud",
+        "preferred_execution_target": "local",
+        "execution_target_substituted": True,
+    }
+    later = client.get(f"/jobs/{enqueued['job_id']}", headers=owner_headers).json()
+    assert _announced(later) == _announced(enqueued)
 
 
 # ---------------------------------------------------------------------------

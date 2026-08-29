@@ -158,7 +158,14 @@ def test_segmenting_unsegmented_pages_skips_the_pages_that_already_have_lines(
     body = response.json()
     assert body["queued"] == 2
     assert body["skipped"] == 2
-    assert len(body["job_ids"]) == 2
+    assert len(body["jobs"]) == 2
+    # A batch announces the host per job, at submission, the same way a single
+    # enqueue does: the researcher is told where the chapter went before the
+    # first poll, not after it.
+    for job in body["jobs"]:
+        assert job["execution_target"] == "cloud"
+        assert job["preferred_execution_target"] == "cloud"
+        assert job["execution_target_substituted"] is False
     queued_parts = {str(job.document_part_id) for job in _stored_jobs(document_id, JobType.segment)}
     assert queued_parts == {part_ids[1], part_ids[3]}
 
@@ -312,7 +319,7 @@ def test_a_document_with_no_pages_returns_a_queued_count_of_zero(
     for action in ("jobs/segment", "jobs/transcribe"):
         response = client.post(_batch_url(project_id, document_id, action), headers=owner_headers)
         assert response.status_code == 202, response.text
-        assert response.json() == {"job_ids": [], "queued": 0, "skipped": 0}
+        assert response.json() == {"jobs": [], "queued": 0, "skipped": 0}
 
 
 @pytest.mark.integration
@@ -392,7 +399,7 @@ def test_a_page_with_a_job_still_in_flight_is_skipped_by_the_next_batch(
     )
 
     assert second.status_code == 202, second.text
-    assert second.json() == {"job_ids": [], "queued": 0, "skipped": 3}
+    assert second.json() == {"jobs": [], "queued": 0, "skipped": 3}
     assert len(_stored_jobs(document_id, JobType.segment)) == 3
     assert len(part_ids) == 3
 

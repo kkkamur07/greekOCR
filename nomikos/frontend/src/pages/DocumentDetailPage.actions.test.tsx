@@ -104,6 +104,16 @@ function seedProject(ownerId: string) {
   });
 }
 
+/** One job as a batch route announces it: id plus the host fixed for it. */
+function queuedJob(jobId: string) {
+  return {
+    job_id: jobId,
+    execution_target: "cloud" as const,
+    preferred_execution_target: "cloud" as const,
+    execution_target_substituted: false,
+  };
+}
+
 describe("DocumentDetailPage action toolbar", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -130,12 +140,12 @@ describe("DocumentDetailPage action toolbar", () => {
     vi.mocked(api.getDocument).mockResolvedValue(DOCUMENT);
     vi.mocked(api.getDocumentWorkflowCounts).mockResolvedValue(COUNTS);
     vi.mocked(api.enqueueDocumentSegment).mockResolvedValue({
-      job_ids: ["job-1"],
+      jobs: [queuedJob("job-1")],
       queued: 3,
       skipped: 0,
     });
     vi.mocked(api.enqueueDocumentTranscribe).mockResolvedValue({
-      job_ids: ["job-2"],
+      jobs: [queuedJob("job-2")],
       queued: 3,
       skipped: 0,
     });

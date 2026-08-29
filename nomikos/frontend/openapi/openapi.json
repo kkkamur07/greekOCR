@@ -718,14 +718,13 @@
         "type": "object"
       },
       "DocumentBatchJobsResponse": {
-        "description": "The jobs a fan-out created, and how many pages it left alone.",
+        "description": "The jobs a fan-out created, and how many pages it left alone.\n\nEach job is announced the way a single enqueue announces it: id plus the\n**execution target** fixed at submission. A batch is the same enqueue run\nonce per page, so it states the host the same way, at the same moment,\nrather than leaving a whole chapter's worth of jobs to be discovered on the\nnext poll.",
         "properties": {
-          "job_ids": {
+          "jobs": {
             "items": {
-              "format": "uuid",
-              "type": "string"
+              "$ref": "#/components/schemas/EnqueueJobResponse"
             },
-            "title": "Job Ids",
+            "title": "Jobs",
             "type": "array"
           },
           "queued": {
@@ -737,7 +736,7 @@
             "type": "integer"
           }
         },
-        "required": ["job_ids", "queued", "skipped"],
+        "required": ["jobs", "queued", "skipped"],
         "title": "DocumentBatchJobsResponse",
         "type": "object"
       },
@@ -1030,14 +1029,30 @@
         "type": "object"
       },
       "EnqueueJobResponse": {
+        "description": "A 202 from an enqueue route: the job's id, and the host it was fixed to.\n\nThe **execution target** is decided during submission and never changes\n(ADR 0002), so it is known before this response is written. Announcing it\nhere, rather than on the first status update, closes the window between the\nclick and the first poll in which the interface could say nothing about\nwhere the job went. That window sits exactly where a researcher is looking,\nand it is where a substituted host would otherwise go unnoticed.\n\nThe three fields are the same three every ``JobResponse`` carries, read\nfrom the same columns, so this response and the job's later payload cannot\ndisagree.",
         "properties": {
+          "execution_target": {
+            "$ref": "#/components/schemas/ExecutionTarget"
+          },
+          "execution_target_substituted": {
+            "title": "Execution Target Substituted",
+            "type": "boolean"
+          },
           "job_id": {
             "format": "uuid",
             "title": "Job Id",
             "type": "string"
+          },
+          "preferred_execution_target": {
+            "$ref": "#/components/schemas/ExecutionTarget"
           }
         },
-        "required": ["job_id"],
+        "required": [
+          "job_id",
+          "execution_target",
+          "preferred_execution_target",
+          "execution_target_substituted"
+        ],
         "title": "EnqueueJobResponse",
         "type": "object"
       },

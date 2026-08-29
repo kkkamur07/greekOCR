@@ -19,7 +19,34 @@ class EnqueueTestJobResponse(BaseModel):
 
 
 class EnqueueJobResponse(BaseModel):
+    """A 202 from an enqueue route: the job's id, and the host it was fixed to.
+
+    The **execution target** is decided during submission and never changes
+    (ADR 0002), so it is known before this response is written. Announcing it
+    here, rather than on the first status update, closes the window between the
+    click and the first poll in which the interface could say nothing about
+    where the job went. That window sits exactly where a researcher is looking,
+    and it is where a substituted host would otherwise go unnoticed.
+
+    The three fields are the same three every ``JobResponse`` carries, read
+    from the same columns, so this response and the job's later payload cannot
+    disagree.
+    """
+
     job_id: UUID
+    execution_target: ExecutionTarget
+    preferred_execution_target: ExecutionTarget
+    execution_target_substituted: bool
+
+
+def enqueue_job_response_from_orm(job: Job) -> EnqueueJobResponse:
+    """The enqueue response for a freshly written job, naming its **inference host**."""
+    return EnqueueJobResponse(
+        job_id=job.id,
+        execution_target=job.execution_target,
+        preferred_execution_target=job.preferred_execution_target,
+        execution_target_substituted=job.execution_target_substituted,
+    )
 
 
 class JobResponse(BaseModel):

@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import { ApiError } from "../api/errors";
 import type { JobResponse } from "../api/client";
 import {
+  batchExecutionAnnouncement,
+  enqueuedExecution,
   executionAnnouncement,
   isSubmissionRefusal,
   jobExecution,
@@ -121,6 +123,63 @@ describe("the announcement on a job", () => {
     expect(
       executionAnnouncement(jobExecution(job({ status: "cancelled" }))),
     ).toBe("Cancelled in the cloud.");
+  });
+});
+
+describe("the announcement at submission", () => {
+  // The 202 as the enqueue routes return it: an id and the three fields the
+  // job will carry from now on.
+  const substituted = {
+    job_id: "5f2b1c9e-0000-4000-8000-000000000010",
+    execution_target: "cloud" as const,
+    preferred_execution_target: "local" as const,
+    execution_target_substituted: true,
+  };
+  const chosen = {
+    ...substituted,
+    preferred_execution_target: "cloud" as const,
+    execution_target_substituted: false,
+  };
+
+  it("is composed from the enqueue response alone, as a queued job", () => {
+    expect(executionAnnouncement(enqueuedExecution(substituted))).toBe(
+      "Running in the cloud. You asked for your computer, which had no capacity when this job was submitted.",
+    );
+    expect(enqueuedExecution(chosen).status).toBe("pending");
+  });
+
+  it("says the same thing the job will say once it is polled", () => {
+    // The response and the job payload are the same three columns; the only
+    // thing the first poll may change is the status.
+    const fromEnqueue = enqueuedExecution(substituted);
+    const fromJob = jobExecution(
+      job({ ...substituted, id: substituted.job_id, status: "pending" }),
+    );
+    expect(fromJob).toEqual(fromEnqueue);
+  });
+
+  it("speaks once for a batch that went to one host", () => {
+    expect(batchExecutionAnnouncement([])).toBeNull();
+    expect(batchExecutionAnnouncement([enqueuedExecution(chosen)])).toBe(
+      "Running in the cloud.",
+    );
+    expect(
+      batchExecutionAnnouncement([
+        enqueuedExecution(substituted),
+        enqueuedExecution(substituted),
+      ]),
+    ).toBe(
+      "Running in the cloud. You asked for your computer, which had no capacity when these jobs were submitted.",
+    );
+  });
+
+  it("says nothing for a batch split across hosts rather than something mostly true", () => {
+    expect(
+      batchExecutionAnnouncement([
+        enqueuedExecution(chosen),
+        enqueuedExecution({ ...chosen, execution_target: "local" }),
+      ]),
+    ).toBeNull();
   });
 });
 

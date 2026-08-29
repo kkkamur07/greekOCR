@@ -253,12 +253,11 @@ export type DocumentTranscribeJobRequest = {
 /**
  * A 202 from either batch route. `skipped` is the count the scope excluded,
  * so "queued 0, skipped 18" is a complete answer rather than a silent no-op.
+ * Each entry of `jobs` is the same shape a single enqueue returns, host
+ * included.
  */
-export type DocumentBatchJobResponse = {
-  job_ids: string[];
-  queued: number;
-  skipped: number;
-};
+export type DocumentBatchJobResponse =
+  components["schemas"]["DocumentBatchJobsResponse"];
 
 export type PageResponse<T> = CursorPage<T>;
 
