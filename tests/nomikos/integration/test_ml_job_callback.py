@@ -16,6 +16,11 @@ from backend.document.infrastructure.orm_models import (
     DocumentPart,
     Line,
     LineGeometryKind,
+    LineSource,
+    LineTranscription,
+    PageTranscriptionLine,
+    Transcription,
+    TranscriptionKind,
 )
 from backend.jobs.application import job_callback_service
 from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
@@ -274,7 +279,108 @@ def test_callback_success_marks_job_done(client: TestClient):
     assert job.result["added_lines"] == 1
     assert job.result["pruned_lines"] == 0
     assert job.result["preserved_manual_lines"] == 0
+    assert job.result["preserved_transcribed_lines"] == 0
     assert job.completed_at is not None
+
+
+def _line(part_id: uuid.UUID, order: int, *, manual_geometry: bool = False) -> Line:
+    return Line(
+        id=uuid.uuid4(),
+        part_id=part_id,
+        baseline={"points": [[1, 10 * order + 1], [2, 10 * order + 1]]},
+        kind=LineGeometryKind.polygon,
+        points=[[1, 10 * order], [2, 10 * order], [2, 10 * order + 2], [1, 10 * order + 2]],
+        source=LineSource.manual if manual_geometry else LineSource.kraken,
+        manual_geometry=manual_geometry,
+        order=order,
+    )
+
+
+def test_resegment_keeps_every_line_a_human_touched(client: TestClient):
+    """Approving text or pairing a line is human work even when its polygon never moved.
+
+    Before this guard the merge kept only ``manual_geometry`` lines, so a page whose text
+    was corrected and approved without a single polygon being nudged lost all of it, and
+    the pairing rows pointing at those lines were silently unlinked, to one re-segment.
+    """
+    product_job_id, inference_job_id = _seed_waiting_job()
+    job = _get_job(product_job_id)
+    part_id = job.document_part_id
+    document_id = job.document_id
+    assert part_id is not None and document_id is not None
+
+    approved = _line(part_id, 0)
+    paired = _line(part_id, 1)
+    drawn = _line(part_id, 2, manual_geometry=True)
+    untouched = _line(part_id, 3)
+    with sync_system_session() as session:
+        ground_truth = Transcription(
+            id=uuid.uuid4(),
+            document_id=document_id,
+            name="Ground truth",
+            kind=TranscriptionKind.ground_truth,
+        )
+        model_layer = Transcription(
+            id=uuid.uuid4(), document_id=document_id, name="Model", kind=TranscriptionKind.model
+        )
+        session.add_all([ground_truth, model_layer, approved, paired, drawn, untouched])
+        session.flush()
+        session.add_all(
+            [
+                LineTranscription(
+                    line_id=approved.id, transcription_id=ground_truth.id, text="approved"
+                ),
+                # The model's own output is exactly what a re-segment may replace.
+                LineTranscription(
+                    line_id=untouched.id, transcription_id=model_layer.id, text="guess"
+                ),
+                PageTranscriptionLine(
+                    part_id=part_id, order=0, text="paired", paired_line_id=paired.id
+                ),
+            ]
+        )
+        session.commit()
+
+    response = client.post(
+        CALLBACK_URL,
+        headers=WEBHOOK_HEADERS,
+        json=_segment_done_payload(
+            product_job_id=product_job_id, inference_job_id=inference_job_id
+        ),
+    )
+    assert response.status_code == 204
+
+    with sync_system_session() as session:
+        surviving = {
+            line.id: line
+            for line in session.scalars(select(Line).where(Line.part_id == part_id)).all()
+        }
+        assert approved.id in surviving
+        assert paired.id in surviving
+        assert drawn.id in surviving
+        assert untouched.id not in surviving
+        # Three kept plus the one line the job drew.
+        assert len(surviving) == 4
+        assert (
+            session.scalars(
+                select(LineTranscription.text).where(LineTranscription.line_id == approved.id)
+            ).one()
+            == "approved"
+        )
+        assert (
+            session.scalars(
+                select(PageTranscriptionLine.paired_line_id).where(
+                    PageTranscriptionLine.part_id == part_id
+                )
+            ).one()
+            == paired.id
+        )
+
+    job = _get_job(product_job_id)
+    assert job.status == JobStatus.done
+    assert job.result["pruned_lines"] == 1
+    assert job.result["preserved_manual_lines"] == 1
+    assert job.result["preserved_transcribed_lines"] == 2
 
 
 def test_callback_transcribe_success_marks_job_done(client: TestClient):

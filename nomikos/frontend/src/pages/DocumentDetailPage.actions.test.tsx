@@ -221,7 +221,7 @@ describe("DocumentDetailPage action toolbar", () => {
       "Model blla-greek-v2",
     );
     expect(
-      within(menu).getByText(/Re-segmenting discards the transcriptions/),
+      within(menu).getByText(/Re-segmenting discards unapproved machine text/),
     ).toBeTruthy();
   });
 
@@ -258,7 +258,7 @@ describe("DocumentDetailPage action toolbar", () => {
     // item must not be the click that discards the transcriptions.
     expect(api.enqueueDocumentSegment).not.toHaveBeenCalled();
     expect(
-      screen.getByText(/The transcriptions on every page are discarded/),
+      screen.getByText(/the model's unapproved text on it is discarded/),
     ).toBeTruthy();
     expect(screen.getByText("Re-segment every page (3 pages)?")).toBeTruthy();
 

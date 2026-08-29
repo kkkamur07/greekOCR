@@ -134,6 +134,7 @@ def _apply_segment_merge(session, context: _MergeContext, callback: JobCallbackR
         "added_lines": summary.added_lines,
         "pruned_lines": summary.pruned_lines,
         "preserved_manual_lines": summary.preserved_manual_lines,
+        "preserved_transcribed_lines": summary.preserved_transcribed_lines,
     }
 
 
