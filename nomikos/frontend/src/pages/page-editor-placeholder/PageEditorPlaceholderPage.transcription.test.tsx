@@ -252,7 +252,12 @@ describe("PageEditorPlaceholderPage transcription", () => {
         ],
       }),
     ]);
-    mockedApi.enqueueTranscribePart.mockResolvedValue({ job_id: "job-ocr-1" });
+    mockedApi.enqueueTranscribePart.mockResolvedValue({
+      job_id: "job-ocr-1",
+      execution_target: "cloud",
+      preferred_execution_target: "cloud",
+      execution_target_substituted: false,
+    });
     mockedApi.getJob.mockResolvedValue({
       id: "job-ocr-1",
       type: "transcribe",

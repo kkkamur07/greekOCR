@@ -2042,10 +2042,16 @@ export interface components {
     /**
      * DocumentBatchJobsResponse
      * @description The jobs a fan-out created, and how many pages it left alone.
+     *
+     *     Each job is announced the way a single enqueue announces it: id plus the
+     *     **execution target** fixed at submission. A batch is the same enqueue run
+     *     once per page, so it states the host the same way, at the same moment,
+     *     rather than leaving a whole chapter's worth of jobs to be discovered on the
+     *     next poll.
      */
     DocumentBatchJobsResponse: {
-      /** Job Ids */
-      job_ids: string[];
+      /** Jobs */
+      jobs: components["schemas"]["EnqueueJobResponse"][];
       /** Queued */
       queued: number;
       /** Skipped */
@@ -2203,13 +2209,31 @@ export interface components {
       /** Unsegmented */
       unsegmented: number;
     };
-    /** EnqueueJobResponse */
+    /**
+     * EnqueueJobResponse
+     * @description A 202 from an enqueue route: the job's id, and the host it was fixed to.
+     *
+     *     The **execution target** is decided during submission and never changes
+     *     (ADR 0002), so it is known before this response is written. Announcing it
+     *     here, rather than on the first status update, closes the window between the
+     *     click and the first poll in which the interface could say nothing about
+     *     where the job went. That window sits exactly where a researcher is looking,
+     *     and it is where a substituted host would otherwise go unnoticed.
+     *
+     *     The three fields are the same three every ``JobResponse`` carries, read
+     *     from the same columns, so this response and the job's later payload cannot
+     *     disagree.
+     */
     EnqueueJobResponse: {
+      execution_target: components["schemas"]["ExecutionTarget"];
+      /** Execution Target Substituted */
+      execution_target_substituted: boolean;
       /**
        * Job Id
        * Format: uuid
        */
       job_id: string;
+      preferred_execution_target: components["schemas"]["ExecutionTarget"];
     };
     /** EnqueueTestJobRequest */
     EnqueueTestJobRequest: {

@@ -7,6 +7,7 @@ import {
 } from "react";
 import {
   api,
+  type EnqueueJobResponse,
   type JobResponse,
   type LineResponse,
   type TranscribeJobResult,
@@ -61,7 +62,7 @@ type PairingStateInput = {
    */
   setSubmissionRefusal: Dispatch<SetStateAction<string | null>>;
   trackJobAndWait: (
-    jobId: string,
+    enqueued: EnqueueJobResponse,
     meta: { label: string; kind: PageEditorJobKind },
     options?: { timeoutMs?: number },
   ) => Promise<JobResponse>;
@@ -372,7 +373,7 @@ export function usePairingState({
         },
       );
       const job = await trackJobAndWait(
-        enqueued.job_id,
+        enqueued,
         {
           label: selectedSegmentNumber
             ? `Segment ${selectedSegmentNumber}`
@@ -432,7 +433,7 @@ export function usePairingState({
         },
       );
       const job = await trackJobAndWait(
-        enqueued.job_id,
+        enqueued,
         { label: "Full page", kind: "transcription-page" },
         { timeoutMs: INFERENCE_JOB_WAIT_CEILING_MS },
       );

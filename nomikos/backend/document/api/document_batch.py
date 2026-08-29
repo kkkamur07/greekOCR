@@ -26,6 +26,7 @@ from backend.document.application.document_batch_service import (
     TranscribeScope,
 )
 from backend.document.infrastructure.document_batch_repository import WorkflowCounts
+from backend.jobs.api.schemas import EnqueueJobResponse, enqueue_job_response_from_orm
 from backend.ml.application.capacity_service import InferenceCapacityService
 from backend.users.api.dependencies import get_current_user
 from backend.users.infrastructure.orm_models import User
@@ -56,9 +57,16 @@ class TranscribeDocumentRequest(BaseModel):
 
 
 class DocumentBatchJobsResponse(BaseModel):
-    """The jobs a fan-out created, and how many pages it left alone."""
+    """The jobs a fan-out created, and how many pages it left alone.
 
-    job_ids: list[UUID]
+    Each job is announced the way a single enqueue announces it: id plus the
+    **execution target** fixed at submission. A batch is the same enqueue run
+    once per page, so it states the host the same way, at the same moment,
+    rather than leaving a whole chapter's worth of jobs to be discovered on the
+    next poll.
+    """
+
+    jobs: list[EnqueueJobResponse]
     queued: int
     skipped: int
 
@@ -79,7 +87,9 @@ class DocumentWorkflowCountsResponse(BaseModel):
 
 def _jobs_response(result: BatchEnqueueResult) -> DocumentBatchJobsResponse:
     return DocumentBatchJobsResponse(
-        job_ids=result.job_ids, queued=result.queued, skipped=result.skipped
+        jobs=[enqueue_job_response_from_orm(job) for job in result.jobs],
+        queued=result.queued,
+        skipped=result.skipped,
     )
 
 

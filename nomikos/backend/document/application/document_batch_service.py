@@ -82,12 +82,12 @@ class BatchEnqueueResult:
     researcher, the same page skipped.
     """
 
-    job_ids: list[UUID]
+    jobs: list[Job]
     skipped: int
 
     @property
     def queued(self) -> int:
-        return len(self.job_ids)
+        return len(self.jobs)
 
 
 class DocumentBatchService:
@@ -211,11 +211,11 @@ class DocumentBatchService:
             # that need it" against a chapter that is already segmented has done exactly
             # what was asked. Returning 202 with queued 0 also keeps the empty document
             # and the fully-processed document on the same path.
-            return BatchEnqueueResult(job_ids=[], skipped=total_parts)
+            return BatchEnqueueResult(jobs=[], skipped=total_parts)
         # Only once there is real work to do, and before any of it is written. Asking
         # earlier would refuse a no-op batch for want of a host it was never going to use.
         self._require_capacity(execution)
-        job_ids: list[UUID] = []
+        jobs: list[Job] = []
         for part_id in eligible:
             # One authorization and one model resolution per page, because job creation
             # lives in one place and this is the interface it offers. A chapter is a
@@ -231,8 +231,8 @@ class DocumentBatchService:
                 execution=execution,
                 model_id=model_id,
             )
-            job_ids.append(job.id)
-        return BatchEnqueueResult(job_ids=job_ids, skipped=total_parts - len(job_ids))
+            jobs.append(job)
+        return BatchEnqueueResult(jobs=jobs, skipped=total_parts - len(jobs))
 
     async def _enqueue_one(
         self,

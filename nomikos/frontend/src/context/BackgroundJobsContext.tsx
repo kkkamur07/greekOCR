@@ -11,6 +11,7 @@ import {
 import {
   api,
   waitForJob,
+  type EnqueueJobResponse,
   type JobResponse,
   type JobStatus,
 } from "../api/client";
@@ -21,7 +22,11 @@ import {
   jobStatusLabel,
   type PageEditorJobKind,
 } from "../components/page-editor/jobProgress";
-import { jobExecution, type JobExecution } from "../inference/executionTarget";
+import {
+  enqueuedExecution,
+  jobExecution,
+  type JobExecution,
+} from "../inference/executionTarget";
 
 export type TrackedBackgroundJob = {
   id: string;
@@ -33,9 +38,10 @@ export type TrackedBackgroundJob = {
   finishedAt: number | null;
   /**
    * Which **inference host** the platform fixed for this job, and which one the
-   * account asked for. `null` until the platform has answered.
+   * account asked for. Known from the enqueue response onwards, so a tracked
+   * job never has a moment without a host to show.
    */
-  execution: JobExecution | null;
+  execution: JobExecution;
 };
 
 /**
@@ -61,8 +67,13 @@ type BackgroundJobsContextValue = {
   activeCount: number;
   panelExpanded: boolean;
   setPanelExpanded: (expanded: boolean) => void;
+  /**
+   * Takes the whole enqueue response rather than the id alone: the 202 already
+   * names the job's **execution target**, and that is what the panel shows
+   * from the first render, before any status update arrives.
+   */
   trackAndWait: (
-    jobId: string,
+    enqueued: EnqueueJobResponse,
     meta: { label: string; kind: PageEditorJobKind },
     options?: { timeoutMs?: number },
   ) => Promise<JobResponse>;
@@ -221,10 +232,11 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
 
   const trackAndWait = useCallback(
     async (
-      jobId: string,
+      enqueued: EnqueueJobResponse,
       meta: { label: string; kind: PageEditorJobKind },
       options?: { timeoutMs?: number },
     ): Promise<JobResponse> => {
+      const jobId = enqueued.job_id;
       setJobs((current) => {
         if (current.some((job) => job.id === jobId)) return current;
         return [
@@ -237,9 +249,10 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
             error: null,
             progressLabel: "Queued",
             finishedAt: null,
-            // Filled by the first update from the platform. Enqueueing returns
-            // only an id, and guessing a host would be a claim, not a report.
-            execution: null,
+            // Announced from the response that created the job: the target is
+            // fixed at submission (ADR 0002), so nothing here is a guess, and
+            // a substituted host is stated before the first poll, not after.
+            execution: enqueuedExecution(enqueued),
           },
         ];
       });
@@ -265,9 +278,7 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
                   finishedAt: Date.now(),
                   // A failed job says which host it failed on, so the host it
                   // was given has to travel with the new status.
-                  execution: job.execution
-                    ? { ...job.execution, status: "failed" }
-                    : null,
+                  execution: { ...job.execution, status: "failed" },
                 }
               : job,
           ),

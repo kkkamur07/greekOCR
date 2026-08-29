@@ -139,15 +139,53 @@ describe("the account-level host preference", () => {
   });
 });
 
+/** The 202 from an enqueue route: the id and the host fixed at submission. */
+function enqueued(overrides: Record<string, unknown> = {}) {
+  return {
+    job_id: "job-ocr-1",
+    execution_target: "cloud",
+    preferred_execution_target: "cloud",
+    execution_target_substituted: false,
+    ...overrides,
+  };
+}
+
 describe("the announcement on a job", () => {
   beforeEach(() => {
     resetPageEditorApiMocks();
     loadedPageWithOneSegment();
-    mockedApi.enqueueTranscribePart.mockResolvedValue({ job_id: "job-ocr-1" });
+    mockedApi.enqueueTranscribePart.mockResolvedValue(enqueued());
   });
 
   afterEach(async () => {
     await flushPageEditorEffects();
+  });
+
+  it("renders from the enqueue response, before any job update arrives", async () => {
+    // The platform has answered the enqueue and nothing else: no SSE event, no
+    // poll result. Between the click and the first status update the job must
+    // already say where it went, and with the substitution spelled out, since
+    // this is exactly the moment a researcher is looking at the screen.
+    mockedApi.enqueueTranscribePart.mockResolvedValue(
+      enqueued({
+        execution_target: "cloud",
+        preferred_execution_target: "local",
+        execution_target_substituted: true,
+      }),
+    );
+    mockedApi.getJob.mockReturnValue(new Promise(() => {}));
+
+    renderPageEditor();
+    await runOcrOnTheSelectedSegment();
+    await openBackgroundJobs();
+
+    const announcement = await screen.findByText(
+      /running in the cloud\. you asked for your computer, which had no capacity/i,
+    );
+    expect(announcement.getAttribute("data-execution-target")).toBe("cloud");
+    expect(announcement.getAttribute("data-execution-substituted")).toBe(
+      "true",
+    );
   });
 
   it("states a substituted host on the job rather than in a toast", async () => {

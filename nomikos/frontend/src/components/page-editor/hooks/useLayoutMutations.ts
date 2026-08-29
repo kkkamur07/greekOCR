@@ -8,6 +8,7 @@ import {
 } from "react";
 import {
   api,
+  type EnqueueJobResponse,
   type JobResponse,
   type LayoutLineResponse,
   type LinePoint,
@@ -80,7 +81,7 @@ type LayoutMutationsInput = {
     listener: (event: JobCompletionEvent) => void,
   ) => () => void;
   trackJobAndWait: (
-    jobId: string,
+    enqueued: EnqueueJobResponse,
     meta: { label: string; kind: PageEditorJobKind },
     options?: { timeoutMs?: number },
   ) => Promise<JobResponse>;
@@ -602,7 +603,7 @@ export function useLayoutMutations({
 
     try {
       const enqueued = await api.segmentPart(projectId, documentId, partId, {});
-      await trackJobAndWait(enqueued.job_id, jobMeta, {
+      await trackJobAndWait(enqueued, jobMeta, {
         timeoutMs: INFERENCE_JOB_WAIT_CEILING_MS,
       });
       notePartContentChanged();

@@ -1,4 +1,8 @@
 import type { DocumentBatchJobResponse } from "../../api/client";
+import {
+  batchExecutionAnnouncement,
+  enqueuedExecution,
+} from "../../inference/executionTarget";
 
 /**
  * The engine and model the document-level jobs run with.
@@ -22,6 +26,11 @@ export function pageCountLabel(count: number): string {
  * `skipped` is reported rather than swallowed. "Queued 4, skipped 14" and
  * "queued 4" describe different documents, and a person who expected all 18
  * pages to run needs to be told which one they are looking at.
+ *
+ * The host comes from the response too. The target of every job in the batch
+ * was fixed at submission (ADR 0002), so "Queued 4 pages. Running in the
+ * cloud." is a report, not a prediction, and a substituted host is said here,
+ * at the click, and not left for the jobs list to reveal later.
  */
 export function batchQueuedMessage(result: DocumentBatchJobResponse): string {
   if (result.queued === 0) {
@@ -29,9 +38,12 @@ export function batchQueuedMessage(result: DocumentBatchJobResponse): string {
       ? `Nothing to run. ${pageCountLabel(result.skipped)} skipped.`
       : "Nothing to run.";
   }
-  return result.skipped > 0
-    ? `Queued ${pageCountLabel(result.queued)}. Skipped ${result.skipped}.`
-    : `Queued ${pageCountLabel(result.queued)}.`;
+  const queued =
+    result.skipped > 0
+      ? `Queued ${pageCountLabel(result.queued)}. Skipped ${result.skipped}.`
+      : `Queued ${pageCountLabel(result.queued)}.`;
+  const host = batchExecutionAnnouncement(result.jobs.map(enqueuedExecution));
+  return host ? `${queued} ${host}` : queued;
 }
 
 /**

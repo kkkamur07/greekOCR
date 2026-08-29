@@ -70,7 +70,7 @@ from backend.document.application.part_service import DocumentPartService
 from backend.document.application.transcription_service import TranscriptionService
 from backend.document.infrastructure.document_repository import DocumentRepository
 from backend.document.infrastructure.orm_models import Block, TranscriptionKind
-from backend.jobs.api.schemas import EnqueueJobResponse
+from backend.jobs.api.schemas import EnqueueJobResponse, enqueue_job_response_from_orm
 from backend.ml.application.capacity_service import InferenceCapacityService
 from backend.users.api.dependencies import get_current_user
 from backend.users.infrastructure.orm_models import User
@@ -941,7 +941,7 @@ async def segment_part(
         model_id=body.model_id,
         ml_params=body.model_dump(exclude={"model_id"}),
     )
-    return EnqueueJobResponse(job_id=job.id)
+    return enqueue_job_response_from_orm(job)
 
 
 @router.post(
@@ -968,7 +968,7 @@ async def transcribe_part(
         model_id=body.model_id,
         line_ids=body.line_ids,
     )
-    return EnqueueJobResponse(job_id=job.id)
+    return enqueue_job_response_from_orm(job)
 
 
 @router.post(
