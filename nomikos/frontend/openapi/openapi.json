@@ -14026,9 +14026,10 @@
         "tags": ["projects"]
       }
     },
-    "/projects/{project_id}/share/{username}": {
+    "/projects/{project_id}/share/{user_id}": {
       "delete": {
-        "operationId": "unshare_project_projects__project_id__share__username__delete",
+        "description": "Remove a collaborator, addressed by id.\n\nBy id rather than by username because a username is a path segment here and\nregistration constrains only its length: a username containing a ``/`` splits\ninto two segments, matches no route, and answers 404 however carefully the\nclient percent-encodes it. An id has no character that means anything to a\nURL. ``GET /projects/{id}/share`` hands the caller the ids to use.",
+        "operationId": "unshare_project_projects__project_id__share__user_id__delete",
         "parameters": [
           {
             "in": "path",
@@ -14042,10 +14043,11 @@
           },
           {
             "in": "path",
-            "name": "username",
+            "name": "user_id",
             "required": true,
             "schema": {
-              "title": "Username",
+              "format": "uuid",
+              "title": "User Id",
               "type": "string"
             }
           }

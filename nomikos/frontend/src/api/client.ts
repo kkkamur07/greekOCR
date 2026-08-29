@@ -541,9 +541,10 @@ export const api = {
       body,
     }),
 
-  unshareProject: (projectId: string, username: string) =>
+  /** By user id: a username may contain a `/`, which no encoding survives in a path segment. */
+  unshareProject: (projectId: string, userId: string) =>
     apiRequest<void>(
-      `/projects/${projectId}/share/${encodeURIComponent(username)}`,
+      `/projects/${projectId}/share/${encodeURIComponent(userId)}`,
       { method: "DELETE" },
     ),
 

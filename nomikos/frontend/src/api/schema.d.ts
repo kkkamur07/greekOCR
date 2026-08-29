@@ -1338,7 +1338,7 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/projects/{project_id}/share/{username}": {
+  "/projects/{project_id}/share/{user_id}": {
     parameters: {
       query?: never;
       header?: never;
@@ -1348,8 +1348,17 @@ export interface paths {
     get?: never;
     put?: never;
     post?: never;
-    /** Unshare Project */
-    delete: operations["unshare_project_projects__project_id__share__username__delete"];
+    /**
+     * Unshare Project
+     * @description Remove a collaborator, addressed by id.
+     *
+     *     By id rather than by username because a username is a path segment here and
+     *     registration constrains only its length: a username containing a ``/`` splits
+     *     into two segments, matches no route, and answers 404 however carefully the
+     *     client percent-encodes it. An id has no character that means anything to a
+     *     URL. ``GET /projects/{id}/share`` hands the caller the ids to use.
+     */
+    delete: operations["unshare_project_projects__project_id__share__user_id__delete"];
     options?: never;
     head?: never;
     patch?: never;
@@ -10805,13 +10814,13 @@ export interface operations {
       };
     };
   };
-  unshare_project_projects__project_id__share__username__delete: {
+  unshare_project_projects__project_id__share__user_id__delete: {
     parameters: {
       query?: never;
       header?: never;
       path: {
         project_id: string;
-        username: string;
+        user_id: string;
       };
       cookie?: never;
     };

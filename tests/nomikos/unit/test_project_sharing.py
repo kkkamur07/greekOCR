@@ -30,6 +30,7 @@ class _StubProjectRepository:
     def __init__(self, project: Project) -> None:
         self._project = project
         self.added: list[User] = []
+        self.removed: list[User] = []
 
     async def get_by_id(self, session, project_id):
         return self._project if project_id == self._project.id else None
@@ -37,6 +38,13 @@ class _StubProjectRepository:
     async def add_shared_user(self, session, project, user):
         project.shared_users.append(user)
         self.added.append(user)
+
+    async def remove_shared_user(self, session, project, user):
+        if user not in project.shared_users:
+            return False
+        project.shared_users.remove(user)
+        self.removed.append(user)
+        return True
 
 
 @pytest.fixture
@@ -173,6 +181,38 @@ async def test_share_needs_exactly_one_identifier(owner, friend, project) -> Non
         )
     with pytest.raises(ValueError):
         await service.share_project(None, owner, project.id, username="friend", identifier="friend")
+
+
+# --- Removing a collaborator ---
+# Tests removal addressed by id. Does not test the URL, which is what made it necessary.
+
+
+async def test_unshare_removes_the_collaborator_by_id(owner, friend, project) -> None:
+    project.shared_users = [friend]
+    service, projects = _service(project, [owner, friend])
+
+    await service.unshare_project(None, owner, project.id, user_id=friend.id)
+
+    assert projects.removed == [friend]
+    assert project.shared_users == []
+
+
+async def test_unshare_a_user_who_is_not_a_collaborator_is_not_found(
+    owner, friend, project
+) -> None:
+    service, _ = _service(project, [owner, friend])
+
+    with pytest.raises(NotFoundError):
+        await service.unshare_project(None, owner, project.id, user_id=friend.id)
+
+
+async def test_unshare_is_owner_only(owner, friend, project) -> None:
+    other = _user("other", "other@example.org")
+    project.shared_users = [friend, other]
+    service, _ = _service(project, [owner, friend, other])
+
+    with pytest.raises(AccessDeniedError):
+        await service.unshare_project(None, friend, project.id, user_id=other.id)
 
 
 # --- Collaborator list ---

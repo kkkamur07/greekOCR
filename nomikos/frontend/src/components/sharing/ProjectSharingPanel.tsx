@@ -66,14 +66,12 @@ export function ProjectSharingPanel({ projectId }: ProjectSharingPanelProps) {
 
   async function handleRemove(person: ProjectCollaboratorResponse) {
     if (removing) return;
-    setRemoving(person.username);
+    setRemoving(person.id);
     try {
-      await api.unshareProject(projectId, person.username);
+      await api.unshareProject(projectId, person.id);
       toast.success(`Removed ${person.username}`);
       setCollaborators((current) =>
-        current
-          ? current.filter((item) => item.username !== person.username)
-          : current,
+        current ? current.filter((item) => item.id !== person.id) : current,
       );
     } catch (err) {
       const message =
@@ -135,7 +133,7 @@ export function ProjectSharingPanel({ projectId }: ProjectSharingPanelProps) {
                 aria-label={`Remove ${person.username}`}
                 onClick={() => void handleRemove(person)}
               >
-                {removing === person.username ? "Removing…" : "Remove"}
+                {removing === person.id ? "Removing…" : "Remove"}
               </button>
             </li>
           ))}
