@@ -1,14 +1,14 @@
 # Vercel platform API deployment notes
 
 This note records the deploy lessons from shipping **api.nomikos.app** from
-`deploy/platform/`. It is intentionally practical: use it when a Vercel build
+`infrastructure/platform/`. It is intentionally practical: use it when a Vercel build
 or runtime import fails.
 
 ## Project settings
 
 | Setting | Value |
 |---------|-------|
-| Root Directory | `deploy/platform` |
+| Root Directory | `infrastructure/platform` |
 | Framework | Other |
 | Install Command | *(empty / default)* |
 | Build Command | `bash build.sh` |
@@ -17,18 +17,18 @@ or runtime import fails.
 | Function region | `fra1` (Frankfurt, Europe) |
 
 Do not set a custom install command. Vercel's Python runtime installs from the
-checked-in `deploy/platform/requirements.txt`.
+checked-in `infrastructure/platform/requirements.txt`.
 
 The region applies to the platform API functions only. Static Vercel projects
 remain globally edge-served. Compare API p95 latency with the Supabase project
-region after deployment; change `regions` in `deploy/platform/vercel.json` if needed.
+region after deployment; change `regions` in `infrastructure/platform/vercel.json` if needed.
 
 `build.sh` only bundles source files into the Vercel project root. It must not
 install dependencies.
 
 ## Python version
 
-`deploy/platform/.python-version` pins the function runtime to Python 3.12
+`infrastructure/platform/.python-version` pins the function runtime to Python 3.12
 because Vercel supports Python 3.12/3.13/3.14, while local development remains
 Python 3.11 at the repository root.
 
@@ -36,15 +36,15 @@ Vercel logs can show two Python phases:
 
 - An install resolver phase that may mention the current Vercel default Python.
 - A function packaging phase that should say it is using Python from
-  `deploy/platform/.python-version`.
+  `infrastructure/platform/.python-version`.
 
 The deploy should keep `requires-python = ">=3.11,<3.13"` so local 3.11 and
 Vercel 3.12 are both valid.
 
 ## Build bundle shape
 
-The generated copy under `deploy/platform/nomikos/` and
-`deploy/platform/inference/` is a build artifact. It is gitignored and recreated
+The generated copy under `infrastructure/platform/nomikos/` and
+`infrastructure/platform/inference/` is a build artifact. It is gitignored and recreated
 by `bash build.sh`.
 
 `build.sh` uses Python `shutil` rather than `rsync` because the Vercel build
@@ -68,7 +68,7 @@ the platform never calls inference, and inference never listens (ADR 0002) - an
 
 ## Runtime dependency rules
 
-`deploy/platform/requirements.txt` is generated from the `platform-prod` group
+`infrastructure/platform/requirements.txt` is generated from the `platform-prod` group
 in `pyproject.toml` and committed so Vercel can do its standard Python install.
 
 Keep the Vercel API runtime small. It should include request/response API,
@@ -147,7 +147,7 @@ deployment, leave `BEHIND_PROXY=false`.
 | Symptom | Fix |
 |---------|-----|
 | `externally-managed-environment` from `pip` or `uv pip --system` | Remove custom install commands; let Vercel install from `requirements.txt` |
-| `alembic requires Python>=3.10` while using Python 3.9 | Ensure `deploy/platform/.python-version` exists and uses supported Vercel Python |
+| `alembic requires Python>=3.10` while using Python 3.9 | Ensure `infrastructure/platform/.python-version` exists and uses supported Vercel Python |
 | `rsync: command not found` | Keep `build.sh` on Python stdlib copy helpers |
 | `No Output Directory named "public"` | Set output directory to `.` |
 | Function bundle exceeds 500 MB | Remove heavy runtime deps from `platform-prod`; do not bundle inference stacks |
@@ -158,7 +158,7 @@ deployment, leave `BEHIND_PROXY=false`.
 Before pushing deploy changes:
 
 ```bash
-cd deploy/platform
+cd infrastructure/platform
 PYENV_VERSION=3.11.10 bash build.sh
 ```
 
@@ -199,7 +199,7 @@ change.
 Rollback when p95 latency is more than 50% above baseline, error rate exceeds
 2× baseline, a critical flow breaks, or any security or cross-user isolation
 issue appears. For a region-specific regression, remove `regions` from
-`deploy/platform/vercel.json`, redeploy the last known-good version, and repeat
+`infrastructure/platform/vercel.json`, redeploy the last known-good version, and repeat
 the health and smoke checks.
 
 ## July 2026 production incident and fixes
@@ -232,7 +232,7 @@ them; setting them configures nothing. `INFERENCE_WEBHOOK_SECRET` is unchanged
 and still required in production.
 
 The API function is pinned to Frankfurt with `"regions": ["fra1"]` in
-`deploy/platform/vercel.json`. The landing page and app remain globally served;
+`infrastructure/platform/vercel.json`. The landing page and app remain globally served;
 only the API function is region-pinned.
 
 Local OCR needs nothing from this deployment. The **inference agent** runs on

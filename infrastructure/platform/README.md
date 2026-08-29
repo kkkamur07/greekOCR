@@ -17,7 +17,7 @@ Vercel's **Root Directory** for the `nomikos-api` project. At build time `build.
 ## Local smoke test
 
 ```bash
-cd deploy/platform
+cd infrastructure/platform
 bash build.sh
 PYTHONPATH=".:nomikos" python -c "from api.index import app; print(app.title)"
 ```
@@ -26,7 +26,7 @@ PYTHONPATH=".:nomikos" python -c "from api.index import app; print(app.title)"
 
 | Setting | Value |
 |---------|-------|
-| Root Directory | `deploy/platform` |
+| Root Directory | `infrastructure/platform` |
 | Framework | Other |
 | Install Command | *(empty / default)* |
 | Build Command | `bash build.sh` |

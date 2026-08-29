@@ -12,9 +12,9 @@ hosting, see [deployment/production.md](../deployment/production.md).
 From the repository root:
 
 ```bash
-cp .env.compose.example .env
+cp infrastructure/.env.compose.example infrastructure/.env
 cp nomikos/backend/core/.env.example nomikos/backend/core/.env
-docker compose up --build
+docker compose -f infrastructure/docker-compose.yml up --build
 ```
 
 | Service      | URL                                                                             |
@@ -23,7 +23,7 @@ docker compose up --build
 | Platform API | http://localhost:8000                                                           |
 | API health   | http://localhost:8000/health                                                    |
 | OpenAPI      | http://localhost:8000/docs                                                      |
-| Postgres     | `127.0.0.1:5433` - credentials from the ignored root `.env`, database `kalamos` |
+| Postgres     | `127.0.0.1:5433` - credentials from the ignored `infrastructure/.env`, database `kalamos` |
 
 Migrations run automatically when the API container starts.
 
@@ -42,7 +42,7 @@ Use a hosted Supabase project for shared testing:
 3. Start with the Compose override:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.supabase.yml up --build
+docker compose -f infrastructure/docker-compose.yml -f infrastructure/docker-compose.supabase.yml up --build
 ```
 
 Full guide: [deployment/supabase.md](../deployment/supabase.md).
@@ -52,7 +52,7 @@ Full guide: [deployment/supabase.md](../deployment/supabase.md).
 ## Local API only (Postgres in Docker)
 
 ```bash
-docker compose up db -d
+docker compose -f infrastructure/docker-compose.yml up db -d
 cd nomikos
 export PYTHONPATH=.
 cp backend/core/.env.example backend/core/.env

@@ -9,7 +9,7 @@ Serverless constraints and pitfalls: [learnings - Vercel](../guides/learnings.md
 | -------- | ---------------- | ---------------- | ------ |
 | [nomikos.app](https://nomikos.app) | `nomikos-landing` | `landing/` | Static marketing site |
 | [app.nomikos.app](https://app.nomikos.app) | `nomikos-app` | `nomikos/frontend/` | Next.js App Router client |
-| [api.nomikos.app](https://api.nomikos.app) | `nomikos-api` | `deploy/platform/` | FastAPI platform API |
+| [api.nomikos.app](https://api.nomikos.app) | `nomikos-api` | `infrastructure/platform/` | FastAPI platform API |
 
 Inference has no public surface of its own. Models run in an **inference
 agent** - the **published package** started by a researcher, or by an operator
@@ -124,7 +124,7 @@ Config: [`nomikos/frontend/vercel.json`](../../nomikos/frontend/vercel.json).
 
 | Setting | Value |
 | --------- | ------- |
-| Root Directory | `deploy/platform` |
+| Root Directory | `infrastructure/platform` |
 | Install Command | *(empty / default)* |
 | Build Command | `bash build.sh` |
 | Output Directory | `.` |
@@ -159,12 +159,12 @@ one global bucket that would 429 real users on each other's traffic.
 not depend on the network path. Full reasoning and the remaining gap:
 [`docs/security/rate-limiting.md`](../security/rate-limiting.md).
 
-Config: [`deploy/platform/vercel.json`](../../deploy/platform/vercel.json).
+Config: [`infrastructure/platform/vercel.json`](../../infrastructure/platform/vercel.json).
 
 The `fra1` setting applies to the serverless platform API only. The landing
 page and frontend SPA remain globally edge-served by Vercel. Validate API p95
 latency against the Supabase project region after deployment; rollback by
-removing `regions` from [`deploy/platform/vercel.json`](../../deploy/platform/vercel.json).
+removing `regions` from [`infrastructure/platform/vercel.json`](../../infrastructure/platform/vercel.json).
 
 Vercel-specific Python runtime, bundle-size, and dependency notes:
 [`vercel-platform-api.md`](vercel-platform-api.md).
@@ -323,7 +323,7 @@ broken critical flow.
 
 1. Restore the last known-good Vercel deployment.
 2. If the issue is specific to regional placement, remove `regions` from
-   [`deploy/platform/vercel.json`](../../deploy/platform/vercel.json) and
+   [`infrastructure/platform/vercel.json`](../../infrastructure/platform/vercel.json) and
    redeploy.
 3. Re-run `/health` and the critical-flow smoke checks.
 4. Compare error rate, latency, job completion, and storage writes with the

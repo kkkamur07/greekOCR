@@ -51,7 +51,7 @@ Supabase exposes multiple Postgres endpoints. We use:
 cp nomikos/backend/core/.env.supabase.example nomikos/backend/core/.env.supabase
 # fill DATABASE_URL, MIGRATOR_DATABASE_URL, SUPABASE_* keys
 ./scripts/platform/migrate_supabase.sh
-docker compose -f docker-compose.yml -f docker-compose.supabase.yml up --build
+docker compose -f infrastructure/docker-compose.yml -f infrastructure/docker-compose.supabase.yml up --build
 ```
 
 Full guide: [`docs/deployment/supabase.md`](../deployment/supabase.md).
@@ -60,7 +60,7 @@ Full guide: [`docs/deployment/supabase.md`](../deployment/supabase.md).
 
 ## Serverless API (Vercel)
 
-Production ships the platform API as a **Vercel Python serverless function** (`deploy/platform/` → `api.nomikos.app`). This works for REST + JWT + Supabase, but **not** for background workers or SSE listeners.
+Production ships the platform API as a **Vercel Python serverless function** (`infrastructure/platform/` → `api.nomikos.app`). This works for REST + JWT + Supabase, but **not** for background workers or SSE listeners.
 
 ### What must run elsewhere
 
@@ -80,7 +80,7 @@ Production ships the platform API as a **Vercel Python serverless function** (`d
 | `FORWARDED_ALLOW_IPS` | Explicit proxy IP/CIDR list | Required with `BEHIND_PROXY=true`; never use `*` |
 | `STORAGE_BACKEND` | `supabase` | No writable local disk |
 
-Platform API functions are pinned to **`fra1` (Frankfurt)** in `deploy/platform/vercel.json` for European latency. Landing and SPA stay globally edge-served. Rollback: remove `regions` from `vercel.json` and redeploy.
+Platform API functions are pinned to **`fra1` (Frankfurt)** in `infrastructure/platform/vercel.json` for European latency. Landing and SPA stay globally edge-served. Rollback: remove `regions` from `vercel.json` and redeploy.
 
 Frontend falls back to **HTTP polling** when SSE is unavailable - verified in production.
 

@@ -1,7 +1,14 @@
 # Parallel image builds with persistent local cache.
 #
-#   docker buildx bake
-#   docker compose up
+#   cd infrastructure
+#   docker buildx bake --allow=fs.read=..
+#   docker compose -f docker-compose.yml up
+#
+# Run bake from this directory, not the repository root. Unlike Compose, bake
+# resolves the `..` contexts below against the working directory rather than
+# against this file, and the entitlement grant is what lets it read outside that
+# directory at all. `--print` will happily render a plan for an invocation that
+# cannot build, so it does not verify either point.
 #
 # Compose reuses the tagged images; bake builds both targets at once.
 
@@ -18,7 +25,7 @@ group "default" {
 }
 
 target "api" {
-  context    = "."
+  context    = ".."
   dockerfile = "nomikos/Dockerfile"
   target     = "runtime"
   tags       = ["nomikos-api:latest"]
@@ -30,7 +37,7 @@ target "api" {
 }
 
 target "frontend-dev" {
-  context    = "nomikos"
+  context    = "../nomikos"
   dockerfile = "frontend/Dockerfile"
   target     = "dev"
   tags       = ["nomikos-frontend:latest"]

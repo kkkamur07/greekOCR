@@ -367,13 +367,13 @@ From the **repository root**, with `.env.supabase` configured:
 
 ```bash
 # First time (or after code changes)
-docker compose -f docker-compose.yml -f docker-compose.supabase.yml up --build
+docker compose -f infrastructure/docker-compose.yml -f infrastructure/docker-compose.supabase.yml up --build
 
 # Later starts
-docker compose -f docker-compose.yml -f docker-compose.supabase.yml up
+docker compose -f infrastructure/docker-compose.yml -f infrastructure/docker-compose.supabase.yml up
 
 # Background
-docker compose -f docker-compose.yml -f docker-compose.supabase.yml up -d --build
+docker compose -f infrastructure/docker-compose.yml -f infrastructure/docker-compose.supabase.yml up -d --build
 ```
 
 | URL                   | Service      |
@@ -387,13 +387,13 @@ idempotent development seed.
 
 ```bash
 # Stop
-docker compose -f docker-compose.yml -f docker-compose.supabase.yml down
+docker compose -f infrastructure/docker-compose.yml -f infrastructure/docker-compose.supabase.yml down
 
 # Logs
-docker compose -f docker-compose.yml -f docker-compose.supabase.yml logs -f api frontend
+docker compose -f infrastructure/docker-compose.yml -f infrastructure/docker-compose.supabase.yml logs -f api frontend
 
 # Rebuild one service
-docker compose -f docker-compose.yml -f docker-compose.supabase.yml up --build api
+docker compose -f infrastructure/docker-compose.yml -f infrastructure/docker-compose.supabase.yml up --build api
 ```
 
 The **inference agent** is not in Compose - run it on the host if you want jobs
@@ -462,7 +462,7 @@ Dev login after seed: `dev@example.com` / `dev-pass-123`
 | `DuplicatePreparedStatementError`                     | Pooler + asyncpg                           | Fixed in `db.py`; restart process                                        |
 | `role nomikos_app cannot be dropped`                 | Legacy pre-squash role                     | Remove it during a non-production reset or through the provider operator |
 | Upload 401/403 to Storage                             | Wrong key or missing bucket                | Secret key + private `document-media`                                    |
-| Connection refused on `:5433`                         | Docker not running                         | `docker compose up db -d`                                                |
+| Connection refused on `:5433`                         | Docker not running                         | `docker compose -f infrastructure/docker-compose.yml up db -d`                                                |
 | Integration tests hang                                | Stale DB advisory locks                    | Stop API; terminate idle sessions                                        |
 
 ---

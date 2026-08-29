@@ -131,7 +131,7 @@ outside its own settings module, the tests, and this record. That is the same fa
 having the setting at all: every production deployment would have keyed device tokens off
 `JWT_SECRET` and nobody would have known until a routine rotation unpaired every laptop. So:
 
-- `DEVICE_TOKEN_HMAC_SECRET` is in `.env.compose.example` and
+- `DEVICE_TOKEN_HMAC_SECRET` is in `infrastructure/.env.compose.example` and
   `nomikos/backend/core/.env.production.example`, with the blast radius spelled out next to
   it;
 - in production, `DeviceSettings` refuses to construct when the secret is unset or equal to
