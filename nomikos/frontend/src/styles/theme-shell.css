@@ -420,16 +420,6 @@ button {
   line-height: 1.45;
   color: var(--text-3);
 }
-.entity-panel__status-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 0 12px;
-}
-.entity-panel__status-label {
-  font-size: 0.8125rem;
-  color: var(--text-3);
-}
 .entity-panel__status,
 .entity-panel__meta {
   margin: 0 0 10px;
@@ -449,21 +439,6 @@ button {
   text-transform: uppercase;
   color: var(--text-4);
   margin-bottom: 4px;
-}
-.entity-panel__url {
-  width: 100%;
-  box-sizing: border-box;
-  font: inherit;
-  font-size: 0.75rem;
-  padding: 6px 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  color: var(--text-2);
-  margin-bottom: 8px;
-}
-.entity-panel__share-block {
-  margin-bottom: 12px;
 }
 .entity-panel__share-form {
   display: flex;
@@ -510,12 +485,6 @@ button {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.entity-panel__actions {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-bottom: 12px;
 }
 
 .field-check {

@@ -29,7 +29,6 @@ export function PageEditorSharingMenu({
         publicShareToken={publicShareToken}
         onWorkflowChange={onWorkflowChange}
         disabled={disabled}
-        compact
       />
     </>
   );

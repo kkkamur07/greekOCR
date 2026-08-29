@@ -206,9 +206,68 @@ export type CopyToGroundTruthRequest =
 export type CopyToGroundTruthResponse =
   components["schemas"]["CopyToGroundTruthResponse"];
 
+/*
+ * ─── Document-level workflow and export types, written by hand ──────────
+ *
+ * The routes these describe are new, so `schema.d.ts` does not carry them yet.
+ * Every type below should collapse into `components["schemas"][...]` once
+ * `npm run generate:api` has re-exported the OpenAPI document and regenerated
+ * the artifacts; nothing here is meant to outlive that run. Until then this is
+ * the only hand-written copy of a wire shape in the client, and a backend
+ * change to any of it will reach the frontend as a runtime surprise rather
+ * than a failing typecheck.
+ */
+
+/** What the Workflow and Download menus put in their count badges. */
+export type DocumentWorkflowCounts = {
+  total: number;
+  reviewed: number;
+  unsegmented: number;
+  unpaired: number;
+};
+
+/**
+ * Which pages a batch segment touches.
+ *
+ * `unsegmented` is the safe one: it skips any page that already has lines, so
+ * nothing anybody has transcribed is thrown away. `all` re-runs every page and
+ * discards the transcriptions on the pages it redraws, which is why the item
+ * that sends it is confirmed at the call site.
+ */
+export type DocumentSegmentScope = "unsegmented" | "all";
+
+/** Which pages a batch transcribe touches. */
+export type DocumentTranscribeScope = "unpaired" | "all";
+
+export type DocumentSegmentJobRequest = {
+  scope: DocumentSegmentScope;
+  /** Null means "whatever the document resolves to", which is all the UI offers. */
+  model_id: string | null;
+};
+
+export type DocumentTranscribeJobRequest = {
+  scope: DocumentTranscribeScope;
+  model_id: string | null;
+};
+
+/**
+ * A 202 from either batch route. `skipped` is the count the scope excluded,
+ * so "queued 0, skipped 18" is a complete answer rather than a silent no-op.
+ */
+export type DocumentBatchJobResponse = {
+  job_ids: string[];
+  queued: number;
+  skipped: number;
+};
+
 export type PageResponse<T> = CursorPage<T>;
 
 export type ListPageOptions = CursorPageOptions;
+
+/** Every export route takes the same one flag, spelled the same one way. */
+function reviewedOnlyQuery(reviewedOnly: boolean): string {
+  return `?reviewed_only=${reviewedOnly ? "true" : "false"}`;
+}
 
 function cursorQuery(
   options: CursorPageOptions,
@@ -601,6 +660,77 @@ export const api = {
     apiRequest<void>(`/projects/${projectId}/documents/${documentId}`, {
       method: "DELETE",
     }),
+
+  /**
+   * Mint a fresh share token. Owner-only, and every link built from the old
+   * token stops resolving the moment this returns.
+   */
+  rotateDocumentShareToken: (projectId: string, documentId: string) =>
+    apiRequest<DocumentResponse>(
+      `/projects/${projectId}/documents/${documentId}/share-token/rotate`,
+      { method: "POST" },
+    ),
+
+  /**
+   * The four numbers the document action menus label themselves with.
+   *
+   * Deliberately a separate read from the document: the parts list carries
+   * `reviewed` but says nothing about whether a page has lines or a pairing,
+   * so the counts a Workflow menu needs cannot be derived from what this page
+   * already holds.
+   */
+  getDocumentWorkflowCounts: (projectId: string, documentId: string) =>
+    apiRequest<DocumentWorkflowCounts>(
+      `/projects/${projectId}/documents/${documentId}/workflow-counts`,
+    ),
+
+  /** Zip of the PAGE XML for every page next to the image it describes. */
+  exportDocumentPageXml: (
+    projectId: string,
+    documentId: string,
+    reviewedOnly = false,
+  ) =>
+    fetchBinaryApi(
+      `/projects/${projectId}/documents/${documentId}/export/page-xml${reviewedOnlyQuery(reviewedOnly)}`,
+    ),
+
+  exportDocumentTranscriptionPdf: (
+    projectId: string,
+    documentId: string,
+    reviewedOnly = false,
+  ) =>
+    fetchBinaryApi(
+      `/projects/${projectId}/documents/${documentId}/export/transcription-pdf${reviewedOnlyQuery(reviewedOnly)}`,
+    ),
+
+  exportDocumentText: (
+    projectId: string,
+    documentId: string,
+    reviewedOnly = false,
+  ) =>
+    fetchBinaryApi(
+      `/projects/${projectId}/documents/${documentId}/export/text${reviewedOnlyQuery(reviewedOnly)}`,
+    ),
+
+  enqueueDocumentSegment: (
+    projectId: string,
+    documentId: string,
+    body: DocumentSegmentJobRequest,
+  ) =>
+    apiRequest<DocumentBatchJobResponse>(
+      `/projects/${projectId}/documents/${documentId}/jobs/segment`,
+      { method: "POST", body },
+    ),
+
+  enqueueDocumentTranscribe: (
+    projectId: string,
+    documentId: string,
+    body: DocumentTranscribeJobRequest,
+  ) =>
+    apiRequest<DocumentBatchJobResponse>(
+      `/projects/${projectId}/documents/${documentId}/jobs/transcribe`,
+      { method: "POST", body },
+    ),
 
   listTranscriptions: (projectId: string, documentId: string) =>
     apiRequest<TranscriptionLayerResponse[]>(

@@ -41,6 +41,8 @@ vi.mock("../api/client", async (importOriginal) => {
       updatePartReviewStatus: vi.fn(),
       updatePartsPublished: vi.fn(),
       updateDocument: vi.fn(),
+      deleteDocument: vi.fn(),
+      getDocumentWorkflowCounts: vi.fn(),
     },
   };
 });
@@ -162,6 +164,12 @@ describe("DocumentDetailPage", () => {
       created_at: "2026-01-01T00:00:00Z",
       updated_at: "2026-01-01T00:00:00Z",
       document_count: 1,
+    });
+    vi.mocked(api.getDocumentWorkflowCounts).mockResolvedValue({
+      total: 2,
+      reviewed: 0,
+      unsegmented: 2,
+      unpaired: 2,
     });
     seedDocument();
   });

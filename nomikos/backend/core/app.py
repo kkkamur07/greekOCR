@@ -36,6 +36,7 @@ from backend.core.settings import (
 from backend.core.settings.device import get_device_settings
 from backend.core.settings.job import get_job_settings
 from backend.core.version import get_version
+from backend.document.api.document_batch import router as document_batch_router
 from backend.document.api.documents import router as documents_router
 from backend.document.api.media import router as media_router
 from backend.document.api.public import router as public_router
@@ -369,6 +370,10 @@ def create_app() -> FastAPI:
     app.include_router(auth_router)
     app.include_router(projects_router)
     app.include_router(documents_router)
+    # Document-level fan-out over the same prefix: the per-page routes above address one
+    # part, these address every part of a chapter at once. Mounted after them so the
+    # per-page surface stays the one an ambiguous path would resolve to.
+    app.include_router(document_batch_router)
     app.include_router(annotation_history_router)
     app.include_router(media_router)
     app.include_router(public_router)

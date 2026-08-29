@@ -5,6 +5,7 @@ import {
   api,
   type DocumentWithPartsResponse,
   type DocumentWorkflow,
+  type DocumentWorkflowCounts,
 } from "../api/client";
 import { ApiError } from "../api/errors";
 import { invalidatePartImage } from "../api/imageCache";
@@ -14,12 +15,15 @@ import {
   isUnauthorized,
   navigateToLogin,
 } from "../auth/session";
+import { DocumentActionBar } from "../components/document/DocumentActionBar";
+import { relativeUpdatedLabel } from "../components/document/documentActionCopy";
+import { DocumentLiveLinkRow } from "../components/document/DocumentLiveLinkRow";
 import { JobsNotice } from "../components/document/JobsNotice";
 import { PartList } from "../components/document/PartList";
 import { UploadZone } from "../components/document/UploadZone";
 import { AppPageShell } from "../components/layout/AppPageShell";
 import { ContentRegionLoading } from "../components/layout/ContentRegionLoading";
-import { DocumentLiveSharingPanel } from "../components/sharing/DocumentLiveSharingPanel";
+import { DocumentSettingsPanel } from "../components/sharing/DocumentSettingsPanel";
 import { WorkflowBadge } from "../components/WorkflowBadge";
 import { useFileDrop } from "../hooks/useFileDrop";
 import { useServerQuery } from "../hooks/useServerQuery";
@@ -36,7 +40,7 @@ const ENABLE_TEST_JOBS = process.env.NEXT_PUBLIC_ENABLE_TEST_JOBS === "true";
  * What flipping a page's visibility actually did, in the workflow it happened in.
  *
  * Three states, not two. An archived document is not public and cannot be brought
- * live from here - `DocumentLiveSharingControls` refuses the toggle outright, and
+ * live from here - `DocumentPublishMenu` refuses the toggle outright, and
  * nothing else in the app sets the workflow back - so "when the document goes live"
  * would promise a moment that never arrives.
  */
@@ -57,14 +61,6 @@ function partPublishedMessage(
   return published
     ? "Page will be shown when the document goes live"
     : "Page will stay hidden when the document goes live";
-}
-
-function formatUpdated(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
 }
 
 type DocumentDetailData = {
@@ -141,6 +137,32 @@ export function DocumentDetailPage() {
         : msg;
     },
   });
+
+  /**
+   * The four numbers the action menus label themselves with.
+   *
+   * A separate read from the document on purpose: the parts list says which
+   * pages are reviewed but nothing about which have lines or a pairing, so
+   * "unsegmented" and "unpaired" cannot be derived from what this page already
+   * holds. It carries the document's own tag, so anything that changes the
+   * pages makes these stale too.
+   *
+   * A failure here is silent. The counts label menu items; they are not the
+   * page, and a second red banner over a document that rendered perfectly well
+   * would be the loudest thing on screen for the least reason. The menus fall
+   * back to disabled items, which is the honest state when nothing is known
+   * about what they would act on.
+   */
+  const { data: workflowCounts, refetch: reloadWorkflowCounts } =
+    useServerQuery<DocumentWorkflowCounts>({
+      key:
+        projectId && documentId && signedIn
+          ? ["document-workflow-counts", projectId, documentId]
+          : null,
+      tags: [resourceTags.document(projectId ?? "", documentId ?? "")],
+      read: () => api.getDocumentWorkflowCounts(projectId!, documentId!),
+      onError: () => null,
+    });
 
   const document = data?.document ?? null;
   const projectName = data?.projectName ?? null;
@@ -370,9 +392,39 @@ export function DocumentDetailPage() {
 
   const shownCount = parts.filter((part) => part.published).length;
 
+  const reviewedCount = parts.filter((part) => part.reviewed).length;
+
   const subtitle = document
-    ? `${parts.length} part${parts.length === 1 ? "" : "s"} · updated ${formatUpdated(document.updated_at)}`
+    ? `${parts.length} page${parts.length === 1 ? "" : "s"} · ${reviewedCount} reviewed · ${relativeUpdatedLabel(document.updated_at)}`
     : undefined;
+
+  const applyDocumentPatch = (
+    patch: Partial<
+      Pick<DocumentWithPartsResponse, "workflow" | "public_share_token">
+    >,
+  ) => {
+    patchDocument((current) => ({
+      ...current,
+      document: { ...current.document, ...patch },
+    }));
+    // The document list, the public reader and the copy the page editor holds
+    // are all copies of what just changed, and none of them is this one.
+    invalidateAfter.documentUpdated(projectId!, documentId!);
+  };
+
+  const handleDeleteDocument = async () => {
+    if (!projectId || !documentId) return;
+    try {
+      await api.deleteDocument(projectId, documentId);
+      toast.success("Document deleted");
+      invalidateAfter.documentDeleted(projectId, documentId);
+      router.push(`/projects/${projectId}`);
+    } catch (err) {
+      const msg =
+        err instanceof ApiError ? err.message : "Failed to delete document";
+      toast.error(msg);
+    }
+  };
 
   return (
     <AppPageShell
@@ -393,29 +445,52 @@ export function DocumentDetailPage() {
       titleEditable={Boolean(document && projectId && documentId)}
       titlePanelOpen={titlePanelOpen}
       onTitlePanelToggle={() => setTitlePanelOpen((open) => !open)}
-      titlePanelLabel="Document settings and live sharing"
+      titlePanelLabel="Document settings"
+      headerActions={
+        document && projectId && documentId ? (
+          <DocumentActionBar
+            projectId={projectId}
+            documentId={documentId}
+            documentName={document.name}
+            workflow={document.workflow}
+            publicShareToken={document.public_share_token ?? null}
+            counts={workflowCounts}
+            publishedPageCount={shownCount}
+            isOwner={isOwner}
+            uploading={uploading}
+            busy={reordering}
+            onUpload={(files) => void handleUpload(files)}
+            onWorkflowChange={(workflow: DocumentWorkflow) =>
+              applyDocumentPatch({ workflow })
+            }
+            onShareTokenChange={(token) =>
+              applyDocumentPatch({ public_share_token: token })
+            }
+            onJobsQueued={() => {
+              // The jobs are queued, not finished; what is already stale is the
+              // count of pages still waiting for one.
+              invalidateAfter.documentPartsChanged(projectId, documentId);
+              void reloadWorkflowCounts();
+            }}
+            onOpenSettings={() => setTitlePanelOpen(true)}
+            onDeleteDocument={handleDeleteDocument}
+          />
+        ) : undefined
+      }
       titlePanel={
         document && projectId && documentId ? (
-          <DocumentLiveSharingPanel
+          <DocumentSettingsPanel
             projectId={projectId}
             documentId={documentId}
             name={document.name}
-            workflow={document.workflow}
-            publicShareToken={document.public_share_token ?? null}
             onUpdated={(updated) => {
               patchDocument((current) => ({
                 ...current,
-                document: {
-                  ...current.document,
-                  ...(updated.name !== undefined ? { name: updated.name } : {}),
-                  ...(updated.workflow !== undefined
-                    ? { workflow: updated.workflow }
-                    : {}),
-                },
+                document: { ...current.document, name: updated.name },
               }));
               // The document list, the public view and the copy the page
-              // editor fetches all carry these fields; the panel only wrote to
-              // the copy this page holds.
+              // editor fetches all carry the name; the panel only wrote to the
+              // copy this page holds.
               invalidateAfter.documentUpdated(projectId!, documentId!);
             }}
           />
@@ -432,6 +507,17 @@ export function DocumentDetailPage() {
               {error}
             </div>
           )}
+
+          {document &&
+            document.workflow === "published" &&
+            projectId &&
+            documentId && (
+              <DocumentLiveLinkRow
+                projectId={projectId}
+                documentId={documentId}
+                publicShareToken={document.public_share_token ?? null}
+              />
+            )}
 
           {document && <JobsNotice enableTestJobs={ENABLE_TEST_JOBS} />}
 

@@ -48,7 +48,7 @@ describe("PageEditorPlaceholderPage shell", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /^workflow/i }));
     fireEvent.click(
-      await screen.findByRole("menuitem", { name: /publish live page/i }),
+      await screen.findByRole("menuitem", { name: /^publish document$/i }),
     );
 
     await waitFor(() => {

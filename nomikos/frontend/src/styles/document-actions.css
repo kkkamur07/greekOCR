@@ -1,0 +1,268 @@
+/*
+  The chapter action row and the menus that hang off it.
+
+  Colour notes, because two pairs in this palette are close to the line:
+  every menu surface here is `--surface` (white), where `--text-3` measures
+  4.80:1 and passes. `--text-4` does not pass on white, so nothing that
+  carries meaning uses it: the count badges, which are the whole point of
+  these labels, are `--text-2` on a `--surface-2` chip (9.19:1). `--text-3`
+  is never placed on `--accent-bg`, which measures 4.28:1.
+*/
+
+.doc-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.doc-actions__overflow {
+  font-size: 1rem;
+  line-height: 1;
+  padding: 5px 9px;
+}
+
+/* ─── Menu ────────────────────────────────────────────────────────── */
+.action-menu {
+  position: relative;
+}
+.action-menu__caret {
+  font-size: 0.625rem;
+  line-height: 1;
+  opacity: 0.75;
+}
+.doc-actions__overflow .action-menu__caret {
+  display: none;
+}
+.action-menu__trigger--open {
+  border-color: var(--navy);
+  color: var(--navy);
+  background: var(--surface-2);
+}
+.action-menu__popup {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 60;
+  width: 240px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow:
+    var(--shadow-sm),
+    0 8px 24px rgba(26, 26, 26, 0.08);
+}
+.action-menu__popup--wide {
+  width: min(320px, calc(100vw - 32px));
+}
+.action-menu__popup:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: -2px;
+}
+
+.action-menu__section {
+  margin: 0;
+  padding: 6px 8px 3px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.action-menu__caption {
+  margin: 0;
+  padding: 0 8px 5px;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--text-3);
+}
+.action-menu__caption strong {
+  color: var(--text-2);
+  font-weight: 600;
+}
+.action-menu__divider {
+  height: 1px;
+  background: var(--border);
+  margin: 5px 0;
+}
+
+.action-menu__item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-size: 0.8125rem;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.action-menu__item:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+/* A menu is walked with the arrow keys, so the ring has to be unmissable. */
+.action-menu__item:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: -2px;
+  background: var(--surface-2);
+}
+.action-menu__item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.action-menu__item-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.action-menu__item-label {
+  font-weight: 500;
+  line-height: 1.35;
+}
+.action-menu__item-detail {
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--text-2);
+  font-weight: 400;
+}
+.action-menu__meta {
+  flex-shrink: 0;
+  margin-top: 1px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/*
+  The destructive rows do not merely read differently, they look different
+  before they are read: a red label, a red-tinted hover, and a rule above them
+  that separates them from the safe item they sit beside.
+*/
+.action-menu__item--destructive .action-menu__item-label {
+  color: var(--red);
+}
+.action-menu__item--destructive:hover:not(:disabled) {
+  background: var(--red-light);
+  border-color: var(--red-muted);
+}
+.action-menu__item--destructive:focus-visible {
+  outline-color: var(--red);
+  background: var(--red-light);
+}
+
+.action-menu__warning {
+  margin: 4px 6px 2px;
+  padding: 7px 9px;
+  border-radius: var(--radius-sm);
+  background: var(--amber-bg);
+  color: var(--amber);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.action-menu__confirm {
+  padding: 8px 10px 6px;
+}
+.action-menu__confirm-question {
+  margin: 0 0 4px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.action-menu__confirm-detail {
+  margin: 0 0 10px;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+.action-menu__confirm-actions {
+  display: flex;
+  gap: 6px;
+}
+.action-menu__item--compact {
+  width: auto;
+  flex: 1;
+  justify-content: center;
+  border: 1px solid var(--border-2);
+  font-weight: 500;
+  padding: 6px 10px;
+}
+.action-menu__item--confirm {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: #fff;
+}
+.action-menu__item--confirm:hover:not(:disabled) {
+  background: var(--navy-mid);
+}
+.action-menu__item--confirm.action-menu__item--destructive {
+  background: var(--red);
+  border-color: var(--red);
+  color: #fff;
+}
+.action-menu__item--confirm.action-menu__item--destructive:hover:not(
+    :disabled
+  ) {
+  background: var(--red-hover);
+  border-color: var(--red-hover);
+}
+
+/* ─── Live link row ───────────────────────────────────────────────── */
+.doc-live-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+  padding: 8px 12px;
+  background: var(--green-banner-bg);
+  border: 1px solid var(--green-banner-border);
+  border-radius: var(--radius);
+  font-size: 0.8125rem;
+}
+.doc-live-link--muted {
+  display: block;
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text-2);
+}
+.doc-live-link__label {
+  flex-shrink: 0;
+  font-weight: 600;
+  color: var(--green);
+}
+.doc-live-link__url {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--green-banner-border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-2);
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.doc-live-link__url:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 1px;
+}
+
+@media (max-width: 640px) {
+  .action-menu__popup {
+    right: auto;
+    left: 0;
+  }
+  .doc-live-link {
+    flex-wrap: wrap;
+  }
+}
