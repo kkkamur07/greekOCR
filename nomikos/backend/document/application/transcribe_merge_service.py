@@ -50,7 +50,17 @@ class TranscribeMergeService:
         commit: bool = True,
         layer_name: str | None = None,
     ) -> dict:
-        part = session.get(DocumentPart, part_id)
+        # Load the part locked, not with ``session.get``. Segment health decides a
+        # merge or a deletion from a snapshot of which lines carry text, and
+        # ``_has_text`` counts every layer, model output included: an unapproved
+        # draft is the thing a reviewer is about to correct, which is why
+        # ``test_an_unapproved_model_prediction_still_counts_as_text`` exists. A
+        # layer committed inside that snapshot's window is therefore attached to a
+        # line the apply is about to delete, and the draft goes with it. Holding
+        # the part until this commits makes the two wait for each other.
+        part = session.execute(
+            select(DocumentPart).where(DocumentPart.id == part_id).with_for_update()
+        ).scalar_one_or_none()
         if part is None or part.document_id != document_id:
             raise TranscribeJobHandlerError("Document part not found")
 

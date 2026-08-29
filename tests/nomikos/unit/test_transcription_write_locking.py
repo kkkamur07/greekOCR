@@ -187,7 +187,10 @@ def _committing_methods_without_a_lock(cls) -> list[str]:
             source = inspect.getsource(member)
         except OSError:  # pragma: no cover - source always available in-tree
             continue
-        if "session.commit()" in source and "lock_part" not in source:
+        # ``with_for_update`` counts too: the sync job-callback services take the
+        # row directly rather than through the async repository helper.
+        locked = "lock_part" in source or "with_for_update" in source
+        if "session.commit()" in source and not locked:
             offenders.append(name)
     return sorted(offenders)
 
@@ -214,4 +217,18 @@ def test_every_page_text_write_takes_the_part_lock() -> None:
     by document and can span every part in one transaction.
     """
     offenders = _committing_methods_without_a_lock(TranscriptionService)
+    assert offenders == [], f"unlocked writers: {offenders}"
+
+
+def test_the_transcribe_callback_takes_the_part_lock() -> None:
+    """Model output protects a line from deletion, so writing it must lock too.
+
+    This one was argued out of scope in an earlier round on the grounds that
+    losing a prediction matters less than losing a pairing. That was wrong on the
+    service's own terms: `_has_text` counts every layer, and an unapproved draft
+    is the thing a reviewer is about to correct.
+    """
+    from backend.document.application.transcribe_merge_service import TranscribeMergeService
+
+    offenders = _committing_methods_without_a_lock(TranscribeMergeService)
     assert offenders == [], f"unlocked writers: {offenders}"
