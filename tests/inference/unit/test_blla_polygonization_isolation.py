@@ -12,9 +12,9 @@ import numpy as np
 import pytest
 from shapely import geometry as geom
 
-import inference.architectures.blla.blla_decoder as decoder
-from inference.architectures.blla.blla_decoder import decode_blla_heatmaps
-from inference.architectures.blla.blla_decoder.polygon import (
+import nomikos_inference.architectures.blla.blla_decoder as decoder
+from nomikos_inference.architectures.blla.blla_decoder import decode_blla_heatmaps
+from nomikos_inference.architectures.blla.blla_decoder.polygon import (
     _intersection_ring,
     calculate_polygonal_environment,
 )

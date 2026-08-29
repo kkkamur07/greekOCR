@@ -24,8 +24,8 @@ from __future__ import annotations
 from backend.core.settings.ml import get_ml_settings
 from backend.ml.domain.execution import ALL_EXECUTION_TARGETS, ExecutionTarget
 from backend.ml.infrastructure.orm_models import InferenceModel, InferenceTask
-from inference.contracts.common import HostEligibility
-from inference.registry import load_registry
+from nomikos_inference.contracts.common import HostEligibility
+from nomikos_inference.registry import load_registry
 
 # The registry model id used when a job carries no catalog model. Kept here
 # rather than imported from the dispatcher: this is a property of the Registry,

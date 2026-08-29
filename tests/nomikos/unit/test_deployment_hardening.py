@@ -71,9 +71,9 @@ def test_published_package_ships_the_onnx_runtime_and_nothing_else() -> None:
         for dependency in group
         if isinstance(dependency, str)
     )
-    # The `helper` group died with `inference/api` and `inference/helper` (#60).
+    # The `helper` group died with `nomikos_inference/api` and `nomikos_inference/helper` (#60).
     # It named what the loopback HTTP surfaces needed on top of the runtime, and
-    # there is no longer anything under `inference/` that serves HTTP.
+    # there is no longer anything under `nomikos_inference/` that serves HTTP.
     assert "helper" not in groups
     assert not any(
         dependency.startswith("onnxruntime") for dependency in _flatten_group(groups, "inference")

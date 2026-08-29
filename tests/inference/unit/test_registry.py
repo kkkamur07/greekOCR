@@ -2,9 +2,9 @@
 
 import pytest
 
-from inference.contracts import ComputeDevice, InferenceTask, RegistryArchitecture
-from inference.registry import RegistryVersionEntry, get_model_entry, load_registry
-from inference.weights import resolve_weights_source
+from nomikos_inference.contracts import ComputeDevice, InferenceTask, RegistryArchitecture
+from nomikos_inference.registry import RegistryVersionEntry, get_model_entry, load_registry
+from nomikos_inference.weights import resolve_weights_source
 
 # --- registry.yaml entries ---
 # Tests bundled model metadata loads correctly. Does not run inference.
@@ -69,7 +69,7 @@ def test_weights_source_rejects_paths_outside_ml_root():
         resolve_weights_source("file://../pyproject.toml")
 
 
-# `test_interim_weights_layout` stood here and asserted `inference/weights/kraken/` is a
+# `test_interim_weights_layout` stood here and asserted `nomikos_inference/weights/kraken/` is a
 # directory. pyproject.toml calls that tree an empty placeholder from the pre-Hub weights
 # layout and excludes its `.gitkeep` from the wheel; `DEFAULT_WEIGHTS_ROOT` has no
 # production caller.

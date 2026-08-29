@@ -82,7 +82,7 @@ def test_converter_is_weight_for_weight_lossless(tmp_path: Path) -> None:
     # A dense input: tile a tracked line horizontally to many timesteps.
     from PIL import Image
 
-    from inference.architectures.calamari.preprocessing import (
+    from nomikos_inference.architectures.calamari.preprocessing import (
         preprocess_line_image_bytes_to_calamari_tensor,
     )
 

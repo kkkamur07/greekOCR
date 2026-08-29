@@ -318,8 +318,8 @@ transcribe rows are left `pending` for an inference agent to claim over HTTP,
 and the agent reports the outcome to `POST /internal/inference/job-complete`
 (ADR 0003).
 
-What the platform imports from the repository-level [`inference/`](../../inference/)
-package is the wire contract (`inference/contracts/`), the shared admission
+What the platform imports from the repository-level [`nomikos_inference/`](../../nomikos_inference/)
+package is the wire contract (`nomikos_inference/contracts/`), the shared admission
 limits, and the registry it serves to agents at `GET /inference/v1/registry`.
 
 ## Special Notes

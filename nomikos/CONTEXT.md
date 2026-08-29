@@ -246,11 +246,11 @@ Running segment or transcribe models on a hosted inference service the platform 
 _Avoid_: Cloud OCR (too narrow), server-side ML (too generic)
 
 **Inference agent**:
-The program that runs models on a machine and takes its work from this platform's queue - `nomikos run`, from the **Published package**, started by the researcher in a terminal. It reaches the platform outbound and accepts no connections, so nothing in the browser addresses it and nothing on the researcher's machine is exposed. Defined in [`inference/CONTEXT.md`](../inference/CONTEXT.md). The same program runs on a hosted worker, differing only by the credential it presents.
+The program that runs models on a machine and takes its work from this platform's queue - `nomikos run`, from the **Published package**, started by the researcher in a terminal. It reaches the platform outbound and accepts no connections, so nothing in the browser addresses it and nothing on the researcher's machine is exposed. Defined in [`nomikos_inference/CONTEXT.md`](../nomikos_inference/CONTEXT.md). The same program runs on a hosted worker, differing only by the credential it presents.
 _Avoid_: Inference helper / Inference sidecar (loopback-era, meant a process listening on localhost), browser inference, embedded WASM model, one-click installer (retired by ADR 0002)
 
 **Host preference**:
-The account-level setting "use my computer when it is available" - the only researcher input to which **inference host** a job runs on. Combined with **host eligibility** and **capacity** it fixes one **execution target** at submission; there is no per-job toggle. Defined in [`inference/CONTEXT.md`](../inference/CONTEXT.md); the interface renders it in editor settings and announces the resulting host on every job.
+The account-level setting "use my computer when it is available" - the only researcher input to which **inference host** a job runs on. Combined with **host eligibility** and **capacity** it fixes one **execution target** at submission; there is no per-job toggle. Defined in [`nomikos_inference/CONTEXT.md`](../nomikos_inference/CONTEXT.md); the interface renders it in editor settings and announces the resulting host on every job.
 _Avoid_: Inference preference (retired name), per-job execution mode, `local_only` (retired by ADR 0002), sync vs async (execution mode, not host)
 
 **Product job status delivery (browser)**:

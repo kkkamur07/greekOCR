@@ -44,7 +44,7 @@ Vercel 3.12 are both valid.
 ## Build bundle shape
 
 The generated copy under `infrastructure/platform/nomikos/` and
-`infrastructure/platform/inference/` is a build artifact. It is gitignored and recreated
+`infrastructure/platform/nomikos_inference/` is a build artifact. It is gitignored and recreated
 by `bash build.sh`.
 
 `build.sh` uses Python `shutil` rather than `rsync` because the Vercel build
@@ -55,14 +55,14 @@ The platform API needs only:
 - `nomikos/backend/`
 - `nomikos/infrastructure/`
 - `nomikos/VERSION`
-- `inference/registry.yaml`
-- `inference/admission.py`
-- `inference/settings.py`
-- `inference/contracts/`
-- `inference/registry/`
+- `nomikos_inference/registry.yaml`
+- `nomikos_inference/admission.py`
+- `nomikos_inference/settings.py`
+- `nomikos_inference/contracts/`
+- `nomikos_inference/registry/`
 
 It does not bundle model weights, training code, inference runtimes, notebooks,
-or local media. Nothing under `inference/` that the API bundles serves HTTP:
+or local media. Nothing under `nomikos_inference/` that the API bundles serves HTTP:
 the platform never calls inference, and inference never listens (ADR 0002) - an
 **inference agent** claims work from this API and reports back to it.
 
@@ -80,8 +80,8 @@ Required runtime dependencies include:
 - SQLAlchemy, asyncpg, psycopg2-binary
 - Supabase Storage client
 - Pillow and ReportLab for media normalization and PDF/export features
-- PyYAML because `backend.ml.api.registry` imports `inference.registry`, which
-  parses `inference/registry.yaml`
+- PyYAML because `backend.ml.api.registry` imports `nomikos_inference.registry`, which
+  parses `nomikos_inference/registry.yaml`
 
 Do not include these in `platform-prod` unless a Vercel API route imports them
 directly:
@@ -172,8 +172,8 @@ From repo root, confirm the registry import still works:
 ```bash
 PYTHONPATH=. uv run python - <<'PY'
 from pathlib import Path
-from inference.registry import load_registry
-registry = load_registry(Path("inference/registry.yaml"))
+from nomikos_inference.registry import load_registry
+registry = load_registry(Path("nomikos_inference/registry.yaml"))
 print(f"registry ok: {len(registry.models)} models")
 PY
 ```

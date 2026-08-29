@@ -32,9 +32,9 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from inference.cli import console as ui
-from inference.cli import run as run_module
-from inference.cli.api import (
+from nomikos_inference.cli import console as ui
+from nomikos_inference.cli import run as run_module
+from nomikos_inference.cli.api import (
     AgentVersionRefused,
     Claim,
     ClaimedPage,

@@ -17,7 +17,7 @@ researcher's laptop comes back up on the new build.
 
 Two things about the wheels are deliberately unlike production, and neither is a
 substitution for anything under test. They are built from the repository's own
-`inference/` tree with a generated `pyproject.toml`, because two versions of one
+`nomikos_inference/` tree with a generated `pyproject.toml`, because two versions of one
 package cannot both be the checked-in version - the *code* in them is this
 repository's. And they declare no dependencies, so the resolver never leaves the
 local index; whether the published closure resolves is
@@ -79,14 +79,14 @@ requires-python = ">=3.11,<3.13"
 dependencies = []
 
 [project.scripts]
-nomikos = "inference.cli:main"
+nomikos = "nomikos_inference.cli:main"
 
 [build-system]
 requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["inference"]
+packages = ["nomikos_inference"]
 """
 
 
@@ -104,8 +104,8 @@ def local_index(tmp_path_factory: pytest.TempPathFactory) -> str:
     workspace = tmp_path_factory.mktemp("index")
     source = workspace / "package"
     shutil.copytree(
-        REPO_ROOT / "inference",
-        source / "inference",
+        REPO_ROOT / "nomikos_inference",
+        source / "nomikos_inference",
         # The loopback HTTP surfaces are excluded from the published wheel too,
         # and nothing in the CLI imports them.
         ignore=shutil.ignore_patterns("api", "helper", "__pycache__", "*.pyc"),
@@ -568,7 +568,7 @@ def test_a_source_checkout_is_told_to_install_rather_than_upgraded(platform_at, 
     environment.pop("NOMIKOS_UPGRADED_FROM", None)
 
     completed = subprocess.run(
-        [sys.executable, "-m", "inference.cli", "upgrade", "--api-url", platform.base_url],
+        [sys.executable, "-m", "nomikos_inference.cli", "upgrade", "--api-url", platform.base_url],
         cwd=str(tmp_path),
         env=environment,
         capture_output=True,

@@ -80,8 +80,8 @@ App: http://localhost:5173 - see [`nomikos/frontend/README.md`](../../nomikos/fr
 Against a local platform, from a source checkout:
 
 ```bash
-NOMIKOS_API_URL=http://localhost:8000 uv run --group inference python -m inference.cli pair
-NOMIKOS_API_URL=http://localhost:8000 uv run --group inference python -m inference.cli run
+NOMIKOS_API_URL=http://localhost:8000 uv run --group inference python -m nomikos_inference.cli pair
+NOMIKOS_API_URL=http://localhost:8000 uv run --group inference python -m nomikos_inference.cli run
 ```
 
 `pair` writes the device credential to `~/.nomikos/device.json`; `run` is the
@@ -96,7 +96,7 @@ in a script; without it `run` waits for more work. `--api-url` overrides
 Researchers install the same program from PyPI rather than running it from a
 checkout - `uv tool install nomikos-inference`, then
 `nomikos pair` and `nomikos run`
-([`inference/README.md`](../../inference/README.md#install)). There is no
+([`nomikos_inference/README.md`](../../nomikos_inference/README.md#install)). There is no
 installer to build.
 
 ---
@@ -108,6 +108,6 @@ installer to build.
 | [Root README](../../README.md)                                                 | Repo overview, training, domain model                             |
 | [`nomikos/README.md`](../../nomikos/README.md)                               | App operations, env vars, version bumps                           |
 | [`nomikos/infrastructure/README.md`](../../nomikos/infrastructure/README.md) | Alembic, database wiring                                          |
-| [`inference/README.md`](../../inference/README.md)                             | Published package, CLI, registry, weights                         |
+| [`nomikos_inference/README.md`](../../nomikos_inference/README.md)                             | Published package, CLI, registry, weights                         |
 | [learnings.md](learnings.md)                                                   | Supabase, serverless (Vercel), Calamari training, frequent errors |
 | [testing.md](testing.md)                                                       | Pytest commands                                                   |

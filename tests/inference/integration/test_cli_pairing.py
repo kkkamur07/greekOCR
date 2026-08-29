@@ -11,7 +11,7 @@ That matters more here than it usually would. Every claim this issue makes is
 about behaviour *between* processes: that the URL is printed before a browser is
 launched, that the code the terminal shows is the code the consent screen shows,
 that the credential lands on disk readable by nobody else. A test that imported
-`inference.cli.pair` and called it could not observe any of them.
+`nomikos_inference.cli.pair` and called it could not observe any of them.
 
 The scaffolding all three CLI integration modules share - Postgres, alembic,
 uvicorn, the wheel build, the hand-rolled HTTP client - is in
@@ -480,7 +480,7 @@ def test_the_version_subcommand_reports_the_installed_package_version(installed_
 
 # Two more `version` tests stood here. One asserted the help text names
 # `X-Nomikos-Agent-Version`; the header actually sent is `AGENT_VERSION_HEADER` in
-# `inference/cli/api.py`, which that test never touched. The other reported whether this
+# `nomikos_inference/cli/api.py`, which that test never touched. The other reported whether this
 # machine is paired, and its one load-bearing line - a version report is never a way to
 # read the credential out - is already asserted against `run.output` by
 # `test_the_credential_is_written_with_owner_only_permissions` above.

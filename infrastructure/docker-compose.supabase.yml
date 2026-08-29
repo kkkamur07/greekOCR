@@ -42,7 +42,7 @@ services:
     volumes:
       - ../nomikos/backend:/app/backend
       - ../scripts/platform:/app/scripts/platform
-      - ../inference:/app/inference
+      - ../nomikos_inference:/app/nomikos_inference
       - ../data:/data:ro
     # Migrations: run `./scripts/platform/migrate_supabase.sh` on the host first.
     # In-container alembic uses MIGRATOR_DATABASE_URL (direct host) which often fails

@@ -27,10 +27,10 @@ from backend.document.application.transcribe_merge_service import (
 from backend.document.infrastructure.orm_models import DocumentPart
 from backend.jobs.infrastructure.orm_models import Job, JobType
 from backend.ml.infrastructure.orm_models import InferenceModel, InferenceTask
-from inference.admission import validate_request_params
-from inference.contracts.common import InferenceTask as WireInferenceTask
-from inference.settings import get_inference_settings
 from infrastructure.db import sync_system_session
+from nomikos_inference.admission import validate_request_params
+from nomikos_inference.contracts.common import InferenceTask as WireInferenceTask
+from nomikos_inference.settings import get_inference_settings
 
 _DEFAULT_SEGMENT_REGISTRY_MODEL = "blla-segment"
 _DEFAULT_SEGMENT_REGISTRY_TAG = "stable"
@@ -42,7 +42,7 @@ _DEFAULT_TRANSCRIBE_REGISTRY_TAG = "stable"
 class PageRunRequest:
     """What to run on one page - and deliberately not the page itself.
 
-    This used to be ``inference.contracts.jobs.JobSubmitRequest``, which carries
+    This used to be ``nomikos_inference.contracts.jobs.JobSubmitRequest``, which carries
     ``image_bytes``, because the platform once POSTed that body into a second
     queue and the image had to travel with it. Since ADR 0003 there is no second
     queue: the agent claims from the platform's own table and fetches the scan

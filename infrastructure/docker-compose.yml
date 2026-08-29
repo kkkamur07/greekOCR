@@ -47,7 +47,7 @@ services:
       - ../nomikos/backend/media:/app/backend/media
       - ../nomikos/backend:/app/backend
       - ../scripts/platform:/app/scripts/platform
-      - ../inference:/app/inference
+      - ../nomikos_inference:/app/nomikos_inference
       - ../data:/data:ro
     depends_on:
       db:
@@ -83,7 +83,7 @@ services:
       JOB_SSE_NOTIFICATIONS_ENABLED: "false"
     volumes:
       - ../nomikos/backend:/app/backend
-      - ../inference:/app/inference
+      - ../nomikos_inference:/app/nomikos_inference
     depends_on:
       db:
         condition: service_healthy

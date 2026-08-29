@@ -1,7 +1,7 @@
 """Training and serving must convert line images to grayscale identically.
 
 The training pipeline (vendored Calamari, driven by ``src/train/calamari``) and the
-serving pipeline (``inference/architectures/calamari/preprocessing``) each load line
+serving pipeline (``nomikos_inference/architectures/calamari/preprocessing``) each load line
 images independently. When they disagree the model is fitted on one pixel
 distribution and served another, which shows up only as a quiet accuracy loss.
 
@@ -20,7 +20,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from inference.architectures.calamari.preprocessing.pipeline import (
+from nomikos_inference.architectures.calamari.preprocessing.pipeline import (
     preprocess_line_array_to_calamari_tensor,
     preprocess_line_image_bytes_to_calamari_tensor,
 )
@@ -110,7 +110,7 @@ def test_training_and_serving_produce_the_same_model_input(mode: str, image_byte
 # instead of by behaviour. It went red on `src/models/trocr/augmentation/weather.py`,
 # whose grayscale is a luminance intermediate inside a fog composite that never becomes
 # a model input tensor -- a false positive answerable only by growing the allowlist.
-# Extending the same scan to `inference/` would have needed another entry on
+# Extending the same scan to `nomikos_inference/` would have needed another entry on
 # identical terms (`architectures/calamari/preprocessing/geometry.py`), which
 # measures geometry rather than producing model input.
 #

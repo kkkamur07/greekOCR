@@ -56,9 +56,9 @@ from backend.ml.application.agent_credentials import (
     resolve_inference_agent,
 )
 from backend.ml.application.device_auth import DEVICE_TOKEN_HEADER
-from inference.contracts.jobs import JobCallbackRequest
-from inference.contracts.webhooks import INFERENCE_WEBHOOK_SECRET_HEADER
 from infrastructure.db import get_db
+from nomikos_inference.contracts.jobs import JobCallbackRequest
+from nomikos_inference.contracts.webhooks import INFERENCE_WEBHOOK_SECRET_HEADER
 
 router = APIRouter(prefix="/internal/inference", tags=["internal-inference"])
 

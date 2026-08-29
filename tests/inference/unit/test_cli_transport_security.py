@@ -25,7 +25,7 @@ from pathlib import Path
 
 import pytest
 
-from inference.cli.api import (
+from nomikos_inference.cli.api import (
     InsecurePlatformURL,
     PlatformClient,
     PlatformError,
@@ -140,6 +140,6 @@ def test_an_https_platform_may_not_hand_out_a_loopback_http_image() -> None:
 
 # A "long poll" section stood here with two tests that replaced `client._request` with a
 # capture function and asserted the timeout it was handed: `[90 + REQUEST_TIMEOUT_SECONDS]`
-# for a claim and `[None]` for anything else. Both re-implement `inference/cli/api.py`'s own
+# for a claim and `[None]` for anything else. Both re-implement `nomikos_inference/cli/api.py`'s own
 # arithmetic inside the assertion, so they can only disagree with the code by being edited.
 # Neither is a transport-security guard, which is what the rest of this file is.

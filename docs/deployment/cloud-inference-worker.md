@@ -11,7 +11,7 @@ There is no inference *service* to deploy. The worker installs
 `nomikos-inference`, runs `nomikos run`, reaches the platform **outbound**,
 and listens on nothing. It opens no port, no tunnel, and no DNS record.
 
-Terminology: [`inference/CONTEXT.md`](../../inference/CONTEXT.md).
+Terminology: [`nomikos_inference/CONTEXT.md`](../../nomikos_inference/CONTEXT.md).
 
 ---
 
@@ -293,7 +293,7 @@ answer tied to the process being diagnosed. If your `ExecStart` differs, change
 
 ## Related
 
-- [`inference/README.md`](../../inference/README.md): the published package, CLI, registry, and limits
+- [`nomikos_inference/README.md`](../../nomikos_inference/README.md): the published package, CLI, registry, and limits
 - [production.md](production.md): full hosted topology and rollback
 - [`adding-inference-models.md`](../inference/adding-inference-models.md): shipping a new model to this worker
 - ADRs [0002](../adr/0002-inference-cli-replaces-loopback-helper.md),

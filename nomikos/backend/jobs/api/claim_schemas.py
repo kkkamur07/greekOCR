@@ -1,7 +1,7 @@
 """Wire shapes for the claim endpoint.
 
 The claimed page carries an instruction, not a payload. It used to carry a whole
-``inference.contracts.jobs.JobSubmitRequest`` - the body the platform once POSTed
+``nomikos_inference.contracts.jobs.JobSubmitRequest`` - the body the platform once POSTed
 into a second inference queue - so that local and cloud agents took literally the
 same object. Since ADR 0003 there is no second queue and no POST: the agent
 claims from the platform's own table and fetches the scan from the signed link in
@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 from backend.jobs.infrastructure.orm_models import JobType
 from backend.ml.api.agent_version import AgentVersionNotice
 from backend.ml.domain.execution import ExecutionTarget
-from inference.contracts.common import InferenceTask
+from nomikos_inference.contracts.common import InferenceTask
 
 
 class JobClaimRequest(BaseModel):

@@ -58,7 +58,7 @@ jobs:
       # the ruff-format pre-commit hook, which deliberately leaves `src/` alone
       # (vendored Calamari fork - reformatting it would fork it from upstream).
       # If the two ever disagree, CI rejects what the hook just produced.
-      - run: uv run --locked --group dev ruff format --check nomikos/backend inference scripts/platform tests/nomikos tests/inference tests/export tests/hf src/model/inference_export
+      - run: uv run --locked --group dev ruff format --check nomikos/backend nomikos_inference scripts/platform tests/nomikos tests/inference tests/export tests/hf src/model/inference_export
       # Types. Non-blocking on purpose - mypy was introduced against an untyped
       # codebase, so this reports the error count on every pull request without
       # gating merges. The runtime groups are installed so the check runs against
@@ -157,7 +157,7 @@ jobs:
       # ONNX-vs-PyTorch parity assertions ran only when a maintainer happened to
       # type `poe test-export`. Those assertions are the only thing standing
       # between a bad export and silently wrong transcriptions - see the note at
-      # inference/registry.yaml, which records that regression having shipped
+      # nomikos_inference/registry.yaml, which records that regression having shipped
       # once - so leaving them un-run was strictly worse than not having them.
       # They belong in this job: it is the other thing here too slow to gate a
       # pull request, and the export tree is the only one that still needs Torch
@@ -178,7 +178,7 @@ jobs:
           import yaml
           from huggingface_hub import hf_hub_download
 
-          registry = yaml.safe_load(pathlib.Path("inference/registry.yaml").read_text())
+          registry = yaml.safe_load(pathlib.Path("nomikos_inference/registry.yaml").read_text())
           pinned = registry["models"]["syriac-calamari-v1"]["versions"]["stable"]
           repo = pinned["weights_source"].removeprefix("hf://").split("@")[0]
           destination = pathlib.Path("src/hf/cache/syriac-calamari-v1/stable")

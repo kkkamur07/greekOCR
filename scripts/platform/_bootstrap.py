@@ -23,7 +23,7 @@ def nomikos_root() -> Path:
 def ensure_nomikos_on_path() -> Path:
     root = nomikos_root()
     paths_to_add: list[Path] = [root]
-    if not (root / "inference").is_dir() and (root.parent / "inference").is_dir():
+    if not (root / "nomikos_inference").is_dir() and (root.parent / "nomikos_inference").is_dir():
         paths_to_add.append(root.parent)
     for path in paths_to_add:
         path_str = str(path)

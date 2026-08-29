@@ -40,7 +40,9 @@ os.environ.setdefault(
 )
 os.environ.setdefault(
     "INFERENCE_REGISTRY_PATH",
-    os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../inference/registry.yaml")),
+    os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "../../../nomikos_inference/registry.yaml")
+    ),
 )
 # The device routers construct their service at import time, so the pairing poll
 # cadence has to be collapsed before ``backend.core.app`` is imported below - the

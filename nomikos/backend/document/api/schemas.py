@@ -26,7 +26,7 @@ MAX_REPLACE_PART_LINES = 10_000
 # bound is re-enforced by finalize against the blob actually stored, since the direct
 # PUT bypasses the API entirely (see MAX_PART_UPLOAD_BYTES in part_service).
 MAX_PART_UPLOAD_BYTES = _MAX_PART_UPLOAD_BYTES
-# Mirrors INFERENCE_MAX_GEOMETRY_POINTS (inference/admission.py). Geometry above this
+# Mirrors INFERENCE_MAX_GEOMETRY_POINTS (nomikos_inference/admission.py). Geometry above this
 # bound is refused by the inference runtime, so the platform must never store it either.
 MAX_LINE_GEOMETRY_POINTS = 256
 MAX_LINE_TEXT_CHARS = 10_000

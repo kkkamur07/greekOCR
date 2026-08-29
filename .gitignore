@@ -75,7 +75,7 @@ data/
 # Hugging Face resolver cache. The default cache root moved to
 # ~/.nomikos/hf/cache when hf:// resolution moved into the published package,
 # but HF_CACHE_ROOT can still point here and older checkouts have one.
-# inference/hub/cache.py shutil.rmtree()s the model directories under it
+# nomikos_inference/hub/cache.py shutil.rmtree()s the model directories under it
 # whenever a cached artifact fails verification, so a tracked file in this tree
 # is deleted by the application at runtime. Weights are resolved from the Hub
 # on demand and must never be committed.

@@ -51,11 +51,11 @@ docs/
 config/
 
 # Model weights are mounted at runtime, not baked into images. Keep the Python
-# package initializer so `from inference.weights import ...` works in the image.
-inference/weights
-!inference/
-!inference/weights/
-!inference/weights/__init__.py
+# package initializer so `from nomikos_inference.weights import ...` works in the image.
+nomikos_inference/weights
+!nomikos_inference/
+!nomikos_inference/weights/
+!nomikos_inference/weights/__init__.py
 
 # Only the Hub resolver is needed by the inference image.  Docker ignore
 # negations must re-include both ancestor directories and concrete files.

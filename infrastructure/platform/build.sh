@@ -11,8 +11,8 @@ if [[ "$DEST" == "/" ]]; then
     exit 1
 fi
 
-rm -rf "$DEST/nomikos" "$DEST/inference"
-mkdir -p "$DEST/nomikos" "$DEST/inference"
+rm -rf "$DEST/nomikos" "$DEST/nomikos_inference"
+mkdir -p "$DEST/nomikos" "$DEST/nomikos_inference"
 
 python - "$ROOT" "$DEST" <<'PY'
 import fnmatch
@@ -51,18 +51,18 @@ shutil.copytree(
     dest / "nomikos" / "infrastructure",
     ignore=ignore_deploy_artifacts,
 )
-shutil.copy2(root / "inference" / "__init__.py", dest / "inference" / "__init__.py")
-shutil.copy2(root / "inference" / "admission.py", dest / "inference" / "admission.py")
-shutil.copy2(root / "inference" / "settings.py", dest / "inference" / "settings.py")
-shutil.copy2(root / "inference" / "registry.yaml", dest / "inference" / "registry.yaml")
+shutil.copy2(root / "nomikos_inference" / "__init__.py", dest / "nomikos_inference" / "__init__.py")
+shutil.copy2(root / "nomikos_inference" / "admission.py", dest / "nomikos_inference" / "admission.py")
+shutil.copy2(root / "nomikos_inference" / "settings.py", dest / "nomikos_inference" / "settings.py")
+shutil.copy2(root / "nomikos_inference" / "registry.yaml", dest / "nomikos_inference" / "registry.yaml")
 shutil.copytree(
-    root / "inference" / "contracts",
-    dest / "inference" / "contracts",
+    root / "nomikos_inference" / "contracts",
+    dest / "nomikos_inference" / "contracts",
     ignore=ignore_deploy_artifacts,
 )
 shutil.copytree(
-    root / "inference" / "registry",
-    dest / "inference" / "registry",
+    root / "nomikos_inference" / "registry",
+    dest / "nomikos_inference" / "registry",
     ignore=ignore_deploy_artifacts,
 )
 shutil.copy2(root / "nomikos" / "VERSION", dest / "nomikos" / "VERSION")

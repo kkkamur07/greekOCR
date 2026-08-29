@@ -58,7 +58,7 @@ The runtime catalog currently ships:
 
 The repository includes data preparation, training, and publishing tools for expanding this
 catalog. A model is runtime-supported only after its weights are published, pinned, verified,
-and added to [inference/registry.yaml](inference/registry.yaml).
+and added to [nomikos_inference/registry.yaml](nomikos_inference/registry.yaml).
 
 The project has an experimental result of 1.69% character error rate on one held-out Greek
 line. That is not a platform-wide accuracy guarantee: results depend on the script, the hand,
@@ -185,7 +185,7 @@ no email or push notification provider in the current implementation.
 - [Use and host Nomikos](docs/guides/using-and-hosting.md)
 - [Models and datasets](docs/inference/models-and-datasets.md)
 - [Technical architecture](docs/architecture.md)
-- [Inference service reference](inference/README.md)
+- [Inference service reference](nomikos_inference/README.md)
 - [Model publishing workflow](scripts/hf/README.md)
 - [Testing guide](docs/guides/testing.md)
 - [Production deployment](docs/deployment/production.md)

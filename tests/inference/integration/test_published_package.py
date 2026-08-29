@@ -100,10 +100,10 @@ def _run_installed(
     """Run `source` under the installed interpreter, outside the repository.
 
     `cwd` is the throwaway workspace and `PYTHONPATH` is cleared, so an import
-    of `inference` can only be satisfied by the installed wheel.
+    of `nomikos_inference` can only be satisfied by the installed wheel.
 
     The repository-relative settings the test session runs under are dropped
-    too. `INFERENCE_REGISTRY_PATH=inference/registry.yaml` is the load-bearing
+    too. `INFERENCE_REGISTRY_PATH=nomikos_inference/registry.yaml` is the load-bearing
     one: leaving it set would have the installed package read the **Registry**
     out of the checkout, and finding its own bundled copy is part of what is
     being tested.
@@ -158,7 +158,7 @@ def test_the_hub_cache_defaults_under_the_researchers_home_directory(
     output = _run_installed(
         installed_package,
         "import json, pathlib;"
-        " from inference.hub.cache import DEFAULT_CACHE_ROOT;"
+        " from nomikos_inference.hub.cache import DEFAULT_CACHE_ROOT;"
         " print(json.dumps({'root': str(DEFAULT_CACHE_ROOT),"
         " 'home': str(pathlib.Path.home())}))",
     )
@@ -179,8 +179,8 @@ def real_page_run(installed_package: dict[str, Path], tmp_path_factory) -> dict:
     cache_root = tmp_path_factory.mktemp("hub-cache")
     source = f"""
 import json, pathlib
-from inference.contracts.common import InferenceTask
-from inference.jobs.runner import run_model
+from nomikos_inference.contracts.common import InferenceTask
+from nomikos_inference.jobs.runner import run_model
 
 segment = run_model(
     task=InferenceTask.segment,
@@ -236,7 +236,7 @@ def test_the_cached_artifacts_match_the_digests_the_registry_pins(
     """
     import yaml
 
-    registry = yaml.safe_load((REPO_ROOT / "inference" / "registry.yaml").read_text())
+    registry = yaml.safe_load((REPO_ROOT / "nomikos_inference" / "registry.yaml").read_text())
     cache_root = real_page_run["cache_root"]
 
     checked = 0

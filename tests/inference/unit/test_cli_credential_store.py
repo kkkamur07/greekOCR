@@ -26,9 +26,9 @@ from pathlib import Path
 
 import pytest
 
-from inference.cli import credentials as credentials_module
-from inference.cli.api import InsecurePlatformURL
-from inference.cli.credentials import (
+from nomikos_inference.cli import credentials as credentials_module
+from nomikos_inference.cli.api import InsecurePlatformURL
+from nomikos_inference.cli.credentials import (
     CREDENTIAL_FILE_MODE,
     DeviceCredential,
     file_mode,

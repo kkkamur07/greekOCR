@@ -157,10 +157,10 @@ def platform_environment(database_url: str, **overrides: str) -> dict[str, str]:
             # rather than relying on it.
             "JOB_WORKER_ENABLED": "false",
             "ENVIRONMENT": "development",
-            # The platform imports `inference.contracts`, so the repository root
+            # The platform imports `nomikos_inference.contracts`, so the repository root
             # is on the path alongside the application package.
             "PYTHONPATH": os.pathsep.join([str(REPO_ROOT / "nomikos"), str(REPO_ROOT)]),
-            "INFERENCE_REGISTRY_PATH": str(REPO_ROOT / "inference" / "registry.yaml"),
+            "INFERENCE_REGISTRY_PATH": str(REPO_ROOT / "nomikos_inference" / "registry.yaml"),
         }
     )
     environment.update(overrides)

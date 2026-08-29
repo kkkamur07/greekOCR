@@ -78,7 +78,7 @@ docker compose -f infrastructure/docker-compose.yml up --build -d   # detached b
 
 Platform media is mounted at `nomikos/backend/media/`. The existing `data/` folder is not mounted or migrated by the production platform relocation.
 
-Compose runs no inference service. The repository-level [`inference/`](../inference/) package supplies the contracts the platform imports and the model runtime an agent executes; the platform owns the only job queue (ADR 0003). See [`inference/README.md`](../inference/README.md).
+Compose runs no inference service. The repository-level [`nomikos_inference/`](../nomikos_inference/) package supplies the contracts the platform imports and the model runtime an agent executes; the platform owns the only job queue (ADR 0003). See [`nomikos_inference/README.md`](../nomikos_inference/README.md).
 
 Useful after `-d`: `docker compose -f infrastructure/docker-compose.yml ps`, `docker compose -f infrastructure/docker-compose.yml logs -f`, `docker compose -f infrastructure/docker-compose.yml down`.
 
@@ -128,7 +128,7 @@ updated to match `VERSION`.
 
 ## Inference Catalog
 
-`inference/registry.yaml` is the runtime model catalog. The development seed
+`nomikos_inference/registry.yaml` is the runtime model catalog. The development seed
 creates `InferenceModel` rows with `registry://<model-id>?tag=stable` artifact
 references and project-level bindings. Its defaults are
 `blla-segment` for segmentation and `syriac-calamari-v1` for

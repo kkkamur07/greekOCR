@@ -10,8 +10,8 @@ from tests.fixtures.paths import REPO_ROOT, TRANSCRIBE_LINE
 
 torch = pytest.importorskip("torch")
 
-from inference.architectures.calamari import run_calamari_transcribe  # noqa: E402
-from inference.architectures.calamari.preprocessing import (  # noqa: E402
+from nomikos_inference.architectures.calamari import run_calamari_transcribe  # noqa: E402
+from nomikos_inference.architectures.calamari.preprocessing import (  # noqa: E402
     preprocess_line_image_bytes_to_calamari_tensor,
 )
 
@@ -24,7 +24,7 @@ def test_the_published_graph_and_artifact_decode_the_same_line() -> None:
     researcher reads. Text must match exactly - a CTC decode that agrees only
     approximately has already changed a character somewhere.
     """
-    from inference.architectures.calamari.adapter import _decode_greedy
+    from nomikos_inference.architectures.calamari.adapter import _decode_greedy
     from src.model.inference_export.calamari import load_calamari_checkpoint
 
     checkpoint = REPO_ROOT / "src/hf/cache/syriac-calamari-v1/stable/best.pt"

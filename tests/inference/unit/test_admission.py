@@ -3,7 +3,7 @@
 ADR 0002 deleted the loopback service, and with it the middleware that bounded a
 request body and the secret that authenticated its callers. Everything asserted
 here is what survived that deletion because it was never about the transport:
-the limits sit next to the runtime, in ``inference.admission``, and are reached
+the limits sit next to the runtime, in ``nomikos_inference.admission``, and are reached
 from both sides of a **claim** - ``JobSubmitRequest`` on the platform's
 submission path, and ``run_model`` in the **inference agent** that runs the page.
 
@@ -21,14 +21,14 @@ import pytest
 from PIL import Image
 from pydantic import ValidationError
 
-from inference.admission import (
+from nomikos_inference.admission import (
     CLIENT_INPUT_ERROR,
     validate_image_bytes,
     validate_request_params,
 )
-from inference.contracts.common import InferenceTask
-from inference.contracts.jobs import JobSubmitRequest
-from inference.settings import InferenceSettings, get_inference_settings
+from nomikos_inference.contracts.common import InferenceTask
+from nomikos_inference.contracts.jobs import JobSubmitRequest
+from nomikos_inference.settings import InferenceSettings, get_inference_settings
 
 
 @pytest.fixture(autouse=True)

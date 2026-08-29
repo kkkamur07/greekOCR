@@ -4,7 +4,7 @@ Repository for tests
 The folder structure is
 
 tests/
-    inference/
+    nomikos_inference/
         unit/
         integration/
     nomikos/

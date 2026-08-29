@@ -14,7 +14,7 @@ from backend.document.infrastructure.orm_models import (
     Transcription,
     TranscriptionKind,
 )
-from inference.contracts.transcribe import TranscribeRunResponse
+from nomikos_inference.contracts.transcribe import TranscribeRunResponse
 
 
 class TranscribeJobHandlerError(Exception):

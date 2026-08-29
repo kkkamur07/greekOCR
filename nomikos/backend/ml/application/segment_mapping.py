@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from backend.document.infrastructure.orm_models import LineGeometryKind
 from backend.ml.domain.segment import CanonicalBlock, CanonicalLine, CanonicalSegmentResult
-from inference.contracts.segment import SegmentRunResponse
+from nomikos_inference.contracts.segment import SegmentRunResponse
 
 
 def to_canonical_segment(output: SegmentRunResponse) -> CanonicalSegmentResult:
