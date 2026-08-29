@@ -34,6 +34,14 @@ def test_neighbours_touching_at_ascenders_do_not_add_up_to_coverage():
     assert not _mostly_covered(_box(100, 100, 900, 160), kept)
 
 
+def test_a_fresh_line_spanning_two_kept_lines_is_already_claimed():
+    # Kraken draws one box across the gutter over two approved lines, or one line over
+    # two approved fragments. No single kept line matches it, and it is still not new
+    # ink: what it covers is claimed twice over, so it is skipped.
+    kept = _kept(_box(100, 100, 480, 160), _box(520, 100, 900, 160))
+    assert _mostly_covered(_box(100, 100, 900, 160), kept)
+
+
 def test_half_inside_is_the_same_ink():
     kept = _kept(_box(100, 100, 500, 160))
     assert _mostly_covered(_box(100, 100, 900, 160), kept)

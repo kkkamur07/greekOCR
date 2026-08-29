@@ -225,7 +225,12 @@ def _polygon(points: list[list[float]] | None) -> Polygon | None:
 
 
 def _mostly_covered(points: list[list[float]], kept: list[Polygon]) -> bool:
-    """Whether ``points`` lies at least ``_COVERED_FRACTION`` inside ``kept``."""
+    """Whether ``points`` lies at least ``_COVERED_FRACTION`` inside ``kept``.
+
+    Inside the *union* of the kept lines, deliberately: a fresh line drawn across two
+    kept lines (a box spanning both columns, or one line where two approved fragments
+    already sit) is not a new line, it is ink that is already claimed twice over.
+    """
     if not kept:
         return False
     fresh = _polygon(points)
