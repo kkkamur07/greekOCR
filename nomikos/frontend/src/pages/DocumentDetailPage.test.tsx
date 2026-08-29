@@ -254,6 +254,42 @@ describe("DocumentDetailPage", () => {
     });
   });
 
+  it("promises no public future to an archived document", async () => {
+    // The workflow is three states, and a two-way `=== "published"` check folds
+    // archived in with draft: both the toast and the pages aside then said the
+    // page would show "once the document is live". `DocumentLiveSharingControls`
+    // refuses to publish an archived document and nothing else in the app moves
+    // it back, so that names a moment which never arrives.
+    const archived: DocumentWithPartsResponse = {
+      ...DOCUMENT,
+      workflow: "archived",
+    };
+    vi.mocked(api.getDocument).mockImplementation(async () => archived);
+    vi.mocked(api.updatePartsPublished).mockResolvedValue(archived.parts);
+
+    renderDocumentPage();
+
+    await screen.findByRole("heading", { name: "Grec 1360" });
+    expect(
+      screen.getByText(/archived documents are not public/i),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /hide part 1 from the public page/i,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalledWith(
+        "Page marked hidden. Archived documents are not public",
+      );
+    });
+    expect(toast.success).not.toHaveBeenCalledWith(
+      expect.stringContaining("goes live"),
+    );
+  });
+
   it("toggles rather than navigating when the button is reached by keyboard", async () => {
     renderDocumentPage();
 

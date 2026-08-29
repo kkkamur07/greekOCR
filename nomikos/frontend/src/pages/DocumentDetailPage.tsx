@@ -1,7 +1,11 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "../components/ui/toast";
-import { api, type DocumentWithPartsResponse } from "../api/client";
+import {
+  api,
+  type DocumentWithPartsResponse,
+  type DocumentWorkflow,
+} from "../api/client";
 import { ApiError } from "../api/errors";
 import { invalidatePartImage } from "../api/imageCache";
 import { resourceTags, invalidateAfter } from "../api/resources";
@@ -27,6 +31,33 @@ import { renderPdfToPageFiles } from "../utils/pdfToPages";
 import { compareFilenames, isPdfFile } from "../utils/uploadBatch";
 
 const ENABLE_TEST_JOBS = process.env.NEXT_PUBLIC_ENABLE_TEST_JOBS === "true";
+
+/**
+ * What flipping a page's visibility actually did, in the workflow it happened in.
+ *
+ * Three states, not two. An archived document is not public and cannot be brought
+ * live from here - `DocumentLiveSharingControls` refuses the toggle outright, and
+ * nothing else in the app sets the workflow back - so "when the document goes live"
+ * would promise a moment that never arrives.
+ */
+function partPublishedMessage(
+  workflow: DocumentWorkflow | undefined,
+  published: boolean,
+): string {
+  if (workflow === "published") {
+    return published
+      ? "Page shown on the public page"
+      : "Page hidden from the public page";
+  }
+  if (workflow === "archived") {
+    return published
+      ? "Page marked shown. Archived documents are not public"
+      : "Page marked hidden. Archived documents are not public";
+  }
+  return published
+    ? "Page will be shown when the document goes live"
+    : "Page will stay hidden when the document goes live";
+}
 
 function formatUpdated(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, {
@@ -317,16 +348,7 @@ export function DocumentDetailPage() {
       });
       // On a draft nothing is public yet, and saying otherwise would be the one
       // place in this flow that overstates what just happened.
-      const live = document?.workflow === "published";
-      toast.success(
-        published
-          ? live
-            ? "Page shown on the public page"
-            : "Page will be shown when the document goes live"
-          : live
-            ? "Page hidden from the public page"
-            : "Page will stay hidden when the document goes live",
-      );
+      toast.success(partPublishedMessage(document?.workflow, published));
       // The public reader reads this flag, and so does the owner-facing parts
       // list the editor holds; neither is the copy this page just wrote.
       invalidateAfter.documentPartsChanged(projectId, documentId);
@@ -442,7 +464,9 @@ export function DocumentDetailPage() {
                     {shownCount} of {parts.length} shown publicly
                     {document.workflow === "published"
                       ? ""
-                      : " once the document is live"}
+                      : document.workflow === "archived"
+                        ? ", though archived documents are not public"
+                        : " once the document is live"}
                   </span>
                 )}
               </p>
