@@ -52,7 +52,7 @@ The runtime catalog currently ships:
 
 | Capability                      | Model                                                                                         | Status                                |
 | ------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------- |
-| Page segmentation               | Kraken BLLA (`blla-segment`)                                                                  | Available                             |
+| Page segmentation               | [Kraken BLLA model](https://huggingface.co/nomikos-project/segmentation-blla) (`blla-segment`) | Available                             |
 | Syriac line transcription       | [Calamari model](https://huggingface.co/nomikos-project/syriac-htr-calamari) (`syriac-calamari-v1`) | Available                             |
 | Greek, Coptic, and Armenian HTR | Language-specific models                                                                      | Expansion work; not all are published |
 
