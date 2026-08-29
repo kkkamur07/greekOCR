@@ -838,51 +838,6 @@ button {
   margin-bottom: 2px;
 }
 
-.upload-zone {
-  border: 1px dashed var(--border-2);
-  border-radius: var(--radius);
-  padding: 24px;
-  text-align: center;
-  background: var(--surface);
-  color: var(--text-4);
-  margin-bottom: 24px;
-  transition:
-    border-color 0.12s,
-    background 0.12s;
-  width: 100%;
-  font: inherit;
-}
-.upload-zone:hover:not(:disabled) {
-  border-color: var(--text-4);
-  background: var(--surface-2);
-}
-.upload-zone:focus-visible {
-  outline: none;
-  border-color: var(--navy);
-  background: var(--surface-2);
-  box-shadow: 0 0 0 3px rgba(13, 31, 60, 0.08);
-}
-.upload-zone:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.upload-zone svg {
-  margin: 0 auto 6px;
-  width: 22px;
-  height: 22px;
-  opacity: 0.5;
-}
-.upload-zone p {
-  font-size: 0.8125rem;
-  color: var(--text-3);
-  margin: 0;
-}
-.upload-zone .hint {
-  font-size: 0.75rem;
-  color: var(--text-4);
-  margin-top: 2px;
-}
-
 .part-list {
   display: flex;
   flex-direction: column;
@@ -1733,7 +1688,6 @@ button {
 
 @media (prefers-reduced-motion: reduce) {
   .btn,
-  .upload-zone,
   .tab {
     transition: none;
   }
