@@ -43,7 +43,7 @@ npm install
 ### Terminal 1 - API
 
 ```bash
-docker compose up db -d
+docker compose -f infrastructure/docker-compose.yml up db -d
 cd nomikos
 uv run --project .. --group platform alembic -c infrastructure/alembic.ini upgrade head
 uv run --project .. --group platform uvicorn backend.core.app:create_app --factory --reload
@@ -66,8 +66,8 @@ Ensure ports **5173**, **8000**, and **5433** are free. Run Compose from the rep
 
 ```bash
 cd ..
-docker compose up --build      # foreground; Ctrl+C stops the stack
-docker compose up --build -d   # detached background
+docker compose -f infrastructure/docker-compose.yml up --build      # foreground; Ctrl+C stops the stack
+docker compose -f infrastructure/docker-compose.yml up --build -d   # detached background
 ```
 
 | Service | URL |
@@ -80,7 +80,7 @@ Platform media is mounted at `nomikos/backend/media/`. The existing `data/` fold
 
 Compose runs no inference service. The repository-level [`inference/`](../inference/) package supplies the contracts the platform imports and the model runtime an agent executes; the platform owns the only job queue (ADR 0003). See [`inference/README.md`](../inference/README.md).
 
-Useful after `-d`: `docker compose ps`, `docker compose logs -f`, `docker compose down`.
+Useful after `-d`: `docker compose -f infrastructure/docker-compose.yml ps`, `docker compose -f infrastructure/docker-compose.yml logs -f`, `docker compose -f infrastructure/docker-compose.yml down`.
 
 - `NEXT_PUBLIC_API_BASE_URL` (build/runtime env) - URL the browser uses (`http://localhost:8000`)
 
@@ -96,10 +96,10 @@ Rebuild the frontend image if you change `NEXT_PUBLIC_API_BASE_URL`.
 ```bash
 cd ..
 export NOMIKOS_VERSION=$(cat nomikos/VERSION)
-docker compose up --build -d
+docker compose -f infrastructure/docker-compose.yml up --build -d
 ```
 
-The root `docker-compose.yml` builds `nomikos-api:${NOMIKOS_VERSION}` and `nomikos-frontend:${NOMIKOS_VERSION}` and passes `APP_VERSION` into both Dockerfiles (API `/health` and frontend build).
+`infrastructure/docker-compose.yml` builds `nomikos-api:${NOMIKOS_VERSION}` and `nomikos-frontend:${NOMIKOS_VERSION}` and passes `APP_VERSION` into both Dockerfiles (API `/health` and frontend build).
 
 3. Verify:
 
@@ -110,8 +110,8 @@ docker images 'nomikos-*'
 
 **When to bump:** any release you want to distinguish in image tags or `/health` - not required for every code change during dev (rebuild with the same `NOMIKOS_VERSION` is fine).
 
-**Important:** set `NOMIKOS_VERSION` in a shell profile or root `.env` next to
-`docker-compose.yml` so the image tag always matches `VERSION`. The current
+**Important:** set `NOMIKOS_VERSION` in a shell profile or in `infrastructure/.env`
+next to the Compose file so the image tag always matches `VERSION`. The current
 Compose fallback is `0.3.3`; do not rely on it for a release unless it has been
 updated to match `VERSION`.
 

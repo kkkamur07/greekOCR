@@ -5,8 +5,9 @@ This folder is intentionally small: domain ORM models live in the backend
 bounded contexts, while `infrastructure/` owns the shared SQLAlchemy base,
 engine/session setup, and Alembic migration environment.
 
-Run infrastructure commands from the `nomikos/` app root. Run Docker Compose
-commands from the repository root, where `docker-compose.yml` lives.
+Run these database commands from the `nomikos/` app root. Docker Compose is a
+separate concern and lives in the repository-root `infrastructure/` directory;
+run those commands from the repository root.
 
 ## Directory Map
 
@@ -38,35 +39,35 @@ Settings live in `backend/core/settings/` and are usually loaded from
 | Host port | `5433` |
 | Container port | `5432` |
 | User | `postgres` |
-| Password | value in ignored root `.env` |
+| Password | value in ignored `infrastructure/.env` |
 | Async URL | configured in `backend/core/.env` |
 | Sync/Alembic URL | configured in `backend/core/.env` |
 
 Start only Postgres:
 
 ```bash
-docker compose up db -d
-docker compose ps
+docker compose -f infrastructure/docker-compose.yml up db -d
+docker compose -f infrastructure/docker-compose.yml ps
 ```
 
 Start the full stack:
 
 ```bash
-docker compose up --build
+docker compose -f infrastructure/docker-compose.yml up --build
 ```
 
 Stop the stack:
 
 ```bash
-docker compose down
+docker compose -f infrastructure/docker-compose.yml down
 ```
 
 Reset local dev data:
 
 ```bash
-docker compose down
+docker compose -f infrastructure/docker-compose.yml down
 docker volume rm nomikos_postgres_data
-docker compose up db -d
+docker compose -f infrastructure/docker-compose.yml up db -d
 cd nomikos
 PYTHONPATH=. alembic -c infrastructure/alembic.ini upgrade head
 ```
@@ -262,7 +263,7 @@ is what Alembic uses as metadata.
 Open psql in the running DB container:
 
 ```bash
-docker compose exec db psql -U postgres -d kalamos
+docker compose -f infrastructure/docker-compose.yml exec db psql -U postgres -d kalamos
 ```
 
 Common psql commands:
@@ -347,10 +348,10 @@ Fix (pick one):
 
 ```bash
 # Recreate dev user immediately (does not restart Postgres)
-docker compose exec api python scripts/platform/seed_dev_user.py
+docker compose -f infrastructure/docker-compose.yml exec api python scripts/platform/seed_dev_user.py
 
 # Or restart the API container (re-runs migrations + full seed)
-docker compose restart api
+docker compose -f infrastructure/docker-compose.yml restart api
 
 # In development, app lifespan recreates the missing dev user (not /health)
 curl -s http://localhost:8000/health
@@ -359,7 +360,7 @@ curl -s http://localhost:8000/health
 If you only run Postgres in Docker and the API locally, run migrations then seed after a DB reset:
 
 ```bash
-docker compose up db -d
+docker compose -f infrastructure/docker-compose.yml up db -d
 cd nomikos
 PYTHONPATH=. alembic -c infrastructure/alembic.ini upgrade head
 python ../scripts/platform/seed_dev_user.py

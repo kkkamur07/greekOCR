@@ -93,6 +93,33 @@ def test_runtime_images_are_non_root_and_have_import_and_health_checks() -> None
     assert "from backend.core.main import app" in dockerfile
 
 
+def test_api_build_context_still_excludes_secrets_and_local_trees() -> None:
+    """The API image builds from the repository root, so its ignore file is load-bearing.
+
+    These rules live in `nomikos/Dockerfile.dockerignore` rather than a root
+    `.dockerignore` (see that file's header). BuildKit resolves the sidecar by
+    the Dockerfile's own path, so a renamed or relocated Dockerfile orphans it
+    and the whole repository - env files, database dumps, the virtualenv - lands
+    in the build context with no error anywhere.
+    """
+    dockerfile = REPO_ROOT / "nomikos" / "Dockerfile"
+    ignore_file = dockerfile.with_name(dockerfile.name + ".dockerignore")
+
+    assert dockerfile.is_file(), "the sidecar below is keyed to this exact path"
+    assert ignore_file.is_file(), f"{ignore_file.name} must sit beside the Dockerfile"
+    assert not (REPO_ROOT / ".dockerignore").exists(), (
+        "a root .dockerignore would take effect for other contexts and split the rules"
+    )
+
+    patterns = {
+        line.strip()
+        for line in ignore_file.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    }
+    for required in ("**/.env", "**/.env.*", "**/.venv", ".git", "data/", "tests/"):
+        assert required in patterns, f"{required} dropped out of the API build context rules"
+
+
 def test_runtime_images_uninstall_vulnerable_system_packaging_tools() -> None:
     dockerfile = (REPO_ROOT / "nomikos" / "Dockerfile").read_text(encoding="utf-8")
     assert "pip uninstall -y pip setuptools wheel" in dockerfile
@@ -105,7 +132,7 @@ def test_development_compose_ports_are_loopback_only_and_secrets_are_interpolate
     platform API on whatever network the researcher's laptop is attached to, and
     dropping the `:?` interpolation re-introduces a committed default password.
     """
-    compose = (REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    compose = (REPO_ROOT / "infrastructure" / "docker-compose.yml").read_text(encoding="utf-8")
 
     for mapping in (
         '"127.0.0.1:5433:5432"',
@@ -172,8 +199,10 @@ def test_platform_backend_ships_bundled_unicode_pdf_font() -> None:
     assert "assets" in fonts_module
     assert "NotoSans-Regular.ttf" in fonts_module
 
-    # deploy/platform/build.sh copytree of nomikos/backend includes assets/fonts.
-    build_script = (REPO_ROOT / "deploy" / "platform" / "build.sh").read_text(encoding="utf-8")
+    # infrastructure/platform/build.sh copytree of nomikos/backend includes assets/fonts.
+    build_script = (REPO_ROOT / "infrastructure" / "platform" / "build.sh").read_text(
+        encoding="utf-8"
+    )
     assert '"nomikos" / "backend"' in build_script
 
 

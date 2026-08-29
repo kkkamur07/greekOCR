@@ -23,7 +23,7 @@ From the repository root:
 ```bash
 git clone https://github.com/kkkamur07/greekOCR.git
 cd greekOCR
-cp .env.compose.example .env
+cp infrastructure/.env.compose.example infrastructure/.env
 ```
 
 Replace the placeholders in `.env`:
@@ -37,7 +37,7 @@ INFERENCE_WEBHOOK_SECRET
 Start the stack:
 
 ```bash
-docker compose up --build
+docker compose -f infrastructure/docker-compose.yml up --build
 ```
 
 Open <http://localhost:5173>. Development seed credentials are
@@ -56,10 +56,10 @@ published port. The first inference run downloads public weights into
 `~/.nomikos/hf/cache`.
 
 ```bash
-docker compose ps
+docker compose -f infrastructure/docker-compose.yml ps
 curl -s http://localhost:8000/health | python -m json.tool
-docker compose logs -f
-docker compose down
+docker compose -f infrastructure/docker-compose.yml logs -f
+docker compose -f infrastructure/docker-compose.yml down
 ```
 
 ## Run services individually
@@ -70,7 +70,7 @@ Docker for Postgres:
 ```bash
 uv sync --group platform --group inference
 cp nomikos/backend/core/.env.example nomikos/backend/core/.env
-docker compose up db -d
+docker compose -f infrastructure/docker-compose.yml up db -d
 ```
 
 Start the platform API:
@@ -142,7 +142,7 @@ failure: the job goes to the cloud and says so.
 1. Create a Supabase project.
 2. Create a private Storage bucket named `document-media`.
 3. Fill `nomikos/backend/core/.env.supabase.example`.
-4. Set service secrets in the repository-root `.env`.
+4. Set service secrets in `infrastructure/.env`.
 5. Provision the least-privilege roles in
    [`../deployment/database-roles.md`](../deployment/database-roles.md).
 6. Run migrations with the direct migrator connection:
@@ -154,7 +154,7 @@ failure: the job goes to the cloud and says so.
 7. Start the overlay:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.supabase.yml up --build
+docker compose -f infrastructure/docker-compose.yml -f infrastructure/docker-compose.supabase.yml up --build
 ```
 
 Runtime traffic uses configured pooler connections; migrations use the direct

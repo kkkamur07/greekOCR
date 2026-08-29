@@ -1,3 +1,23 @@
+# Build-context exclusions for `nomikos/Dockerfile`.
+#
+# This used to be `.dockerignore` at the repository root. It is named for its
+# Dockerfile instead because a `.dockerignore` is only read from the *build
+# context* root, and the context for this image is the repository root - so the
+# file could not simply move into `infrastructure/` with the Compose files
+# without silently disabling every exclusion below. BuildKit reads
+# `<dockerfile>.dockerignore` in preference to the context's `.dockerignore`,
+# which lets the rules live next to the Dockerfile they belong to.
+#
+# The consequence of that lookup failing is not a slow build, it is `**/.env`,
+# `.git` and the virtualenv entering the context, so
+# `tests/nomikos/unit/test_deployment_hardening.py` asserts this file exists and
+# still names them. BuildKit is required: the pre-23 classic builder
+# (`DOCKER_BUILDKIT=0`) does not implement the sidecar and would ship the whole
+# tree.
+#
+# The frontend image is unaffected - it builds from the `nomikos/` context and
+# reads `nomikos/.dockerignore`.
+
 **/.DS_Store
 **/.env
 **/.env.*

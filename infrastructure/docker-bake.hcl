@@ -18,7 +18,7 @@ group "default" {
 }
 
 target "api" {
-  context    = "."
+  context    = ".."
   dockerfile = "nomikos/Dockerfile"
   target     = "runtime"
   tags       = ["nomikos-api:latest"]
@@ -30,7 +30,7 @@ target "api" {
 }
 
 target "frontend-dev" {
-  context    = "nomikos"
+  context    = "../nomikos"
   dockerfile = "frontend/Dockerfile"
   target     = "dev"
   tags       = ["nomikos-frontend:latest"]

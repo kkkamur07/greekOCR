@@ -4,13 +4,15 @@
 # - nomikos/backend/core/.env.supabase (see .env.supabase.example)
 #
 # Usage:
-#   docker compose -f docker-compose.yml -f docker-compose.supabase.yml up --build
+#   docker compose -f infrastructure/docker-compose.yml -f infrastructure/docker-compose.supabase.yml up --build
 #
 # Open http://localhost:5173. This profile does NOT auto-seed the dev login: it
 # targets a persistent external database, and seeding a published-password account
 # on every boot is a backdoor if the env file ever points at real data. Seed once,
 # by hand, when you actually want it:
-#   docker compose exec api python scripts/platform/seed_dev_user.py
+#   docker compose -f infrastructure/docker-compose.yml \
+#     -f infrastructure/docker-compose.supabase.yml exec api \
+#     python scripts/platform/seed_dev_user.py
 
 name: nomikos
 
@@ -21,14 +23,14 @@ services:
 
   api:
     env_file:
-      - ./nomikos/backend/core/.env.supabase
+      - ../nomikos/backend/core/.env.supabase
     # !override drops base compose DATABASE_URL (local db:5432/kalamos) so env_file wins.
     environment: !override
       NOMIKOS_APP_ROOT: /app
       # Authenticates the inbound job callback an inference agent posts. Source
-      # it from the repository-root Compose .env instead of duplicating it
+      # it from the Compose .env at infrastructure/.env instead of duplicating it
       # across environment files.
-      INFERENCE_WEBHOOK_SECRET: ${INFERENCE_WEBHOOK_SECRET:?set INFERENCE_WEBHOOK_SECRET in the repository-root .env}
+      INFERENCE_WEBHOOK_SECRET: ${INFERENCE_WEBHOOK_SECRET:?set INFERENCE_WEBHOOK_SECRET in infrastructure/.env}
       CORS_ORIGINS: http://localhost:3000,http://localhost:5173
       JOB_WORKER_ENABLED: "false"
       JOB_SSE_NOTIFICATIONS_ENABLED: "false"
@@ -38,10 +40,10 @@ services:
     # keep a dangling dependency on an undefined service.
     depends_on: !reset null
     volumes:
-      - ./nomikos/backend:/app/backend
-      - ./scripts/platform:/app/scripts/platform
-      - ./inference:/app/inference
-      - ./data:/data:ro
+      - ../nomikos/backend:/app/backend
+      - ../scripts/platform:/app/scripts/platform
+      - ../inference:/app/inference
+      - ../data:/data:ro
     # Migrations: run `./scripts/platform/migrate_supabase.sh` on the host first.
     # In-container alembic uses MIGRATOR_DATABASE_URL (direct host) which often fails
     # from Docker (IPv6 / network). No auto-seed here (see header).
@@ -50,9 +52,9 @@ services:
 
   platform-worker:
     env_file:
-      - ./nomikos/backend/core/.env.supabase
+      - ../nomikos/backend/core/.env.supabase
     environment: !override
-      INFERENCE_WEBHOOK_SECRET: ${INFERENCE_WEBHOOK_SECRET:?set INFERENCE_WEBHOOK_SECRET in the repository-root .env}
+      INFERENCE_WEBHOOK_SECRET: ${INFERENCE_WEBHOOK_SECRET:?set INFERENCE_WEBHOOK_SECRET in infrastructure/.env}
       INFERENCE_MAX_DECODED_IMAGE_BYTES: "104857600"
       INFERENCE_MAX_JOB_PAYLOAD_BYTES: "104857600"
       JOB_WORKER_ENABLED: "true"

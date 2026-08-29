@@ -23,7 +23,7 @@ Start the backend separately:
 
 ```bash
 cd ../..
-docker compose up db -d
+docker compose -f infrastructure/docker-compose.yml up db -d
 cd nomikos
 PYTHONPATH=. alembic -c infrastructure/alembic.ini upgrade head
 PYTHONPATH=. uvicorn backend.core.app:create_app --factory --reload

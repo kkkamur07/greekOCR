@@ -263,4 +263,4 @@ Full-suite layout, `DATABASE_URL` caveats, and failure analysis: [`docs/guides/t
 ## Related docs
 
 - Nomikos platform API and job integration: [`nomikos/backend/README.md`](../nomikos/backend/README.md)
-- Compose stack and env vars: [`docker-compose.yml`](../docker-compose.yml) and [`nomikos/README.md`](../nomikos/README.md)
+- Compose stack and env vars: [`infrastructure/docker-compose.yml`](../infrastructure/docker-compose.yml) and [`nomikos/README.md`](../nomikos/README.md)

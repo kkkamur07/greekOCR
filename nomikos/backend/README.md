@@ -10,7 +10,7 @@ Run backend commands from the `nomikos/` app root unless a command says otherwis
 
 ```bash
 cp nomikos/backend/core/.env.example nomikos/backend/core/.env
-docker compose up db -d
+docker compose -f infrastructure/docker-compose.yml up db -d
 cd nomikos
 uv run --project .. --group platform alembic -c infrastructure/alembic.ini upgrade head
 uv run --project .. --group platform uvicorn backend.core.app:create_app --factory --reload

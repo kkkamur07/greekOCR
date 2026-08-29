@@ -30,6 +30,11 @@ useDefault = true
 # now, so the same mistake cannot recur *there* - but nothing was stopping it
 # recurring anywhere else.
 #
+# `infrastructure/.env` is a live path again: the Compose files moved into
+# `infrastructure/`, and Compose reads its `.env` from the directory holding
+# them. It is the same ignored, never-committed file it was before, and this
+# rule is the reason a slip would now be caught rather than repeated.
+#
 # Scoped deliberately: it fires only when a password is actually present between
 # the scheme and the host. `postgresql://localhost/db` and
 # `postgresql://postgres@localhost` carry no credential and are not findings; a
@@ -86,7 +91,42 @@ regexes = [
 
 [allowlist]
 description = "Shared test literals and scanner false positives"
+
+# Matched against the whole source line, not just the captured secret.
+#
+# This is not cosmetic. `regexTarget` defaults to "secret", and against a secret
+# the anchored `tokenizer=` entry below could never match: gitleaks captures
+# `gpt_syriac_500`, so the `^...=...$` shape had nothing to bind to and the
+# entry sat here doing nothing. Matching the line is also what the entries
+# actually mean - it is the *assignment* that proves the value is a config key
+# or a placeholder, and a bare high-entropy string on its own proves nothing.
+regexTarget = "line"
+
 regexes = [
+  # A literal, so it allowlists on any target. See the header: one test fixture,
+  # high-entropy on purpose because the accept path cannot be tested without it.
   '''xQ7v2Kd9RmZ4pB6wLt1yHs3nCf8jUa5eG0oV''',
+  # A Hydra config key, not a credential: `tokenizer=gpt_syriac_500` names a
+  # tokenizer checked into this repository.
   '''(?m)^\s*tokenizer=gpt_syriac_500(?:\s*\\)?\s*$''',
+  # "replace-..." is how every shipped `.env.*.example` spells "put yours here",
+  # and `AuthSettings._validate_secret` refuses to boot on a value starting that
+  # way - so this shape is a secret's absence, the same argument the URI
+  # allowlist above makes for `${...}` and `<...>`. By shape, never by path: a
+  # real credential pasted into those same templates is still a finding.
+  #
+  # Deliberately case-sensitive on the value, and hyphens only. Case-insensitive
+  # with `_` allowed, `replacement_for_the_old_key_xK9mP2vQ8wL4nR7t` reads as a
+  # placeholder and walks straight past the scanner. Every placeholder actually
+  # shipped here is lowercase-and-hyphens, so requiring that costs nothing and
+  # closes the prefix as an evasion.
+  '''^\s*[A-Z][A-Z0-9_]*(?:SECRET|KEY|TOKEN|PASSWORD)\s*=\s*replace[a-z0-9-]*\s*$''',
+]
+
+# Compiled bytecode, not source. `__pycache__` is gitignored, so nothing here
+# can reach a commit and neither `gitleaks git` nor `protect --staged` ever sees
+# it; the exclusion only stops a full-directory scan reporting a string that a
+# tracked test file already accounts for.
+paths = [
+  '''(^|/)__pycache__/''',
 ]
