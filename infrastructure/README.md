@@ -76,13 +76,35 @@ See [`docs/deployment/supabase.md`](../docs/deployment/supabase.md).
 ## Images
 
 ```bash
-docker buildx bake -f infrastructure/docker-bake.hcl
+cd infrastructure
+docker buildx bake --allow=fs.read=..
 ```
 
-Bake resolves build contexts against the bake file, so `..` is the repository
-root. The local cache paths (`.docker-cache/`) are resolved against your working
-directory instead, so run bake from the repository root to keep the cache where
-`.gitignore` expects it.
+Bake is the one tool here that does **not** behave like Compose, and the
+difference decides where you have to stand:
+
+- Compose resolves `../nomikos` against the Compose file, so it works from
+  anywhere.
+- Bake resolves it against your **working directory**. Run it from the
+  repository root and `..` becomes the repository's *parent*, which fails with
+  `lstat ../nomikos: no such file or directory`. Run it from `infrastructure/`
+  and `..` is the repository root, which is what the contexts mean.
+
+`--allow=fs.read=..` is required because buildx refuses to read outside the
+invocation directory without an explicit grant. `BUILDX_BAKE_ENTITLEMENTS_FS=0`
+does the same job if you would rather not repeat the flag.
+
+A bare `docker buildx bake` from the repository root now exits with
+`couldn't find a bake definition`, since no bake file is left there.
+
+Do not treat `docker buildx bake --print` as verification. It renders the plan
+from the literal file and never resolves a context, so it prints a clean plan
+for an invocation that cannot build.
+
+The local cache paths follow the working directory too, so the cache lands in
+`infrastructure/.docker-cache/`. Both `.gitignore` and
+`nomikos/Dockerfile.dockerignore` match it at any depth rather than only at the
+repository root, so it is neither committed nor uploaded into a build context.
 
 ## Platform bundle
 
@@ -102,6 +124,8 @@ is no longer at the default root path:
 - `.pre-commit-config.yaml` runs `gitleaks protect --staged --config infrastructure/gitleaks.toml`
 - `.github/workflows/security.yml` sets `GITLEAKS_CONFIG: infrastructure/gitleaks.toml`
 
-If either loses its path, gitleaks falls back to the default ruleset. That does
-not fail open, it fails *noisily* on a test fixture this config allowlists, so a
-broken path shows up as a red CI job rather than a missed secret.
+If either loses its path, gitleaks falls back to the default ruleset, and that
+does fail open. The CI action scans only the commit range being pushed, so a
+change touching neither the allowlisted fixture nor a database URI passes while
+the custom `database-uri-with-password` rule is not loaded at all. Nothing goes
+red to tell you. Both paths are load-bearing.

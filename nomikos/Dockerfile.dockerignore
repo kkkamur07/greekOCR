@@ -31,7 +31,9 @@
 **/dist
 **/build
 .cursor
-.docker-cache/
+# Not root-anchored: bake resolves its cache paths against the bake file,
+# so the cache is written under infrastructure/ rather than at the root.
+**/.docker-cache/
 .git
 .gitignore
 agent-transcripts

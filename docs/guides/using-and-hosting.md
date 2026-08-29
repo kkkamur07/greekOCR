@@ -26,7 +26,7 @@ cd greekOCR
 cp infrastructure/.env.compose.example infrastructure/.env
 ```
 
-Replace the placeholders in `.env`:
+Replace the placeholders in `infrastructure/.env`:
 
 ```text
 POSTGRES_PASSWORD
