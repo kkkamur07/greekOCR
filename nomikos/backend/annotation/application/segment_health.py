@@ -59,6 +59,16 @@ FRAGMENT_MAX_WIDTH_RATIO = 0.6
 # as covered, so that a polygon merely leaning into its neighbour is left alone.
 BAND_COVERAGE_RATIO = 0.2
 
+# Two line masks that share this much of the smaller one are a defect, not a
+# pair of neighbours whose descenders reach. Measured across 1617 overlapping
+# pairs in two manuscripts: 1388 share under 5%, which is ordinary, and the
+# distribution thins to nothing between 10% and 20%. Nineteen pairs sit above.
+OVERLAP_DEFECT_RATIO = 0.2
+# Past this the two are not neighbours bleeding into each other, they are one
+# line drawn twice, and cutting between their baselines halves a duplicate
+# rather than separating two lines. Those are reported without a trim.
+OVERLAP_DUPLICATE_RATIO = 0.5
+
 
 def bbox(points: Polygon) -> Box:
     xs = [point[0] for point in points]
@@ -123,6 +133,26 @@ class FragmentMerge:
     fragment_id: str
     points: Polygon
     baseline: Polygon
+
+
+@dataclass(frozen=True)
+class OverlapTrim:
+    """Two line masks sharing enough area that one of them is wrong."""
+
+    upper_id: str
+    lower_id: str
+    #: Shared area as a fraction of the smaller of the two.
+    ratio: float
+    #: Midway between the two baselines, where the trim would cut.
+    cut: float
+    #: The trimmed outlines, empty when no trim is offered.
+    upper_points: Polygon = field(default_factory=list)
+    lower_points: Polygon = field(default_factory=list)
+    #: What each would lose, so the cost is on screen before anyone agrees.
+    upper_loss: float = 0.0
+    lower_loss: float = 0.0
+    #: Set when the two are one line drawn twice rather than two that bleed.
+    duplicate: bool = False
 
 
 def _median(values: list[float], fallback: float) -> float:
@@ -318,29 +348,43 @@ def y_at(polyline: Polygon, x: float) -> float:
     return ordered[-1][1]
 
 
-def _intersect_at(first: Point, second: Point, x_cut: float) -> Point:
-    (ax, ay), (bx, by) = first, second
-    t = (x_cut - ax) / (bx - ax) if bx != ax else 0.0
-    return [round(x_cut, 1), round(ay + t * (by - ay), 1)]
+def _intersect_at(first: Point, second: Point, cut: float, axis: int) -> Point:
+    other = 1 - axis
+    span = second[axis] - first[axis]
+    t = (cut - first[axis]) / span if span else 0.0
+    crossing = first[other] + t * (second[other] - first[other])
+    return [round(cut, 1), round(crossing, 1)] if axis == 0 else [round(crossing, 1), round(cut, 1)]
 
 
-def clip_half(polygon: Polygon, x_cut: float, *, keep_left: bool) -> Polygon:
-    """Sutherland-Hodgman against the vertical line x = x_cut.
+def _clip_half(polygon: Polygon, cut: float, *, axis: int, keep_lower: bool) -> Polygon:
+    """Sutherland-Hodgman against one axis-aligned line.
 
     A half-plane is convex, which is what this algorithm needs of its clip
     region; the polygon being clipped may be as concave as kraken likes.
     """
-    inside = (lambda p: p[0] <= x_cut) if keep_left else (lambda p: p[0] >= x_cut)
+    inside = (
+        (lambda p: p[axis] <= cut) if keep_lower else (lambda p: p[axis] >= cut)  # noqa: E731
+    )
     out: Polygon = []
     for index in range(len(polygon)):
         current, previous = polygon[index], polygon[index - 1]
         if inside(current):
             if not inside(previous):
-                out.append(_intersect_at(previous, current, x_cut))
+                out.append(_intersect_at(previous, current, cut, axis))
             out.append([float(current[0]), float(current[1])])
         elif inside(previous):
-            out.append(_intersect_at(previous, current, x_cut))
+            out.append(_intersect_at(previous, current, cut, axis))
     return out
+
+
+def clip_half(polygon: Polygon, x_cut: float, *, keep_left: bool) -> Polygon:
+    """Everything to one side of the vertical line x = x_cut."""
+    return _clip_half(polygon, x_cut, axis=0, keep_lower=keep_left)
+
+
+def clip_across(polygon: Polygon, y_cut: float, *, keep_above: bool) -> Polygon:
+    """Everything to one side of the horizontal line y = y_cut."""
+    return _clip_half(polygon, y_cut, axis=1, keep_lower=keep_above)
 
 
 def clip_polygon(polygon: Polygon, low: float | None, high: float | None) -> Polygon:
@@ -600,4 +644,140 @@ def find_fragments(segments: list[Segment], stats: PageStats) -> list[FragmentMe
                 )
             )
             claimed.add(narrow.id)
+    return found
+
+
+def polygon_area(polygon: Polygon) -> float:
+    """Shoelace, unsigned."""
+    total = 0.0
+    for index in range(len(polygon)):
+        ax, ay = polygon[index]
+        bx, by = polygon[(index + 1) % len(polygon)]
+        total += ax * by - bx * ay
+    return abs(total) / 2
+
+
+def overlap_area(first: Polygon, second: Polygon) -> float:
+    """Area the two outlines share.
+
+    Integrated column by column rather than by intersecting the rings: the
+    height they share at an x is the overlap of their two vertical extents, and
+    that is the same view of a polygon the rest of this module takes. It is
+    exact for outlines with one top edge and one bottom edge, which is what
+    kraken draws and what everything here already assumes.
+    """
+    first_box, second_box = bbox(first), bbox(second)
+    low = max(first_box[0], second_box[0])
+    high = min(first_box[1], second_box[1])
+    if high <= low:
+        return 0.0
+    columns = sorted(
+        {low, high}
+        | {float(p[0]) for p in first if low < p[0] < high}
+        | {float(p[0]) for p in second if low < p[0] < high}
+    )
+    # The shared height is piecewise linear except where the two swap which one
+    # is on top, so each gap is walked in steps rather than trusted as one.
+    xs: list[float] = []
+    for left, right in zip(columns, columns[1:], strict=False):
+        xs.extend(left + (right - left) * step / 4 for step in range(4))
+    xs.append(columns[-1])
+
+    def shared(x: float) -> float:
+        a, b = _extent_at(first, x), _extent_at(second, x)
+        if a is None or b is None:
+            return 0.0
+        return max(0.0, min(a[1], b[1]) - max(a[0], b[0]))
+
+    heights = [shared(x) for x in xs]
+    return sum(
+        (left_height + right_height) / 2 * (right_x - left_x)
+        for left_x, right_x, left_height, right_height in zip(
+            xs, xs[1:], heights, heights[1:], strict=False
+        )
+    )
+
+
+def _baseline_midline(upper: Segment, lower: Segment) -> float:
+    """The y midway between two baselines, across the span they share."""
+    upper_box, lower_box = bbox(upper.points), bbox(lower.points)
+    low = max(upper_box[0], lower_box[0])
+    high = min(upper_box[1], lower_box[1])
+    samples = [low, (low + high) / 2, high] if high > low else [(low + high) / 2]
+    return statistics.mean((y_at(upper.baseline, x) + y_at(lower.baseline, x)) / 2 for x in samples)
+
+
+def find_overlaps(segments: list[Segment], stats: PageStats) -> list[OverlapTrim]:
+    """Pairs of lines whose masks have grown into each other.
+
+    Neighbouring lines share a little: a descender reaches, an ascender reaches
+    back, and across two manuscripts 1388 of 1617 overlapping pairs share under
+    5% of the smaller mask. Sharing a fifth of it is something else, and the
+    fix is a cut midway between the two baselines, which on all nineteen of the
+    heavy pairs separated them completely.
+
+    Offered, never applied. The cut removes a sixth of a mask on average and
+    half of one at worst, and the worst case is a pair that is really one line
+    drawn twice, where cutting between the baselines is the wrong answer
+    entirely. Those are reported as duplicates with no trim attached, and the
+    rest carry what each side would lose so that whoever decides can see the
+    cost first.
+    """
+    del stats  # Read from the pair itself; nothing here is a page-wide rule.
+    candidates = [
+        segment
+        for segment in segments
+        if not segment.manual_geometry and len(segment.points) >= 3 and len(segment.baseline) >= 2
+    ]
+    found: list[OverlapTrim] = []
+    for index, first in enumerate(candidates):
+        first_box = bbox(first.points)
+        first_area = polygon_area(first.points)
+        if first_area <= 0:
+            continue
+        for second in candidates[index + 1 :]:
+            second_box = bbox(second.points)
+            if (
+                first_box[1] <= second_box[0]
+                or second_box[1] <= first_box[0]
+                or first_box[3] <= second_box[2]
+                or second_box[3] <= first_box[2]
+            ):
+                continue
+            second_area = polygon_area(second.points)
+            if second_area <= 0:
+                continue
+            shared = overlap_area(first.points, second.points)
+            ratio = shared / min(first_area, second_area)
+            if ratio < OVERLAP_DEFECT_RATIO:
+                continue
+            upper, lower = sorted(
+                (first, second), key=lambda s: statistics.mean(p[1] for p in s.baseline)
+            )
+            cut = _baseline_midline(upper, lower)
+            if ratio >= OVERLAP_DUPLICATE_RATIO:
+                found.append(
+                    OverlapTrim(
+                        upper_id=upper.id, lower_id=lower.id, ratio=ratio, cut=cut, duplicate=True
+                    )
+                )
+                continue
+            kept_upper = clip_across(upper.points, cut, keep_above=True)
+            kept_lower = clip_across(lower.points, cut, keep_above=False)
+            if len(kept_upper) < 3 or len(kept_lower) < 3:
+                continue
+            upper_area = polygon_area(upper.points)
+            lower_area = polygon_area(lower.points)
+            found.append(
+                OverlapTrim(
+                    upper_id=upper.id,
+                    lower_id=lower.id,
+                    ratio=ratio,
+                    cut=round(cut, 1),
+                    upper_points=_dedupe(kept_upper),
+                    lower_points=_dedupe(kept_lower),
+                    upper_loss=1 - polygon_area(kept_upper) / upper_area,
+                    lower_loss=1 - polygon_area(kept_lower) / lower_area,
+                )
+            )
     return found

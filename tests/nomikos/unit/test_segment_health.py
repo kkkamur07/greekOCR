@@ -8,6 +8,7 @@ hazard imagined afterwards. Those are called out where they sit.
 from __future__ import annotations
 
 from backend.annotation.application.segment_health import (
+    PageStats,
     Segment,
     baseline_distance,
     bbox,
@@ -15,10 +16,13 @@ from backend.annotation.application.segment_health import (
     clip_polygon,
     column_bands,
     find_fragments,
+    find_overlaps,
     find_spanning,
     find_suspects,
     merge_polygons,
+    overlap_area,
     page_stats,
+    polygon_area,
 )
 
 PAGE_WIDTH = 2400.0
@@ -69,6 +73,50 @@ def tapered(x0: float, x1: float, y: float, *, height: float = 100.0) -> list[li
         + [[x1, y + height / 8]]
         + [[x0 + span * f, bottom - height / 12 * i] for i, f in enumerate((0.75, 0.45, 0.15))]
     )
+
+
+def mask(
+    identifier: str,
+    top: float,
+    bottom: float,
+    baseline_y: float,
+    *,
+    x0: float = 300.0,
+    x1: float = 1100.0,
+    manual: bool = False,
+) -> Segment:
+    """A line mask with its baseline where a baseline really sits.
+
+    Inside the mask rather than along its bottom edge, because ascenders and
+    descenders are why two neighbouring masks touch at all, and a cut midway
+    between two baselines only makes sense against real ones.
+    """
+    return Segment(
+        id=identifier,
+        points=[[x0, top], [x1, top], [x1, bottom], [x0, bottom]],
+        baseline=[[x0, baseline_y], [x1, baseline_y]],
+        manual_geometry=manual,
+    )
+
+
+def overlapping(
+    share: float, *, manual: bool = False, height: float = 120.0
+) -> tuple[list[Segment], PageStats]:
+    """Two stacked masks sharing a given fraction of one mask's height."""
+    # Below the twenty rows the two-column page draws, so the pair under test
+    # is the only overlap on it.
+    top = 2800.0
+    shared = height * share
+    upper = mask("U", top, top + height, top + height * 0.58)
+    lower = mask(
+        "L",
+        top + height - shared,
+        top + 2 * height - shared,
+        top + 1.58 * height - shared,
+        manual=manual,
+    )
+    segments = two_column_page() + [upper, lower]
+    return segments, page_stats(segments, PAGE_WIDTH, PAGE_HEIGHT)
 
 
 def two_column_page(spanning: list[Segment] | None = None) -> list[Segment]:
@@ -237,6 +285,94 @@ class TestMergePolygons:
         merged = merge_polygons(primary, fragment)
         assert bbox(merged) == (300.0, 1000.0, 450.0, 550.0)
         assert len(merged) >= 4
+
+
+class TestOverlaps:
+    def test_two_masks_sharing_a_third_are_offered_a_cut_between_the_baselines(self) -> None:
+        segments, stats = overlapping(0.3)
+        (trim,) = [t for t in find_overlaps(segments, stats) if t.upper_id == "U"]
+        assert trim.lower_id == "L"
+        assert not trim.duplicate
+        upper, lower = (
+            next(s for s in segments if s.id == "U"),
+            next(s for s in segments if s.id == "L"),
+        )
+        assert upper.baseline[0][1] < trim.cut < lower.baseline[0][1]
+        # The point of the cut: afterwards they share nothing at all.
+        assert overlap_area(trim.upper_points, trim.lower_points) == 0.0
+
+    def test_lines_that_merely_touch_are_left_alone(self) -> None:
+        # Neighbouring masks always share a little, which is a descender doing
+        # its job. Across two manuscripts 1388 of 1617 overlapping pairs shared
+        # under 5% of the smaller mask, and flagging those would bury the
+        # nineteen that mean something.
+        segments, stats = overlapping(0.05)
+        assert [t for t in find_overlaps(segments, stats) if t.upper_id == "U"] == []
+
+    def test_one_line_drawn_twice_is_reported_without_a_cut(self) -> None:
+        # The failure this catches. A cut midway between the baselines is the
+        # right fix for two lines that bled into each other and the wrong one
+        # for a single line kraken emitted twice: it halves both copies and
+        # leaves two mutilated masks where a human would have deleted one. The
+        # worst real pair shared 98% and would have lost half its area.
+        segments, stats = overlapping(0.9)
+        (trim,) = [t for t in find_overlaps(segments, stats) if t.upper_id == "U"]
+        assert trim.duplicate
+        assert trim.upper_points == []
+        assert trim.lower_points == []
+
+    def test_a_hand_drawn_mask_is_never_trimmed(self) -> None:
+        segments, stats = overlapping(0.3, manual=True)
+        assert [t for t in find_overlaps(segments, stats) if t.upper_id == "U"] == []
+
+    def test_the_trim_says_what_each_side_would_lose(self) -> None:
+        # Offered, not applied, so the cost has to travel with the offer. On
+        # real pages the cut takes a sixth of a mask on average.
+        segments, stats = overlapping(0.3)
+        (trim,) = [t for t in find_overlaps(segments, stats) if t.upper_id == "U"]
+        assert 0 < trim.upper_loss < 1
+        assert 0 < trim.lower_loss < 1
+        segments_by_id = {segment.id: segment for segment in segments}
+        kept = polygon_area(trim.upper_points) + polygon_area(trim.lower_points)
+        whole = sum(polygon_area(segments_by_id[i].points) for i in ("U", "L"))
+        assert kept < whole
+
+    def test_two_tapered_masks_are_measured_by_what_they_share_not_their_boxes(self) -> None:
+        # Two kraken masks can have boxes that overlap heavily while the masks
+        # themselves barely touch, because each tapers to a point at its ends.
+        # Comparing boxes would flag the pair; comparing the masks does not.
+        first = tapered(300.0, 1100.0, 500.0, height=120.0)
+        second = tapered(300.0, 1100.0, 560.0, height=120.0)
+        first_box, second_box = bbox(first), bbox(second)
+        box_overlap = (min(first_box[1], second_box[1]) - max(first_box[0], second_box[0])) * (
+            min(first_box[3], second_box[3]) - max(first_box[2], second_box[2])
+        )
+        assert overlap_area(first, second) < box_overlap * 0.8
+
+
+class TestAreas:
+    def test_the_area_of_a_rectangle_is_its_sides(self) -> None:
+        assert polygon_area([[0.0, 0.0], [10.0, 0.0], [10.0, 4.0], [0.0, 4.0]]) == 40.0
+
+    def test_the_shared_area_of_two_rectangles_is_the_part_they_both_cover(self) -> None:
+        first = [[0.0, 0.0], [10.0, 0.0], [10.0, 4.0], [0.0, 4.0]]
+        second = [[6.0, 2.0], [20.0, 2.0], [20.0, 9.0], [6.0, 9.0]]
+        assert overlap_area(first, second) == 8.0
+
+    def test_outlines_that_pass_over_each_other_share_nothing(self) -> None:
+        # The failure this catches: the shared height at a column is the
+        # overlap of two vertical extents, and where one outline sits well
+        # above the other that number is negative. Added up rather than floored
+        # at zero it subtracts real overlap elsewhere, and two masks that
+        # genuinely grew into each other come out reading as clean.
+        above = [[0.0, 0.0], [100.0, 0.0], [100.0, 10.0], [0.0, 10.0]]
+        below = [[0.0, 400.0], [100.0, 400.0], [100.0, 410.0], [0.0, 410.0]]
+        assert overlap_area(above, below) == 0.0
+
+    def test_outlines_that_do_not_touch_share_nothing(self) -> None:
+        first = [[0.0, 0.0], [10.0, 0.0], [10.0, 4.0], [0.0, 4.0]]
+        second = [[40.0, 0.0], [50.0, 0.0], [50.0, 4.0], [40.0, 4.0]]
+        assert overlap_area(first, second) == 0.0
 
 
 class TestSuspects:
