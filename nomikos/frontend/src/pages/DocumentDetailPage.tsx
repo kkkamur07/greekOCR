@@ -23,7 +23,7 @@ import { PartList } from "../components/document/PartList";
 import { UploadZone } from "../components/document/UploadZone";
 import { AppPageShell } from "../components/layout/AppPageShell";
 import { ContentRegionLoading } from "../components/layout/ContentRegionLoading";
-import { DocumentLiveSharingPanel } from "../components/sharing/DocumentLiveSharingPanel";
+import { DocumentSettingsPanel } from "../components/sharing/DocumentSettingsPanel";
 import { WorkflowBadge } from "../components/WorkflowBadge";
 import { useFileDrop } from "../hooks/useFileDrop";
 import { useServerQuery } from "../hooks/useServerQuery";
@@ -40,7 +40,7 @@ const ENABLE_TEST_JOBS = process.env.NEXT_PUBLIC_ENABLE_TEST_JOBS === "true";
  * What flipping a page's visibility actually did, in the workflow it happened in.
  *
  * Three states, not two. An archived document is not public and cannot be brought
- * live from here - `DocumentLiveSharingControls` refuses the toggle outright, and
+ * live from here - `DocumentPublishMenu` refuses the toggle outright, and
  * nothing else in the app sets the workflow back - so "when the document goes live"
  * would promise a moment that never arrives.
  */
@@ -445,7 +445,7 @@ export function DocumentDetailPage() {
       titleEditable={Boolean(document && projectId && documentId)}
       titlePanelOpen={titlePanelOpen}
       onTitlePanelToggle={() => setTitlePanelOpen((open) => !open)}
-      titlePanelLabel="Document settings and live sharing"
+      titlePanelLabel="Document settings"
       headerActions={
         document && projectId && documentId ? (
           <DocumentActionBar
@@ -479,26 +479,18 @@ export function DocumentDetailPage() {
       }
       titlePanel={
         document && projectId && documentId ? (
-          <DocumentLiveSharingPanel
+          <DocumentSettingsPanel
             projectId={projectId}
             documentId={documentId}
             name={document.name}
-            workflow={document.workflow}
-            publicShareToken={document.public_share_token ?? null}
             onUpdated={(updated) => {
               patchDocument((current) => ({
                 ...current,
-                document: {
-                  ...current.document,
-                  ...(updated.name !== undefined ? { name: updated.name } : {}),
-                  ...(updated.workflow !== undefined
-                    ? { workflow: updated.workflow }
-                    : {}),
-                },
+                document: { ...current.document, name: updated.name },
               }));
               // The document list, the public view and the copy the page
-              // editor fetches all carry these fields; the panel only wrote to
-              // the copy this page holds.
+              // editor fetches all carry the name; the panel only wrote to the
+              // copy this page holds.
               invalidateAfter.documentUpdated(projectId!, documentId!);
             }}
           />

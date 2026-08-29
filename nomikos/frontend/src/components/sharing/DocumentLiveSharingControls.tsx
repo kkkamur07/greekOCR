@@ -21,9 +21,16 @@ type DocumentLiveSharingControlsProps = {
   publicShareToken: string | null;
   onWorkflowChange: (workflow: DocumentWorkflow) => void;
   disabled?: boolean;
-  compact?: boolean;
 };
 
+/**
+ * Publishing, as it appears inside the page editor's dropdown.
+ *
+ * This is the page editor's only route to publishing, which is why it stays.
+ * The document page has its own Publish menu in the action row and no longer
+ * renders this; the wider, panel-shaped variant this component used to grow
+ * when `compact` was false went with it.
+ */
 export function DocumentLiveSharingControls({
   projectId,
   documentId,
@@ -31,7 +38,6 @@ export function DocumentLiveSharingControls({
   publicShareToken,
   onWorkflowChange,
   disabled = false,
-  compact = false,
 }: DocumentLiveSharingControlsProps) {
   const [publishing, setPublishing] = useState(false);
   const isPublished = workflow === "published";
@@ -81,22 +87,13 @@ export function DocumentLiveSharingControls({
     }
   }
 
-  const statusClass = compact
-    ? "entity-panel__meta"
-    : "entity-panel__status-row";
-  const urlClass = compact ? "pe-dd-share__url" : "entity-panel__url";
-  const actionsClass = compact
-    ? "pe-dd-share__actions"
-    : "entity-panel__actions";
-
   return (
     <>
-      <div className={statusClass}>
-        {!compact && <span className="entity-panel__status-label">Status</span>}
+      <div className="entity-panel__meta">
         <WorkflowBadge workflow={workflow} />
       </div>
       {isPublished && publicUrl && publicPath && (
-        <div className={compact ? "pe-dd-share" : "entity-panel__share-block"}>
+        <div className="pe-dd-share">
           <label
             className="entity-panel__label"
             htmlFor={`public-url-${documentId}`}
@@ -105,13 +102,13 @@ export function DocumentLiveSharingControls({
           </label>
           <input
             id={`public-url-${documentId}`}
-            className={urlClass}
+            className="pe-dd-share__url"
             type="text"
             readOnly
             value={publicUrl}
             aria-label="Public document URL"
           />
-          <div className={actionsClass}>
+          <div className="pe-dd-share__actions">
             <button
               type="button"
               className="btn btn-outline btn-xs"
@@ -137,39 +134,25 @@ export function DocumentLiveSharingControls({
         so plainly rather than showing a link that 404s for whoever opens it.
       */}
       {isPublished && !publicShareToken && (
-        <p className={compact ? "pe-dd-share" : "entity-panel__hint"}>
+        <p className="pe-dd-share">
           Only the project owner can get the public share link.
         </p>
       )}
-      {!isArchived &&
-        (compact ? (
-          <button
-            type="button"
-            role="menuitem"
-            className="pe-dd-item"
-            disabled={busy}
-            onClick={() => void handlePublishToggle()}
-          >
-            {publishing
-              ? "Updating…"
-              : isPublished
-                ? "Unpublish document"
-                : "Publish document"}
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="btn btn-primary btn-sm"
-            disabled={busy}
-            onClick={() => void handlePublishToggle()}
-          >
-            {publishing
-              ? "Updating…"
-              : isPublished
-                ? "Unpublish document"
-                : "Publish document"}
-          </button>
-        ))}
+      {!isArchived && (
+        <button
+          type="button"
+          role="menuitem"
+          className="pe-dd-item"
+          disabled={busy}
+          onClick={() => void handlePublishToggle()}
+        >
+          {publishing
+            ? "Updating…"
+            : isPublished
+              ? "Unpublish document"
+              : "Publish document"}
+        </button>
+      )}
     </>
   );
 }

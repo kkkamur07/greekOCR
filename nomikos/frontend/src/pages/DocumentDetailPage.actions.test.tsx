@@ -505,9 +505,46 @@ describe("DocumentDetailPage action toolbar", () => {
     // it sits outside it. The listener must not see the click that opened it.
     expect(
       await screen.findByRole("dialog", {
-        name: "Document settings and live sharing",
+        name: "Document settings",
       }),
     ).toBeTruthy();
+  });
+
+  it("leaves publishing to the Publish menu alone, with no second control in the settings panel", async () => {
+    // The failure this catches: the settings panel used to carry its own
+    // "Publish document" button, next to the public URL. It published with no
+    // confirm step and no page count, so a document could go live by a route
+    // that never said how many pages it was exposing or how many of them
+    // nobody had checked. Deleting the panel's copy is only worth anything if
+    // nothing puts it back, and the panel is a dialog nothing else asserts on.
+    vi.mocked(api.getDocument).mockResolvedValue({
+      ...DOCUMENT,
+      workflow: "published",
+      public_share_token: "tok-visible",
+    });
+    renderDocumentPage();
+    await screen.findByRole("heading", { name: "Chapter 4" });
+
+    const menu = await openMenu(
+      "More document actions",
+      "More document actions",
+    );
+    fireEvent.click(
+      within(menu).getByRole("menuitem", { name: /Document settings/ }),
+    );
+    const panel = await screen.findByRole("dialog", {
+      name: "Document settings",
+    });
+
+    // Renaming is what the panel is for, so this asserts the panel really
+    // rendered rather than passing because the query found an empty node.
+    expect(
+      within(panel).getByRole("button", { name: "Save name" }),
+    ).toBeTruthy();
+    expect(
+      within(panel).queryByRole("button", { name: /publish/i }),
+    ).toBeNull();
+    expect(within(panel).queryByLabelText("Public document URL")).toBeNull();
   });
 
   it("deletes the document only after the confirm names what goes with it", async () => {
