@@ -189,6 +189,12 @@ class LayoutService:
         # Bulk PUT /lines and POST /layout/reset are the paths that preserve kraken source.
         reject_unknown_fields(updates, LINE_PATCH_FIELDS, "line patch")
         context = await self._access.require_part(session, user, project_id, document_id, part_id)
+        # Lock the part for the rest of this transaction. Segment health derives
+        # a fix from the whole line list and then renumbers or deletes rows, and
+        # re-segmentation replaces the list wholesale; both hold this same row.
+        # A line write that skipped it would interleave with either of them, and
+        # the one that committed second would win on rows it never read.
+        await self._documents.lock_part(session, part_id)
         part = context.part
         line = await self._line_or_404(session, part.id, line_id)
         if "block_id" in updates and updates["block_id"] is not None:
@@ -213,6 +219,12 @@ class LayoutService:
         line_id: UUID,
     ) -> None:
         context = await self._access.require_part(session, user, project_id, document_id, part_id)
+        # Lock the part for the rest of this transaction. Segment health derives
+        # a fix from the whole line list and then renumbers or deletes rows, and
+        # re-segmentation replaces the list wholesale; both hold this same row.
+        # A line write that skipped it would interleave with either of them, and
+        # the one that committed second would win on rows it never read.
+        await self._documents.lock_part(session, part_id)
         line = await self._line_or_404(session, context.part.id, line_id)
         await session.delete(line)
         await session.commit()
@@ -228,6 +240,11 @@ class LayoutService:
         line_ids: list[UUID] | None = None,
     ) -> tuple[list[Block], list[Line]]:
         context = await self._access.require_part(session, user, project_id, document_id, part_id)
+        # ``manual_geometry`` is the flag re-segmentation reads before it clears a
+        # page, and this path and segment health set it in opposite directions.
+        # Without the lock the two interleave and the flag ends up describing
+        # neither of them.
+        await self._documents.lock_part(session, part_id)
         part = context.part
         lines = await self._documents.list_part_lines(session, part.id)
         selected_ids = set(line_ids) if line_ids is not None else {line.id for line in lines}
@@ -259,6 +276,12 @@ class LayoutService:
                 f"Cannot replace more than {MAX_REPLACE_PART_LINES} lines at once"
             )
         context = await self._access.require_part(session, user, project_id, document_id, part_id)
+        # Lock the part for the rest of this transaction. Segment health derives
+        # a fix from the whole line list and then renumbers or deletes rows, and
+        # re-segmentation replaces the list wholesale; both hold this same row.
+        # A line write that skipped it would interleave with either of them, and
+        # the one that committed second would win on rows it never read.
+        await self._documents.lock_part(session, part_id)
         part = context.part
         ground_truth = await self._ground_truth.layer_for(session, context.document)
 

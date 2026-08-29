@@ -325,15 +325,22 @@ class SegmentHealthService:
         The lock is taken before anything is read. Recomputing already stops a
         stale *client* from writing geometry measured against an older page, but
         on its own it leaves the server's own window open: between this read and
-        the commit below, a re-segment or a second apply on the same part can
-        land, and the edit is then written over geometry it was never derived
-        from. Holding the part row from before the read makes the two wait for
-        each other instead.
+        the commit below, a re-segment, an editor line edit or a second apply on
+        the same part can land, and the edit is then written over geometry it
+        was never derived from. Holding the part row from before the read makes
+        them wait for each other instead. All three now take it; see
+        ``DocumentRepository.lock_part`` for the full set, which is the thing
+        that has to stay complete for any of this to hold.
 
         Every apply path goes through here and then writes, so the lock lives
         here rather than in the four callers: that is what makes it impossible
         to add a fifth that forgets to take it.
+
+        Access is checked before the lock is taken, not after. Locking first
+        would let any signed-in caller hold a row on a part they cannot read,
+        just by naming its id.
         """
+        await self._require_part(session, user, project_id, document_id, part_id)
         await self._documents.lock_part(session, part_id)
         report = await self.report(session, user, project_id, document_id, part_id)
         lines = await self._documents.list_part_lines(session, part_id)

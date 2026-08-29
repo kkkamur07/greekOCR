@@ -334,15 +334,22 @@ class DocumentRepository:
         return {line_id for line_id in result.scalars().all() if line_id is not None}
 
     async def lock_part(self, session: AsyncSession, part_id: UUID) -> None:
-        """Hold one part's geometry still until the caller commits.
+        """Hold one part's lines still until the caller commits.
 
-        ``segment_merge_service`` takes this same row lock before it deletes and
-        reinserts a part's machine geometry. Anything that reads a page's lines,
-        derives an edit from them and writes it back has to hold it across that
-        whole span, or a re-segment commits into the gap and the edit lands on a
-        page that no longer exists. Selecting the id alone keeps this a lock and
-        nothing else: no entity comes back, so there is no loaded instance to go
-        stale the way ``reorder_parts`` describes.
+        A lock only works if every writer takes it, so every path that rewrites
+        a part's lines does: ``segment_merge_service`` before it replaces the
+        machine geometry, ``SegmentHealthService._recompute`` before it derives
+        a fix from the list, and the four ``LayoutService`` write paths (patch,
+        delete, bulk replace, layout reset). Each reads the rows and writes back
+        a decision made from them, so without a shared lock the one that commits
+        second wins on rows it never read: newer geometry overwritten, a
+        deleted line acted on, orders renumbered from a stale list.
+
+        Take it after the access check, never before. Locking first would let
+        any signed-in caller hold a row on a part they cannot read by naming its
+        id. Selecting the id alone keeps this a lock and nothing else: no entity
+        comes back, so there is no loaded instance to go stale the way
+        ``reorder_parts`` describes.
         """
         await session.execute(
             select(DocumentPart.id).where(DocumentPart.id == part_id).with_for_update()

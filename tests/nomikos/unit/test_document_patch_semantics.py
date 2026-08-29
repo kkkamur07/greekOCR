@@ -29,6 +29,9 @@ class _Session:
     async def refresh(self, _item: object) -> None:
         pass
 
+    async def delete(self, _item: object) -> None:
+        pass
+
 
 class _StubAccess:
     def __init__(self, document: Document, part: DocumentPart) -> None:
@@ -45,6 +48,10 @@ class _StubRepository:
     def __init__(self, line: Line | None, block: Block | None) -> None:
         self._line = line
         self._block = block
+        self.locks = 0
+
+    async def lock_part(self, _session, _part_id) -> None:
+        self.locks += 1
 
     async def get_line_in_part(self, _session, _part_id, _line_id):
         return self._line
@@ -120,3 +127,48 @@ async def test_patch_line_leaves_block_id_alone_when_omitted(monkeypatch) -> Non
 
     assert patched.block_id == block_id
     assert patched.order == 4
+
+
+# --- Concurrency: a single-line write holds the part too ---
+
+
+@pytest.mark.asyncio
+async def test_patch_line_locks_the_part(monkeypatch) -> None:
+    """One line is still part of a list segment health renumbers wholesale."""
+    part = DocumentPart(id=uuid.uuid4(), document_id=uuid.uuid4(), order=0, image_key="k")
+    line = Line(id=uuid.uuid4(), part_id=part.id, block_id=None, baseline={}, order=0)
+    repository = _StubRepository(line, None)
+    service = LayoutService(
+        documents=repository,
+        access=_StubAccess(Document(id=part.document_id, name="codex"), part),
+    )
+    body = LinePatchRequest.model_validate({"order": 3})
+
+    await service.patch_part_line(
+        _Session(),
+        object(),
+        uuid.uuid4(),
+        part.document_id,
+        part.id,
+        line.id,
+        **body.model_dump(exclude_unset=True),
+    )
+
+    assert repository.locks == 1
+
+
+@pytest.mark.asyncio
+async def test_delete_line_locks_the_part(monkeypatch) -> None:
+    part = DocumentPart(id=uuid.uuid4(), document_id=uuid.uuid4(), order=0, image_key="k")
+    line = Line(id=uuid.uuid4(), part_id=part.id, block_id=None, baseline={}, order=0)
+    repository = _StubRepository(line, None)
+    service = LayoutService(
+        documents=repository,
+        access=_StubAccess(Document(id=part.document_id, name="codex"), part),
+    )
+
+    await service.delete_part_line(
+        _Session(), object(), uuid.uuid4(), part.document_id, part.id, line.id
+    )
+
+    assert repository.locks == 1
