@@ -182,6 +182,17 @@ export type ResetPartLayoutRequest =
  */
 export type LayoutBlockResponse = Pick<BlockResponse, "id"> &
   Partial<Pick<BlockResponse, "box" | "manual_geometry">>;
+export type SegmentHealthResponse =
+  components["schemas"]["SegmentHealthResponse"];
+export type SegmentSuspectResponse =
+  components["schemas"]["SegmentSuspectResponse"];
+export type SegmentSplitResponse =
+  components["schemas"]["SegmentSplitResponse"];
+export type SegmentMergeResponse =
+  components["schemas"]["SegmentMergeResponse"];
+export type SegmentOverlapResponse =
+  components["schemas"]["SegmentOverlapResponse"];
+
 export type LayoutLineResponse = Pick<LineResponse, "id"> &
   Partial<
     Pick<LineResponse, "block_id" | "baseline" | "mask" | "manual_geometry">
@@ -947,6 +958,63 @@ export const api = {
     apiRequest<EnqueueJobResponse>(
       `/projects/${projectId}/documents/${documentId}/parts/${partId}/segment`,
       { method: "POST", body: body ?? {} },
+    ),
+
+  getSegmentHealth: (projectId: string, documentId: string, partId: string) =>
+    apiRequest<SegmentHealthResponse>(
+      `/projects/${projectId}/documents/${documentId}/parts/${partId}/segment-health`,
+    ),
+
+  // Every apply takes ids and nothing else. The server re-derives the outline
+  // from the rows as they stand, so a panel left open while somebody else
+  // edited the page cannot write geometry measured against the old one.
+  splitSpanningSegment: (
+    projectId: string,
+    documentId: string,
+    partId: string,
+    lineId: string,
+  ) =>
+    apiRequest<LineResponse[]>(
+      `/projects/${projectId}/documents/${documentId}/parts/${partId}/segment-health/splits`,
+      { method: "POST", body: { line_id: lineId } },
+    ),
+
+  mergeSegmentFragment: (
+    projectId: string,
+    documentId: string,
+    partId: string,
+    primaryId: string,
+    fragmentId: string,
+  ) =>
+    apiRequest<LineResponse[]>(
+      `/projects/${projectId}/documents/${documentId}/parts/${partId}/segment-health/merges`,
+      {
+        method: "POST",
+        body: { primary_id: primaryId, fragment_id: fragmentId },
+      },
+    ),
+
+  trimSegmentOverlap: (
+    projectId: string,
+    documentId: string,
+    partId: string,
+    upperId: string,
+    lowerId: string,
+  ) =>
+    apiRequest<LineResponse[]>(
+      `/projects/${projectId}/documents/${documentId}/parts/${partId}/segment-health/trims`,
+      { method: "POST", body: { upper_id: upperId, lower_id: lowerId } },
+    ),
+
+  deleteSegmentSuspect: (
+    projectId: string,
+    documentId: string,
+    partId: string,
+    lineId: string,
+  ) =>
+    apiRequest<LineResponse[]>(
+      `/projects/${projectId}/documents/${documentId}/parts/${partId}/segment-health/deletions`,
+      { method: "POST", body: { line_id: lineId } },
     ),
 
   enqueueTranscribePart: (

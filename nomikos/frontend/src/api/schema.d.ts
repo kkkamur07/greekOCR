@@ -1282,6 +1282,91 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/projects/{project_id}/documents/{document_id}/parts/{part_id}/segment-health": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get Segment Health */
+    get: operations["get_segment_health_projects__project_id__documents__document_id__parts__part_id__segment_health_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/projects/{project_id}/documents/{document_id}/parts/{part_id}/segment-health/deletions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Delete Suspect */
+    post: operations["delete_suspect_projects__project_id__documents__document_id__parts__part_id__segment_health_deletions_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/projects/{project_id}/documents/{document_id}/parts/{part_id}/segment-health/merges": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Merge Fragment */
+    post: operations["merge_fragment_projects__project_id__documents__document_id__parts__part_id__segment_health_merges_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/projects/{project_id}/documents/{document_id}/parts/{part_id}/segment-health/splits": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Split Spanning Segment */
+    post: operations["split_spanning_segment_projects__project_id__documents__document_id__parts__part_id__segment_health_splits_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/projects/{project_id}/documents/{document_id}/parts/{part_id}/segment-health/trims": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Trim Overlap */
+    post: operations["trim_overlap_projects__project_id__documents__document_id__parts__part_id__segment_health_trims_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/projects/{project_id}/documents/{document_id}/parts/{part_id}/transcribe": {
     parameters: {
       query?: never;
@@ -3173,6 +3258,14 @@ export interface components {
       /** Order */
       order: number;
     };
+    /** SegmentDeleteRequest */
+    SegmentDeleteRequest: {
+      /**
+       * Line Id
+       * Format: uuid
+       */
+      line_id: string;
+    };
     /**
      * SegmentDocumentRequest
      * @description Which pages to segment, and with which model.
@@ -3191,6 +3284,34 @@ export interface components {
      * @enum {string}
      */
     SegmentGeometryKind: "polygon" | "rectangle";
+    /** SegmentHealthResponse */
+    SegmentHealthResponse: {
+      /** Considered Count */
+      considered_count: number;
+      /** Finding Count */
+      finding_count: number;
+      /** Fragments */
+      fragments: components["schemas"]["SegmentMergeResponse"][];
+      /** Line Count */
+      line_count: number;
+      /** Measured Page */
+      measured_page: boolean;
+      /** Overlaps */
+      overlaps: components["schemas"]["SegmentOverlapResponse"][];
+      /** Page Height */
+      page_height: number;
+      /** Page Width */
+      page_width: number;
+      /**
+       * Part Id
+       * Format: uuid
+       */
+      part_id: string;
+      /** Spanning */
+      spanning: components["schemas"]["SegmentSplitResponse"][];
+      /** Suspects */
+      suspects: components["schemas"]["SegmentSuspectResponse"][];
+    };
     /** SegmentJobOutput */
     SegmentJobOutput: {
       data: components["schemas"]["SegmentRunResponse"];
@@ -3227,6 +3348,61 @@ export interface components {
         [key: string]: unknown;
       };
     };
+    /** SegmentMergeRequest */
+    SegmentMergeRequest: {
+      /**
+       * Fragment Id
+       * Format: uuid
+       */
+      fragment_id: string;
+      /**
+       * Primary Id
+       * Format: uuid
+       */
+      primary_id: string;
+    };
+    /**
+     * SegmentMergeResponse
+     * @description A fragment and the line it broke off. The primary keeps its id.
+     */
+    SegmentMergeResponse: {
+      /**
+       * Fragment Id
+       * Format: uuid
+       */
+      fragment_id: string;
+      /**
+       * Primary Id
+       * Format: uuid
+       */
+      primary_id: string;
+    };
+    /**
+     * SegmentOverlapResponse
+     * @description Two masks sharing enough area that one of them is wrong.
+     */
+    SegmentOverlapResponse: {
+      /** Cut */
+      cut: number;
+      /** Duplicate */
+      duplicate: boolean;
+      /**
+       * Lower Id
+       * Format: uuid
+       */
+      lower_id: string;
+      /** Lower Loss */
+      lower_loss: number;
+      /** Ratio */
+      ratio: number;
+      /**
+       * Upper Id
+       * Format: uuid
+       */
+      upper_id: string;
+      /** Upper Loss */
+      upper_loss: number;
+    };
     /** SegmentPartRequest */
     SegmentPartRequest: {
       /** Model Id */
@@ -3249,6 +3425,55 @@ export interface components {
      * @enum {string}
      */
     SegmentScope: "unsegmented" | "all";
+    /** SegmentSplitRequest */
+    SegmentSplitRequest: {
+      /**
+       * Line Id
+       * Format: uuid
+       */
+      line_id: string;
+    };
+    /**
+     * SegmentSplitResponse
+     * @description A segment that swallowed two columns, with the gutter cuts already found.
+     */
+    SegmentSplitResponse: {
+      /** Cuts */
+      cuts: number[];
+      /**
+       * Line Id
+       * Format: uuid
+       */
+      line_id: string;
+      /** Piece Count */
+      piece_count: number;
+    };
+    /**
+     * SegmentSuspectResponse
+     * @description A segment that looks like noise. Flagged for a human, never auto-deleted.
+     */
+    SegmentSuspectResponse: {
+      /**
+       * Line Id
+       * Format: uuid
+       */
+      line_id: string;
+      /** Reasons */
+      reasons: string[];
+    };
+    /** SegmentTrimRequest */
+    SegmentTrimRequest: {
+      /**
+       * Lower Id
+       * Format: uuid
+       */
+      lower_id: string;
+      /**
+       * Upper Id
+       * Format: uuid
+       */
+      upper_id: string;
+    };
     /**
      * ShareUserRequest
      * @description Who to share with, named exactly one of three ways.
@@ -10212,6 +10437,457 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["EnqueueJobResponse"];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
+  get_segment_health_projects__project_id__documents__document_id__parts__part_id__segment_health_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: string;
+        document_id: string;
+        part_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SegmentHealthResponse"];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
+  delete_suspect_projects__project_id__documents__document_id__parts__part_id__segment_health_deletions_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: string;
+        document_id: string;
+        part_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SegmentDeleteRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LineResponse"][];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
+  merge_fragment_projects__project_id__documents__document_id__parts__part_id__segment_health_merges_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: string;
+        document_id: string;
+        part_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SegmentMergeRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LineResponse"][];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
+  split_spanning_segment_projects__project_id__documents__document_id__parts__part_id__segment_health_splits_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: string;
+        document_id: string;
+        part_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SegmentSplitRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LineResponse"][];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
+  trim_overlap_projects__project_id__documents__document_id__parts__part_id__segment_health_trims_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: string;
+        document_id: string;
+        part_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SegmentTrimRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LineResponse"][];
         };
       };
       /** @description Not authenticated */

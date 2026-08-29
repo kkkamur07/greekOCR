@@ -3132,6 +3132,18 @@
         "title": "SegmentBlock",
         "type": "object"
       },
+      "SegmentDeleteRequest": {
+        "properties": {
+          "line_id": {
+            "format": "uuid",
+            "title": "Line Id",
+            "type": "string"
+          }
+        },
+        "required": ["line_id"],
+        "title": "SegmentDeleteRequest",
+        "type": "object"
+      },
       "SegmentDocumentRequest": {
         "description": "Which pages to segment, and with which model.\n\nThe default is the additive scope. ``all`` re-segments every page and discards the\ntranscriptions on each one, so a client that wants that has to say the word.",
         "properties": {
@@ -3159,6 +3171,82 @@
         "enum": ["polygon", "rectangle"],
         "title": "SegmentGeometryKind",
         "type": "string"
+      },
+      "SegmentHealthResponse": {
+        "properties": {
+          "considered_count": {
+            "title": "Considered Count",
+            "type": "integer"
+          },
+          "finding_count": {
+            "title": "Finding Count",
+            "type": "integer"
+          },
+          "fragments": {
+            "items": {
+              "$ref": "#/components/schemas/SegmentMergeResponse"
+            },
+            "title": "Fragments",
+            "type": "array"
+          },
+          "line_count": {
+            "title": "Line Count",
+            "type": "integer"
+          },
+          "measured_page": {
+            "title": "Measured Page",
+            "type": "boolean"
+          },
+          "overlaps": {
+            "items": {
+              "$ref": "#/components/schemas/SegmentOverlapResponse"
+            },
+            "title": "Overlaps",
+            "type": "array"
+          },
+          "page_height": {
+            "title": "Page Height",
+            "type": "number"
+          },
+          "page_width": {
+            "title": "Page Width",
+            "type": "number"
+          },
+          "part_id": {
+            "format": "uuid",
+            "title": "Part Id",
+            "type": "string"
+          },
+          "spanning": {
+            "items": {
+              "$ref": "#/components/schemas/SegmentSplitResponse"
+            },
+            "title": "Spanning",
+            "type": "array"
+          },
+          "suspects": {
+            "items": {
+              "$ref": "#/components/schemas/SegmentSuspectResponse"
+            },
+            "title": "Suspects",
+            "type": "array"
+          }
+        },
+        "required": [
+          "part_id",
+          "page_width",
+          "page_height",
+          "measured_page",
+          "line_count",
+          "considered_count",
+          "finding_count",
+          "suspects",
+          "spanning",
+          "fragments",
+          "overlaps"
+        ],
+        "title": "SegmentHealthResponse",
+        "type": "object"
       },
       "SegmentJobOutput": {
         "properties": {
@@ -3259,6 +3347,87 @@
         "title": "SegmentLine",
         "type": "object"
       },
+      "SegmentMergeRequest": {
+        "properties": {
+          "fragment_id": {
+            "format": "uuid",
+            "title": "Fragment Id",
+            "type": "string"
+          },
+          "primary_id": {
+            "format": "uuid",
+            "title": "Primary Id",
+            "type": "string"
+          }
+        },
+        "required": ["primary_id", "fragment_id"],
+        "title": "SegmentMergeRequest",
+        "type": "object"
+      },
+      "SegmentMergeResponse": {
+        "description": "A fragment and the line it broke off. The primary keeps its id.",
+        "properties": {
+          "fragment_id": {
+            "format": "uuid",
+            "title": "Fragment Id",
+            "type": "string"
+          },
+          "primary_id": {
+            "format": "uuid",
+            "title": "Primary Id",
+            "type": "string"
+          }
+        },
+        "required": ["primary_id", "fragment_id"],
+        "title": "SegmentMergeResponse",
+        "type": "object"
+      },
+      "SegmentOverlapResponse": {
+        "description": "Two masks sharing enough area that one of them is wrong.",
+        "properties": {
+          "cut": {
+            "title": "Cut",
+            "type": "number"
+          },
+          "duplicate": {
+            "title": "Duplicate",
+            "type": "boolean"
+          },
+          "lower_id": {
+            "format": "uuid",
+            "title": "Lower Id",
+            "type": "string"
+          },
+          "lower_loss": {
+            "title": "Lower Loss",
+            "type": "number"
+          },
+          "ratio": {
+            "title": "Ratio",
+            "type": "number"
+          },
+          "upper_id": {
+            "format": "uuid",
+            "title": "Upper Id",
+            "type": "string"
+          },
+          "upper_loss": {
+            "title": "Upper Loss",
+            "type": "number"
+          }
+        },
+        "required": [
+          "upper_id",
+          "lower_id",
+          "ratio",
+          "cut",
+          "upper_loss",
+          "lower_loss",
+          "duplicate"
+        ],
+        "title": "SegmentOverlapResponse",
+        "type": "object"
+      },
       "SegmentPartRequest": {
         "properties": {
           "model_id": {
@@ -3304,6 +3473,79 @@
         "enum": ["unsegmented", "all"],
         "title": "SegmentScope",
         "type": "string"
+      },
+      "SegmentSplitRequest": {
+        "properties": {
+          "line_id": {
+            "format": "uuid",
+            "title": "Line Id",
+            "type": "string"
+          }
+        },
+        "required": ["line_id"],
+        "title": "SegmentSplitRequest",
+        "type": "object"
+      },
+      "SegmentSplitResponse": {
+        "description": "A segment that swallowed two columns, with the gutter cuts already found.",
+        "properties": {
+          "cuts": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Cuts",
+            "type": "array"
+          },
+          "line_id": {
+            "format": "uuid",
+            "title": "Line Id",
+            "type": "string"
+          },
+          "piece_count": {
+            "title": "Piece Count",
+            "type": "integer"
+          }
+        },
+        "required": ["line_id", "cuts", "piece_count"],
+        "title": "SegmentSplitResponse",
+        "type": "object"
+      },
+      "SegmentSuspectResponse": {
+        "description": "A segment that looks like noise. Flagged for a human, never auto-deleted.",
+        "properties": {
+          "line_id": {
+            "format": "uuid",
+            "title": "Line Id",
+            "type": "string"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          }
+        },
+        "required": ["line_id", "reasons"],
+        "title": "SegmentSuspectResponse",
+        "type": "object"
+      },
+      "SegmentTrimRequest": {
+        "properties": {
+          "lower_id": {
+            "format": "uuid",
+            "title": "Lower Id",
+            "type": "string"
+          },
+          "upper_id": {
+            "format": "uuid",
+            "title": "Upper Id",
+            "type": "string"
+          }
+        },
+        "required": ["upper_id", "lower_id"],
+        "title": "SegmentTrimRequest",
+        "type": "object"
       },
       "ShareUserRequest": {
         "description": "Who to share with, named exactly one of three ways.\n\n``email`` and ``username`` say which kind of identifier this is, for a\ncaller that knows. ``identifier`` says \"one or the other, you work it out\",\nwhich is what a single UI box has to send: a username may legally contain\nan ``@`` (registration constrains only its length), so the client cannot\ntell the two apart by looking. Resolution order is documented on\n``ProjectService._find_collaborator``.\n\nMatching on email is case-insensitive, like login.",
@@ -13079,6 +13321,692 @@
         ],
         "summary": "Segment Part",
         "tags": ["documents"]
+      }
+    },
+    "/projects/{project_id}/documents/{document_id}/parts/{part_id}/segment-health": {
+      "get": {
+        "operationId": "get_segment_health_projects__project_id__documents__document_id__parts__part_id__segment_health_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Part Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SegmentHealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict with current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Segment Health",
+        "tags": ["segment-health"]
+      }
+    },
+    "/projects/{project_id}/documents/{document_id}/parts/{part_id}/segment-health/deletions": {
+      "post": {
+        "operationId": "delete_suspect_projects__project_id__documents__document_id__parts__part_id__segment_health_deletions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Part Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SegmentDeleteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LineResponse"
+                  },
+                  "title": "Response Delete Suspect Projects  Project Id  Documents  Document Id  Parts  Part Id  Segment Health Deletions Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict with current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Suspect",
+        "tags": ["segment-health"]
+      }
+    },
+    "/projects/{project_id}/documents/{document_id}/parts/{part_id}/segment-health/merges": {
+      "post": {
+        "operationId": "merge_fragment_projects__project_id__documents__document_id__parts__part_id__segment_health_merges_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Part Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SegmentMergeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LineResponse"
+                  },
+                  "title": "Response Merge Fragment Projects  Project Id  Documents  Document Id  Parts  Part Id  Segment Health Merges Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict with current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Merge Fragment",
+        "tags": ["segment-health"]
+      }
+    },
+    "/projects/{project_id}/documents/{document_id}/parts/{part_id}/segment-health/splits": {
+      "post": {
+        "operationId": "split_spanning_segment_projects__project_id__documents__document_id__parts__part_id__segment_health_splits_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Part Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SegmentSplitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LineResponse"
+                  },
+                  "title": "Response Split Spanning Segment Projects  Project Id  Documents  Document Id  Parts  Part Id  Segment Health Splits Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict with current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Split Spanning Segment",
+        "tags": ["segment-health"]
+      }
+    },
+    "/projects/{project_id}/documents/{document_id}/parts/{part_id}/segment-health/trims": {
+      "post": {
+        "operationId": "trim_overlap_projects__project_id__documents__document_id__parts__part_id__segment_health_trims_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Part Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SegmentTrimRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LineResponse"
+                  },
+                  "title": "Response Trim Overlap Projects  Project Id  Documents  Document Id  Parts  Part Id  Segment Health Trims Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict with current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Trim Overlap",
+        "tags": ["segment-health"]
       }
     },
     "/projects/{project_id}/documents/{document_id}/parts/{part_id}/transcribe": {
