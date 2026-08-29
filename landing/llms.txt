@@ -12,11 +12,11 @@ Nomikos is open research tooling for manuscript HTR workflows: page annotation, 
 
 ## Models
 
-- [syriac-htr-calamari](https://huggingface.co/kkkamur07/syriac-htr-calamari): Syriac line HTR (Calamari), published
+- [syriac-htr-calamari](https://huggingface.co/nomikos-project/syriac-htr-calamari): Syriac line HTR (Calamari), published
 - coptic-htr-calamari: Coptic line HTR (Calamari), coming soon
 - armenian-htr-calamari: Armenian line HTR (Calamari), coming soon
 - Datasets: training and evaluation sets on Hugging Face, coming soon
-- [Author models on Hugging Face](https://huggingface.co/kkkamur07): Published checkpoints
+- [Author models on Hugging Face](https://huggingface.co/nomikos-project): Published checkpoints
 
 ## Project
 

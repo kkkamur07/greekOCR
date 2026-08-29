@@ -196,10 +196,100 @@ as a known follow-up (issue #62).
 | `401` on claim | service token mismatch | Make `INFERENCE_WORKER_SERVICE_TOKEN` equal `NOMIKOS_SERVICE_TOKEN` |
 | `426` at launch | installed version below the **version floor** | `uv tool upgrade nomikos-inference`, or lower `INFERENCE_AGENT_MIN_VERSION` |
 | Jobs stuck `waiting` | no worker reporting capacity for `cloud` | Start/check the workers; a worker's first claim is what registers capacity |
+| Worker pulls weights from an old namespace after a migration | `registry.yaml` ships in the wheel; `git pull` does not touch it, and the Hub redirect hides it | Reinstall the wheel and restart, then verify the resolved namespace (below) |
 
 The agent self-upgrades at launch against the platform's version floor. A
 worker below the floor is refused and told to upgrade; a worker merely behind
 the newest release is served normally and told it is outdated.
+
+### Changing which model repo the worker pulls
+
+`registry.yaml` is **packaged inside the wheel**, not read from a checkout.
+`[tool.hatch.build.targets.wheel]` sets `packages = ["inference"]` and does not
+exclude it, so the installed worker resolves weights from
+`site-packages/inference/registry.yaml`.
+
+A `git pull` on the box therefore does **not** change what the worker
+downloads. Updating the registry means reinstalling:
+
+```bash
+# From PyPI: name the version that actually contains the change. No client-side
+# command can install a registry that was never released. `uv tool upgrade` is a
+# no-op once the installed version matches, and `--reinstall` refetches that
+# same version's wheel, old registry and all. Both report success either way.
+uv tool install --reinstall "nomikos-inference==<version containing the change>"
+
+# Or from a source checkout, where the version usually has not moved at all.
+# --force is what makes a same-version wheel replace the installed one:
+uv build && uv tool install --force --python 3.12 ./dist/nomikos_inference-<version>-py3-none-any.whl
+
+sudo systemctl restart 'nomikos-worker@*'  # a running worker holds the old registry
+```
+
+Then run the check below. It is the only step that distinguishes a reinstall
+that changed the registry from one that reinstalled the same bytes.
+
+Alternatively point `INFERENCE_REGISTRY_PATH` at a checkout the box does pull,
+which trades the packaged default for a file you have to keep current yourself.
+
+The reason this is worth stating rather than leaving to inference: **nothing
+looks wrong when you get it wrong.** A Hub repo that has been transferred to a
+new namespace keeps serving its old path as a redirect, indefinitely and
+silently. So a worker still pinned to the pre-migration namespace downloads the
+same bytes and runs normally, and the pull that was supposed to move it appears
+to have worked. There is no error to notice and no symptom to chase, which is
+what makes it survive to the point where whoever debugs it has never heard of
+the migration.
+
+Do not check this by confirming that a download succeeds; the redirect makes
+that pass either way. Check the namespace the worker actually resolved:
+
+```bash
+# INFERENCE_REGISTRY_PATH, if the worker sets it, wins over the packaged copy.
+# The sed strips surrounding quotes: systemd removes them when it reads the
+# EnvironmentFile, so a quoted value that the worker resolves perfectly well
+# would otherwise reach grep with literal quote characters still attached.
+registry=$(sudo grep -hE '^INFERENCE_REGISTRY_PATH=' /etc/nomikos/worker.env \
+             | tail -1 | cut -d= -f2- \
+             | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'\$//")
+
+if [ -z "$registry" ]; then
+  worker_bin=/root/.local/bin/nomikos   # match ExecStart in your unit file
+  tool_root=$(dirname "$(dirname "$(sudo readlink -f "$worker_bin")")")
+  registry=$(sudo sh -c "ls $tool_root/lib/python*/site-packages/inference/registry.yaml")
+fi
+
+echo "worker registry: $registry"
+sudo grep weights_source "$registry"
+```
+
+It prints the path before the contents on purpose. The whole difficulty here is
+knowing *which* `registry.yaml` you are looking at, so a check that shows only
+the namespace is one you have to trust rather than read.
+
+Three things this deliberately avoids, all of which produce a confident wrong
+answer rather than an error.
+
+**Do not assume the packaged copy is the live one.** Setting
+`INFERENCE_REGISTRY_PATH` (the alternative offered above) repoints the worker
+at a file outside the wheel, and a check hardcoded to `site-packages` would
+then report a registry nothing resolves. Read the override first, and fall back
+to the package only when it is unset.
+
+**Do not import the package to locate the file.** `import inference` resolves
+against `sys.path`, and the current directory comes first, so run from a source
+checkout it imports the checkout's `inference/` and prints whatever
+`registry.yaml` says **there**. That is the one copy the worker does not use,
+and it is the copy that always looks correct right after a `git pull`, which is
+the mistake this section exists to catch.
+
+**Do not use `uv tool dir` from your own shell.** It resolves per user. The
+unit above runs `/root/.local/bin/nomikos`, so an operator checking as
+themselves inspects their own tool environment and either finds nothing or
+reads an unrelated install, while the worker's registry goes unexamined.
+Deriving `tool_root` from the binary the unit actually names is what keeps the
+answer tied to the process being diagnosed. If your `ExecStart` differs, change
+`worker_bin` to match it.
 
 ## Related
 

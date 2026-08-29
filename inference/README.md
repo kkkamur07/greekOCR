@@ -145,9 +145,9 @@ Registry models resolve weights at runtime from:
 
 | Source | Example | Cache / path |
 |--------|---------|----------------|
-| Hub | `hf://kkkamur07/syriac-htr-calamari@stable` | `~/.nomikos/hf/cache/<registry_model_id>/<registry_tag>/` |
+| Hub | `hf://nomikos-project/syriac-htr-calamari@stable` | `~/.nomikos/hf/cache/<registry_model_id>/<registry_tag>/` |
 | Local bundled (offline) | `file://local/syriac/calamari/v1/stable/best.pt` | `src/hf/local/...` |
-| BLLA segmentation | `hf://kkkamur07/segmentation-blla@stable` | `blla.onnx` in the Hub cache |
+| BLLA segmentation | `hf://nomikos-project/segmentation-blla@stable` | `blla.onnx` in the Hub cache |
 
 No local weight checkout is required for the default Hub models; they download from their public repos on first use into `HF_CACHE_ROOT`.
 
