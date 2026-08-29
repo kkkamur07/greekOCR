@@ -110,7 +110,7 @@ nomikos run           # takes pages from the queue until you stop it
 
 No flags and no uv version floor: ADR 0006 replaced PyTorch with ONNX Runtime,
 which publishes one CPU wheel per platform, so there is no accelerator variant to
-pin against. See [`inference/README.md`](../../inference/README.md#install) for
+pin against. See [`nomikos_inference/README.md`](../../nomikos_inference/README.md#install) for
 what the instruction used to be and why it mattered.
 
 The agent opens no port and accepts no connection. It asks the platform for a
@@ -128,7 +128,7 @@ NOMIKOS_API_URL=http://localhost:8000 nomikos pair
 NOMIKOS_API_URL=http://localhost:8000 nomikos run
 ```
 
-From a source checkout, `uv run --group inference python -m inference.cli run`
+From a source checkout, `uv run --group inference python -m nomikos_inference.cli run`
 is the same entry point without installing the package first.
 
 Where a job runs is decided once, at submission, from the account-level **host
@@ -192,4 +192,4 @@ See the detailed operator runbooks:
 
 - [`../deployment/production.md`](../deployment/production.md)
 - [`../deployment/supabase.md`](../deployment/supabase.md)
-- [`../../inference/README.md`](../../inference/README.md)
+- [`../../nomikos_inference/README.md`](../../nomikos_inference/README.md)

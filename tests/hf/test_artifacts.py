@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from inference.hub import artifacts
-from inference.hub.artifacts import ArtifactIntegrityError, verify_artifact_sha256
+from nomikos_inference.hub import artifacts
+from nomikos_inference.hub.artifacts import ArtifactIntegrityError, verify_artifact_sha256
 
 CONTENT = b"checkpoint bytes" * 64
 DIGEST = hashlib.sha256(CONTENT).hexdigest()

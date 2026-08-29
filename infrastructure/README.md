@@ -110,7 +110,7 @@ repository root, so it is neither committed nor uploaded into a build context.
 
 `platform/` is the Vercel deployment of the FastAPI platform API
 (`api.nomikos.app`). `platform/build.sh` copies the backend and the parts of
-`inference/` the API needs into `platform/nomikos/` and `platform/inference/`;
+`nomikos_inference/` the API needs into `platform/nomikos/` and `platform/nomikos_inference/`;
 both are build artifacts and are gitignored.
 
 Vercel's **Root Directory** project setting must point at `infrastructure/platform`.

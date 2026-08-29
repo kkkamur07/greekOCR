@@ -24,17 +24,21 @@ def test_platform_bundle_excludes_env_files_from_all_copied_trees(tmp_path: Path
     _write_source_file(source_root, "nomikos/infrastructure/.env")
     _write_source_file(source_root, "nomikos/infrastructure/.env.production")
     _write_source_file(source_root, "nomikos/infrastructure/__pycache__/settings.cpython-311.pyc")
-    _write_source_file(source_root, "inference/__init__.py")
-    _write_source_file(source_root, "inference/admission.py")
-    _write_source_file(source_root, "inference/registry.yaml")
-    _write_source_file(source_root, "inference/contracts/__init__.py")
-    _write_source_file(source_root, "inference/contracts/.env")
-    _write_source_file(source_root, "inference/contracts/__pycache__/common.cpython-311.pyc")
-    _write_source_file(source_root, "inference/settings.py")
-    _write_source_file(source_root, "inference/registry/__init__.py")
-    _write_source_file(source_root, "inference/registry/.env.production")
-    _write_source_file(source_root, "inference/registry/__pycache__/resolve.cpython-311.pyc")
-    _write_source_file(source_root, "inference/weights/production.pt")
+    _write_source_file(source_root, "nomikos_inference/__init__.py")
+    _write_source_file(source_root, "nomikos_inference/admission.py")
+    _write_source_file(source_root, "nomikos_inference/registry.yaml")
+    _write_source_file(source_root, "nomikos_inference/contracts/__init__.py")
+    _write_source_file(source_root, "nomikos_inference/contracts/.env")
+    _write_source_file(
+        source_root, "nomikos_inference/contracts/__pycache__/common.cpython-311.pyc"
+    )
+    _write_source_file(source_root, "nomikos_inference/settings.py")
+    _write_source_file(source_root, "nomikos_inference/registry/__init__.py")
+    _write_source_file(source_root, "nomikos_inference/registry/.env.production")
+    _write_source_file(
+        source_root, "nomikos_inference/registry/__pycache__/resolve.cpython-311.pyc"
+    )
+    _write_source_file(source_root, "nomikos_inference/weights/production.pt")
     _write_source_file(source_root, "src/experiments/notebook.ipynb")
     _write_source_file(source_root, "data/local-page.webp")
     _write_source_file(source_root, "nomikos/VERSION")
@@ -54,12 +58,12 @@ def test_platform_bundle_excludes_env_files_from_all_copied_trees(tmp_path: Path
         for path in destination.rglob("*")
         if path.is_file()
     } == {
-        "inference/__init__.py",
-        "inference/admission.py",
-        "inference/contracts/__init__.py",
-        "inference/settings.py",
-        "inference/registry.yaml",
-        "inference/registry/__init__.py",
+        "nomikos_inference/__init__.py",
+        "nomikos_inference/admission.py",
+        "nomikos_inference/contracts/__init__.py",
+        "nomikos_inference/settings.py",
+        "nomikos_inference/registry.yaml",
+        "nomikos_inference/registry/__init__.py",
         "nomikos/VERSION",
         "nomikos/backend/main.py",
         "nomikos/infrastructure/alembic.ini",

@@ -153,7 +153,7 @@ Hydra config paths they reference do not exist, so none of these commands run
 as written. See `docs/final-code-review-2026-08-06.md` for the exact failures
 before trusting this section.
 
-Training and finetuning use the **vendored TensorFlow Calamari tree** under `src/model/calamari/`. Inference does **not** import that tree - it runs a separate ONNX Runtime graph under `inference/architectures/calamari/` and loads `best.onnx` from Hugging Face Hub (`hf://`).
+Training and finetuning use the **vendored TensorFlow Calamari tree** under `src/model/calamari/`. Inference does **not** import that tree - it runs a separate ONNX Runtime graph under `nomikos_inference/architectures/calamari/` and loads `best.onnx` from Hugging Face Hub (`hf://`).
 
 ### Layout
 
@@ -215,4 +215,4 @@ ln -sfn ../src/model/calamari _support_repo/calamari
 | [Root README](../../README.md) | Repo overview, Supabase summary, production hosting |
 | [deployment/production.md](../deployment/production.md) | Vercel + Supabase + Docker runbook |
 | [deployment/supabase.md](../deployment/supabase.md) | Supabase operational guide |
-| [inference/README.md](../../inference/README.md) | Inference service, Hub cache |
+| [nomikos_inference/README.md](../../nomikos_inference/README.md) | Inference service, Hub cache |

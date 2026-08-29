@@ -25,13 +25,13 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from inference.architectures.blla.blla import run_blla_segment
-from inference.architectures.calamari.adapter import (
+from nomikos_inference.architectures.blla.blla import run_blla_segment
+from nomikos_inference.architectures.calamari.adapter import (
     CalamariUnavailableError,
     _load_session,
     run_calamari_transcribe,
 )
-from inference.hub.artifacts import ArtifactIntegrityError, find_hub_artifact
+from nomikos_inference.hub.artifacts import ArtifactIntegrityError, find_hub_artifact
 from tests.fixtures.paths import REPO_ROOT, SEGMENT_PAGE, TRANSCRIBE_LINE
 
 # The published artifacts, as fetched from the Hub revisions the registry pins.
@@ -231,7 +231,9 @@ def test_the_registry_pins_the_digest_of_the_artifact_the_loader_opens() -> None
     if not (PUBLISHED_CALAMARI.is_file() and PUBLISHED_BLLA.is_file()):
         pytest.skip("published artifacts are not cached locally")
 
-    registry = yaml.safe_load((REPO_ROOT / "inference/registry.yaml").read_text(encoding="utf-8"))
+    registry = yaml.safe_load(
+        (REPO_ROOT / "nomikos_inference/registry.yaml").read_text(encoding="utf-8")
+    )
 
     calamari = registry["models"]["syriac-calamari-v1"]["versions"]["stable"]
     assert calamari["artifact_sha256"] == _digest(PUBLISHED_CALAMARI)

@@ -4,20 +4,20 @@
 # version-compatibility matrix between components that always ship together.
 #
 # The repository root is the project because the package it publishes lives at
-# `inference/`, and a build backend cannot reach outside its own project root.
+# `nomikos_inference/`, and a build backend cannot reach outside its own project root.
 # `tool.uv.package = false` below keeps development running from the tree: the
 # wheel is built explicitly (`uv build`), not installed into every dev venv.
 [project]
 name = "nomikos-inference"
 version = "0.3.0"
 description = "Manuscript segmentation and transcription runtime for the nomikos platform"
-readme = "inference/README.md"
+readme = "nomikos_inference/README.md"
 requires-python = ">=3.11,<3.13"
 # [project].dependencies is the closure that reaches a researcher's laptop.
 # Anything added here is downloaded by every `uv tool install nomikos-inference`,
 # so it is the runtime imports of the shipped modules and nothing else. There is
 # no FastAPI, uvicorn or httpx because since #60 there is nothing under
-# `inference/` that serves HTTP: the wheel is now the whole package, with no
+# `nomikos_inference/` that serves HTTP: the wheel is now the whole package, with no
 # excluded subtree, because the loopback surfaces that had to be excluded are
 # gone (ADR 0002).
 dependencies = [
@@ -47,20 +47,20 @@ dependencies = [
 [project.scripts]
 # ADR 0002: local inference is a CLI, not a loopback service. `pair` and
 # `version` shipped in #56, the `run` claim loop in #57; self-upgrade is #58.
-nomikos = "inference.cli:main"
+nomikos = "nomikos_inference.cli:main"
 
 [build-system]
 requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["inference"]
+packages = ["nomikos_inference"]
 # Nothing is excluded for being a web server any more: #60 deleted
-# `inference/api` and `inference/helper` outright, so "the published closure
+# `nomikos_inference/api` and `nomikos_inference/helper` outright, so "the published closure
 # holds no web server" is now true by construction rather than by an exclude
 # list somebody has to keep correct.
 exclude = [
-    "/inference/CONTEXT.md",
+    "/nomikos_inference/CONTEXT.md",
     # Empty placeholder tree from the pre-Hub weights layout. Weights come from
     # the Hub now and are cached under the researcher's home directory.
     "**/.gitkeep",
@@ -68,7 +68,7 @@ exclude = [
 
 [tool.hatch.build.targets.sdist]
 include = [
-    "/inference",
+    "/nomikos_inference",
     "/pyproject.toml",
 ]
 
@@ -92,7 +92,7 @@ train = [
 # Torch lives now: on a maintainer's machine, at the moment weights are
 # published, and nowhere near `[project].dependencies`. `safetensors` is here
 # for the same reason - it is the native BLLA checkpoint format the exporter
-# reads, and nothing under `inference/` opens it any more.
+# reads, and nothing under `nomikos_inference/` opens it any more.
 export = [
     "onnx>=1.17.0",
     "safetensors>=0.5.0",
@@ -133,7 +133,7 @@ service-core = [
 ]
 # The `helper` group is gone with the modules it existed for (#60). It named
 # what the loopback HTTP surfaces needed on top of the published runtime, and
-# there is no longer anything under `inference/` that serves HTTP.
+# there is no longer anything under `nomikos_inference/` that serves HTTP.
 #
 # What is left is what `tests/inference` needs in order to have a *platform* to
 # drive the CLI against: the integration tests stand up a real uvicorn process
@@ -268,7 +268,7 @@ markers = [
 # is operator tooling, and `tests/` covering itself is a tautology.
 # ---------------------------------------------------------------------------
 [tool.coverage.run]
-source = ["nomikos/backend", "inference"]
+source = ["nomikos/backend", "nomikos_inference"]
 branch = true
 # The integration suite runs the app in a TestClient thread and the platform job
 # worker in the lifespan task; without this, everything either of them executes
@@ -287,7 +287,7 @@ omit = [
 # `parallel = true` writes one data file per process; these have to be collapsed
 # onto one set of names before a report can be produced.
 backend = ["nomikos/backend", "*/nomikos/backend"]
-inference = ["inference", "*/inference"]
+nomikos_inference = ["nomikos_inference", "*/nomikos_inference"]
 
 [tool.coverage.report]
 show_missing = true
@@ -303,10 +303,10 @@ line-length = 100
 target-version = "py311"
 # The import roots, matching `tool.pytest.ini_options.pythonpath` and
 # `tool.mypy.mypy_path` exactly. These are what `backend.*`, `infrastructure.*`,
-# `inference.*`, `scripts.*`, and `tests.*` resolve against at runtime, so they
+# `nomikos_inference.*`, `scripts.*`, and `tests.*` resolve against at runtime, so they
 # are what isort must resolve against to call an import first-party. The
-# previous value named the packages (`nomikos/backend`, `inference`) rather
-# than the roots that contain them, so nothing resolved: `inference` and
+# previous value named the packages (`nomikos/backend`, `nomikos_inference`) rather
+# than the roots that contain them, so nothing resolved: `nomikos_inference` and
 # `infrastructure` were classified third-party and sorted in among `PIL` and
 # `sqlalchemy`. The I001 suppression below hid that for as long as it existed.
 src = ["nomikos", "."]
@@ -319,7 +319,7 @@ extend-exclude = [
     # Retired subsystems, kept readable as they were. See archive/*/README.md.
     "archive",
     "data",
-    "infrastructure/platform/inference",
+    "infrastructure/platform/nomikos_inference",
     "infrastructure/platform/nomikos",
     # The whole research tree, not `src/experiments` alone. It is vendored code
     # nobody is maintaining to a lint standard, and it carried 555 findings that
@@ -357,7 +357,7 @@ extend-immutable-calls = ["fastapi.Depends", "fastapi.File", "fastapi.Query"]
 
 # ---------------------------------------------------------------------------
 # This table used to hold a per-tree debt block - B905, I001, SIM*, UP*, F401,
-# B008 suppressed across `inference`, `nomikos`, `scripts` and `tests` - with a
+# B008 suppressed across `nomikos_inference`, `nomikos`, `scripts` and `tests` - with a
 # comment saying every entry should be fixed and deleted. Those entries are now
 # fixed and deleted. What is left is policy, and each row says why it is right
 # rather than why it is temporary.
@@ -381,11 +381,11 @@ extend-immutable-calls = ["fastapi.Depends", "fastapi.File", "fastapi.Query"]
 # secret scanner's job, not this rule's.
 #
 # S603/S607 (subprocess, partial path): the CLI integration tests exist to run
-# the CLI as a real process. `[sys.executable, "-m", "inference.cli", ...]` is
+# the CLI as a real process. `[sys.executable, "-m", "nomikos_inference.cli", ...]` is
 # the thing under test, and the "untrusted input" is the test's own argv.
 #
 # S310 (URL open): these drive a loopback stub HTTP server the test started, on
-# a URL the test built. The production `urlopen` calls in `inference/cli/api.py`
+# a URL the test built. The production `urlopen` calls in `nomikos_inference/cli/api.py`
 # stay covered - they carry per-site `# noqa: S310` naming the scheme check that
 # makes them safe.
 "tests/**" = ["S101", "S105", "S106", "S310", "S603", "S607"]
@@ -404,13 +404,13 @@ quote-style = "double"
 # shrinking number every build gets adopted. Tighten the knobs below (and drop
 # the continue-on-error) as the count comes down, not before.
 #
-# Scope is `nomikos/backend` and `inference` only: the service code that ships.
+# Scope is `nomikos/backend` and `nomikos_inference` only: the service code that ships.
 # `src/` (research + vendored Calamari), `scripts/`, and `tests/` are out.
 # ---------------------------------------------------------------------------
 [tool.mypy]
 python_version = "3.11"
 # Bare `mypy` checks the same tree CI does. CI still names the paths explicitly.
-files = ["nomikos/backend", "inference"]
+files = ["nomikos/backend", "nomikos_inference"]
 # Runtime resolves `backend.*` with `nomikos` on sys.path (see
 # tool.pytest.ini_options.pythonpath); mypy needs the same two roots or every
 # first-party import inside nomikos/backend reads as missing.

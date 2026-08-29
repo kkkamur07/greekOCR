@@ -12,9 +12,9 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from inference.architectures.blla.blla_decoder import decode_blla_heatmaps
-from inference.architectures.blla.blla_decoder.common import resize_heatmaps_nearest
-from inference.architectures.blla.blla_preprocessing import (
+from nomikos_inference.architectures.blla.blla_decoder import decode_blla_heatmaps
+from nomikos_inference.architectures.blla.blla_decoder.common import resize_heatmaps_nearest
+from nomikos_inference.architectures.blla.blla_preprocessing import (
     MAX_WIDTH_TO_HEIGHT_RATIO,
     preprocess_blla_image,
 )

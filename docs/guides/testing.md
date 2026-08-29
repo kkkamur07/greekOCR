@@ -64,7 +64,7 @@ npm run check:api
 Python correctness checks and the configured pre-commit hook:
 
 ```bash
-uv run --locked --group dev ruff check nomikos/backend inference scripts/platform tests/nomikos tests/inference tests/hf
+uv run --locked --group dev ruff check nomikos/backend nomikos_inference scripts/platform tests/nomikos tests/inference tests/hf
 uv run --locked --group dev pre-commit run --all-files
 ```
 
@@ -95,4 +95,4 @@ For Supabase-backed local testing, see [deployment/supabase.md](../deployment/su
 |---------|-----|
 | Tests hang on DB lock | Stop the `api` container; terminate stale Postgres sessions |
 | `DuplicatePreparedStatementError` with Supabase pooler | Handled in `nomikos/infrastructure/db.py` (`statement_cache_size=0`) |
-| ML tests skip or fail | Prefetch the default transcribe model: `PYTHONPATH=. python scripts/hf/fetch_model.py syriac-calamari-v1 --registry-tag stable` (see [`inference/README.md`](../../inference/README.md)) |
+| ML tests skip or fail | Prefetch the default transcribe model: `PYTHONPATH=. python scripts/hf/fetch_model.py syriac-calamari-v1 --registry-tag stable` (see [`nomikos_inference/README.md`](../../nomikos_inference/README.md)) |

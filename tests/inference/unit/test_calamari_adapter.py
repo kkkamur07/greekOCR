@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from inference.architectures.calamari.adapter import (
+from nomikos_inference.architectures.calamari.adapter import (
     CalamariUnavailableError,
     _load_session,
     _response_from_decoded,

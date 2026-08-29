@@ -5,7 +5,7 @@ Every claim the run loop makes is about behaviour *between* processes: that a
 page is claimed over HTTP and reported back over HTTP, that exactly one is in
 flight at a time, that a Ctrl-C delivered to a real process ends the page it was
 holding. None of that is observable from inside one interpreter, and a test that
-imported `inference.cli.run` and called it would be asserting about its own
+imported `nomikos_inference.cli.run` and called it would be asserting about its own
 mocks.
 
 So: the CLI is the real `nomikos` executable from a real wheel with its real
@@ -473,8 +473,8 @@ def test_the_cli_produces_what_the_same_code_produces_in_process(
     bytes the agent fetches are not the bytes that were uploaded, and comparing
     against the wrong ones would be comparing two different pages.
     """
-    from inference.contracts.common import InferenceTask
-    from inference.jobs.runner import run_model
+    from nomikos_inference.contracts.common import InferenceTask
+    from nomikos_inference.jobs.runner import run_model
 
     ids = agent.new_page()
     job_id = agent.submit_segment(ids)

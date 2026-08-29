@@ -1,6 +1,6 @@
 # Hugging Face Hub scripts
 
-Operator tooling for publishing inference weights and datasets from the **Hub staging tree**, and for syncing the `nomos` **Hub collection**. Domain vocabulary is defined in [`inference/CONTEXT.md`](../../inference/CONTEXT.md).
+Operator tooling for publishing inference weights and datasets from the **Hub staging tree**, and for syncing the `nomos` **Hub collection**. Domain vocabulary is defined in [`nomikos_inference/CONTEXT.md`](../../nomikos_inference/CONTEXT.md).
 
 ## Hub staging tree
 
@@ -103,7 +103,7 @@ Default CI and local dry-runs do **not** call the Hub upload API unless `--uploa
      --upload
    ```
 
-4. **Point the Registry** at the published revision in [`inference/registry.yaml`](../inference/registry.yaml), for example:
+4. **Point the Registry** at the published revision in [`nomikos_inference/registry.yaml`](../nomikos_inference/registry.yaml), for example:
 
    ```yaml
    weights_source: hf://nomikos/greek-htr-calamari@stable

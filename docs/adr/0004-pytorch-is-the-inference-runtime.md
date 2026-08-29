@@ -54,9 +54,9 @@ The Torch graphs already exist and already run, so this is a deletion rather tha
 | `inference/architectures/blla/blla_model.py`                                  | 142   |
 | `inference/architectures/calamari/{model,layers,config}.py` (re-export shims) | 41    |
 
-(Implemented in 049: the Calamari graph moved into `inference/architectures/calamari/`,
+(Implemented in 049: the Calamari graph moved into `nomikos_inference/architectures/calamari/`,
 replacing the shims, and its checkpoint loader became
-`inference/architectures/calamari/checkpoint.py`.)
+`nomikos_inference/architectures/calamari/checkpoint.py`.)
 
 `blla.py` already loads a state dict and calls `.eval()`. The work is removing the ONNX loaders
 and pointing the runtime at graphs that are present today.

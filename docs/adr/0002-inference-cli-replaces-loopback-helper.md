@@ -81,7 +81,7 @@ always ship together.
 
 The boundary moves `hf` weight resolution *in*, since it is already on the runtime path
 (`adapter.py`, `weights/__init__.py`, `run_errors.py`, both BLLA modules) despite living
-outside `inference/`.
+outside `nomikos_inference/`.
 
 > Superseded in part by [0004](./0004-pytorch-is-the-inference-runtime.md). This section
 > originally moved the Torch modules *out* of the published package and treated `excludes.txt`
@@ -91,12 +91,12 @@ outside `inference/`.
 > reasoning below was bundle-era: it inherited "keep Torch out" from the frozen installer
 > without rechecking whether PyPI distribution still required it. It did not.
 >
-> As built (issue 050): the wheel is `inference/` minus `inference/api` and `inference/helper`,
+> As built (issue 050): the wheel is `nomikos_inference/` minus `nomikos_inference/api` and `nomikos_inference/helper`,
 > the loopback HTTP surfaces this record deletes, so the published closure carries no web
-> server. `hf` resolution moved in as `inference/hub`, and the Hub cache moved with it, from
+> server. `hf` resolution moved in as `nomikos_inference/hub`, and the Hub cache moved with it, from
 > beside the code to `~/.nomikos/hf/cache`, because inside a wheel "beside the code" is
 > site-packages. The repository root is the project, because a build backend cannot reach
-> outside its own root and the package it publishes is `inference/`.
+> outside its own root and the package it publishes is `nomikos_inference/`.
 
 ### Auto-update at launch, from the platform
 

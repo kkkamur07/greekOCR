@@ -23,7 +23,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--registry-path",
         type=Path,
-        default=REPO_ROOT / "inference" / "registry.yaml",
+        default=REPO_ROOT / "nomikos_inference" / "registry.yaml",
         help="Path to registry.yaml",
     )
     return parser.parse_args()
@@ -32,8 +32,8 @@ def _parse_args() -> argparse.Namespace:
 def main() -> int:
     args = _parse_args()
 
-    from inference.registry import get_model_entry, load_registry
-    from inference.weights import resolve_weights_source
+    from nomikos_inference.registry import get_model_entry, load_registry
+    from nomikos_inference.weights import resolve_weights_source
 
     registry = load_registry(args.registry_path)
     try:

@@ -2,7 +2,7 @@
 
 Nomikos separates training and data preparation from production inference.
 Training tools live in `src/`; the deployable runtime reads the verified
-catalog in [`inference/registry.yaml`](../../inference/registry.yaml).
+catalog in [`nomikos_inference/registry.yaml`](../../nomikos_inference/registry.yaml).
 
 ## Runtime models
 
@@ -101,7 +101,7 @@ PYTHONPATH=. python scripts/hf/publish_model.py \
 ```
 
 After setting a write-capable `HF_TOKEN`, add `--upload`. Then pin the
-immutable revision and SHA-256 in `inference/registry.yaml`, run tests,
+immutable revision and SHA-256 in `nomikos_inference/registry.yaml`, run tests,
 prefetch the weights, update platform catalog metadata, and deploy the
 matching runtime.
 

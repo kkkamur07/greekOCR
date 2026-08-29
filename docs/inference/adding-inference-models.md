@@ -4,11 +4,11 @@ End-to-end checklist for shipping a new **segment** or **transcribe** model to p
 
 | Store | Purpose | Updated by |
 |-------|---------|------------|
-| **`inference/registry.yaml`** | Runtime catalog: task, architecture, weights URI, `host_eligibility` | Git + API deploy |
+| **`nomikos_inference/registry.yaml`** | Runtime catalog: task, architecture, weights URI, `host_eligibility` | Git + API deploy |
 | **Postgres `inference_models`** | Editor model picker (`GET /inference/models`) | Seed script or DB insert |
 | **Hub (or bundled weights)** | Checkpoint bytes | `publish_model.py` or `src/hf/local/` |
 
-Vocabulary: [`inference/CONTEXT.md`](../../inference/CONTEXT.md).
+Vocabulary: [`nomikos_inference/CONTEXT.md`](../../nomikos_inference/CONTEXT.md).
 
 ## Overview
 
@@ -16,7 +16,7 @@ Vocabulary: [`inference/CONTEXT.md`](../../inference/CONTEXT.md).
 Train / export checkpoint
     → stage under src/hf/staging/…
     → publish to Hub (hf://…)
-    → add entry to inference/registry.yaml
+    → add entry to nomikos_inference/registry.yaml
     → add InferenceModel row in Postgres
     → deploy platform API
     → release the published package so agents carry the new entry
@@ -174,7 +174,7 @@ weights_source: file://local/syriac/calamari/v1/stable/best.pt
 
 ---
 
-## 3. Register in `inference/registry.yaml`
+## 3. Register in `nomikos_inference/registry.yaml`
 
 Add a model block under `models:`:
 
@@ -265,7 +265,7 @@ uv run --group platform --group inference pytest tests/nomikos/integration/test_
 
 ## 6. Deploy
 
-1. **Deploy platform API** - ships the updated `inference/registry.yaml` in the container (`/app/inference/registry.yaml`). The new endpoint is live:
+1. **Deploy platform API** - ships the updated `nomikos_inference/registry.yaml` in the container (`/app/nomikos_inference/registry.yaml`). The new endpoint is live:
 
    ```bash
    curl -s https://api.example.com/inference/v1/registry
@@ -274,7 +274,7 @@ uv run --group platform --group inference pytest tests/nomikos/integration/test_
 2. **Publish the package.** A registry entry only reaches an **inference agent**
    inside the wheel it ships in, so a new model is a PyPI release - one wheel,
    one runner, no per-OS installer build. See
-   [`inference/README.md`](../../inference/README.md#releasing-and-what-that-changed-about-security-patching).
+   [`nomikos_inference/README.md`](../../nomikos_inference/README.md#releasing-and-what-that-changed-about-security-patching).
 
 3. **Roll out the hosted agent**, if cloud inference should serve the model, by
    upgrading the package on its host. It runs the same wheel a laptop does.
@@ -290,7 +290,7 @@ uv run --group platform --group inference pytest tests/nomikos/integration/test_
 
    ```bash
    NOMIKOS_API_URL=http://localhost:8000 \
-     uv run --group inference python -m inference.cli run --exit-when-empty
+     uv run --group inference python -m nomikos_inference.cli run --exit-when-empty
    ```
 
 ---
@@ -309,14 +309,14 @@ uv run --group platform --group inference pytest tests/nomikos/integration/test_
 
 1. Stage `best.pt` → `src/hf/staging/models/{script}/calamari/v1/stable/`
 2. `publish_model.py … --upload`
-3. Add block to `inference/registry.yaml` with `hf://…` **weights_source**
+3. Add block to `nomikos_inference/registry.yaml` with `hf://…` **weights_source**
 4. Upsert `InferenceModel` with `artifact_ref: registry://{id}?tag=stable`
 5. Run tests → deploy API → publish the package
 6. Agents carry the entry once upgraded; weights download on first use
 
 ## Related docs
 
-- [`inference/README.md`](../../inference/README.md) - published package, CLI, and registry
+- [`nomikos_inference/README.md`](../../nomikos_inference/README.md) - published package, CLI, and registry
 - [`scripts/hf/README.md`](../../scripts/hf/README.md) - Hub publish and prefetch
 - [`README.md`](../../README.md#self-hosting-and-local-inference) - local vs cloud inference architecture
 - Issue **036** - registry id naming migration (historical; see git history on branches with `issues/done/`)

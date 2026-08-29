@@ -25,8 +25,8 @@ from backend.document.infrastructure.orm_models import (
 from backend.jobs.application import job_callback_service
 from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
 from backend.project.infrastructure.orm_models import Project
-from inference.contracts.webhooks import INFERENCE_WEBHOOK_SECRET_HEADER
 from infrastructure.db import sync_system_session
+from nomikos_inference.contracts.webhooks import INFERENCE_WEBHOOK_SECRET_HEADER
 
 CALLBACK_URL = "/internal/inference/job-complete"
 WEBHOOK_HEADERS = {INFERENCE_WEBHOOK_SECRET_HEADER: "test-inference-webhook-secret"}

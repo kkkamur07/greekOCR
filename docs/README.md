@@ -38,7 +38,7 @@ Start with the audience-appropriate guide:
 | Doc                                                             | Scope                                                             |
 | --------------------------------------------------------------- | ----------------------------------------------------------------- |
 | [Adding inference models](inference/adding-inference-models.md) | Registry, weights, platform catalog, and deployment checklist     |
-| [Inference service](../inference/README.md)                     | Install from PyPI, releasing, contracts, limits, and runtime reference |
+| [Inference service](../nomikos_inference/README.md)                     | Install from PyPI, releasing, contracts, limits, and runtime reference |
 | [Hugging Face publishing](../scripts/hf/README.md)              | Model and dataset staging, validation, and upload workflow        |
 
 ## Platform references

@@ -75,7 +75,7 @@ instead of two.** The runbook is in A4.
 ### A4. The BLLA clamp went 8 → 3, and it costs resolution
 
 This is done and shipped on the branch, but it is a **product** trade-off, and reversing it
-is one line in `inference/architectures/blla/blla_preprocessing.py`.
+is one line in `nomikos_inference/architectures/blla/blla_preprocessing.py`.
 
 Measured on the real `segment_page.jpeg` fixture tiled to each width, shipped ONNX graph
 against the Torch oracle:

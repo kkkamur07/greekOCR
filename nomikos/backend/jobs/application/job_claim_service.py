@@ -40,7 +40,7 @@ independently re-derive job ownership. The signature *is* the authorization, and
 it covers exactly one object key.
 
 The response used to violate that anyway. ``request`` was an
-``inference.contracts.jobs.JobSubmitRequest`` - the body the platform once POSTed
+``nomikos_inference.contracts.jobs.JobSubmitRequest`` - the body the platform once POSTed
 into the second queue - so it carried ``image_bytes``, and the claim shipped the
 whole scan base64-encoded at about 1.33x its stored size *next to* the link. No
 agent has ever read that field. It is gone: the claim payload is now

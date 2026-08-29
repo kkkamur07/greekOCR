@@ -37,7 +37,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from inference.architectures.calamari import adapter as calamari_adapter
+from nomikos_inference.architectures.calamari import adapter as calamari_adapter
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -73,7 +73,7 @@ def _run_calamari(artifact: Path, artifact_sha256: str | None) -> object:
 
 
 def _run_blla_native(artifact: Path, artifact_sha256: str | None) -> object:
-    from inference.architectures.blla.blla import run_blla_segment
+    from nomikos_inference.architectures.blla.blla import run_blla_segment
 
     return run_blla_segment(
         _page_bytes(),
@@ -83,7 +83,7 @@ def _run_blla_native(artifact: Path, artifact_sha256: str | None) -> object:
 
 
 def _execution_paths() -> list[ExecutionPath]:
-    from inference.architectures.blla.blla import BLLAUnavailableError
+    from nomikos_inference.architectures.blla.blla import BLLAUnavailableError
 
     # One execution path per architecture, and under ADR 0006 both load the
     # same format. The foreign suffix is each architecture's *retired* native
@@ -152,7 +152,7 @@ def test_corrupt_artifact_is_a_service_error_not_a_client_error(
     tmp_path: Path,
 ) -> None:
     """``ArtifactIntegrityError`` subclasses ``ValueError`` but is not a bad request."""
-    from inference.hub.artifacts import ArtifactIntegrityError
+    from nomikos_inference.hub.artifacts import ArtifactIntegrityError
 
     artifact = tmp_path / f"model{path.native_suffix}"
     artifact.write_bytes(b"content that does not match the pinned digest")
@@ -193,7 +193,7 @@ def test_no_torch_remains_in_the_inference_import_graph() -> None:
     This is the guard that keeps the published closure honest. Torch is 475 MB
     of the 817 MB a researcher used to install, and it is *still in this
     repository* - `src/model/inference_export/` traces the graph with it - so the only thing
-    standing between the two is that nothing under `inference/` imports it. A
+    standing between the two is that nothing under `nomikos_inference/` imports it. A
     single convenience import would put it back in `[project].dependencies`
     without anyone noticing, because the dev venv has Torch installed and
     everything would keep working here.
@@ -207,14 +207,14 @@ def test_no_torch_remains_in_the_inference_import_graph() -> None:
     program = (
         "import importlib, sys\n"
         "for name in (\n"
-        "    'inference.architectures.artifact',\n"
-        "    'inference.architectures.isolation',\n"
-        "    'inference.architectures.calamari',\n"
-        "    'inference.architectures.calamari.adapter',\n"
-        "    'inference.architectures.blla',\n"
-        "    'inference.architectures.blla.blla',\n"
-        "    'inference.architectures.blla.blla_runtime',\n"
-        "    'inference.jobs.runner',\n"
+        "    'nomikos_inference.architectures.artifact',\n"
+        "    'nomikos_inference.architectures.isolation',\n"
+        "    'nomikos_inference.architectures.calamari',\n"
+        "    'nomikos_inference.architectures.calamari.adapter',\n"
+        "    'nomikos_inference.architectures.blla',\n"
+        "    'nomikos_inference.architectures.blla.blla',\n"
+        "    'nomikos_inference.architectures.blla.blla_runtime',\n"
+        "    'nomikos_inference.jobs.runner',\n"
         "):\n"
         "    importlib.import_module(name)\n"
         "leaked = sorted(\n"

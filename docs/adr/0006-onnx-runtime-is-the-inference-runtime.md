@@ -58,9 +58,9 @@ re-raises its first cause instead of returning an empty page.
 
 | restored to | from |
 |---|---|
-| `inference/architectures/calamari/adapter.py` | the archived `calamari/onnx.py` |
-| `inference/architectures/blla/blla.py` | the archived `blla/onnx.py` |
-| `inference/architectures/blla/blla_preprocessing.py` | `preprocess_blla_image_numpy` |
+| `nomikos_inference/architectures/calamari/adapter.py` | the archived `calamari/onnx.py` |
+| `nomikos_inference/architectures/blla/blla.py` | the archived `blla/onnx.py` |
+| `nomikos_inference/architectures/blla/blla_preprocessing.py` | `preprocess_blla_image_numpy` |
 | `blla_decoder/common.py::resize_heatmaps_nearest` | the same helper, `numpy_support.py` |
 | `src/model/inference_export/{calamari,blla}/export.py` | the archived exporters |
 

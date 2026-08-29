@@ -11,8 +11,8 @@ COPY nomikos/README.md nomikos/VERSION /app/
 
 # `--only-group` is deliberate: this image must NOT pick up
 # [project].dependencies (numpy, onnxruntime, opencv-python-headless). The
-# platform API imports none of them: it only needs inference.contracts and
-# inference.admission, which are pure pydantic, so installing the full set
+# platform API imports none of them: it only needs nomikos_inference.contracts and
+# nomikos_inference.admission, which are pure pydantic, so installing the full set
 # would add hundreds of megabytes of unused ML wheels. If the backend ever
 # imports one of them, add it to the platform-prod group explicitly.
 RUN --mount=type=cache,target=/root/.cache/uv \
@@ -40,7 +40,7 @@ COPY nomikos/README.md nomikos/VERSION /app/
 COPY nomikos/backend /app/backend
 COPY nomikos/infrastructure /app/infrastructure
 COPY scripts/platform /app/scripts/platform
-COPY inference /app/inference
+COPY nomikos_inference /app/nomikos_inference
 
 ENV PATH="/app/.venv/bin:${PATH}" \
     PYTHONPATH=/app

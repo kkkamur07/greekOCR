@@ -22,12 +22,12 @@ from backend.document.infrastructure.orm_models import Line
 from backend.jobs.infrastructure.notifications import notify_platform_job_status_changed
 from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
 from backend.ml.application.segment_mapping import to_canonical_segment
-from inference.contracts.common import InferenceJobStatus
-from inference.contracts.common import InferenceTask as WireInferenceTask
-from inference.contracts.jobs import JobCallbackRequest
-from inference.contracts.segment import SegmentRunResponse
-from inference.contracts.transcribe import TranscribeBatchRunResponse
 from infrastructure.db import sync_system_session
+from nomikos_inference.contracts.common import InferenceJobStatus
+from nomikos_inference.contracts.common import InferenceTask as WireInferenceTask
+from nomikos_inference.contracts.jobs import JobCallbackRequest
+from nomikos_inference.contracts.segment import SegmentRunResponse
+from nomikos_inference.contracts.transcribe import TranscribeBatchRunResponse
 
 logger = logging.getLogger(__name__)
 

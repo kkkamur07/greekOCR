@@ -18,10 +18,10 @@ from __future__ import annotations
 
 import pytest
 
-from inference.cli import console as ui
-from inference.cli import upgrade as upgrade_module
-from inference.cli.api import AgentFloor
-from inference.cli.version import DISTRIBUTION_NAME
+from nomikos_inference.cli import console as ui
+from nomikos_inference.cli import upgrade as upgrade_module
+from nomikos_inference.cli.api import AgentFloor
+from nomikos_inference.cli.version import DISTRIBUTION_NAME
 
 
 def _floor(*, package: str = DISTRIBUTION_NAME, minimum_version: str = "9.9.9") -> AgentFloor:

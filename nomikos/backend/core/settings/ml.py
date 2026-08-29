@@ -19,7 +19,7 @@ _PLACEHOLDER_SECRET_VALUES = {
 
 def _default_inference_registry_path() -> Path:
     app_root = Path(os.environ.get("NOMIKOS_APP_ROOT", REPO_ROOT.parent))
-    return app_root / "inference" / "registry.yaml"
+    return app_root / "nomikos_inference" / "registry.yaml"
 
 
 def _is_placeholder_secret(value: str | None) -> bool:

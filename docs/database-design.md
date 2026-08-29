@@ -202,7 +202,7 @@ Many-to-many project sharing table.
 
 A researcher's own computer, authorised once from a logged-in browser and
 thereafter authenticating outbound with an opaque device token. See the pairing
-flow in `inference/CONTEXT.md`.
+flow in `nomikos_inference/CONTEXT.md`.
 
 - `user_id` is `NOT NULL` and cascades to the owning user. That foreign key is
   the entire authorization scope of the credential, which is why it is a schema

@@ -15,7 +15,7 @@ from uuid import UUID, uuid4
 import pytest
 from pydantic import ValidationError
 
-from inference.contracts import (
+from nomikos_inference.contracts import (
     CharacterConfidence,
     InferenceJobStatus,
     InferenceTask,
@@ -29,7 +29,7 @@ from inference.contracts import (
     TranscribeJobOutput,
     TranscribeRunResponse,
 )
-from inference.contracts.segment import SegmentGeometryKind
+from nomikos_inference.contracts.segment import SegmentGeometryKind
 
 
 # Checks whether the payload survives the round trip.

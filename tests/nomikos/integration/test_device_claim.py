@@ -35,8 +35,8 @@ from backend.ml.application.agent_credentials import (
 from backend.ml.application.device_auth import DEVICE_TOKEN_HEADER
 from backend.ml.domain.execution import ExecutionTarget
 from backend.ml.infrastructure.device_orm_models import HelperDevice
-from inference.contracts.webhooks import INFERENCE_WEBHOOK_SECRET_HEADER
 from infrastructure.db import sync_system_session
+from nomikos_inference.contracts.webhooks import INFERENCE_WEBHOOK_SECRET_HEADER
 
 # An autouse fixture imported into a module is scoped to that module: this closes
 # the asyncpg connections the concurrent claims below open, on the loop that owns

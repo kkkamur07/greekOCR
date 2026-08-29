@@ -43,7 +43,7 @@ from backend.ml.domain.execution import (
     choose_execution_target,
 )
 from backend.ml.infrastructure.orm_models import InferenceModel, InferenceTask
-from inference.contracts.common import HostEligibility
+from nomikos_inference.contracts.common import HostEligibility
 
 LOCAL = ExecutionTarget.local
 CLOUD = ExecutionTarget.cloud

@@ -17,8 +17,8 @@ import argparse
 
 import pytest
 
-from inference.cli import pair as pair_module
-from inference.cli.api import DEVICE_NAME_LIMIT, PlatformError
+from nomikos_inference.cli import pair as pair_module
+from nomikos_inference.cli.api import DEVICE_NAME_LIMIT, PlatformError
 
 
 class _RecordingClient:

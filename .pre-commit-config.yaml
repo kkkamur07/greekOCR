@@ -36,7 +36,7 @@ repos:
         entry: uv run --locked --group dev ruff format
         language: system
         types_or: [python, pyi]
-        files: ^(nomikos/backend|inference|scripts/platform|tests/nomikos|tests/inference|tests/export|tests/hf|src/model/inference_export)/
+        files: ^(nomikos/backend|nomikos_inference|scripts/platform|tests/nomikos|tests/inference|tests/export|tests/hf|src/model/inference_export)/
 
       - id: frontend-eslint
         name: Frontend ESLint checks

@@ -13,9 +13,9 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from inference.architectures.blla.blla import run_blla_logits
-from inference.architectures.blla.blla_decoder.common import resize_heatmaps_nearest
-from inference.architectures.blla.blla_preprocessing import (
+from nomikos_inference.architectures.blla.blla import run_blla_logits
+from nomikos_inference.architectures.blla.blla_decoder.common import resize_heatmaps_nearest
+from nomikos_inference.architectures.blla.blla_preprocessing import (
     MAX_WIDTH_TO_HEIGHT_RATIO,
     preprocess_blla_image,
 )
@@ -48,7 +48,7 @@ def test_the_numpy_decoder_head_matches_the_torch_one_on_a_real_page() -> None:
     Random values would not test this - the real page is what puts probabilities
     *at* the boundary.
     """
-    from inference.architectures.blla.blla_decoder import _sigmoid
+    from nomikos_inference.architectures.blla.blla_decoder import _sigmoid
 
     with Image.open(SEGMENT_PAGE) as image:
         prepared = preprocess_blla_image(image.convert("RGB"))

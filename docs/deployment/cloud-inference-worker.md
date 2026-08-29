@@ -11,7 +11,7 @@ There is no inference *service* to deploy. The worker installs
 `nomikos-inference`, runs `nomikos run`, reaches the platform **outbound**,
 and listens on nothing. It opens no port, no tunnel, and no DNS record.
 
-Terminology: [`inference/CONTEXT.md`](../../inference/CONTEXT.md).
+Terminology: [`nomikos_inference/CONTEXT.md`](../../nomikos_inference/CONTEXT.md).
 
 ---
 
@@ -205,9 +205,9 @@ the newest release is served normally and told it is outdated.
 ### Changing which model repo the worker pulls
 
 `registry.yaml` is **packaged inside the wheel**, not read from a checkout.
-`[tool.hatch.build.targets.wheel]` sets `packages = ["inference"]` and does not
+`[tool.hatch.build.targets.wheel]` sets `packages = ["nomikos_inference"]` and does not
 exclude it, so the installed worker resolves weights from
-`site-packages/inference/registry.yaml`.
+`site-packages/nomikos_inference/registry.yaml`.
 
 A `git pull` on the box therefore does **not** change what the worker
 downloads. Updating the registry means reinstalling:
@@ -256,7 +256,7 @@ registry=$(sudo grep -hE '^INFERENCE_REGISTRY_PATH=' /etc/nomikos/worker.env \
 if [ -z "$registry" ]; then
   worker_bin=/root/.local/bin/nomikos   # match ExecStart in your unit file
   tool_root=$(dirname "$(dirname "$(sudo readlink -f "$worker_bin")")")
-  registry=$(sudo sh -c "ls $tool_root/lib/python*/site-packages/inference/registry.yaml")
+  registry=$(sudo sh -c "ls $tool_root/lib/python*/site-packages/nomikos_inference/registry.yaml")
 fi
 
 echo "worker registry: $registry"
@@ -276,9 +276,9 @@ at a file outside the wheel, and a check hardcoded to `site-packages` would
 then report a registry nothing resolves. Read the override first, and fall back
 to the package only when it is unset.
 
-**Do not import the package to locate the file.** `import inference` resolves
+**Do not import the package to locate the file.** `import nomikos_inference` resolves
 against `sys.path`, and the current directory comes first, so run from a source
-checkout it imports the checkout's `inference/` and prints whatever
+checkout it imports the checkout's `nomikos_inference/` and prints whatever
 `registry.yaml` says **there**. That is the one copy the worker does not use,
 and it is the copy that always looks correct right after a `git pull`, which is
 the mistake this section exists to catch.
@@ -293,7 +293,7 @@ answer tied to the process being diagnosed. If your `ExecStart` differs, change
 
 ## Related
 
-- [`inference/README.md`](../../inference/README.md): the published package, CLI, registry, and limits
+- [`nomikos_inference/README.md`](../../nomikos_inference/README.md): the published package, CLI, registry, and limits
 - [production.md](production.md): full hosted topology and rollback
 - [`adding-inference-models.md`](../inference/adding-inference-models.md): shipping a new model to this worker
 - ADRs [0002](../adr/0002-inference-cli-replaces-loopback-helper.md),

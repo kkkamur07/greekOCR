@@ -400,8 +400,8 @@ The **inference agent** is not in Compose - run it on the host if you want jobs
 to execute:
 
 ```bash
-NOMIKOS_API_URL=http://localhost:8000 uv run --group inference python -m inference.cli pair
-NOMIKOS_API_URL=http://localhost:8000 uv run --group inference python -m inference.cli run
+NOMIKOS_API_URL=http://localhost:8000 uv run --group inference python -m nomikos_inference.cli pair
+NOMIKOS_API_URL=http://localhost:8000 uv run --group inference python -m nomikos_inference.cli run
 ```
 
 It reaches the API the same way your browser does, so it works from the host

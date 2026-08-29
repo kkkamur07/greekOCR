@@ -15,17 +15,17 @@ import pytest
 from PIL import Image
 from pydantic import ValidationError
 
-from inference.architectures.calamari import adapter
-from inference.architectures.calamari.adapter import TranscribeLineFailure
-from inference.contracts.common import InferenceTask, RegistryArchitecture
-from inference.contracts.transcribe import (
+from nomikos_inference.architectures.calamari import adapter
+from nomikos_inference.architectures.calamari.adapter import TranscribeLineFailure
+from nomikos_inference.contracts.common import InferenceTask, RegistryArchitecture
+from nomikos_inference.contracts.transcribe import (
     TRANSCRIBE_LINE_ERROR,
     CharacterConfidence,
     TranscribeBatchLineResult,
     TranscribeBatchRunResponse,
     TranscribeRunResponse,
 )
-from inference.jobs.runner import run_model
+from nomikos_inference.jobs.runner import run_model
 from tests.fixtures.paths import TRANSCRIBE_LINE
 
 # The published graph, from the Hub revision the registry pins. Gitignored, so
@@ -69,14 +69,16 @@ def _line_params(count: int) -> dict:
 @pytest.fixture
 def calamari_runner(monkeypatch: pytest.MonkeyPatch):
     """Wire ``run_model`` to a Calamari entry without touching weights."""
-    monkeypatch.setattr("inference.jobs.runner.validate_image_bytes", lambda *_args: None)
-    monkeypatch.setattr("inference.jobs.runner.validate_request_params", lambda *_args: None)
+    monkeypatch.setattr("nomikos_inference.jobs.runner.validate_image_bytes", lambda *_args: None)
     monkeypatch.setattr(
-        "inference.jobs.runner.get_inference_settings",
+        "nomikos_inference.jobs.runner.validate_request_params", lambda *_args: None
+    )
+    monkeypatch.setattr(
+        "nomikos_inference.jobs.runner.get_inference_settings",
         lambda: SimpleNamespace(inference_registry_path=Path("registry.yaml")),
     )
     monkeypatch.setattr(
-        "inference.jobs.runner.resolve_registry_entry",
+        "nomikos_inference.jobs.runner.resolve_registry_entry",
         lambda **_kwargs: SimpleNamespace(
             architecture=RegistryArchitecture.calamari,
             versions={
@@ -89,7 +91,7 @@ def calamari_runner(monkeypatch: pytest.MonkeyPatch):
         ),
     )
     monkeypatch.setattr(
-        "inference.jobs.runner.resolve_weights_source",
+        "nomikos_inference.jobs.runner.resolve_weights_source",
         lambda *_args, **_kwargs: CALAMARI_ARTIFACT,
     )
 
@@ -110,7 +112,7 @@ def test_one_failing_line_still_returns_the_other_lines(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "inference.jobs.runner.run_calamari_transcribe_many",
+        "nomikos_inference.jobs.runner.run_calamari_transcribe_many",
         lambda line_images, **_kwargs: [
             _transcribed("a"),
             TranscribeLineFailure(index=1, error=ValueError("undecodable crop")),
@@ -141,9 +143,9 @@ def test_uncroppable_line_geometry_is_isolated_from_the_batch(
             raise ValueError("degenerate polygon")
         return image_bytes
 
-    monkeypatch.setattr("inference.jobs.runner._crop_line_image", crop)
+    monkeypatch.setattr("nomikos_inference.jobs.runner._crop_line_image", crop)
     monkeypatch.setattr(
-        "inference.jobs.runner.run_calamari_transcribe_many",
+        "nomikos_inference.jobs.runner.run_calamari_transcribe_many",
         lambda line_images, **_kwargs: [_transcribed("a") for _ in line_images],
     )
     params = _line_params(3)
@@ -164,11 +166,11 @@ def test_batch_with_no_croppable_line_fails_instead_of_returning_nothing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "inference.jobs.runner._crop_line_image",
+        "nomikos_inference.jobs.runner._crop_line_image",
         lambda *_args: (_ for _ in ()).throw(ValueError("degenerate polygon")),
     )
     monkeypatch.setattr(
-        "inference.jobs.runner.run_calamari_transcribe_many",
+        "nomikos_inference.jobs.runner.run_calamari_transcribe_many",
         lambda *_args, **_kwargs: pytest.fail("the model must not run without a single crop"),
     )
 

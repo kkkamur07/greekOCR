@@ -24,7 +24,7 @@ from backend.jobs.application.job_callback_service import (
     _public_callback_error,
 )
 from backend.jobs.infrastructure.orm_models import Job, JobStatus, JobType
-from inference.contracts.jobs import JobCallbackRequest
+from nomikos_inference.contracts.jobs import JobCallbackRequest
 
 
 class _FakeResult:
@@ -336,7 +336,7 @@ class _LineLookupSession:
 
 
 def _batch(part_id: uuid.UUID, entries: list[tuple[int, str | None]]):
-    from inference.contracts.transcribe import (
+    from nomikos_inference.contracts.transcribe import (
         TRANSCRIBE_LINE_ERROR,
         TranscribeBatchLineResult,
         TranscribeBatchRunResponse,
@@ -408,7 +408,7 @@ def test_a_fully_failed_batch_is_not_merged_as_a_success(monkeypatch: pytest.Mon
     ``model_construct`` to skip that validator. It exists because the alternative
     to raising is merging zero lines and reporting the page as transcribed.
     """
-    from inference.contracts.transcribe import (
+    from nomikos_inference.contracts.transcribe import (
         TRANSCRIBE_LINE_ERROR,
         TranscribeBatchLineResult,
         TranscribeBatchRunResponse,
