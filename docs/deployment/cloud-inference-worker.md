@@ -213,9 +213,14 @@ A `git pull` on the box therefore does **not** change what the worker
 downloads. Updating the registry means reinstalling:
 
 ```bash
-uv tool upgrade nomikos-inference          # from PyPI
-# or, from a source checkout:
+# From PyPI. The registry change must ride a version bump: `uv tool upgrade` is
+# a no-op when the installed version already matches, which leaves the old
+# registry in place while reporting success. `--reinstall` does not rely on that.
+uv tool install --reinstall nomikos-inference
+
+# Or from a source checkout, where the version usually has not moved at all:
 uv build && uv tool install --force --python 3.12 ./dist/nomikos_inference-<version>-py3-none-any.whl
+
 sudo systemctl restart 'nomikos-worker@*'  # a running worker holds the old registry
 ```
 
@@ -235,16 +240,18 @@ Do not check this by confirming that a download succeeds; the redirect makes
 that pass either way. Check the namespace the worker actually resolved:
 
 ```bash
-uv run python -c "
-import pathlib, yaml, inference
-r = yaml.safe_load((pathlib.Path(inference.__file__).parent / 'registry.yaml').read_text())
-for name, m in r['models'].items():
-    print(name, m['versions']['stable']['weights_source'])
-"
+grep weights_source \
+  "$(uv tool dir)"/nomikos-inference/lib/python*/site-packages/inference/registry.yaml
 ```
 
-That reads the registry the worker itself loads, so it reports the packaged
-copy rather than the one in your checkout.
+Read the file out of the tool environment rather than importing the package.
+`import inference` resolves against `sys.path`, and the current directory comes
+first, so running it from a source checkout imports the checkout's `inference/`
+and prints whatever `registry.yaml` says **there**. That is the copy the worker
+does not use, and it is the copy that always looks correct right after a `git
+pull`, which is the mistake this section exists to catch. Reading the installed
+path by name cannot resolve anywhere else, and fails loudly if the tool is
+installed somewhere other than where you looked.
 
 ## Related
 
