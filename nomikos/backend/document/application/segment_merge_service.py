@@ -21,7 +21,6 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from shapely.geometry import Polygon
-from shapely.ops import unary_union
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -225,19 +224,23 @@ def _polygon(points: list[list[float]] | None) -> Polygon | None:
 
 
 def _mostly_covered(points: list[list[float]], kept: list[Polygon]) -> bool:
-    """Whether ``points`` lies at least ``_COVERED_FRACTION`` inside ``kept``.
+    """Whether some single kept line claims at least ``_COVERED_FRACTION`` of ``points``.
 
-    Inside the *union* of the kept lines, deliberately: a fresh line drawn across two
-    kept lines (a box spanning both columns, or one line where two approved fragments
-    already sit) is not a new line, it is ink that is already claimed twice over.
+    One kept line, not their union. "Is this a redraw of a line I kept" is a claim
+    about one line, and summing what several neighbours claim gets it wrong in the
+    direction nobody can see: two generously drawn kept lines above and below, each
+    dipping a quarter into a fresh line that is neither of them, would swallow it and
+    leave the page silently missing a line. The price is the other way round: a fresh
+    box drawn across two kept lines is added and shows up as a visible overlap, which
+    someone can delete.
     """
     if not kept:
         return False
     fresh = _polygon(points)
     if fresh is None:
         return False
-    touching = [polygon for polygon in kept if polygon.intersects(fresh)]
-    if not touching:
-        return False
-    covered = unary_union(touching).intersection(fresh).area
-    return covered / fresh.area >= _COVERED_FRACTION
+    best = max(
+        (polygon.intersection(fresh).area for polygon in kept if polygon.intersects(fresh)),
+        default=0.0,
+    )
+    return best / fresh.area >= _COVERED_FRACTION

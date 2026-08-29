@@ -34,12 +34,20 @@ def test_neighbours_touching_at_ascenders_do_not_add_up_to_coverage():
     assert not _mostly_covered(_box(100, 100, 900, 160), kept)
 
 
-def test_a_fresh_line_spanning_two_kept_lines_is_already_claimed():
-    # Kraken draws one box across the gutter over two approved lines, or one line over
-    # two approved fragments. No single kept line matches it, and it is still not new
-    # ink: what it covers is claimed twice over, so it is skipped.
+def test_generous_neighbours_do_not_add_up_to_swallowing_a_distinct_line():
+    # Hand-drawn boxes above and below are drawn tall and each dips 30% into this
+    # line, which is neither of them. Summed they would pass the threshold and the
+    # line would silently never appear; measured one kept line at a time it stays.
+    kept = _kept(_box(100, 40, 900, 118), _box(100, 142, 900, 220))
+    assert not _mostly_covered(_box(100, 100, 900, 160), kept)
+
+
+def test_a_fresh_line_spanning_two_kept_lines_is_added_as_a_visible_overlap():
+    # One fresh box across the gutter over two approved lines. Neither kept line is
+    # a redraw of it, so it is added: a duplicate someone can see and delete, rather
+    # than a hole nobody is told about.
     kept = _kept(_box(100, 100, 480, 160), _box(520, 100, 900, 160))
-    assert _mostly_covered(_box(100, 100, 900, 160), kept)
+    assert not _mostly_covered(_box(100, 100, 900, 160), kept)
 
 
 def test_half_inside_is_the_same_ink():
