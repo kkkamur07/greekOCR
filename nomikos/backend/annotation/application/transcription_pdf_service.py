@@ -19,7 +19,12 @@ from backend.core.exceptions import NotFoundError, ValidationError
 from backend.core.fonts import resolve_unicode_font
 from backend.document.application.document_service import DocumentService
 from backend.document.infrastructure.document_repository import DocumentRepository
-from backend.document.infrastructure.orm_models import DocumentPart, Line, TranscriptionKind
+from backend.document.infrastructure.orm_models import (
+    DocumentPart,
+    Line,
+    LineTranscription,
+    TranscriptionKind,
+)
 from backend.users.infrastructure.orm_models import User
 
 _FONT_NAME = "AnnotePlatformTranscriptionPdf"
@@ -30,6 +35,9 @@ _font_registered = False
 _font_lock = threading.Lock()
 _PAGE_FILL = (1.0, 1.0, 1.0)
 _TEXT_FILL = (0.1, 0.1, 0.35)
+# Machine text nobody has approved yet. Legible, but unmistakably not the ink colour of
+# approved text: a reader must be able to tell a model's guess from a researcher's word.
+_MODEL_TEXT_FILL = (0.55, 0.55, 0.6)
 
 
 @dataclass(frozen=True)
@@ -42,6 +50,11 @@ class _PdfLine:
 
     text: str
     points: list[list[float]]
+    approved: bool = True
+
+    @property
+    def fill(self) -> tuple[float, float, float]:
+        return _TEXT_FILL if self.approved else _MODEL_TEXT_FILL
 
 
 class TranscriptionPdfService:
@@ -102,12 +115,23 @@ class TranscriptionPdfService:
         return part.width, part.height
 
     def _pdf_lines(self, lines: list[Line]) -> list[_PdfLine]:
+        """Every line that has any text at all, approved text first.
+
+        A line with ground truth renders that and nothing else. A line with only a
+        model's output renders the model's output, marked unapproved, because a page
+        that has been transcribed but not yet reviewed used to come back as a blank PDF
+        with no error, and "blank" is not a way to say "nothing here is approved yet".
+        A line with no text of either kind is skipped.
+        """
         prepared: list[_PdfLine] = []
         for line in lines:
             text = self._ground_truth_text(line)
-            if text is None:
+            if text is not None:
+                prepared.append(_PdfLine(text=text, points=line.points, approved=True))
                 continue
-            prepared.append(_PdfLine(text=text, points=line.points))
+            text = self._model_text(line)
+            if text is not None:
+                prepared.append(_PdfLine(text=text, points=line.points, approved=False))
         return prepared
 
     def _render_pdf(self, *, width: int, height: int, lines: list[_PdfLine]) -> bytes:
@@ -128,7 +152,7 @@ class TranscriptionPdfService:
             box_h = max(y1 - y0, 1)
             font_size = _fit_font_size(text, font_path, box_w * 0.95, box_h * 0.85)
             pdf.setFont(font_name, font_size)
-            pdf.setFillColorRGB(*_TEXT_FILL)
+            pdf.setFillColorRGB(*line.fill)
             pdf.drawString(x0 + 2, height - y0 - font_size, text)
 
         pdf.showPage()
@@ -143,6 +167,24 @@ class TranscriptionPdfService:
             ):
                 return transcription.text
         return None
+
+    def _model_text(self, line: Line) -> str | None:
+        """The newest non-empty model transcription on ``line``, or None."""
+        candidates = [
+            transcription
+            for transcription in line.transcriptions
+            if transcription.transcription.kind == TranscriptionKind.model
+            and transcription.text.strip()
+        ]
+        if not candidates:
+            return None
+        newest = max(candidates, key=_layer_age)
+        return newest.text
+
+
+def _layer_age(transcription: LineTranscription) -> float:
+    created_at = transcription.transcription.created_at
+    return created_at.timestamp() if created_at is not None else 0.0
 
 
 def _ensure_font(font_path: Path) -> str:

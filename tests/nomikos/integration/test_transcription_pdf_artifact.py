@@ -11,6 +11,12 @@ from fastapi.testclient import TestClient
 from PIL import Image
 from pypdf import PdfReader
 
+from backend.document.infrastructure.orm_models import (
+    LineTranscription,
+    Transcription,
+    TranscriptionKind,
+)
+from infrastructure.db import sync_system_session
 from tests.nomikos.integration.helpers import documents_url
 
 
@@ -125,6 +131,62 @@ def test_member_generates_blank_same_size_transcription_pdf_without_paired_lines
     assert (reader.pages[0].extract_text() or "").strip() == ""
     assert reader.pages[0].mediabox.width == 160
     assert reader.pages[0].mediabox.height == 90
+
+
+def test_member_pdf_renders_unapproved_machine_text_when_nothing_is_approved(
+    client: TestClient, owner_headers: dict[str, str], owner_project: dict
+) -> None:
+    """A transcribed-but-unreviewed page is not blank; it shows the model's text.
+
+    Approved text still wins on the line that has it. The two are drawn in different
+    colours, which pypdf cannot read back, so the colour rule is held by the unit test
+    on ``_pdf_lines``; here the check is that both texts reach the page at all.
+    """
+    project_id, document_id, part_id, line_ids = _create_document_part_with_segments(
+        client, owner_headers, owner_project
+    )
+    base = documents_url(project_id)
+    import_response = client.put(
+        f"{base}/{document_id}/parts/{part_id}/page-transcription",
+        headers=owner_headers,
+        json={"text": "Αθήνα"},
+    )
+    assert import_response.status_code == 200
+    pair = client.post(
+        f"{base}/{document_id}/parts/{part_id}/pairings",
+        headers=owner_headers,
+        json={"line_id": line_ids[0], "text_line_order": 0},
+    )
+    assert pair.status_code == 200
+    with sync_system_session() as session:
+        model_layer = Transcription(
+            document_id=document_id, name="Model run", kind=TranscriptionKind.model
+        )
+        session.add(model_layer)
+        session.flush()
+        session.add_all(
+            [
+                # Ignored: the line already has approved text.
+                LineTranscription(
+                    line_id=line_ids[0], transcription_id=model_layer.id, text="Αθηνα?"
+                ),
+                LineTranscription(
+                    line_id=line_ids[1], transcription_id=model_layer.id, text="Σπάρτη"
+                ),
+            ]
+        )
+        session.commit()
+
+    response = client.post(
+        f"{base}/{document_id}/parts/{part_id}/transcription-pdf",
+        headers=owner_headers,
+    )
+
+    assert response.status_code == 200
+    text = _pdf_reader(response.content).pages[0].extract_text() or ""
+    assert "Αθήνα" in text
+    assert "Σπάρτη" in text
+    assert "Αθηνα?" not in text
 
 
 # --- PDF access control ---
