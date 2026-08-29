@@ -148,7 +148,7 @@ def test_placeholder_secrets_are_rejected_in_every_environment(environment: str)
 
 def test_shipped_example_secrets_still_fail_validation() -> None:
     """The committed templates must never be a working configuration."""
-    compose = (REPO_ROOT / ".env.compose.example").read_text(encoding="utf-8")
+    compose = (REPO_ROOT / "infrastructure" / ".env.compose.example").read_text(encoding="utf-8")
     production = (REPO_ROOT / "nomikos" / "backend" / "core" / ".env.production.example").read_text(
         encoding="utf-8"
     )

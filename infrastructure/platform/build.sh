@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bundle platform API sources into deploy/platform for Vercel.
+# Bundle platform API sources into infrastructure/platform for Vercel.
 set -euo pipefail
 
 ROOT="${PLATFORM_BUNDLE_SOURCE_ROOT:-$(cd "$(dirname "$0")/../.." && pwd)}"

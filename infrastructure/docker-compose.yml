@@ -1,7 +1,7 @@
 name: nomikos
 
 x-api-build: &api-build
-  context: .
+  context: ..
   dockerfile: nomikos/Dockerfile
   args:
     APP_VERSION: ${NOMIKOS_VERSION:-0.3.3}
@@ -11,7 +11,7 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?copy .env.compose.example to .env and set POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?copy infrastructure/.env.compose.example to infrastructure/.env and set POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-kalamos}
     ports:
       - "127.0.0.1:5433:5432"
@@ -30,25 +30,25 @@ services:
       - "127.0.0.1:8000:8000"
     environment:
       ENVIRONMENT: development
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?copy .env.compose.example to .env and set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-kalamos}
-      SYNC_DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?copy .env.compose.example to .env and set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-kalamos}
-      MIGRATOR_DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?copy .env.compose.example to .env and set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-kalamos}
-      JWT_SECRET: ${JWT_SECRET:?copy .env.compose.example to .env and set JWT_SECRET}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?copy infrastructure/.env.compose.example to infrastructure/.env and set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-kalamos}
+      SYNC_DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?copy infrastructure/.env.compose.example to infrastructure/.env and set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-kalamos}
+      MIGRATOR_DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?copy infrastructure/.env.compose.example to infrastructure/.env and set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-kalamos}
+      JWT_SECRET: ${JWT_SECRET:?copy infrastructure/.env.compose.example to infrastructure/.env and set JWT_SECRET}
       CORS_ORIGINS: http://localhost:3000,http://localhost:5173
       MEDIA_ROOT: /app/backend/media
       NOMIKOS_APP_ROOT: /app
       CLOUD_INFERENCE_ENABLED: "true"
-      INFERENCE_WEBHOOK_SECRET: ${INFERENCE_WEBHOOK_SECRET:?copy .env.compose.example to .env and set INFERENCE_WEBHOOK_SECRET}
+      INFERENCE_WEBHOOK_SECRET: ${INFERENCE_WEBHOOK_SECRET:?copy infrastructure/.env.compose.example to infrastructure/.env and set INFERENCE_WEBHOOK_SECRET}
       # API hosts remain request/response only; Compose runs platform-worker separately.
       JOB_WORKER_ENABLED: "false"
       JOB_SSE_NOTIFICATIONS_ENABLED: "false"
       ANNOTATED_DATA_ROOT: /data/annotated/data
     volumes:
-      - ./nomikos/backend/media:/app/backend/media
-      - ./nomikos/backend:/app/backend
-      - ./scripts/platform:/app/scripts/platform
-      - ./inference:/app/inference
-      - ./data:/data:ro
+      - ../nomikos/backend/media:/app/backend/media
+      - ../nomikos/backend:/app/backend
+      - ../scripts/platform:/app/scripts/platform
+      - ../inference:/app/inference
+      - ../data:/data:ro
     depends_on:
       db:
         condition: service_healthy
@@ -77,13 +77,13 @@ services:
     build: *api-build
     environment:
       ENVIRONMENT: development
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?copy .env.compose.example to .env and set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-kalamos}
-      SYNC_DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?copy .env.compose.example to .env and set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-kalamos}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?copy infrastructure/.env.compose.example to infrastructure/.env and set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-kalamos}
+      SYNC_DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?copy infrastructure/.env.compose.example to infrastructure/.env and set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-kalamos}
       JOB_WORKER_ENABLED: "true"
       JOB_SSE_NOTIFICATIONS_ENABLED: "false"
     volumes:
-      - ./nomikos/backend:/app/backend
-      - ./inference:/app/inference
+      - ../nomikos/backend:/app/backend
+      - ../inference:/app/inference
     depends_on:
       db:
         condition: service_healthy
@@ -92,7 +92,7 @@ services:
   frontend:
     image: nomikos-frontend:latest
     build:
-      context: ./nomikos
+      context: ../nomikos
       dockerfile: frontend/Dockerfile
       target: dev
       args:
@@ -104,7 +104,7 @@ services:
       NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
     command: npm run dev -- --hostname 0.0.0.0
     volumes:
-      - ./nomikos/frontend:/app
+      - ../nomikos/frontend:/app
       - frontend_node_modules:/app/node_modules
     depends_on:
       - api

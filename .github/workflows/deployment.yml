@@ -19,24 +19,24 @@ jobs:
         with:
           python-version: "3.11"
           enable-cache: true
-      # deploy/platform/requirements.txt is what Vercel installs; uv.lock is what
+      # infrastructure/platform/requirements.txt is what Vercel installs; uv.lock is what
       # every other environment installs. Regenerate it with the exact command in
       # its own header and fail if the committed copy differs.
-      - name: Verify deploy/platform/requirements.txt matches uv.lock
+      - name: Verify infrastructure/platform/requirements.txt matches uv.lock
         run: |
-          uv export --locked --only-group platform-prod --no-hashes -o deploy/platform/requirements.txt
-          if ! git diff --exit-code -- deploy/platform/requirements.txt; then
-            echo "::error file=deploy/platform/requirements.txt::Out of sync with uv.lock. Run: uv export --locked --only-group platform-prod --no-hashes -o deploy/platform/requirements.txt"
+          uv export --locked --only-group platform-prod --no-hashes -o infrastructure/platform/requirements.txt
+          if ! git diff --exit-code -- infrastructure/platform/requirements.txt; then
+            echo "::error file=infrastructure/platform/requirements.txt::Out of sync with uv.lock. Run: uv export --locked --only-group platform-prod --no-hashes -o infrastructure/platform/requirements.txt"
             exit 1
           fi
-      - run: bash deploy/platform/build.sh
-      - run: test -f deploy/platform/nomikos/backend/core/app.py
-      - run: test -f deploy/platform/inference/contracts/__init__.py
-      - run: test -f deploy/platform/inference/admission.py
-      - run: test -f deploy/platform/inference/settings.py
+      - run: bash infrastructure/platform/build.sh
+      - run: test -f infrastructure/platform/nomikos/backend/core/app.py
+      - run: test -f infrastructure/platform/inference/contracts/__init__.py
+      - run: test -f infrastructure/platform/inference/admission.py
+      - run: test -f infrastructure/platform/inference/settings.py
       - name: Verify platform contract import surface
         run: |
-          PYTHONPATH=deploy/platform uv run --locked --group platform python -c \
+          PYTHONPATH=infrastructure/platform uv run --locked --group platform python -c \
             "from inference.contracts.jobs import JobCallbackRequest; assert JobCallbackRequest"
       - run: docker build --target runtime --tag nomikos-api:ci -f nomikos/Dockerfile .
       # Build and tag the frontend `runner` stage (the image that actually ships)

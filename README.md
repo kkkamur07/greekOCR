@@ -74,14 +74,14 @@ Prerequisites: Git, Docker Desktop with Compose, and about 10 GB of free disk sp
 ```bash
 git clone https://github.com/kkkamur07/greekOCR.git
 cd greekOCR
-cp .env.compose.example .env
+cp infrastructure/.env.compose.example infrastructure/.env
 ```
 
-Replace the placeholder values in `.env` for `POSTGRES_PASSWORD`, `JWT_SECRET`, and
+Replace the placeholder values in `infrastructure/.env` for `POSTGRES_PASSWORD`, `JWT_SECRET`, and
 `INFERENCE_WEBHOOK_SECRET`. Then start the stack:
 
 ```bash
-docker compose up --build
+docker compose -f infrastructure/docker-compose.yml up --build
 ```
 
 Open [http://localhost:5173](http://localhost:5173). Development seed credentials are
@@ -97,10 +97,10 @@ Open [http://localhost:5173](http://localhost:5173). Development seed credential
 The first inference request downloads public weights into `~/.nomikos/hf/cache`.
 
 ```bash
-docker compose ps
+docker compose -f infrastructure/docker-compose.yml ps
 curl -s http://localhost:8000/health | python -m json.tool
-docker compose logs -f
-docker compose down
+docker compose -f infrastructure/docker-compose.yml logs -f
+docker compose -f infrastructure/docker-compose.yml down
 ```
 
 ## Self-hosting and local inference

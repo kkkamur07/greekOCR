@@ -315,8 +315,8 @@ extend-exclude = [
     # Retired subsystems, kept readable as they were. See archive/*/README.md.
     "archive",
     "data",
-    "deploy/platform/inference",
-    "deploy/platform/nomikos",
+    "infrastructure/platform/inference",
+    "infrastructure/platform/nomikos",
     # The whole research tree, not `src/experiments` alone. It is vendored code
     # nobody is maintaining to a lint standard, and it carried 555 findings that
     # said nothing about the application. Excluding it here rather than listing

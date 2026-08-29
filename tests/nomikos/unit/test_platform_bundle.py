@@ -8,7 +8,7 @@ from pathlib import Path
 
 from tests.fixtures.paths import REPO_ROOT
 
-BUILD_SCRIPT = REPO_ROOT / "deploy" / "platform" / "build.sh"
+BUILD_SCRIPT = REPO_ROOT / "infrastructure" / "platform" / "build.sh"
 
 
 def test_platform_bundle_excludes_env_files_from_all_copied_trees(tmp_path: Path) -> None:
