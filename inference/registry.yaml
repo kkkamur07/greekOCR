@@ -6,7 +6,7 @@ models:
     host_eligibility: local
     versions:
       stable:
-        weights_source: hf://kkkamur07/syriac-htr-calamari@stable
+        weights_source: hf://nomikos-project/syriac-htr-calamari@stable
         hub_revision: 5ff715e873f1ae3f325ebea4d2c4a95eb5094601
         # best.onnx at that revision. The digest has now moved back from the
         # native checkpoint to the graph (ADR 0006); the revision has never
@@ -15,7 +15,7 @@ models:
         # a local copy.
         artifact_sha256: 3cb01b58be5809032318c717c079a5b681a87074a372ea4334b9767c67ce301c
 
-  # greek-calamari-v1 is NOT shippable yet: Hub repo kkkamur07/greek-htr-calamari
+  # greek-calamari-v1 is NOT shippable yet: Hub repo nomikos-project/greek-htr-calamari
   # does not exist (404). Uncomment only after publishing weights + pinning
   # hub_revision + artifact_sha256 (same pattern as syriac-calamari-v1).
   # greek-calamari-v1:
@@ -25,7 +25,7 @@ models:
   #   host_eligibility: local
   #   versions:
   #     stable:
-  #       weights_source: hf://kkkamur07/greek-htr-calamari@stable
+  #       weights_source: hf://nomikos-project/greek-htr-calamari@stable
   #       hub_revision: <40-char-commit>
   #       artifact_sha256: <sha256-of-best.pt>
 
@@ -36,7 +36,7 @@ models:
     host_eligibility: local
     versions:
       stable:
-        weights_source: hf://kkkamur07/segmentation-blla@stable
+        weights_source: hf://nomikos-project/segmentation-blla@stable
         # A NEW revision, unlike Calamari's. The blla.onnx published at
         # 444d51dd predated the exporter's staged GroupNorm reduction, so it
         # carried onnxruntime's flat group reduction and drifted the logits by

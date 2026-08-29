@@ -196,10 +196,55 @@ as a known follow-up (issue #62).
 | `401` on claim | service token mismatch | Make `INFERENCE_WORKER_SERVICE_TOKEN` equal `NOMIKOS_SERVICE_TOKEN` |
 | `426` at launch | installed version below the **version floor** | `uv tool upgrade nomikos-inference`, or lower `INFERENCE_AGENT_MIN_VERSION` |
 | Jobs stuck `waiting` | no worker reporting capacity for `cloud` | Start/check the workers; a worker's first claim is what registers capacity |
+| Worker pulls weights from an old namespace after a migration | `registry.yaml` ships in the wheel; `git pull` does not touch it, and the Hub redirect hides it | Reinstall the wheel and restart, then verify the resolved namespace (below) |
 
 The agent self-upgrades at launch against the platform's version floor. A
 worker below the floor is refused and told to upgrade; a worker merely behind
 the newest release is served normally and told it is outdated.
+
+### Changing which model repo the worker pulls
+
+`registry.yaml` is **packaged inside the wheel**, not read from a checkout.
+`[tool.hatch.build.targets.wheel]` sets `packages = ["inference"]` and does not
+exclude it, so the installed worker resolves weights from
+`site-packages/inference/registry.yaml`.
+
+A `git pull` on the box therefore does **not** change what the worker
+downloads. Updating the registry means reinstalling:
+
+```bash
+uv tool upgrade nomikos-inference          # from PyPI
+# or, from a source checkout:
+uv build && uv tool install --force --python 3.12 ./dist/nomikos_inference-<version>-py3-none-any.whl
+sudo systemctl restart 'nomikos-worker@*'  # a running worker holds the old registry
+```
+
+Alternatively point `INFERENCE_REGISTRY_PATH` at a checkout the box does pull,
+which trades the packaged default for a file you have to keep current yourself.
+
+The reason this is worth stating rather than leaving to inference: **nothing
+looks wrong when you get it wrong.** A Hub repo that has been transferred to a
+new namespace keeps serving its old path as a redirect, indefinitely and
+silently. So a worker still pinned to the pre-migration namespace downloads the
+same bytes and runs normally, and the pull that was supposed to move it appears
+to have worked. There is no error to notice and no symptom to chase, which is
+what makes it survive to the point where whoever debugs it has never heard of
+the migration.
+
+Do not check this by confirming that a download succeeds; the redirect makes
+that pass either way. Check the namespace the worker actually resolved:
+
+```bash
+uv run python -c "
+import pathlib, yaml, inference
+r = yaml.safe_load((pathlib.Path(inference.__file__).parent / 'registry.yaml').read_text())
+for name, m in r['models'].items():
+    print(name, m['versions']['stable']['weights_source'])
+"
+```
+
+That reads the registry the worker itself loads, so it reports the packaged
+copy rather than the one in your checkout.
 
 ## Related
 

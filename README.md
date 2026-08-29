@@ -9,7 +9,7 @@ recognition (HTR), collaboration, publication, and a training-data workflow in o
 
 Links: [Website](https://nomikos.app) ·
 [Application](https://app.nomikos.app) ·
-[Hugging Face](https://huggingface.co/kkkamur07) ·
+[Hugging Face](https://huggingface.co/nomikos-project) ·
 [GitHub](https://github.com/kkkamur07/greekOCR) ·
 [Documentation index](docs/README.md)
 
@@ -53,7 +53,7 @@ The runtime catalog currently ships:
 | Capability                      | Model                                                                                         | Status                                |
 | ------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------- |
 | Page segmentation               | Kraken BLLA (`blla-segment`)                                                                  | Available                             |
-| Syriac line transcription       | [Calamari model](https://huggingface.co/kkkamur07/syriac-htr-calamari) (`syriac-calamari-v1`) | Available                             |
+| Syriac line transcription       | [Calamari model](https://huggingface.co/nomikos-project/syriac-htr-calamari) (`syriac-calamari-v1`) | Available                             |
 | Greek, Coptic, and Armenian HTR | Language-specific models                                                                      | Expansion work; not all are published |
 
 The repository includes data preparation, training, and publishing tools for expanding this

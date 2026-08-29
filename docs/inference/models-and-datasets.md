@@ -44,8 +44,8 @@ the product.
 
 | ID                   | Task       | Architecture     | Artifact                                                                                         |
 | -------------------- | ---------- | ---------------- | ------------------------------------------------------------------------------------------------ |
-| `blla-segment`     | Segment    | BLLA (ONNX Runtime) | `blla.onnx` from [segmentation repo](https://huggingface.co/kkkamur07/segmentation-blla) |
-| `syriac-calamari-v1` | Transcribe | Calamari (ONNX Runtime) | `best.onnx` from the [Hugging Face checkpoint](https://huggingface.co/kkkamur07/syriac-htr-calamari), pinned revision |
+| `blla-segment`     | Segment    | BLLA (ONNX Runtime) | `blla.onnx` from [segmentation repo](https://huggingface.co/nomikos-project/segmentation-blla) |
+| `syriac-calamari-v1` | Transcribe | Calamari (ONNX Runtime) | `best.onnx` from the [Hugging Face checkpoint](https://huggingface.co/nomikos-project/syriac-htr-calamari), pinned revision |
 
 Greek Calamari is commented out because its Hub repository and verified
 artifact are unavailable. Coptic, Armenian, and additional Greek models are
