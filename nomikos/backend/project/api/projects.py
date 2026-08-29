@@ -174,11 +174,19 @@ async def share_project(
     )
 
 
-@router.delete("/{project_id}/share/{username}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{project_id}/share/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def unshare_project(
     project_id: UUID,
-    username: str,
+    user_id: UUID,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> None:
-    await _service.unshare_project(db, current_user, project_id, username=username)
+    """Remove a collaborator, addressed by id.
+
+    By id rather than by username because a username is a path segment here and
+    registration constrains only its length: a username containing a ``/`` splits
+    into two segments, matches no route, and answers 404 however carefully the
+    client percent-encodes it. An id has no character that means anything to a
+    URL. ``GET /projects/{id}/share`` hands the caller the ids to use.
+    """
+    await _service.unshare_project(db, current_user, project_id, user_id=user_id)

@@ -124,8 +124,11 @@ def test_share_and_collaborator_list_read(
     assert collab_read.status_code == 200
     assert collab_read.json()["slug"] == slug
 
+    collaborator_id = client.get(f"/projects/{project_id}/share", headers=owner_headers).json()[0][
+        "id"
+    ]
     unshare = client.delete(
-        f"/projects/{project_id}/share/{collaborator_user['username']}",
+        f"/projects/{project_id}/share/{collaborator_id}",
         headers=owner_headers,
     )
     assert unshare.status_code == 204
@@ -227,10 +230,10 @@ def test_identifier_resolves_an_email_or_a_username(client, owner_headers, colla
     listed = client.get(f"/projects/{project_id}/share", headers=owner_headers)
     assert [c["username"] for c in listed.json()] == [collaborator_user["username"]]
 
-    client.delete(
-        f"/projects/{project_id}/share/{collaborator_user['username']}",
-        headers=owner_headers,
-    )
+    collaborator_id = client.get(f"/projects/{project_id}/share", headers=owner_headers).json()[0][
+        "id"
+    ]
+    client.delete(f"/projects/{project_id}/share/{collaborator_id}", headers=owner_headers)
     by_username = client.post(
         f"/projects/{project_id}/share",
         headers=owner_headers,
@@ -277,6 +280,91 @@ def test_a_username_containing_an_at_sign_is_not_read_as_an_email(client, owner_
 
     listed = client.get(f"/projects/{project_id}/share", headers=owner_headers)
     assert [c["username"] for c in listed.json()] == [odd["username"]]
+
+
+# --- Removing a collaborator ---
+# Tests removal by id, including names a URL path cannot carry. Does not test sharing.
+
+
+@pytest.mark.integration
+def test_a_collaborator_whose_username_contains_a_slash_can_be_removed(client, owner_headers):
+    """Registration constrains only a username's length, so `scribe/anna` is a
+    real account name. While removal addressed the collaborator by username in
+    the path, that name split into two path segments, matched no route and
+    answered 404 no matter how the client encoded it: the person could be
+    shared with and then never removed."""
+    suffix = uuid.uuid4().hex[:8]
+    odd = {
+        "email": f"scribe-{suffix}@test.kalamos",
+        "username": f"scribe/{suffix}",
+        "password": "test-pass-123",
+    }
+    assert client.post("/auth/register", json=odd).status_code == 201
+
+    project_id = client.post(
+        "/projects", headers=owner_headers, json={"slug": f"slash-{suffix}", "name": "Slash"}
+    ).json()["id"]
+    assert (
+        client.post(
+            f"/projects/{project_id}/share",
+            headers=owner_headers,
+            json={"identifier": odd["username"]},
+        ).status_code
+        == 204
+    )
+
+    listed = client.get(f"/projects/{project_id}/share", headers=owner_headers).json()
+    assert [c["username"] for c in listed] == [odd["username"]]
+
+    removed = client.delete(
+        f"/projects/{project_id}/share/{listed[0]['id']}", headers=owner_headers
+    )
+    assert removed.status_code == 204
+    assert client.get(f"/projects/{project_id}/share", headers=owner_headers).json() == []
+
+
+@pytest.mark.integration
+def test_removing_someone_who_is_not_a_collaborator_is_404(
+    client, owner_headers, outsider_headers, collaborator_user
+):
+    suffix = uuid.uuid4().hex[:8]
+    project_id = client.post(
+        "/projects", headers=owner_headers, json={"slug": f"rm-{suffix}", "name": "Remove"}
+    ).json()["id"]
+
+    stranger = client.delete(f"/projects/{project_id}/share/{uuid.uuid4()}", headers=owner_headers)
+    assert stranger.status_code == 404
+
+    # A user who exists but was never shared with reads the same way.
+    client.post(
+        f"/projects/{project_id}/share",
+        headers=owner_headers,
+        json={"username": collaborator_user["username"]},
+    )
+    collaborator_id = client.get(f"/projects/{project_id}/share", headers=owner_headers).json()[0][
+        "id"
+    ]
+    assert (
+        client.delete(
+            f"/projects/{project_id}/share/{collaborator_id}", headers=owner_headers
+        ).status_code
+        == 204
+    )
+    assert (
+        client.delete(
+            f"/projects/{project_id}/share/{collaborator_id}", headers=owner_headers
+        ).status_code
+        == 404
+    )
+
+    # Not the owner's to remove, and not a UUID at all.
+    assert client.delete(
+        f"/projects/{project_id}/share/{uuid.uuid4()}", headers=outsider_headers
+    ).status_code in (403, 404)
+    assert (
+        client.delete(f"/projects/{project_id}/share/not-a-uuid", headers=owner_headers).status_code
+        == 422
+    )
 
 
 # --- Non-member access ---

@@ -118,15 +118,37 @@ describe("ProjectSharingPanel", () => {
     );
   });
 
-  it("removes a collaborator by username and drops them from the list", async () => {
+  it("removes a collaborator by id and drops them from the list", async () => {
     vi.mocked(api.listProjectCollaborators).mockResolvedValue([FRIEND]);
     render(<ProjectSharingPanel projectId="project-1" />);
     await screen.findByText("friend");
 
     fireEvent.click(screen.getByRole("button", { name: "Remove friend" }));
 
+    // By id, not username: a username may contain a "/", which would split the
+    // path segment and 404 however it is encoded.
     await waitFor(() =>
-      expect(api.unshareProject).toHaveBeenCalledWith("project-1", "friend"),
+      expect(api.unshareProject).toHaveBeenCalledWith("project-1", "user-2"),
+    );
+    expect(
+      await screen.findByText("Not shared with anyone yet."),
+    ).toBeInTheDocument();
+  });
+
+  it("removes a collaborator whose username contains a slash", async () => {
+    const odd = {
+      id: "user-3",
+      username: "scribe/anna",
+      email: "anna@example.org",
+    };
+    vi.mocked(api.listProjectCollaborators).mockResolvedValue([odd]);
+    render(<ProjectSharingPanel projectId="project-1" />);
+    await screen.findByText("scribe/anna");
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove scribe/anna" }));
+
+    await waitFor(() =>
+      expect(api.unshareProject).toHaveBeenCalledWith("project-1", "user-3"),
     );
     expect(
       await screen.findByText("Not shared with anyone yet."),

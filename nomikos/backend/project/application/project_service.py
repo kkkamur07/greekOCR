@@ -106,16 +106,19 @@ class ProjectService:
         await self._projects.add_shared_user(session, project, collaborator)
 
     async def unshare_project(
-        self, session: AsyncSession, user: User, project_id: UUID, *, username: str
+        self, session: AsyncSession, user: User, project_id: UUID, *, user_id: UUID
     ) -> None:
         project = await self._load_or_404(session, project_id)
         self._require_owner(project, user.id)
-        collaborator = await self._users.get_by_username(session, username)
+        # Taken from the project's own collaborators rather than looked up
+        # globally: "is not shared on this project" and "is not a user at all"
+        # are the same answer to the caller, and this way it is one query.
+        collaborator = next(
+            (shared for shared in project.shared_users if shared.id == user_id), None
+        )
         if collaborator is None:
-            raise NotFoundError("User not found")
-        removed = await self._projects.remove_shared_user(session, project, collaborator)
-        if not removed:
             raise NotFoundError("User is not shared on this project")
+        await self._projects.remove_shared_user(session, project, collaborator)
 
     async def _find_collaborator(
         self,
