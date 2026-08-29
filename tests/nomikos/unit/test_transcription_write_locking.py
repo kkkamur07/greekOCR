@@ -172,6 +172,73 @@ async def test_a_ground_truth_text_edit_locks_the_line_s_part() -> None:
     assert repository.locks == [line.part_id]
 
 
+@pytest.mark.asyncio
+async def test_a_line_deleted_under_the_lock_is_a_404_not_an_integrity_error() -> None:
+    """This route reads the line before it locks, because the lock needs its part.
+
+    Every other writer here locks first and so never sees a line disappear. This
+    one has to learn the part id from an unlocked read, which leaves a gap a
+    segment-health delete can commit inside. Reading the line again once the part
+    is held turns what would be a foreign-key error on the insert into an ordinary
+    not-found the caller can act on.
+    """
+    from backend.core.exceptions import NotFoundError
+
+    service, repository, part, line = _service()
+    layer = await service._ground_truth.layer_for(None, None)
+    events: list[str] = []
+
+    async def _transcription_or_404(*_args, **_kwargs):
+        return layer
+
+    reads = 0
+
+    async def _line_in_document_or_404(*_args, **_kwargs):
+        nonlocal reads
+        reads += 1
+        events.append(f"read{reads}")
+        if reads == 1:
+            return line
+        # Segment health committed its delete in the gap.
+        raise NotFoundError("Line not found")
+
+    async def _lock_part(_session, part_id) -> None:
+        events.append("lock")
+        repository.locks.append(part_id)
+
+    service._transcription_or_404 = _transcription_or_404  # type: ignore[method-assign]
+    service._line_in_document_or_404 = _line_in_document_or_404  # type: ignore[method-assign]
+    repository.lock_part = _lock_part  # type: ignore[method-assign]
+
+    # A session that can carry the write through, so that dropping the re-read
+    # fails this test by writing happily rather than by tripping over the fake.
+    class _TextSession(_Session):
+        async def execute(self, _stmt):
+            class _Result:
+                @staticmethod
+                def scalar_one_or_none():
+                    return None
+
+            return _Result()
+
+        def add(self, _item: object) -> None:
+            pass
+
+    with pytest.raises(NotFoundError):
+        await service.patch_ground_truth_line_text(
+            _TextSession(),
+            object(),
+            uuid.uuid4(),
+            part.document_id,
+            layer.id,
+            line.id,
+            text="ܡܪܝܐ",
+        )
+
+    # The re-read is only worth anything if it happens after the lock.
+    assert events == ["read1", "lock", "read2"]
+
+
 # --- The invariant itself, rather than one more example of it ---
 
 

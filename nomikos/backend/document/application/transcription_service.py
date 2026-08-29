@@ -264,6 +264,13 @@ class TranscriptionService:
         # segment health, so writing it takes the same lock a delete holds. The
         # part comes from the line because this route is addressed by document.
         await self._documents.lock_part(session, line.part_id)
+        # That first read was unlocked, taken only to learn which part to hold, so
+        # a segment-health delete can commit in the gap and leave ``line`` pointing
+        # at a row that is gone. Every other writer here locks before it reads and
+        # so cannot see this; read it again now the part is held. Gone means a
+        # plain 404, which is what the caller can act on, instead of the
+        # foreign-key error the insert below would otherwise raise.
+        line = await self._line_in_document_or_404(session, document, line_id)
 
         result = await session.execute(
             select(LineTranscription).where(
