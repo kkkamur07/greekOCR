@@ -246,8 +246,12 @@ that pass either way. Check the namespace the worker actually resolved:
 
 ```bash
 # INFERENCE_REGISTRY_PATH, if the worker sets it, wins over the packaged copy.
+# The sed strips surrounding quotes: systemd removes them when it reads the
+# EnvironmentFile, so a quoted value that the worker resolves perfectly well
+# would otherwise reach grep with literal quote characters still attached.
 registry=$(sudo grep -hE '^INFERENCE_REGISTRY_PATH=' /etc/nomikos/worker.env \
-             | tail -1 | cut -d= -f2-)
+             | tail -1 | cut -d= -f2- \
+             | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'\$//")
 
 if [ -z "$registry" ]; then
   worker_bin=/root/.local/bin/nomikos   # match ExecStart in your unit file
