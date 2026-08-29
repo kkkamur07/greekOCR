@@ -722,6 +722,14 @@ def find_overlaps(segments: list[Segment], stats: PageStats) -> list[OverlapTrim
     entirely. Those are reported as duplicates with no trim attached, and the
     rest carry what each side would lose so that whoever decides can see the
     cost first.
+
+    Known limit. Of the nineteen, fourteen are two stacked lines, three are
+    duplicates, and two are a text line that has swallowed a narrow mark
+    sitting beside it rather than under it. A cut between the baselines does
+    separate those two, at a cost of 13% and 42% of the wider mask, but the
+    shape of the mistake is sideways and so the right fix is a sideways clip.
+    They are offered the cut with their cost shown, like the rest, because a
+    person can see what it would do; they are not silently right.
     """
     del stats  # Read from the pair itself; nothing here is a page-wide rule.
     candidates = [
