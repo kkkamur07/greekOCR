@@ -1,10 +1,23 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import { api, type ProjectCollaboratorResponse } from "../../api/client";
 import { ApiError } from "../../api/errors";
 import { toast } from "../ui/toast";
 
 type ProjectSharingPanelProps = {
   projectId: string;
+  /**
+   * Bumped by the header's Share button. Each new value puts the cursor in the
+   * box, so "Share" lands you ready to type rather than merely somewhere the
+   * box happens to be. A counter rather than a boolean because opening the
+   * panel twice in a row has to focus twice.
+   */
+  focusToken?: number;
 };
 
 /**
@@ -16,7 +29,10 @@ type ProjectSharingPanelProps = {
  * under that email first. The 404 from the API says so, and it is surfaced
  * verbatim.
  */
-export function ProjectSharingPanel({ projectId }: ProjectSharingPanelProps) {
+export function ProjectSharingPanel({
+  projectId,
+  focusToken = 0,
+}: ProjectSharingPanelProps) {
   const [collaborators, setCollaborators] = useState<
     ProjectCollaboratorResponse[] | null
   >(null);
@@ -24,6 +40,11 @@ export function ProjectSharingPanel({ projectId }: ProjectSharingPanelProps) {
   const [draft, setDraft] = useState("");
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (focusToken > 0) inputRef.current?.focus();
+  }, [focusToken]);
 
   const load = useCallback(async () => {
     try {
@@ -95,6 +116,7 @@ export function ProjectSharingPanel({ projectId }: ProjectSharingPanelProps) {
         </label>
         <input
           id="entity-project-share"
+          ref={inputRef}
           type="text"
           autoComplete="off"
           placeholder="Email or username"

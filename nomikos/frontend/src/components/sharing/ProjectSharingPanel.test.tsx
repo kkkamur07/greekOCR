@@ -155,6 +155,30 @@ describe("ProjectSharingPanel", () => {
     ).toBeInTheDocument();
   });
 
+  it("puts the cursor in the box when the header asks it to", async () => {
+    const { rerender } = render(
+      <ProjectSharingPanel projectId="project-1" focusToken={0} />,
+    );
+    await screen.findByText("Not shared with anyone yet.");
+    expect(screen.getByLabelText("Email or username")).not.toHaveFocus();
+
+    rerender(<ProjectSharingPanel projectId="project-1" focusToken={1} />);
+
+    expect(screen.getByLabelText("Email or username")).toHaveFocus();
+  });
+
+  it("re-focuses the box each time the header asks again", async () => {
+    const { rerender } = render(
+      <ProjectSharingPanel projectId="project-1" focusToken={1} />,
+    );
+    await screen.findByText("Not shared with anyone yet.");
+    screen.getByLabelText("Email or username").blur();
+
+    rerender(<ProjectSharingPanel projectId="project-1" focusToken={2} />);
+
+    expect(screen.getByLabelText("Email or username")).toHaveFocus();
+  });
+
   it("does not submit an empty box", async () => {
     render(<ProjectSharingPanel projectId="project-1" />);
     await screen.findByText("Not shared with anyone yet.");
