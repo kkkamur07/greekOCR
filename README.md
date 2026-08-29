@@ -141,9 +141,10 @@ architecture-beta
     junction clients in browser
 
     group platform(cloud)[Platform]
-    service api(server)[FastAPI on Vercel] in platform
-    service db(database)[Postgres on Supabase] in platform
-    service blobs(disk)[Private object storage] in platform
+    service api(server)[Nomikos API] in platform
+    service db(database)[Postgres] in platform
+    service blobs(disk)[Object storage] in platform
+    junction stores in platform
 
     group execution(cloud)[Execution]
     service agent(server)[Researcher agent] in execution
@@ -151,15 +152,16 @@ architecture-beta
     service models(disk)[Model weights] in execution
     junction hosts in execution
 
-    editor:R --> L:clients
-    reader:L --> R:clients
+    editor:R -- L:clients
+    reader:L -- R:clients
     clients:B --> T:api
-    api:R --> L:db
-    api:L --> R:blobs
-    hosts:T --> B:api
-    agent:R --> L:hosts
-    worker:L --> R:hosts
-    hosts:B --> T:models
+    api:R --> L:stores
+    stores:R --> L:db
+    stores:B --> T:blobs
+    agent:R -- L:hosts
+    worker:B -- T:hosts
+    models:T -- B:hosts
+    hosts:R --> L:api
 ```
 
 The editor reaches the API with a session token; the public reader reaches it with a secret
