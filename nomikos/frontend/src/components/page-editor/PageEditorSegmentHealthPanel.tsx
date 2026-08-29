@@ -71,7 +71,11 @@ export function PageEditorSegmentHealthPanel({
     );
   }
 
-  if (error) {
+  // Only when there is nothing else to show. A fix the server refuses leaves
+  // the report standing (and freshly re-read), and swapping the findings out
+  // for a bare "Try again" would hide the very list that now explains the
+  // refusal: the finding the reviewer clicked is usually gone from it.
+  if (error && !report) {
     return (
       <div
         className="pe-dropdown pe-dropdown--segment-health"
@@ -113,6 +117,12 @@ export function PageEditorSegmentHealthPanel({
           </span>
         )}
       </div>
+
+      {error ? (
+        <p className="pe-dd-hint" role="alert">
+          {error}
+        </p>
+      ) : null}
 
       {!hasFindings ? (
         <p className="pe-dd-hint">

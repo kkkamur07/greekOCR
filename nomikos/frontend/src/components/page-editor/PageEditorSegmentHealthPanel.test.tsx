@@ -186,4 +186,31 @@ describe("PageEditorSegmentHealthPanel", () => {
     expect((cutting as HTMLButtonElement).disabled).toBe(true);
     expect((idle as HTMLButtonElement).disabled).toBe(false);
   });
+
+  it("keeps the findings on screen when a fix is refused", () => {
+    // The refusal arrives with a re-read behind it, so the list underneath is
+    // the reviewer's evidence for what happened. Replacing it with "Try again"
+    // would throw that away at the one moment it is worth reading.
+    panel({
+      error: "This segment is no longer offered a column split",
+      report: report({
+        finding_count: 1,
+        spanning: [{ line_id: UPPER, cuts: [1240], piece_count: 2 }],
+      }),
+    });
+
+    expect(screen.getByRole("alert").textContent).toContain(
+      "no longer offered",
+    );
+    expect(
+      screen.getByRole("button", { name: "Cut at the gutter" }),
+    ).toBeTruthy();
+  });
+
+  it("shows only the error when there is no report to keep", () => {
+    panel({ error: "Could not check this page.", report: null });
+
+    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+    expect(screen.queryByText(/Nothing systematic found/)).toBeNull();
+  });
 });
