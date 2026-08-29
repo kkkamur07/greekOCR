@@ -111,6 +111,57 @@ async def test_share_by_username_still_works(owner, friend, project) -> None:
     assert projects.added == [friend]
 
 
+# --- The single box: identifier resolution ---
+# Tests email-or-username resolved server-side. Does not test the HTTP layer.
+
+
+async def test_identifier_resolves_an_email(owner, friend, project) -> None:
+    service, projects = _service(project, [owner, friend])
+
+    await service.share_project(None, owner, project.id, identifier="FRIEND@example.org")
+
+    assert projects.added == [friend]
+
+
+async def test_identifier_resolves_a_username(owner, friend, project) -> None:
+    service, projects = _service(project, [owner, friend])
+
+    await service.share_project(None, owner, project.id, identifier="friend")
+
+    assert projects.added == [friend]
+
+
+async def test_identifier_resolves_a_username_containing_an_at_sign(owner, project) -> None:
+    """Registration constrains only a username's length, so `greek@corpus` is a
+    real account name. Classifying it as an email loses it."""
+    odd = _user("greek@corpus", "curator@example.org")
+    service, projects = _service(project, [owner, odd])
+
+    await service.share_project(None, owner, project.id, identifier="greek@corpus")
+
+    assert projects.added == [odd]
+
+
+async def test_identifier_prefers_the_email_owner_over_a_username_squatter(owner, project) -> None:
+    """A username is unique but unrestricted, so someone can register the
+    username `victim@example.org` while the real owner of that address holds it
+    as their email. The address must resolve to the account that proved it."""
+    squatter = _user("victim@example.org", "squatter@example.org")
+    victim = _user("victim", "victim@example.org")
+    service, projects = _service(project, [owner, squatter, victim])
+
+    await service.share_project(None, owner, project.id, identifier="victim@example.org")
+
+    assert projects.added == [victim]
+
+
+async def test_unknown_identifier_names_what_was_typed(owner, project) -> None:
+    service, _ = _service(project, [owner])
+
+    with pytest.raises(NotFoundError, match="ghost"):
+        await service.share_project(None, owner, project.id, identifier="ghost")
+
+
 async def test_share_needs_exactly_one_identifier(owner, friend, project) -> None:
     service, _ = _service(project, [owner, friend])
 
@@ -120,6 +171,8 @@ async def test_share_needs_exactly_one_identifier(owner, friend, project) -> Non
         await service.share_project(
             None, owner, project.id, username="friend", email="friend@example.org"
         )
+    with pytest.raises(ValueError):
+        await service.share_project(None, owner, project.id, username="friend", identifier="friend")
 
 
 # --- Collaborator list ---
@@ -160,9 +213,21 @@ def test_share_request_accepts_username() -> None:
     assert ShareUserRequest(username="friend").username == "friend"
 
 
+def test_share_request_accepts_a_bare_identifier() -> None:
+    body = ShareUserRequest(identifier="  greek@corpus  ")
+    assert body.identifier == "greek@corpus"
+    assert body.email is None and body.username is None
+
+
 @pytest.mark.parametrize(
     "payload",
-    [{}, {"username": "friend", "email": "friend@example.org"}, {"email": "not-an-email"}],
+    [
+        {},
+        {"username": "friend", "email": "friend@example.org"},
+        {"identifier": "friend", "email": "friend@example.org"},
+        {"identifier": "   "},
+        {"email": "not-an-email"},
+    ],
 )
 def test_share_request_rejects_ambiguous_or_malformed_bodies(payload) -> None:
     with pytest.raises(ValueError):

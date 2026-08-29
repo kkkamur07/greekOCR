@@ -50,7 +50,7 @@ describe("ProjectSharingPanel", () => {
 
     await waitFor(() =>
       expect(api.shareProject).toHaveBeenCalledWith("project-1", {
-        email: "friend@example.org",
+        identifier: "Friend@Example.org",
       }),
     );
     expect(await screen.findByText("friend")).toBeInTheDocument();
@@ -58,7 +58,7 @@ describe("ProjectSharingPanel", () => {
     expect(screen.getByLabelText("Email or username")).toHaveValue("");
   });
 
-  it("shares by username when there is no @", async () => {
+  it("shares by username", async () => {
     render(<ProjectSharingPanel projectId="project-1" />);
     await screen.findByText("Not shared with anyone yet.");
 
@@ -71,7 +71,25 @@ describe("ProjectSharingPanel", () => {
 
     await waitFor(() =>
       expect(api.shareProject).toHaveBeenCalledWith("project-1", {
-        username: "friend",
+        identifier: "friend",
+      }),
+    );
+  });
+
+  it("does not mistake a username containing an @ for an email address", async () => {
+    render(<ProjectSharingPanel projectId="project-1" />);
+    await screen.findByText("Not shared with anyone yet.");
+
+    fireEvent.change(screen.getByLabelText("Email or username"), {
+      target: { value: "greek@corpus" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Share" }));
+
+    // Sent verbatim for the server to resolve. Classifying it here as an email
+    // would fail EmailStr validation and lose a legitimate account.
+    await waitFor(() =>
+      expect(api.shareProject).toHaveBeenCalledWith("project-1", {
+        identifier: "greek@corpus",
       }),
     );
   });

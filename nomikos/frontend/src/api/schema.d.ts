@@ -3018,15 +3018,22 @@ export interface components {
     };
     /**
      * ShareUserRequest
-     * @description Who to share with: a username or an email address, exactly one of them.
+     * @description Who to share with, named exactly one of three ways.
      *
-     *     Email is the address people actually know each other by; the username is
-     *     kept for callers that predate email sharing. Matching on email is
-     *     case-insensitive, like login.
+     *     ``email`` and ``username`` say which kind of identifier this is, for a
+     *     caller that knows. ``identifier`` says "one or the other, you work it out",
+     *     which is what a single UI box has to send: a username may legally contain
+     *     an ``@`` (registration constrains only its length), so the client cannot
+     *     tell the two apart by looking. Resolution order is documented on
+     *     ``ProjectService._find_collaborator``.
+     *
+     *     Matching on email is case-insensitive, like login.
      */
     ShareUserRequest: {
       /** Email */
       email?: string | null;
+      /** Identifier */
+      identifier?: string | null;
       /** Username */
       username?: string | null;
     };

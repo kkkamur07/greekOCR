@@ -3214,7 +3214,7 @@
         "type": "object"
       },
       "ShareUserRequest": {
-        "description": "Who to share with: a username or an email address, exactly one of them.\n\nEmail is the address people actually know each other by; the username is\nkept for callers that predate email sharing. Matching on email is\ncase-insensitive, like login.",
+        "description": "Who to share with, named exactly one of three ways.\n\n``email`` and ``username`` say which kind of identifier this is, for a\ncaller that knows. ``identifier`` says \"one or the other, you work it out\",\nwhich is what a single UI box has to send: a username may legally contain\nan ``@`` (registration constrains only its length), so the client cannot\ntell the two apart by looking. Resolution order is documented on\n``ProjectService._find_collaborator``.\n\nMatching on email is case-insensitive, like login.",
         "properties": {
           "email": {
             "anyOf": [
@@ -3227,6 +3227,19 @@
               }
             ],
             "title": "Email"
+          },
+          "identifier": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identifier"
           },
           "username": {
             "anyOf": [

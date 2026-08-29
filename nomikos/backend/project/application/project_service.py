@@ -92,10 +92,13 @@ class ProjectService:
         *,
         username: str | None = None,
         email: str | None = None,
+        identifier: str | None = None,
     ) -> None:
         project = await self._load_or_404(session, project_id)
         self._require_owner(project, user.id)
-        collaborator = await self._find_collaborator(session, username=username, email=email)
+        collaborator = await self._find_collaborator(
+            session, username=username, email=email, identifier=identifier
+        )
         if collaborator.id == project.owner_id:
             raise ConflictError("Cannot share project with the owner")
         if any(shared.id == collaborator.id for shared in project.shared_users):
@@ -115,15 +118,41 @@ class ProjectService:
             raise NotFoundError("User is not shared on this project")
 
     async def _find_collaborator(
-        self, session: AsyncSession, *, username: str | None, email: str | None
+        self,
+        session: AsyncSession,
+        *,
+        username: str | None = None,
+        email: str | None = None,
+        identifier: str | None = None,
     ) -> User:
-        if (username is None) == (email is None):
-            raise ValueError("share_project needs exactly one of username or email")
+        given = [f for f in (username, email, identifier) if f is not None]
+        if len(given) != 1:
+            raise ValueError("share_project needs exactly one of username, email or identifier")
+
+        if identifier is not None:
+            # A single box cannot know which kind of name it was handed: nothing
+            # stops a username containing an "@", so "looks like an email" is a
+            # guess, and a wrong guess is a 422 the owner cannot act on.
+            #
+            # Email is tried first, and that order is load-bearing rather than
+            # arbitrary. Usernames are unique but unrestricted, so someone can
+            # register the username "victim@example.org" while the real owner of
+            # that address holds it as their email. Username-first would hand
+            # that impostor every project meant for the real account; email-first
+            # means a real address always resolves to the account that proved it.
+            collaborator = await self._users.get_by_email(session, identifier)
+            if collaborator is None:
+                collaborator = await self._users.get_by_username(session, identifier)
+            if collaborator is None:
+                raise NotFoundError(f"No account found for {identifier}")
+            return collaborator
+
         if email is not None:
             collaborator = await self._users.get_by_email(session, email)
             if collaborator is None:
                 raise NotFoundError(f"No account is registered under {email}")
             return collaborator
+
         collaborator = await self._users.get_by_username(session, username or "")
         if collaborator is None:
             raise NotFoundError("User not found")

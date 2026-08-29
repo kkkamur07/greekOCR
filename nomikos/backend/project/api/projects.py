@@ -165,7 +165,12 @@ async def share_project(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> None:
     await _service.share_project(
-        db, current_user, project_id, username=body.username, email=body.email
+        db,
+        current_user,
+        project_id,
+        username=body.username,
+        email=body.email,
+        identifier=body.identifier,
     )
 
 

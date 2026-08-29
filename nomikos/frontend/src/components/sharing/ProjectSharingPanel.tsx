@@ -47,12 +47,11 @@ export function ProjectSharingPanel({ projectId }: ProjectSharingPanelProps) {
     if (!value || adding) return;
     setAdding(true);
     try {
-      await api.shareProject(
-        projectId,
-        value.includes("@")
-          ? { email: value.toLowerCase() }
-          : { username: value },
-      );
+      // Deliberately not branching on "does it contain an @": a username may
+      // legally contain one, so that guess sends a real username as an email
+      // and the owner gets a validation error they cannot act on. The server
+      // resolves it against actual accounts instead.
+      await api.shareProject(projectId, { identifier: value });
       toast.success(`Shared with ${value}`);
       setDraft("");
       await load();

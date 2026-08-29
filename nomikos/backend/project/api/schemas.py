@@ -27,25 +27,42 @@ class ProjectUpdateRequest(BaseModel):
 
 
 class ShareUserRequest(BaseModel):
-    """Who to share with: a username or an email address, exactly one of them.
+    """Who to share with, named exactly one of three ways.
 
-    Email is the address people actually know each other by; the username is
-    kept for callers that predate email sharing. Matching on email is
-    case-insensitive, like login.
+    ``email`` and ``username`` say which kind of identifier this is, for a
+    caller that knows. ``identifier`` says "one or the other, you work it out",
+    which is what a single UI box has to send: a username may legally contain
+    an ``@`` (registration constrains only its length), so the client cannot
+    tell the two apart by looking. Resolution order is documented on
+    ``ProjectService._find_collaborator``.
+
+    Matching on email is case-insensitive, like login.
     """
 
     username: str | None = Field(default=None, min_length=1, max_length=150)
     email: EmailStr | None = None
+    identifier: str | None = Field(default=None, min_length=1, max_length=255)
 
     @field_validator("email")
     @classmethod
     def normalize_email(cls, value: str | None) -> str | None:
         return value.strip().lower() if value is not None else None
 
+    @field_validator("identifier")
+    @classmethod
+    def strip_identifier(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("identifier must not be blank")
+        return stripped
+
     @model_validator(mode="after")
     def exactly_one_identifier(self) -> "ShareUserRequest":
-        if (self.username is None) == (self.email is None):
-            raise ValueError("provide exactly one of username or email")
+        given = [f for f in (self.username, self.email, self.identifier) if f is not None]
+        if len(given) != 1:
+            raise ValueError("provide exactly one of username, email or identifier")
         return self
 
 
