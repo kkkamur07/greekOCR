@@ -266,3 +266,9 @@
     flex-wrap: wrap;
   }
 }
+
+.doc-actions__progress {
+  font-size: 0.75rem;
+  color: var(--text-4);
+  white-space: nowrap;
+}

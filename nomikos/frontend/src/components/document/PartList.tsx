@@ -35,7 +35,15 @@ export function PartList({
   reordering = false,
 }: PartListProps) {
   if (!loading && parts.length === 0) {
-    return <p className="text-muted text-sm">No parts yet. Upload an image.</p>;
+    // The only place worth naming both ways in. Once there are pages the
+    // action row is enough, but an empty document has nothing to point at, and
+    // dropping onto the window works without anything on screen saying so.
+    return (
+      <p className="text-muted text-sm">
+        No pages yet. Use Upload pages, or drop images and PDFs anywhere on this
+        page.
+      </p>
+    );
   }
 
   return (

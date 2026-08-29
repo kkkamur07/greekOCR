@@ -27,6 +27,8 @@ type DocumentActionBarProps = {
    */
   isOwner: boolean;
   uploading: boolean;
+  /** Narration for a long batch ("Splitting scan.pdf · page 3/12"). */
+  uploadProgress: string | null;
   busy: boolean;
   onUpload: (files: File[]) => void;
   onWorkflowChange: (workflow: DocumentWorkflow) => void;
@@ -53,6 +55,7 @@ export function DocumentActionBar({
   publishedPageCount,
   isOwner,
   uploading,
+  uploadProgress,
   busy,
   onUpload,
   onWorkflowChange,
@@ -93,6 +96,14 @@ export function DocumentActionBar({
       >
         {uploading ? "Uploading…" : "Upload pages"}
       </button>
+      {uploading && uploadProgress && (
+        // A PDF of forty sheets takes a while and becomes forty pages. The
+        // button can only say that something is happening, so the narration
+        // that says which sheet sits beside it.
+        <span className="doc-actions__progress" role="status">
+          {uploadProgress}
+        </span>
+      )}
 
       <DocumentWorkflowMenu
         projectId={projectId}

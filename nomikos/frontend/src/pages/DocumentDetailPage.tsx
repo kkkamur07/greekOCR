@@ -20,7 +20,6 @@ import { relativeUpdatedLabel } from "../components/document/documentActionCopy"
 import { DocumentLiveLinkRow } from "../components/document/DocumentLiveLinkRow";
 import { JobsNotice } from "../components/document/JobsNotice";
 import { PartList } from "../components/document/PartList";
-import { UploadZone } from "../components/document/UploadZone";
 import { AppPageShell } from "../components/layout/AppPageShell";
 import { ContentRegionLoading } from "../components/layout/ContentRegionLoading";
 import { DocumentSettingsPanel } from "../components/sharing/DocumentSettingsPanel";
@@ -288,8 +287,11 @@ export function DocumentDetailPage() {
     }
   };
 
-  // Whole-window drop target; the UploadZone button stays as the
-  // click-to-pick alternative.
+  // Whole-window drop target. The one click-to-pick alternative is the Upload
+  // pages button in the action row; there used to be a second, a panel above
+  // the page list that opened the same file picker with the same accept list.
+  // Two controls doing one thing is not two ways in, it is a question about
+  // which one is the real one.
   const dragActive = useFileDrop(
     (files) => void handleUpload(files),
     Boolean(document) && !uploading && !loading,
@@ -458,6 +460,7 @@ export function DocumentDetailPage() {
             publishedPageCount={shownCount}
             isOwner={isOwner}
             uploading={uploading}
+            uploadProgress={uploadProgress}
             busy={reordering}
             onUpload={(files) => void handleUpload(files)}
             onWorkflowChange={(workflow: DocumentWorkflow) =>
@@ -520,15 +523,6 @@ export function DocumentDetailPage() {
             )}
 
           {document && <JobsNotice enableTestJobs={ENABLE_TEST_JOBS} />}
-
-          {document && (
-            <UploadZone
-              onUpload={handleUpload}
-              disabled={loading}
-              loading={uploading}
-              progress={uploadProgress}
-            />
-          )}
 
           {dragActive && (
             <div className="drop-overlay" role="presentation">

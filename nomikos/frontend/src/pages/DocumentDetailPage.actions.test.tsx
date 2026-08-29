@@ -150,6 +150,36 @@ describe("DocumentDetailPage action toolbar", () => {
     );
   });
 
+  it("offers one way to pick files, not the same picker twice", async () => {
+    // The failure this catches: the page used to render a large upload panel
+    // above the page list as well as this button, and both opened the same
+    // hidden multi-file input with the same accept list. Not two affordances,
+    // one action drawn twice, which leaves a reader working out which is the
+    // real one. Counting the file inputs is the check that bites, because a
+    // second panel that looks different still has to have its own.
+    const { container } = renderDocumentPage();
+
+    await screen.findByRole("heading", { name: "Chapter 4" });
+    expect(screen.getByRole("button", { name: "Upload pages" })).toBeTruthy();
+    expect(container.querySelectorAll('input[type="file"]')).toHaveLength(1);
+  });
+
+  it("names both ways in only while the document has no pages", async () => {
+    vi.mocked(api.getDocument).mockResolvedValue({
+      ...DOCUMENT,
+      part_count: 0,
+      parts: [],
+    });
+    renderDocumentPage();
+
+    // Nothing on screen says the whole window takes a drop, so the empty state
+    // is where that gets said. It stops being worth the room once there are
+    // pages and the action row is visible above them.
+    expect(
+      await screen.findByText(/drop images and PDFs anywhere on this page/i),
+    ).toBeTruthy();
+  });
+
   it("puts the page counts in the header line", async () => {
     renderDocumentPage();
 
