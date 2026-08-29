@@ -138,6 +138,147 @@ def test_share_and_collaborator_list_read(
     assert collab_read_after.status_code in (403, 404)
 
 
+# --- Sharing by email ---
+# Tests the email path and the collaborator list. Does not test username sharing.
+
+
+@pytest.mark.integration
+def test_share_by_email_and_list_collaborators(
+    client, owner_headers, collaborator_headers, collaborator_user, outsider_headers
+):
+    slug = f"share-email-{uuid.uuid4().hex[:8]}"
+    create = client.post(
+        "/projects",
+        headers=owner_headers,
+        json={"slug": slug, "name": "Shared by email"},
+    )
+    assert create.status_code == 201
+    project_id = create.json()["id"]
+
+    empty = client.get(f"/projects/{project_id}/share", headers=owner_headers)
+    assert empty.status_code == 200
+    assert empty.json() == []
+
+    share = client.post(
+        f"/projects/{project_id}/share",
+        headers=owner_headers,
+        json={"email": collaborator_user["email"].upper()},
+    )
+    assert share.status_code == 204
+
+    listed = client.get(f"/projects/{project_id}/share", headers=owner_headers)
+    assert listed.status_code == 200
+    assert [c["username"] for c in listed.json()] == [collaborator_user["username"]]
+    assert listed.json()[0]["email"] == collaborator_user["email"]
+
+    # The list carries emails, so only the owner may read it.
+    as_collaborator = client.get(f"/projects/{project_id}/share", headers=collaborator_headers)
+    assert as_collaborator.status_code == 403
+    as_outsider = client.get(f"/projects/{project_id}/share", headers=outsider_headers)
+    assert as_outsider.status_code in (403, 404)
+
+    collab_read = client.get(f"/projects/{project_id}", headers=collaborator_headers)
+    assert collab_read.status_code == 200
+
+    again = client.post(
+        f"/projects/{project_id}/share",
+        headers=owner_headers,
+        json={"email": collaborator_user["email"]},
+    )
+    assert again.status_code == 409
+
+    unknown = client.post(
+        f"/projects/{project_id}/share",
+        headers=owner_headers,
+        json={"email": f"nobody-{uuid.uuid4().hex[:6]}@test.kalamos"},
+    )
+    assert unknown.status_code == 404
+
+    both = client.post(
+        f"/projects/{project_id}/share",
+        headers=owner_headers,
+        json={"email": collaborator_user["email"], "username": collaborator_user["username"]},
+    )
+    assert both.status_code == 422
+    neither = client.post(f"/projects/{project_id}/share", headers=owner_headers, json={})
+    assert neither.status_code == 422
+
+
+# --- The single box the UI sends ---
+# Tests identifier resolution over HTTP. Does not test the owner-only list.
+
+
+@pytest.mark.integration
+def test_identifier_resolves_an_email_or_a_username(client, owner_headers, collaborator_user):
+    slug = f"share-ident-{uuid.uuid4().hex[:8]}"
+    project_id = client.post(
+        "/projects",
+        headers=owner_headers,
+        json={"slug": slug, "name": "Single box"},
+    ).json()["id"]
+
+    by_email = client.post(
+        f"/projects/{project_id}/share",
+        headers=owner_headers,
+        json={"identifier": collaborator_user["email"].upper()},
+    )
+    assert by_email.status_code == 204
+
+    listed = client.get(f"/projects/{project_id}/share", headers=owner_headers)
+    assert [c["username"] for c in listed.json()] == [collaborator_user["username"]]
+
+    client.delete(
+        f"/projects/{project_id}/share/{collaborator_user['username']}",
+        headers=owner_headers,
+    )
+    by_username = client.post(
+        f"/projects/{project_id}/share",
+        headers=owner_headers,
+        json={"identifier": collaborator_user["username"]},
+    )
+    assert by_username.status_code == 204
+
+    missing = client.post(
+        f"/projects/{project_id}/share",
+        headers=owner_headers,
+        json={"identifier": f"ghost-{uuid.uuid4().hex[:6]}"},
+    )
+    assert missing.status_code == 404
+
+    blank = client.post(
+        f"/projects/{project_id}/share", headers=owner_headers, json={"identifier": "   "}
+    )
+    assert blank.status_code == 422
+
+
+@pytest.mark.integration
+def test_a_username_containing_an_at_sign_is_not_read_as_an_email(client, owner_headers):
+    """Registration constrains only a username's length, so this is a real
+    account name; the old client-side "contains @" guess made it unshareable."""
+    suffix = uuid.uuid4().hex[:8]
+    odd = {
+        "email": f"curator-{suffix}@test.kalamos",
+        "username": f"greek@corpus-{suffix}",
+        "password": "test-pass-123",
+    }
+    assert client.post("/auth/register", json=odd).status_code == 201
+
+    slug = f"share-at-{uuid.uuid4().hex[:8]}"
+    project_id = client.post(
+        "/projects", headers=owner_headers, json={"slug": slug, "name": "At sign"}
+    ).json()["id"]
+
+    shared = client.post(
+        f"/projects/{project_id}/share",
+        headers=owner_headers,
+        json={"identifier": odd["username"]},
+    )
+    assert shared.status_code == 204
+
+    listed = client.get(f"/projects/{project_id}/share", headers=owner_headers)
+    assert [c["username"] for c in listed.json()] == [odd["username"]]
+
+
 # --- Non-member access ---
 # Tests outsiders cannot read or mutate projects. Does not test anonymous access.
 

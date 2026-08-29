@@ -22,6 +22,7 @@ vi.mock("../api/client", async (importOriginal) => {
       updateDocument: vi.fn(),
       deleteProject: vi.fn(),
       updateProject: vi.fn(),
+      listProjectCollaborators: vi.fn(),
     },
   };
 });
@@ -77,6 +78,7 @@ describe("ProjectDashboardPage", () => {
       created_at: "2026-01-01T00:00:00Z",
     });
     seedProject();
+    vi.mocked(api.listProjectCollaborators).mockResolvedValue([]);
     vi.mocked(api.listDocuments).mockResolvedValue([
       {
         id: "doc-1",

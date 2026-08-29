@@ -30,6 +30,9 @@ export type ProjectCreateRequest =
   components["schemas"]["ProjectCreateRequest"];
 export type ProjectUpdateRequest =
   components["schemas"]["ProjectUpdateRequest"];
+export type ShareUserRequest = components["schemas"]["ShareUserRequest"];
+export type ProjectCollaboratorResponse =
+  components["schemas"]["ProjectCollaboratorResponse"];
 export type DocumentResponse = components["schemas"]["DocumentResponse"];
 export type DocumentWithPartsResponse =
   components["schemas"]["DocumentWithPartsResponse"];
@@ -527,6 +530,22 @@ export const api = {
 
   deleteProject: (projectId: string) =>
     apiRequest<void>(`/projects/${projectId}`, { method: "DELETE" }),
+
+  /** Owner-only: the list carries collaborators' emails. */
+  listProjectCollaborators: (projectId: string) =>
+    apiRequest<ProjectCollaboratorResponse[]>(`/projects/${projectId}/share`),
+
+  shareProject: (projectId: string, body: ShareUserRequest) =>
+    apiRequest<void>(`/projects/${projectId}/share`, {
+      method: "POST",
+      body,
+    }),
+
+  unshareProject: (projectId: string, username: string) =>
+    apiRequest<void>(
+      `/projects/${projectId}/share/${encodeURIComponent(username)}`,
+      { method: "DELETE" },
+    ),
 
   listDocumentsPage: (
     projectId: string,

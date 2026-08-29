@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 from pydantic.json_schema import SkipJsonSchema
 
 
@@ -27,7 +27,51 @@ class ProjectUpdateRequest(BaseModel):
 
 
 class ShareUserRequest(BaseModel):
-    username: str = Field(min_length=1, max_length=150)
+    """Who to share with, named exactly one of three ways.
+
+    ``email`` and ``username`` say which kind of identifier this is, for a
+    caller that knows. ``identifier`` says "one or the other, you work it out",
+    which is what a single UI box has to send: a username may legally contain
+    an ``@`` (registration constrains only its length), so the client cannot
+    tell the two apart by looking. Resolution order is documented on
+    ``ProjectService._find_collaborator``.
+
+    Matching on email is case-insensitive, like login.
+    """
+
+    username: str | None = Field(default=None, min_length=1, max_length=150)
+    email: EmailStr | None = None
+    identifier: str | None = Field(default=None, min_length=1, max_length=255)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str | None) -> str | None:
+        return value.strip().lower() if value is not None else None
+
+    @field_validator("identifier")
+    @classmethod
+    def strip_identifier(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("identifier must not be blank")
+        return stripped
+
+    @model_validator(mode="after")
+    def exactly_one_identifier(self) -> "ShareUserRequest":
+        given = [f for f in (self.username, self.email, self.identifier) if f is not None]
+        if len(given) != 1:
+            raise ValueError("provide exactly one of username, email or identifier")
+        return self
+
+
+class ProjectCollaboratorResponse(BaseModel):
+    id: UUID
+    username: str
+    email: str
+
+    model_config = {"from_attributes": True}
 
 
 class ProjectResponse(BaseModel):
