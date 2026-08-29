@@ -55,6 +55,22 @@ def line(
     )
 
 
+def tapered(x0: float, x1: float, y: float, *, height: float = 100.0) -> list[list[float]]:
+    """A polygon shaped the way kraken draws one, rather than a rectangle.
+
+    One vertex at each end, so the outline is a single point tall there, and the
+    top and bottom vertices at different x in between.
+    """
+    top, bottom = y - height / 2, y + height / 2
+    span = x1 - x0
+    return (
+        [[x0, y - height / 8]]
+        + [[x0 + span * f, top + height / 12 * i] for i, f in enumerate((0.2, 0.5, 0.8))]
+        + [[x1, y + height / 8]]
+        + [[x0 + span * f, bottom - height / 12 * i] for i, f in enumerate((0.75, 0.45, 0.15))]
+    )
+
+
 def two_column_page(spanning: list[Segment] | None = None) -> list[Segment]:
     """Twenty lines a side, at a 120px pitch, with an empty gutter between."""
     segments: list[Segment] = []
@@ -188,6 +204,33 @@ class TestMergePolygons:
         # this one line rather than two pieces sharing a bounding box.
         assert _contains(merged, (930.0, 500.0))
 
+    def test_the_outline_of_two_kraken_shaped_pieces_does_not_cross_itself(self) -> None:
+        # The failure this catches, and it is the one that shipped twice,
+        # because every fixture above is a rectangle. A rectangle puts its top
+        # and bottom vertices at the same x and is a full line height tall at
+        # both ends. A kraken mask does neither: it tapers to one vertex at each
+        # end, and its top and bottom vertices sit at different x. The end
+        # vertex then belongs to the top edge and the bottom edge at once, so
+        # the outline arrived at it twice and closed against itself, and the
+        # attempt at walking around it instead sent the return path back across
+        # the outward one. Both are outlines no consumer of geometry accepts,
+        # and both scored well on bounding box and point count, which is all the
+        # rectangles could ever have checked.
+        merged = merge_polygons(tapered(300.0, 900.0, 500.0), tapered(960.0, 1160.0, 504.0))
+        assert _is_simple(merged), f"outline crosses or touches itself: {merged}"
+        assert _contains(merged, (930.0, 500.0)), "the gap between the pieces is not enclosed"
+
+    def test_a_fragment_sitting_inside_the_primary_still_gives_a_simple_outline(self) -> None:
+        # Not every pair offered is side by side. A blot under a line overlaps
+        # it in x completely, and cutting the two apart at the middle of that
+        # overlap leaves nothing of one of them, which used to leave the two
+        # edges interleaved and crossing.
+        primary = tapered(1381.0, 1446.0, 2840.0, height=120.0)
+        fragment = tapered(1399.0, 1414.0, 2985.0, height=280.0)
+        merged = merge_polygons(primary, fragment)
+        assert _is_simple(merged), f"outline crosses or touches itself: {merged}"
+        assert bbox(merged)[1] >= 1446.0, "the wider piece was clipped away"
+
     def test_pieces_overlapping_in_x_still_produce_a_simple_outline(self) -> None:
         primary = [[300.0, 450.0], [900.0, 450.0], [900.0, 550.0], [300.0, 550.0]]
         fragment = [[850.0, 450.0], [1000.0, 450.0], [1000.0, 550.0], [850.0, 550.0]]
@@ -234,3 +277,36 @@ def _contains(polygon: list[list[float]], point: tuple[float, float]) -> bool:
         if (ay > y) != (by > y) and x < ax + (bx - ax) * (y - ay) / (by - ay):
             inside = not inside
     return inside
+
+
+def _is_simple(polygon: list[list[float]]) -> bool:
+    """No vertex used twice, and no two edges that are not neighbours crossing."""
+    if len({(p[0], p[1]) for p in polygon}) != len(polygon):
+        return False
+    count = len(polygon)
+    edges = [(polygon[i], polygon[(i + 1) % count]) for i in range(count)]
+    for i in range(count):
+        for j in range(i + 1, count):
+            if j == i + 1 or (i == 0 and j == count - 1):
+                continue
+            if _crosses(*edges[i], *edges[j]):
+                return False
+    return True
+
+
+def _crosses(a, b, c, d) -> bool:
+    def side(p, q, r):
+        value = (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
+        return 0 if abs(value) < 1e-9 else (1 if value > 0 else -1)
+
+    def on(p, q, r):
+        return (
+            side(p, q, r) == 0
+            and min(p[0], q[0]) <= r[0] <= max(p[0], q[0])
+            and (min(p[1], q[1]) <= r[1] <= max(p[1], q[1]))
+        )
+
+    d1, d2, d3, d4 = side(a, b, c), side(a, b, d), side(c, d, a), side(c, d, b)
+    if d1 != d2 and d3 != d4:
+        return True
+    return any((on(a, b, c), on(a, b, d), on(c, d, a), on(c, d, b)))

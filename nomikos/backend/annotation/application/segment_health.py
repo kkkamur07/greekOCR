@@ -439,26 +439,54 @@ def baseline_distance(first: Polygon, second: Polygon) -> float:
     return statistics.mean(abs(y_at(first, x) - y_at(second, x)) for x in samples)
 
 
-def _chains(polygon: Polygon) -> tuple[Polygon, Polygon]:
-    """The top and bottom edge of a polygon, each left to right.
+def _extent_at(polygon: Polygon, x: float) -> tuple[float, float] | None:
+    """The polygon's top and bottom at a given x, or None if it is not there.
 
-    Taken as the highest and lowest vertex at every distinct x rather than by
-    walking the ring. Walking is the obvious approach and produces a wrong
-    outline here: the path along the bottom of a rectangle also carries its two
-    end verticals, so joining two such paths re-traverses the inner ends and
-    folds a notch back into the gap the merge was supposed to bridge.
-
-    Reading an envelope instead cannot do that. It costs the fine detail of a
-    concave top edge, which for the shape of a text line is not detail worth
-    keeping.
+    Found by intersecting the vertical line at x with every edge, which is the
+    only way that works on a real segment polygon. Bucketing vertices by their x
+    and taking the highest and lowest at each one looks equivalent and is not:
+    kraken puts its top and bottom vertices at different x, so almost every x
+    carries exactly one vertex, the top and bottom collapse onto the same
+    polyline, and the result is a zigzag rather than an outline. That version
+    passed a test built from rectangles, where the top and bottom vertices do
+    share their x, and produced 51 self-intersecting rings out of 51 on real
+    pages.
     """
-    by_x: dict[float, tuple[float, float]] = {}
-    for x, y in ((float(p[0]), float(p[1])) for p in polygon):
-        low, high = by_x.get(x, (y, y))
-        by_x[x] = (min(low, y), max(high, y))
-    xs = sorted(by_x)
-    upper = [[x, by_x[x][0]] for x in xs]
-    lower = [[x, by_x[x][1]] for x in xs]
+    ys: list[float] = []
+    count = len(polygon)
+    for index in range(count):
+        ax, ay = polygon[index]
+        bx, by = polygon[(index + 1) % count]
+        if ax == bx:
+            if abs(ax - x) <= 1e-9:
+                ys.extend((ay, by))
+            continue
+        low, high = (ax, bx) if ax < bx else (bx, ax)
+        if low - 1e-9 <= x <= high + 1e-9:
+            ys.append(ay + (by - ay) * (x - ax) / (bx - ax))
+    if not ys:
+        return None
+    return (min(ys), max(ys))
+
+
+def _envelope(pieces: list[Polygon]) -> tuple[Polygon, Polygon]:
+    """The top and bottom edges of everything at once, at each vertex column.
+
+    Sampled at the x of every vertex in every piece, taking the highest top and
+    the lowest bottom of whichever pieces reach that column. Two pieces side by
+    side, overlapping, or one sitting inside the other all come out the same
+    way, and no column falls in the gap between two pieces, so the chains cross
+    it as a straight run.
+    """
+    xs = sorted({float(point[0]) for piece in pieces for point in piece})
+    upper: Polygon = []
+    lower: Polygon = []
+    for x in xs:
+        extents = [extent for extent in (_extent_at(piece, x) for piece in pieces) if extent]
+        if not extents:
+            continue
+        upper.append([x, min(extent[0] for extent in extents)])
+        lower.append([x, max(extent[1] for extent in extents)])
     return upper, lower
 
 
@@ -466,27 +494,30 @@ def merge_polygons(primary: Polygon, fragment: Polygon) -> Polygon:
     """One outline around two pieces of the same text line.
 
     Not a general polygon union, and it does not need to be. The two inputs are
-    already known to sit on one baseline with a gap between them, and the gap is
-    the line's own text, so the merged outline is the upper edge of both pieces
-    followed by the lower edge of both, walked back. Joining the chains bridges
-    the gap by construction, which is the part that matters: the reference
-    implementation had to add an explicit bridging band because a buffer round
-    trip on its own silently dropped the fragment.
-
-    Where the two pieces overlap in x they are first cut apart at the middle of
-    the overlap, so the chains never double back and the result stays simple.
+    already known to sit on one baseline, so the merged outline is the top edge
+    of both pieces followed by the bottom edge of both, walked back. Joining the
+    chains bridges the gap by construction, which is the part that matters: the
+    reference implementation had to add an explicit bridging band because a
+    buffer round trip on its own silently dropped the fragment.
     """
-    left, right = sorted([primary, fragment], key=lambda poly: bbox(poly)[0])
-    left_box, right_box = bbox(left), bbox(right)
-    if left_box[1] > right_box[0]:
-        middle = (left_box[1] + right_box[0]) / 2
-        clipped_left = clip_half(left, middle, keep_left=True)
-        clipped_right = clip_half(right, middle, keep_left=False)
-        if len(clipped_left) >= 3 and len(clipped_right) >= 3:
-            left, right = clipped_left, clipped_right
-    left_upper, left_lower = _chains(left)
-    right_upper, right_lower = _chains(right)
-    merged = left_upper + right_upper + list(reversed(right_lower)) + list(reversed(left_lower))
+    upper, lower = _envelope([primary, fragment])
+    if len(upper) < 2:
+        return _dedupe([[round(p[0], 1), round(p[1], 1)] for p in primary + fragment])
+    # Where the outline is a single point tall the two chains meet at one
+    # vertex. At the two outer ends that is the ring's turning point and is
+    # walked once, on the way out. Anywhere in between it belongs to neither
+    # chain: kept in both it is visited twice and pinches the ring shut against
+    # itself, and kept in one the return path starts a column further in and
+    # cuts back across the outward one. Dropping it lets the chains run
+    # parallel, which is what keeps the ring simple.
+    last = len(upper) - 1
+    keep = [i for i in range(len(upper)) if i in (0, last) or upper[i] != lower[i]]
+    upper = [upper[i] for i in keep]
+    lower = [lower[i] for i in keep]
+    merged = list(upper)
+    merged.extend(
+        lower[index] for index in range(len(lower) - 1, -1, -1) if lower[index] != upper[index]
+    )
     return _dedupe([[round(p[0], 1), round(p[1], 1)] for p in merged])
 
 
