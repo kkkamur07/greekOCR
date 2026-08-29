@@ -240,18 +240,28 @@ Do not check this by confirming that a download succeeds; the redirect makes
 that pass either way. Check the namespace the worker actually resolved:
 
 ```bash
-grep weights_source \
-  "$(uv tool dir)"/nomikos-inference/lib/python*/site-packages/inference/registry.yaml
+worker_bin=/root/.local/bin/nomikos   # match ExecStart in your unit file
+tool_root=$(dirname "$(dirname "$(sudo readlink -f "$worker_bin")")")
+sudo grep weights_source "$tool_root"/lib/python*/site-packages/inference/registry.yaml
 ```
 
-Read the file out of the tool environment rather than importing the package.
-`import inference` resolves against `sys.path`, and the current directory comes
-first, so running it from a source checkout imports the checkout's `inference/`
-and prints whatever `registry.yaml` says **there**. That is the copy the worker
-does not use, and it is the copy that always looks correct right after a `git
-pull`, which is the mistake this section exists to catch. Reading the installed
-path by name cannot resolve anywhere else, and fails loudly if the tool is
-installed somewhere other than where you looked.
+Two things this deliberately avoids, both of which produce a confident wrong
+answer rather than an error.
+
+**Do not import the package to locate the file.** `import inference` resolves
+against `sys.path`, and the current directory comes first, so run from a source
+checkout it imports the checkout's `inference/` and prints whatever
+`registry.yaml` says **there**. That is the one copy the worker does not use,
+and it is the copy that always looks correct right after a `git pull`, which is
+the mistake this section exists to catch.
+
+**Do not use `uv tool dir` from your own shell.** It resolves per user. The
+unit above runs `/root/.local/bin/nomikos`, so an operator checking as
+themselves inspects their own tool environment and either finds nothing or
+reads an unrelated install, while the worker's registry goes unexamined.
+Deriving `tool_root` from the binary the unit actually names is what keeps the
+answer tied to the process being diagnosed. If your `ExecStart` differs, change
+`worker_bin` to match it.
 
 ## Related
 
