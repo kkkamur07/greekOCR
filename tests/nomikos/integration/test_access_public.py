@@ -363,20 +363,36 @@ def test_setting_published_flag_is_owner_only(client, outsider_headers, publishe
 
 @pytest.mark.integration
 def test_setting_published_flag_is_refused_to_a_collaborator(
-    client, collaborator_headers, published_document
+    client, owner_headers, collaborator_user, collaborator_headers, published_document
 ):
     """The owner check, not the membership check.
 
     ``test_setting_published_flag_is_owner_only`` above uses an outsider, who is
     already turned away by ``require_document`` before ownership is ever consulted -
     delete the ``is_owner`` guard in ``DocumentPartService`` and that test still
-    passes. A collaborator is a member, so this one reaches the guard and is the only
-    test that fails if it goes. The editor hides the control from non-owners on the
-    strength of this being enforced.
+    passes. The share below is what makes this one different: the caller is a member,
+    so the request gets past ``require_project`` and reaches the guard, and this is
+    the only test that fails if the guard goes. The editor hides the control from
+    non-owners on the strength of it being enforced.
     """
     project_id = published_document["project_id"]
     document_id = published_document["document_id"]
     part_id = published_document["part_id"]
+
+    share = client.post(
+        f"/projects/{project_id}/share",
+        headers=owner_headers,
+        json={"username": collaborator_user["username"]},
+    )
+    assert share.status_code == 204
+
+    # Asserted, not assumed. No fixture makes the collaborator a member, so without
+    # the share above this reads 403 exactly like the outsider does, and the PATCH
+    # below would prove nothing about ownership.
+    member_read = client.get(
+        f"/projects/{project_id}/documents/{document_id}", headers=collaborator_headers
+    )
+    assert member_read.status_code == 200
 
     denied = client.patch(
         f"/projects/{project_id}/documents/{document_id}/parts/published",
