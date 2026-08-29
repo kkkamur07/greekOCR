@@ -213,16 +213,21 @@ A `git pull` on the box therefore does **not** change what the worker
 downloads. Updating the registry means reinstalling:
 
 ```bash
-# From PyPI. The registry change must ride a version bump: `uv tool upgrade` is
-# a no-op when the installed version already matches, which leaves the old
-# registry in place while reporting success. `--reinstall` does not rely on that.
-uv tool install --reinstall nomikos-inference
+# From PyPI: name the version that actually contains the change. No client-side
+# command can install a registry that was never released. `uv tool upgrade` is a
+# no-op once the installed version matches, and `--reinstall` refetches that
+# same version's wheel, old registry and all. Both report success either way.
+uv tool install --reinstall "nomikos-inference==<version containing the change>"
 
-# Or from a source checkout, where the version usually has not moved at all:
+# Or from a source checkout, where the version usually has not moved at all.
+# --force is what makes a same-version wheel replace the installed one:
 uv build && uv tool install --force --python 3.12 ./dist/nomikos_inference-<version>-py3-none-any.whl
 
 sudo systemctl restart 'nomikos-worker@*'  # a running worker holds the old registry
 ```
+
+Then run the check below. It is the only step that distinguishes a reinstall
+that changed the registry from one that reinstalled the same bytes.
 
 Alternatively point `INFERENCE_REGISTRY_PATH` at a checkout the box does pull,
 which trades the packaged default for a file you have to keep current yourself.
@@ -240,13 +245,32 @@ Do not check this by confirming that a download succeeds; the redirect makes
 that pass either way. Check the namespace the worker actually resolved:
 
 ```bash
-worker_bin=/root/.local/bin/nomikos   # match ExecStart in your unit file
-tool_root=$(dirname "$(dirname "$(sudo readlink -f "$worker_bin")")")
-sudo grep weights_source "$tool_root"/lib/python*/site-packages/inference/registry.yaml
+# INFERENCE_REGISTRY_PATH, if the worker sets it, wins over the packaged copy.
+registry=$(sudo grep -hE '^INFERENCE_REGISTRY_PATH=' /etc/nomikos/worker.env \
+             | tail -1 | cut -d= -f2-)
+
+if [ -z "$registry" ]; then
+  worker_bin=/root/.local/bin/nomikos   # match ExecStart in your unit file
+  tool_root=$(dirname "$(dirname "$(sudo readlink -f "$worker_bin")")")
+  registry=$(sudo sh -c "ls $tool_root/lib/python*/site-packages/inference/registry.yaml")
+fi
+
+echo "worker registry: $registry"
+sudo grep weights_source "$registry"
 ```
 
-Two things this deliberately avoids, both of which produce a confident wrong
+It prints the path before the contents on purpose. The whole difficulty here is
+knowing *which* `registry.yaml` you are looking at, so a check that shows only
+the namespace is one you have to trust rather than read.
+
+Three things this deliberately avoids, all of which produce a confident wrong
 answer rather than an error.
+
+**Do not assume the packaged copy is the live one.** Setting
+`INFERENCE_REGISTRY_PATH` (the alternative offered above) repoints the worker
+at a file outside the wheel, and a check hardcoded to `site-packages` would
+then report a registry nothing resolves. Read the override first, and fall back
+to the package only when it is unset.
 
 **Do not import the package to locate the file.** `import inference` resolves
 against `sys.path`, and the current directory comes first, so run from a source
