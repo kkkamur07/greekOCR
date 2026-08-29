@@ -134,35 +134,37 @@ rather than a failure: the work goes to the cloud, and the page says so.
 ## Architecture in one picture
 
 ```mermaid
-flowchart TB
-    subgraph browser["Browser"]
-        Editor["Editor<br/>segment, transcribe, review"]
-        Reader["Public reader<br/>read only"]
-    end
+architecture-beta
+    group browser(internet)[Browser]
+    service editor(server)[Editor] in browser
+    service reader(internet)[Public reader] in browser
+    junction clients in browser
 
-    subgraph platform["Platform"]
-        API["FastAPI on Vercel<br/>auth, sharing, documents, job state"]
-        DB[("Postgres on Supabase")]
-        Blobs[("Private object storage")]
-    end
+    group platform(cloud)[Platform]
+    service api(server)[Nomikos API] in platform
+    service blobs(disk)[Object storage] in platform
+    service db(database)[Postgres] in platform
 
-    subgraph execution["Execution"]
-        Agent["nomikos agent<br/>researcher's own machine"]
-        Worker["Hosted worker<br/>same package, Docker host"]
-        LocalModels["CPU model cache"]
-        Models["BLLA + Calamari"]
-    end
+    group execution(cloud)[Execution]
+    service agent(server)[Researcher agent] in execution
+    service worker(server)[Hosted worker] in execution
+    service models(disk)[Model weights] in execution
+    junction hosts in execution
 
-    Editor -->|"session token"| API
-    Reader -->|"secret share link"| API
-    API --> DB
-    API --> Blobs
-    Agent -->|"claims a job"| API
-    Worker -->|"claims a job"| API
-    Agent --> LocalModels
-    Worker --> Models
-    API -.->|"job state, SSE or polling"| Editor
+    editor:R -- L:clients
+    reader:L -- R:clients
+    clients:B --> T:api
+    api:L --> R:blobs
+    api:R --> L:db
+    agent:R -- L:hosts
+    worker:L -- R:hosts
+    hosts:T --> B:api
+    hosts:B --> T:models
 ```
+
+The editor reaches the API with a session token; the public reader reaches it with a secret
+share link and no session at all. Both execution hosts claim jobs from the same durable job
+state, and the two fan-ins pass through a junction because a node side carries one edge.
 
 Nothing outside the platform box reaches Postgres or private storage. The API owns
 authentication, authorization, project sharing, document state and job state, and it is the
