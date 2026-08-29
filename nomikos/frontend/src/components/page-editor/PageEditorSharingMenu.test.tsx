@@ -54,7 +54,7 @@ describe("PageEditorSharingMenu", () => {
     const { onWorkflowChange } = renderMenu("draft");
 
     fireEvent.click(
-      screen.getByRole("menuitem", { name: /publish live page/i }),
+      screen.getByRole("menuitem", { name: /^publish document$/i }),
     );
 
     await waitFor(() => {

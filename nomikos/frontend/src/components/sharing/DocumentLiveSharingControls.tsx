@@ -154,7 +154,7 @@ export function DocumentLiveSharingControls({
               ? "Updating…"
               : isPublished
                 ? "Unpublish document"
-                : "Publish live page"}
+                : "Publish document"}
           </button>
         ) : (
           <button
@@ -167,7 +167,7 @@ export function DocumentLiveSharingControls({
               ? "Updating…"
               : isPublished
                 ? "Unpublish document"
-                : "Publish live page"}
+                : "Publish document"}
           </button>
         ))}
     </>

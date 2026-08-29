@@ -11,15 +11,33 @@
 const UNSAFE_FILENAME_CHARS = /[\\/:*?"<>|\p{Cc}]+/gu;
 const MAX_STEM_DOCUMENT_CHARS = 80;
 
-export function exportFileStem(
-  documentName: string,
-  pageNumber: number,
-): string {
+function safeDocumentStem(documentName: string): string {
   const safe = documentName
     .replace(UNSAFE_FILENAME_CHARS, "")
     .trim()
     .replace(/\s+/g, "_")
     .slice(0, MAX_STEM_DOCUMENT_CHARS)
     .replace(/[._]+$/, "");
-  return `${safe || "document"}_page_${pageNumber}`;
+  return safe || "document";
+}
+
+export function exportFileStem(
+  documentName: string,
+  pageNumber: number,
+): string {
+  return `${safeDocumentStem(documentName)}_page_${pageNumber}`;
+}
+
+/**
+ * The stem a whole-document export saves under.
+ *
+ * A reviewed-only export says so in its name. Two files sitting in the same
+ * downloads folder are otherwise indistinguishable, and the smaller one looks
+ * like an export that failed halfway rather than one that was asked for.
+ */
+export function documentExportFileStem(
+  documentName: string,
+  reviewedOnly: boolean,
+): string {
+  return `${safeDocumentStem(documentName)}${reviewedOnly ? "_reviewed" : ""}`;
 }

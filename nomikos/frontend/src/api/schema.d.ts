@@ -720,6 +720,129 @@ export interface paths {
     patch: operations["update_document_projects__project_id__documents__document_id__patch"];
     trace?: never;
   };
+  "/projects/{project_id}/documents/{document_id}/export/page-xml": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Export Document Page Xml
+     * @description Every page as PAGE XML next to the full-resolution image it describes.
+     */
+    get: operations["export_document_page_xml_projects__project_id__documents__document_id__export_page_xml_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/projects/{project_id}/documents/{document_id}/export/text": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Export Document Text
+     * @description The whole document's transcription as plain text, one ``[p.N]`` block per page.
+     */
+    get: operations["export_document_text_projects__project_id__documents__document_id__export_text_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/projects/{project_id}/documents/{document_id}/export/transcription-pdf": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Export Document Transcription Pdf
+     * @description The whole document's transcription as one PDF, pages in reading order.
+     */
+    get: operations["export_document_transcription_pdf_projects__project_id__documents__document_id__export_transcription_pdf_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/projects/{project_id}/documents/{document_id}/jobs/segment": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Segment Document
+     * @description Queue segmentation across a document, one job per page.
+     *
+     *     ``scope="unsegmented"`` (the default) queues only pages that have no segments yet.
+     *     Nothing already on the document can be lost to it.
+     *
+     *     ``scope="all"`` re-segments **every** page, and that destroys work: segmentation
+     *     replaces a page's lines, transcriptions hang off those lines, so every transcription
+     *     on every page of this document is discarded - the model's output and the
+     *     researcher's approved ground truth alike. There is no undo. Ask for it by name, never
+     *     by default, and confirm it with the researcher before sending it.
+     *
+     *     Returns 202 with ``queued: 0`` when the scope matches no page, including on a
+     *     document with no pages at all: a batch that had nothing to do has done what was
+     *     asked. Refuses with 409 when no inference host has capacity, before writing any job,
+     *     so a chapter is never left half queued.
+     */
+    post: operations["segment_document_projects__project_id__documents__document_id__jobs_segment_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/projects/{project_id}/documents/{document_id}/jobs/transcribe": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Transcribe Document
+     * @description Queue transcription across a document, one job per segmented page.
+     *
+     *     ``scope="unpaired"`` (the default) queues only pages whose segments carry no text
+     *     yet. ``scope="all"`` re-transcribes every segmented page: it adds a transcription
+     *     layer rather than replacing the lines, so unlike re-segmentation it destroys nothing,
+     *     but it does spend inference on pages that already have text.
+     *
+     *     Neither scope reaches a page with no segments - there would be nothing to transcribe.
+     *     Those pages count as ``skipped``. Same 202-with-zero and same up-front capacity
+     *     refusal as the segment route.
+     */
+    post: operations["transcribe_document_projects__project_id__documents__document_id__jobs_transcribe_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/projects/{project_id}/documents/{document_id}/model-bindings": {
     parameters: {
       query?: never;
@@ -1265,6 +1388,30 @@ export interface paths {
     head?: never;
     /** Patch Ground Truth Line Text */
     patch: operations["patch_ground_truth_line_text_projects__project_id__documents__document_id__transcriptions__transcription_id__lines__line_id__patch"];
+    trace?: never;
+  };
+  "/projects/{project_id}/documents/{document_id}/workflow-counts": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Document Workflow Counts
+     * @description How many pages this document has, and how many still need each step.
+     *
+     *     These numbers go straight into menu labels next to the actions above, so they are
+     *     counted by Postgres over the whole document in one statement and must match what the
+     *     corresponding scope would queue.
+     */
+    get: operations["document_workflow_counts_projects__project_id__documents__document_id__workflow_counts_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   "/projects/{project_id}/jobs": {
@@ -1892,6 +2039,18 @@ export interface components {
        */
       token_expires_at: string;
     };
+    /**
+     * DocumentBatchJobsResponse
+     * @description The jobs a fan-out created, and how many pages it left alone.
+     */
+    DocumentBatchJobsResponse: {
+      /** Job Ids */
+      job_ids: string[];
+      /** Queued */
+      queued: number;
+      /** Skipped */
+      skipped: number;
+    };
     /** DocumentCreateRequest */
     DocumentCreateRequest: {
       /** Name */
@@ -2026,6 +2185,24 @@ export interface components {
      * @enum {string}
      */
     DocumentWorkflow: "draft" | "published" | "archived";
+    /**
+     * DocumentWorkflowCountsResponse
+     * @description Progress through a document, in the numbers the batch menu renders.
+     *
+     *     ``unsegmented`` counts pages with no segments at all. ``unpaired`` counts *segmented*
+     *     pages whose segments carry no text yet, so the two never overlap and neither promises
+     *     work the platform would refuse.
+     */
+    DocumentWorkflowCountsResponse: {
+      /** Reviewed */
+      reviewed: number;
+      /** Total */
+      total: number;
+      /** Unpaired */
+      unpaired: number;
+      /** Unsegmented */
+      unsegmented: number;
+    };
     /** EnqueueJobResponse */
     EnqueueJobResponse: {
       /**
@@ -2973,6 +3150,19 @@ export interface components {
       order: number;
     };
     /**
+     * SegmentDocumentRequest
+     * @description Which pages to segment, and with which model.
+     *
+     *     The default is the additive scope. ``all`` re-segments every page and discards the
+     *     transcriptions on each one, so a client that wants that has to say the word.
+     */
+    SegmentDocumentRequest: {
+      /** Model Id */
+      model_id?: string | null;
+      /** @default unsegmented */
+      scope: components["schemas"]["SegmentScope"];
+    };
+    /**
      * SegmentGeometryKind
      * @enum {string}
      */
@@ -3026,6 +3216,16 @@ export interface components {
       lines?: components["schemas"]["SegmentLine"][];
     };
     /**
+     * SegmentScope
+     * @description Which pages a document-level segment run covers.
+     *
+     *     ``unsegmented`` is additive: it touches only pages that have never been segmented, so
+     *     nothing a researcher has done can be lost to it. ``all`` re-segments every page and
+     *     is destructive - it is spelled out rather than defaulted to for that reason.
+     * @enum {string}
+     */
+    SegmentScope: "unsegmented" | "all";
+    /**
      * ShareUserRequest
      * @description Who to share with, named exactly one of three ways.
      *
@@ -3073,6 +3273,16 @@ export interface components {
       /** Lines */
       lines: components["schemas"]["TranscribeBatchLineResult"][];
     };
+    /**
+     * TranscribeDocumentRequest
+     * @description Which segmented pages to transcribe, and with which model.
+     */
+    TranscribeDocumentRequest: {
+      /** Model Id */
+      model_id?: string | null;
+      /** @default unpaired */
+      scope: components["schemas"]["TranscribeScope"];
+    };
     /** TranscribeJobOutput */
     TranscribeJobOutput: {
       data: components["schemas"]["TranscribeBatchRunResponse"];
@@ -3098,6 +3308,17 @@ export interface components {
       /** Text */
       text: string;
     };
+    /**
+     * TranscribeScope
+     * @description Which pages a document-level transcribe run covers.
+     *
+     *     ``unpaired`` covers pages whose segments carry no text yet. ``all`` re-transcribes
+     *     every segmented page, which adds a transcription layer rather than removing one, so
+     *     it is far less costly than its segment counterpart - but it still spends inference on
+     *     work already done, so it is also named explicitly.
+     * @enum {string}
+     */
+    TranscribeScope: "unpaired" | "all";
     /**
      * TranscriptionKind
      * @enum {string}
@@ -6738,6 +6959,455 @@ export interface operations {
       };
     };
   };
+  export_document_page_xml_projects__project_id__documents__document_id__export_page_xml_get: {
+    parameters: {
+      query?: {
+        /** @description Cover only pages marked reviewed. 404 when that leaves nothing to export. */
+        reviewed_only?: boolean;
+      };
+      header?: never;
+      path: {
+        project_id: string;
+        document_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Zip of one PAGE XML and one full-resolution image per page */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/zip": string;
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
+  export_document_text_projects__project_id__documents__document_id__export_text_get: {
+    parameters: {
+      query?: {
+        /** @description Cover only pages marked reviewed. 404 when that leaves nothing to export. */
+        reviewed_only?: boolean;
+      };
+      header?: never;
+      path: {
+        project_id: string;
+        document_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Plain-text transcription, one page after another */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "text/plain": string;
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
+  export_document_transcription_pdf_projects__project_id__documents__document_id__export_transcription_pdf_get: {
+    parameters: {
+      query?: {
+        /** @description Cover only pages marked reviewed. 404 when that leaves nothing to export. */
+        reviewed_only?: boolean;
+      };
+      header?: never;
+      path: {
+        project_id: string;
+        document_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Transcription PDF bytes */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/pdf": string;
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
+  segment_document_projects__project_id__documents__document_id__jobs_segment_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: string;
+        document_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json":
+          components["schemas"]["SegmentDocumentRequest"] | null;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DocumentBatchJobsResponse"];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
+  transcribe_document_projects__project_id__documents__document_id__jobs_transcribe_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: string;
+        document_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json":
+          components["schemas"]["TranscribeDocumentRequest"] | null;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DocumentBatchJobsResponse"];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
   list_document_model_bindings_projects__project_id__documents__document_id__model_bindings_get: {
     parameters: {
       query?: never;
@@ -10139,6 +10809,92 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["LineTranscriptionResponse"];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Resource not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Conflict with current state */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Validation error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Rate limit exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApiErrorResponse"];
+        };
+      };
+    };
+  };
+  document_workflow_counts_projects__project_id__documents__document_id__workflow_counts_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: string;
+        document_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DocumentWorkflowCountsResponse"];
         };
       };
       /** @description Not authenticated */

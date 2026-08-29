@@ -1,0 +1,70 @@
+import type { DocumentBatchJobResponse } from "../../api/client";
+
+/**
+ * The engine and model the document-level jobs run with.
+ *
+ * Named here as constants because the batch routes take `model_id: null` and
+ * resolve the binding themselves: there is no per-document choice to offer, so
+ * a request to `/inference/models` would only be able to confirm what the
+ * server was going to do anyway. When the batch routes start accepting a model
+ * these become a read of the resolved binding instead.
+ */
+export const SEGMENT_ENGINE_NAME = "blla-segment";
+export const TRANSCRIBE_MODEL_NAME = "blla-greek-v2";
+
+export function pageCountLabel(count: number): string {
+  return `${count} page${count === 1 ? "" : "s"}`;
+}
+
+/**
+ * What a 202 from a batch route says out loud.
+ *
+ * `skipped` is reported rather than swallowed. "Queued 4, skipped 14" and
+ * "queued 4" describe different documents, and a person who expected all 18
+ * pages to run needs to be told which one they are looking at.
+ */
+export function batchQueuedMessage(result: DocumentBatchJobResponse): string {
+  if (result.queued === 0) {
+    return result.skipped > 0
+      ? `Nothing to run. ${pageCountLabel(result.skipped)} skipped.`
+      : "Nothing to run.";
+  }
+  return result.skipped > 0
+    ? `Queued ${pageCountLabel(result.queued)}. Skipped ${result.skipped}.`
+    : `Queued ${pageCountLabel(result.queued)}.`;
+}
+
+/**
+ * The line the publish confirm shows: "18 pages, 6 reviewed, 12 not".
+ *
+ * Publishing is the one action here whose blast radius is other people, so the
+ * split between checked and unchecked pages is put in front of the owner
+ * before they agree to it rather than after.
+ */
+export function publishConfirmSummary(total: number, reviewed: number): string {
+  const unreviewed = Math.max(total - reviewed, 0);
+  return `${pageCountLabel(total)}, ${reviewed} reviewed, ${unreviewed} not`;
+}
+
+/** "updated 2 hours ago", in the coarsest unit that is still true. */
+export function relativeUpdatedLabel(
+  iso: string,
+  now: Date = new Date(),
+): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "updated recently";
+  const seconds = Math.round((now.getTime() - then) / 1000);
+  if (seconds < 60) return "updated just now";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60)
+    return `updated ${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `updated ${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.round(hours / 24);
+  if (days < 30) return `updated ${days} day${days === 1 ? "" : "s"} ago`;
+  return `updated ${new Date(iso).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  })}`;
+}

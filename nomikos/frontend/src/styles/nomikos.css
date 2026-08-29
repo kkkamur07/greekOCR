@@ -1,5 +1,6 @@
 @import "./theme-shell.css";
 @import "./page-editor.css";
+@import "./document-actions.css";
 
 /* Page editor status bar */
 .pe-inference-banner {

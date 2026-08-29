@@ -717,6 +717,30 @@
         "title": "DeviceTokenRenewResponse",
         "type": "object"
       },
+      "DocumentBatchJobsResponse": {
+        "description": "The jobs a fan-out created, and how many pages it left alone.",
+        "properties": {
+          "job_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Job Ids",
+            "type": "array"
+          },
+          "queued": {
+            "title": "Queued",
+            "type": "integer"
+          },
+          "skipped": {
+            "title": "Skipped",
+            "type": "integer"
+          }
+        },
+        "required": ["job_ids", "queued", "skipped"],
+        "title": "DocumentBatchJobsResponse",
+        "type": "object"
+      },
       "DocumentCreateRequest": {
         "properties": {
           "name": {
@@ -980,6 +1004,30 @@
         "enum": ["draft", "published", "archived"],
         "title": "DocumentWorkflow",
         "type": "string"
+      },
+      "DocumentWorkflowCountsResponse": {
+        "description": "Progress through a document, in the numbers the batch menu renders.\n\n``unsegmented`` counts pages with no segments at all. ``unpaired`` counts *segmented*\npages whose segments carry no text yet, so the two never overlap and neither promises\nwork the platform would refuse.",
+        "properties": {
+          "reviewed": {
+            "title": "Reviewed",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "unpaired": {
+            "title": "Unpaired",
+            "type": "integer"
+          },
+          "unsegmented": {
+            "title": "Unsegmented",
+            "type": "integer"
+          }
+        },
+        "required": ["total", "reviewed", "unsegmented", "unpaired"],
+        "title": "DocumentWorkflowCountsResponse",
+        "type": "object"
       },
       "EnqueueJobResponse": {
         "properties": {
@@ -3069,6 +3117,29 @@
         "title": "SegmentBlock",
         "type": "object"
       },
+      "SegmentDocumentRequest": {
+        "description": "Which pages to segment, and with which model.\n\nThe default is the additive scope. ``all`` re-segments every page and discards the\ntranscriptions on each one, so a client that wants that has to say the word.",
+        "properties": {
+          "model_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/SegmentScope",
+            "default": "unsegmented"
+          }
+        },
+        "title": "SegmentDocumentRequest",
+        "type": "object"
+      },
       "SegmentGeometryKind": {
         "enum": ["polygon", "rectangle"],
         "title": "SegmentGeometryKind",
@@ -3213,6 +3284,12 @@
         "title": "SegmentRunResponse",
         "type": "object"
       },
+      "SegmentScope": {
+        "description": "Which pages a document-level segment run covers.\n\n``unsegmented`` is additive: it touches only pages that have never been segmented, so\nnothing a researcher has done can be lost to it. ``all`` re-segments every page and\nis destructive - it is spelled out rather than defaulted to for that reason.",
+        "enum": ["unsegmented", "all"],
+        "title": "SegmentScope",
+        "type": "string"
+      },
       "ShareUserRequest": {
         "description": "Who to share with, named exactly one of three ways.\n\n``email`` and ``username`` say which kind of identifier this is, for a\ncaller that knows. ``identifier`` says \"one or the other, you work it out\",\nwhich is what a single UI box has to send: a username may legally contain\nan ``@`` (registration constrains only its length), so the client cannot\ntell the two apart by looking. Resolution order is documented on\n``ProjectService._find_collaborator``.\n\nMatching on email is case-insensitive, like login.",
         "properties": {
@@ -3345,6 +3422,29 @@
         "title": "TranscribeBatchRunResponse",
         "type": "object"
       },
+      "TranscribeDocumentRequest": {
+        "description": "Which segmented pages to transcribe, and with which model.",
+        "properties": {
+          "model_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/TranscribeScope",
+            "default": "unpaired"
+          }
+        },
+        "title": "TranscribeDocumentRequest",
+        "type": "object"
+      },
       "TranscribeJobOutput": {
         "properties": {
           "data": {
@@ -3418,6 +3518,12 @@
         "required": ["text", "confidence", "character_confidences"],
         "title": "TranscribeRunResponse",
         "type": "object"
+      },
+      "TranscribeScope": {
+        "description": "Which pages a document-level transcribe run covers.\n\n``unpaired`` covers pages whose segments carry no text yet. ``all`` re-transcribes\nevery segmented page, which adds a transcription layer rather than removing one, so\nit is far less costly than its segment counterpart - but it still spends inference on\nwork already done, so it is also named explicitly.",
+        "enum": ["unpaired", "all"],
+        "title": "TranscribeScope",
+        "type": "string"
       },
       "TranscriptionKind": {
         "enum": ["ground_truth", "model"],
@@ -8092,6 +8198,663 @@
           }
         ],
         "summary": "Update Document",
+        "tags": ["documents"]
+      }
+    },
+    "/projects/{project_id}/documents/{document_id}/export/page-xml": {
+      "get": {
+        "description": "Every page as PAGE XML next to the full-resolution image it describes.",
+        "operationId": "export_document_page_xml_projects__project_id__documents__document_id__export_page_xml_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Cover only pages marked reviewed. 404 when that leaves nothing to export.",
+            "in": "query",
+            "name": "reviewed_only",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Cover only pages marked reviewed. 404 when that leaves nothing to export.",
+              "title": "Reviewed Only",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/zip": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Zip of one PAGE XML and one full-resolution image per page"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict with current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Export Document Page Xml",
+        "tags": ["documents"]
+      }
+    },
+    "/projects/{project_id}/documents/{document_id}/export/text": {
+      "get": {
+        "description": "The whole document's transcription as plain text, one ``[p.N]`` block per page.",
+        "operationId": "export_document_text_projects__project_id__documents__document_id__export_text_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Cover only pages marked reviewed. 404 when that leaves nothing to export.",
+            "in": "query",
+            "name": "reviewed_only",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Cover only pages marked reviewed. 404 when that leaves nothing to export.",
+              "title": "Reviewed Only",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Plain-text transcription, one page after another"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict with current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Export Document Text",
+        "tags": ["documents"]
+      }
+    },
+    "/projects/{project_id}/documents/{document_id}/export/transcription-pdf": {
+      "get": {
+        "description": "The whole document's transcription as one PDF, pages in reading order.",
+        "operationId": "export_document_transcription_pdf_projects__project_id__documents__document_id__export_transcription_pdf_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Cover only pages marked reviewed. 404 when that leaves nothing to export.",
+            "in": "query",
+            "name": "reviewed_only",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Cover only pages marked reviewed. 404 when that leaves nothing to export.",
+              "title": "Reviewed Only",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Transcription PDF bytes"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict with current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Export Document Transcription Pdf",
+        "tags": ["documents"]
+      }
+    },
+    "/projects/{project_id}/documents/{document_id}/jobs/segment": {
+      "post": {
+        "description": "Queue segmentation across a document, one job per page.\n\n``scope=\"unsegmented\"`` (the default) queues only pages that have no segments yet.\nNothing already on the document can be lost to it.\n\n``scope=\"all\"`` re-segments **every** page, and that destroys work: segmentation\nreplaces a page's lines, transcriptions hang off those lines, so every transcription\non every page of this document is discarded - the model's output and the\nresearcher's approved ground truth alike. There is no undo. Ask for it by name, never\nby default, and confirm it with the researcher before sending it.\n\nReturns 202 with ``queued: 0`` when the scope matches no page, including on a\ndocument with no pages at all: a batch that had nothing to do has done what was\nasked. Refuses with 409 when no inference host has capacity, before writing any job,\nso a chapter is never left half queued.",
+        "operationId": "segment_document_projects__project_id__documents__document_id__jobs_segment_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/SegmentDocumentRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentBatchJobsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict with current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Segment Document",
+        "tags": ["documents"]
+      }
+    },
+    "/projects/{project_id}/documents/{document_id}/jobs/transcribe": {
+      "post": {
+        "description": "Queue transcription across a document, one job per segmented page.\n\n``scope=\"unpaired\"`` (the default) queues only pages whose segments carry no text\nyet. ``scope=\"all\"`` re-transcribes every segmented page: it adds a transcription\nlayer rather than replacing the lines, so unlike re-segmentation it destroys nothing,\nbut it does spend inference on pages that already have text.\n\nNeither scope reaches a page with no segments - there would be nothing to transcribe.\nThose pages count as ``skipped``. Same 202-with-zero and same up-front capacity\nrefusal as the segment route.",
+        "operationId": "transcribe_document_projects__project_id__documents__document_id__jobs_transcribe_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/TranscribeDocumentRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentBatchJobsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict with current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Transcribe Document",
         "tags": ["documents"]
       }
     },
@@ -13214,6 +13977,123 @@
           }
         ],
         "summary": "Patch Ground Truth Line Text",
+        "tags": ["documents"]
+      }
+    },
+    "/projects/{project_id}/documents/{document_id}/workflow-counts": {
+      "get": {
+        "description": "How many pages this document has, and how many still need each step.\n\nThese numbers go straight into menu labels next to the actions above, so they are\ncounted by Postgres over the whole document in one statement and must match what the\ncorresponding scope would queue.",
+        "operationId": "document_workflow_counts_projects__project_id__documents__document_id__workflow_counts_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentWorkflowCountsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Not authorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict with current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Document Workflow Counts",
         "tags": ["documents"]
       }
     },

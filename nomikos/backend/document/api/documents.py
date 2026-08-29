@@ -7,6 +7,7 @@ from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Query, Response, UploadFile, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.annotation.application.export_service import AnnotationExportService
@@ -60,6 +61,9 @@ from backend.document.api.schemas import (
     TranscriptionLayerResponse,
 )
 from backend.document.application.document_catalog import DocumentCatalog
+from backend.document.application.document_export_page_xml import DocumentPageXmlExportService
+from backend.document.application.document_export_pdf import DocumentTranscriptionPdfService
+from backend.document.application.document_export_text import DocumentTextExportService
 from backend.document.application.document_job_enqueue import DocumentJobEnqueueService
 from backend.document.application.layout_service import LayoutService
 from backend.document.application.part_service import DocumentPartService
@@ -83,6 +87,9 @@ _document_repo = DocumentRepository()
 _export_service = AnnotationExportService()
 _page_xml_export_service = PageXmlExportService()
 _transcription_pdf_service = TranscriptionPdfService()
+_document_page_xml_export_service = DocumentPageXmlExportService()
+_document_pdf_export_service = DocumentTranscriptionPdfService()
+_document_text_export_service = DocumentTextExportService()
 MAX_UPLOAD_BYTES = 100 * 1024 * 1024
 PDF_RESPONSE: dict[int | str, dict[str, Any]] = {
     200: {
@@ -102,6 +109,21 @@ ZIP_RESPONSE: dict[int | str, dict[str, Any]] = {
         "description": "Zip of the PAGE XML and the full-resolution page image it describes",
     }
 }
+DOCUMENT_ZIP_RESPONSE: dict[int | str, dict[str, Any]] = {
+    200: {
+        "content": {"application/zip": {"schema": {"type": "string", "format": "binary"}}},
+        "description": "Zip of one PAGE XML and one full-resolution image per page",
+    }
+}
+TEXT_RESPONSE: dict[int | str, dict[str, Any]] = {
+    200: {
+        "content": {"text/plain": {"schema": {"type": "string"}}},
+        "description": "Plain-text transcription, one page after another",
+    }
+}
+REVIEWED_ONLY_DESCRIPTION = (
+    "Cover only pages marked reviewed. 404 when that leaves nothing to export."
+)
 
 
 def _block_response(block: Block) -> BlockResponse:
@@ -799,6 +821,99 @@ async def export_part_page_xml_bundle(
         content=zip_bytes,
         media_type="application/zip",
         headers={"Content-Disposition": attachment_disposition(bundle.zip_filename)},
+    )
+
+
+# --- Whole-document exports ---
+#
+# The same three artifacts the per-part routes above serve, for every page at once.
+# Getting an eighteen-page chapter out of the per-part routes means opening eighteen
+# pages and pressing the same button eighteen times, which is not a workflow anybody
+# completes without losing a page. Membership is checked exactly as it is above, and
+# ``reviewed_only`` is the one filter: it narrows the export to pages a human has signed
+# off, which is what a chapter is usually released as.
+
+
+@router.get(
+    "/{document_id}/export/page-xml",
+    response_class=StreamingResponse,
+    responses=DOCUMENT_ZIP_RESPONSE,
+)
+async def export_document_page_xml(
+    project_id: UUID,
+    document_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    reviewed_only: bool = Query(default=False, description=REVIEWED_ONLY_DESCRIPTION),
+) -> StreamingResponse:
+    """Every page as PAGE XML next to the full-resolution image it describes."""
+    export = await _document_page_xml_export_service.export_document(
+        db,
+        current_user,
+        project_id,
+        document_id,
+        reviewed_only=reviewed_only,
+    )
+    # Streamed rather than returned whole: the archive holds a full manuscript scan per
+    # page, and the generator is written so that only one of them is in memory at a time.
+    return StreamingResponse(
+        export.chunks,
+        media_type="application/zip",
+        headers={"Content-Disposition": attachment_disposition(export.filename)},
+    )
+
+
+@router.get(
+    "/{document_id}/export/transcription-pdf",
+    response_class=Response,
+    responses=PDF_RESPONSE,
+)
+async def export_document_transcription_pdf(
+    project_id: UUID,
+    document_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    reviewed_only: bool = Query(default=False, description=REVIEWED_ONLY_DESCRIPTION),
+) -> Response:
+    """The whole document's transcription as one PDF, pages in reading order."""
+    export = await _document_pdf_export_service.generate_document_pdf(
+        db,
+        current_user,
+        project_id,
+        document_id,
+        reviewed_only=reviewed_only,
+    )
+    return Response(
+        content=export.content,
+        media_type="application/pdf",
+        headers={"Content-Disposition": attachment_disposition(export.filename)},
+    )
+
+
+@router.get(
+    "/{document_id}/export/text",
+    response_class=Response,
+    responses=TEXT_RESPONSE,
+)
+async def export_document_text(
+    project_id: UUID,
+    document_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    reviewed_only: bool = Query(default=False, description=REVIEWED_ONLY_DESCRIPTION),
+) -> Response:
+    """The whole document's transcription as plain text, one ``[p.N]`` block per page."""
+    export = await _document_text_export_service.export_document_text(
+        db,
+        current_user,
+        project_id,
+        document_id,
+        reviewed_only=reviewed_only,
+    )
+    return Response(
+        content=export.text.encode("utf-8"),
+        media_type="text/plain; charset=utf-8",
+        headers={"Content-Disposition": attachment_disposition(export.filename)},
     )
 
 
