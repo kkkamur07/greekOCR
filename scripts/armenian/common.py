@@ -17,10 +17,7 @@ register_uuid()
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 ENV_FILE = os.environ.get("SUPABASE_ENV_FILE", os.path.join(ROOT, "nomikos/backend/core/.env.supabase"))
 DATA = os.path.join(ROOT, "data/dataset/armenian")
-SCRATCH = os.environ.get(
-    "ARMENIAN_SCRATCH",
-    "/private/tmp/claude-501/-Users-krishuagarwal-Desktop-Programming-python-greekOCR/8f1472c5-31ae-475e-9d90-e99eed1235d1/scratchpad/armenian",
-)
+SCRATCH = os.environ.get("ARMENIAN_SCRATCH", os.path.join(ROOT, "outputs", "armenian"))
 
 DOCS = {
     "ms_p_172": "7e718475-2c3e-4fc4-9e06-63f39786551a",   # MS_P_172

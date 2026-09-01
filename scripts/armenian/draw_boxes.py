@@ -27,7 +27,6 @@ for part in parts:
         for l in r["lines"]:
             if l["text"] and l["coords"]:
                 xml_by_text.setdefault(l["text"], []).append(l)
-    cur.execute('select id, "order", text from page_transcription_lines where part_id=%s and paired_line_id is null order by "order"', (part["id"],))
     cur.execute('select coalesce(max("order"), -1) as m from lines where part_id=%s', (part["id"],)); next_order = cur.fetchone()["m"] + 1
     cur.execute('select id, "order", text from page_transcription_lines where part_id=%s and paired_line_id is null order by "order"', (part["id"],))
     for t in cur.fetchall():
@@ -68,6 +67,9 @@ else:
         d.rectangle([x0 - ox, y0 - oy, x1 - ox, y1 - oy], outline=(0, 90, 220), width=3)
         d.line([(x0 - ox, j["baseline"][0][1] - oy), (x1 - ox, j["baseline"][0][1] - oy)], fill=(0, 90, 220), width=2)
         c = c.resize((280, int(c.height * 280 / c.width))); tiles.append(c)
+    if not tiles:
+        print("DRY RUN - nothing written; no boxes proposed")
+        sys.exit(0)
     cols = 6; rows = (len(tiles) + cols - 1) // cols; th = max(t.height for t in tiles)
     sheet = Image.new("RGB", (cols * 286, rows * (th + 6)), (255, 255, 255))
     for i, t in enumerate(tiles): sheet.paste(t, ((i % cols) * 286, (i // cols) * (th + 6)))

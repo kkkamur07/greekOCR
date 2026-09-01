@@ -17,8 +17,9 @@ print(f"{slug} page {order} {name} db={part['width']}x{part['height']} xml={size
 print("--- kraken (order: bbox x0-x1 y0-y1 w h, baseline y mean, npts) ---")
 for l in kl:
     x0, x1, y0, y1 = bbox(l["points"]) if l["points"] else (0, 0, 0, 0)
-    by = sum(p[1] for p in l["baseline"]["points"]) / len(l["baseline"]["points"]) if l["baseline"]["points"] else -1
-    print(f"k{l['order']:<3} x={x0:5.0f}-{x1:5.0f} y={y0:5.0f}-{y1:5.0f} w={x1-x0:5.0f} h={y1-y0:4.0f} by={by:6.0f} bl={len(l['baseline'])} {l['source']}/{l['kind']}")
+    bl_pts = (l["baseline"] or {}).get("points") or []
+    by = sum(p[1] for p in bl_pts) / len(bl_pts) if bl_pts else -1
+    print(f"k{l['order']:<3} x={x0:5.0f}-{x1:5.0f} y={y0:5.0f}-{y1:5.0f} w={x1-x0:5.0f} h={y1-y0:4.0f} by={by:6.0f} bl={len(bl_pts)} {l['source']}/{l['kind']}")
 print("--- xml (region, line: bbox, baseline y mean, text) ---")
 for r in regions:
     rb = bbox(r["coords"]) if r["coords"] else None

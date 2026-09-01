@@ -71,7 +71,7 @@ for slug, d in data.items():
         rows_html = ''.join(
             f'<li class="item {kind}"><label><input type="checkbox" data-key="{slug}-{p["order"]}-{i}"><span class="kind">{ {"draw":"Draw","merge":"Merge","untranscribed":"Transcribe"}[kind]}</span>'
             f'<span class="txt" lang="hy">{html.escape(text) or "<em>no text</em>"}</span><span class="meta">{html.escape(ref)}{" · " if ref else ""}{html.escape(loc)}</span></label>'
-            f'<img src="{uri}" alt=""><p class="note">{html.escape(note)}</p></li>'
+            f'<img src="{uri}" alt="{html.escape(note)}"><p class="note">{html.escape(note)}</p></li>'
             for i, (kind, text, ref, loc, note, uri) in enumerate(rows))
         state = 'done' if not rows else ''
         pages_html.append(
