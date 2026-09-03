@@ -309,24 +309,43 @@ class _FakeLine:
         self.id = line_id
 
 
+class _FakePart:
+    def __init__(self, part_id: uuid.UUID, document_id: uuid.UUID) -> None:
+        self.id = part_id
+        self.document_id = document_id
+
+
 class _ScalarResult:
-    def __init__(self, rows: list[_FakeLine]) -> None:
+    def __init__(self, rows: list) -> None:
         self._rows = rows
 
     def scalars(self) -> _ScalarResult:
         return self
 
-    def all(self) -> list[_FakeLine]:
+    def all(self) -> list:
         return self._rows
+
+    def scalar_one_or_none(self):
+        return self._rows[0] if self._rows else None
 
 
 class _LineLookupSession:
-    """Returns a line owned by ``part_id`` for every id the batched lookup asks for."""
+    """Returns a line owned by ``part_id`` for every id the batched lookup asks for.
 
-    def __init__(self, part_id: uuid.UUID) -> None:
+    Also answers the part-row lock, and records each statement as ``"lock"`` or
+    ``"read"`` in the order it arrives, so a test can assert which came first.
+    """
+
+    def __init__(self, part_id: uuid.UUID, document_id: uuid.UUID | None = None) -> None:
         self._part_id = part_id
+        self._document_id = document_id
+        self.statements: list[str] = []
 
     def execute(self, statement, *_args, **_kwargs) -> _ScalarResult:
+        locking = "FOR UPDATE" in str(statement)
+        self.statements.append("lock" if locking else "read")
+        if locking:
+            return _ScalarResult([_FakePart(self._part_id, self._document_id)])
         ids: list[uuid.UUID] = []
         for value in statement.compile().params.values():
             for item in value if isinstance(value, (list, tuple)) else [value]:
@@ -388,9 +407,10 @@ def test_failed_lines_are_skipped_and_reported(monkeypatch: pytest.MonkeyPatch):
         ),
     )
 
+    context = _transcribe_context(part_id)
     summary = service._apply_transcribe_merge_sync(
-        _LineLookupSession(part_id),
-        context=_transcribe_context(part_id),
+        _LineLookupSession(part_id, context.document_id),
+        context=context,
         output=_batch(part_id, [(0, "alpha"), (1, None), (2, "gamma")]),
     )
 
@@ -429,9 +449,54 @@ def test_a_fully_failed_batch_is_not_merged_as_a_success(monkeypatch: pytest.Mon
         ]
     )
 
+    context = _transcribe_context(part_id)
     with pytest.raises(service.TranscribeJobHandlerError):
         service._apply_transcribe_merge_sync(
-            _LineLookupSession(part_id),
-            context=_transcribe_context(part_id),
+            _LineLookupSession(part_id, context.document_id),
+            context=context,
             output=all_failed,
+        )
+
+
+def test_the_part_is_locked_before_its_lines_are_read(monkeypatch: pytest.MonkeyPatch):
+    """The lock has to precede the read, not sit inside the merge after it.
+
+    A segment-health merge or deletion committing between an unlocked read and a
+    later lock leaves this callback holding a ``Line`` whose row is gone, and the
+    ``LineTranscription`` insert dies on the foreign key, failing a job whose model
+    output was perfectly good. Locking first makes the two queue instead.
+    """
+    part_id = uuid.uuid4()
+    context = _transcribe_context(part_id)
+    session = _LineLookupSession(part_id, context.document_id)
+    monkeypatch.setattr(
+        service.TranscribeMergeService,
+        "apply_sync",
+        lambda _self, _session, **_kwargs: {"transcription_id": "t", "lines": []},
+    )
+
+    service._apply_transcribe_merge_sync(
+        session,
+        context=context,
+        output=_batch(part_id, [(0, "alpha")]),
+    )
+
+    assert session.statements[0] == "lock"
+    assert "read" in session.statements
+
+
+def test_a_transcribe_callback_for_a_missing_part_is_refused(monkeypatch: pytest.MonkeyPatch):
+    """The lock doubles as the ownership check, so it must reject a foreign part."""
+    part_id = uuid.uuid4()
+    context = _transcribe_context(part_id)
+    session = _LineLookupSession(part_id, uuid.uuid4())  # a different document
+    monkeypatch.setattr(
+        service.TranscribeMergeService,
+        "apply_sync",
+        lambda *_args, **_kwargs: pytest.fail("a part on another document must not merge"),
+    )
+
+    with pytest.raises(service.TranscribeJobHandlerError):
+        service._apply_transcribe_merge_sync(
+            session, context=context, output=_batch(part_id, [(0, "alpha")])
         )

@@ -39,6 +39,24 @@ class TranscribeMergeService:
             )
         return lines
 
+    @staticmethod
+    def lock_part_sync(session: Session, *, document_id: UUID, part_id: UUID) -> DocumentPart:
+        """Hold one part still before reading the lines a callback is about to write.
+
+        Take this before the caller reads its lines, not after. Segment health can
+        delete a line between an unlocked read and this lock, leaving the callback
+        holding a stale ``Line`` whose row is gone; the insert then fails on the
+        foreign key and takes the whole model output down with it.
+        ``segment_merge_service._load_part`` locks in the same order for the same
+        reason.
+        """
+        part = session.execute(
+            select(DocumentPart).where(DocumentPart.id == part_id).with_for_update()
+        ).scalar_one_or_none()
+        if part is None or part.document_id != document_id:
+            raise TranscribeJobHandlerError("Document part not found")
+        return part
+
     def apply_sync(
         self,
         session: Session,
@@ -50,9 +68,15 @@ class TranscribeMergeService:
         commit: bool = True,
         layer_name: str | None = None,
     ) -> dict:
-        part = session.get(DocumentPart, part_id)
-        if part is None or part.document_id != document_id:
-            raise TranscribeJobHandlerError("Document part not found")
+        # Load the part locked, not with ``session.get``. Segment health decides a
+        # merge or a deletion from a snapshot of which lines carry text, and
+        # ``_has_text`` counts every layer, model output included: an unapproved
+        # draft is the thing a reviewer is about to correct, which is why
+        # ``test_an_unapproved_model_prediction_still_counts_as_text`` exists. A
+        # layer committed inside that snapshot's window is therefore attached to a
+        # line the apply is about to delete, and the draft goes with it. Holding
+        # the part until this commits makes the two wait for each other.
+        self.lock_part_sync(session, document_id=document_id, part_id=part_id)
 
         resolved_name = layer_name or (
             f"Model transcription {job_id.hex[:8]}"

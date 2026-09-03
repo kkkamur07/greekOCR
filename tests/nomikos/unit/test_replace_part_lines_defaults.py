@@ -58,6 +58,10 @@ class _Repository:
         self._part = part
         self._ground_truth = ground_truth
         self.persisted: list[object] = list(existing or [])
+        self.locks = 0
+
+    async def lock_part(self, _session, _part_id) -> None:
+        self.locks += 1
 
     async def get_part(self, _session, part_id):
         return self._part if part_id == self._part.id else None
@@ -231,3 +235,29 @@ async def test_an_explicit_source_still_overrides_an_existing_line(monkeypatch) 
 
     assert lines[0].source is LineSource.manual
     assert lines[0].manual_geometry is True
+
+
+# --- Concurrency: a bulk replace holds the part while it rewrites the list ---
+
+
+@pytest.mark.asyncio
+async def test_replace_part_lines_locks_the_part_before_it_reads(monkeypatch) -> None:
+    """Segment health and re-segmentation both take this row before rewriting a page.
+
+    A bulk replace that skipped it would interleave with either of them and the
+    later commit would win on rows it never read. Asserted here rather than in a
+    concurrency test because the lock is unobservable from a single caller: the
+    only evidence it is still being taken is that it is asked for.
+    """
+    service, session, document, part, repository = _service(monkeypatch)
+
+    await service.replace_part_lines(
+        session,
+        user=object(),
+        project_id=document.project_id,
+        document_id=document.id,
+        part_id=part.id,
+        lines=_payload(),
+    )
+
+    assert repository.locks == 1

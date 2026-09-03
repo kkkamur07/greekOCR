@@ -28,6 +28,7 @@ import {
   usePageEditorJobQueue,
   usePageEditorRunState,
   usePairingState,
+  useSegmentHealth,
 } from "../components/page-editor/hooks";
 import {
   segmentHasGroundTruth,
@@ -49,6 +50,7 @@ export function PageEditorPlaceholderPage() {
   const [draftPolygon, setDraftPolygon] = useState<LinePoint[]>([]);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [segmentHealthOpen, setSegmentHealthOpen] = useState(false);
   const [canvasSettings, setCanvasSettings] = useState(loadPageEditorSettings);
   const [transcriptionPdfOpen, setTranscriptionPdfOpen] = useState(false);
   const [transcriptionPdfRefreshKey, setTranscriptionPdfRefreshKey] =
@@ -98,6 +100,14 @@ export function PageEditorPlaceholderPage() {
     setSelectedTranscribeModelId,
     partIndex,
   } = editorData;
+
+  const segmentHealth = useSegmentHealth({
+    projectId,
+    documentId,
+    partId,
+    open: segmentHealthOpen,
+    setLines,
+  });
 
   const jobQueue = usePageEditorJobQueue();
   const hostPreference = useHostPreference();
@@ -373,6 +383,9 @@ export function PageEditorPlaceholderPage() {
             transcriptionPdfOpen={transcriptionPdfOpen}
             onOpenTranscriptionPdf={openTranscriptionPdf}
             onCloseTranscriptionPdf={() => setTranscriptionPdfOpen(false)}
+            segmentHealthOpen={segmentHealthOpen}
+            onSegmentHealthOpenChange={setSegmentHealthOpen}
+            segmentHealth={segmentHealth}
             settingsOpen={settingsOpen}
             onSettingsOpenChange={setSettingsOpen}
             canvasSettings={canvasSettings}

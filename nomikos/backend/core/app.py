@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 
 import infrastructure.models  # noqa: F401 - register all ORM mappers before first query
 from backend.annotation.api.history import router as annotation_history_router
+from backend.annotation.api.segment_health import router as segment_health_router
 from backend.core.api.client_failures import router as client_failures_router
 from backend.core.api.health import router as health_router
 from backend.core.api.root import router as root_router
@@ -375,6 +376,7 @@ def create_app() -> FastAPI:
     # per-page surface stays the one an ambiguous path would resolve to.
     app.include_router(document_batch_router)
     app.include_router(annotation_history_router)
+    app.include_router(segment_health_router)
     app.include_router(media_router)
     app.include_router(public_router)
     app.include_router(public_media_router)

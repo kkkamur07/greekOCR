@@ -4,6 +4,7 @@ import type {
   DocumentWithPartsResponse,
   InferenceModelResponse,
   LineResponse,
+  SegmentHealthResponse,
 } from "../../api/client";
 import { PageEditorBackLink } from "./PageEditorNavHeader";
 import { PageEditorModelSelect } from "./PageEditorModelSelect";
@@ -12,6 +13,10 @@ import { PageEditorPageXmlButton } from "./PageEditorPageXmlButton";
 import { exportFileStem } from "../../utils/exportFilename";
 import { SettingsIcon } from "./EditorIcons";
 import { PageEditorSettingsPanel } from "./PageEditorSettingsPanel";
+import {
+  PageEditorSegmentHealthPanel,
+  type SegmentHealthAction,
+} from "./PageEditorSegmentHealthPanel";
 import { PageEditorInferenceStatus } from "./PageEditorInferenceStatus";
 import type { PageEditorCanvasSettings } from "./pageEditorSettings";
 
@@ -49,6 +54,18 @@ type PageEditorToolbarProps = {
   onCloseTranscriptionPdf: () => void;
   settingsOpen: boolean;
   onSettingsOpenChange: (open: boolean) => void;
+  segmentHealthOpen: boolean;
+  onSegmentHealthOpenChange: (open: boolean) => void;
+  /** Passed through from ``useSegmentHealth`` as one object: the toolbar owns
+   *  none of this state, it only decides where the panel hangs. */
+  segmentHealth: {
+    report: SegmentHealthResponse | null;
+    loading: boolean;
+    error: string | null;
+    pending: string | null;
+    apply: (action: SegmentHealthAction) => void;
+    refresh: () => void;
+  };
   canvasSettings: PageEditorCanvasSettings;
   onCanvasSettingsChange: (settings: PageEditorCanvasSettings) => void;
   preferLocalInference: boolean;
@@ -87,6 +104,9 @@ export function PageEditorToolbar({
   onCloseTranscriptionPdf,
   settingsOpen,
   onSettingsOpenChange,
+  segmentHealthOpen,
+  onSegmentHealthOpenChange,
+  segmentHealth,
   canvasSettings,
   onCanvasSettingsChange,
   preferLocalInference,
@@ -97,9 +117,10 @@ export function PageEditorToolbar({
 }: PageEditorToolbarProps) {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const settingsRef = useRef<HTMLDivElement>(null);
+  const segmentHealthRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!actionsOpen && !settingsOpen) return;
+    if (!actionsOpen && !settingsOpen && !segmentHealthOpen) return;
     function handleClick(event: MouseEvent) {
       const target = event.target as Node;
       if (
@@ -116,10 +137,24 @@ export function PageEditorToolbar({
       ) {
         onSettingsOpenChange(false);
       }
+      if (
+        segmentHealthOpen &&
+        segmentHealthRef.current &&
+        !segmentHealthRef.current.contains(target)
+      ) {
+        onSegmentHealthOpenChange(false);
+      }
     }
     globalThis.document.addEventListener("click", handleClick);
     return () => globalThis.document.removeEventListener("click", handleClick);
-  }, [actionsOpen, settingsOpen, onActionsOpenChange, onSettingsOpenChange]);
+  }, [
+    actionsOpen,
+    settingsOpen,
+    segmentHealthOpen,
+    onActionsOpenChange,
+    onSettingsOpenChange,
+    onSegmentHealthOpenChange,
+  ]);
 
   const segmentLabel = lines.length === 1 ? "seg" : "segs";
   const pairingPercent =
@@ -446,6 +481,34 @@ export function PageEditorToolbar({
         </div>
 
         <div className="pe-toolbar__cluster">
+          <div className="pe-dropdown-wrap" ref={segmentHealthRef}>
+            <button
+              type="button"
+              className={`pe-tb-btn${segmentHealthOpen ? " pe-tb-btn--on" : ""}`}
+              aria-haspopup="dialog"
+              aria-expanded={segmentHealthOpen}
+              title="Look for segmentation mistakes on this page"
+              disabled={lines.length === 0}
+              onClick={() => onSegmentHealthOpenChange(!segmentHealthOpen)}
+            >
+              Check page
+              {/* The count only appears once a report has been read, so an
+                  unopened panel never implies the page is clean. */}
+              {segmentHealth.report && segmentHealth.report.finding_count > 0
+                ? ` · ${segmentHealth.report.finding_count}`
+                : ""}
+            </button>
+            {segmentHealthOpen && (
+              <PageEditorSegmentHealthPanel
+                report={segmentHealth.report}
+                loading={segmentHealth.loading}
+                error={segmentHealth.error}
+                pending={segmentHealth.pending}
+                onApply={segmentHealth.apply}
+                onRefresh={segmentHealth.refresh}
+              />
+            )}
+          </div>
           <div className="pe-dropdown-wrap" ref={settingsRef}>
             <button
               type="button"

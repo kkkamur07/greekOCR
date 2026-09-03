@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from uuid import UUID
 
 from sqlalchemy import case, func, select, tuple_, update
@@ -316,6 +316,67 @@ class DocumentRepository:
         )
         return list(result.scalars().all())
 
+    async def paired_line_ids(self, session: AsyncSession, part_id: UUID) -> set[UUID]:
+        """Lines a human has paired to a line of page transcription.
+
+        A pairing is a decision about a line recorded outside the transcription
+        layers, so a line can be paired while carrying no ground-truth text of
+        its own: text imported and paired before anyone approved it has the
+        pairing without the layer. Anything asking "has a person touched this
+        line" has to read this as well as the text.
+        """
+        result = await session.execute(
+            select(PageTranscriptionLine.paired_line_id).where(
+                PageTranscriptionLine.part_id == part_id,
+                PageTranscriptionLine.paired_line_id.is_not(None),
+            )
+        )
+        return {line_id for line_id in result.scalars().all() if line_id is not None}
+
+    async def lock_part(self, session: AsyncSession, part_id: UUID) -> None:
+        """Hold one part's lines still until the caller commits.
+
+        A lock only works if every writer takes it, so every path that rewrites
+        a part's lines does: ``segment_merge_service`` before it replaces the
+        machine geometry, ``SegmentHealthService._recompute`` before it derives
+        a fix from the list, and every ``LayoutService`` method that commits.
+        That last one is a rule, not a list, and it is enforced as one in
+        ``test_every_layout_write_takes_the_part_lock``: enumerating the paths by
+        hand is what left ``create_part_line`` unlocked through a whole round of
+        review. Each reads the rows and writes back
+        a decision made from them, so without a shared lock the one that commits
+        second wins on rows it never read: newer geometry overwritten, a
+        deleted line acted on, orders renumbered from a stale list.
+
+        Take it after the access check, never before. Locking first would let
+        any signed-in caller hold a row on a part they cannot read by naming its
+        id. Selecting the id alone keeps this a lock and nothing else: no entity
+        comes back, so there is no loaded instance to go stale the way
+        ``reorder_parts`` describes.
+        """
+        await session.execute(
+            select(DocumentPart.id).where(DocumentPart.id == part_id).with_for_update()
+        )
+
+    async def lock_parts(self, session: AsyncSession, part_ids: Iterable[UUID]) -> None:
+        """``lock_part`` for an operation that spans several parts at once.
+
+        Locking many rows is where a deadlock becomes possible, so they are
+        taken in one statement ordered by id: two callers that overlap therefore
+        queue on the same row first instead of each holding what the other wants
+        next. Single-part callers cannot join such a cycle, because they take
+        one row and then wait for nothing.
+        """
+        ids = sorted(set(part_ids))
+        if not ids:
+            return
+        await session.execute(
+            select(DocumentPart.id)
+            .where(DocumentPart.id.in_(ids))
+            .order_by(DocumentPart.id)
+            .with_for_update()
+        )
+
     async def get_page_transcription_line(
         self, session: AsyncSession, part_id: UUID, order: int
     ) -> PageTranscriptionLine | None:
@@ -370,9 +431,15 @@ class DocumentRepository:
         # from ``part.order``, so without this it could be computed from orders a
         # concurrent reorder had already superseded, land on the range that transaction
         # wrote, and violate uq_document_parts_document_order - a 500 on a plain drag.
+        # ``order_by(id)`` is for the locking, not the reading: everything below
+        # works off a dict and set comparisons, so the order rows arrive in does
+        # not matter, but the order they are *locked* in does. ``lock_parts``
+        # takes the same one, so two transactions that overlap on this document
+        # queue on the same row rather than each holding what the other needs.
         result = await session.execute(
             select(DocumentPart)
             .where(DocumentPart.document_id == document.id)
+            .order_by(DocumentPart.id)
             .with_for_update()
             .execution_options(populate_existing=True)
         )

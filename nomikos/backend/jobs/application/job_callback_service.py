@@ -148,6 +148,18 @@ def _apply_transcribe_merge_sync(
     if context.document_id is None or context.document_part_id is None:
         raise TranscribeJobHandlerError("Transcribe job is missing its target document part")
 
+    # Lock the part before reading its lines, not inside ``apply_sync`` after. A
+    # segment-health merge or deletion committing in that gap leaves the loop
+    # below holding a ``Line`` whose row is gone, and the insert dies on the
+    # foreign key. Locking first makes the two operations queue: whichever wins
+    # commits, and the loser reads the state the winner left, so a line that
+    # really did disappear surfaces as "Document line not found" instead.
+    TranscribeMergeService.lock_part_sync(
+        session,
+        document_id=context.document_id,
+        part_id=context.document_part_id,
+    )
+
     # First pass: validate ids and enforce the job's own line scope, collecting
     # the ids so every line is fetched in one query instead of one SELECT per
     # line (a 50-line page was 50 sequential round trips under the locked job row).
