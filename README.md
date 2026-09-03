@@ -1,73 +1,37 @@
-# Nomikos
+<div align="center">
+  <h1>Nomikos</h1>
+  <p><strong>Nomikos is an open-source platform for transcribing historical manuscripts you can run in minutes.</strong></p>
+  <img src="landing/assets/screenshots/editor-1280.webp" alt="Nomikos manuscript editor pairing line segments with transcription" width="720">
+  <p><em>In this view, Nomikos pairs line segments with an editable transcription. Models draft the first pass from the page image — researchers correct, review, share, publish, and export.</em></p>
+  <p>
+    <a href="#quick-start"><strong>Quick Start</strong></a> ·
+    <a href="#current-model-support"><strong>Models</strong></a> ·
+    <a href="docs/README.md"><strong>Documentation</strong></a> ·
+    <a href="https://huggingface.co/nomikos-project"><strong>Hugging Face</strong></a> ·
+    <a href="#explore-nomikos"><strong>Explore</strong></a> ·
+    <a href="https://nomikos.app"><strong>Website</strong></a>
+  </p>
 
-Nomikos is an open-source platform for transcribing, annotating, sharing, and publishing
-historical manuscripts. It is being developed for the Nomos research ecosystem, with a focus
-on Syriac, Coptic, Armenian, Byzantine Greek, and related scripts.
+  <a href="https://nomikos.app"><img src="https://img.shields.io/badge/Website-nomikos.app-navy" alt="Website"></a>
+  <a href="https://app.nomikos.app"><img src="https://img.shields.io/badge/App-app.nomikos.app-green" alt="Application"></a>
+  <a href="https://huggingface.co/nomikos-project"><img src="https://img.shields.io/badge/Models-Hugging_Face-yellow" alt="Hugging Face models"></a>
+</div>
 
-It combines a browser manuscript editor, model-assisted segmentation and handwritten-text
-recognition (HTR), collaboration, publication, and a training-data workflow in one platform.
+Upload a manuscript page and Nomikos segments it into written lines, drafts a transcription where a compatible HTR model is available, and hands you a browser editor to correct, review, share, publish, and export. From there, adapt the workflow to your institution, data policy, language, and annotation conventions.
 
-Links: [Website](https://nomikos.app) ·
-[Application](https://app.nomikos.app) ·
-[Hugging Face](https://huggingface.co/nomikos-project) ·
-[GitHub](https://github.com/kkkamur07/greekOCR) ·
-[Documentation index](docs/README.md)
+Nomikos handles the editor, API, storage, job state, streaming, and local-or-hosted inference needed to turn page images into reviewable research data within boundaries you control.
 
-## What it does
+## Built for Research
 
-Nomikos turns manuscript page images into editable, reviewable research data:
+Nomikos is being developed for the Nomos research ecosystem, with a focus on Syriac, Coptic, Armenian, Byzantine Greek, and related scripts.
 
-1. Upload or open a manuscript page.
-2. Segment the page into written lines.
-3. Generate a model transcription when a compatible HTR model is available.
-4. Correct the model output and pair text with segments.
-5. Review, share, publish, and export the result.
+The system is expert-in-the-loop by design. Models draft, and researchers decide what is correct. Approved work produces processed line images and transcription files for publication or future model training.
 
-The system is expert-in-the-loop by design. Models draft, and researchers decide what is
-correct. Approved work can produce processed line images and transcription files for
-publication or future model training.
+The project has an experimental result of 1.69% character error rate on one held-out Greek line. That is not a platform-wide accuracy guarantee: results depend on the script, the hand, image quality, layout, and training data.
 
-## Why use it?
+## Quick Start
 
-Nomikos is for researchers, universities, libraries, and projects that need more control than
-a closed transcription service provides. The platform is open source and can be adapted to
-your own institution, data policy, language, annotation conventions, and infrastructure.
-
-You can:
-
-- run supported inference on a researcher's own computer through the `nomikos` agent;
-- keep application data behind an API you control;
-- collaborate through projects and document sharing;
-- correct model output instead of treating it as automatic ground truth;
-- export research and training data in a predictable format; and
-- extend the model registry and workflow to new historical scripts.
-
-The project aims to make the first transcription pass up to 10x faster. Being open source also
-gives researchers an alternative to closed platforms, with control over data, hosting, model
-choice, and review.
-
-## Current model support
-
-The runtime catalog currently ships:
-
-| Capability                      | Model                                                                                         | Status                                |
-| ------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------- |
-| Page segmentation               | Kraken BLLA (`blla-segment`)                                                                  | Available                             |
-| Syriac line transcription       | [Calamari model](https://huggingface.co/nomikos-project/syriac-htr-calamari) (`syriac-calamari-v1`) | Available                             |
-| Greek, Coptic, and Armenian HTR | Language-specific models                                                                      | Expansion work; not all are published |
-
-The repository includes data preparation, training, and publishing tools for expanding this
-catalog. A model is runtime-supported only after its weights are published, pinned, verified,
-and added to [nomikos_inference/registry.yaml](nomikos_inference/registry.yaml).
-
-The project has an experimental result of 1.69% character error rate on one held-out Greek
-line. That is not a platform-wide accuracy guarantee: results depend on the script, the hand,
-image quality, layout, and training data.
-
-## Run it locally with Docker
-
-The fastest way to evaluate the complete application is the development Compose stack. It is
-not a hardened internet-facing production deployment.
+The fastest way to evaluate the complete application is the development Compose stack. It is not a hardened internet-facing production deployment.
 
 Prerequisites: Git, Docker Desktop with Compose, and about 10 GB of free disk space.
 
@@ -77,22 +41,25 @@ cd greekOCR
 cp infrastructure/.env.compose.example infrastructure/.env
 ```
 
-Replace the placeholder values in `infrastructure/.env` for `POSTGRES_PASSWORD`, `JWT_SECRET`, and
-`INFERENCE_WEBHOOK_SECRET`. Then start the stack:
+Replace the placeholder values in `infrastructure/.env` for `POSTGRES_PASSWORD`, `JWT_SECRET`, and `INFERENCE_WEBHOOK_SECRET`. Then start the stack:
 
 ```bash
 docker compose -f infrastructure/docker-compose.yml up --build
 ```
 
-Open [http://localhost:5173](http://localhost:5173). Development seed credentials are
-`dev@example.com` / `dev-pass-123`.
+Open the editor:
 
-| Service      | Address                                                  |
-| ------------ | -------------------------------------------------------- |
-| Editor       | [http://localhost:5173](http://localhost:5173)           |
-| Platform API | [http://localhost:8000](http://localhost:8000)           |
+```bash
+open http://localhost:5173   # or visit manually
+# Development seed login: dev@example.com / dev-pass-123
+```
+
+| Service      | Address                                        |
+| ------------ | ---------------------------------------------- |
+| Editor       | [http://localhost:5173](http://localhost:5173) |
+| Platform API | [http://localhost:8000](http://localhost:8000) |
 | API docs     | [http://localhost:8000/docs](http://localhost:8000/docs) |
-| Postgres     | `127.0.0.1:5433`                                         |
+| Postgres     | `127.0.0.1:5433`                               |
 
 The first inference request downloads public weights into `~/.nomikos/hf/cache`.
 
@@ -103,17 +70,47 @@ docker compose -f infrastructure/docker-compose.yml logs -f
 docker compose -f infrastructure/docker-compose.yml down
 ```
 
-## Self-hosting and local inference
+## Why Nomikos
 
-The complete local stack is available for development and evaluation. A production deployment
-currently requires manual configuration of Supabase, three Vercel projects, DNS, secrets, and
-migrations, plus a persistent Docker host for the workers if remote inference is enabled. It
-is not a one-click full-stack hosting product today.
+- **Keep the expert in the loop.** Models draft segments and transcriptions; researchers correct and approve. Model output is never treated as automatic ground truth.
+- **Operate inside your own data boundary.** Keep application data behind an API you control, with your own hosting, data policy, and review conventions.
+- **Run inference on your own computer.** Point the `nomikos` agent at the platform and run supported BLLA and Calamari models on a researcher's CPU — no inbound ports, VPN, or proxy required.
+- **Collaborate through projects and sharing.** Organize work in projects, share documents, and publish through secret-link public reading with no session at all.
+- **Aim for a 10x faster first pass.** Correcting a model draft beats transcribing from blank, with exports in a predictable format for research or retraining.
 
-Local inference is a command-line agent rather than a background service (ADR 0002). It is the
-one published package, `nomikos-inference`, and a hosted worker installs that same package.
-It runs BLLA and Calamari on the researcher's CPU and caches weights under
-`~/.nomikos/hf/cache`.
+## Complete Workflow
+
+- **Turn pages into editable data.** Upload or open a page, segment it into lines, generate a model transcription, and pair text with segments.
+- **Correct instead of retyping.** Edit the draft in the browser editor, with job state that says which host ran each job and what is still queued.
+- **Review, share, and publish.** Move documents through review, share them with collaborators, and publish read-only views for readers.
+- **Export training-ready data.** Produce processed line images and transcription files from approved work for publication or future model training.
+- **Extend to new scripts.** Add models through the registry, weights, and publishing workflow — data preparation, training, and Hub publishing tools are in the repo.
+
+## Data Control and Review
+
+Data controls define the boundary around Nomikos:
+
+- Runs in infrastructure you control, including local Docker evaluation today and manual Supabase + Vercel + worker setup for production.
+- Nothing outside the platform reaches Postgres or private storage. The API owns authentication, authorization, project sharing, and document and job state, and it is the only thing that reads a page image off disk.
+- The public reader is the same API seen through a narrower door: no session, and every route it can reach demands the document's secret share token or answers exactly as if the document did not exist.
+- The local agent opens no port. It claims one page over a short-lived signed link, runs the model, and reports back. An agent that is not running is an announced state, not a failure: work goes to the cloud, and the page says so.
+- Job updates travel over Postgres `NOTIFY` to API listeners, then SSE with polling fallback. There is no email or push provider in the current implementation.
+
+See [`docs/security/`](docs/security/), [`docs/architecture.md`](docs/architecture.md), and [`docs/database-design.md`](docs/database-design.md), including auth boundaries, share-link behavior, and rate limiting.
+
+## Current Model Support
+
+Through the pinned runtime registry, Nomikos pages can use:
+
+| Capability | What Nomikos does |
+| --- | --- |
+| Page segmentation | Segments pages into written lines with Kraken BLLA (`blla-segment`) |
+| Syriac transcription | Transcribes Syriac lines with the [Calamari model](https://huggingface.co/nomikos-project/syriac-htr-calamari) (`syriac-calamari-v1`) |
+| Greek, Coptic, and Armenian HTR | Drafts transcriptions with language-specific models — expansion work, not all published |
+
+A model is runtime-supported only after its weights are published, pinned, verified, and added to [nomikos_inference/registry.yaml](nomikos_inference/registry.yaml). The repo includes data preparation, training, and publishing tools for expanding this catalog.
+
+Run supported inference locally:
 
 ```bash
 uv tool install nomikos-inference   # or: pip install nomikos-inference
@@ -121,66 +118,17 @@ nomikos pair          # links this machine to your account
 nomikos run           # takes pages from the queue until you stop it
 ```
 
-It opens no port. The agent asks the platform for work, downloads the one page image it was
-handed through a short-lived signed link, runs the model, and reports the result back. Nothing
-on the researcher's machine has to be reachable from a browser, a proxy, or a VPN. Point it at
-a different platform with `NOMIKOS_API_URL` or `--api-url`.
+Point it at a different platform with `NOMIKOS_API_URL` or `--api-url`.
 
-Where a job runs is decided once, when it is submitted, from the account setting "use my
-computer when it is available" and whether that computer has been seen recently. Every job
-then says which host ran it. An agent that is not running is an ordinary announced state
-rather than a failure: the work goes to the cloud, and the page says so.
+## Ways to Run Nomikos
 
-## Architecture in one picture
+- **As a browser editor.** Open pages, correct segments and text, and move work through review at `http://localhost:5173` (or [app.nomikos.app](https://app.nomikos.app)).
+- **As a public reader.** Share published documents through secret links — no login required.
+- **As a local inference agent.** Run `nomikos pair` once, then `nomikos run` to process your queue on your own CPU.
+- **As a Docker stack.** Run the published Compose services (editor, API, Postgres, workers) for evaluation and development.
+- **As a self-hosted platform.** Deploy the API, storage, and workers on infrastructure you operate; production today is manual Supabase + Vercel + Docker-host configuration, not one-click hosting.
 
-```mermaid
-architecture-beta
-    group browser(internet)[Browser]
-    service editor(server)[Editor] in browser
-    service reader(internet)[Public reader] in browser
-    junction clients in browser
-
-    group platform(cloud)[Platform]
-    service api(server)[Nomikos API] in platform
-    service blobs(disk)[Object storage] in platform
-    service db(database)[Postgres] in platform
-
-    group execution(cloud)[Execution]
-    service agent(server)[Researcher agent] in execution
-    service worker(server)[Hosted worker] in execution
-    service models(disk)[Model weights] in execution
-    junction hosts in execution
-
-    editor:R -- L:clients
-    reader:L -- R:clients
-    clients:B --> T:api
-    api:L --> R:blobs
-    api:R --> L:db
-    agent:R -- L:hosts
-    worker:L -- R:hosts
-    hosts:T --> B:api
-    hosts:B --> T:models
-```
-
-The editor reaches the API with a session token; the public reader reaches it with a secret
-share link and no session at all. Both execution hosts claim jobs from the same durable job
-state, and the two fan-ins pass through a junction because a node side carries one edge.
-
-Nothing outside the platform box reaches Postgres or private storage. The API owns
-authentication, authorization, project sharing, document state and job state, and it is the
-only thing that reads a page image off disk. The public reader is the same API seen through a
-narrower door: it carries no session, and every route it can reach demands the document's
-secret share token or answers exactly as if the document did not exist.
-
-Where a job runs is decided once, at submission. Both execution hosts run the same package
-and claim work from the same durable job state, so a job that starts in the cloud and a job
-that starts on a laptop differ only in which host is recorded against it.
-
-Postgres `NOTIFY` wakes API listeners, which deliver job changes through SSE when a
-long-lived listener is available; the frontend falls back to polling when it is not. There is
-no email or push notification provider in the current implementation.
-
-## Read next
+## Explore Nomikos
 
 - [Use and host Nomikos](docs/guides/using-and-hosting.md)
 - [Models and datasets](docs/inference/models-and-datasets.md)
@@ -189,4 +137,20 @@ no email or push notification provider in the current implementation.
 - [Model publishing workflow](scripts/hf/README.md)
 - [Testing guide](docs/guides/testing.md)
 - [Production deployment](docs/deployment/production.md)
-- [Security notes](docs/security/)
+
+## Community
+
+Questions, script requests, and model contributions are welcome via [GitHub](https://github.com/kkkamur07/greekOCR), [Hugging Face](https://huggingface.co/nomikos-project), and the [website](https://nomikos.app).
+
+- [Website](https://nomikos.app) — product overview
+- [Application](https://app.nomikos.app) — hosted editor
+- [Hugging Face](https://huggingface.co/nomikos-project) — published weights and datasets
+- [Documentation index](docs/README.md) — guides, architecture, deployment, and security
+
+## Model Hosting
+
+Public weights are hosted on [Hugging Face](https://huggingface.co/nomikos-project) and cached locally under `~/.nomikos/hf/cache` on first inference. See [models and datasets](docs/inference/models-and-datasets.md) and the [publishing workflow](scripts/hf/README.md) for pinning, verification, and release steps.
+
+## License
+
+Nomikos is developed as an open-source platform for the Nomos research ecosystem. No `LICENSE` file is published in this snapshot — see the repository and linked documentation for current terms.
