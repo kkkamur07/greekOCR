@@ -238,18 +238,38 @@ describe("PageEditorPlaceholderPage transcription", () => {
         created_at: "2026-06-16T10:00:00Z",
       },
     ]);
-    mockedApi.listPartLines.mockResolvedValue([
+    const groundTruthOnLine = {
+      id: "line-tx-gt-1",
+      transcription_id: "ground-truth-1",
+      transcription_kind: "ground_truth",
+      text: "hand-checked text",
+      confidence: null,
+      character_confidences: null,
+    };
+    const oldModelOutput = {
+      id: "line-tx-model-1",
+      transcription_id: "model-1",
+      transcription_kind: "model",
+      text: "old ocr",
+      confidence: 0.8,
+      character_confidences: null,
+    };
+    const freshModelOutput = {
+      id: "line-tx-model-2",
+      transcription_id: "model-2",
+      transcription_kind: "model",
+      text: "fresh ocr",
+      confidence: 0.92,
+      character_confidences: null,
+    };
+    // Only the reload that follows the run can see the new layer, and the job
+    // has to have been polled for that layer to exist at all.
+    mockedApi.listPartLines.mockImplementation(async () => [
       line({
-        line_transcriptions: [
-          {
-            id: "line-tx-model-1",
-            transcription_id: "model-1",
-            transcription_kind: "model",
-            text: "old ocr",
-            confidence: 0.8,
-            character_confidences: null,
-          },
-        ],
+        line_transcriptions:
+          mockedApi.getJob.mock.calls.length > 0
+            ? [groundTruthOnLine, oldModelOutput, freshModelOutput]
+            : [groundTruthOnLine, oldModelOutput],
       }),
     ]);
     mockedApi.enqueueTranscribePart.mockResolvedValue({
@@ -298,6 +318,108 @@ describe("PageEditorPlaceholderPage transcription", () => {
     await waitFor(() => {
       expect(mockedApi.getJob).toHaveBeenCalledWith("job-ocr-1");
     });
+
+    // The run produced a suggestion, so the fresh output shows as model output
+    // while the researcher's Ground truth stays exactly as they left it.
+    await waitFor(() => {
+      expect(
+        screen.getByLabelText(/ocr model output for segment 1/i),
+      ).toHaveTextContent("fresh ocr");
+    });
+    expect(
+      screen.getByLabelText(/ground truth text for selected segment/i),
+    ).toHaveValue("hand-checked text");
+  });
+
+  it("offers the model output as a suggestion to accept while Ground truth is open", async () => {
+    mockedApi.getDocument.mockResolvedValue(DOCUMENT);
+    mockedApi.listTranscriptions.mockResolvedValue([
+      {
+        id: "ground-truth-1",
+        document_id: "doc-1",
+        name: "Ground truth",
+        kind: "ground_truth",
+        created_by_job_id: null,
+        created_at: "2026-06-16T10:00:00Z",
+      },
+      {
+        id: "model-1",
+        document_id: "doc-1",
+        name: "Model layer",
+        kind: "model",
+        created_by_job_id: "job-old",
+        created_at: "2026-06-16T10:01:00Z",
+      },
+    ]);
+    mockedApi.listPartLines.mockResolvedValue([
+      line({
+        line_transcriptions: [
+          {
+            id: "line-tx-model-1",
+            transcription_id: "model-1",
+            transcription_kind: "model",
+            text: "model suggestion",
+            confidence: 0.88,
+            character_confidences: null,
+          },
+        ],
+      }),
+    ]);
+
+    renderPageEditor();
+
+    fireEvent.click(await screen.findByLabelText(/^Segment 1/));
+    // Ground truth is the open layer and the segment has none yet, so the
+    // model output is there to be accepted rather than merely read.
+    fireEvent.click(await screen.findByRole("button", { name: /^accept$/i }));
+
+    await waitFor(() => {
+      expect(mockedApi.copyToGroundTruth).toHaveBeenCalledWith(
+        "project-1",
+        "doc-1",
+        "model-1",
+        { line_ids: ["line-1"] },
+      );
+    });
+  });
+
+  it("saves what the researcher typed instead of accepting the suggestion", async () => {
+    mockedApi.getDocument.mockResolvedValue(DOCUMENT);
+    mockedApi.listPartLines.mockResolvedValue([
+      line({
+        line_transcriptions: [
+          {
+            id: "line-tx-model-1",
+            transcription_id: "model-1",
+            transcription_kind: "model",
+            text: "model suggestion",
+            confidence: 0.88,
+            character_confidences: null,
+          },
+        ],
+      }),
+    ]);
+
+    renderPageEditor();
+
+    fireEvent.click(await screen.findByLabelText(/^Segment 1/));
+    fireEvent.change(
+      screen.getByLabelText(/approved text for selected segment/i),
+      { target: { value: "my own reading" } },
+    );
+    // Accepting here would throw the typing away, so the button saves it.
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+
+    await waitFor(() => {
+      expect(mockedApi.updateGroundTruthLineText).toHaveBeenLastCalledWith(
+        "project-1",
+        "doc-1",
+        "ground-truth-1",
+        "line-1",
+        { text: "my own reading" },
+      );
+    });
+    expect(mockedApi.copyToGroundTruth).not.toHaveBeenCalled();
   });
 
   it("surfaces Ground truth save API errors and keeps the typed text visible", async () => {

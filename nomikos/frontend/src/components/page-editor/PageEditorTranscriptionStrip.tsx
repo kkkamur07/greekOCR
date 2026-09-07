@@ -99,9 +99,21 @@ export function PageEditorTranscriptionStrip({
   const showOcrReview = Boolean(ocrReviewTranscription);
   const showApprovedEditor =
     Boolean(selectedSegmentNumber) && !showGroundTruthEditor && !showOcrReview;
+  /**
+   * Whether the footer offers to accept the model output as Ground truth.
+   *
+   * The output is a suggestion wherever it is shown, so the offer no longer
+   * waits for the model layer to be the selected one: a segment with no Ground
+   * truth yet gets "Accept" while Ground truth is the open layer. Once the
+   * researcher has typed into the box the button saves what they typed
+   * instead, because accepting there would throw that typing away.
+   */
   const canPromoteModelOutput = Boolean(
     modelOutputTranscription?.text &&
-    (selectedTranscriptionLayer?.kind === "model" || showOcrReview),
+    !showGroundTruthEditor &&
+    (selectedTranscriptionLayer?.kind === "model" ||
+      showOcrReview ||
+      approvedTextDraft.trim() === ""),
   );
 
   const onAccept = showGroundTruthEditor

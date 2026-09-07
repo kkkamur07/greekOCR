@@ -205,6 +205,8 @@ models:
     architecture: calamari    # calamari | blla-segment
     device: cpu               # compute hint (cpu | cuda)
     host_eligibility: local   # local | remote | any
+    line_crop: polygon-white  # required on transcribe: the crop function this model was trained on (ADR 0007)
+    line_crop_padding: 12     # required on transcribe: px the crop was widened by before masking (Greek uses 0)
     versions:
       stable:
         weights_source: hf://<namespace>/syriac-htr-calamari@stable

@@ -32,6 +32,33 @@ class RegistryArchitecture(StrEnum):
     blla_segment = "blla-segment"
 
 
+class LineCrop(StrEnum):
+    """How a transcribe model's line crops were cut when it was trained.
+
+    ``polygon_white`` is the recipe in
+    ``src/preprocessing_data/syriac/xml_to_data.py::crop_polygon``: the polygon's
+    bounding box, widened by the model's ``line_crop_padding`` and clamped to the
+    page, with every pixel outside the polygon painted white on the crop.
+
+    Every registry model uses it. What differs between them is the padding, not
+    the function, which is why that lives in its own registry field rather than
+    in another enum value here. Measured 2026-09-07 on the pages each model was
+    trained on, same ONNX in every run:
+
+    * ``greek-calamari-v1`` on the whole Grec1360 corpus (204 lines) reads 0/204
+      exact at padding 12 (CER 0.304) and 125/204 exact at padding 0 (CER 0.050).
+      Its finetuning crops were exported with no padding.
+    * ``armenian-calamari-v1`` on the full MS_UCLA_MS document reads 664/819
+      exact at padding 12.
+
+    The enum stays a single-value enum rather than collapsing to a bool because
+    the field then still names the convention, and a second convention (should a
+    future model arrive with one) is an added member rather than a schema change.
+    """
+
+    polygon_white = "polygon-white"
+
+
 class ComputeDevice(StrEnum):
     cpu = "cpu"
     cuda = "cuda"
@@ -98,6 +125,7 @@ __all__ = [
     "ImageBytes",
     "InferenceJobStatus",
     "InferenceTask",
+    "LineCrop",
     "MAX_GEOMETRY_POINTS",
     "MAX_KRAKEN_CEILING_POINTS",
     "MAX_LINE_TEXT_CHARS",

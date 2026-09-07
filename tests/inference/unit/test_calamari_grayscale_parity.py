@@ -111,8 +111,9 @@ def test_training_and_serving_produce_the_same_model_input(mode: str, image_byte
 # whose grayscale is a luminance intermediate inside a fog composite that never becomes
 # a model input tensor -- a false positive answerable only by growing the allowlist.
 # Extending the same scan to `nomikos_inference/` would have needed another entry on
-# identical terms (`architectures/calamari/preprocessing/geometry.py`), which
-# measures geometry rather than producing model input.
+# identical terms for the dewarping module that used to sit in
+# `architectures/calamari/preprocessing/`, which measured geometry rather than
+# producing model input; that module is now deleted (ADR 0007).
 #
 # The property it was reaching for -- training and serving derive the same luminance
 # from the same bytes -- is enforced above by
