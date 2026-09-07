@@ -13,8 +13,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Sync the nomos Hub collection from "
-            "nomikos_inference/publish/collection.yaml."
+            "Sync the nomos Hub collection from nomikos_inference/publish/collection.yaml."
         ),
     )
     parser.add_argument(
