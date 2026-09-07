@@ -145,7 +145,7 @@ Registry models resolve weights at runtime from:
 
 | Source | Example | Cache / path |
 |--------|---------|----------------|
-| Hub | `hf://nomikos-project/syriac-htr-calamari@stable` | `~/.nomikos/hf/cache/<registry_model_id>/<registry_tag>/` |
+| Hub | `hf://nomikos-project/greek-htr-calamari@stable` | `~/.nomikos/hf/cache/<registry_model_id>/<registry_tag>/` |
 | Local bundled (offline) | `file://local/syriac/calamari/v1/stable/best.pt` | `src/hf/local/...` |
 | BLLA segmentation | `hf://nomikos-project/segmentation-blla@stable` | `blla.onnx` in the Hub cache |
 
@@ -219,7 +219,10 @@ Job callbacks use a tagged output union: `output.kind` is either `segment` or `t
 
 `nomikos_inference/registry.yaml` lists available models and weight locations. Example entries:
 
-- `syriac-calamari-v1` - transcribe, Calamari architecture, pinned Hub revision and digest
+- `greek-calamari-v1`, `armenian-calamari-v1`, `syriac-calamari-v1` - transcribe,
+  Calamari architecture, one Hub repo and pinned revision + digest each. Same
+  graph, one codec per script, so the entries differ only in `weights_source`
+  and the pins.
 - `blla-segment` - segment, BLLA `blla.onnx` weights
 
 Weights are resolved at runtime from the Hub cache (`~/.nomikos/hf/cache/`) or, in a source

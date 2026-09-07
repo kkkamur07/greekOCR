@@ -14,13 +14,23 @@ geometry, preserves the legacy `kraken_ceiling` field, and simplifies polygons.
 
 ### Calamari HTR
 
-`syriac-calamari-v1` runs the Calamari graph on ONNX Runtime for line transcription:
+`greek-calamari-v1`, `armenian-calamari-v1` and `syriac-calamari-v1` run the
+Calamari graph on ONNX Runtime for line transcription. All three are the same
+topology, retrained per script:
 
 ```text
 CNN → max pooling → CNN → max pooling
-   → 200-unit bidirectional LSTM → dropout → linear CTC logits
+   → 200-unit bidirectional LSTM → dropout
+   → 200-unit bidirectional LSTM → linear CTC logits
    → greedy text decoding + character confidences
 ```
+
+The second recurrent layer is the only structural change from the first
+generation of these models, and it is invisible to the runtime: the codec, line
+height (48) and blank index travel in the graph's own `metadata_props`, so a
+deeper stack is a different set of weights and not a different adapter. What
+separates the three is the codec they were trained over: 259 characters for
+polytonic Greek, 96 for Armenian, 71 for Syriac.
 
 The loader validates the graph's own `calamari-onnx-v1` metadata - codec, line
 height, blank index - and verifies the configured artifact digest before opening
@@ -45,11 +55,11 @@ the product.
 | ID                   | Task       | Architecture     | Artifact                                                                                         |
 | -------------------- | ---------- | ---------------- | ------------------------------------------------------------------------------------------------ |
 | `blla-segment`     | Segment    | BLLA (ONNX Runtime) | `blla.onnx` from [segmentation repo](https://huggingface.co/nomikos-project/segmentation-blla) |
+| `greek-calamari-v1` | Transcribe | Calamari (ONNX Runtime) | `best.onnx` from the [Hugging Face checkpoint](https://huggingface.co/nomikos-project/greek-htr-calamari), pinned revision |
+| `armenian-calamari-v1` | Transcribe | Calamari (ONNX Runtime) | `best.onnx` from the [Hugging Face checkpoint](https://huggingface.co/nomikos-project/armenian-htr-calamari), pinned revision |
 | `syriac-calamari-v1` | Transcribe | Calamari (ONNX Runtime) | `best.onnx` from the [Hugging Face checkpoint](https://huggingface.co/nomikos-project/syriac-htr-calamari), pinned revision |
 
-Greek Calamari is commented out because its Hub repository and verified
-artifact are unavailable. Coptic, Armenian, and additional Greek models are
-expansion targets rather than shipped runtime models.
+Coptic is an expansion target rather than a shipped runtime model.
 
 New public models need a compatible adapter, immutable Hub revision, SHA-256
 digest, registry entry, platform catalog metadata, tests, and a declared host

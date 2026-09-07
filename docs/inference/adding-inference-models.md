@@ -46,11 +46,11 @@ Follow the **registry model id** convention:
 {script}-{architecture}-{model_version}
 ```
 
-Examples: `syriac-calamari-v1`, `blla-segment`.
+Examples: `greek-calamari-v1`, `armenian-calamari-v1`, `syriac-calamari-v1`, `blla-segment`.
 
 | Field | Meaning | Example |
 |-------|---------|---------|
-| **script** | Writing system / language family | `syriac`, `coptic` |
+| **script** | Writing system / language family | `greek`, `armenian`, `syriac` |
 | **architecture** | Runtime adapter | `calamari`, `blla-segment` |
 | **model_version** | Family generation | `v1`, `v2` |
 | **registry tag** | Named weight snapshot | `stable` (default) |
@@ -58,7 +58,7 @@ Examples: `syriac-calamari-v1`, `blla-segment`.
 **Hub repo slug** (separate from registry model id): `{script}-htr-{architecture}` → `syriac-htr-calamari`.
 
 **Platform `artifact_ref`** (Postgres): `registry://<registry_model_id>?tag=<registry_tag>`
-Example: `registry://syriac-calamari-v1?tag=stable`.
+Example: `registry://greek-calamari-v1?tag=stable`.
 
 ---
 
@@ -133,10 +133,13 @@ Full publish runbook: [`scripts/hf/README.md`](../../scripts/hf/README.md).
 ### Record immutable provenance for new Hub entries
 
 Before adding an `hf://` source to the Registry, resolve the public Hub tag to
-its 40-character commit and read the SHA-256 for the architecture-native Hub
-artifact. Record both values in the same Registry version entry. The runtime
-uses `hub_revision` when present and verifies `artifact_sha256` before loading
-or reusing cache contents.
+its 40-character commit and read the SHA-256 **of the published `.onnx`**, which
+is the file the runtime opens. It is not the digest of `best.pt`: ADR 0006 moved
+the pin from the native checkpoint to the exported graph, and the checkpoint is
+still published beside it at the same revision, so a repo listing offers you two
+plausible digests and only one of them is checked. Record both values in the
+same Registry version entry. The runtime uses `hub_revision` when present and
+verifies `artifact_sha256` before loading or reusing cache contents.
 
 Existing `hf://` entries without both provenance fields are accepted for
 migration compatibility and resolve from their `weights_source` tag. Do not add
@@ -238,14 +241,15 @@ The editor lists models from **`inference_models`**, not directly from `registry
 | Column | Value |
 |--------|-------|
 | `name` | Same as **registry model id** (unique) |
-| `provider` | e.g. `kraken`, `calamari`, `huggingface` |
+| `provider` | Architecture the row runs on: `calamari` for Calamari HTR, `kraken` for BLLA segmentation. A label for humans reading the table; nothing dispatches on it, and `list_models` only orders by it |
 | `task` | `segment` or `transcribe` |
 | `artifact_ref` | `registry://<registry_model_id>?tag=stable` |
 | `default_params` | JSON, e.g. `{"device": "cpu"}` |
 
 ### Development
 
-Extend [`scripts/platform/seed_dev_inference.py`](../../scripts/platform/seed_dev_inference.py) and run:
+Add the registry model id to `SEGMENT_MODELS` or `TRANSCRIBE_MODELS` in
+[`scripts/platform/seed_dev_inference.py`](../../scripts/platform/seed_dev_inference.py) and run:
 
 ```bash
 uv run --group platform python scripts/platform/seed_dev_inference.py
@@ -322,12 +326,19 @@ uv run --group platform --group inference pytest tests/nomikos/integration/test_
 
 ## Quick reference: new Calamari transcribe model
 
-1. Stage `best.pt` → `src/hf/staging/models/{script}/calamari/v1/stable/`
-2. `publish_model.py … --upload`
-3. Add block to `nomikos_inference/registry.yaml` with `hf://…` **weights_source**
-4. Upsert `InferenceModel` with `artifact_ref: registry://{id}?tag=stable`
+1. Stage `best.pt` → `src/hf/staging/models/{script}/calamari/v1/stable/`, then export `best.onnx` beside it
+2. `publish_model.py … --upload` (both files go up at one revision)
+3. Add block to `nomikos_inference/registry.yaml` with `hf://…` **weights_source**, `hub_revision`, and the `artifact_sha256` **of `best.onnx`**
+4. Add the id to `TRANSCRIBE_MODELS` in `scripts/platform/seed_dev_inference.py`, which upserts the `InferenceModel` with `provider: calamari` and `artifact_ref: registry://{id}?tag=stable`
 5. Run tests → deploy API → publish the package
 6. Agents carry the entry once upgraded; weights download on first use
+
+Re-pointing an existing id at a retrained model is the same six steps: the
+registry entry is edited in place rather than added, and the catalog row already
+exists, so the seed script rewrites it. What the old revision holds is
+irrelevant to the new one, and it keeps resolving for anything still pinned to
+it, which is why a stale pin fails by transcribing with last generation's
+weights rather than by erroring.
 
 ## Related docs
 
