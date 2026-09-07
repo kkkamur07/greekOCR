@@ -107,7 +107,8 @@ jobs:
     # it also means nothing in CI ever exercised the real Calamari/BLLA path - a
     # train/serve preprocessing skew could regress indefinitely without a red build.
     # This job closes that hole. It is deliberately kept off pull requests: it
-    # loads the checkpoints under src/hf/staging, which is minutes, not seconds.
+    # loads the checkpoints under nomikos_inference/publish/artifacts/staging, which
+    # is minutes, not seconds.
     #
     # This used to be the ONNX-vs-Kraken parity job. ADR 0004 left one runtime,
     # so there is nothing to be at parity with; what remains worth running on a
@@ -166,7 +167,8 @@ jobs:
       # Six of the seven export gates compare logits and need only the two
       # checkpoints tracked in git. The seventh - the Calamari graph-vs-artifact
       # gate - is the only one that compares decoded *text*, and it skips unless
-      # the published pair is cached under `src/hf/cache/`, which is gitignored.
+      # the published pair is cached under
+      # `nomikos_inference/publish/artifacts/cache/`, which is gitignored.
       # On a clean runner that skip is permanent, so the single most meaningful
       # assertion in the directory would go on not running even after wiring the
       # directory in. Fetch the pair first. The revision is read out of
@@ -181,7 +183,9 @@ jobs:
           registry = yaml.safe_load(pathlib.Path("nomikos_inference/registry.yaml").read_text())
           pinned = registry["models"]["syriac-calamari-v1"]["versions"]["stable"]
           repo = pinned["weights_source"].removeprefix("hf://").split("@")[0]
-          destination = pathlib.Path("src/hf/cache/syriac-calamari-v1/stable")
+          destination = pathlib.Path(
+              "nomikos_inference/publish/artifacts/cache/syriac-calamari-v1/stable"
+          )
           destination.mkdir(parents=True, exist_ok=True)
           for artifact in ("best.pt", "best.onnx"):
               hf_hub_download(

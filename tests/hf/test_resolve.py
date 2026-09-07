@@ -14,7 +14,9 @@ from nomikos_inference.hub.manifest import load_manifest
 from nomikos_inference.hub.uri import parse_hf_weights_uri
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-MOCK_CHECKPOINT = REPO_ROOT / "src/hf/local/syriac/calamari/v1/stable/best.pt"
+MOCK_CHECKPOINT = (
+    REPO_ROOT / "nomikos_inference/publish/artifacts/local/syriac/calamari/v1/stable/best.pt"
+)
 # A stand-in for the graph, not a real one: nothing on this path opens a
 # session, it hashes bytes and moves files. What matters is that the mock
 # snapshot puts *both* formats in the cache directory, the way a real

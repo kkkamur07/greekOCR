@@ -74,11 +74,17 @@ data/
 
 # Hugging Face resolver cache. The default cache root moved to
 # ~/.nomikos/hf/cache when hf:// resolution moved into the published package,
-# but HF_CACHE_ROOT can still point here and older checkouts have one.
+# but HF_CACHE_ROOT can still point here, CI fetches the published Calamari pair
+# here for the graph-vs-artifact gate, and older checkouts have one.
 # nomikos_inference/hub/cache.py shutil.rmtree()s the model directories under it
 # whenever a cached artifact fails verification, so a tracked file in this tree
 # is deleted by the application at runtime. Weights are resolved from the Hub
 # on demand and must never be committed.
+#
+# It moved with the rest of `src/hf/` into the package directory; the old path
+# stays listed so a checkout that predates the move does not start offering its
+# cache to `git add`.
+/nomikos_inference/publish/artifacts/cache/
 /src/hf/cache/
 
 # Build output of the published `nomikos-inference` wheel.
@@ -107,7 +113,7 @@ graphify-out/
 # pinned revision + digest. Committing a copy would create a third version that
 # can drift from both - which is the exact defect ADR 0006 had to fix, where the
 # published blla.onnx no longer matched what the exporter produced.
-src/hf/staging/**/*.onnx
+nomikos_inference/publish/artifacts/staging/**/*.onnx
 
 # Database dumps kept for rollback. These contain real user rows (auth records,
 # request IPs), so they must never reach the repo.

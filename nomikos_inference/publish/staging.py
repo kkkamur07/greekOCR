@@ -5,11 +5,10 @@ from __future__ import annotations
 import csv
 import re
 from dataclasses import dataclass
-from pathlib import Path
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
-from src.hf.paths import DEFAULT_STAGING_ROOT
 from nomikos_inference.hub.artifacts import find_hub_artifact
+from nomikos_inference.publish.paths import DEFAULT_STAGING_ROOT
 
 
 @dataclass(frozen=True, slots=True)
@@ -285,7 +284,7 @@ This **Hub dataset repo** holds training/evaluation material only. Inference loa
 
 One dataset can support multiple future **registry model ids**; it is not itself a
 Registry entry and it must not contain inference weights. After publishing a new
-model generation, update `src/hf/publish/collection.yaml` so the `nomos` **Hub
+model generation, update `nomikos_inference/publish/collection.yaml` so the `nomos` **Hub
 collection** lists both the dataset and the corresponding **Hub model repo**.
 
 ## Staging layout
@@ -293,7 +292,7 @@ collection** lists both the dataset and the corresponding **Hub model repo**.
 Stage publish-ready files under:
 
 ```
-src/hf/staging/datasets/{ref.dataset_slug}/
+nomikos_inference/publish/artifacts/staging/datasets/{ref.dataset_slug}/
   images/
   labels.csv
 ```

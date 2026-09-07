@@ -6,13 +6,13 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from src.hf.publish.client import PublishClient
-from src.hf.publish.staging import (
+from nomikos_inference.publish.client import PublishClient
+from nomikos_inference.publish.staging import (
   DatasetStagingRef,
   build_dataset_readme,
   dataset_staging_dir,
-  validate_dataset_staging,
   validate_dataset_slug,
+  validate_dataset_staging,
 )
 
 

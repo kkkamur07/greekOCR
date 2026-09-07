@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sync src/hf/publish/collection.yaml to the Hugging Face Hub collection."""
+"""Sync nomikos_inference/publish/collection.yaml to the Hugging Face Hub collection."""
 
 from __future__ import annotations
 
@@ -12,12 +12,15 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Sync the nomos Hub collection from src/hf/publish/collection.yaml.",
+        description=(
+            "Sync the nomos Hub collection from "
+            "nomikos_inference/publish/collection.yaml."
+        ),
     )
     parser.add_argument(
         "--collection-path",
         type=Path,
-        default=REPO_ROOT / "src" / "hf" / "publish" / "collection.yaml",
+        default=REPO_ROOT / "nomikos_inference" / "publish" / "collection.yaml",
         help="Path to collection.yaml",
     )
     parser.add_argument(
@@ -31,7 +34,7 @@ def _parse_args() -> argparse.Namespace:
 def main() -> int:
     args = _parse_args()
 
-    from src.hf.publish import (
+    from nomikos_inference.publish import (
         get_default_publish_client,
         plan_collection_sync,
         sync_collection,

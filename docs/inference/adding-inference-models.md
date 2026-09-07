@@ -6,7 +6,7 @@ End-to-end checklist for shipping a new **segment** or **transcribe** model to p
 |-------|---------|------------|
 | **`nomikos_inference/registry.yaml`** | Runtime catalog: task, architecture, weights URI, `host_eligibility` | Git + API deploy |
 | **Postgres `inference_models`** | Editor model picker (`GET /inference/models`) | Seed script or DB insert |
-| **Hub (or bundled weights)** | Checkpoint bytes | `publish_model.py` or `src/hf/local/` |
+| **Hub (or bundled weights)** | Checkpoint bytes | `publish_model.py` or `nomikos_inference/publish/artifacts/local/` |
 
 Vocabulary: [`nomikos_inference/CONTEXT.md`](../../nomikos_inference/CONTEXT.md).
 
@@ -14,7 +14,7 @@ Vocabulary: [`nomikos_inference/CONTEXT.md`](../../nomikos_inference/CONTEXT.md)
 
 ```
 Train / export checkpoint
-    → stage under src/hf/staging/…
+    → stage under nomikos_inference/publish/artifacts/staging/…
     → publish to Hub (hf://…)
     → add entry to nomikos_inference/registry.yaml
     → add InferenceModel row in Postgres
@@ -72,7 +72,7 @@ Example: `registry://syriac-calamari-v1?tag=stable`.
    refuses a staging directory that has no `.onnx` in it:
 
    ```
-   src/hf/staging/models/{script}/calamari/{model_version}/{registry_tag}/
+   nomikos_inference/publish/artifacts/staging/models/{script}/calamari/{model_version}/{registry_tag}/
      best.pt
      best.onnx
    ```
@@ -81,7 +81,7 @@ Example: `registry://syriac-calamari-v1?tag=stable`.
    uv run --group export python -c "
    from pathlib import Path
    from src.model.inference_export.calamari import export_calamari_onnx
-   d = Path('src/hf/staging/models/{script}/calamari/{model_version}/{registry_tag}')
+   d = Path('nomikos_inference/publish/artifacts/staging/models/{script}/calamari/{model_version}/{registry_tag}')
    export_calamari_onnx(d / 'best.pt', d / 'best.onnx')"
    ```
 
@@ -111,7 +111,7 @@ Example: `registry://syriac-calamari-v1?tag=stable`.
    PYTHONPATH=. python scripts/hf/fetch_model.py syriac-calamari-v1 --registry-tag stable
    ```
 
-4. Optional: add the Hub repo to [`src/hf/publish/collection.yaml`](../../src/hf/publish/collection.yaml) and run `sync_collection.py`.
+4. Optional: add the Hub repo to [`nomikos_inference/publish/collection.yaml`](../../nomikos_inference/publish/collection.yaml) and run `sync_collection.py`.
 
 Full publish runbook: [`scripts/hf/README.md`](../../scripts/hf/README.md).
 
@@ -148,7 +148,7 @@ The BLLA runtime loads `blla.onnx` from the registry-pinned
 uv run --group export python -c "
 from pathlib import Path
 from src.model.inference_export.blla import export_blla_onnx
-d = Path('src/hf/staging/models/segmentation/blla/v1/stable')
+d = Path('nomikos_inference/publish/artifacts/staging/models/segmentation/blla/v1/stable')
 export_blla_onnx(d / 'blla.safetensors', d / 'blla.onnx', example_width=64)"
 ```
 
@@ -164,13 +164,15 @@ real weights.
 
 ### Local / offline dev
 
-Point `weights_source` at bundled files under `src/hf/local/`:
+Point `weights_source` at bundled files under `nomikos_inference/publish/artifacts/local/`:
 
 ```yaml
 weights_source: file://local/syriac/calamari/v1/stable/best.pt
 ```
 
-(`file://` paths are relative to `src/hf/`.)
+(`file://local/…` paths are relative to `nomikos_inference/publish/artifacts/`, which
+is in the package directory but excluded from the wheel, so an installed package
+resolves none of them and says so.)
 
 ---
 
@@ -307,7 +309,7 @@ uv run --group platform --group inference pytest tests/nomikos/integration/test_
 
 ## Quick reference: new Calamari transcribe model
 
-1. Stage `best.pt` → `src/hf/staging/models/{script}/calamari/v1/stable/`
+1. Stage `best.pt` → `nomikos_inference/publish/artifacts/staging/models/{script}/calamari/v1/stable/`
 2. `publish_model.py … --upload`
 3. Add block to `nomikos_inference/registry.yaml` with `hf://…` **weights_source**
 4. Upsert `InferenceModel` with `artifact_ref: registry://{id}?tag=stable`

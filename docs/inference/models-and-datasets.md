@@ -63,7 +63,7 @@ The intended expert-in-the-loop pipeline is:
 2. Pair each segment with a transcription.
 3. Correct and review the text as ground truth.
 4. Export processed line images and transcription files.
-5. Stage labelled crops under `src/hf/staging/datasets/`.
+5. Stage labelled crops under `nomikos_inference/publish/artifacts/staging/datasets/`.
 6. Validate and publish a separate Hugging Face dataset repository.
 7. Train or fine-tune a script-specific model.
 8. Publish verified weights and add the model to the registry.
@@ -71,7 +71,7 @@ The intended expert-in-the-loop pipeline is:
 The staging layout is:
 
 ```text
-src/hf/staging/datasets/<dataset-slug>/
+nomikos_inference/publish/artifacts/staging/datasets/<dataset-slug>/
   images/
     manuscript-001/line-0001.png
   labels.csv

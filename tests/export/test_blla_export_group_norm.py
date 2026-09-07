@@ -18,7 +18,11 @@ torch = pytest.importorskip("torch")
 from src.model.inference_export.blla import export_blla_onnx  # noqa: E402
 from src.model.inference_export.blla.model import BLLATorchModel  # noqa: E402
 
-BLLA_CHECKPOINT = REPO_ROOT / "src/hf/staging/models/segmentation/blla/v1/stable/blla.safetensors"
+BLLA_CHECKPOINT = (
+    REPO_ROOT
+    / "nomikos_inference/publish/artifacts/staging"
+    / "models/segmentation/blla/v1/stable/blla.safetensors"
+)
 
 
 def test_export_swap_leaves_the_runtime_model_untouched() -> None:

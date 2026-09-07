@@ -146,7 +146,7 @@ Registry models resolve weights at runtime from:
 | Source | Example | Cache / path |
 |--------|---------|----------------|
 | Hub | `hf://nomikos-project/syriac-htr-calamari@stable` | `~/.nomikos/hf/cache/<registry_model_id>/<registry_tag>/` |
-| Local bundled (offline) | `file://local/syriac/calamari/v1/stable/best.pt` | `src/hf/local/...` |
+| Local bundled (offline) | `file://local/syriac/calamari/v1/stable/best.pt` | `publish/artifacts/local/...` |
 | BLLA segmentation | `hf://nomikos-project/segmentation-blla@stable` | `blla.onnx` in the Hub cache |
 
 No local weight checkout is required for the default Hub models; they download from their public repos on first use into `HF_CACHE_ROOT`.
@@ -176,7 +176,7 @@ group; `tests/inference/unit/test_architecture_contract.py` asserts nothing unde
 
 Training and vendored TensorFlow Calamari: [`docs/guides/learnings.md`](../docs/guides/learnings.md#calamari-training).
 
-**Hub integration:** `hf://` weight-source resolution, Hub cache, and digest verification live *inside* this package at `nomikos_inference/hub/` - they are on the runtime path, so they ship in the published wheel. Publish-side tooling (staging tree, model cards, collection sync) stays under `src/hf/` and `scripts/hf/`, which never ship. See `nomikos_inference/CONTEXT.md` for domain terminology and [`scripts/hf/README.md`](../scripts/hf/README.md) for the Hub publish runbook.
+**Hub integration:** `hf://` weight-source resolution, Hub cache, and digest verification live *inside* this package at `nomikos_inference/hub/` - they are on the runtime path, so they ship in the published wheel. Publish-side tooling (staging tree, model cards, collection sync) is `nomikos_inference/publish/` and `scripts/hf/`, which never ship: the first sits in this directory so that it imports like everything else here, and is named in the `exclude` list of both build targets in `pyproject.toml` so that being in the directory does not make it part of the wheel. See `nomikos_inference/CONTEXT.md` for domain terminology and [`scripts/hf/README.md`](../scripts/hf/README.md) for the Hub publish runbook.
 
 ## Run from a source checkout
 
@@ -223,7 +223,8 @@ Job callbacks use a tagged output union: `output.kind` is either `segment` or `t
 - `blla-segment` - segment, BLLA `blla.onnx` weights
 
 Weights are resolved at runtime from the Hub cache (`~/.nomikos/hf/cache/`) or, in a source
-checkout only, local bundled paths (`src/hf/local/`).
+checkout only, local bundled paths (`nomikos_inference/publish/artifacts/local/`, which an
+install does not have).
 New `hf://` entries should include both `hub_revision` and `artifact_sha256`; see
 the migration note in [`docs/inference/adding-inference-models.md`](../docs/inference/adding-inference-models.md).
 

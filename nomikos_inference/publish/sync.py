@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from src.hf.publish.client import PublishClient
-from src.hf.publish.collection import CollectionSpec, load_collection_spec
+from nomikos_inference.publish.client import PublishClient
+from nomikos_inference.publish.collection import CollectionSpec, load_collection_spec
 
 
 @dataclass(frozen=True, slots=True)

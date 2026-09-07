@@ -57,17 +57,22 @@ nomikos_inference/weights
 !nomikos_inference/weights/
 !nomikos_inference/weights/__init__.py
 
-# Only the Hub resolver is needed by the inference image.  Docker ignore
-# negations must re-include both ancestor directories and concrete files.
-# Keep local caches, staging trees, publishing helpers, and bundled weights
-# outside the build context.
+# The research tree is not needed by either image. The negations that used to
+# re-include `src/hf/` are gone with the directory itself: `hf://` resolution is
+# `nomikos_inference/hub/` and has been since ADR 0002, and everything else that
+# was under `src/hf/` now lives under `nomikos_inference/publish/`.
 src/**
 !src/
-!src/hf/
-!src/hf/__init__.py
-!src/hf/paths.py
-!src/hf/resolve/
-!src/hf/resolve/**
+
+# Publish-side tooling and the blob trees beneath it. It sits inside
+# `nomikos_inference/` so that it imports like the rest of the repository, which
+# means the blanket re-include of `nomikos_inference/` above would otherwise pull
+# ~26 MB of staged checkpoints and bundled weights into the context. Same
+# reasoning as the `exclude` list in pyproject.toml: inside the package directory
+# is not inside what ships. The training-stack predictors go with it - neither
+# image runs a trainer.
+nomikos_inference/publish/
+nomikos_inference/predictors/
 
 # Frontend is built from nomikos/ context; exclude from repo-root API/inference builds
 nomikos/frontend/

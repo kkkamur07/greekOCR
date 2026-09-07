@@ -2,19 +2,19 @@
 
 This directory holds publish-ready labelled manuscript line crops for **Hub
 dataset repos**. It does not hold inference checkpoints: those belong in the
-separate model staging tree at `src/hf/staging/models/`.
+separate model staging tree at `../models/`.
 
 Create one directory per **Hub dataset slug**:
 
 ```text
-src/hf/staging/datasets/{script}-manuscript-lines/
-src/hf/staging/datasets/{script}-{corpus}-htr-lines/
+nomikos_inference/publish/artifacts/staging/datasets/{script}-manuscript-lines/
+nomikos_inference/publish/artifacts/staging/datasets/{script}-{corpus}-htr-lines/
 ```
 
 For example:
 
 ```text
-src/hf/staging/datasets/greek-manuscript-lines/
+nomikos_inference/publish/artifacts/staging/datasets/greek-manuscript-lines/
   images/
     ms-001/
       line-0001.png

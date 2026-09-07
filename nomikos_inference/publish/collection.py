@@ -8,7 +8,7 @@ from typing import Any
 
 import yaml
 
-from src.hf.paths import DEFAULT_COLLECTION_PATH
+from nomikos_inference.publish.paths import DEFAULT_COLLECTION_PATH
 
 
 @dataclass(frozen=True, slots=True)

@@ -27,8 +27,12 @@ def test_the_published_graph_and_artifact_decode_the_same_line() -> None:
     from nomikos_inference.architectures.calamari.adapter import _decode_greedy
     from src.model.inference_export.calamari import load_calamari_checkpoint
 
-    checkpoint = REPO_ROOT / "src/hf/cache/syriac-calamari-v1/stable/best.pt"
-    artifact = REPO_ROOT / "src/hf/cache/syriac-calamari-v1/stable/best.onnx"
+    checkpoint = (
+        REPO_ROOT / "nomikos_inference/publish/artifacts/cache/syriac-calamari-v1/stable/best.pt"
+    )
+    artifact = (
+        REPO_ROOT / "nomikos_inference/publish/artifacts/cache/syriac-calamari-v1/stable/best.onnx"
+    )
     if not (checkpoint.is_file() and artifact.is_file()):
         pytest.skip("published Calamari artifacts are not cached locally")
 

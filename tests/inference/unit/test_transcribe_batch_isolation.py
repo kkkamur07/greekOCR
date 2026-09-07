@@ -32,7 +32,8 @@ from tests.fixtures.paths import TRANSCRIBE_LINE
 # these two real-weights cases skip in a checkout that has not fetched it; every
 # other case here injects failures at the batch seam and needs no artifact.
 CALAMARI_ARTIFACT = (
-    Path(__file__).resolve().parents[3] / "src/hf/cache/syriac-calamari-v1/stable/best.onnx"
+    Path(__file__).resolve().parents[3]
+    / "nomikos_inference/publish/artifacts/cache/syriac-calamari-v1/stable/best.onnx"
 )
 requires_artifact = pytest.mark.skipif(
     not CALAMARI_ARTIFACT.is_file(), reason="published Calamari artifact is not cached locally"

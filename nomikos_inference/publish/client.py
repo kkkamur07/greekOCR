@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Protocol
+from typing import Literal, Protocol
+
+# The two item kinds the `nomos` **Hub collection** holds. Narrower than `str`
+# because `HfApi.add_collection_item` types this parameter as a Literal, and
+# a plain `str` here only moved the mismatch to the one call site that cannot
+# check it. `sync.py` passes these two spellings and nothing else.
+CollectionItemType = Literal["model", "dataset"]
 
 
 class PublishClient(Protocol):
@@ -47,7 +53,7 @@ class PublishClient(Protocol):
     collection_slug: str,
     *,
     item_id: str,
-    item_type: str,
+    item_type: CollectionItemType,
     note: str | None = None,
   ) -> None: ...
 
@@ -112,7 +118,7 @@ class MockPublishClient:
     collection_slug: str,
     *,
     item_id: str,
-    item_type: str,
+    item_type: CollectionItemType,
     note: str | None = None,
   ) -> None:
     self.collection_items.append((collection_slug, item_id, item_type, note))
@@ -206,7 +212,7 @@ class HuggingFacePublishClient:
     collection_slug: str,
     *,
     item_id: str,
-    item_type: str,
+    item_type: CollectionItemType,
     note: str | None = None,
   ) -> None:
     from huggingface_hub import HfApi

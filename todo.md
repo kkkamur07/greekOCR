@@ -17,7 +17,8 @@ The `feat/todo-sweep` branch is merged to `main`; what follows is the open backl
 | `ruff check . src/model/inference_export` | All checks passed |
 | `npm run check:api` | exit 0 |
 
-The 7 skips are the published-artifact assertions, which need `src/hf/cache/`. That
+The 7 skips are the published-artifact assertions, which need
+`nomikos_inference/publish/artifacts/cache/` (`src/hf/cache/` when this was written). That
 directory does not exist in a fresh worktree. **Run them in the main checkout before
 trusting anything about the published `blla.onnx`** — a half-landed exporter change would
 be silently green here.

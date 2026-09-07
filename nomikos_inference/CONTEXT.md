@@ -43,8 +43,8 @@ The single-segment name of a **Hub dataset repo**, optimized for search: `{scrip
 _Avoid_: mirroring registry model id, generic `dataset-v1`
 
 **Hub collection**:
-A Hugging Face collection grouping **Hub model repos** and **Hub dataset repos** for discovery. Source of truth: `src/hf/publish/collection.yaml`; synced via `scripts/hf/sync_collection.py`. Collection slug: `nomos`.
-_Avoid_: monorepo, model bundle
+A Hugging Face collection grouping **Hub model repos** and **Hub dataset repos** for discovery. Source of truth: `nomikos_inference/publish/collection.yaml`; synced via `scripts/hf/sync_collection.py`. Collection slug: `nomos`.
+_Avoid_: monorepo, model bundle, src/hf/publish/collection.yaml (pre-move location)
 
 **Hub revision**:
 The immutable 40-character git commit on a **Hub model repo** selected by a **registry tag**. The tag remains a human-facing selector in the **weights source**, while the registry records its resolved commit separately.
@@ -59,24 +59,24 @@ The required 64-character SHA-256 digest for the architecture-native **Hub artif
 _Avoid_: directory hash alone, unverified download
 
 **Local bundled weights**:
-Checkpoint files under `src/hf/local/` used for offline dev and Docker without Hub access. Referenced by `file://local/...` **weights source** URIs relative to `src/hf/`. A source-checkout affordance only: they are not shipped in the published package, which resolves weights by `hf://`. Override the root with `NOMIKOS_LOCAL_WEIGHTS_ROOT`.
-_Avoid_: dev weights, nomikos_inference/weights
+Checkpoint files under `nomikos_inference/publish/artifacts/local/` used for offline dev and images built without Hub access. Referenced by `file://local/...` **weights source** URIs relative to `nomikos_inference/publish/artifacts/`. A source-checkout affordance only: the directory is excluded from both build targets, so an installed package has no such root and `local_bundled_root()` refuses rather than resolving inside site-packages. Override the root with `NOMIKOS_LOCAL_WEIGHTS_ROOT`.
+_Avoid_: dev weights, nomikos_inference/weights, src/hf/local (pre-move location)
 
 **Hub staging tree**:
-Publish-ready **Hub artifact**s under `src/hf/staging/` (models and datasets) before upload scripts push to the Hub.
-_Avoid_: hf repo (ambiguous with Hub remote repo)
+Publish-ready **Hub artifact**s under `nomikos_inference/publish/artifacts/staging/` (models and datasets) before upload scripts push to the Hub.
+_Avoid_: hf repo (ambiguous with Hub remote repo), src/hf/staging (pre-move location)
 
 **Hub cache**:
 Downloaded **Hub artifact**s at runtime under `~/.nomikos/hf/cache/<registry_model_id>/<registry_tag>/` (override: `HF_CACHE_ROOT`). It lives in the researcher's home directory, not beside the code, because **Hub integration** ships inside the installed package. Reused only when required files exist and a manifest matches the immutable **Hub revision** and **artifact SHA-256**.
-_Avoid_: runtime weight cache, nomikos_inference/weights/cache, src/hf/cache (pre-package layout)
+_Avoid_: runtime weight cache, nomikos_inference/weights/cache, src/hf/cache (pre-package layout), nomikos_inference/publish/artifacts/cache (a CI and test fetch target under `HF_CACHE_ROOT`, not the default root)
 
 **Hub cache manifest**:
 An integrity record (e.g. `.hub-manifest.json`) stored alongside cached **Hub artifact**s. It records the Hub repo, immutable **Hub revision**, artifact path, and **artifact SHA-256**; all must match before cache reuse.
 _Avoid_: revision file alone (insufficient when artifact bytes change)
 
 **Hub integration**:
-Python code at `nomikos_inference/hub/` that resolves `hf://` URIs, checks **Hub cache**, verifies **artifact SHA-256**, and downloads missing artifacts. It lives inside the published package because it is on the runtime path (ADR 0002). Publish-side code under `src/hf/` reuses it; the reverse dependency does not exist.
-_Avoid_: huggingface module (too generic), src/hf/resolve (pre-package location)
+Python code at `nomikos_inference/hub/` that resolves `hf://` URIs, checks **Hub cache**, verifies **artifact SHA-256**, and downloads missing artifacts. It lives inside the published package because it is on the runtime path (ADR 0002). Publish-side code under `nomikos_inference/publish/` reuses it; the reverse dependency does not exist.
+_Avoid_: huggingface module (too generic), src/hf/resolve (pre-package location), nomikos_inference/publish (that is the publish side, and it is excluded from the wheel)
 
 **Published package**:
 The one distribution, `nomikos-inference`, carrying the inference library, **Hub integration**, and the `nomikos` console entry point. A researcher's laptop and a hosted worker install the same package (ADR 0002), so there is no version-compatibility matrix between components that always ship together. Built from the repository root; the wheel is now the whole of `nomikos_inference/`, because the loopback HTTP surfaces it used to exclude were deleted (#60) rather than merely held out of the build.
@@ -159,11 +159,11 @@ _Avoid_: org (when meaning the namespace generically)
 - The **Registry** maps each **registry model id** + **registry tag** to one **weights source**
 - One **Hub model repo** corresponds to one task/architecture pair; HTR uses `{script}-htr-{architecture}` and BLLA segmentation uses `segmentation-blla`
 - **Registry model id** = `{script}-{architecture}-{model_version}`; maps to one **Hub repo slug** + **model version**
-- Local **Hub staging tree**: `src/hf/staging/models/{script}/{architecture}/{model_version}/{registry_tag}/`
+- Local **Hub staging tree**: `nomikos_inference/publish/artifacts/staging/models/{script}/{architecture}/{model_version}/{registry_tag}/`
 - **Hub cache**: `~/.nomikos/hf/cache/{registry_model_id}/{registry_tag}/`
 - **Device credential file**: `~/.nomikos/device.json` - the same home-directory root as the **Hub cache**, one **device token** per machine
-- **Local bundled weights**: `src/hf/local/{script}/{architecture}/{model_version}/{registry_tag}/`
-- The **Hub staging tree** and **Local bundled weights** live under `src/hf/`; the **Hub cache** is in the researcher's home directory and **Hub integration** code is in the package
+- **Local bundled weights**: `nomikos_inference/publish/artifacts/local/{script}/{architecture}/{model_version}/{registry_tag}/`
+- The **Hub staging tree** and **Local bundled weights** live under `nomikos_inference/publish/artifacts/`, which is inside the package directory and outside both build targets; the **Hub cache** is in the researcher's home directory and **Hub integration** code is in the package and in the wheel
 - **Hub cache** reuse requires matching **Hub cache manifest** hash, not just present files
 - **Hub integration** lazy-fetches at inference; `scripts/hf/fetch_model.py` for explicit prefetch
 - One **registry tag** records one immutable **Hub revision** on that repo
@@ -177,7 +177,7 @@ _Avoid_: org (when meaning the namespace generically)
 - Every **claim** states which agent version is calling; below the **version floor** it is refused before it is authenticated, so a refused agent also stops reporting **capacity** and submission announces no host rather than creating pages nobody may claim
 - The **launch check** asks for the same verdict with no page attached (`GET /device/v1/agent/version`), so an agent learns it is below the **version floor** while nothing is in flight; it runs once per process and has no call site inside the **claim** loop
 - Pairing writes one **device credential file** per machine; the **confirmation code** is printed before the wait, and the pairing URL before any browser is opened
-- A **Hub collection** (`nomos`) links to many **Hub model repos** and **Hub dataset repos**; defined in `src/hf/publish/collection.yaml`
+- A **Hub collection** (`nomos`) links to many **Hub model repos** and **Hub dataset repos**; defined in `nomikos_inference/publish/collection.yaml`
 
 ## Example dialogue
 
@@ -209,14 +209,21 @@ _Avoid_: org (when meaning the namespace generically)
 - Runtime cache: `~/.nomikos/hf/cache/<registry_model_id>/<registry_tag>/`
 - **CLI** (`nomikos_inference/cli/`): the only entry point a researcher has. `nomikos pair` and `nomikos version` (#56), `nomikos run` (#57), `nomikos upgrade` (#58). `pair` runs the pairing protocol above and writes the **device credential file**; `version` reports what the **version floor** will read, and asks the platform nothing; `upgrade` is the **launch check** run on demand, and prints nothing when this agent is current. `run` is the **claim** loop: one page in flight, fetched through the **signed page image link**, executed by the same `run_model` the platform's own worker calls, and ended through the existing job callback - `--exit-when-empty` for a script, waiting otherwise. `run` is also the only command that claims, so it is the only one the launch check gates, and it runs that check before its first claim and never again. A hosted **inference agent** runs the same loop with a **service credential** in `NOMIKOS_SERVICE_TOKEN` and a short poll. The platform base URL comes from `NOMIKOS_API_URL` or `--api-url`.
 
-### Hub layout (`src/hf/`)
+### Hub layout
 
-| Piece | Location |
-|-------|----------|
-| `hf://` resolution, download, cache manifest | `nomikos_inference/hub/` (published package) |
-| Publish staging validation, model cards, collection sync | `src/hf/publish/` |
-| Local bundled weights for offline dev | `src/hf/local/` |
-| Publish-ready staging tree | `src/hf/staging/` |
-| Hub runtime cache | `~/.nomikos/hf/cache/` |
-| Collection metadata | `src/hf/publish/collection.yaml` |
-| CLI entrypoints | `scripts/hf/` |
+Every path below except the Hub runtime cache is now under `nomikos_inference/`,
+which is a statement about the import root and not about the wheel. Only the
+first row ships: `pyproject.toml` excludes `nomikos_inference/publish` from the
+wheel and the sdist, so the published file listing is the same as it was when
+these lived under `src/hf/`.
+
+| Piece | Location | Ships? |
+|-------|----------|--------|
+| `hf://` resolution, download, cache manifest | `nomikos_inference/hub/` | yes |
+| Publish staging validation, model cards, collection sync | `nomikos_inference/publish/` | no |
+| Local bundled weights for offline dev | `nomikos_inference/publish/artifacts/local/` | no |
+| Publish-ready staging tree | `nomikos_inference/publish/artifacts/staging/` | no |
+| Training-stack predictors (the export *input*, not the runtime) | `nomikos_inference/predictors/` | no |
+| Hub runtime cache | `~/.nomikos/hf/cache/` | n/a |
+| Collection metadata | `nomikos_inference/publish/collection.yaml` | no |
+| CLI entrypoints | `scripts/hf/` | no |
