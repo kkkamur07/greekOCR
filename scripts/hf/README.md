@@ -4,19 +4,19 @@ Operator tooling for publishing inference weights and datasets from the **Hub st
 
 ## Hub staging tree
 
-Publish-ready artifacts live under `src/hf/staging/` before upload:
+Publish-ready artifacts live under `nomikos_inference/publish/artifacts/staging/` before upload:
 
 | Kind | Path |
 |------|------|
-| **Hub model repo** weights | `src/hf/staging/models/{script}/{architecture}/{model_version}/{registry_tag}/` |
-| **Hub dataset repo** crops | `src/hf/staging/datasets/{hub-dataset-slug}/` |
+| **Hub model repo** weights | `nomikos_inference/publish/artifacts/staging/models/{script}/{architecture}/{model_version}/{registry_tag}/` |
+| **Hub dataset repo** crops | `nomikos_inference/publish/artifacts/staging/datasets/{hub-dataset-slug}/` |
 
 ### Model layout (Calamari)
 
 Place architecture-native **Hub artifact** files at the staging leaf, for example:
 
 ```
-src/hf/staging/models/greek/calamari/v1/stable/
+nomikos_inference/publish/artifacts/staging/models/greek/calamari/v1/stable/
   best.pt             # Calamari PyTorch checkpoint - the export input
   best.onnx           # the runtime **Hub artifact** (ADR 0006)
 ```
@@ -44,7 +44,7 @@ hf://<namespace>/<hub-repo-slug>@<registry-tag>
 Stage labelled line crops under a searchable **Hub dataset slug** (`{script}-manuscript-lines` or `{script}-{corpus}-htr-lines`):
 
 ```
-src/hf/staging/datasets/greek-manuscript-lines/
+nomikos_inference/publish/artifacts/staging/datasets/greek-manuscript-lines/
   images/
     ms-001/line-0001.png
   labels.csv
@@ -123,13 +123,13 @@ Default CI and local dry-runs do **not** call the Hub upload API unless `--uploa
    PYTHONPATH=. python scripts/hf/fetch_model.py greek-calamari-v1 --registry-tag stable
    ```
 
-6. **Update the collection** — add the model slug to `src/hf/publish/collection.yaml` and run `sync_collection.py` after setting `hub_slug` (see below).
+6. **Update the collection** — add the model slug to `nomikos_inference/publish/collection.yaml` and run `sync_collection.py` after setting `hub_slug` (see below).
 
 Override `--namespace` if the **Hub namespace** is not yet `nomikos`. Use `--registry-model-id` when the legacy id differs from the default `{script}-{architecture}{model_version}` derivation.
 
 ## Dataset publish
 
-1. Create a directory under `src/hf/staging/datasets/` using
+1. Create a directory under `nomikos_inference/publish/artifacts/staging/datasets/` using
    `{script}-manuscript-lines` or `{script}-{corpus}-htr-lines`.
 2. Add the required `images/` and `labels.csv` pairing layout above.
 3. Run the command below without `--upload` to validate the staging layout and
@@ -146,7 +146,7 @@ HF_PUBLISH=1 PYTHONPATH=. python scripts/hf/publish_dataset.py greek-manuscript-
 
 ## Hub collection (`nomos`)
 
-Source of truth: [`src/hf/publish/collection.yaml`](../src/hf/publish/collection.yaml).
+Source of truth: [`nomikos_inference/publish/collection.yaml`](../../nomikos_inference/publish/collection.yaml).
 
 **When to update the collection**
 
@@ -157,7 +157,7 @@ Source of truth: [`src/hf/publish/collection.yaml`](../src/hf/publish/collection
 **First-time collection setup**
 
 1. Create the `nomos` collection on Hugging Face (or note the slug returned by the Hub UI).
-2. Set `hub_slug` in `src/hf/publish/collection.yaml` to the full slug (e.g. `nomikos/nomos-abc123`).
+2. Set `hub_slug` in `nomikos_inference/publish/collection.yaml` to the full slug (e.g. `nomikos/nomos-abc123`).
 3. List model and dataset slugs under `models:` / `datasets:`.
 4. Sync:
 

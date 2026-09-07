@@ -35,14 +35,25 @@ from nomikos_inference.hub.artifacts import ArtifactIntegrityError, find_hub_art
 from tests.fixtures.paths import REPO_ROOT, SEGMENT_PAGE, TRANSCRIBE_LINE
 
 # The published artifacts, as fetched from the Hub revisions the registry pins.
-# They are gitignored (``/src/hf/cache/``), so a checkout that has not fetched
+# They are gitignored (``/nomikos_inference/publish/artifacts/cache/``), so a
+# checkout that has not fetched
 # them exports an equivalent graph from the tracked native checkpoints instead -
 # see ``_exported``. Either way these tests run a real graph; what varies is
 # whether it is the published one or one built from the same weights.
-PUBLISHED_CALAMARI = REPO_ROOT / "src/hf/cache/syriac-calamari-v1/stable/best.onnx"
-PUBLISHED_BLLA = REPO_ROOT / "src/hf/cache/blla-segment/stable/blla.onnx"
-CALAMARI_CHECKPOINT = REPO_ROOT / "src/hf/local/syriac/calamari/v1/stable/best.pt"
-BLLA_CHECKPOINT = REPO_ROOT / "src/hf/staging/models/segmentation/blla/v1/stable/blla.safetensors"
+PUBLISHED_CALAMARI = (
+    REPO_ROOT / "nomikos_inference/publish/artifacts/cache/syriac-calamari-v1/stable/best.onnx"
+)
+PUBLISHED_BLLA = (
+    REPO_ROOT / "nomikos_inference/publish/artifacts/cache/blla-segment/stable/blla.onnx"
+)
+CALAMARI_CHECKPOINT = (
+    REPO_ROOT / "nomikos_inference/publish/artifacts/local/syriac/calamari/v1/stable/best.pt"
+)
+BLLA_CHECKPOINT = (
+    REPO_ROOT
+    / "nomikos_inference/publish/artifacts/staging"
+    / "models/segmentation/blla/v1/stable/blla.safetensors"
+)
 
 
 def _digest(path: Path) -> str:
