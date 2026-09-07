@@ -1,10 +1,14 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { type LayoutPoint, type LinePoint } from "../api/client";
 import { invalidateAfter } from "../api/resources";
 import { useHostPreference } from "../inference";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import { PageEditorCanvas } from "../components/page-editor/PageEditorCanvas";
+import {
+  PageEditorPageRail,
+  PAGE_RAIL_TOGGLE_ID,
+} from "../components/page-editor/PageEditorPageRail";
 import { PageEditorTranscriptionStrip } from "../components/page-editor/PageEditorTranscriptionStrip";
 import { PageEditorShell } from "../components/page-editor/PageEditorShell";
 import {
@@ -23,6 +27,8 @@ import {
   removePolygonVertex,
 } from "../components/page-editor/canvasGeometry";
 import {
+  pageNeighbours,
+  useDocumentPaging,
   useLayoutMutations,
   usePageEditorData,
   usePageEditorJobQueue,
@@ -31,17 +37,24 @@ import {
   useSegmentHealth,
 } from "../components/page-editor/hooks";
 import {
+  loadPageRailOpen,
+  savePageRailOpen,
+} from "../components/page-editor/pageEditorSettings";
+import {
   segmentHasGroundTruth,
   segmentIdsWithGroundTruth,
 } from "../components/page-editor/hooks/utils";
 
 export function PageEditorPlaceholderPage() {
-  const { projectId, documentId, partId } =
-    useParams<{
-      projectId: string;
-      documentId: string;
-      partId: string;
-    }>() ?? {};
+  const {
+    projectId,
+    documentId,
+    partId: routePartId,
+  } = useParams<{
+    projectId: string;
+    documentId: string;
+    partId: string;
+  }>() ?? {};
 
   const [drawMode, setDrawMode] = useState<"none" | "rectangle" | "polygon">(
     "none",
@@ -56,6 +69,8 @@ export function PageEditorPlaceholderPage() {
   const [transcriptionPdfRefreshKey, setTranscriptionPdfRefreshKey] =
     useState(0);
   const [stripDismissed, setStripDismissed] = useState(false);
+  const [pageRailOpen, setPageRailOpen] = useState(loadPageRailOpen);
+  const [reclaimRailFocus, setReclaimRailFocus] = useState(false);
   const [selectedVertexIndex, setSelectedVertexIndex] = useState<number | null>(
     null,
   );
@@ -66,10 +81,21 @@ export function PageEditorPlaceholderPage() {
     null,
   );
 
+  // The page the editor is on. The route seeds it and mirrors it back, but the
+  // editor turns pages by changing this rather than by re-entering the route,
+  // so the toolbar, the page rail and the focused control survive a page turn.
+  const { activePartId: partId, goToPart } = useDocumentPaging({
+    projectId,
+    documentId,
+    routePartId,
+  });
+
   const editorData = usePageEditorData(projectId, documentId, partId, () => {
     setDrawMode("none");
     setDraftPolygon([]);
     setDraftStart(null);
+    setStripDismissed(false);
+    setSelectedVertexIndex(null);
   });
   const {
     document,
@@ -80,6 +106,7 @@ export function PageEditorPlaceholderPage() {
     lines,
     setLines,
     loading,
+    partLoading,
     error,
     layoutError,
     lineError,
@@ -98,8 +125,32 @@ export function PageEditorPlaceholderPage() {
     transcribeModels,
     selectedTranscribeModelId,
     setSelectedTranscribeModelId,
+    parts,
     partIndex,
   } = editorData;
+
+  const { previousPartId, nextPartId } = pageNeighbours(parts, partId);
+  const goToPreviousPage = useCallback(() => {
+    if (previousPartId) goToPart(previousPartId);
+  }, [previousPartId, goToPart]);
+  const goToNextPage = useCallback(() => {
+    if (nextPartId) goToPart(nextPartId);
+  }, [nextPartId, goToPart]);
+
+  function handlePageRailOpenChange(open: boolean) {
+    setPageRailOpen(open);
+    savePageRailOpen(open);
+    // Closing the rail unmounts whatever inside it had focus, and the rail's
+    // own collapse button is the likeliest thing that did. The effect below
+    // hands focus to the toolbar toggle once the rail is actually gone.
+    if (!open) setReclaimRailFocus(true);
+  }
+
+  useEffect(() => {
+    if (!reclaimRailFocus) return;
+    setReclaimRailFocus(false);
+    globalThis.document.getElementById(PAGE_RAIL_TOGGLE_ID)?.focus();
+  }, [reclaimRailFocus]);
 
   const segmentHealth = useSegmentHealth({
     projectId,
@@ -228,21 +279,27 @@ export function PageEditorPlaceholderPage() {
 
   const runState = usePageEditorRunState({ segmenting, ocrRunning, ocrScope });
 
-  const canvasHint = runState.processingLabel
-    ? `${runState.processingLabel}…`
-    : drawMode === "polygon"
-      ? draftPolygon.length === 0
-        ? "Polygon: click to place the first corner · hold Space to pan"
-        : `Polygon: ${draftPolygon.length} point${draftPolygon.length === 1 ? "" : "s"} · click to add · double-click or Enter to finish`
-      : drawMode === "rectangle"
-        ? "Rectangle: drag to draw a segment · hold Space to pan"
-        : selectedSegment
-          ? selectedVertexIndex !== null
-            ? `Segment ${selectedSegmentNumber} · vertex ${selectedVertexIndex + 1} selected · Delete removes point · Esc deselects`
-            : `Segment ${selectedSegmentNumber} ${
-                segmentHasGroundTruth(selectedSegment) ? "paired" : "unpaired"
-              } · click edge to add · click handle to select · Esc deselects`
-          : "Drag to pan · scroll to zoom · select a segment to edit it";
+  // A page turn keeps the editor on screen, so the hint is where it says the
+  // next page's Segments are still on their way.
+  const canvasHint = partLoading
+    ? partIndex
+      ? `Loading page ${partIndex}…`
+      : "Loading page…"
+    : runState.processingLabel
+      ? `${runState.processingLabel}…`
+      : drawMode === "polygon"
+        ? draftPolygon.length === 0
+          ? "Polygon: click to place the first corner · hold Space to pan"
+          : `Polygon: ${draftPolygon.length} point${draftPolygon.length === 1 ? "" : "s"} · click to add · double-click or Enter to finish`
+        : drawMode === "rectangle"
+          ? "Rectangle: drag to draw a segment · hold Space to pan"
+          : selectedSegment
+            ? selectedVertexIndex !== null
+              ? `Segment ${selectedSegmentNumber} · vertex ${selectedVertexIndex + 1} selected · Delete removes point · Esc deselects`
+              : `Segment ${selectedSegmentNumber} ${
+                  segmentHasGroundTruth(selectedSegment) ? "paired" : "unpaired"
+                } · click edge to add · click handle to select · Esc deselects`
+            : "Drag to pan · scroll to zoom · Page Up/Down for pages · select a segment to edit it";
 
   function pickDrawMode(nextMode: "rectangle" | "polygon") {
     setDrawMode((mode) => (mode === nextMode ? "none" : nextMode));
@@ -290,6 +347,8 @@ export function PageEditorPlaceholderPage() {
       drawMode === "polygon" && draftPolygon.length >= 3
         ? completeDraftPolygon
         : undefined,
+    onPreviousPage: previousPartId ? goToPreviousPage : undefined,
+    onNextPage: nextPartId ? goToNextPage : undefined,
   });
 
   function handleCanvasSettingsChange(next: typeof canvasSettings) {
@@ -352,6 +411,13 @@ export function PageEditorPlaceholderPage() {
             partId={part.id}
             document={document}
             partIndex={partIndex ?? 1}
+            pageCount={parts.length}
+            hasPreviousPart={Boolean(previousPartId)}
+            hasNextPart={Boolean(nextPartId)}
+            onPreviousPart={goToPreviousPage}
+            onNextPart={goToNextPage}
+            pageRailOpen={pageRailOpen}
+            onPageRailOpenChange={handlePageRailOpenChange}
             lines={lines}
             pairingProgress={pairingProgress}
             selectedSegmentId={selectedSegmentId}
@@ -404,6 +470,14 @@ export function PageEditorPlaceholderPage() {
       {document && part && (
         <div className="pe-workspace">
           <div className="pe-body">
+            {pageRailOpen && parts.length > 1 && (
+              <PageEditorPageRail
+                parts={parts}
+                activePartId={partId}
+                onSelectPart={goToPart}
+                onCollapse={() => handlePageRailOpenChange(false)}
+              />
+            )}
             <div className="pe-canvas-pane">
               <PageEditorCanvas
                 imageUrl={part.image_url}

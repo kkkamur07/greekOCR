@@ -13,6 +13,8 @@ interface ShortcutHandlers {
   onMoveDown?: () => void;
   onMoveLeft?: () => void;
   onMoveRight?: () => void;
+  onPreviousPage?: () => void;
+  onNextPage?: () => void;
 }
 
 export const useKeyboardShortcuts = (handlers: ShortcutHandlers) => {
@@ -33,8 +35,17 @@ export const useKeyboardShortcuts = (handlers: ShortcutHandlers) => {
       const key = e.key.toLowerCase();
       const ctrl = e.ctrlKey || e.metaKey;
 
+      // PageUp/PageDown - previous/next page of the document. Nothing in the
+      // editor scrolls with these keys, so they are free to mean what they say.
+      if (key === "pageup" && !ctrl) {
+        e.preventDefault();
+        current.onPreviousPage?.();
+      } else if (key === "pagedown" && !ctrl) {
+        e.preventDefault();
+        current.onNextPage?.();
+      }
       // B - Draw Box
-      if (key === "b" && !ctrl) {
+      else if (key === "b" && !ctrl) {
         e.preventDefault();
         current.onDrawBox?.();
       }

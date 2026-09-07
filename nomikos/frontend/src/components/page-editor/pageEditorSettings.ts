@@ -99,3 +99,30 @@ export function savePageEditorSettings(
 ): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
 }
+
+/**
+ * Whether the page rail is open, stored apart from the canvas settings.
+ *
+ * It is a layout choice rather than a rendering one, and it is toggled from the
+ * toolbar rather than from the settings panel; folding it into the settings
+ * object would make every rail toggle rewrite the whole canvas record.
+ */
+const PAGE_RAIL_KEY = "nomikos_page_editor_rail_open";
+
+export function loadPageRailOpen(): boolean {
+  try {
+    // Open is the default: a researcher who has never touched the toggle
+    // should find out the document is reachable from here without looking.
+    return localStorage.getItem(PAGE_RAIL_KEY) !== "false";
+  } catch {
+    return true;
+  }
+}
+
+export function savePageRailOpen(open: boolean): void {
+  try {
+    localStorage.setItem(PAGE_RAIL_KEY, String(open));
+  } catch {
+    // A browser refusing storage is not a reason to refuse the toggle.
+  }
+}

@@ -1,3 +1,8 @@
+export {
+  useDocumentPaging,
+  pageNeighbours,
+  partEditorHref,
+} from "./useDocumentPaging";
 export { usePageEditorData } from "./usePageEditorData";
 export { useLayoutMutations } from "./useLayoutMutations";
 export { usePageEditorJobQueue } from "./usePageEditorJobQueue";
