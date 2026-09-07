@@ -2,7 +2,7 @@
   <h1>Nomikos</h1>
   <p><strong>Nomikos is an open-source platform for transcribing historical manuscripts you can run in minutes.</strong></p>
   <img src="landing/assets/screenshots/editor-1280.webp" alt="The Nomikos page editor open on Grec1360 p.3, a two-page Greek manuscript spread with 49 line segments outlined in green, an HTR model selector in the toolbar, and a paired/unpaired legend" width="720">
-  <p><em>Grec1360 p.2, segmented into 51 lines. Pick an HTR model in the toolbar, let it draft the first pass, then correct, review, share, publish, and export.</em></p>
+  <p><em>Grec1360 p.3, segmented into 49 lines. Pick an HTR model in the toolbar, let it draft the first pass, then correct, review, share, publish, and export.</em></p>
   <p>
     <a href="#why-nomikos"><strong>Why Nomikos</strong></a> ·
     <a href="#current-model-support"><strong>Models</strong></a> ·
