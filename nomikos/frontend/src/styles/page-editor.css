@@ -1801,6 +1801,28 @@
   outline-offset: 1px;
 }
 
+.pe-page-rail-tab {
+  flex: 0 0 auto;
+  width: 18px;
+  border: none;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-3);
+  cursor: pointer;
+  font-size: 0.9375rem;
+  line-height: 1;
+  padding: 0;
+  z-index: 5;
+}
+.pe-page-rail-tab:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.pe-page-rail-tab:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: -2px;
+}
+
 .pe-page-rail__list {
   flex: 1;
   min-height: 0;
@@ -1880,12 +1902,11 @@
 
 /* A narrow window needs the canvas more than it needs the strip. */
 @media (max-width: 900px) {
-  /* The rail and its toolbar toggle go together: a toggle left on screen
-     would keep reporting aria-expanded for a list nobody can see, and its
-     first press would collapse the invisible rail instead of showing it.
-     The pager and PageUp/PageDown still turn pages at this width. */
+  /* The rail and its edge tab go together: a tab left on screen would offer
+     a list this width cannot show. The pager and PageUp/PageDown still turn
+     pages at this width. */
   .pe-page-rail,
-  .pe-toolbar [aria-controls="pe-page-rail"] {
+  .pe-page-rail-tab {
     display: none;
   }
 }

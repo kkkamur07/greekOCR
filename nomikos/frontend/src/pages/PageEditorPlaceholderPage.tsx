@@ -7,6 +7,7 @@ import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import { PageEditorCanvas } from "../components/page-editor/PageEditorCanvas";
 import {
   PageEditorPageRail,
+  PageEditorPageRailTab,
   PAGE_RAIL_TOGGLE_ID,
 } from "../components/page-editor/PageEditorPageRail";
 import { PageEditorTranscriptionStrip } from "../components/page-editor/PageEditorTranscriptionStrip";
@@ -142,7 +143,8 @@ export function PageEditorPlaceholderPage() {
     savePageRailOpen(open);
     // Closing the rail unmounts whatever inside it had focus, and the rail's
     // own collapse button is the likeliest thing that did. The effect below
-    // hands focus to the toolbar toggle once the rail is actually gone.
+    // hands focus to the edge tab that takes the rail's place once the rail
+    // is actually gone.
     if (!open) setReclaimRailFocus(true);
   }
 
@@ -416,8 +418,6 @@ export function PageEditorPlaceholderPage() {
             hasNextPart={Boolean(nextPartId)}
             onPreviousPart={goToPreviousPage}
             onNextPart={goToNextPage}
-            pageRailOpen={pageRailOpen}
-            onPageRailOpenChange={handlePageRailOpenChange}
             lines={lines}
             pairingProgress={pairingProgress}
             selectedSegmentId={selectedSegmentId}
@@ -470,14 +470,19 @@ export function PageEditorPlaceholderPage() {
       {document && part && (
         <div className="pe-workspace">
           <div className="pe-body">
-            {pageRailOpen && parts.length > 1 && (
-              <PageEditorPageRail
-                parts={parts}
-                activePartId={partId}
-                onSelectPart={goToPart}
-                onCollapse={() => handlePageRailOpenChange(false)}
-              />
-            )}
+            {parts.length > 1 &&
+              (pageRailOpen ? (
+                <PageEditorPageRail
+                  parts={parts}
+                  activePartId={partId}
+                  onSelectPart={goToPart}
+                  onCollapse={() => handlePageRailOpenChange(false)}
+                />
+              ) : (
+                <PageEditorPageRailTab
+                  onExpand={() => handlePageRailOpenChange(true)}
+                />
+              ))}
             <div className="pe-canvas-pane">
               <PageEditorCanvas
                 imageUrl={part.image_url}

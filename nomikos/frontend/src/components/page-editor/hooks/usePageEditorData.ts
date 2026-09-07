@@ -76,20 +76,27 @@ function canReuseDocument(
   return document?.project_id === projectId && document.id === documentId;
 }
 
+/**
+ * The transcribe model picker's contents for one page. The catalog is the
+ * document-level half and is only refetched when the caller passes it; the
+ * binding is resolved for every page, since it can be bound per part.
+ */
 async function loadTranscribeModels(
   projectId: string,
   documentId: string,
   partId: string,
+  catalog: Promise<InferenceModelResponse[]> | null,
 ): Promise<{
-  models: InferenceModelResponse[];
-  selectedModelId: string | null;
+  models: InferenceModelResponse[] | null;
+  resolvedModel: InferenceModelResponse | null;
 }> {
-  let models: InferenceModelResponse[] = [];
-  try {
-    const catalog = await api.listInferenceModels();
-    models = catalog.filter((model) => model.task === "transcribe");
-  } catch {
-    models = [];
+  let models: InferenceModelResponse[] | null = null;
+  if (catalog) {
+    try {
+      models = (await catalog).filter((model) => model.task === "transcribe");
+    } catch {
+      models = [];
+    }
   }
 
   try {
@@ -99,12 +106,9 @@ async function loadTranscribeModels(
       partId,
       "transcribe",
     );
-    if (!models.some((model) => model.id === resolved.model.id)) {
-      models = [resolved.model, ...models];
-    }
-    return { models, selectedModelId: resolved.model.id };
+    return { models, resolvedModel: resolved.model };
   } catch {
-    return { models, selectedModelId: models[0]?.id ?? null };
+    return { models, resolvedModel: null };
   }
 }
 
@@ -140,9 +144,15 @@ type PartContentSetters = {
  *
  * Shared by the route-keyed mount effect below and the job-completion refresh
  * effect: the first runs it once resolving a fresh part, the second re-runs it
- * verbatim when a segmentation or OCR job finishes for the part already on
- * screen. `apply` is the caller's own cancelled/stale guard - this function
- * does not know or care which one it was given.
+ * when a segmentation or OCR job finishes for the part already on screen.
+ * `apply` is the caller's own cancelled/stale guard - this function does not
+ * know or care which one it was given.
+ *
+ * `documentLevel` is what separates a page turn from a load. The transcription
+ * layers and the model catalog belong to the document and do not change when
+ * the page does, so a page turn fetches only what is the page's own: its
+ * layout, its Segments, its pairing and its model binding. A cold load and a
+ * finished job (which may have written a new layer) fetch everything.
  */
 async function fetchPartContent(
   projectId: string,
@@ -150,6 +160,7 @@ async function fetchPartContent(
   partId: string,
   apply: <T>(setter: (value: T) => void, value: T) => void,
   setters: PartContentSetters,
+  { documentLevel }: { documentLevel: boolean },
 ): Promise<void> {
   const [
     layoutResult,
@@ -160,9 +171,16 @@ async function fetchPartContent(
   ] = await Promise.allSettled([
     api.getPartLayout(projectId, documentId, partId),
     api.listPartLines(projectId, documentId, partId),
-    api.listTranscriptions(projectId, documentId),
+    documentLevel
+      ? api.listTranscriptions(projectId, documentId)
+      : Promise.resolve(null),
     api.getPagePairing(projectId, documentId, partId),
-    loadTranscribeModels(projectId, documentId, partId),
+    loadTranscribeModels(
+      projectId,
+      documentId,
+      partId,
+      documentLevel ? api.listInferenceModels() : null,
+    ),
   ]);
 
   if (layoutResult.status === "fulfilled") {
@@ -203,13 +221,15 @@ async function fetchPartContent(
 
   if (transcriptionsResult.status === "fulfilled") {
     const layers = transcriptionsResult.value;
-    const groundTruth = layers.find((layer) => layer.kind === "ground_truth");
-    apply(setters.setTranscriptionLayers, layers);
-    apply(setters.setGroundTruthTranscriptionId, groundTruth?.id ?? null);
-    apply(
-      setters.setSelectedTranscriptionLayerId,
-      groundTruth?.id ?? layers[0]?.id ?? null,
-    );
+    if (layers !== null) {
+      const groundTruth = layers.find((layer) => layer.kind === "ground_truth");
+      apply(setters.setTranscriptionLayers, layers);
+      apply(setters.setGroundTruthTranscriptionId, groundTruth?.id ?? null);
+      apply(
+        setters.setSelectedTranscriptionLayerId,
+        groundTruth?.id ?? layers[0]?.id ?? null,
+      );
+    }
   } else {
     const err = transcriptionsResult.reason;
     if (isUnauthorized(err)) {
@@ -246,10 +266,22 @@ async function fetchPartContent(
   }
 
   if (modelsResult.status === "fulfilled") {
-    apply(setters.setTranscribeModels, modelsResult.value.models);
-    apply(
-      setters.setSelectedTranscribeModelId,
-      modelsResult.value.selectedModelId,
+    const { models, resolvedModel } = modelsResult.value;
+    // On a page turn `models` is null and the catalog already on screen is
+    // kept; the bound model still joins it if the catalog does not list it.
+    apply(setters.setTranscribeModels, (current: InferenceModelResponse[]) => {
+      const catalog = models ?? current;
+      return resolvedModel &&
+        !catalog.some((model) => model.id === resolvedModel.id)
+        ? [resolvedModel, ...catalog]
+        : catalog;
+    });
+    apply(setters.setSelectedTranscribeModelId, (current: string | null) =>
+      resolvedModel
+        ? resolvedModel.id
+        : models
+          ? (models[0]?.id ?? null)
+          : current,
     );
   } else {
     apply(setters.setTranscribeModels, []);
@@ -411,9 +443,12 @@ export function usePageEditorData(
     }
     setLayout({ blocks: [], lines: [] });
     setLines([]);
-    setTranscriptionLayers([]);
-    setSelectedTranscriptionLayerId(null);
-    setGroundTruthTranscriptionId(null);
+    if (!carriedPart) {
+      // Document-level state survives a page turn; see fetchPartContent.
+      setTranscriptionLayers([]);
+      setSelectedTranscriptionLayerId(null);
+      setGroundTruthTranscriptionId(null);
+    }
     setTextLines([]);
     setPairingProgress({ paired_lines: 0, total_lines: 0, percent: 0 });
     setPairingError(null);
@@ -443,20 +478,27 @@ export function usePageEditorData(
         apply(setPart, selectedPart);
         if (cancelled) return;
 
-        await fetchPartContent(projectId, documentId, partId, apply, {
-          setLayout,
-          setLayoutError,
-          setLines,
-          setLineError,
-          setTranscriptionLayers,
-          setGroundTruthTranscriptionId,
-          setSelectedTranscriptionLayerId,
-          setPairingError,
-          setTextLines,
-          setPairingProgress,
-          setTranscribeModels,
-          setSelectedTranscribeModelId,
-        });
+        await fetchPartContent(
+          projectId,
+          documentId,
+          partId,
+          apply,
+          {
+            setLayout,
+            setLayoutError,
+            setLines,
+            setLineError,
+            setTranscriptionLayers,
+            setGroundTruthTranscriptionId,
+            setSelectedTranscriptionLayerId,
+            setPairingError,
+            setTextLines,
+            setPairingProgress,
+            setTranscribeModels,
+            setSelectedTranscribeModelId,
+          },
+          { documentLevel: !carriedPart },
+        );
       } catch (err) {
         if (isUnauthorized(err)) {
           redirectToLogin();
@@ -517,20 +559,27 @@ export function usePageEditorData(
         setter(value);
       };
 
-      void fetchPartContent(projectId, documentId, partId, apply, {
-        setLayout,
-        setLayoutError,
-        setLines,
-        setLineError,
-        setTranscriptionLayers,
-        setGroundTruthTranscriptionId,
-        setSelectedTranscriptionLayerId,
-        setPairingError,
-        setTextLines,
-        setPairingProgress,
-        setTranscribeModels,
-        setSelectedTranscribeModelId,
-      });
+      void fetchPartContent(
+        projectId,
+        documentId,
+        partId,
+        apply,
+        {
+          setLayout,
+          setLayoutError,
+          setLines,
+          setLineError,
+          setTranscriptionLayers,
+          setGroundTruthTranscriptionId,
+          setSelectedTranscriptionLayerId,
+          setPairingError,
+          setTextLines,
+          setPairingProgress,
+          setTranscribeModels,
+          setSelectedTranscribeModelId,
+        },
+        { documentLevel: true },
+      );
     });
 
     return () => {

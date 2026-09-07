@@ -197,7 +197,7 @@ describe("PageEditorPlaceholderPage paging", () => {
     expect(host?.classList.contains("pe-canvas-host--panning")).toBe(false);
   });
 
-  it("hands focus back to the toolbar toggle when the rail is hidden", async () => {
+  it("hands focus to the edge tab when the rail is hidden", async () => {
     mockedApi.getDocument.mockResolvedValue(documentWithPages(3));
 
     renderPageEditor();
@@ -213,11 +213,11 @@ describe("PageEditorPlaceholderPage paging", () => {
       ).toBeNull();
     });
     expect(globalThis.document.activeElement).toBe(
-      screen.getByRole("button", { name: "Page list" }),
+      screen.getByRole("button", { name: "Show the page list" }),
     );
 
-    // And the toggle brings it back, so hiding it is not a one-way door.
-    fireEvent.click(screen.getByRole("button", { name: "Page list" }));
+    // And the tab brings it back, so hiding it is not a one-way door.
+    fireEvent.click(screen.getByRole("button", { name: "Show the page list" }));
     expect(
       await screen.findByRole("navigation", { name: "Document pages" }),
     ).toBeTruthy();
@@ -232,7 +232,9 @@ describe("PageEditorPlaceholderPage paging", () => {
     expect(
       screen.queryByRole("navigation", { name: "Document pages" }),
     ).toBeNull();
-    expect(screen.queryByRole("button", { name: "Page list" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Show the page list" }),
+    ).toBeNull();
     expect(
       screen.getByRole("button", { name: "Previous page" }),
     ).toBeDisabled();

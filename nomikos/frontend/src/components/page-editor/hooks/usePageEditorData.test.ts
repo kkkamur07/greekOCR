@@ -217,3 +217,59 @@ describe("usePageEditorData job-completion refresh", () => {
     expect(result.current.lines).toEqual([freshLine]);
   });
 });
+
+describe("usePageEditorData page turn", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    completionListener = null;
+    setAccessToken("test-token");
+    getDocument.mockResolvedValue(DOCUMENT);
+    getPartLayout.mockResolvedValue({ blocks: [], lines: [] });
+    listPartLines.mockResolvedValue([]);
+    listTranscriptions.mockResolvedValue([
+      { id: "layer-gt", kind: "ground_truth" },
+    ]);
+    getPagePairing.mockResolvedValue(EMPTY_PAIRING);
+    listInferenceModels.mockResolvedValue([
+      { id: "model-1", task: "transcribe" },
+    ]);
+    resolvePartModelBinding.mockRejectedValue(new Error("no binding"));
+  });
+
+  afterEach(() => {
+    clearAccessToken();
+  });
+
+  it("fetches only the page's own content on a page turn and keeps the document's", async () => {
+    const { result, rerender } = renderHook(
+      ({ partId }: { partId: string }) =>
+        usePageEditorData("project-1", "document-1", partId),
+      { initialProps: { partId: "part-1" } },
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(listTranscriptions).toHaveBeenCalledTimes(1);
+    expect(listInferenceModels).toHaveBeenCalledTimes(1);
+    expect(result.current.selectedTranscriptionLayerId).toBe("layer-gt");
+    expect(result.current.selectedTranscribeModelId).toBe("model-1");
+
+    rerender({ partId: "part-2" });
+    await waitFor(() => expect(result.current.partLoading).toBe(false));
+
+    // The page's own content came down again for the new page.
+    expect(listPartLines).toHaveBeenCalledTimes(2);
+    expect(listPartLines).toHaveBeenLastCalledWith(
+      "project-1",
+      "document-1",
+      "part-2",
+    );
+    expect(getPagePairing).toHaveBeenCalledTimes(2);
+    expect(resolvePartModelBinding).toHaveBeenCalledTimes(2);
+    // The document's did not, and what was on screen is still there.
+    expect(listTranscriptions).toHaveBeenCalledTimes(1);
+    expect(listInferenceModels).toHaveBeenCalledTimes(1);
+    expect(result.current.transcriptionLayers).toHaveLength(1);
+    expect(result.current.selectedTranscriptionLayerId).toBe("layer-gt");
+    expect(result.current.transcribeModels).toHaveLength(1);
+    expect(result.current.selectedTranscribeModelId).toBe("model-1");
+  });
+});
