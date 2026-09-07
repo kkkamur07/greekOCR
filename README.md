@@ -51,7 +51,7 @@ Through the pinned runtime registry, Nomikos pages can use:
 | `blla-segment` | Page segmentation, any script | Kraken BLLA | [segmentation-blla](https://huggingface.co/nomikos-project/segmentation-blla) |
 | `greek-calamari-v1` | Line HTR, Byzantine Greek (`grc`) | Calamari | [greek-htr-calamari](https://huggingface.co/nomikos-project/greek-htr-calamari) |
 | `armenian-calamari-v1` | Line HTR, Armenian (`hy`) | Calamari | [armenian-htr-calamari](https://huggingface.co/nomikos-project/armenian-htr-calamari) |
-| `syriac-calamari-v1` | Line HTR, Syriac (`syr`) | Calamari | [syriac-htr-calamari](https://huggingface.co/nomikos-project/syriac-htr-calamari) |
+| `syriac-calamari-v2` | Line HTR, Syriac (`syr`) | Calamari | [syriac-htr-calamari](https://huggingface.co/nomikos-project/syriac-htr-calamari) |
 
 All three HTR checkpoints are a CNN followed by two bidirectional LSTM layers at line height 48.
 
@@ -77,8 +77,8 @@ The Hugging Face model cards report these figures. All three come from the same 
 | `greek-calamari-v1` | test | 21 | 0.226 | 0.675 | 0.000 | 0.390 |
 | `armenian-calamari-v1` | val | 119 | 0.092 | 0.440 | 0.319 | 0.588 |
 | `armenian-calamari-v1` | test | 120 | 0.072 | 0.340 | 0.458 | 0.701 |
-| `syriac-calamari-v1` | val | 331 | 0.181 | 0.535 | 0.245 | 0.485 |
-| `syriac-calamari-v1` | test | 335 | 0.210 | 0.577 | 0.245 | 0.452 |
+| `syriac-calamari-v2` | val | 331 | 0.181 | 0.535 | 0.245 | 0.485 |
+| `syriac-calamari-v2` | test | 335 | 0.210 | 0.577 | 0.245 | 0.452 |
 
 Each checkpoint selects `best.pt` on validation CER: 0.156 for Greek, 0.092 for Armenian, 0.181 for Syriac. Weigh the rows by how much text stands behind them.
 

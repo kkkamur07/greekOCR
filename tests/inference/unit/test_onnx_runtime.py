@@ -41,7 +41,7 @@ from tests.fixtures.paths import REPO_ROOT, SEGMENT_PAGE, TRANSCRIBE_LINE
 # see ``_exported``. Either way these tests run a real graph; what varies is
 # whether it is the published one or one built from the same weights.
 PUBLISHED_CALAMARI = (
-    REPO_ROOT / "nomikos_inference/publish/artifacts/cache/syriac-calamari-v1/stable/best.onnx"
+    REPO_ROOT / "nomikos_inference/publish/artifacts/cache/syriac-calamari-v2/stable/best.onnx"
 )
 PUBLISHED_BLLA = (
     REPO_ROOT / "nomikos_inference/publish/artifacts/cache/blla-segment/stable/blla.onnx"
@@ -246,7 +246,7 @@ def test_the_registry_pins_the_digest_of_the_artifact_the_loader_opens() -> None
         (REPO_ROOT / "nomikos_inference/registry.yaml").read_text(encoding="utf-8")
     )
 
-    calamari = registry["models"]["syriac-calamari-v1"]["versions"]["stable"]
+    calamari = registry["models"]["syriac-calamari-v2"]["versions"]["stable"]
     assert calamari["artifact_sha256"] == _digest(PUBLISHED_CALAMARI)
 
     blla = registry["models"]["blla-segment"]["versions"]["stable"]

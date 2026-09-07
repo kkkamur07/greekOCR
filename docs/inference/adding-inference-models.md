@@ -46,7 +46,7 @@ Follow the **registry model id** convention:
 {script}-{architecture}-{model_version}
 ```
 
-Examples: `greek-calamari-v1`, `armenian-calamari-v1`, `syriac-calamari-v1`, `blla-segment`.
+Examples: `greek-calamari-v1`, `armenian-calamari-v1`, `syriac-calamari-v2`, `blla-segment`.
 
 | Field | Meaning | Example |
 |-------|---------|---------|
@@ -123,7 +123,7 @@ Example: `registry://greek-calamari-v1?tag=stable`.
 3. Optional: warm cache locally:
 
    ```bash
-   PYTHONPATH=. python scripts/hf/fetch_model.py syriac-calamari-v1 --registry-tag stable
+   PYTHONPATH=. python scripts/hf/fetch_model.py syriac-calamari-v2 --registry-tag stable
    ```
 
 4. Optional: add the Hub repo to [`nomikos_inference/publish/collection.yaml`](../../nomikos_inference/publish/collection.yaml) and run `sync_collection.py`.
@@ -200,7 +200,7 @@ Add a model block under `models:`:
 
 ```yaml
 models:
-  syriac-calamari-v1:
+  syriac-calamari-v2:
     task: transcribe          # transcribe | segment
     architecture: calamari    # calamari | blla-segment
     device: cpu               # compute hint (cpu | cuda)

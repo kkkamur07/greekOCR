@@ -9,7 +9,7 @@
 # recorded here because it is what makes the Syriac pin below a different
 # model rather than a re-export of the old one.
 models:
-  syriac-calamari-v1:
+  syriac-calamari-v2:
     task: transcribe
     architecture: calamari
     device: cpu

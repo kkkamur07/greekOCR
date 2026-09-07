@@ -14,7 +14,7 @@ from nomikos_inference.weights import resolve_weights_source
 # eligibility, one Hub repo and codec each. Parametrizing says that out loud, and
 # means adding a fourth script is a one-line change here rather than a fourth
 # copy of the same six assertions.
-TRANSCRIBE_MODEL_IDS = ("greek-calamari-v1", "armenian-calamari-v1", "syriac-calamari-v1")
+TRANSCRIBE_MODEL_IDS = ("greek-calamari-v1", "armenian-calamari-v1", "syriac-calamari-v2")
 
 
 @pytest.mark.parametrize("registry_model_id", TRANSCRIBE_MODEL_IDS)

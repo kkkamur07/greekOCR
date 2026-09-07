@@ -95,4 +95,4 @@ For Supabase-backed local testing, see [deployment/supabase.md](../deployment/su
 |---------|-----|
 | Tests hang on DB lock | Stop the `api` container; terminate stale Postgres sessions |
 | `DuplicatePreparedStatementError` with Supabase pooler | Handled in `nomikos/infrastructure/db.py` (`statement_cache_size=0`) |
-| ML tests skip or fail | Prefetch the default transcribe model: `PYTHONPATH=. python scripts/hf/fetch_model.py syriac-calamari-v1 --registry-tag stable` (see [`nomikos_inference/README.md`](../../nomikos_inference/README.md)) |
+| ML tests skip or fail | Prefetch the default transcribe model: `PYTHONPATH=. python scripts/hf/fetch_model.py syriac-calamari-v2 --registry-tag stable` (see [`nomikos_inference/README.md`](../../nomikos_inference/README.md)) |

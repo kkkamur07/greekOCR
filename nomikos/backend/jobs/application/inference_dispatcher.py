@@ -34,7 +34,7 @@ from nomikos_inference.settings import get_inference_settings
 
 _DEFAULT_SEGMENT_REGISTRY_MODEL = "blla-segment"
 _DEFAULT_SEGMENT_REGISTRY_TAG = "stable"
-_DEFAULT_TRANSCRIBE_REGISTRY_MODEL = "syriac-calamari-v1"
+_DEFAULT_TRANSCRIBE_REGISTRY_MODEL = "syriac-calamari-v2"
 _DEFAULT_TRANSCRIBE_REGISTRY_TAG = "stable"
 
 

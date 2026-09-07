@@ -48,7 +48,7 @@ from nomikos_inference.registry import load_registry
 # laptop without anything saying so.
 DEFAULT_REGISTRY_MODEL_IDS: dict[InferenceTask, str] = {
     InferenceTask.segment: "blla-segment",
-    InferenceTask.transcribe: "syriac-calamari-v1",
+    InferenceTask.transcribe: "syriac-calamari-v2",
 }
 
 _REGISTRY_SCHEME = "registry://"

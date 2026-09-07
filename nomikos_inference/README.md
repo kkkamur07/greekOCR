@@ -201,7 +201,7 @@ Environment:
 Prefetch Hub weights without running inference:
 
 ```bash
-PYTHONPATH=. python scripts/hf/fetch_model.py syriac-calamari-v1 --registry-tag stable
+PYTHONPATH=. python scripts/hf/fetch_model.py syriac-calamari-v2 --registry-tag stable
 ```
 
 ## Contracts
@@ -219,7 +219,7 @@ Job callbacks use a tagged output union: `output.kind` is either `segment` or `t
 
 `nomikos_inference/registry.yaml` lists available models and weight locations. Example entries:
 
-- `greek-calamari-v1`, `armenian-calamari-v1`, `syriac-calamari-v1` - transcribe,
+- `greek-calamari-v1`, `armenian-calamari-v1`, `syriac-calamari-v2` - transcribe,
   Calamari architecture, one Hub repo and pinned revision + digest each. Same
   graph, one codec per script, so the entries differ only in `weights_source`
   and the pins.

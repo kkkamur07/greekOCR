@@ -169,7 +169,7 @@ def test_async_transcribe_submit_requires_batched_line_regions():
     with pytest.raises(ValidationError, match="non-empty params.lines"):
         JobSubmitRequest(
             task=InferenceTask.transcribe,
-            registry_model_id="syriac-calamari-v1",
+            registry_model_id="syriac-calamari-v2",
             product_job_id=uuid4(),
             image_bytes=b"page-bytes",
         )

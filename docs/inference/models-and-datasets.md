@@ -14,7 +14,7 @@ geometry, preserves the legacy `kraken_ceiling` field, and simplifies polygons.
 
 ### Calamari HTR
 
-`greek-calamari-v1`, `armenian-calamari-v1` and `syriac-calamari-v1` run the
+`greek-calamari-v1`, `armenian-calamari-v1` and `syriac-calamari-v2` run the
 Calamari graph on ONNX Runtime for line transcription. All three are the same
 topology, retrained per script:
 
@@ -57,7 +57,7 @@ the product.
 | `blla-segment`     | Segment    | BLLA (ONNX Runtime) | `blla.onnx` from [segmentation repo](https://huggingface.co/nomikos-project/segmentation-blla) |
 | `greek-calamari-v1` | Transcribe | Calamari (ONNX Runtime) | `best.onnx` from the [Hugging Face checkpoint](https://huggingface.co/nomikos-project/greek-htr-calamari), pinned revision |
 | `armenian-calamari-v1` | Transcribe | Calamari (ONNX Runtime) | `best.onnx` from the [Hugging Face checkpoint](https://huggingface.co/nomikos-project/armenian-htr-calamari), pinned revision |
-| `syriac-calamari-v1` | Transcribe | Calamari (ONNX Runtime) | `best.onnx` from the [Hugging Face checkpoint](https://huggingface.co/nomikos-project/syriac-htr-calamari), pinned revision |
+| `syriac-calamari-v2` | Transcribe | Calamari (ONNX Runtime) | `best.onnx` from the [Hugging Face checkpoint](https://huggingface.co/nomikos-project/syriac-htr-calamari), pinned revision |
 
 Coptic is an expansion target rather than a shipped runtime model.
 

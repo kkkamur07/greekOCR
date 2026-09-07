@@ -181,10 +181,10 @@ jobs:
           from huggingface_hub import hf_hub_download
 
           registry = yaml.safe_load(pathlib.Path("nomikos_inference/registry.yaml").read_text())
-          pinned = registry["models"]["syriac-calamari-v1"]["versions"]["stable"]
+          pinned = registry["models"]["syriac-calamari-v2"]["versions"]["stable"]
           repo = pinned["weights_source"].removeprefix("hf://").split("@")[0]
           destination = pathlib.Path(
-              "nomikos_inference/publish/artifacts/cache/syriac-calamari-v1/stable"
+              "nomikos_inference/publish/artifacts/cache/syriac-calamari-v2/stable"
           )
           destination.mkdir(parents=True, exist_ok=True)
           for artifact in ("best.pt", "best.onnx"):
