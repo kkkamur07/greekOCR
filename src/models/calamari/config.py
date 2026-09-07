@@ -49,8 +49,8 @@ def default_model_config(
     *, classes: int, temperature: float = -1.0, lstm_layers: int = 2
 ) -> CalamariTorchConfig:
     """Return the established Calamari CNN–BiLSTM topology."""
-    if lstm_layers not in {1, 2, 3}:
-        raise ValueError("Calamari supports one, two, or three bidirectional LSTM layers.")
+    if lstm_layers not in {1, 2}:
+        raise ValueError("Calamari supports one or two bidirectional LSTM layers.")
     recurrent_layers = (
         CalamariTorchLayerConfig("bilstm", "lstm_0", hidden_nodes=200, merge_mode="concat"),
         CalamariTorchLayerConfig("dropout", "dropout_0", rate=0.3),
@@ -58,11 +58,6 @@ def default_model_config(
     if lstm_layers == 2:
         recurrent_layers += (
             CalamariTorchLayerConfig("bilstm", "lstm_1", hidden_nodes=200, merge_mode="concat"),
-        )
-    if lstm_layers == 3:
-        recurrent_layers += (
-            CalamariTorchLayerConfig("bilstm", "lstm_1", hidden_nodes=200, merge_mode="concat"),
-            CalamariTorchLayerConfig("bilstm", "lstm_2", hidden_nodes=200, merge_mode="concat"),
         )
     return CalamariTorchConfig(
         layers=(

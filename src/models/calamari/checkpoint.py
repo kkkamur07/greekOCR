@@ -126,7 +126,7 @@ def _metadata_from_checkpoint(checkpoint: Mapping[str, object]) -> CalamariCheck
         or not math.isfinite(float(temperature))
         or not isinstance(lstm_layers, int)
         or isinstance(lstm_layers, bool)
-        or lstm_layers not in {1, 2, 3}
+        or lstm_layers not in {1, 2}
     ):
         raise CalamariCheckpointError("Invalid Calamari checkpoint metadata.")
     return CalamariCheckpointMetadata(
