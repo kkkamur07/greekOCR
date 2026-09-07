@@ -5,6 +5,7 @@ const platformApi = (
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"
 ).replace(/\/$/, "");
 const frontendRoot = fileURLToPath(new URL(".", import.meta.url));
+const isDevelopment = process.env.NODE_ENV !== "production";
 
 // Kept in sync with vercel.json. Vercel serves those at the edge; the self-hosted
 // `node server.js` runtime never reads vercel.json, so the same headers are applied
@@ -32,7 +33,10 @@ const securityHeaders = [
       "object-src 'none'",
       "frame-ancestors 'none'",
       "form-action 'self'",
-      "script-src 'self' 'unsafe-inline'",
+      // React's development build reconstructs call stacks with eval() and
+      // warns on every page when the policy forbids it. Production never
+      // evaluates code, so the allowance exists only in development.
+      `script-src 'self' 'unsafe-inline'${isDevelopment ? " 'unsafe-eval'" : ""}`,
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com",
       `img-src 'self' data: blob: https://api.nomikos.app ${platformApi}`,
