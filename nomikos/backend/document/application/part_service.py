@@ -25,6 +25,7 @@ from backend.document.infrastructure.media_store import (
     encode_part_image_with_size,
     encode_part_thumbnail,
     get_media_store,
+    persisted_thumbnail_key,
     read_image_size,
     validate_image_key,
 )
@@ -445,10 +446,38 @@ class DocumentPartService:
         return await asyncio.to_thread(self._read_part_bytes, part, width)
 
     def _read_part_bytes(self, part: DocumentPart, width: int | None) -> bytes:
+        if width is None:
+            return self._read_original(part)
+
+        # A persisted rendering is read *instead of* the original: that is the whole
+        # saving. Rendering needs the full page scan, so the first request for a
+        # width pays for it once and writes the result back next to the original;
+        # every later process reads kilobytes rather than megabytes.
+        derived_key = persisted_thumbnail_key(part.image_key, width)
+        if derived_key is not None:
+            try:
+                return self._media.read(derived_key)
+            except (ValueError, FileNotFoundError):
+                pass
+            except Exception:
+                # A storage hiccup on the small read must not hide the page: fall
+                # through to rendering from the original, which raises on its own.
+                logger.warning(
+                    "persisted thumbnail unreadable, rendering key=%s", derived_key, exc_info=True
+                )
+
+        encoded = encode_part_thumbnail(self._read_original(part), width)
+        if derived_key is not None:
+            try:
+                self._media.write(derived_key, encoded)
+            except Exception:
+                # Best effort. The response is already in hand; a failed write only
+                # means the next process renders again.
+                logger.warning("could not persist thumbnail key=%s", derived_key, exc_info=True)
+        return encoded
+
+    def _read_original(self, part: DocumentPart) -> bytes:
         try:
-            data = self._media.read(part.image_key)
+            return self._media.read(part.image_key)
         except (ValueError, FileNotFoundError):
             raise NotFoundError("Part image not found") from None
-        if width is None:
-            return data
-        return encode_part_thumbnail(data, width)

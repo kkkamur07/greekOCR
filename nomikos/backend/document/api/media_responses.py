@@ -8,6 +8,7 @@ from fastapi.responses import Response
 
 from backend.core.schemas.errors import ApiErrorResponse
 from backend.document.application.part_service import DocumentPartService
+from backend.document.infrastructure.media_store import THUMBNAIL_ENCODER_VERSION
 from backend.document.infrastructure.orm_models import DocumentPart
 
 IMAGE_MEDIA_RESPONSES: dict = {
@@ -53,7 +54,9 @@ PUBLIC_THUMBNAIL_WIDTHS: tuple[int, ...] = tuple(int(width) for width in PublicT
 
 PRIVATE_MEDIA_CACHE_CONTROL = "private, max-age=86400"
 PUBLIC_MEDIA_CACHE_CONTROL = "public, max-age=300, must-revalidate"
-THUMBNAIL_ENCODER_VERSION = "webp-q85-v1"
+# ``THUMBNAIL_ENCODER_VERSION`` lives with the encoder now (it also names the
+# persisted renderings in the bucket) and is re-exported here for the ETag.
+__all__ = ["THUMBNAIL_ENCODER_VERSION"]
 
 
 def media_type_for_image_key(image_key: str) -> str:
