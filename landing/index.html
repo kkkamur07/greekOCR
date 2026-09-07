@@ -145,14 +145,14 @@
                 assets/screenshots/editor-1280.webp 1280w
               "
               sizes="(min-width: 56rem) min(48vw, 34rem), calc(100vw - 2rem)"
-              alt="Nomikos page editor open on Grec1360 p.2, a two-page Greek manuscript spread with 51 line segments outlined in green, an HTR model selector in the toolbar, and a paired/unpaired legend"
+              alt="Nomikos page editor open on Grec1360 p.3, a two-page Greek manuscript spread with 49 line segments outlined in green, an HTR model selector in the toolbar, and a paired/unpaired legend"
               width="1280"
               height="695"
               fetchpriority="high"
               decoding="async"
             />
             <figcaption class="hero-split__caption">
-              Grec1360 p.2, segmented into 51 lines. Pick a model, review its draft,
+              Grec1360 p.3, segmented into 49 lines. Pick a model, review its draft,
               edit only where needed.
             </figcaption>
           </figure>
@@ -264,20 +264,12 @@
           <ul class="links">
             <li>
               <div class="links__main">
-                <a href="https://huggingface.co/nomikos-project/segmentation-blla" target="_blank" rel="noreferrer">
-                  segmentation-blla
-                </a>
-                <span class="links__desc">Page segmentation, Kraken BLLA</span>
-              </div>
-              <span class="status status--live"><span class="status__dot" aria-hidden="true"></span>Live</span>
-            </li>
-            <li>
-              <div class="links__main">
                 <a href="https://huggingface.co/nomikos-project/greek-htr-calamari" target="_blank" rel="noreferrer">
                   greek-htr-calamari
                 </a>
                 <span class="links__desc">Byzantine Greek line HTR, Calamari</span>
               </div>
+              <span class="links__cer" title="Character error rate on the validation pack reported in the model card">val CER <b>0.156</b></span>
               <span class="status status--live"><span class="status__dot" aria-hidden="true"></span>Live</span>
             </li>
             <li>
@@ -287,15 +279,7 @@
                 </a>
                 <span class="links__desc">Armenian line HTR, Calamari</span>
               </div>
-              <span class="status status--live"><span class="status__dot" aria-hidden="true"></span>Live</span>
-            </li>
-            <li>
-              <div class="links__main">
-                <a href="https://huggingface.co/nomikos-project/greek-htr-calamari" target="_blank" rel="noreferrer">
-                  greek-htr-calamari
-                </a>
-                <span class="links__desc">Greek line HTR, Calamari</span>
-              </div>
+              <span class="links__cer" title="Character error rate on the validation pack reported in the model card">val CER <b>0.092</b></span>
               <span class="status status--live"><span class="status__dot" aria-hidden="true"></span>Live</span>
             </li>
             <li>
@@ -305,6 +289,7 @@
                 </a>
                 <span class="links__desc">Syriac line HTR, Calamari</span>
               </div>
+              <span class="links__cer" title="Character error rate on the validation pack reported in the model card">val CER <b>0.181</b></span>
               <span class="status status--live"><span class="status__dot" aria-hidden="true"></span>Live</span>
             </li>
             <li>
@@ -312,6 +297,7 @@
                 <span class="links__name">coptic-htr-calamari</span>
                 <span class="links__desc">Coptic line HTR, Calamari</span>
               </div>
+              <span class="links__cer" aria-hidden="true"></span>
               <span class="status status--soon"><span class="status__dot" aria-hidden="true"></span>Coming soon</span>
             </li>
             <li>
@@ -319,21 +305,10 @@
                 <span class="links__name">Curated HTR datasets</span>
                 <span class="links__desc">Training and evaluation sets on Hugging Face</span>
               </div>
+              <span class="links__cer" aria-hidden="true"></span>
               <span class="status status--soon"><span class="status__dot" aria-hidden="true"></span>Coming soon</span>
             </li>
           </ul>
-          <p>
-            On the held-out packs reported in the model cards, greek-htr-calamari
-            scores 0.156 CER on validation (19 lines) and 0.226 on test (21 lines),
-            armenian-htr-calamari scores 0.092 on validation (119 lines) and 0.072
-            on test (120 lines), and syriac-htr-calamari scores 0.181 on validation
-            (331 lines) and 0.210 on test (335 lines). The Syriac and Armenian packs
-            run to a few hundred lines each; the 21-line Greek test pack is thin
-            enough that its figure is as much noise as signal. None of this is a
-            platform-wide accuracy guarantee: every pack comes from specific
-            manuscripts in specific hands, and CER moves with the script, the hand,
-            image quality, layout, and the training data behind the checkpoint.
-          </p>
         </section>
       </div>
     </main>
