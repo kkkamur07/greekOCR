@@ -709,19 +709,30 @@ export function PageEditorCanvas({
    * to exactly this, so it costs nothing to learn.
    *
    * Typing a space into the transcription strip must not pan the page, hence
-   * the editable-target guard. preventDefault stops the browser scrolling the
-   * pane out from under the gesture.
+   * the guard below. preventDefault stops the browser scrolling the pane out
+   * from under the gesture.
    */
   useEffect(() => {
-    function isEditableTarget(target: EventTarget | null): boolean {
+    /**
+     * Whatever has focus gets Space before the canvas does.
+     *
+     * A field types it, and a focused button is activated by it - Space is how
+     * half the keyboard world presses a button, and swallowing it here would
+     * make the page rail and the pager reachable by Tab but dead on arrival.
+     * Space only means "pan" when nothing else has a claim on it.
+     */
+    function ownsSpaceKey(target: EventTarget | null): boolean {
       if (!(target instanceof HTMLElement)) return false;
       if (target.isContentEditable) return true;
       const tag = target.tagName;
-      return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT")
+        return true;
+      if (tag === "BUTTON" || tag === "SUMMARY") return true;
+      return target.getAttribute("role") === "button";
     }
     function handleKeyDown(event: globalThis.KeyboardEvent) {
       if (event.code !== "Space" || event.repeat) return;
-      if (isEditableTarget(event.target)) return;
+      if (ownsSpaceKey(event.target)) return;
       event.preventDefault();
       setSpaceHeld(true);
     }

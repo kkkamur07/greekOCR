@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type Dispatch,
@@ -273,6 +274,13 @@ export function usePageEditorData(
   });
   const [lines, setLines] = useState<LineResponse[]>([]);
   const [loading, setLoading] = useState(true);
+  /**
+   * True while this part's own content is in flight, including the page turns
+   * that keep the editor on screen. `loading` blanks the editor and can only
+   * mean "there is nothing to show yet"; this one means "what you are looking
+   * at is the next page, and its Segments have not arrived".
+   */
+  const [partLoading, setPartLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [layoutError, setLayoutError] = useState<string | null>(null);
   const [lineError, setLineError] = useState<string | null>(null);
@@ -313,6 +321,53 @@ export function usePageEditorData(
    */
   const contentGenerationRef = useRef(0);
 
+  /**
+   * The document already on screen, readable from the route effect without
+   * making that effect depend on the state it sets.
+   *
+   * Paging inside one document is what needs it. The next part is already in
+   * `document.parts`, so the editor can swap to it without blanking itself:
+   * the toolbar, the page rail and whatever has focus stay mounted while the
+   * new page's layout, Segments and pairing load underneath. Blanking is
+   * reserved for the case that has nothing to show, a cold load of a document
+   * this hook has not read yet.
+   */
+  const documentRef = useRef<DocumentWithPartsResponse | null>(null);
+  documentRef.current = document;
+
+  /**
+   * Which page the setters handed out of this hook may still write to.
+   *
+   * A geometry save, a segmentation, a pairing or an OCR request starts on
+   * one page and finishes whenever the server answers. If the researcher has
+   * paged on by then, the answer belongs to a page that is no longer on
+   * screen, and writing it through the shared setters would put the previous
+   * page's Segments, layers or pairing under the current page. So the setters
+   * given to the mutation hooks are minted per part, and refuse a write once
+   * the part they were minted for is not the active one. The load effects
+   * below keep the raw setters; they have their own generation counter.
+   */
+  const activePartIdRef = useRef(partId);
+  activePartIdRef.current = partId;
+  const partSetters = useMemo(() => {
+    const mintedFor = partId;
+    const forPart = <T>(set: Dispatch<SetStateAction<T>>) =>
+      ((value: SetStateAction<T>) => {
+        if (activePartIdRef.current !== mintedFor) return;
+        set(value);
+      }) as Dispatch<SetStateAction<T>>;
+    return {
+      setPart: forPart(setPart),
+      setLayout: forPart(setLayout),
+      setLines: forPart(setLines),
+      setLineError: forPart(setLineError),
+      setTranscriptionLayers: forPart(setTranscriptionLayers),
+      setTextLines: forPart(setTextLines),
+      setPairingProgress: forPart(setPairingProgress),
+      setPairingError: forPart(setPairingError),
+    };
+  }, [partId]);
+
   useEffect(() => {
     if (!projectId || !documentId || !partId) {
       setLoading(false);
@@ -332,12 +387,28 @@ export function usePageEditorData(
       }
     };
 
-    setLoading(true);
+    const carriedDocument = canReuseDocument(
+      documentRef.current,
+      projectId,
+      documentId,
+    )
+      ? documentRef.current
+      : null;
+    const carriedPart = carriedDocument
+      ? resolvePart(carriedDocument, partId)
+      : null;
+
+    setLoading(!carriedPart);
+    setPartLoading(true);
     setError(null);
     setLayoutError(null);
     setLineError(null);
-    setDocument(null);
-    setPart(null);
+    if (carriedPart) {
+      setPart(carriedPart);
+    } else {
+      setDocument(null);
+      setPart(null);
+    }
     setLayout({ blocks: [], lines: [] });
     setLines([]);
     setTranscriptionLayers([]);
@@ -398,6 +469,7 @@ export function usePageEditorData(
       } finally {
         if (!cancelled) {
           setLoading(false);
+          setPartLoading(false);
         }
       }
     })();
@@ -467,39 +539,47 @@ export function usePageEditorData(
     };
   }, [projectId, documentId, partId, subscribeToJobCompletion]);
 
+  /** Every page of this document, in page order. The page rail reads it. */
+  const parts = useMemo(
+    () => (document ? sortedParts(document) : []),
+    [document],
+  );
+
   const partIndex =
     document && part
-      ? sortedParts(document).findIndex((item) => item.id === part.id) + 1
+      ? parts.findIndex((item) => item.id === part.id) + 1
       : null;
 
   return {
     document,
     setDocument,
     part,
-    setPart,
+    setPart: partSetters.setPart,
     layout,
-    setLayout,
+    setLayout: partSetters.setLayout,
     lines,
-    setLines,
+    setLines: partSetters.setLines,
     loading,
+    partLoading,
     error,
     layoutError,
     lineError,
-    setLineError,
+    setLineError: partSetters.setLineError,
     transcriptionLayers,
-    setTranscriptionLayers,
+    setTranscriptionLayers: partSetters.setTranscriptionLayers,
     selectedTranscriptionLayerId,
     setSelectedTranscriptionLayerId,
     groundTruthTranscriptionId,
     textLines,
-    setTextLines,
+    setTextLines: partSetters.setTextLines,
     pairingProgress,
-    setPairingProgress,
+    setPairingProgress: partSetters.setPairingProgress,
     pairingError,
-    setPairingError,
+    setPairingError: partSetters.setPairingError,
     transcribeModels,
     selectedTranscribeModelId,
     setSelectedTranscribeModelId,
+    parts,
     partIndex,
   };
 }

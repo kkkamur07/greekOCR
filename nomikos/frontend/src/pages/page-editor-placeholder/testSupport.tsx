@@ -141,6 +141,27 @@ export const DOCUMENT: DocumentWithPartsResponse = {
 };
 
 /**
+ * The same document, `count` pages long, in page order.
+ *
+ * `DOCUMENT` holds one page because most of these tests only need a canvas to
+ * put a Segment on. Paging needs a document long enough for a page turn to
+ * mean something, and long enough that "the page rail fetched a thumbnail for
+ * every page in the manuscript" is a mistake a test can see.
+ */
+export function documentWithPages(count: number): DocumentWithPartsResponse {
+  return {
+    ...DOCUMENT,
+    part_count: count,
+    parts: Array.from({ length: count }, (_, index) => ({
+      ...DOCUMENT.parts[0],
+      id: `part-${index + 1}`,
+      order: index,
+      image_url: `/media/parts/part-${index + 1}`,
+    })),
+  };
+}
+
+/**
  * A Line as `listPartLines` answers with one.
  *
  * The default is the plain manual rectangle-ish polygon most of these tests
@@ -231,18 +252,33 @@ export function layoutWith(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function pageEditorTree() {
+  return (
+    <BackgroundJobsProvider>
+      <PageEditorPlaceholderPage />
+      <BackgroundJobsPanel />
+    </BackgroundJobsProvider>
+  );
+}
+
 export function renderPageEditor() {
   window.history.replaceState(
     {},
     "",
     "/projects/project-1/documents/doc-1/parts/part-1",
   );
-  return render(
-    <BackgroundJobsProvider>
-      <PageEditorPlaceholderPage />
-      <BackgroundJobsPanel />
-    </BackgroundJobsProvider>,
-  );
+  const view = render(pageEditorTree());
+  return {
+    ...view,
+    /**
+     * Re-render the same editor against whatever the address bar now says.
+     *
+     * `useParams` is stubbed to read `window.location` (see vitest.setup.ts),
+     * so this is how a test plays back a route change the editor did not
+     * make - browser Back, above all.
+     */
+    rerenderFromUrl: () => view.rerender(pageEditorTree()),
+  };
 }
 
 export async function enableBaselinesOnCanvas() {
