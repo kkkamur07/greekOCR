@@ -16,3 +16,4 @@ value of an ADR is that it says what was believed at the time, and why.
 | [0004](0004-pytorch-is-the-inference-runtime.md)                     | PyTorch is the inference runtime; ONNX is archived             | Superseded by 0006                                           |
 | [0005](0005-agent-claim-endpoint-and-the-inference-service-account.md) | The agent claim endpoint and the inference service account     | Accepted                                                     |
 | [0006](0006-onnx-runtime-is-the-inference-runtime.md)                | ONNX Runtime is the inference runtime; PyTorch builds the artifact | Accepted                                                 |
+| [0007](0007-serving-preprocessing-reproduces-the-training-loader.md) | Serving preprocessing reproduces the training loader, exactly  | Accepted                                                     |

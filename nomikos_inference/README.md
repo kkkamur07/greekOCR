@@ -160,6 +160,12 @@ carries its own codec, line height and blank index in `metadata_props`, which is
 why one file is the whole model - there is no sidecar and no `.pt` to pair it
 with.
 
+Calamari preprocessing is the **training recipe** and nothing else: the runtime
+cuts and prepares a line exactly the way the trainer that produced the weights
+did, because a serving input that differs from the training input is a wrong
+answer from a correct model
+([ADR 0007](../docs/adr/0007-serving-preprocessing-reproduces-the-training-loader.md)).
+
 The **artifact SHA-256** is verified in `architectures/artifact.py` *before* the
 loader opens the file. That check used to be what kept `torch.load` off an
 unverified pickle; there is no unpickling left to reach, because a `.pt` is

@@ -151,14 +151,12 @@ def _decode_greedy(
             confidences[-1] = max(confidences[-1], float(softmax[index, label]))
         last_label = label
 
-    # Trim edge whitespace together with its confidences so the per-character
-    # confidence alignment survives (a bare ``str.strip`` would desync them).
-    while text_parts and text_parts[0].isspace():
-        text_parts.pop(0)
-        confidences.pop(0)
-    while text_parts and text_parts[-1].isspace():
-        text_parts.pop()
-        confidences.pop()
+    # No edge-whitespace trim. The trainer's ``CharacterCodec.decode_ctc`` in
+    # ``src/models/calamari/codec.py`` returns the collapsed labels as they are,
+    # and its loader reads ``.gt.txt`` files without stripping, so a model that
+    # learned to emit a leading or trailing space emits it on both sides. The
+    # trim that used to live here was the last thing keeping serving from being
+    # byte-identical to the trainer (see ADR 0007).
     return "".join(text_parts), confidences
 
 

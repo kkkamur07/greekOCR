@@ -13,6 +13,7 @@ from nomikos_inference.contracts.common import (
     ComputeDevice,
     HostEligibility,
     InferenceTask,
+    LineCrop,
     RegistryArchitecture,
 )
 
@@ -57,11 +58,58 @@ class RegistryModelEntry(BaseModel):
     architecture: RegistryArchitecture
     device: ComputeDevice
     host_eligibility: HostEligibility = HostEligibility.local
+    #: How this model's training line crops were cut, and by how much the
+    #: polygon's box was widened before masking. Both are required for transcribe
+    #: entries and rejected for the others; see ``RegistryDocument`` for why the
+    #: rule lives one level up. Optional here only so the error can name the
+    #: model id rather than a field path.
+    line_crop: LineCrop | None = None
+    line_crop_padding: int | None = None
     versions: dict[str, RegistryVersionEntry] = Field(min_length=1)
 
 
 class RegistryDocument(BaseModel):
     models: dict[str, RegistryModelEntry] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_line_crop_per_task(self) -> RegistryDocument:
+        """Every transcribe model has to state how its training crops were cut.
+
+        There is no safe default for the padding. Serving Greek at Armenian's 12
+        px costs it 125 exact lines out of 204 down to 0, CER 0.050 to 0.304, and
+        it fails silently: plausible-looking text, quietly wrong. So a transcribe
+        entry without both fields is a registry error rather than an assumption,
+        and the message names the model id because that is what the person
+        editing this YAML is looking at.
+        """
+        for model_id, entry in self.models.items():
+            if entry.task == InferenceTask.transcribe:
+                if entry.line_crop is None:
+                    raise ValueError(
+                        f"registry model {model_id!r} has task 'transcribe' and must set "
+                        "line_crop to one of: "
+                        + ", ".join(repr(option.value) for option in LineCrop)
+                    )
+                if entry.line_crop_padding is None:
+                    raise ValueError(
+                        f"registry model {model_id!r} has task 'transcribe' and must set "
+                        "line_crop_padding, the pixel padding its training crops were "
+                        "exported with"
+                    )
+                if entry.line_crop_padding < 0:
+                    raise ValueError(
+                        f"registry model {model_id!r} has a negative line_crop_padding "
+                        f"({entry.line_crop_padding}); padding widens the crop and cannot "
+                        "shrink it"
+                    )
+            else:
+                for field in ("line_crop", "line_crop_padding"):
+                    if getattr(entry, field) is not None:
+                        raise ValueError(
+                            f"registry model {model_id!r} has task {entry.task.value!r} and "
+                            f"must not set {field}, which only applies to transcribe models"
+                        )
+        return self
 
 
 @lru_cache(maxsize=8)

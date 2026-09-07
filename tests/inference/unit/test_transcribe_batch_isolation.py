@@ -17,7 +17,7 @@ from pydantic import ValidationError
 
 from nomikos_inference.architectures.calamari import adapter
 from nomikos_inference.architectures.calamari.adapter import TranscribeLineFailure
-from nomikos_inference.contracts.common import InferenceTask, RegistryArchitecture
+from nomikos_inference.contracts.common import InferenceTask, LineCrop, RegistryArchitecture
 from nomikos_inference.contracts.transcribe import (
     TRANSCRIBE_LINE_ERROR,
     CharacterConfidence,
@@ -69,7 +69,13 @@ def _line_params(count: int) -> dict:
 
 @pytest.fixture
 def calamari_runner(monkeypatch: pytest.MonkeyPatch):
-    """Wire ``run_model`` to a Calamari entry without touching weights."""
+    """Wire ``run_model`` to a Calamari entry without touching weights.
+
+    ``line_crop`` and ``line_crop_padding`` are on the stub entry because the
+    registry requires both on every transcribe model: how a model's training
+    crops were cut is per model, and the runner reads it off the resolved entry
+    (ADR 0007).
+    """
     monkeypatch.setattr("nomikos_inference.jobs.runner.validate_image_bytes", lambda *_args: None)
     monkeypatch.setattr(
         "nomikos_inference.jobs.runner.validate_request_params", lambda *_args: None
@@ -82,6 +88,8 @@ def calamari_runner(monkeypatch: pytest.MonkeyPatch):
         "nomikos_inference.jobs.runner.resolve_registry_entry",
         lambda **_kwargs: SimpleNamespace(
             architecture=RegistryArchitecture.calamari,
+            line_crop=LineCrop.polygon_white,
+            line_crop_padding=12,
             versions={
                 "stable": SimpleNamespace(
                     weights_source="file://unused",
@@ -139,7 +147,13 @@ def test_uncroppable_line_geometry_is_isolated_from_the_batch(
     calamari_runner,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def crop(image, image_bytes: bytes, points: list[list[float]] | None) -> bytes:
+    def crop(
+        image,
+        image_bytes: bytes,
+        points: list[list[float]] | None,
+        line_crop: LineCrop = LineCrop.polygon_white,
+        line_crop_padding: int = 12,
+    ) -> bytes:
         if points and points[0][0] == 99.0:
             raise ValueError("degenerate polygon")
         return image_bytes
@@ -168,7 +182,7 @@ def test_batch_with_no_croppable_line_fails_instead_of_returning_nothing(
 ) -> None:
     monkeypatch.setattr(
         "nomikos_inference.jobs.runner._crop_line_image",
-        lambda *_args: (_ for _ in ()).throw(ValueError("degenerate polygon")),
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(ValueError("degenerate polygon")),
     )
     monkeypatch.setattr(
         "nomikos_inference.jobs.runner.run_calamari_transcribe_many",
@@ -239,3 +253,52 @@ def test_batch_response_rejects_an_all_error_body() -> None:
                 TranscribeBatchLineResult(line_index=1, error=TRANSCRIBE_LINE_ERROR),
             ]
         )
+
+
+@pytest.mark.parametrize("padding", [0, 12])
+def test_the_registry_crop_settings_reach_the_crop(
+    calamari_runner,
+    monkeypatch: pytest.MonkeyPatch,
+    padding: int,
+) -> None:
+    """The model's own crop settings are what the page is actually cut with.
+
+    Greek and Armenian were trained by the same team on the same architecture and
+    still need different paddings, so a hard-coded number here reads one of them
+    wrong every time and never raises: Greek at Armenian's 12 px drops from 125
+    exact lines out of 204 to 0. Pin the wiring rather than the pixels; the crop
+    itself is compared against the training function in
+    ``test_calamari_training_parity.py``.
+    """
+    import numpy as np
+
+    monkeypatch.setattr(
+        "nomikos_inference.jobs.runner.resolve_registry_entry",
+        lambda **_kwargs: SimpleNamespace(
+            architecture=RegistryArchitecture.calamari,
+            line_crop=LineCrop.polygon_white,
+            line_crop_padding=padding,
+            versions={
+                "stable": SimpleNamespace(
+                    weights_source="file://unused",
+                    hub_revision=None,
+                    artifact_sha256=None,
+                )
+            },
+        ),
+    )
+    seen: list[tuple[LineCrop, int]] = []
+
+    def record(page, points, convention: LineCrop, *, padding: int):
+        seen.append((convention, padding))
+        return np.zeros((6, 12), dtype=np.uint8)
+
+    monkeypatch.setattr("nomikos_inference.jobs.runner.crop_line", record)
+    monkeypatch.setattr(
+        "nomikos_inference.jobs.runner.run_calamari_transcribe_many",
+        lambda line_images, **_kwargs: [_transcribed("a") for _ in line_images],
+    )
+
+    calamari_runner(_line_params(2))
+
+    assert seen == [(LineCrop.polygon_white, padding)] * 2

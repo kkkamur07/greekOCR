@@ -16,7 +16,11 @@ from nomikos_inference.architectures.calamari import (
     run_calamari_transcribe,
     run_calamari_transcribe_many,
 )
-from nomikos_inference.contracts.common import InferenceTask, RegistryArchitecture
+from nomikos_inference.architectures.calamari.preprocessing import (
+    TRAINING_CROP_PADDING,
+    crop_line,
+)
+from nomikos_inference.contracts.common import InferenceTask, LineCrop, RegistryArchitecture
 from nomikos_inference.contracts.segment import SegmentRunResponse
 from nomikos_inference.contracts.transcribe import (
     TRANSCRIBE_LINE_ERROR,
@@ -32,36 +36,53 @@ from nomikos_inference.weights import resolve_weights_source
 logger = logging.getLogger(__name__)
 
 
+#: ``save_crop`` in ``src/preprocessing_data/syriac/xml_to_data.py`` wrote every
+#: training crop as a grayscale JPEG with exactly these options, and the
+#: trainer's loader read that file back. The lossy round trip is therefore part
+#: of the picture the model was fitted on, not an artifact of storage, so serving
+#: reproduces it rather than handing over a cleaner PNG.
+TRAINING_CROP_JPEG_OPTIONS = {"format": "JPEG", "quality": 82, "optimize": True}
+
+
 def _crop_line_image(
-    image: Image.Image, image_bytes: bytes, points: list[list[float]] | None
+    image: Image.Image,
+    image_bytes: bytes,
+    points: list[list[float]] | None,
+    line_crop: LineCrop = LineCrop.polygon_white,
+    line_crop_padding: int = TRAINING_CROP_PADDING,
 ) -> bytes:
-    """Crop one line from an already-decoded page image.
+    """Cut one line out of a page the way *this model's* training crops were cut.
+
+    One crop function serves every model: the polygon's box widened by
+    ``line_crop_padding``, clamped to the page, with everything outside the
+    polygon painted white, which is what
+    ``src/preprocessing_data/syriac/xml_to_data.py::crop_polygon`` wrote. Only
+    the padding differs, and it differs enough to matter: Greek was exported at 0
+    and reads 125 of its 204 corpus lines exactly there against 0 of 204 at 12.
+    So the registry states both per model and they are threaded down to here.
 
     Takes the open ``image`` so a page with N lines is decoded once, not N times:
     ``Image.crop`` forces a full decode of the source on every call, so re-opening
     the multi-megapixel scan per line was O(N) full decodes of the same bytes.
     ``image_bytes`` is still returned verbatim for the whole-page fallback so the
     downstream model sees the original encoding, not a re-encode.
+
+    The crop goes on as a mode ``L`` JPEG at the exporter's own quality, not as a
+    lossless PNG: the model was trained on crops that had been through that
+    encoder, so a clean PNG would hand it pixels slightly unlike any it ever saw.
+    A ``ValueError`` from the crop (degenerate geometry off the page) propagates:
+    ``_transcribe_batch`` isolates it to its own line.
     """
     if not points:
         return image_bytes
 
-    xs = [point[0] for point in points if len(point) == 2]
-    ys = [point[1] for point in points if len(point) == 2]
-    if not xs or not ys:
+    polygon = [point for point in points if len(point) == 2]
+    if not polygon:
         return image_bytes
 
-    width, height = image.size
-    left = max(0, int(min(xs)))
-    top = max(0, int(min(ys)))
-    right = min(width, int(max(xs)))
-    bottom = min(height, int(max(ys)))
-    if right <= left or bottom <= top:
-        return image_bytes
-
-    cropped = image.crop((left, top, right, bottom))
+    cropped = crop_line(image, polygon, line_crop, padding=line_crop_padding)
     output = BytesIO()
-    cropped.save(output, format=image.format or "PNG")
+    Image.fromarray(cropped, mode="L").save(output, **TRAINING_CROP_JPEG_OPTIONS)
     return output.getvalue()
 
 
@@ -80,6 +101,8 @@ def _transcribe_batch(
     *,
     checkpoint_path: Path,
     artifact_sha256: str | None,
+    line_crop: LineCrop = LineCrop.polygon_white,
+    line_crop_padding: int = TRAINING_CROP_PADDING,
 ) -> TranscribeBatchRunResponse:
     """Transcribe every requested line, keeping per-line failures per-line.
 
@@ -99,7 +122,13 @@ def _transcribe_batch(
         page_image.load()
         for position, region in enumerate(line_regions):
             try:
-                crop = _crop_line_image(page_image, image_bytes, region.points)
+                crop = _crop_line_image(
+                    page_image,
+                    image_bytes,
+                    region.points,
+                    line_crop=line_crop,
+                    line_crop_padding=line_crop_padding,
+                )
             except Exception as error:  # noqa: BLE001 - one bad region is not a bad page
                 logger.warning(
                     "transcribe line crop failed (line_index=%s, line_id=%s)",
@@ -203,6 +232,14 @@ def run_model(
                     line_regions,
                     checkpoint_path=weights_path,
                     artifact_sha256=version.artifact_sha256,
+                    # The registry requires both on every transcribe entry; the
+                    # fallbacks only cover an entry built outside the loader.
+                    line_crop=entry.line_crop or LineCrop.polygon_white,
+                    line_crop_padding=(
+                        TRAINING_CROP_PADDING
+                        if entry.line_crop_padding is None
+                        else entry.line_crop_padding
+                    ),
                 )
             return run_calamari_transcribe(
                 image_bytes,

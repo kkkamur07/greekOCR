@@ -8,12 +8,32 @@
 # stack needs no adapter change and no new registry field. The depth is
 # recorded here because it is what makes the Syriac pin below a different
 # model rather than a re-export of the old one.
+# All three were trained by the in-house PyTorch trainer, and the runtime feeds
+# the graph exactly what that trainer's loader fed it: grayscale, an
+# aspect-preserving bilinear resize to the graph's line height, raw uint8, no
+# inversion, no dewarp, no tensor padding, and one crop function for all three:
+# the training exporter's `crop_polygon`, a polygon mask on a white canvas
+# (`line_crop: polygon-white`). What the three do differ on is how far that crop
+# was widened before masking, so each entry declares its own
+# `line_crop_padding`: the Greek finetuning crops were exported with 0 px while
+# Armenian and Syriac used 12 (ADR 0007). The
+# `preprocessing` string in the ONNX metadata of the artifacts pinned below reads
+# `existing Calamari NumPy preprocessing`; that is a stale label left by an
+# earlier exporter, not an instruction the runtime follows.
 models:
   syriac-calamari-v2:
     task: transcribe
     architecture: calamari
     device: cpu
     host_eligibility: local
+    # Pinned to the training exporter's own PADDING. Not measured end to end:
+    # the Syriac model reproduces no ground truth we hold under any padding
+    # (EastSyriac Chapter4, 0/504 exact, CER 0.29 against the card's own test
+    # CER 0.21; its charset has no ASCII full stop or colon, which 490 of the
+    # 504 lines contain). Serving equals the trainer on those crops line for
+    # line, so this is the exporter's PADDING, not a measured value. ADR 0007.
+    line_crop: polygon-white
+    line_crop_padding: 12
     versions:
       stable:
         weights_source: hf://nomikos-project/syriac-htr-calamari@stable
@@ -36,6 +56,11 @@ models:
     architecture: calamari
     device: cpu
     host_eligibility: local
+    # Whole Grec1360 corpus, 204 lines, 2026-09-07: 0/204 exact at padding 12
+    # (CER 0.304) against 125/204 exact at padding 0 (CER 0.050). The Greek
+    # finetuning crops were exported with no padding.
+    line_crop: polygon-white
+    line_crop_padding: 0
     versions:
       stable:
         weights_source: hf://nomikos-project/greek-htr-calamari@stable
@@ -53,6 +78,9 @@ models:
     architecture: calamari
     device: cpu
     host_eligibility: local
+    # Full MS_UCLA_MS document, 2026-09-07: 664/819 lines exact at padding 12.
+    line_crop: polygon-white
+    line_crop_padding: 12
     versions:
       stable:
         weights_source: hf://nomikos-project/armenian-htr-calamari@stable

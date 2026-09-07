@@ -45,9 +45,37 @@ const LINE = {
   line_transcriptions: [],
 };
 
-function setup() {
+/** The same segment once a researcher has approved text on it. */
+const LINE_WITH_GROUND_TRUTH = {
+  ...LINE,
+  line_transcriptions: [
+    {
+      id: "line-tx-gt",
+      transcription_id: "ground-truth-1",
+      transcription_kind: "ground_truth",
+      text: "hand-checked text",
+      confidence: null,
+    },
+  ],
+};
+
+/** The Ground truth layer, as `listTranscriptions` still returns it. */
+const GROUND_TRUTH_LAYER = {
+  id: "ground-truth-1",
+  created_by_job_id: null,
+  kind: "ground_truth",
+};
+
+type SetupOptions = {
+  lines?: (typeof LINE)[];
+  selectedTranscriptionLayerId?: string | null;
+  groundTruthTranscriptionId?: string | null;
+};
+
+function setup(options: SetupOptions = {}) {
   const setPairingError = vi.fn();
   const setSubmissionRefusal = vi.fn();
+  const setSelectedTranscriptionLayerId = vi.fn();
   const trackJobAndWait = vi.fn().mockResolvedValue({
     status: "done",
     result: {
@@ -61,13 +89,14 @@ function setup() {
       projectId: "project-1",
       documentId: "document-1",
       partId: "part-1",
-      lines: [LINE],
+      lines: options.lines ?? [LINE],
       setLines: vi.fn(),
       transcriptionLayers: [],
       setTranscriptionLayers: vi.fn(),
-      selectedTranscriptionLayerId: null,
-      setSelectedTranscriptionLayerId: vi.fn(),
-      groundTruthTranscriptionId: null,
+      selectedTranscriptionLayerId:
+        options.selectedTranscriptionLayerId ?? null,
+      setSelectedTranscriptionLayerId,
+      groundTruthTranscriptionId: options.groundTruthTranscriptionId ?? null,
       setTextLines: vi.fn(),
       setPairingProgress: vi.fn(),
       setPairingError,
@@ -77,7 +106,13 @@ function setup() {
     }),
   );
 
-  return { view, setPairingError, setSubmissionRefusal, trackJobAndWait };
+  return {
+    view,
+    setPairingError,
+    setSubmissionRefusal,
+    setSelectedTranscriptionLayerId,
+    trackJobAndWait,
+  };
 }
 
 /**
@@ -104,7 +139,7 @@ describe("usePairingState OCR", () => {
     vi.clearAllMocks();
     enqueueTranscribePart.mockResolvedValue({ job_id: "cloud-job-1" });
     listPartLines.mockResolvedValue([LINE]);
-    listTranscriptions.mockResolvedValue([]);
+    listTranscriptions.mockResolvedValue([GROUND_TRUTH_LAYER]);
     getPagePairing.mockResolvedValue({
       text_lines: [],
       pairing_progress: { paired_lines: 0, total_lines: 0, percent: 0 },
@@ -199,8 +234,89 @@ describe("usePairingState OCR", () => {
     expect(options?.timeoutMs).toBeGreaterThan(120_000);
   });
 
+  it("leaves Ground truth open and untouched when a segment run finishes", async () => {
+    // The model output is a suggestion. Switching the dropdown to the new
+    // model layer, and the draft box with it, read as "the model replaced my
+    // Ground truth" even though the two layers are separate rows.
+    listPartLines.mockResolvedValue([LINE_WITH_GROUND_TRUTH]);
+    const { view, setSelectedTranscriptionLayerId } = setup({
+      lines: [LINE_WITH_GROUND_TRUTH],
+      selectedTranscriptionLayerId: "ground-truth-1",
+      groundTruthTranscriptionId: "ground-truth-1",
+    });
+
+    act(() => {
+      view.result.current.selectSegment("line-1");
+    });
+    await act(async () => {
+      await view.result.current.runSegmentOcr();
+    });
+
+    expect(setSelectedTranscriptionLayerId).not.toHaveBeenCalledWith(
+      "transcription-1",
+    );
+    expect(setSelectedTranscriptionLayerId).not.toHaveBeenCalled();
+    expect(view.result.current.approvedTextDraft).toBe("hand-checked text");
+  });
+
+  it("opens Ground truth, not the model layer, when nothing is selected", async () => {
+    listPartLines.mockResolvedValue([LINE_WITH_GROUND_TRUTH]);
+    const { view, setSelectedTranscriptionLayerId } = setup({
+      lines: [LINE_WITH_GROUND_TRUTH],
+      selectedTranscriptionLayerId: null,
+      groundTruthTranscriptionId: "ground-truth-1",
+    });
+
+    act(() => {
+      view.result.current.selectSegment("line-1");
+    });
+    await act(async () => {
+      await view.result.current.runPageOcr();
+    });
+
+    expect(setSelectedTranscriptionLayerId).toHaveBeenCalledWith(
+      "ground-truth-1",
+    );
+    expect(setSelectedTranscriptionLayerId).not.toHaveBeenCalledWith(
+      "transcription-1",
+    );
+    expect(view.result.current.approvedTextDraft).toBe("hand-checked text");
+  });
+
+  it("opens Ground truth when the layer that was selected is gone", async () => {
+    // The layer was deleted while the run was in flight. Keeping its id would
+    // leave the selection resolving to no layer at all, which empties the
+    // draft box over approved text the researcher never touched.
+    listPartLines.mockResolvedValue([LINE_WITH_GROUND_TRUTH]);
+    const { view, setSelectedTranscriptionLayerId } = setup({
+      lines: [LINE_WITH_GROUND_TRUTH],
+      selectedTranscriptionLayerId: "deleted-layer-1",
+      groundTruthTranscriptionId: "ground-truth-1",
+    });
+
+    act(() => {
+      view.result.current.selectSegment("line-1");
+    });
+    await act(async () => {
+      await view.result.current.runPageOcr();
+    });
+
+    expect(setSelectedTranscriptionLayerId).toHaveBeenCalledWith(
+      "ground-truth-1",
+    );
+    expect(view.result.current.approvedTextDraft).toBe("hand-checked text");
+  });
+
   it("reloads the layer the job created when the result is unreadable", async () => {
-    const { view, trackJobAndWait, setPairingError } = setup();
+    const {
+      view,
+      trackJobAndWait,
+      setPairingError,
+      setSelectedTranscriptionLayerId,
+    } = setup({
+      selectedTranscriptionLayerId: "ground-truth-1",
+      groundTruthTranscriptionId: "ground-truth-1",
+    });
     trackJobAndWait.mockResolvedValueOnce({
       id: "cloud-job-1",
       status: "done",
@@ -223,5 +339,10 @@ describe("usePairingState OCR", () => {
     expect(listPartLines).toHaveBeenCalled();
     expect(setPairingError).not.toHaveBeenCalledWith(expect.any(String));
     expect(view.result.current.ocrMessage?.text).toMatch(/completed/i);
+    // Reloading is not switching: the layer the job created is a suggestion
+    // here too, so the open layer stays the researcher's.
+    expect(setSelectedTranscriptionLayerId).not.toHaveBeenCalledWith(
+      "transcription-2",
+    );
   });
 });

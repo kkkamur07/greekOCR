@@ -39,8 +39,50 @@ the file. The trained checkpoint is converted to the run artifact by
 revision** (ADR 0006, which supersedes 0004). `tests/export/` runs the graph and
 the artifact on real
 weights and compares them, because a conversion step is exactly where a model
-can drift from what was trained. The vendored TensorFlow Calamari tree is used
-for training, not shipped in the inference image.
+can drift from what was trained.
+
+All three were trained by the in-house PyTorch trainer
+(`src/models/calamari/trainer.py`), not by the vendored TensorFlow Calamari
+tree, which is a research artifact and is not shipped in the inference image.
+That decides what the runtime may feed them: **the serving input must be exactly
+the training input.** Grayscale, an aspect-preserving bilinear resize to the line
+height the graph declares, raw `uint8` values (the graph divides by 255 itself),
+no inversion, no centre-line dewarping, no padding. Nothing else. Until
+2026-09-07 the runtime ran the legacy TensorFlow Calamari processors instead,
+which no registry model was ever trained on; on Armenian pages that are in the
+training data that produced 1 exact line in 30 where the training recipe
+produces 30 in 30 on the same `best.onnx`.
+
+The line crop is part of that input. One crop function serves every model, the
+training exporter's `crop_polygon`: the polygon's bounding box, widened by a
+padding, with every pixel outside the polygon painted white on the crop. What is
+**per model** is that padding, because the Greek finetuning crops were exported
+with 0 px while the Armenian and Syriac ones used 12. Every `task: transcribe`
+entry states both in required `line_crop` and `line_crop_padding` fields. Using
+the wrong padding costs about as much as the wrong preprocessing did: over the
+whole Grec1360 corpus Greek reads 125 of 204 lines exactly at padding 0 (CER
+0.050) and none of them at 12 (CER 0.304). The crop is then handed to the model
+re-encoded the way the exporter wrote it, a grayscale JPEG at quality 82, so the
+lossy round trip the training pixels went through is reproduced rather than
+skipped. Polygon coordinates are rounded to integers the way the exporter's
+`parse_points` rounds them, and the CTC decoder returns exactly what the
+trainer's codec returns, edge whitespace included: neither side trims.
+
+The benchmark for all of this is the trainer, not the ground truth. Run over
+the three whole training documents held in Supabase, with the real `src/`
+exporter, dataset and `best.pt` on one side and the runner's `run_model` with
+`best.onnx` on the other, serving reproduces the trainer's text on every line:
+819 of 819 Armenian, 204 of 204 Greek, 504 of 504 Syriac, with the trainer at
+batch size 1. (At its default batch of 16 the trainer disagrees with itself,
+because its collate pads lines to the batch's widest and the network can see
+the pad; that is a trainer property and is described in the ADR.)
+
+See [ADR 0007](../adr/0007-serving-preprocessing-reproduces-the-training-loader.md)
+for the measurements and for the three files that have to move together;
+`tests/inference/unit/test_calamari_training_parity.py` compares the serving
+functions against the training functions and is what keeps the two in step. The
+`preprocessing` string in a published graph's ONNX metadata is a stale label on
+the existing artifacts, not a description of what the runtime does.
 
 Calamari and BLLA are capable enough for the current manuscript workflow while
 remaining practical for CPU-first local execution. The helper does not require

@@ -22,6 +22,7 @@ import {
 } from "../jobProgress";
 import { segmentNumberFor, segmentsInNumberOrder } from "../segmentNumbering";
 import { statusMessage, type StatusMessage } from "../statusMessage";
+import { groundTruthLayer } from "../../../utils/transcriptionLayerLabel";
 import {
   lineTextForLayer,
   modelLayerIdForPromotion,
@@ -274,7 +275,19 @@ export function usePairingState({
     }
   }
 
-  async function refreshAfterOcr(modelLayerId: string) {
+  /**
+   * The reload a finished OCR run needs, without touching the open layer.
+   *
+   * A model run produces a suggestion, never a replacement: switching the
+   * dropdown to the new model layer, and the draft box with it, read as "the
+   * model overwrote my Ground truth" even though the layers are separate rows.
+   * So the selection stays where the researcher left it, and the draft box is
+   * re-synced to that same layer. With nothing selected yet, Ground truth is
+   * the layer to open, never the model output. A layer deleted while the run
+   * was in flight is the exception: an id the reload no longer carries would
+   * resolve to no layer at all, so it is dropped and Ground truth opens.
+   */
+  async function refreshAfterOcr() {
     if (!projectId || !documentId || !partId) return;
     const [reloadedLines, layers] = await Promise.all([
       api.listPartLines(projectId, documentId, partId),
@@ -282,8 +295,20 @@ export function usePairingState({
     ]);
     setLines(reloadedLines);
     setTranscriptionLayers(layers);
-    setSelectedTranscriptionLayerId(modelLayerId);
-    syncApprovedTextDraft(reloadedLines, modelLayerId);
+    const stillPresent = (layerId: string | null) =>
+      layerId !== null && layers.some((layer) => layer.id === layerId)
+        ? layerId
+        : null;
+    const layerToShow =
+      stillPresent(selectedTranscriptionLayerId) ??
+      stillPresent(groundTruthTranscriptionId) ??
+      groundTruthLayer(layers)?.id ??
+      null;
+    if (layerToShow === null) return;
+    if (layerToShow !== selectedTranscriptionLayerId) {
+      setSelectedTranscriptionLayerId(layerToShow);
+    }
+    syncApprovedTextDraft(reloadedLines, layerToShow);
   }
 
   /**
@@ -315,7 +340,7 @@ export function usePairingState({
         };
       }),
     );
-    await refreshAfterOcr(result.transcription_id);
+    await refreshAfterOcr();
     notePartContentChanged();
     return result;
   }
@@ -336,7 +361,7 @@ export function usePairingState({
         (layer) => layer.created_by_job_id === job.id,
       );
       if (created) {
-        await refreshAfterOcr(created.id);
+        await refreshAfterOcr();
         notePartContentChanged();
         return null;
       }
