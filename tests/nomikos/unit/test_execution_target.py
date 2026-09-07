@@ -155,6 +155,8 @@ def _model(artifact_ref: str, task: InferenceTask = InferenceTask.transcribe) ->
     ("artifact_ref", "expected"),
     [
         ("registry://syriac-calamari-v1?tag=stable", "syriac-calamari-v1"),
+        ("registry://greek-calamari-v1?tag=stable", "greek-calamari-v1"),
+        ("registry://armenian-calamari-v1?tag=stable", "armenian-calamari-v1"),
         ("registry://blla-segment", "blla-segment"),
     ],
 )
@@ -184,3 +186,15 @@ def test_the_shipped_registry_models_are_lite_and_may_run_on_either_host() -> No
     this is where the change surfaces."""
     for registry_model_id in DEFAULT_REGISTRY_MODEL_IDS.values():
         assert host_eligibility_for(registry_model_id) is HostEligibility.local
+
+
+@pytest.mark.parametrize(
+    "registry_model_id",
+    ["greek-calamari-v1", "armenian-calamari-v1", "syriac-calamari-v1"],
+)
+def test_every_transcribe_script_may_run_on_a_researchers_laptop(registry_model_id: str) -> None:
+    """``DEFAULT_REGISTRY_MODEL_IDS`` names only one transcribe model, so the test
+    above covers only one of the three scripts. The other two reach this module
+    through a catalog ``artifact_ref`` instead, and a laptop-ineligible one would
+    send a job to the cloud with no visible cause."""
+    assert host_eligibility_for(registry_model_id) is HostEligibility.local

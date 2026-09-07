@@ -30,6 +30,22 @@ from nomikos_inference.registry import load_registry
 # The registry model id used when a job carries no catalog model. Kept here
 # rather than imported from the dispatcher: this is a property of the Registry,
 # and the dispatcher is being rewritten around it.
+#
+# There are three transcribe models now (Greek, Armenian, Syriac) and no reason
+# to think a job carrying no catalog model wants the Syriac one. The entry stays
+# unchanged anyway, because what this module asks of it is narrower than it
+# looks: the id is handed to `host_eligibility_for`, and all three Calamari
+# entries are `local`, so every candidate answers that question identically.
+# Naming a different script here would change no behaviour and would still be a
+# guess.
+#
+# The guess that does matter, which weights transcribe a page whose job named no
+# model, is not fixable by editing this line: any single default is wrong for two
+# of the three scripts. That belongs upstream, in making the caller carry a
+# catalog model. Dropping the key would be the quiet change, not the honest one:
+# `registry_model_id_for` would return None, unknown reads as `remote` by design,
+# and model-less transcribe jobs would stop being eligible for a researcher's
+# laptop without anything saying so.
 DEFAULT_REGISTRY_MODEL_IDS: dict[InferenceTask, str] = {
     InferenceTask.segment: "blla-segment",
     InferenceTask.transcribe: "syriac-calamari-v1",
