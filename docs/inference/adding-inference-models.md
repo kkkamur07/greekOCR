@@ -78,12 +78,27 @@ Example: `registry://syriac-calamari-v1?tag=stable`.
    ```
 
    ```bash
-   uv run --group export python -c "
-   from pathlib import Path
-   from src.model.inference_export.calamari import export_calamari_onnx
-   d = Path('src/hf/staging/models/{script}/calamari/{model_version}/{registry_tag}')
-   export_calamari_onnx(d / 'best.pt', d / 'best.onnx')"
+   uv run --group export python scripts/hf/export_calamari_onnx.py \
+     --checkpoint src/hf/staging/models/{script}/calamari/{model_version}/{registry_tag}/best.pt \
+     --destination src/hf/staging/models/{script}/calamari/{model_version}/{registry_tag}/best.onnx
    ```
+
+   The script prints the SHA-256 of both files plus the classes, line height,
+   recurrent depth and opset, which is what step 4 below copies into the
+   Registry. Pass `--repo-id` and `--revision` instead of `--checkpoint` to
+   export straight from a published Hub commit.
+
+   Then check the artifact against the graph it was traced from, on real line
+   crops, before publishing it. ADR 0006 exists because a published artifact had
+   silently drifted from its exporter, and this is the measurement that would
+   have caught it:
+
+   ```bash
+   uv run --group export python scripts/hf/verify_calamari_parity.py \
+     --checkpoint .../best.pt --onnx .../best.onnx --lines path/to/line/crops
+   ```
+
+   It exits non-zero if any greedy decode differs between the two.
 
 2. Dry-run, then upload:
 

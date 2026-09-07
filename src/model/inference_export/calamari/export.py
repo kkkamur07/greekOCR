@@ -99,5 +99,11 @@ def _metadata_values(metadata: CalamariCheckpointMetadata) -> dict[str, str]:
         "charset": json.dumps(list(metadata.charset), ensure_ascii=False),
         "blank_index": str(metadata.blank_index),
         "temperature": repr(metadata.temperature),
+        # Provenance only. The traced graph carries whatever recurrent stack
+        # the checkpoint declared, so the runtime never has to know how deep it
+        # was; ``_load_session`` validates a fixed set of keys and ignores the
+        # rest, so recording it here costs nothing and answers "which
+        # architecture is this artifact?" without reopening the ``.pt``.
+        "lstm_layers": str(metadata.lstm_layers),
         "preprocessing": "existing Calamari NumPy preprocessing; model input is uint8-valued float32",
     }

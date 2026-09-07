@@ -176,11 +176,28 @@ Source of truth: [`src/hf/publish/collection.yaml`](../src/hf/publish/collection
 | `sync_collection.py` | `collection.yaml` → **Hub collection** membership |
 | `convert_blla.py` | Kraken `blla.mlmodel` → `blla.safetensors` (`blla-pytorch-v1`) |
 | `convert_calamari.py` | TF `best.ckpt` + `best.ckpt.json` → `.pt` (`calamari-pytorch-v1`) |
+| `export_calamari_onnx.py` | `.pt` (local or Hub revision) → `best.onnx` + provenance report |
+| `verify_calamari_parity.py` | Torch oracle vs exported `.onnx`, on real line crops |
+
+`export_calamari_onnx.py` is how the staging leaf gets its `.onnx`. Give it a
+local checkpoint or a Hub repo id plus an explicit `--revision`; it prints the
+SHA-256 of both the source `.pt` and the produced `.onnx` alongside the classes,
+line height, recurrent depth and opset, which is what step 4 of the runbook
+copies into `registry.yaml`.
+
+`verify_calamari_parity.py` is the check that belongs between export and
+publish. It runs the Torch graph and the exported artifact over the same
+preprocessed line tensors and reports max/mean absolute logits difference,
+per-timestep argmax agreement, and whether the greedy decodes are
+byte-identical, exiting non-zero if any decode differs. Point `--lines` at real
+line crops; `--synthetic-widths` is a labelled fallback, not a substitute.
 
 `convert_calamari.py` is the TF → PyTorch weight re-layout that feeds
-`export_calamari_onnx`. It needs TensorFlow at runtime (read the SavedModel
-variables) and Torch (write the checkpoint); run it in an environment that has
-both, e.g. the `calamari-train` group once declared. See the module docstring
+`export_calamari_onnx`. It reads only the single-BiLSTM TF stack; models trained
+directly in PyTorch (including every two-BiLSTM model published so far) write
+`calamari-pytorch-v1` themselves and skip it entirely. It needs TensorFlow at
+runtime (read the SavedModel variables) and Torch (write the checkpoint); run it
+in an environment that has both, e.g. the `calamari-train` group once declared. See the module docstring
 for the exact re-layout (conv/dense transposes, LSTM `[i,f,c,o]` gate order, and
 forget-bias semantics all preserve values losslessly).
 
