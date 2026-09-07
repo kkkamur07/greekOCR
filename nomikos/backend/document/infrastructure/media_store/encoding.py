@@ -25,6 +25,14 @@ INVALID_IMAGE_MESSAGE = "Uploaded file is not a valid image"
 # browser caches and the bucket copies together.
 THUMBNAIL_ENCODER_VERSION = "webp-q85-v1"
 
+# Every encoder version that ever persisted a rendering, oldest first. Bump the
+# encoder by appending here and pointing THUMBNAIL_ENCODER_VERSION at the new
+# entry: the bucket still holds renderings under the earlier versions, and a page's
+# deletion has to sweep those too or they outlive their original.
+THUMBNAIL_ENCODER_VERSIONS: tuple[str, ...] = ("webp-q85-v1",)
+if THUMBNAIL_ENCODER_VERSION not in THUMBNAIL_ENCODER_VERSIONS:
+    raise RuntimeError("THUMBNAIL_ENCODER_VERSION must be listed in THUMBNAIL_ENCODER_VERSIONS")
+
 # The widths whose renderings are written back to the bucket next to the original.
 # Rendering a thumbnail costs a full download of the page scan (megabytes of
 # lossless WebP) on every process that has not seen it: on a serverless API that is
@@ -33,6 +41,10 @@ THUMBNAIL_ENCODER_VERSION = "webp-q85-v1"
 # caller cannot fill the bucket with one file per width; the widths the frontend
 # and the public route actually ask for are all in it.
 PERSISTED_THUMBNAIL_WIDTHS: frozenset[int] = frozenset({200, 400, 800})
+
+# Widths that were persisted once and no longer are. Like the version list above,
+# these stay swept on deletion even though nothing writes them any more.
+RETIRED_THUMBNAIL_WIDTHS: frozenset[int] = frozenset()
 
 
 def persisted_thumbnail_key(image_key: str, width: int) -> str | None:
@@ -43,10 +55,15 @@ def persisted_thumbnail_key(image_key: str, width: int) -> str | None:
 
 
 def persisted_thumbnail_keys(image_key: str) -> list[str]:
-    """Every key a persisted rendering of ``image_key`` may live under (current encoder)."""
+    """Every key a persisted rendering of ``image_key`` may live under.
+
+    Covers every encoder version and every width that ever persisted, not only the
+    current ones, so deleting a page sweeps renderings written by earlier releases.
+    """
     return [
-        derived_image_key(image_key, width=width, encoder_version=THUMBNAIL_ENCODER_VERSION)
-        for width in sorted(PERSISTED_THUMBNAIL_WIDTHS)
+        derived_image_key(image_key, width=width, encoder_version=version)
+        for version in THUMBNAIL_ENCODER_VERSIONS
+        for width in sorted(PERSISTED_THUMBNAIL_WIDTHS | RETIRED_THUMBNAIL_WIDTHS)
     ]
 
 

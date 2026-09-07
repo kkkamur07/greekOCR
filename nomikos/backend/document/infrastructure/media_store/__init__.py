@@ -2,7 +2,9 @@
 
 from backend.document.infrastructure.media_store.encoding import (
     PERSISTED_THUMBNAIL_WIDTHS,
+    RETIRED_THUMBNAIL_WIDTHS,
     THUMBNAIL_ENCODER_VERSION,
+    THUMBNAIL_ENCODER_VERSIONS,
     DecodedPartImage,
     encode_part_image,
     encode_part_image_with_size,
@@ -31,8 +33,10 @@ from backend.document.infrastructure.media_store.thumbnail_cache import clear_th
 __all__ = [
     "DEFAULT_PART_IMAGE_SUFFIX",
     "PERSISTED_THUMBNAIL_WIDTHS",
+    "RETIRED_THUMBNAIL_WIDTHS",
     "SIGNED_MEDIA_PREFIX",
     "THUMBNAIL_ENCODER_VERSION",
+    "THUMBNAIL_ENCODER_VERSIONS",
     "DecodedPartImage",
     "LocalMediaStore",
     "MediaStore",

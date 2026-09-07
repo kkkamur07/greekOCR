@@ -23,6 +23,7 @@ from backend.document.infrastructure.media_store import (
     THUMBNAIL_ENCODER_VERSION,
     clear_thumbnail_cache,
     derived_image_key,
+    encoding,
     persisted_thumbnail_key,
     persisted_thumbnail_keys,
     validate_image_key,
@@ -122,9 +123,26 @@ def test_only_the_closed_width_set_is_persisted():
         assert persisted_thumbnail_key(image_key, width) == derived_image_key(
             image_key, width=width, encoder_version=THUMBNAIL_ENCODER_VERSION
         )
-    assert persisted_thumbnail_keys(image_key) == [
-        persisted_thumbnail_key(image_key, width) for width in sorted(PERSISTED_THUMBNAIL_WIDTHS)
-    ]
+    for width in sorted(PERSISTED_THUMBNAIL_WIDTHS):
+        assert persisted_thumbnail_key(image_key, width) in persisted_thumbnail_keys(image_key)
+
+
+def test_deletion_sweeps_renderings_of_earlier_encoder_versions_and_retired_widths(monkeypatch):
+    # An encoder bump changes the key; the bucket still holds the old renderings.
+    monkeypatch.setattr(encoding, "THUMBNAIL_ENCODER_VERSIONS", ("webp-q85-v1", "webp-q85-v2"))
+    monkeypatch.setattr(encoding, "THUMBNAIL_ENCODER_VERSION", "webp-q85-v2")
+    monkeypatch.setattr(encoding, "RETIRED_THUMBNAIL_WIDTHS", frozenset({160}))
+    image_key = part_image_key(PART_ID)
+
+    swept = set(encoding.persisted_thumbnail_keys(image_key))
+
+    assert derived_image_key(image_key, width=200, encoder_version="webp-q85-v1") in swept
+    assert derived_image_key(image_key, width=160, encoder_version="webp-q85-v1") in swept
+    assert derived_image_key(image_key, width=160, encoder_version="webp-q85-v2") in swept
+    assert encoding.persisted_thumbnail_key(image_key, 200) in swept
+    assert encoding.persisted_thumbnail_key(image_key, 160) is None, (
+        "retired widths are not written"
+    )
 
 
 def test_first_thumbnail_read_renders_from_the_original_and_persists_it():
