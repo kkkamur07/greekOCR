@@ -10,7 +10,11 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select
 
 import infrastructure.models  # noqa: F401 - register MediaDeletionIntent mapper
-from backend.document.infrastructure.media_store import get_media_store
+from backend.document.infrastructure.media_store import (
+    MediaStore,
+    get_media_store,
+    persisted_thumbnail_keys,
+)
 from backend.document.infrastructure.orm_models import DocumentPart, MediaDeletionIntent
 from infrastructure.db import sync_system_session
 
@@ -23,6 +27,22 @@ if TYPE_CHECKING:
 # Supabase's signed upload URLs live for a fixed ~2 hours (the requested expiry is
 # not honored), so past this bound the browser can no longer complete the upload.
 ABANDONED_PART_UPLOAD_MAX_AGE = timedelta(hours=3)
+
+
+def delete_media_object(store: MediaStore, image_key: str) -> None:
+    """Delete a page image and the thumbnails persisted next to it.
+
+    The original's deletion is the intent and raises like before, so a failure is
+    retried. The thumbnails are swept afterwards on a best-effort basis: they are
+    only ever read through their original's part, so one left behind is a few
+    stray kilobytes, not a leak of anything reachable.
+    """
+    store.delete(image_key)
+    for derived_key in persisted_thumbnail_keys(image_key):
+        try:
+            store.delete(derived_key)
+        except Exception:
+            logger.warning("persisted thumbnail not deleted key=%s", derived_key, exc_info=True)
 
 
 def process_media_deletion_intents(*, batch_size: int = 50) -> int:
@@ -41,7 +61,7 @@ def process_media_deletion_intents(*, batch_size: int = 50) -> int:
         store = get_media_store()
         for intent in intents:
             try:
-                store.delete(intent.image_key)
+                delete_media_object(store, intent.image_key)
             except Exception as exc:
                 intent.attempts += 1
                 intent.last_error = f"{type(exc).__name__}: {str(exc)[:900]}"
