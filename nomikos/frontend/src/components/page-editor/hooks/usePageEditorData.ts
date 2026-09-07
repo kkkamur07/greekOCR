@@ -335,6 +335,39 @@ export function usePageEditorData(
   const documentRef = useRef<DocumentWithPartsResponse | null>(null);
   documentRef.current = document;
 
+  /**
+   * Which page the setters handed out of this hook may still write to.
+   *
+   * A geometry save, a segmentation, a pairing or an OCR request starts on
+   * one page and finishes whenever the server answers. If the researcher has
+   * paged on by then, the answer belongs to a page that is no longer on
+   * screen, and writing it through the shared setters would put the previous
+   * page's Segments, layers or pairing under the current page. So the setters
+   * given to the mutation hooks are minted per part, and refuse a write once
+   * the part they were minted for is not the active one. The load effects
+   * below keep the raw setters; they have their own generation counter.
+   */
+  const activePartIdRef = useRef(partId);
+  activePartIdRef.current = partId;
+  const partSetters = useMemo(() => {
+    const mintedFor = partId;
+    const forPart = <T>(set: Dispatch<SetStateAction<T>>) =>
+      ((value: SetStateAction<T>) => {
+        if (activePartIdRef.current !== mintedFor) return;
+        set(value);
+      }) as Dispatch<SetStateAction<T>>;
+    return {
+      setPart: forPart(setPart),
+      setLayout: forPart(setLayout),
+      setLines: forPart(setLines),
+      setLineError: forPart(setLineError),
+      setTranscriptionLayers: forPart(setTranscriptionLayers),
+      setTextLines: forPart(setTextLines),
+      setPairingProgress: forPart(setPairingProgress),
+      setPairingError: forPart(setPairingError),
+    };
+  }, [partId]);
+
   useEffect(() => {
     if (!projectId || !documentId || !partId) {
       setLoading(false);
@@ -521,28 +554,28 @@ export function usePageEditorData(
     document,
     setDocument,
     part,
-    setPart,
+    setPart: partSetters.setPart,
     layout,
-    setLayout,
+    setLayout: partSetters.setLayout,
     lines,
-    setLines,
+    setLines: partSetters.setLines,
     loading,
     partLoading,
     error,
     layoutError,
     lineError,
-    setLineError,
+    setLineError: partSetters.setLineError,
     transcriptionLayers,
-    setTranscriptionLayers,
+    setTranscriptionLayers: partSetters.setTranscriptionLayers,
     selectedTranscriptionLayerId,
     setSelectedTranscriptionLayerId,
     groundTruthTranscriptionId,
     textLines,
-    setTextLines,
+    setTextLines: partSetters.setTextLines,
     pairingProgress,
-    setPairingProgress,
+    setPairingProgress: partSetters.setPairingProgress,
     pairingError,
-    setPairingError,
+    setPairingError: partSetters.setPairingError,
     transcribeModels,
     selectedTranscribeModelId,
     setSelectedTranscribeModelId,

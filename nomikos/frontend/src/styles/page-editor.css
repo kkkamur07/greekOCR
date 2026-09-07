@@ -1880,7 +1880,12 @@
 
 /* A narrow window needs the canvas more than it needs the strip. */
 @media (max-width: 900px) {
-  .pe-page-rail {
+  /* The rail and its toolbar toggle go together: a toggle left on screen
+     would keep reporting aria-expanded for a list nobody can see, and its
+     first press would collapse the invisible rail instead of showing it.
+     The pager and PageUp/PageDown still turn pages at this width. */
+  .pe-page-rail,
+  .pe-toolbar [aria-controls="pe-page-rail"] {
     display: none;
   }
 }
