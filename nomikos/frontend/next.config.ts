@@ -23,8 +23,23 @@ const securityHeaders = [
   },
   {
     key: "Content-Security-Policy",
-    value:
-      "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://api.nomikos.app; frame-src 'self' blob:; connect-src 'self' https://api.nomikos.app https://mknnoqpavpmxsyctwjdt.supabase.co; worker-src 'self' blob:",
+    // The platform API the build points at is allowed alongside production's,
+    // so `next dev` and the compose stack, which talk to localhost:8000, are
+    // not blocked by their own CSP. On production the two are the same origin.
+    value: [
+      "default-src 'self'",
+      "base-uri 'self'",
+      "object-src 'none'",
+      "frame-ancestors 'none'",
+      "form-action 'self'",
+      "script-src 'self' 'unsafe-inline'",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      "font-src 'self' https://fonts.gstatic.com",
+      `img-src 'self' data: blob: https://api.nomikos.app ${platformApi}`,
+      "frame-src 'self' blob:",
+      `connect-src 'self' https://api.nomikos.app https://mknnoqpavpmxsyctwjdt.supabase.co ${platformApi}`,
+      "worker-src 'self' blob:",
+    ].join("; "),
   },
 ];
 
