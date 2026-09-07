@@ -30,6 +30,29 @@ const RAIL_THUMB_WIDTH = 200;
 export const PAGE_RAIL_ID = "pe-page-rail";
 export const PAGE_RAIL_TOGGLE_ID = "pe-page-rail-toggle";
 
+/**
+ * What stands where the rail was once it is hidden: one narrow control on the
+ * canvas's left edge, so hiding the page list is not a one-way door. It also
+ * carries the id the page hands focus to once the rail's own collapse button
+ * has unmounted underneath the researcher's finger.
+ */
+export function PageEditorPageRailTab({ onExpand }: { onExpand: () => void }) {
+  return (
+    <button
+      type="button"
+      id={PAGE_RAIL_TOGGLE_ID}
+      className="pe-page-rail-tab"
+      aria-expanded={false}
+      aria-controls={PAGE_RAIL_ID}
+      aria-label="Show the page list"
+      title="Show the page list"
+      onClick={onExpand}
+    >
+      ›
+    </button>
+  );
+}
+
 function thumbnailUrl(part: DocumentPartResponse): string | null {
   if (!part.image_url) return null;
   const separator = part.image_url.includes("?") ? "&" : "?";

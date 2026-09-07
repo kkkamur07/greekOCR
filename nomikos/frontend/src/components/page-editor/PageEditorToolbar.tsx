@@ -9,7 +9,6 @@ import type {
 import { PageEditorBackLink } from "./PageEditorNavHeader";
 import { PageEditorModelSelect } from "./PageEditorModelSelect";
 import { PageEditorPager } from "./PageEditorPager";
-import { PAGE_RAIL_ID, PAGE_RAIL_TOGGLE_ID } from "./PageEditorPageRail";
 import { PageEditorSharingMenu } from "./PageEditorSharingMenu";
 import { PageEditorPageXmlButton } from "./PageEditorPageXmlButton";
 import { exportFileStem } from "../../utils/exportFilename";
@@ -33,8 +32,6 @@ type PageEditorToolbarProps = {
   hasNextPart: boolean;
   onPreviousPart: () => void;
   onNextPart: () => void;
-  pageRailOpen: boolean;
-  onPageRailOpenChange: (open: boolean) => void;
   lines: LineResponse[];
   pairingProgress: {
     paired_lines: number;
@@ -97,8 +94,6 @@ export function PageEditorToolbar({
   hasNextPart,
   onPreviousPart,
   onNextPart,
-  pageRailOpen,
-  onPageRailOpenChange,
   lines,
   pairingProgress,
   selectedSegmentId,
@@ -253,35 +248,6 @@ export function PageEditorToolbar({
           />
         )}
         <div className="pe-toolbar__sep" aria-hidden="true" />
-        {pageCount > 1 && (
-          <button
-            type="button"
-            id={PAGE_RAIL_TOGGLE_ID}
-            className={`pe-tb-btn pe-tb-btn--icon${pageRailOpen ? " pe-tb-btn--on" : ""}`}
-            aria-expanded={pageRailOpen}
-            aria-controls={PAGE_RAIL_ID}
-            // The name stays put and aria-expanded carries the state, which is
-            // what a disclosure button is. The rail's own collapse control is
-            // the one named "Hide the page list"; two buttons answering to a
-            // single name would be two buttons nobody can ask for.
-            aria-label="Page list"
-            title={pageRailOpen ? "Hide the page list" : "Show the page list"}
-            onClick={() => onPageRailOpenChange(!pageRailOpen)}
-          >
-            <svg
-              className="pe-tb-btn__icon"
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              aria-hidden="true"
-            >
-              <rect x="2.2" y="2.4" width="4.2" height="11.2" rx="0.8" />
-              <path d="M8.6 4.4h5.2M8.6 8h5.2M8.6 11.6h5.2" />
-            </svg>
-          </button>
-        )}
         <h1
           className="pe-toolbar__doc"
           title={`${document.name} · Page ${partIndex}`}
