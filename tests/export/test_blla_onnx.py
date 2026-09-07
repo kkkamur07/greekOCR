@@ -30,7 +30,11 @@ pytest.importorskip("onnxruntime")
 import torch.nn.functional as F  # noqa: E402
 from safetensors.torch import load_file  # noqa: E402
 
-BLLA_ARTIFACT = REPO_ROOT / "src/hf/staging/models/segmentation/blla/v1/stable/blla.safetensors"
+BLLA_ARTIFACT = (
+    REPO_ROOT
+    / "nomikos_inference/publish/artifacts/staging"
+    / "models/segmentation/blla/v1/stable/blla.safetensors"
+)
 
 
 def test_the_numpy_decoder_head_matches_the_torch_one_on_a_real_page() -> None:

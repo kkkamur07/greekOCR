@@ -10,7 +10,15 @@ from nomikos_inference.weights import resolve_weights_source
 # Tests bundled model metadata loads correctly. Does not run inference.
 
 
-def test_registry_yaml_validates_model_entries():
+# The three scripts are one model family: same graph, same device, same
+# eligibility, one Hub repo and codec each. Parametrizing says that out loud, and
+# means adding a fourth script is a one-line change here rather than a fourth
+# copy of the same six assertions.
+TRANSCRIBE_MODEL_IDS = ("greek-calamari-v1", "armenian-calamari-v1", "syriac-calamari-v1")
+
+
+@pytest.mark.parametrize("registry_model_id", TRANSCRIBE_MODEL_IDS)
+def test_registry_yaml_validates_calamari_transcribe_entries(registry_model_id: str):
     """The schema each entry must satisfy, not the values one publish happened to have.
 
     The literal ``hub_revision`` and ``artifact_sha256`` this used to inline made a
@@ -19,16 +27,34 @@ def test_registry_yaml_validates_model_entries():
     test_the_registry_pins_the_digest_of_the_artifact_the_loader_opens``; here only
     their presence and shape matter.
     """
-    registry = load_registry()
+    entry = get_model_entry(load_registry(), registry_model_id, "stable")
 
-    syriac = get_model_entry(registry, "syriac-calamari-v1", "stable")
-    assert syriac.task == InferenceTask.transcribe
-    assert syriac.architecture == RegistryArchitecture.calamari
-    assert syriac.device == ComputeDevice.cpu
-    assert syriac.host_eligibility.value == "local"
-    assert syriac.versions["stable"].weights_source.startswith("hf://")
-    assert len(syriac.versions["stable"].hub_revision) == 40
-    assert len(syriac.versions["stable"].artifact_sha256) == 64
+    assert entry.task == InferenceTask.transcribe
+    assert entry.architecture == RegistryArchitecture.calamari
+    assert entry.device == ComputeDevice.cpu
+    assert entry.host_eligibility.value == "local"
+
+    version = entry.versions["stable"]
+    assert version.weights_source.startswith("hf://")
+    assert len(version.hub_revision) == 40
+    assert len(version.artifact_sha256) == 64
+
+
+def test_every_transcribe_entry_names_its_own_hub_repo():
+    """Three entries copied from one another is exactly how two of them end up
+    resolving the same weights. A shared ``weights_source`` would still validate,
+    load, and transcribe: it would just silently read Greek pages with the Syriac
+    codec, so the distinctness is worth an assertion of its own."""
+    registry = load_registry()
+    sources = {
+        registry.models[registry_model_id].versions["stable"].weights_source
+        for registry_model_id in TRANSCRIBE_MODEL_IDS
+    }
+    assert len(sources) == len(TRANSCRIBE_MODEL_IDS)
+
+
+def test_registry_yaml_validates_the_blla_segment_entry():
+    registry = load_registry()
 
     blla = get_model_entry(registry, "blla-segment", "stable")
     assert blla.task == InferenceTask.segment

@@ -41,7 +41,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--staging-root",
         type=Path,
-        default=REPO_ROOT / "src" / "hf" / "staging",
+        default=REPO_ROOT / "nomikos_inference" / "publish" / "artifacts" / "staging",
         help="Hub staging tree root",
     )
     parser.add_argument(
@@ -55,7 +55,7 @@ def _parse_args() -> argparse.Namespace:
 def main() -> int:
     args = _parse_args()
 
-    from src.hf.publish import (
+    from nomikos_inference.publish import (
         build_model_card,
         get_default_publish_client,
         plan_model_publish,

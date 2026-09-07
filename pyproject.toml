@@ -59,8 +59,28 @@ packages = ["nomikos_inference"]
 # `nomikos_inference/api` and `nomikos_inference/helper` outright, so "the published closure
 # holds no web server" is now true by construction rather than by an exclude
 # list somebody has to keep correct.
+#
+# Two trees below are the exception, and they are here on purpose. `src/hf/` and
+# `src/inference/` moved into this directory so that the repository has one
+# import root instead of two, which is a question about where code is *edited*.
+# Where code is *published* is a different question, and ADR 0002 already
+# answered it: runtime `hf://` resolution ships (it is on the inference path),
+# publish-side tooling and the training-stack predictors do not. Moving a
+# directory must not silently reverse that, so each one is named here, and
+# `uv build` on this commit emits the same wheel file listing, path for path,
+# as the commit before it. Anything new that lands under either tree is excluded with
+# it; a genuinely shippable module belongs somewhere else in the package.
 exclude = [
     "/nomikos_inference/CONTEXT.md",
+    # Publish-side only: staging validation, model cards, collection sync, and
+    # the blob trees under `publish/artifacts/`. A researcher publishes nothing,
+    # and the blobs alone are ~26 MB on top of a wheel that ADR 0006 spent real
+    # effort shrinking.
+    "/nomikos_inference/publish",
+    # Training-stack predictors. They import `calamari_ocr` and `transformers`,
+    # neither of which is in `[project].dependencies` and neither of which is
+    # going to be: nothing that trains a model is part of what runs one.
+    "/nomikos_inference/predictors",
     # Empty placeholder tree from the pre-Hub weights layout. Weights come from
     # the Hub now and are cached under the researcher's home directory.
     "**/.gitkeep",
@@ -70,6 +90,16 @@ exclude = [
 include = [
     "/nomikos_inference",
     "/pyproject.toml",
+]
+# The sdist is uploaded to PyPI alongside the wheel (`uv build` in
+# `.github/workflows/release.yml`), so the two trees held out of the wheel are
+# held out here too. Repeated rather than hoisted into `[tool.hatch.build]`:
+# hatchling lets a target's own `exclude` replace the shared one outright rather
+# than adding to it, so a shared list would be silently dead for the wheel the
+# moment the wheel keeps a list of its own.
+exclude = [
+    "/nomikos_inference/publish",
+    "/nomikos_inference/predictors",
 ]
 
 [dependency-groups]

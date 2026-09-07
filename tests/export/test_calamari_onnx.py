@@ -24,7 +24,9 @@ from src.model.inference_export.calamari import (  # noqa: E402
     load_calamari_checkpoint,
 )
 
-CHECKPOINT = REPO_ROOT / "src/hf/local/syriac/calamari/v1/stable/best.pt"
+CHECKPOINT = (
+    REPO_ROOT / "nomikos_inference/publish/artifacts/local/syriac/calamari/v1/stable/best.pt"
+)
 
 
 def test_export_embeds_codec_metadata_and_handles_odd_even_widths(tmp_path: Path) -> None:

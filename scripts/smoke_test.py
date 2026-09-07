@@ -25,8 +25,8 @@ sys.path.insert(0, str(REPO_ROOT))
 
 _VRAM_TOTAL_MB: int = 0
 _SEP = "─" * 70
-_N_AUGMENTATIONS = 3          # matches config/*/augmentation/default.yaml
-_OVERHEAD_FACTOR  = 1.15      # eval + checkpoint + data-loading overhead
+_N_AUGMENTATIONS = 3  # matches config/*/augmentation/default.yaml
+_OVERHEAD_FACTOR = 1.15  # eval + checkpoint + data-loading overhead
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -74,7 +74,7 @@ def _count_samples(lang: str, split: str = "train") -> int:
 def _fmt_duration(seconds: float) -> str:
     seconds = int(seconds)
     h, rem = divmod(seconds, 3600)
-    m, s   = divmod(rem, 60)
+    m, s = divmod(rem, 60)
     if h:
         return f"{h}h {m:02d}m"
     if m:
@@ -99,11 +99,12 @@ def smoke_calamari(
     Returns (recommended_batch_size, seconds_per_step).
     """
     from src.models.calamari.config import default_model_config
-
     from src.models.calamari.model import CalamariTorchModel
 
     print(f"\n{'Calamari  CNN+BiLSTM':^70}")
-    print(f"{'2.6 M params · FP32 · line images ' + str(image_width) + '×' + str(image_height):^70}")
+    print(
+        f"{'2.6 M params · FP32 · line images ' + str(image_width) + '×' + str(image_height):^70}"
+    )
     print(_SEP)
 
     device = torch.device("cuda")
@@ -113,12 +114,16 @@ def smoke_calamari(
     cfg = default_model_config(classes=num_classes)
     model = CalamariTorchModel(cfg).to(device)
     loss_fn = torch.nn.CTCLoss(blank=0, zero_infinity=True)
-    _wx = torch.randint(0, 256, (batch_sizes[0], image_width, image_height, 1), dtype=torch.uint8, device=device)
+    _wx = torch.randint(
+        0, 256, (batch_sizes[0], image_width, image_height, 1), dtype=torch.uint8, device=device
+    )
     _wl = torch.full((batch_sizes[0],), image_width, dtype=torch.long, device=device)
     _wt = torch.randint(1, num_classes, (batch_sizes[0] * 10,), device=device)
     _wll = torch.full((batch_sizes[0],), 10, dtype=torch.long, device=device)
     _wout = model(_wx, _wl)
-    loss_fn(_wout["logits"].log_softmax(-1).permute(1, 0, 2), _wt, _wout["out_len"], _wll).backward()
+    loss_fn(
+        _wout["logits"].log_softmax(-1).permute(1, 0, 2), _wt, _wout["out_len"], _wll
+    ).backward()
     del _wx, _wl, _wt, _wll, _wout
     torch.cuda.synchronize()
 
@@ -134,8 +139,11 @@ def smoke_calamari(
                 _model: CalamariTorchModel = model,
             ) -> float:
                 x = torch.randint(
-                    0, 256, (_bs, image_width, image_height, 1),
-                    dtype=torch.uint8, device=device,
+                    0,
+                    256,
+                    (_bs, image_width, image_height, 1),
+                    dtype=torch.uint8,
+                    device=device,
                 )
                 lengths = torch.full((_bs,), image_width, dtype=torch.long, device=device)
                 tgt = torch.randint(1, num_classes, (_bs * 10,), device=device)
@@ -201,7 +209,9 @@ def smoke_trocr(
     model = VisionEncoderDecoderModel.from_pretrained(str(checkpoint))
     dec_cfg = model.config.decoder
     if not getattr(model.config, "pad_token_id", None):
-        model.config.pad_token_id = getattr(dec_cfg, "pad_token_id", None) or getattr(dec_cfg, "eos_token_id", 1)
+        model.config.pad_token_id = getattr(dec_cfg, "pad_token_id", None) or getattr(
+            dec_cfg, "eos_token_id", 1
+        )
     if not getattr(model.config, "decoder_start_token_id", None):
         model.config.decoder_start_token_id = getattr(dec_cfg, "bos_token_id", None) or 0
     real_vocab = dec_cfg.vocab_size
@@ -231,9 +241,7 @@ def smoke_trocr(
                 _opt: torch.optim.Optimizer = opt,
                 _model: VisionEncoderDecoderModel = model,
             ) -> float:
-                pixel_values = torch.randn(
-                    _bs, 3, 384, 384, device=device, dtype=torch.float16
-                )
+                pixel_values = torch.randn(_bs, 3, 384, 384, device=device, dtype=torch.float16)
                 labels = torch.randint(0, real_vocab, (_bs, label_seq_len), device=device)
                 labels[:, label_seq_len // 2 :] = -100
                 t0 = time.perf_counter()
@@ -271,7 +279,7 @@ def smoke_trocr(
 @dataclass
 class JobSpec:
     script: str
-    model: str    # "calamari" | "trocr-base" | "trocr-small"
+    model: str  # "calamari" | "trocr-base" | "trocr-small"
     language: str
     epochs: int
 
@@ -279,20 +287,22 @@ class JobSpec:
 _JOBS: list[JobSpec] = [
     # ── Calamari ──────────────────────────────────────────────────────────
     JobSpec("calamari/pretraining/armenian", "calamari", "armenian", 40),
-    JobSpec("calamari/pretraining/greek",    "calamari", "greek",    40),
-    JobSpec("calamari/pretraining/syriac",   "calamari", "syriac",   40),
+    JobSpec("calamari/pretraining/greek", "calamari", "greek", 40),
+    JobSpec("calamari/pretraining/syriac", "calamari", "syriac", 40),
     JobSpec("calamari/pretraining/combined", "calamari", "combined", 60),
     # ── TrOCR-base ────────────────────────────────────────────────────────
-    JobSpec("trocr/pretraining/armenian",    "trocr-base", "armenian", 40),
-    JobSpec("trocr/pretraining/greek",       "trocr-base", "greek",    40),
-    JobSpec("trocr/pretraining/syriac",      "trocr-base", "syriac",   50),
-    JobSpec("trocr/pretraining/combined",    "trocr-base", "combined", 60),
+    JobSpec("trocr/pretraining/armenian", "trocr-base", "armenian", 40),
+    JobSpec("trocr/pretraining/greek", "trocr-base", "greek", 40),
+    JobSpec("trocr/pretraining/syriac", "trocr-base", "syriac", 50),
+    JobSpec("trocr/pretraining/combined", "trocr-base", "combined", 60),
 ]
 
 
 def print_time_estimates(
-    calamari_bs: int, calamari_step_s: float,
-    trocr_base_bs: int, trocr_base_step_s: float,
+    calamari_bs: int,
+    calamari_step_s: float,
+    trocr_base_bs: int,
+    trocr_base_step_s: float,
 ) -> None:
     print(f"\n\n{'TRAINING TIME ESTIMATES  (RTX 3090, cc-gpu-n03)':^70}")
     print("=" * 70)
@@ -303,36 +313,36 @@ def print_time_estimates(
     print(_SEP)
 
     step_map = {"calamari": calamari_step_s, "trocr-base": trocr_base_step_s}
-    bs_map   = {"calamari": calamari_bs,     "trocr-base": trocr_base_bs}
+    bs_map = {"calamari": calamari_bs, "trocr-base": trocr_base_bs}
 
     slurm_limits = {
-        "calamari/pretraining/armenian":  "10:00:00",
-        "calamari/pretraining/greek":     "10:00:00",
-        "calamari/pretraining/syriac":    "10:00:00",
-        "calamari/pretraining/combined":  "10:00:00",
-        "trocr/pretraining/armenian":     "10:00:00",
-        "trocr/pretraining/greek":        "10:00:00",
-        "trocr/pretraining/syriac":       "20:00:00",
-        "trocr/pretraining/combined":     "10:00:00",
+        "calamari/pretraining/armenian": "10:00:00",
+        "calamari/pretraining/greek": "10:00:00",
+        "calamari/pretraining/syriac": "10:00:00",
+        "calamari/pretraining/combined": "10:00:00",
+        "trocr/pretraining/armenian": "10:00:00",
+        "trocr/pretraining/greek": "10:00:00",
+        "trocr/pretraining/syriac": "20:00:00",
+        "trocr/pretraining/combined": "10:00:00",
     }
 
     for job in _JOBS:
         step_s = step_map.get(job.model)
-        bs     = bs_map.get(job.model)
+        bs = bs_map.get(job.model)
         if step_s is None or bs is None or step_s == 0:
             print(f"  {job.script:<38}  (no timing data)")
             continue
 
         base_samples = _count_samples(job.language)
-        eff_samples  = base_samples * (_N_AUGMENTATIONS + 1)
+        eff_samples = base_samples * (_N_AUGMENTATIONS + 1)
         if eff_samples == 0:
             print(f"  {job.script:<38}  (dataset not found locally)")
             continue
 
         steps_per_epoch = math.ceil(eff_samples / bs)
-        epoch_s         = steps_per_epoch * step_s
-        total_s         = epoch_s * job.epochs * _OVERHEAD_FACTOR
-        limit           = slurm_limits.get(job.script, "?")
+        epoch_s = steps_per_epoch * step_s
+        total_s = epoch_s * job.epochs * _OVERHEAD_FACTOR
+        limit = slurm_limits.get(job.script, "?")
 
         print(
             f"  {job.script:<38} {eff_samples:>8,}  {steps_per_epoch:>8,}  "
@@ -342,7 +352,9 @@ def print_time_estimates(
     print()
     print(f"  Batch sizes used:  Calamari={calamari_bs}  TrOCR-base={trocr_base_bs}")
     print(f"  Overhead factor:   ×{_OVERHEAD_FACTOR} (eval + checkpointing + data-load)")
-    print(f"  Aug multiplier:    ×{_N_AUGMENTATIONS + 1}  (n_augmentations={_N_AUGMENTATIONS} + original)")
+    print(
+        f"  Aug multiplier:    ×{_N_AUGMENTATIONS + 1}  (n_augmentations={_N_AUGMENTATIONS} + original)"
+    )
     print("=" * 70)
 
 
@@ -366,7 +378,7 @@ def main() -> None:
     print(f"  PyTorch: {torch.__version__}")
     print("=" * 70)
 
-    trocr_base  = REPO_ROOT / "trocr_checkpoints" / "trocr-base-handwritten"
+    trocr_base = REPO_ROOT / "trocr_checkpoints" / "trocr-base-handwritten"
     trocr_small = REPO_ROOT / "trocr_checkpoints" / "trocr-small-handwritten"
 
     # ── 1. Calamari: probe every 64 images up to 512 ─────────────────────────

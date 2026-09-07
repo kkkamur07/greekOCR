@@ -155,15 +155,22 @@ def _build_state_dict(
     ``scenario.model.layers`` list), not by a hardcoded architecture, so any
     Calamari CNN-BiLSTM stack this converter is pointed at converts correctly.
 
-    The PyTorch loader (``CalamariTorchModel`` via ``_default_config``) only
-    supports the ``conv2d`` / ``maxpool2d`` / ``bilstm`` / ``dropout`` layer
-    kinds, at the fixed depth the loader instantiates. This converter therefore
-    *validates* the config against that supported shape and refuses to convert
-    an architecture the runtime cannot load (a silent mismatch would produce a
-    checkpoint that ``load_state_dict(strict=True)`` rejects anyway, but with a
-    worse error).
+    The supported stack is this converter's limit, not the runtime's.
+    ``load_calamari_checkpoint`` builds one *or* two stacked BiLSTMs from the
+    checkpoint's ``lstm_layers`` field, but the TF variable indices used below
+    (``variables/4`` through ``variables/9`` for the BiLSTM, ``10``/``11`` for
+    the dense head) are a hardcoded reading of the one-BiLSTM SavedModel layout.
+    A second BiLSTM shifts every index after it, and no two-layer TF SavedModel
+    has been available to establish what that numbering actually is.
+
+    The published two-layer models did not come through here: their Hub
+    ``config.yaml`` is a PyTorch training config (``training.mode: finetune``
+    over a ``.pt``), not a Calamari ``best.ckpt.json``, and none of their
+    payloads carries the ``source_sha256`` field ``_save_checkpoint`` always
+    writes. So this refuses rather than guesses. Extend it against a real
+    two-layer TF export, not from the shape of the PyTorch side.
     """
-    # The loader's ``_default_config`` instantiates a specific 6-layer stack:
+    # The TF layout this converter knows how to read is the 6-layer stack:
     #   layers[0]=conv2d, layers[1]=maxpool2d, layers[2]=conv2d,
     #   layers[3]=maxpool2d, layers[4]=bilstm, layers[5]=dropout.
     # A config with a different stack is refused here rather than mis-mapped.
@@ -183,11 +190,11 @@ def _build_state_dict(
         if actual != expected:
             raise CalamariConversionError(
                 f"calamari config: layer {i} ({metadata.layers[i].get('name')!r}) is "
-                f"{actual!r}; the PyTorch runtime supports only the {expected_kinds} stack"
+                f"{actual!r}; this converter reads only the {expected_kinds} TF stack"
             )
     if len(actual_kinds) != len(expected_kinds):
         raise CalamariConversionError(
-            f"calamari config: {len(actual_kinds)} layers; the PyTorch runtime supports "
+            f"calamari config: {len(actual_kinds)} layers; this converter reads "
             f"exactly {len(expected_kinds)}"
         )
 

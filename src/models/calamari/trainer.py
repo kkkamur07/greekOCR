@@ -633,7 +633,7 @@ def _metadata_lstm_layers(metadata: dict[str, object]) -> int:
     if (
         not isinstance(lstm_layers, int)
         or isinstance(lstm_layers, bool)
-        or lstm_layers not in {1, 2, 3}
+        or lstm_layers not in {1, 2}
     ):
         raise ValueError("Calamari Trainer checkpoint has an invalid LSTM layer count.")
     return lstm_layers

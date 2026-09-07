@@ -1,9 +1,10 @@
 """Resolve a registry entry's **weights source** URI to a file on this machine.
 
 Four schemes, one answer: `hf://` through the **Hub cache**, `package://` out of
-an installed distribution, `file://local/...` from a source checkout's `src/hf/`,
-and `file://...` relative to the inference tree. Whichever it is, a pinned
-`artifact_sha256` is verified before the path is handed back.
+an installed distribution, `file://local/...` from a source checkout's
+`nomikos_inference/publish/artifacts/`, and `file://...` relative to the
+inference tree. Whichever it is, a pinned `artifact_sha256` is verified before
+the path is handed back.
 
 Nothing here is a cache layout of its own - `nomikos_inference/hub/cache.py` owns the one
 directory that is written to, under the researcher's `~/.nomikos`. This module
@@ -27,17 +28,23 @@ def local_bundled_root() -> Path:
     """Root that ``file://local/...`` **weights source**s resolve against.
 
     **Local bundled weights** are a source-checkout affordance: they exist for
-    offline development and for Docker images that copy `src/hf/` in. They are
-    deliberately not shipped inside the published wheel - checkpoints are
-    published to the Hub and fetched by `hf://`, digest-verified - so the
-    installed package has no `src/hf/` to point at and says so instead of
-    resolving to a path that happens to exist inside site-packages.
+    offline development and for images built with the publish-side tree in the
+    context. They are deliberately not shipped inside the published wheel -
+    checkpoints are published to the Hub and fetched by `hf://`, digest-verified.
+
+    The root moved from `src/hf/` into `nomikos_inference/publish/artifacts/`,
+    which puts it inside the package *directory* without putting it inside the
+    *wheel*: `pyproject.toml` excludes `nomikos_inference/publish` from both
+    build targets. So the check below still discriminates a checkout from an
+    install exactly as it did before - an installed `nomikos_inference` has no
+    `publish/artifacts` to point at, and this says so instead of resolving to a
+    path that happens to exist inside site-packages.
     """
     override = os.environ.get(LOCAL_BUNDLED_ROOT_ENV)
     if override:
         return Path(override).expanduser()
 
-    checkout_root = INFERENCE_ROOT.parent / "src" / "hf"
+    checkout_root = INFERENCE_ROOT / "publish" / "artifacts"
     if checkout_root.is_dir():
         return checkout_root
 
@@ -101,7 +108,10 @@ def resolve_weights_source(
         raise ValueError("file weights source must name a path")
     source_path = Path(relative)
     if source_path.is_absolute():
-        raise ValueError("file weights source must be relative to INFERENCE_ROOT or src/hf/")
+        raise ValueError(
+            "file weights source must be relative to INFERENCE_ROOT or the local "
+            "bundled weights root"
+        )
 
     if relative.startswith(LOCAL_BUNDLED_PREFIX):
         resolved_root = local_bundled_root().resolve()
