@@ -190,7 +190,7 @@ segment = run_model(
 )
 transcribe = run_model(
     task=InferenceTask.transcribe,
-    registry_model_id="syriac-calamari-v1",
+    registry_model_id="syriac-calamari-v2",
     registry_tag="stable",
     image_bytes=pathlib.Path({str(TRANSCRIBE_LINE)!r}).read_bytes(),
     params={{"line_index": 0}},

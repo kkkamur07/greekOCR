@@ -204,7 +204,7 @@ ln -sfn ../src/model/calamari _support_repo/calamari
 | `Expected train/ and val/ images under ...` | Wrong pack layout | Pack needs `train/` and `val/` image folders |
 | Checkpoint works in training but inference rejects `.ckpt` | Inference needs the ONNX graph | Export `best.onnx` and publish the graph to Hub |
 | Empty OCR despite job **done** | Wrong model for script | Use a model matching the page script (e.g. Syriac model only for Syriac pages) |
-| First Hub transcribe slow in Docker | Cold download + CPU | `PYTHONPATH=. python scripts/hf/fetch_model.py syriac-calamari-v1 --registry-tag stable` (Greek model not published yet) |
+| First Hub transcribe slow in Docker | Cold download + CPU | `PYTHONPATH=. python scripts/hf/fetch_model.py syriac-calamari-v2 --registry-tag stable` (Greek model not published yet) |
 
 ---
 

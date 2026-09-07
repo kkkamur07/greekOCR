@@ -114,7 +114,7 @@ Warm the Hub cache once so the first live page does not pay a weight download:
 ```bash
 cd /path/to/greekOCR
 uv sync --group inference
-PYTHONPATH=. uv run --group inference python scripts/hf/fetch_model.py syriac-calamari-v1 --registry-tag stable
+PYTHONPATH=. uv run --group inference python scripts/hf/fetch_model.py syriac-calamari-v2 --registry-tag stable
 PYTHONPATH=. uv run --group inference python scripts/hf/fetch_model.py blla-segment --registry-tag stable
 ```
 

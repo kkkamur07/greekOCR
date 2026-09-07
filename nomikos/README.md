@@ -131,7 +131,7 @@ updated to match `VERSION`.
 `nomikos_inference/registry.yaml` is the runtime model catalog. The development seed
 creates `InferenceModel` rows with `registry://<model-id>?tag=stable` artifact
 references and project-level bindings. Its defaults are
-`blla-segment` for segmentation and `syriac-calamari-v1` for
+`blla-segment` for segmentation and `syriac-calamari-v2` for
 transcription.
 
 ```bash

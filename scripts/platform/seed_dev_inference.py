@@ -53,7 +53,7 @@ def _ids(env_var: str, default: tuple[str, ...]) -> tuple[str, ...]:
 SEGMENT_MODELS = _ids("DEFAULT_SEGMENT_MODEL", ("blla-segment",))
 TRANSCRIBE_MODELS = _ids(
     "DEFAULT_TRANSCRIBE_MODEL",
-    ("greek-calamari-v1", "armenian-calamari-v1", "syriac-calamari-v1"),
+    ("greek-calamari-v1", "armenian-calamari-v1", "syriac-calamari-v2"),
 )
 BINDING_PROJECT_SLUG = os.environ.get(
     "BINDING_PROJECT_SLUG",

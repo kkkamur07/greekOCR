@@ -325,7 +325,7 @@ The seed defaults can be overridden with registry model ids:
 
 ```bash
 DEFAULT_SEGMENT_MODEL=blla-segment
-DEFAULT_TRANSCRIBE_MODEL=syriac-calamari-v1
+DEFAULT_TRANSCRIBE_MODEL=syriac-calamari-v2
 BINDING_PROJECT_SLUG=byzantine-greek-manuscripts
 ```
 
