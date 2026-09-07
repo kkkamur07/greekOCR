@@ -1,0 +1,6 @@
+# @package _global_
+
+evaluation:
+  checkpoint: ${output.root}/best.pt
+  split: ${data.test_split}
+  batch_size: ${training.batch_size}

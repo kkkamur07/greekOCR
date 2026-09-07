@@ -1,3 +1,4 @@
 # @package augmentation
 probability: 1.0
-n_augmentations: 3
+# 5 copies + original: 2 easy (3 light ops), 2 mild (2 mild ops), 1 hard (1 heavy op).
+n_augmentations: 5

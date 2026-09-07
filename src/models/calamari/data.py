@@ -12,8 +12,12 @@ from torch import Tensor
 from torch.utils.data import Dataset
 
 from ...metrics.languages import language_labels
-from .augmentation import augment_legacy_line_image
+from ...augmentation.augmentation import EXPECTED_N_AUGMENTATIONS, plan_for_augmented_variant
+from .augmentation import augment_legacy_line_image, jitter_syriac_line_width
 from .codec import CharacterCodec
+
+_SYRIAC_2024_PREFIX = "syriac_2024_"
+_SYRIAC_2024_TRAIN_REPEATS = 2
 
 
 _IMAGE_EXTENSIONS = frozenset({".png", ".jpg", ".jpeg", ".tif", ".tiff"})
@@ -33,6 +37,8 @@ class CalamariLineDataset(Dataset[dict[str, object]]):
         self.codec = codec
         self.line_height = line_height
         self.samples = collect_samples(root, split)
+        self._decoded_images: dict[int, Tensor] = {}
+        self._encoded_targets: dict[int, Tensor] = {}
         if not self.samples:
             raise ValueError(f"No labeled Calamari samples found for split {split!r} in {root}.")
 
@@ -42,11 +48,27 @@ class CalamariLineDataset(Dataset[dict[str, object]]):
     def __getitem__(self, index: int) -> dict[str, object]:
         sample = self.samples[index]
         return {
-            "image": _load_line_image(sample.image_path, self.line_height),
-            "targets": self.codec.encode(sample.text),
+            "image": self._decoded_image(index, sample.image_path),
+            "targets": self._encoded_target(index, sample.text),
             "text": sample.text,
             "language": sample.language,
         }
+
+    def _decoded_image(self, index: int, image_path: Path) -> Tensor:
+        cached = self._decoded_images.get(index)
+        if cached is not None:
+            return cached
+        image = _load_line_image(image_path, self.line_height)
+        self._decoded_images[index] = image
+        return image
+
+    def _encoded_target(self, index: int, text: str) -> Tensor:
+        cached = self._encoded_targets.get(index)
+        if cached is not None:
+            return cached
+        encoded = self.codec.encode(text)
+        self._encoded_targets[index] = encoded
+        return encoded
 
 
 class CalamariAugmentedDataset(Dataset[dict[str, object]]):
@@ -58,8 +80,11 @@ class CalamariAugmentedDataset(Dataset[dict[str, object]]):
         n_augmentations: int,
         probability: float = 1.0,
     ) -> None:
-        if n_augmentations < 0:
-            raise ValueError("Calamari n_augmentations must be zero or greater.")
+        if n_augmentations != EXPECTED_N_AUGMENTATIONS:
+            raise ValueError(
+                f"Calamari n_augmentations must be {EXPECTED_N_AUGMENTATIONS} "
+                "(2 easy, 2 mild, 1 hard), plus the original."
+            )
         if not 0.0 <= probability <= 1.0:
             raise ValueError("Calamari augmentation probability must be between zero and one.")
         self.dataset = dataset
@@ -72,16 +97,51 @@ class CalamariAugmentedDataset(Dataset[dict[str, object]]):
     def __getitem__(self, index: int) -> dict[str, object]:
         sample_index, variant = divmod(index, self._variants_per_sample)
         sample = dict(self.dataset[sample_index])
+        image = sample["image"]
+        if not isinstance(image, Tensor):
+            raise TypeError("Calamari augmentation requires tensor images.")
         if variant and numpy.random.random() < self.probability:
-            image = sample["image"]
-            if not isinstance(image, Tensor):
-                raise TypeError("Calamari augmentation requires tensor images.")
-            sample["image"] = augment_legacy_line_image(image)
+            if sample.get("language") == "syriac":
+                image = jitter_syriac_line_width(image, str(sample.get("text", "")))
+            strength, operation_count = plan_for_augmented_variant(variant)
+            image = augment_legacy_line_image(image, strength, operation_count)
+        sample["image"] = image
         return sample
 
     @property
     def _variants_per_sample(self) -> int:
         return self.n_augmentations + 1 if self.probability > 0.0 else 1
+
+
+class RemappedDataset(Dataset[dict[str, object]]):
+    """Address ``dataset`` through an index list so repeats share the same cache."""
+
+    def __init__(self, dataset: Dataset[dict[str, object]], indices: list[int]) -> None:
+        self.dataset = dataset
+        self.indices = indices
+        if not indices:
+            raise ValueError("RemappedDataset requires at least one index.")
+
+    def __len__(self) -> int:
+        return len(self.indices)
+
+    def __getitem__(self, index: int) -> dict[str, object]:
+        return self.dataset[self.indices[index]]
+
+
+def repeat_syriac_2024_train(dataset: CalamariLineDataset) -> Dataset[dict[str, object]]:
+    """See each ``syriac_2024_`` train line twice without copying files or GT."""
+    indices: list[int] = []
+    for index, sample in enumerate(dataset.samples):
+        repeats = (
+            _SYRIAC_2024_TRAIN_REPEATS
+            if sample.image_path.name.startswith(_SYRIAC_2024_PREFIX)
+            else 1
+        )
+        indices.extend([index] * repeats)
+    if len(indices) == len(dataset.samples):
+        return dataset
+    return RemappedDataset(dataset, indices)
 
 
 def collect_samples(root: Path, split: str) -> list[LineSample]:
@@ -159,7 +219,9 @@ def collate_ctc(samples: list[dict[str, object]]) -> dict[str, object]:
         "image": batch,
         "image_lengths": widths,
         "targets": torch.cat(typed_targets),
-        "target_lengths": torch.tensor([target.numel() for target in typed_targets], dtype=torch.long),
+        "target_lengths": torch.tensor(
+            [target.numel() for target in typed_targets], dtype=torch.long
+        ),
         # Padded labels are used solely by Hugging Face Trainer's evaluation
         # loop; CTC loss continues to consume the concatenated targets above.
         "labels": labels,

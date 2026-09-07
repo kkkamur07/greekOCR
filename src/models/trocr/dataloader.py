@@ -12,6 +12,8 @@ from torch.utils.data import Dataset
 from transformers import PreTrainedTokenizerBase, TrOCRProcessor
 
 from ...metrics.languages import language_labels
+from ...augmentation.augmentation import EXPECTED_N_AUGMENTATIONS, plan_for_augmented_variant
+from .augmentation import LineAugmentation
 
 
 def read_ground_truth(path: Path) -> list[tuple[str, str]]:
@@ -56,11 +58,14 @@ class TrOCRAugmentedDataset(Dataset):
     def __init__(
         self,
         dataset: Dataset,
-        augmentation: Callable[[Image.Image], Image.Image],
+        augmentation: LineAugmentation,
         n_augmentations: int,
     ) -> None:
-        if n_augmentations < 0:
-            raise ValueError("TrOCR n_augmentations must be zero or greater.")
+        if n_augmentations != EXPECTED_N_AUGMENTATIONS:
+            raise ValueError(
+                f"TrOCR n_augmentations must be {EXPECTED_N_AUGMENTATIONS} "
+                "(2 easy, 2 mild, 1 hard), plus the original."
+            )
         self.dataset = dataset
         self.augmentation = augmentation
         self.n_augmentations = n_augmentations
@@ -75,7 +80,8 @@ class TrOCRAugmentedDataset(Dataset):
             image = sample["image"]
             if not isinstance(image, Image.Image):
                 raise TypeError("TrOCR augmentation requires PIL images.")
-            sample["image"] = self.augmentation(image)
+            strength, operation_count = plan_for_augmented_variant(variant)
+            sample["image"] = self.augmentation.apply(image, strength, operation_count)
         return sample
 
     @property

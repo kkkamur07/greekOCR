@@ -17,8 +17,7 @@ def edit_distance(reference: Sequence[Any], prediction: Sequence[Any]) -> int:
                 min(
                     current_row[-1] + 1,
                     previous_row[prediction_index] + 1,
-                    previous_row[prediction_index - 1]
-                    + (reference_item != prediction_item),
+                    previous_row[prediction_index - 1] + (reference_item != prediction_item),
                 )
             )
         previous_row = current_row
@@ -67,29 +66,15 @@ def compute_text_metrics(
 
         reference_counter = Counter(reference_tokens)
         prediction_counter = Counter(prediction_tokens)
-        matched_sroie_words += sum(
-            (reference_counter & prediction_counter).values()
-        )
+        matched_sroie_words += sum((reference_counter & prediction_counter).values())
         reference_sroie_words += len(reference_tokens)
         predicted_sroie_words += len(prediction_tokens)
 
-    cer = (
-        character_edits / reference_characters
-        if reference_characters
-        else 0.0
-    )
+    cer = character_edits / reference_characters if reference_characters else 0.0
     wer = word_edits / reference_words if reference_words else 0.0
     exact_match = exact_matches / len(references)
-    sroie_precision = (
-        matched_sroie_words / predicted_sroie_words
-        if predicted_sroie_words
-        else 0.0
-    )
-    sroie_recall = (
-        matched_sroie_words / reference_sroie_words
-        if reference_sroie_words
-        else 0.0
-    )
+    sroie_precision = matched_sroie_words / predicted_sroie_words if predicted_sroie_words else 0.0
+    sroie_recall = matched_sroie_words / reference_sroie_words if reference_sroie_words else 0.0
     sroie_f1 = (
         2 * sroie_precision * sroie_recall / (sroie_precision + sroie_recall)
         if sroie_precision + sroie_recall

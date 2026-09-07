@@ -70,8 +70,13 @@ def load_calamari_checkpoint(
         raise CalamariCheckpointError("Unsupported Calamari checkpoint format.")
     metadata = _metadata_from_checkpoint(checkpoint)
     state_dict = checkpoint.get("state_dict")
-    if not isinstance(state_dict, Mapping) or not state_dict or not all(
-        isinstance(name, str) and isinstance(value, Tensor) for name, value in state_dict.items()
+    if (
+        not isinstance(state_dict, Mapping)
+        or not state_dict
+        or not all(
+            isinstance(name, str) and isinstance(value, Tensor)
+            for name, value in state_dict.items()
+        )
     ):
         raise CalamariCheckpointError("Invalid Calamari checkpoint state dictionary.")
 
@@ -121,7 +126,7 @@ def _metadata_from_checkpoint(checkpoint: Mapping[str, object]) -> CalamariCheck
         or not math.isfinite(float(temperature))
         or not isinstance(lstm_layers, int)
         or isinstance(lstm_layers, bool)
-        or lstm_layers not in {1, 2}
+        or lstm_layers not in {1, 2, 3}
     ):
         raise CalamariCheckpointError("Invalid Calamari checkpoint metadata.")
     return CalamariCheckpointMetadata(

@@ -60,16 +60,14 @@ def _sequence_length_rows(
         if match is None:
             continue
         lower, upper, name = match.groups()
-        values.setdefault(scope, {}).setdefault(
-            (int(lower), int(upper)), {}
-        )[name] = float(value)
+        values.setdefault(scope, {}).setdefault((int(lower), int(upper)), {})[name] = float(value)
         sequence_keys.add(str(key))
 
     rows_by_scope: dict[str, list[tuple[object, ...]]] = {}
     for scope, bins in values.items():
         rows_by_scope[scope] = [
             (
-                f"{lower}-{upper}",
+                f"{lower:03d}-{upper:03d}",
                 bin_metrics.get("cer", 0.0),
                 bin_metrics.get("character_errors", 0.0),
                 bin_metrics.get("reference_characters", 0.0),

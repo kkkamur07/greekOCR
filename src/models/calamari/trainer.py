@@ -1,5 +1,6 @@
 """Hugging Face Trainer integration for the PyTorch CTC Calamari recognizer."""
 
+#! need to change the zero weight and bias
 from __future__ import annotations
 
 import copy
@@ -20,7 +21,13 @@ from ...metrics.metrics import compute_sequence_length_metrics, compute_text_met
 from .checkpoint import load_calamari_checkpoint, save_calamari_checkpoint
 from .codec import CharacterCodec
 from .config import default_model_config
-from .data import CalamariAugmentedDataset, CalamariLineDataset, collect_samples, collate_ctc
+from .data import (
+    CalamariAugmentedDataset,
+    CalamariLineDataset,
+    collect_samples,
+    collate_ctc,
+    repeat_syriac_2024_train,
+)
 from .model import CalamariTorchModel
 
 
@@ -44,12 +51,13 @@ class CalamariTrainingSettings:
     weight_decay: float
     line_height: int
     device: str
-    temperature: float = -1.0
+    temperature: float
+    lstm_layers: int
     checkpoint: Path | None = None
     mode: str = "train"
     train_split: str = "train"
     validation_split: str = "val"
-    n_augmentations: int = 0
+    n_augmentations: int = 5
     augmentation_probability: float = 1.0
     ema_decay: float = 0.99
     logging_steps: int = 10
@@ -227,23 +235,53 @@ class CalamariTrainer(Trainer):
         super().log(normalized, start_time)
 
     def evaluate(self, *args: Any, **kwargs: Any) -> dict[str, float]:
-        """Evaluate EMA weights while retaining raw weights for checkpoint resumes."""
+        """Evaluate EMA weights while retaining raw weights for checkpoint resumes.
+
+        Combined and multilingual val splits also report per-language metrics.
+        A single-language val set is already covered by ``eval_*``, so the
+        extra ``eval_<language>_*`` pass is skipped.
+        """
         model = self.accelerator.unwrap_model(self.model)
         raw_state = {name: value.detach().clone() for name, value in model.state_dict().items()}
         model.load_state_dict(self.ema.model.state_dict())
         try:
             metrics = super().evaluate(*args, **kwargs)
-            language_metrics: dict[str, float] = {}
-            for language, dataset in self.language_eval_datasets.items():
-                language_metrics.update(
-                    self.predict(dataset, metric_key_prefix=f"eval_{language}").metrics
-                )
+            language_metrics = self._language_eval_metrics()
             if language_metrics:
                 self.log(language_metrics)
                 metrics.update(language_metrics)
             return metrics
         finally:
             model.load_state_dict(raw_state)
+
+    def _language_eval_metrics(self) -> dict[str, float]:
+        if len(self.language_eval_datasets) < 2:
+            return {}
+        language_metrics: dict[str, float] = {}
+        for language, dataset in self.language_eval_datasets.items():
+            output = self.evaluation_loop(
+                self._language_eval_dataloader(language, dataset),
+                description=f"{language} evaluation",
+                prediction_loss_only=True if self.compute_metrics is None else None,
+                metric_key_prefix=f"eval_{language}",
+            )
+            language_metrics.update(output.metrics)
+        return language_metrics
+
+    def _language_eval_dataloader(
+        self, language: str, dataset: Dataset[dict[str, object]]
+    ) -> DataLoader[dict[str, object]]:
+        cache_key = f"language_{language}"
+        cached = getattr(self, "_eval_dataloaders", {}).get(cache_key)
+        if cached is not None and self.args.dataloader_persistent_workers:
+            return cached
+        return self._get_dataloader(
+            dataset=dataset,
+            description=f"{language} evaluation",
+            batch_size=self.args.eval_batch_size,
+            sampler_fn=self._get_eval_sampler,
+            dataloader_key=cache_key,
+        )
 
     def _save_checkpoint(self, model: nn.Module, trial: Any) -> None:
         super()._save_checkpoint(model, trial)
@@ -267,9 +305,7 @@ class CalamariTrainer(Trainer):
         super()._load_from_checkpoint(resume_from_checkpoint, model)
         ema_path = Path(resume_from_checkpoint) / _EMA_FILENAME
         if not ema_path.is_file():
-            raise ValueError(
-                f"Calamari Trainer checkpoint is missing EMA state: {ema_path}."
-            )
+            raise ValueError(f"Calamari Trainer checkpoint is missing EMA state: {ema_path}.")
         self.ema.model.load_state_dict(torch.load(ema_path, map_location="cpu", weights_only=True))
 
     def load_ema_checkpoint(self, checkpoint: Path) -> None:
@@ -303,8 +339,11 @@ def train_calamari(
         raise ValueError(f"No Calamari training samples found in {data_root}.")
     validation_samples = collect_samples(data_root, settings.validation_split)
     model, codec = _initial_model([*train_samples, *validation_samples], settings)
+    train_lines = CalamariLineDataset(data_root, settings.train_split, codec, settings.line_height)
+    if settings.mode == "train":
+        train_lines = repeat_syriac_2024_train(train_lines)
     train_dataset = CalamariAugmentedDataset(
-        CalamariLineDataset(data_root, settings.train_split, codec, settings.line_height),
+        train_lines,
         settings.n_augmentations,
         probability=settings.augmentation_probability,
     )
@@ -342,6 +381,9 @@ def train_calamari(
         metric_for_best_model="eval_cer",
         greater_is_better=False,
         dataloader_num_workers=settings.workers,
+        dataloader_persistent_workers=settings.workers > 0,
+        dataloader_prefetch_factor=8 if settings.workers > 0 else None,
+        dataloader_pin_memory=_resolve_device(settings.device).type == "cuda",
         remove_unused_columns=False,
         label_names=["labels"],
         report_to=[],
@@ -444,17 +486,76 @@ def _initial_model(
             {character for sample in samples for character in sample.text} - set(codec.charset)
         )
         if unsupported:
-            raise ValueError(
-                f"Fine-tuning data has characters absent from the checkpoint codec: {unsupported}"
+            model, codec = _expand_checkpoint_charset(
+                model,
+                codec,
+                unsupported,
+                line_height=settings.line_height,
             )
         return model, codec
     codec = CharacterCodec.from_texts(sample.text for sample in samples)
     return (
         CalamariTorchModel(
-            default_model_config(classes=codec.classes, temperature=settings.temperature)
+            default_model_config(
+                classes=codec.classes,
+                temperature=settings.temperature,
+                lstm_layers=settings.lstm_layers,
+            )
         ),
         codec,
     )
+
+
+def _expand_checkpoint_charset(
+    model: CalamariTorchModel,
+    codec: CharacterCodec,
+    additional_characters: list[str],
+    *,
+    line_height: int,
+) -> tuple[CalamariTorchModel, CharacterCodec]:
+    """Extend a pretrained checkpoint's classifier without changing known outputs."""
+    expanded_charset = (*codec.charset, *additional_characters)
+    lstm_layers = sum(layer.kind == "bilstm" for layer in model.config.layers)
+    expanded_model = CalamariTorchModel(
+        default_model_config(
+            classes=len(expanded_charset),
+            temperature=model.config.temperature,
+            lstm_layers=lstm_layers,
+        )
+    )
+    expanded_model.eval()
+    with torch.no_grad():
+        expanded_model(
+            torch.zeros((1, 8, line_height, 1), dtype=torch.float32),
+            image_lengths=torch.tensor([8]),
+        )
+
+    if not isinstance(model.logits, nn.Linear) or not isinstance(expanded_model.logits, nn.Linear):
+        raise TypeError("Calamari classifier must be materialized before extending its charset.")
+    with torch.no_grad():
+        source_state = model.state_dict()
+        expanded_state = expanded_model.state_dict()
+        for name, value in expanded_state.items():
+            if name in {"logits.weight", "logits.bias"}:
+                continue
+            source_value = source_state.get(name)
+            if source_value is None or source_value.shape != value.shape:
+                raise ValueError(f"Cannot expand incompatible pretrained parameter: {name}.")
+            value.copy_(source_value)
+
+        known_characters = len(codec.charset) - 1
+        expanded_model.logits.weight[:known_characters].copy_(
+            model.logits.weight[:known_characters]
+        )
+        expanded_model.logits.bias[:known_characters].copy_(model.logits.bias[:known_characters])
+        expanded_model.logits.weight[-1].copy_(model.logits.weight[-1])
+        expanded_model.logits.bias[-1].copy_(model.logits.bias[-1])
+        expanded_model.logits.weight[known_characters:-1].zero_()
+        expanded_model.logits.bias[known_characters:-1].fill_(
+            float(model.logits.bias[:known_characters].mean())
+        )
+
+    return expanded_model, CharacterCodec(expanded_charset)
 
 
 def _trainer_checkpoint(settings: CalamariTrainingSettings) -> Path | None:
@@ -477,8 +578,7 @@ def _compute_ctc_metrics(prediction: Any, codec: CharacterCodec) -> dict[str, fl
     )
     labels = torch.as_tensor(prediction.label_ids)
     references = [
-        "".join(codec.charset[int(token)] for token in row.tolist() if token > 0)
-        for row in labels
+        "".join(codec.charset[int(token)] for token in row.tolist() if token > 0) for row in labels
     ]
     metrics = compute_text_metrics(references, hypotheses)
     metrics.update(compute_sequence_length_metrics(references, hypotheses))
@@ -487,9 +587,7 @@ def _compute_ctc_metrics(prediction: Any, codec: CharacterCodec) -> dict[str, fl
 
 def _best_metrics(history: list[dict[str, Any]]) -> dict[str, float]:
     evaluations = [
-        metrics
-        for metrics in history
-        if isinstance(metrics.get("eval_cer"), int | float)
+        metrics for metrics in history if isinstance(metrics.get("eval_cer"), int | float)
     ]
     if not evaluations:
         raise RuntimeError("Calamari training did not produce evaluation metrics.")
@@ -535,7 +633,7 @@ def _metadata_lstm_layers(metadata: dict[str, object]) -> int:
     if (
         not isinstance(lstm_layers, int)
         or isinstance(lstm_layers, bool)
-        or lstm_layers not in {1, 2}
+        or lstm_layers not in {1, 2, 3}
     ):
         raise ValueError("Calamari Trainer checkpoint has an invalid LSTM layer count.")
     return lstm_layers
@@ -544,20 +642,28 @@ def _metadata_lstm_layers(metadata: dict[str, object]) -> int:
 def _loader(
     dataset: Dataset[dict[str, object]], settings: CalamariTrainingSettings, *, shuffle: bool
 ) -> DataLoader[dict[str, object]]:
+    extra: dict[str, object] = {}
+    if settings.workers > 0:
+        extra["persistent_workers"] = True
+        extra["prefetch_factor"] = 8
     return DataLoader(
         dataset,
         batch_size=settings.batch_size,
         shuffle=shuffle,
         num_workers=settings.workers,
+        pin_memory=_resolve_device(settings.device).type == "cuda",
         collate_fn=collate_ctc,
+        **extra,
     )
 
 
 def _materialize_model(
     model: CalamariTorchModel, batch: dict[str, object], device: torch.device
 ) -> None:
-    image = _tensor(batch["image"], "image").to(device)
-    lengths = _tensor(batch["image_lengths"], "image_lengths").to(device)
+    image = _tensor(batch["image"], "image").to(device, non_blocking=device.type == "cuda")
+    lengths = _tensor(batch["image_lengths"], "image_lengths").to(
+        device, non_blocking=device.type == "cuda"
+    )
     with torch.no_grad():
         model(image, image_lengths=lengths)
 
@@ -569,10 +675,13 @@ def _batch_loss(
     device: torch.device,
     loss_function: nn.CTCLoss | None,
 ) -> tuple[Tensor, list[str], list[str]]:
-    image = _tensor(batch["image"], "image").to(device)
-    image_lengths = _tensor(batch["image_lengths"], "image_lengths").to(device)
-    targets = _tensor(batch["targets"], "targets").to(device)
-    target_lengths = _tensor(batch["target_lengths"], "target_lengths").to(device)
+    pinned = device.type == "cuda"
+    image = _tensor(batch["image"], "image").to(device, non_blocking=pinned)
+    image_lengths = _tensor(batch["image_lengths"], "image_lengths").to(device, non_blocking=pinned)
+    targets = _tensor(batch["targets"], "targets").to(device, non_blocking=pinned)
+    target_lengths = _tensor(batch["target_lengths"], "target_lengths").to(
+        device, non_blocking=pinned
+    )
     outputs = model(image, image_lengths=image_lengths)
     output_lengths = outputs["out_len"]
     logits = outputs["logits"]

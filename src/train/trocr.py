@@ -114,16 +114,29 @@ def log_training_summary(
             str(cfg.augmentation.max_rotation_degrees),
         ),
     ]
-    widths = [max(len(str(row[index])) for row in rows + [("Section", "Setting", "Value")]) for index in range(3)]
+    widths = [
+        max(len(str(row[index])) for row in rows + [("Section", "Setting", "Value")])
+        for index in range(3)
+    ]
     separator = "+-" + "-+-".join("-" * width for width in widths) + "-+"
-    header = "| " + " | ".join(
-        value.ljust(width) for value, width in zip(("Section", "Setting", "Value"), widths)
-    ) + " |"
+    header = (
+        "| "
+        + " | ".join(
+            value.ljust(width) for value, width in zip(("Section", "Setting", "Value"), widths)
+        )
+        + " |"
+    )
     body = [
         "| " + " | ".join(str(value).ljust(width) for value, width in zip(row, widths)) + " |"
         for row in rows
     ]
-    LOGGER.info("Training configuration:\n%s\n%s\n%s\n%s", separator, header, separator, "\n".join(body + [separator]))
+    LOGGER.info(
+        "Training configuration:\n%s\n%s\n%s\n%s",
+        separator,
+        header,
+        separator,
+        "\n".join(body + [separator]),
+    )
 
 
 def apply_sweep_experiment(cfg: DictConfig, experiment_name: str) -> None:
@@ -132,8 +145,7 @@ def apply_sweep_experiment(cfg: DictConfig, experiment_name: str) -> None:
     if experiment is None:
         available = ", ".join(sorted(cfg.sweep.experiments.keys()))
         raise ValueError(
-            f"Unknown W&B sweep experiment {experiment_name!r}. "
-            f"Available experiments: {available}."
+            f"Unknown W&B sweep experiment {experiment_name!r}. Available experiments: {available}."
         )
 
     overrides = OmegaConf.to_container(experiment, resolve=True)
@@ -169,10 +181,7 @@ def initialize_run(cfg: DictConfig, log_dir: Path) -> tuple[str, WandbLogger]:
     if "WANDB_SWEEP_ID" in os.environ:
         unknown_parameters = set(run.config.keys()) - _SWEEP_PARAMETER_PATHS
         if unknown_parameters:
-            raise ValueError(
-                "Unsupported W&B sweep parameters: "
-                f"{sorted(unknown_parameters)}"
-            )
+            raise ValueError(f"Unsupported W&B sweep parameters: {sorted(unknown_parameters)}")
         apply_sweep_experiment(cfg, str(run.config["experiment"]))
 
     resolved_config = OmegaConf.to_container(cfg, resolve=True)
@@ -201,9 +210,7 @@ def main(cfg: DictConfig) -> None:
 
     output_dir = Path(to_absolute_path(cfg.output.root)).expanduser().resolve()
     log_dir = (
-        Path(to_absolute_path(cfg.logging.root)).expanduser().resolve()
-        / "trocr"
-        / output_dir.name
+        Path(to_absolute_path(cfg.logging.root)).expanduser().resolve() / "trocr" / output_dir.name
     )
     configure_file_logging(
         log_file=log_dir / "train.log",
@@ -212,13 +219,9 @@ def main(cfg: DictConfig) -> None:
 
     checkpoint_dir = cfg.model.get("checkpoint_dir")
     model_root = (
-        Path(to_absolute_path(checkpoint_dir)).expanduser().resolve()
-        if checkpoint_dir
-        else None
+        Path(to_absolute_path(checkpoint_dir)).expanduser().resolve() if checkpoint_dir else None
     )
-    is_resume_checkpoint = (
-        model_root is not None and (model_root / "trainer_state.json").exists()
-    )
+    is_resume_checkpoint = model_root is not None and (model_root / "trainer_state.json").exists()
     model_source = str(model_root) if model_root and model_root.exists() else str(cfg.model.name)
     tokenizer_path = resolve_tokenizer_path(cfg.tokenizer.path)
     tokenizer = load_tokenizer(
@@ -235,9 +238,7 @@ def main(cfg: DictConfig) -> None:
         tokenizer,
         max_target_length=cfg.tokenizer.max_target_length,
         freeze_visual_encoder=bool(cfg.model.freeze_encoder),
-        reinitialize_decoder=(
-            "none" if is_resume_checkpoint else str(cfg.decoder.reinitialize)
-        ),
+        reinitialize_decoder=("none" if is_resume_checkpoint else str(cfg.decoder.reinitialize)),
         tie_decoder_embeddings=bool(cfg.decoder.tied),
         decoder_dropout=float(cfg.decoder.dropout),
         lora_config=lora_config,

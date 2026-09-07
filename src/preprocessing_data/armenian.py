@@ -36,6 +36,89 @@ SEED = 1111
 PRETRAINING_RATIO = 0.7
 SPLIT_RATIOS = (0.8, 0.1, 0.1)
 PADDING = 12
+DROP_CROPS = frozenset(
+    {
+        "ms_ucla_ms__0011__044.jpg",  # scratch labelled է
+        "ms_ucla_ms__0011__046.jpg",  # gutter box labelled գ
+        "ms_ucla_ms__0011__047.jpg",  # gutter box labelled դ
+        "ms_ucla_ms__0011__048.jpg",  # gutter box labelled մ
+    }
+)
+ASCII_FULL_STOP = "."
+ASCII_COLON = ":"
+ARMENIAN_MIJAKET = "\u2024"  # ․
+ARMENIAN_VERJAKET = "\u0589"  # ։
+
+
+ARMENIAN_ABBREVIATION_MARK = "\u055f"  # ՟ pativ / titlo
+_BRACKET_EXPANSION = re.compile(r"\[[^\[\]]*\]")
+_ARMENIAN_LETTER = re.compile(r"[\u0531-\u0587և]")
+
+
+def normalize_print_punctuation(text: str) -> str:
+    """Map Western print stops onto the Armenian marks they look like.
+
+    ASCII '.' is one dot, so it becomes միջակետ ․. ASCII ':' is two dots,
+    so it becomes վերջակետ ։. Native Armenian punctuation is left as-is.
+    """
+    return text.replace(ASCII_FULL_STOP, ARMENIAN_MIJAKET).replace(ASCII_COLON, ARMENIAN_VERJAKET)
+
+
+def normalize_latin_typos(text: str) -> str:
+    """Map leftover Latin keys onto the Armenian letters in the ink.
+
+    On MS_P_172 nomina sacra, q is ի (tall stem plus the abbreviation bar),
+    t is յ (bar sitting on Yi), and b is a stray keystroke inside յի.
+    Dotless ı is ա in հանապազ and ի in տի. ASCII & is և except զիդ,
+    trailing @ is գ, line-final / is ։, and | is a separator to drop.
+    """
+    text = text.replace(
+        "արոզութին․ ևզաղաւթսն զհետ բերել, զոր ի նոյն խորհուրդ արարեալ է "
+        "երանելւոյն Յովհաննու Մանդակունւոյ Հայոց կաթողիկոսի՝ | Քարոզութիւն, "
+        "Զարթուցեալքս, Աղաւթք, Զքէն գոհանամք և զհանգիստ նորին՝ Նայեա՛ Տէր "
+        "ողորմութեամբ։",
+        "արոզութին․ ևզաղաւթսն զհետ",
+    )
+    return (
+        text.replace("յqս", "յիս")
+        .replace("յqիցին", "յիսիցին")
+        .replace("յbի", "յի")
+        .replace("tիս", "յիս")
+        .replace("հանապıզ", "հանապազ")
+        .replace("տı", "տի")
+        .replace("&իս", "ևիս")
+        .replace("&իդ", "զիդ")
+        .replace("․ @", "․ գ")
+        .replace("ասի/", "ասի։")
+        .replace("այլըստ|ողորմու", "այլըստողորմու")
+    )
+
+
+def to_diplomatic_gt(text: str) -> str:
+    """Keep page ink, drop Calfa restorations inside [brackets].
+
+    Letters in [...] were never drawn; a pativ/titlo bar usually was. The bar
+    is encoded as U+055F after the last visible letter of that word. The
+    ideogram ~ already *is* the drawing for աշխարհ, so ~[աշխարհ] becomes ~
+    with no extra mark.
+    """
+    text = text.replace("{", "[")
+    pieces: list[str] = []
+    for part in re.split(r"(\s+)", text):
+        if not part or part.isspace():
+            pieces.append(part)
+            continue
+        had_brackets = "[" in part or "]" in part
+        had_ideogram = "~" in part
+        part = _BRACKET_EXPANSION.sub("", part)
+        part = part.replace("[", "").replace("]", "")
+        if had_brackets and not had_ideogram:
+            letters = list(_ARMENIAN_LETTER.finditer(part))
+            if letters:
+                index = letters[-1].end()
+                part = part[:index] + ARMENIAN_ABBREVIATION_MARK + part[index:]
+        pieces.append(part)
+    return "".join(pieces)
 
 
 def slugify(value: str) -> str:
@@ -134,9 +217,7 @@ def partition_pages(xml_files: list[Path], source_index: int) -> dict[str, dict[
         result[partition_name] = {
             "train": partition_files[:train_count],
             "val": partition_files[train_count : train_count + val_count],
-            "test": partition_files[
-                train_count + val_count : train_count + val_count + test_count
-            ],
+            "test": partition_files[train_count + val_count : train_count + val_count + test_count],
         }
     return result
 
@@ -162,9 +243,7 @@ def build_armenian_dataset(raw_sources: dict[str, Path], staging_root: Path) -> 
         xml_files = sorted((source_root / "page").glob("*.xml"))
         assignments = partition_pages(xml_files, source_index)
         manuscript_summary = {
-            partition: {
-                split: len(split_files) for split, split_files in split_map.items()
-            }
+            partition: {split: len(split_files) for split, split_files in split_map.items()}
             for partition, split_map in assignments.items()
         }
         summary["manuscripts"][source_name] = manuscript_summary
@@ -181,24 +260,37 @@ def build_armenian_dataset(raw_sources: dict[str, Path], staging_root: Path) -> 
                         cv2.IMREAD_COLOR,
                     )
                     if page_image is None:
-                        raise ValueError(f"Could not read page image: {source_root / page_image_name}")
+                        raise ValueError(
+                            f"Could not read page image: {source_root / page_image_name}"
+                        )
 
                     for annotation in annotations:
+                        image_name = (
+                            f"{source_slug}__{annotation.page_stem}"
+                            f"__{annotation.line_index:03d}.jpg"
+                        )
+                        if image_name in DROP_CROPS:
+                            continue
                         crop, _ = crop_polygon(
                             page_image,
                             annotation.polygon,
                             PADDING,
                             keep_color=False,
                         )
-                        image_name = (
-                            f"{source_slug}__{annotation.page_stem}"
-                            f"__{annotation.line_index:03d}.jpg"
-                        )
                         image_path = image_dir / image_name
                         if image_path.exists():
                             raise FileExistsError(f"Duplicate Armenian crop name: {image_name}")
                         save_crop(image_path, crop, keep_color=False)
-                        rows[partition][split].append((image_name, annotation.text))
+                        rows[partition][split].append(
+                            (
+                                image_name,
+                                to_diplomatic_gt(
+                                    normalize_latin_typos(
+                                        normalize_print_punctuation(annotation.text)
+                                    )
+                                ),
+                            )
+                        )
 
     for partition, split_rows in rows.items():
         partition_root = staging_root / partition

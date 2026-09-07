@@ -30,6 +30,174 @@ IMPORTED_PREFIXES = ("esteban__", "labelled__")
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".tif", ".tiff"}
 SPLIT_SEED = 1111
 
+# Keyboard lookalikes. Latin ß is mapped separately onto stigma.
+LATIN_LOOKALIKE_TO_GREEK = str.maketrans(
+    {
+        "A": "Α",
+        "E": "Ε",
+        "H": "Η",
+        "I": "Ι",
+        "K": "Κ",
+        "M": "Μ",
+        "N": "Ν",
+        "O": "Ο",
+        "T": "Τ",
+        "X": "Χ",
+        "Y": "Υ",
+        "o": "ο",
+        "t": "τ",
+    }
+)
+
+
+def normalize_latin_lookalikes(text: str) -> str:
+    """Map leftover Latin keys onto the Greek letters they look like."""
+    return text.translate(LATIN_LOOKALIKE_TO_GREEK)
+
+
+LATIN_SHARP_S = "\u00df"  # ß
+GREEK_STIGMA = "\u03db"  # ϛ
+SHARP_S_TO_STIGMA = str.maketrans({LATIN_SHARP_S: GREEK_STIGMA})
+
+
+def normalize_stigma(text: str) -> str:
+    """Map Latin sharp S onto Greek stigma.
+
+    Eparchos section numbers use ß as the printed stand-in for numeral 6.
+    """
+    return text.translate(SHARP_S_TO_STIGMA)
+
+
+MIDDLE_DOT = "\u00b7"  # ·
+GREEK_ANO_TELEIA = "\u0387"  # ·
+BULLET = "\u2022"  # •
+RAISED_DOTS_TO_ANO_TELEIA = str.maketrans({MIDDLE_DOT: GREEK_ANO_TELEIA, BULLET: GREEK_ANO_TELEIA})
+
+
+def normalize_raised_dots(text: str) -> str:
+    """Map middle-dot and bullet onto Greek ano teleia.
+
+    ASCII period is left as-is: it may be a low full stop. Do not NFC after
+    this step — Unicode decomposes U+0387 to U+00B7.
+    """
+    return text.translate(RAISED_DOTS_TO_ANO_TELEIA)
+
+
+GREEK_KORONIS = "\u1fbd"  # ᾽
+GREEK_PSILI = "\u1fbf"  # ᾿
+RIGHT_SINGLE_QUOTE = "\u2019"  # ’
+ASCII_APOSTROPHE = "'"
+MODIFIER_APOSTROPHE = "\u02bc"  # ʼ
+HIGH_COMMAS_TO_KORONIS = str.maketrans(
+    {
+        GREEK_PSILI: GREEK_KORONIS,
+        RIGHT_SINGLE_QUOTE: GREEK_KORONIS,
+        ASCII_APOSTROPHE: GREEK_KORONIS,
+        MODIFIER_APOSTROPHE: GREEK_KORONIS,
+    }
+)
+
+
+def normalize_high_commas(text: str) -> str:
+    """Map lookalike elision/breathing commas onto Greek koronis.
+
+    Spacing psili, Unicode/ASCII apostrophes, and modifier apostrophe are
+    the same raised comma in this GT as koronis.
+    """
+    return text.translate(HIGH_COMMAS_TO_KORONIS)
+
+
+ACUTE_ACCENT = "\u00b4"  # ´
+GREEK_OXIA = "\u1ffd"  # ´
+GREEK_TONOS = "\u0384"  # ΄
+GREEK_NUMERAL_SIGN = "\u0374"  # ʹ
+TICKS_TO_KORONIS = str.maketrans(
+    {
+        ACUTE_ACCENT: GREEK_KORONIS,
+        GREEK_OXIA: GREEK_KORONIS,
+        GREEK_TONOS: GREEK_KORONIS,
+        GREEK_NUMERAL_SIGN: GREEK_KORONIS,
+    }
+)
+
+
+def normalize_apostrophe_ticks(text: str) -> str:
+    """Map acute / oxia / tonos / keraia onto Greek koronis.
+
+    On the page these are one tick. Meaning (number vs elision) comes from
+    context. None of the source marks is an apostrophe; koronis is.
+    """
+    return text.translate(TICKS_TO_KORONIS)
+
+
+FOUR_DOT_PUNCTUATION = "\u2058"  # ⁘
+FOUR_DOT_MARK = "\u205b"  # ⁛
+FOUR_DOTS_TO_PUNCTUATION = str.maketrans({FOUR_DOT_MARK: FOUR_DOT_PUNCTUATION})
+
+
+def normalize_four_dots(text: str) -> str:
+    """Map four-dot mark onto four-dot punctuation."""
+    return text.translate(FOUR_DOTS_TO_PUNCTUATION)
+
+
+ASCII_SEMICOLON = ";"
+GREEK_QUESTION_MARK = "\u037e"  # ;
+SEMICOLON_TO_EROTIMATIKO = str.maketrans({ASCII_SEMICOLON: GREEK_QUESTION_MARK})
+
+
+def normalize_question_mark(text: str) -> str:
+    """Map ASCII semicolon onto Greek question mark.
+
+    Same ink. Do not NFC after this step — Unicode decomposes U+037E to U+003B.
+    """
+    return text.translate(SEMICOLON_TO_EROTIMATIKO)
+
+
+HALF_TRIANGULAR_COLON = "\u02d1"  # ˑ
+ASCII_COLON = ":"
+COLON_LOOKALIKES_TO_COLON = str.maketrans({HALF_TRIANGULAR_COLON: ASCII_COLON})
+
+
+def normalize_colon(text: str) -> str:
+    """Map the manuscript half-colon onto the two-dot colon.
+
+    `:ˑ` becomes `::` after the map; collapse that to one colon.
+    """
+    text = text.translate(COLON_LOOKALIKES_TO_COLON)
+    while "::" in text:
+        text = text.replace("::", ASCII_COLON)
+    return text
+
+
+EN_DASH = "\u2013"  # –
+EM_DASH = "\u2014"  # —
+ASCII_HYPHEN = "-"
+DASHES_TO_HYPHEN = str.maketrans({EN_DASH: ASCII_HYPHEN, EM_DASH: ASCII_HYPHEN})
+
+
+def normalize_dash(text: str) -> str:
+    """Map en/em dashes onto ASCII hyphen."""
+    return text.translate(DASHES_TO_HYPHEN)
+
+
+def normalize_greek_gt(text: str) -> str:
+    """Apply the agreed Greek GT normalizations."""
+    return normalize_dash(
+        normalize_colon(
+            normalize_question_mark(
+                normalize_four_dots(
+                    normalize_apostrophe_ticks(
+                        normalize_high_commas(
+                            normalize_raised_dots(
+                                normalize_stigma(normalize_latin_lookalikes(text))
+                            )
+                        )
+                    )
+                )
+            )
+        )
+    )
+
 
 @dataclass(frozen=True)
 class ImportRow:
@@ -94,7 +262,7 @@ def read_esteban_rows(root: Path) -> list[ImportRow]:
             ImportRow(
                 split=normalize_split(split_value),
                 output_name=output_name,
-                text=str(label_value).strip(),
+                text=normalize_greek_gt(str(label_value).strip()),
                 source_image=source_image,
             )
         )
@@ -132,7 +300,7 @@ def read_labelled_rows(root: Path) -> list[ImportRow]:
                 ImportRow(
                     split=split,
                     output_name=f"labelled__{source_image.name}",
-                    text=read_text(label_path),
+                    text=normalize_greek_gt(read_text(label_path)),
                     source_image=source_image,
                 )
             )
@@ -188,6 +356,49 @@ def write_manifest(path: Path, rows: list[tuple[str, str]]) -> None:
             output.write(f"{image_name}\t{text}\n")
 
 
+def rewrite_greek_manifests() -> dict[str, int]:
+    """Rewrite existing Greek GT and copy the new text into combined manifests."""
+    from .trocr_splits import rebuild_combined_partition
+
+    summary: dict[str, int] = {}
+    for partition in ("pretraining", "finetuning"):
+        greek_root = PROCESSED_ROOT / "greek" / partition
+        changed = 0
+        greek_text: dict[str, str] = {}
+        for split in SPLITS:
+            path = greek_root / f"gt_{split}.txt"
+            if not path.is_file():
+                continue
+            rows = []
+            for image_name, text in parse_manifest(path):
+                cleaned = normalize_greek_gt(text)
+                if cleaned != text:
+                    changed += 1
+                greek_text[image_name] = cleaned
+                rows.append((image_name, cleaned))
+            write_manifest(path, rows)
+        summary[f"greek_{partition}_rows_changed"] = changed
+        try:
+            rebuild_combined_partition(partition)
+            summary[f"combined_{partition}"] = 1
+        except FileNotFoundError:
+            combined_root = PROCESSED_ROOT / "combined" / partition
+            synced = 0
+            for split in SPLITS:
+                path = combined_root / f"gt_{split}.txt"
+                if not path.is_file():
+                    continue
+                rows = []
+                for image_name, text in parse_manifest(path):
+                    updated = greek_text.get(image_name, text)
+                    if updated != text:
+                        synced += 1
+                    rows.append((image_name, updated))
+                write_manifest(path, rows)
+            summary[f"combined_{partition}_rows_synced"] = synced
+    return summary
+
+
 def stage_partition(target: Path, imports: list[ImportRow]) -> tuple[Path, dict[str, int]]:
     """Build a validated replacement for one pretraining partition."""
     if not target.is_dir():
@@ -199,9 +410,7 @@ def stage_partition(target: Path, imports: list[ImportRow]) -> tuple[Path, dict[
     image_dir = staging / "image"
     image_dir.mkdir(parents=True)
 
-    imported_by_split = {
-        split: [row for row in imports if row.split == split] for split in SPLITS
-    }
+    imported_by_split = {split: [row for row in imports if row.split == split] for split in SPLITS}
     summary: dict[str, int] = {}
     for split in SPLITS:
         manifest = target / f"gt_{split}.txt"
@@ -287,12 +496,8 @@ def main() -> None:
         raise
 
     source_summary = {
-        "esteban": {
-            split: sum(row.split == split for row in esteban_rows) for split in SPLITS
-        },
-        "labelled": {
-            split: sum(row.split == split for row in labelled_rows) for split in SPLITS
-        },
+        "esteban": {split: sum(row.split == split for row in esteban_rows) for split in SPLITS},
+        "labelled": {split: sum(row.split == split for row in labelled_rows) for split in SPLITS},
     }
     print(
         json.dumps(

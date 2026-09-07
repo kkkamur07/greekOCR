@@ -1,4 +1,6 @@
-path: bundled:gpt_tokenizer
+#! Original GPT tokenizer
+
+path: tokenizer/gpt_tokenizer
 use_fast: true
 pad_token: "<|pad|>"
-reinitialize_decoder: true
+max_target_length: 50

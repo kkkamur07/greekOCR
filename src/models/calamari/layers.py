@@ -42,9 +42,7 @@ class SameMaxPool2d(nn.Module):
 
     def forward(self, value: Tensor) -> Tensor:
         if self.padding == "same":
-            value = _pad_same(
-                value, self.pool_size, self.strides, padding_value=float("-inf")
-            )
+            value = _pad_same(value, self.pool_size, self.strides, padding_value=float("-inf"))
         elif self.padding != "valid":
             raise ValueError(f"Unsupported MaxPool2D padding: {self.padding}")
         return functional.max_pool2d(value, kernel_size=self.pool_size, stride=self.strides)

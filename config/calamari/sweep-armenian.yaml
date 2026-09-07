@@ -1,0 +1,38 @@
+program: scripts/workstation/calamari/finetuning/armenian.sh
+
+method: bayes
+
+metric:
+  name: eval/cer
+  goal: minimize
+
+early_terminate:
+  type: hyperband
+  min_iter: 10
+  eta: 3
+  s: 2
+
+command:
+  - ${env}
+  - ${program}
+  - ${args_no_hyphens}
+
+parameters:
+  training:
+    value: finetuning
+  training.checkpoint:
+    value: checkpoints/calamari/pretrained/on_armenian/lstm_layers_3/best.pt
+  training.epochs:
+    value: 30
+  training.batch_size:
+    value: 32
+  data:
+    value: finetuning/armenian
+  output.root:
+    value: checkpoints/calamari/sweeps/finetuning/armenian-lstm3-lr
+  wandb.name:
+    value: calamari-sweep-finetuning-armenian-lstm3-lr
+  training.learning_rate:
+    distribution: log_uniform_values
+    min: 0.00001
+    max: 0.001

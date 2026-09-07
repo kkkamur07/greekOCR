@@ -1,0 +1,18 @@
+defaults:
+  - data: pretraining/combined
+  - model: default
+  - augmentation: default
+  - training: pretraining
+  - logging: default
+  - logging@wandb: wand
+  - output: default
+  - evaluation: default
+  - preparation: default
+  - _self_
+
+hydra:
+  job:
+    chdir: false
+  run:
+    dir: .
+  output_subdir: null

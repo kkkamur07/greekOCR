@@ -14,7 +14,7 @@ def configure_file_logging(*, log_file: Path, level: str = "INFO") -> logging.Lo
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
         handlers=[
             logging.StreamHandler(),
-            logging.FileHandler(log_file, encoding="utf-8"),
+            logging.FileHandler(log_file, mode="w", encoding="utf-8"),
         ],
         force=True,
     )

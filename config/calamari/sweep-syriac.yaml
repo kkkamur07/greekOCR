@@ -1,0 +1,46 @@
+program: scripts/workstation/calamari/finetuning/syriac.sh
+
+
+method: bayes
+
+
+metric:
+  name: eval/cer
+  goal: minimize
+
+
+early_terminate:
+  type: hyperband
+  min_iter: 10
+  eta: 3
+  s: 2
+
+
+command:
+  - ${env}
+  - ${program}
+  - ${args_no_hyphens}
+
+
+  
+parameters:
+  training:
+    value: finetuning
+  training.checkpoint:
+    value: checkpoints/calamari/pretrained/on_syriac/calamari-pretraining-syriac-bilstm2--20260827T202012068758Z--local-d17ff509/best.pt
+  training.epochs:
+    value: 100
+  training.batch_size:
+    value: 32
+  data:
+    value: finetuning/syriac
+  output.root:
+    value: checkpoints/calamari/sweeps/finetuning/syriac
+  wandb.name:
+    value: calamari-sweep-finetuning-syriac
+  augmentation.n_augmentations:
+    values: [3, 4, 5, 6]
+  training.learning_rate:
+    distribution: log_uniform_values
+    min: 0.00001
+    max: 0.001

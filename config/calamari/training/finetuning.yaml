@@ -1,0 +1,17 @@
+# @package _global_
+
+training:
+  mode: finetune
+  # Required at runtime, for example:
+  # training.checkpoint=checkpoints/calamari/pretrained/on_armenian/<run>/best.pt
+  checkpoint: null
+  epochs: 100
+  batch_size: 32
+  num_workers: 16
+  seed: 1111
+  device: auto
+  ema_decay: 0.99  #! need to look into this
+  checkpoint_top_k: 1
+  learning_rate: 9.940111830635472e-5
+  weight_decay: 0.01
+  warmup_ratio: 0.09

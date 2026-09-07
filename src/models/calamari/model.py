@@ -34,9 +34,7 @@ class CalamariTorchModel(nn.Module):
             self.layers.append(layer)
         self.logits = nn.LazyLinear(config.classes)
 
-    def forward(
-        self, image: Tensor, image_lengths: Tensor | None = None
-    ) -> dict[str, Tensor]:
+    def forward(self, image: Tensor, image_lengths: Tensor | None = None) -> dict[str, Tensor]:
         if image.ndim != 4:
             raise ValueError("Calamari images must have shape (batch, time, height, channels).")
         value = image.to(dtype=torch.float32) / 255.0

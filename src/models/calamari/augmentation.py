@@ -1,4 +1,12 @@
-"""Random, print-aware line-image augmentation for the Calamari recognizer."""
+"""Random, print-aware line-image augmentation for the Calamari recognizer.
+
+Pool operations are tagged light / mild / heavy. Each training copy uses one
+strength from the fixed 5-copy scheme (two easy, two mild, one hard).
+
+light: small photometric or geometric change; script polarity stays the same.
+mild: visible distortion or dirt; the line is still gray and readable.
+heavy: domain change or strong geometry (invert, binarize, perspective).
+"""
 
 from __future__ import annotations
 
@@ -10,47 +18,134 @@ import numpy
 from torch import Tensor
 
 
-_OPERATIONS_PER_VARIANT = 3
+SYRIAC_CONDENSED_PX_PER_CHAR = 13.0
+SYRIAC_CONDENSED_WIDTH_SCALE_RANGE = (1.0, 2.0)
+SYRIAC_SPACED_WIDTH_SCALE_RANGE = (0.5, 1.5)
 
 
-def augment_legacy_line_image(image: Tensor) -> Tensor:
-    """Apply three random Calamari transforms to a grayscale line image.
+def jitter_syriac_line_width(image: Tensor, text: str = "") -> Tensor:
+    """Stretch or compress Syriac line width; keep height and all ink.
 
-    Calamari's historical augmenter operated on ink-bright, zero-background
-    arrays. PyTorch Calamari stores grayscale image intensities instead, so the
-    image is inverted for the transformation and inverted again before return.
+    Already-dense lines (2024 / chapter 4, under 13 px/char) are only
+    stretched. Spaced 2025 lines may be compressed toward that density.
+    Variant 0 must skip this; the returned tensor may change width.
     """
+    width = image.shape[0]
+    n_chars = max(len(text), 1)
+    px_per_char = width / n_chars
+    if px_per_char < SYRIAC_CONDENSED_PX_PER_CHAR:
+        low, high = SYRIAC_CONDENSED_WIDTH_SCALE_RANGE
+    else:
+        low, high = SYRIAC_SPACED_WIDTH_SCALE_RANGE
+    return scale_line_width(image, random.uniform(low, high))
+
+
+def scale_line_width(image: Tensor, scale: float) -> Tensor:
+    """Resize only the CTC time axis. Height stays the Calamari line height."""
+    if image.ndim != 3 or image.shape[-1] != 1:
+        raise ValueError("Calamari width jitter requires a (width, height, 1) image tensor.")
+    if scale <= 0.0:
+        raise ValueError(f"Width scale must be positive, got {scale}.")
+
+    original_dtype = image.dtype
+    pixels = image.squeeze(-1).detach().cpu().numpy().astype(numpy.float32, copy=True)
+    width, height = pixels.shape
+    new_width = max(1, round(width * scale))
+    if new_width == width:
+        return image.clone()
+    resized = cv2.resize(pixels, (height, new_width), interpolation=cv2.INTER_LINEAR)
+    return Tensor(resized).to(dtype=original_dtype).unsqueeze(-1)
+
+
+def augment_grayscale_line(
+    image: numpy.ndarray,
+    strength: str,
+    operation_count: int,
+) -> numpy.ndarray:
+    """Apply the easy, mild, or hard pool to a ``(height, width)`` grayscale line.
+
+    TrOCR and other image-layout callers use this. The ops themselves are still
+    the width-major Calamari stack; the axis swap stays inside this function.
+    """
+    if image.ndim != 2:
+        raise ValueError("Line augmentation requires a 2D grayscale array.")
+    original_dtype = image.dtype
+    pixels = image.astype(numpy.float32, copy=False)
+    augmented = _augment_width_major(pixels.T, strength, operation_count).T
+    return augmented.astype(original_dtype, copy=False)
+
+
+def augment_legacy_line_image(image: Tensor, strength: str, operation_count: int) -> Tensor:
+    """Apply the easy, mild, or hard pool to a Calamari ``(width, height, 1)`` tensor."""
     if image.ndim != 3 or image.shape[-1] != 1:
         raise ValueError("Calamari augmentation requires a (width, height, 1) image tensor.")
 
     original_dtype = image.dtype
-    pixels = image.squeeze(-1).detach().cpu().numpy().astype(numpy.float32, copy=False)
+    pixels = image.squeeze(-1).detach().cpu().numpy()
+    augmented = _augment_width_major(
+        pixels.astype(numpy.float32, copy=False),
+        strength,
+        operation_count,
+    )
+    return Tensor(augmented.astype(pixels.dtype, copy=False)).to(dtype=original_dtype).unsqueeze(-1)
+
+
+def _augment_width_major(
+    pixels: numpy.ndarray,
+    strength: str,
+    operation_count: int,
+) -> numpy.ndarray:
+    """Run the legacy ink-bright ops on a ``(width, height)`` array."""
     scale = 255.0 if float(pixels.max(initial=0.0)) > 1.0 else 1.0
     ink = 1.0 - numpy.clip(pixels / scale, 0.0, 1.0)
-    augmented = _random_augment(ink)
-    grayscale = numpy.clip((1.0 - augmented) * scale, 0.0, scale)
-    return Tensor(grayscale.astype(pixels.dtype, copy=False)).to(dtype=original_dtype).unsqueeze(-1)
+    augmented = _apply_strength(ink, strength, operation_count)
+    return numpy.clip((1.0 - augmented) * scale, 0.0, scale)
 
 
-def _random_augment(image: numpy.ndarray) -> numpy.ndarray:
-    """Select three distinct transformations from the Calamari augmentation pool."""
-    operations: tuple[Callable[[numpy.ndarray], numpy.ndarray], ...] = (
-        lambda value: _random_pad(value, (0, max(2, value.shape[1] * 2))),
-        _random_rotate,
-        _smooth_elastic_distortion,
-        _printlike_degradation,
-        _camera_degradation,
-        _other_blur,
-        _image_processing,
-        _stroke_morphology,
-    )
+def _apply_strength(image: numpy.ndarray, strength: str, operation_count: int) -> numpy.ndarray:
+    operations = _operations_for_strength(strength)
+    count = operation_count
+    if count > len(operations):
+        raise ValueError(f"Calamari {strength} pool has fewer than {count} operations.")
     augmented = image
-    for operation in random.sample(operations, _OPERATIONS_PER_VARIANT):
+    for operation in random.sample(operations, count):
         augmented = numpy.clip(operation(augmented), 0.0, 1.0)
     return augmented
 
 
+def _operations_for_strength(strength: str) -> tuple[Callable[[numpy.ndarray], numpy.ndarray], ...]:
+    if strength == "easy":
+        return (_line_pad, _random_rotate, _translate, _vignette)
+    if strength == "mild":
+        return (
+            _smooth_elastic_distortion,
+            _printlike_degradation,
+            _camera_degradation,
+            _other_blur,
+            _image_processing,
+            _stroke_morphology,
+            _shear,
+            _anisotropic_scale,
+            _bleed_through,
+            _illumination_gradient,
+            _ruled_lines,
+            _ink_fade,
+            _gaussian_noise,
+            _poisson_noise,
+            _salt_pepper,
+        )
+    if strength == "hard":
+        return (_perspective, _binarize, _invert)
+    raise ValueError(f"Unknown Calamari augmentation strength {strength!r}.")
+
+
+def _line_pad(image: numpy.ndarray) -> numpy.ndarray:
+    """light: pad along the line with empty background."""
+    return _random_pad(image, (0, max(2, image.shape[1] * 2)))
+
+
 def _random_pad(image: numpy.ndarray, horizontal: tuple[int, int]) -> numpy.ndarray:
+    """light: pad along the line with empty background."""
     left, right = numpy.random.randint(*horizontal, size=2)
     return cv2.copyMakeBorder(
         image,
@@ -64,7 +159,7 @@ def _random_pad(image: numpy.ndarray, horizontal: tuple[int, int]) -> numpy.ndar
 
 
 def _random_rotate(image: numpy.ndarray, maximum_degrees: float = 5.0) -> numpy.ndarray:
-    """Rotate a width-major line image by a uniformly sampled small angle."""
+    """light: ±5° rotation on a width-major line."""
     width, height = image.shape[:2]
     angle = float(numpy.random.uniform(-maximum_degrees, maximum_degrees))
     transform = cv2.getRotationMatrix2D((height / 2, width / 2), angle, 1.0)
@@ -79,30 +174,36 @@ def _random_rotate(image: numpy.ndarray, maximum_degrees: float = 5.0) -> numpy.
 
 
 def _smooth_elastic_distortion(image: numpy.ndarray) -> numpy.ndarray:
+    """mild: ±3 px smooth warp."""
     sigma = random.uniform(2.0, 5.0)
     return _distort_with_noise(image, _bounded_gaussian_noise(image.shape, sigma, 3.0))
 
 
 def _printlike_degradation(image: numpy.ndarray) -> numpy.ndarray:
+    """mild: paper texture, blotches, and uneven ink (ocrodeg-style)."""
     return _printlike_multiscale(image, blur=1.0, inverted=True)
 
 
 def _camera_degradation(image: numpy.ndarray) -> numpy.ndarray:
-    return random.choice(
-        (_adjust_brightness, _adjust_contrast, _jpeg_compression, _pixelate)
-    )(image)
+    """mild wrapper: brightness, contrast (light) or jpeg / pixelate (mild)."""
+    return random.choice((_adjust_brightness, _adjust_contrast, _jpeg_compression, _pixelate))(
+        image
+    )
 
 
 def _adjust_brightness(image: numpy.ndarray) -> numpy.ndarray:
+    """light: global brightness 0.75–1.25."""
     return image * random.uniform(0.75, 1.25)
 
 
 def _adjust_contrast(image: numpy.ndarray) -> numpy.ndarray:
+    """light: global contrast 0.7–1.3."""
     factor = random.uniform(0.7, 1.3)
     return (image - image.mean()) * factor + image.mean()
 
 
 def _jpeg_compression(image: numpy.ndarray) -> numpy.ndarray:
+    """mild: JPEG quality 35–75."""
     encoded, buffer = cv2.imencode(
         ".jpg",
         numpy.rint(image * 255.0).astype(numpy.uint8),
@@ -115,6 +216,7 @@ def _jpeg_compression(image: numpy.ndarray) -> numpy.ndarray:
 
 
 def _pixelate(image: numpy.ndarray) -> numpy.ndarray:
+    """mild: downsample to 45–75% then nearest-neighbor upscale."""
     width, height = image.shape
     scale = random.uniform(0.45, 0.75)
     reduced = cv2.resize(
@@ -126,6 +228,7 @@ def _pixelate(image: numpy.ndarray) -> numpy.ndarray:
 
 
 def _other_blur(image: numpy.ndarray) -> numpy.ndarray:
+    """mild: 3×3/5×5 box blur or 5–9 px horizontal motion blur."""
     if random.choice((True, False)):
         return cv2.blur(image, (random.choice((3, 5)),) * 2)
     kernel_size = random.choice((5, 7, 9))
@@ -142,12 +245,12 @@ def _other_blur(image: numpy.ndarray) -> numpy.ndarray:
 
 
 def _image_processing(image: numpy.ndarray) -> numpy.ndarray:
-    return random.choice(
-        (_autocontrast, _equalize_histogram, _sharpen, _posterize)
-    )(image)
+    """mild wrapper: autocontrast / sharpen (light) or equalize / posterize (mild)."""
+    return random.choice((_autocontrast, _equalize_histogram, _sharpen, _posterize))(image)
 
 
 def _autocontrast(image: numpy.ndarray) -> numpy.ndarray:
+    """light: stretch intensities to [0, 1]."""
     minimum = float(image.min())
     maximum = float(image.max())
     if maximum == minimum:
@@ -156,22 +259,25 @@ def _autocontrast(image: numpy.ndarray) -> numpy.ndarray:
 
 
 def _equalize_histogram(image: numpy.ndarray) -> numpy.ndarray:
+    """mild: histogram equalization."""
     equalized = cv2.equalizeHist(numpy.rint(image * 255.0).astype(numpy.uint8))
     return equalized.astype(numpy.float32) / 255.0
 
 
 def _sharpen(image: numpy.ndarray) -> numpy.ndarray:
+    """light: unsharp mask."""
     blurred = cv2.GaussianBlur(image, (0, 0), sigmaX=1.0, borderType=cv2.BORDER_REFLECT)
     return image + random.uniform(0.2, 0.8) * (image - blurred)
 
 
 def _posterize(image: numpy.ndarray) -> numpy.ndarray:
+    """mild: quantize to 16, 32, or 64 gray levels."""
     levels = random.choice((16, 32, 64))
     return numpy.floor(image * (levels - 1)) / (levels - 1)
 
 
 def _stroke_morphology(image: numpy.ndarray) -> numpy.ndarray:
-    """Slightly thicken, thin, or punch holes in ink-bright text strokes."""
+    """mild: thicken, thin, or punch sparse holes in ink-bright strokes."""
     operation = random.choice(("thicken", "thin", "holes"))
     if operation == "thicken":
         return cv2.dilate(
@@ -191,13 +297,219 @@ def _stroke_morphology(image: numpy.ndarray) -> numpy.ndarray:
     return transformed
 
 
+def _warp_width_major(
+    image: numpy.ndarray,
+    matrix: numpy.ndarray,
+    *,
+    perspective: bool = False,
+) -> numpy.ndarray:
+    width, height = image.shape[:2]
+    size = (height, width)
+    if perspective:
+        return cv2.warpPerspective(
+            image,
+            matrix,
+            size,
+            flags=cv2.INTER_LINEAR,
+            borderMode=cv2.BORDER_CONSTANT,
+            borderValue=0,
+        )
+    return cv2.warpAffine(
+        image,
+        matrix,
+        size,
+        flags=cv2.INTER_LINEAR,
+        borderMode=cv2.BORDER_CONSTANT,
+        borderValue=0,
+    )
+
+
+def _shear(image: numpy.ndarray) -> numpy.ndarray:
+    """mild: horizontal slant, factor ±0.28."""
+    width, height = image.shape[:2]
+    factor = float(numpy.random.uniform(-0.28, 0.28))
+    matrix = numpy.array(
+        [[1.0, 0.0, 0.0], [-factor, 1.0, factor * height / 2]], dtype=numpy.float32
+    )
+    return _warp_width_major(image, matrix)
+
+
+def _anisotropic_scale(image: numpy.ndarray) -> numpy.ndarray:
+    """mild: independent width/height scale, then crop or pad."""
+    width, height = image.shape[:2]
+    scaled_width = max(8, int(width * random.uniform(0.82, 1.22)))
+    scaled_height = max(8, int(height * random.uniform(0.82, 1.18)))
+    scaled = cv2.resize(image, (scaled_height, scaled_width), interpolation=cv2.INTER_LINEAR)
+    canvas = numpy.zeros((width, height), dtype=image.dtype)
+    paste_w, paste_h = min(width, scaled.shape[0]), min(height, scaled.shape[1])
+    dst_x = (width - paste_w) // 2
+    dst_y = (height - paste_h) // 2
+    src_x = (scaled.shape[0] - paste_w) // 2
+    src_y = (scaled.shape[1] - paste_h) // 2
+    canvas[dst_x : dst_x + paste_w, dst_y : dst_y + paste_h] = scaled[
+        src_x : src_x + paste_w, src_y : src_y + paste_h
+    ]
+    return canvas
+
+
+def _translate(image: numpy.ndarray) -> numpy.ndarray:
+    """light: shift along the line and its height."""
+    width, height = image.shape[:2]
+    matrix = numpy.array(
+        [
+            [1.0, 0.0, random.uniform(-0.16, 0.16) * height],
+            [0.0, 1.0, random.uniform(-0.07, 0.07) * width],
+        ],
+        dtype=numpy.float32,
+    )
+    return _warp_width_major(image, matrix)
+
+
+def _perspective(image: numpy.ndarray) -> numpy.ndarray:
+    """heavy: trapezoid warp; can drop corners onto empty fill."""
+    width, height = image.shape[:2]
+    jitter_x = 0.14 * height
+    jitter_y = 0.08 * width
+    source = numpy.float32([[0, 0], [height - 1, 0], [height - 1, width - 1], [0, width - 1]])
+    dest = numpy.float32(
+        [
+            [random.uniform(0, jitter_x), random.uniform(0, jitter_y)],
+            [height - 1 - random.uniform(0, jitter_x), random.uniform(0, jitter_y)],
+            [height - 1 - random.uniform(0, jitter_x), width - 1 - random.uniform(0, jitter_y)],
+            [random.uniform(0, jitter_x), width - 1 - random.uniform(0, jitter_y)],
+        ]
+    )
+    return _warp_width_major(image, cv2.getPerspectiveTransform(source, dest), perspective=True)
+
+
+def _bleed_through(image: numpy.ndarray) -> numpy.ndarray:
+    """mild: faded, flipped copy of the same line as verso ghosting."""
+    ghost = numpy.flip(image, axis=0)
+    ghost = numpy.roll(ghost, int(random.uniform(-0.05, 0.05) * image.shape[0]), axis=0)
+    return numpy.maximum(image, ghost * random.uniform(0.14, 0.3))
+
+
+def _paper_field(image: numpy.ndarray, field: numpy.ndarray) -> numpy.ndarray:
+    paper = 1.0 - image
+    return 1.0 - numpy.clip(paper * field, 0.0, 1.0)
+
+
+def _illumination_gradient(image: numpy.ndarray) -> numpy.ndarray:
+    """mild: linear lighting ramp about 0.65–1.3."""
+    width, height = image.shape[:2]
+    start, end = random.uniform(0.65, 0.85), random.uniform(1.05, 1.3)
+    if random.choice((True, False)):
+        ramp = numpy.linspace(start, end, width, dtype=numpy.float32)[:, None]
+        field = numpy.repeat(ramp, height, axis=1)
+    else:
+        ramp = numpy.linspace(start, end, height, dtype=numpy.float32)[None, :]
+        field = numpy.repeat(ramp, width, axis=0)
+    return _paper_field(image, field)
+
+
+def _vignette(image: numpy.ndarray) -> numpy.ndarray:
+    """light: darken the borders."""
+    width, height = image.shape[:2]
+    ys, xs = numpy.ogrid[:width, :height]
+    radius = numpy.sqrt(
+        ((ys - width / 2) / (width / 2 + 1e-6)) ** 2
+        + ((xs - height / 2) / (height / 2 + 1e-6)) ** 2
+    )
+    field = 1.0 - random.uniform(0.25, 0.5) * numpy.clip(radius - 0.15, 0.0, 1.0) ** 2
+    return _paper_field(image, field)
+
+
+def _ruled_lines(image: numpy.ndarray) -> numpy.ndarray:
+    """mild: one or two ruling strokes through the line."""
+    result = image.copy()
+    width, height = image.shape[:2]
+    for _ in range(random.randint(1, 2)):
+        y = int(random.uniform(0.2, 0.8) * height)
+        shade = random.uniform(0.35, 0.75)
+        result[:, max(0, y - 1) : min(height, y + 1)] = numpy.maximum(
+            result[:, max(0, y - 1) : min(height, y + 1)],
+            shade,
+        )
+        if random.random() < 0.4:
+            wobble = numpy.sin(
+                numpy.linspace(0, random.uniform(6.0, 12.0), width)
+            ) * random.uniform(0.4, 1.1)
+            for x, delta in enumerate(wobble):
+                yy = int(numpy.clip(y + delta, 0, height - 1))
+                result[x, yy] = max(result[x, yy], shade)
+    return result
+
+
+def _ink_fade(image: numpy.ndarray) -> numpy.ndarray:
+    """mild: weaken ink-bright strokes, fade 0.25–0.55."""
+    fade = random.uniform(0.25, 0.55)
+    ink = (image > 0.2).astype(numpy.float32)
+    return image * (1.0 - ink * fade)
+
+
+def _binarize(image: numpy.ndarray) -> numpy.ndarray:
+    """heavy: drop gray levels via Otsu, Sauvola-like, or a random threshold."""
+    return random.choice((_binarize_otsu, _binarize_sauvola, _binarize_random))(image)
+
+
+def _binarize_otsu(image: numpy.ndarray) -> numpy.ndarray:
+    """heavy: global Otsu."""
+    pixels = numpy.rint(image * 255.0).astype(numpy.uint8)
+    _threshold, binary = cv2.threshold(pixels, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    return binary.astype(numpy.float32) / 255.0
+
+
+def _binarize_sauvola(image: numpy.ndarray) -> numpy.ndarray:
+    """heavy: local mean/std threshold."""
+    pixels = image.astype(numpy.float32)
+    window = random.choice((15, 21, 25))
+    mean = cv2.blur(pixels, (window, window))
+    sqmean = cv2.blur(pixels * pixels, (window, window))
+    std = numpy.sqrt(numpy.maximum(sqmean - mean * mean, 0.0))
+    threshold = mean * (1.0 + random.uniform(0.15, 0.35) * ((std / 0.5) - 1.0))
+    return (pixels > threshold).astype(numpy.float32)
+
+
+def _binarize_random(image: numpy.ndarray) -> numpy.ndarray:
+    """heavy: hard threshold in 0.35–0.65 (ink space)."""
+    return (image > random.uniform(0.35, 0.65)).astype(numpy.float32)
+
+
+def _invert(image: numpy.ndarray) -> numpy.ndarray:
+    """heavy: swap polarity (white-on-black after the outer invert)."""
+    return 1.0 - image
+
+
+def _gaussian_noise(image: numpy.ndarray) -> numpy.ndarray:
+    """mild: additive grain, sigma 0.03–0.08 in ink space."""
+    return image + numpy.random.normal(0.0, random.uniform(0.03, 0.08), image.shape).astype(
+        numpy.float32
+    )
+
+
+def _poisson_noise(image: numpy.ndarray) -> numpy.ndarray:
+    """mild: Poisson sensor grain."""
+    scale = random.uniform(18.0, 32.0)
+    peaked = numpy.clip(image * scale, 0.0, None)
+    return numpy.random.poisson(peaked).astype(numpy.float32) / scale
+
+
+def _salt_pepper(image: numpy.ndarray) -> numpy.ndarray:
+    """mild: 0.4–1.5% black/white specks."""
+    result = image.copy()
+    amount = random.uniform(0.004, 0.015)
+    salt = numpy.random.random(image.shape) < amount / 2
+    pepper = numpy.random.random(image.shape) < amount / 2
+    result[salt] = 1.0
+    result[pepper] = 0.0
+    return result
+
+
 def _bounded_gaussian_noise(shape: tuple[int, ...], sigma: float, maxdelta: float) -> numpy.ndarray:
     width, height = shape[:2]
     deltas = numpy.random.rand(2, width, height)
     for axis, values in enumerate(deltas):
-        deltas[axis] = cv2.GaussianBlur(
-            values, (0, 0), sigmaX=sigma, borderType=cv2.BORDER_REFLECT
-        )
+        deltas[axis] = cv2.GaussianBlur(values, (0, 0), sigmaX=sigma, borderType=cv2.BORDER_REFLECT)
     deltas -= deltas.min()
     deltas /= deltas.max()
     return (2 * deltas - 1) * maxdelta
@@ -235,9 +547,7 @@ def _random_blobs(shape: tuple[int, int], density: float, size: int) -> numpy.nd
         mask[random.randint(0, width - 1), random.randint(0, height - 1)] = 1
     distance = cv2.distanceTransform(1 - mask, cv2.DIST_L2, 3)
     mask = numpy.array(distance < size, dtype=numpy.float32)
-    mask = cv2.GaussianBlur(
-        mask, (0, 0), sigmaX=size / 4, borderType=cv2.BORDER_REFLECT
-    )
+    mask = cv2.GaussianBlur(mask, (0, 0), sigmaX=size / 4, borderType=cv2.BORDER_REFLECT)
     mask -= mask.min()
     maximum = float(mask.max())
     if maximum:
@@ -291,8 +601,7 @@ def _printlike_multiscale(
     paper = 0.8 + 0.2 * _make_multiscale_noise_uniform(image.shape[:2])
     ink = 0.2 * _make_multiscale_noise_uniform(image.shape[:2])
     blurred = (
-        cv2.GaussianBlur(selector, (0, 0), sigmaX=blur, borderType=cv2.BORDER_REFLECT)
-        + selector
+        cv2.GaussianBlur(selector, (0, 0), sigmaX=blur, borderType=cv2.BORDER_REFLECT) + selector
     ) / 2
     printed = blurred * ink + (1 - blurred) * paper
     return 1 - printed if inverted else printed

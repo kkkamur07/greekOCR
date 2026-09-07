@@ -28,7 +28,10 @@ def _set_seed(seed: int) -> None:
 def main(cfg: DictConfig) -> None:
     _set_seed(int(cfg.training.seed))
     data_root = Path(to_absolute_path(cfg.data.dir)).expanduser().resolve()
-    output_dir = Path(to_absolute_path(cfg.output.root)).expanduser().resolve()
+    run_name = str(cfg.wandb.name) if cfg.wandb.name is not None else "calamari"
+    output_dir = Path(to_absolute_path(cfg.output.root)).expanduser().resolve() / run_name
+    output_dir.mkdir(parents=True, exist_ok=True)
+    OmegaConf.update(cfg, "output.root", str(output_dir), merge=False)
     checkpoint = (
         Path(to_absolute_path(cfg.training.checkpoint)).expanduser().resolve()
         if cfg.training.checkpoint is not None
@@ -45,6 +48,7 @@ def main(cfg: DictConfig) -> None:
         line_height=int(cfg.model.line_height),
         device=str(cfg.training.device),
         temperature=float(cfg.model.temperature),
+        lstm_layers=int(cfg.model.lstm_layers),
         train_split=str(cfg.data.train_split),
         validation_split=str(cfg.data.validation_split),
         n_augmentations=int(cfg.augmentation.n_augmentations),
@@ -54,7 +58,6 @@ def main(cfg: DictConfig) -> None:
         warmup_ratio=float(cfg.training.warmup_ratio),
         checkpoint_top_k=int(cfg.training.checkpoint_top_k),
     )
-    output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "config.yaml").write_text(OmegaConf.to_yaml(cfg, resolve=True), encoding="utf-8")
     log_dir = (
         Path(to_absolute_path(cfg.logging.root)).expanduser().resolve()

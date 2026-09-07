@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+import logging
 import math
 import shutil
 from collections.abc import Callable
@@ -13,8 +14,11 @@ import torch
 from torch.utils.data import Dataset
 from transformers import Seq2SeqTrainer, TrainerCallback
 
+from .checkpoint_mapping import OPTIMIZER_RESET_MARKER
 from .encoder.lora import LoRALinear
 from .token_metrics import compute_token_metrics
+
+LOGGER = logging.getLogger(__name__)
 
 
 OCR_METRIC_NAMES = (
@@ -26,9 +30,7 @@ OCR_METRIC_NAMES = (
     "sroie_f1",
 )
 TRAIN_OCR_METRIC_NAMES = tuple(
-    name
-    for name in OCR_METRIC_NAMES
-    if name not in {"sroie_precision", "sroie_recall", "sroie_f1"}
+    name for name in OCR_METRIC_NAMES if name not in {"sroie_precision", "sroie_recall", "sroie_f1"}
 )
 
 
@@ -62,12 +64,8 @@ class MetricsCsvCallback(TrainerCallback):
         self.latest_encoder_lora_grad_norm = None
         self.latest_decoder_grad_norm = None
         self.latest_decoder_input_embedding_grad_norm = None
-        self.latest_decoder_layer_grad_norms = {
-            position: None for position in range(1, 5)
-        }
-        self.latest_train_ocr_metrics = {
-            name: None for name in TRAIN_OCR_METRIC_NAMES
-        }
+        self.latest_decoder_layer_grad_norms = {position: None for position in range(1, 5)}
+        self.latest_train_ocr_metrics = {name: None for name in TRAIN_OCR_METRIC_NAMES}
         self.latest_learning_rate = None
 
     def on_train_begin(self, args, state, control, **kwargs):
@@ -127,10 +125,7 @@ class MetricsCsvCallback(TrainerCallback):
                         f"train_{name}": value
                         for name, value in self.latest_train_ocr_metrics.items()
                     },
-                    **{
-                        f"eval_{name}": logs.get(f"eval_{name}")
-                        for name in OCR_METRIC_NAMES
-                    },
+                    **{f"eval_{name}": logs.get(f"eval_{name}") for name in OCR_METRIC_NAMES},
                     "learning_rate": self.latest_learning_rate,
                 }
             )
@@ -146,11 +141,13 @@ class MetricsCsvCallback(TrainerCallback):
 class TrOCRTrainer(Seq2SeqTrainer):
     """Seq2SeqTrainer that logs generated OCR and gradient metrics."""
 
-    _SUPPRESSED_KEYS = frozenset({
-        "eval_steps_per_second",
-        "eval_samples_per_second",
-        "eval_runtime",
-    })
+    _SUPPRESSED_KEYS = frozenset(
+        {
+            "eval_steps_per_second",
+            "eval_samples_per_second",
+            "eval_runtime",
+        }
+    )
 
     def __init__(
         self,
@@ -172,6 +169,36 @@ class TrOCRTrainer(Seq2SeqTrainer):
         self.metric_reporter = metric_reporter
         self._load_checkpoint_ranking()
 
+    def _load_optimizer_and_scheduler(self, checkpoint: str) -> None:
+        """Restore the scheduler after a compatibility resume resets AdamW."""
+        checkpoint_dir = Path(checkpoint)
+        if not (checkpoint_dir / OPTIMIZER_RESET_MARKER).is_file():
+            super()._load_optimizer_and_scheduler(checkpoint)
+            return
+
+        scheduler_path = checkpoint_dir / "scheduler.pt"
+        if self.optimizer is None or self.lr_scheduler is None:
+            raise RuntimeError("Optimizer and scheduler must exist before resume.")
+        if not scheduler_path.is_file():
+            raise FileNotFoundError("The compatibility resume checkpoint is missing scheduler.pt.")
+
+        scheduler_state = torch.load(
+            scheduler_path,
+            map_location="cpu",
+            weights_only=False,
+        )
+        self.lr_scheduler.load_state_dict(scheduler_state)
+        learning_rates = self.lr_scheduler.get_last_lr()
+        if len(learning_rates) != len(self.optimizer.param_groups):
+            raise RuntimeError("Resumed scheduler and optimizer have different parameter groups.")
+        for parameter_group, learning_rate in zip(
+            self.optimizer.param_groups,
+            learning_rates,
+            strict=True,
+        ):
+            parameter_group["lr"] = learning_rate
+        LOGGER.warning("Resuming model, trainer, and scheduler state with fresh AdamW momentum.")
+
     @property
     def _checkpoint_manifest_path(self) -> Path:
         return Path(self.args.output_dir) / "checkpoint_ranking.json"
@@ -179,9 +206,7 @@ class TrOCRTrainer(Seq2SeqTrainer):
     def _load_checkpoint_ranking(self) -> None:
         if not self._checkpoint_manifest_path.is_file():
             return
-        manifest = json.loads(
-            self._checkpoint_manifest_path.read_text(encoding="utf-8")
-        )
+        manifest = json.loads(self._checkpoint_manifest_path.read_text(encoding="utf-8"))
         self._ranked_checkpoint_metrics = [
             float(checkpoint["eval_cer"])
             for checkpoint in manifest.get("checkpoints", [])
@@ -234,8 +259,7 @@ class TrOCRTrainer(Seq2SeqTrainer):
             return
 
         insertion_index = sum(
-            existing_metric <= metric
-            for existing_metric in self._ranked_checkpoint_metrics
+            existing_metric <= metric for existing_metric in self._ranked_checkpoint_metrics
         )
         if (
             len(self._ranked_checkpoint_metrics) >= self.checkpoint_top_k
@@ -270,9 +294,7 @@ class TrOCRTrainer(Seq2SeqTrainer):
             self._update_checkpoint_state_path(second_best_dir, best_dir)
 
         self._ranked_checkpoint_metrics.insert(insertion_index, metric)
-        self._ranked_checkpoint_metrics = self._ranked_checkpoint_metrics[
-            : self.checkpoint_top_k
-        ]
+        self._ranked_checkpoint_metrics = self._ranked_checkpoint_metrics[: self.checkpoint_top_k]
         self.state.best_model_checkpoint = str(best_dir)
         self._write_checkpoint_ranking()
 
@@ -291,17 +313,40 @@ class TrOCRTrainer(Seq2SeqTrainer):
         super().log(filtered, start_time)
 
     def evaluate(self, *args, **kwargs) -> dict[str, float]:
-        """Evaluate the combined split and each language subset."""
+        """Evaluate the val split, plus per-language subsets when there are two or more."""
         metrics = super().evaluate(*args, **kwargs)
-        language_metrics: dict[str, float] = {}
-        for language, dataset in self.language_eval_datasets.items():
-            language_metrics.update(
-                self.predict(dataset, metric_key_prefix=f"eval_{language}").metrics
-            )
+        language_metrics = self._language_eval_metrics()
         if language_metrics:
             self.log(language_metrics)
             metrics.update(language_metrics)
         return metrics
+
+    def _language_eval_metrics(self) -> dict[str, float]:
+        if len(self.language_eval_datasets) < 2:
+            return {}
+        language_metrics: dict[str, float] = {}
+        for language, dataset in self.language_eval_datasets.items():
+            output = self.evaluation_loop(
+                self._language_eval_dataloader(language, dataset),
+                description=f"{language} evaluation",
+                prediction_loss_only=True if self.compute_metrics is None else None,
+                metric_key_prefix=f"eval_{language}",
+            )
+            language_metrics.update(output.metrics)
+        return language_metrics
+
+    def _language_eval_dataloader(self, language: str, dataset: Dataset):
+        cache_key = f"language_{language}"
+        cached = getattr(self, "_eval_dataloaders", {}).get(cache_key)
+        if cached is not None and self.args.dataloader_persistent_workers:
+            return cached
+        return self._get_dataloader(
+            dataset=dataset,
+            description=f"{language} evaluation",
+            batch_size=self.args.eval_batch_size,
+            sampler_fn=self._get_eval_sampler,
+            dataloader_key=cache_key,
+        )
 
     def _report_metrics(self, metrics: dict[str, float]) -> None:
         """Forward standard metric names through the configured reporter."""
@@ -358,8 +403,7 @@ class TrOCRTrainer(Seq2SeqTrainer):
                 generated_ids = model.generate(
                     pixel_values=batch["pixel_values"],
                     max_length=(
-                        self.args.generation_max_length
-                        or model.generation_config.max_length
+                        self.args.generation_max_length or model.generation_config.max_length
                     ),
                 )
             batch_metrics = compute_token_metrics(
@@ -368,10 +412,7 @@ class TrOCRTrainer(Seq2SeqTrainer):
                 self.processing_class,
             )
             metrics.update(
-                {
-                    f"train_{name}": batch_metrics[name]
-                    for name in TRAIN_OCR_METRIC_NAMES
-                }
+                {f"train_{name}": batch_metrics[name] for name in TRAIN_OCR_METRIC_NAMES}
             )
             if was_training:
                 model.train()

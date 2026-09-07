@@ -42,7 +42,9 @@ def language_labels(data_root: Path, split: str, image_names: Sequence[str]) -> 
                         f"Invalid language manifest row {manifest}:{line_number}"
                     ) from error
                 if image_name in memberships:
-                    raise ValueError(f"Duplicate image name across language manifests: {image_name}")
+                    raise ValueError(
+                        f"Duplicate image name across language manifests: {image_name}"
+                    )
                 memberships[image_name] = language
 
     missing = [image_name for image_name in image_names if image_name not in memberships]

@@ -1,0 +1,15 @@
+# @package _global_
+
+training:
+  mode: train
+  checkpoint: null
+  epochs: 150
+  batch_size: 32
+  num_workers: 16
+  seed: 1111
+  device: auto
+  ema_decay: 0.99
+  checkpoint_top_k: 1
+  learning_rate: 0.001
+  weight_decay: 0.01
+  warmup_ratio: 0.09

@@ -1,7 +1,6 @@
 """Tokenizer-aware OCR metric adapters for TrOCR."""
 #! for decoding strategy
 
-
 from __future__ import annotations
 
 from typing import Any
@@ -51,10 +50,7 @@ def compute_token_metrics(
     metrics = compute_text_metrics(references, hypotheses)
     if include_sequence_length_metrics:
         metrics.update(compute_sequence_length_metrics(references, hypotheses))
-    return {
-        f"{prefix}{name}": value
-        for name, value in metrics.items()
-    }
+    return {f"{prefix}{name}": value for name, value in metrics.items()}
 
 
 def character_error_rate(

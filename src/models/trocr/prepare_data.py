@@ -30,9 +30,7 @@ def main(cfg: DictConfig) -> None:
     for split in ("train", "val", "test"):
         manifest = raw_root / "manifests" / f"{split}.jsonl"
         rows = [
-            json.loads(line)
-            for line in manifest.read_text(encoding="utf-8").splitlines()
-            if line
+            json.loads(line) for line in manifest.read_text(encoding="utf-8").splitlines() if line
         ]
         output_dir.mkdir(parents=True, exist_ok=True)
         with (output_dir / f"gt_{split}.txt").open("w", encoding="utf-8") as output:
