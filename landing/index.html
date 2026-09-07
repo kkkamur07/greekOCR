@@ -291,8 +291,10 @@
             </li>
             <li>
               <div class="links__main">
-                <span class="links__name">syriac-htr-calamari</span>
-                <span class="links__desc">Syriac line HTR, Calamari. Model card not currently published.</span>
+                <a href="https://huggingface.co/nomikos-project/syriac-htr-calamari" target="_blank" rel="noreferrer">
+                  syriac-htr-calamari
+                </a>
+                <span class="links__desc">Syriac line HTR, Calamari</span>
               </div>
               <span class="status status--live"><span class="status__dot" aria-hidden="true"></span>Live</span>
             </li>
@@ -314,12 +316,14 @@
           <p>
             On the held-out packs reported in the model cards, greek-htr-calamari
             scores 0.156 CER on validation (19 lines) and 0.226 on test (21 lines),
-            and armenian-htr-calamari scores 0.092 on validation (119 lines) and
-            0.072 on test (120 lines). Metrics for syriac-htr-calamari are not
-            currently published. None of this is a platform-wide accuracy guarantee:
-            the packs are small and drawn from specific manuscripts, and CER moves
-            with the script, the hand, image quality, layout, and the training data
-            behind the checkpoint.
+            armenian-htr-calamari scores 0.092 on validation (119 lines) and 0.072
+            on test (120 lines), and syriac-htr-calamari scores 0.181 on validation
+            (331 lines) and 0.210 on test (335 lines). The Syriac and Armenian packs
+            run to a few hundred lines each; the 21-line Greek test pack is thin
+            enough that its figure is as much noise as signal. None of this is a
+            platform-wide accuracy guarantee: every pack comes from specific
+            manuscripts in specific hands, and CER moves with the script, the hand,
+            image quality, layout, and the training data behind the checkpoint.
           </p>
         </section>
       </div>

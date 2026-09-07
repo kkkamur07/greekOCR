@@ -51,9 +51,9 @@ Through the pinned runtime registry, Nomikos pages can use:
 | `blla-segment` | Page segmentation, any script | Kraken BLLA | [segmentation-blla](https://huggingface.co/nomikos-project/segmentation-blla) |
 | `greek-calamari-v1` | Line HTR, Byzantine Greek (`grc`) | Calamari | [greek-htr-calamari](https://huggingface.co/nomikos-project/greek-htr-calamari) |
 | `armenian-calamari-v1` | Line HTR, Armenian (`hy`) | Calamari | [armenian-htr-calamari](https://huggingface.co/nomikos-project/armenian-htr-calamari) |
-| `syriac-calamari-v1` | Line HTR, Syriac | Calamari | Card not currently published |
+| `syriac-calamari-v1` | Line HTR, Syriac (`syr`) | Calamari | [syriac-htr-calamari](https://huggingface.co/nomikos-project/syriac-htr-calamari) |
 
-The Greek and Armenian checkpoints are a CNN followed by two bidirectional LSTM layers at line height 48, with a charset of 259 characters for Greek and 96 for Armenian. `syriac-calamari-v1` is pinned in the registry by revision and digest, but its Hugging Face card does not currently resolve, so this README links no page for it. Coptic is expansion work and has no published checkpoint yet.
+All three HTR checkpoints are a CNN followed by two bidirectional LSTM layers at line height 48. The CTC charsets differ by script: 259 characters for Greek, 96 for Armenian, 71 for Syriac. Coptic is expansion work and has no published checkpoint yet.
 
 A model is runtime-supported only after its weights are published, pinned, verified, and added to [nomikos_inference/registry.yaml](nomikos_inference/registry.yaml). Public weights live on [Hugging Face](https://huggingface.co/nomikos-project) and are cached under `~/.nomikos/hf/cache` on first inference. See [models and datasets](docs/inference/models-and-datasets.md) and the [publishing workflow](scripts/hf/README.md) for the pinning, verification, and release steps.
 
@@ -69,7 +69,7 @@ Point it at a different platform with `NOMIKOS_API_URL` or `--api-url`.
 
 ## Accuracy
 
-The Hugging Face model cards report these figures. Both come from the same evaluator, `python -m src.evaluate.calamari`, run over each script's held-out finetuning pack (`data/processed/greek/finetuning` and `data/processed/armenian/finetuning`):
+The Hugging Face model cards report these figures. All three come from the same evaluator, `python -m src.evaluate.calamari`, run over that script's held-out finetuning pack (`data/processed/greek/finetuning`, `data/processed/armenian/finetuning`, `data/processed/syriac/finetuning`):
 
 | Model | Split | Lines | CER | WER | Exact match | SROIE F1 |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -77,12 +77,12 @@ The Hugging Face model cards report these figures. Both come from the same evalu
 | `greek-calamari-v1` | test | 21 | 0.226 | 0.675 | 0.000 | 0.390 |
 | `armenian-calamari-v1` | val | 119 | 0.092 | 0.440 | 0.319 | 0.588 |
 | `armenian-calamari-v1` | test | 120 | 0.072 | 0.340 | 0.458 | 0.701 |
+| `syriac-calamari-v1` | val | 331 | 0.181 | 0.535 | 0.245 | 0.485 |
+| `syriac-calamari-v1` | test | 335 | 0.210 | 0.577 | 0.245 | 0.452 |
 
-Both checkpoints select `best.pt` on validation CER: 0.156 for Greek, 0.092 for Armenian. The Greek test pack holds 21 lines, which is small enough that its higher CER is as much noise as signal.
+Each checkpoint selects `best.pt` on validation CER: 0.156 for Greek, 0.092 for Armenian, 0.181 for Syriac. Weigh the rows by how much text stands behind them. Syriac was scored on 331 and 335 lines and Armenian on 119 and 120, so those figures are reasonably settled. Greek is the thin one, with 19 validation and 21 test lines, and its higher test CER is as much noise as signal.
 
-For `syriac-calamari-v1`, metrics are not currently published. The Hub repository behind it does not resolve, so there is no card to quote a figure from.
-
-None of this is a platform-wide accuracy guarantee. These are small held-out packs drawn from specific manuscripts, and CER moves with the script, the hand, image quality, layout, and the training data behind the checkpoint.
+None of this is a platform-wide accuracy guarantee. Every pack here comes from specific manuscripts in specific hands, and CER moves with the script, the hand, image quality, layout, and the training data behind the checkpoint.
 
 ## Quick Start
 
