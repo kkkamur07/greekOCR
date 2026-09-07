@@ -495,6 +495,24 @@ main {
   line-height: 1.4;
 }
 
+.links__cer {
+  flex-shrink: 0;
+  min-width: 7rem;
+  text-align: right;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+}
+
+.links__cer b {
+  font-weight: 500;
+  color: var(--text-2);
+}
+
+@media (max-width: 480px) {
+  .links__cer { min-width: 0; }
+}
+
 .status {
   flex-shrink: 0;
   display: inline-flex;

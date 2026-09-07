@@ -12,7 +12,6 @@ Nomikos is open research tooling for manuscript HTR workflows: page annotation, 
 
 ## Models
 
-- [segmentation-blla](https://huggingface.co/nomikos-project/segmentation-blla): Page segmentation (Kraken BLLA), published
 - [greek-htr-calamari](https://huggingface.co/nomikos-project/greek-htr-calamari): Byzantine Greek line HTR (Calamari), published. Model card reports CER 0.156 on validation (19 lines) and 0.226 on test (21 lines)
 - [armenian-htr-calamari](https://huggingface.co/nomikos-project/armenian-htr-calamari): Armenian line HTR (Calamari), published. Model card reports CER 0.092 on validation (119 lines) and 0.072 on test (120 lines)
 - [syriac-htr-calamari](https://huggingface.co/nomikos-project/syriac-htr-calamari): Syriac line HTR (Calamari), published. Model card reports CER 0.181 on validation (331 lines) and 0.210 on test (335 lines)
