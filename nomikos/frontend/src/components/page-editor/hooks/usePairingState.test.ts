@@ -59,6 +59,13 @@ const LINE_WITH_GROUND_TRUTH = {
   ],
 };
 
+/** The Ground truth layer, as `listTranscriptions` still returns it. */
+const GROUND_TRUTH_LAYER = {
+  id: "ground-truth-1",
+  created_by_job_id: null,
+  kind: "ground_truth",
+};
+
 type SetupOptions = {
   lines?: (typeof LINE)[];
   selectedTranscriptionLayerId?: string | null;
@@ -132,7 +139,7 @@ describe("usePairingState OCR", () => {
     vi.clearAllMocks();
     enqueueTranscribePart.mockResolvedValue({ job_id: "cloud-job-1" });
     listPartLines.mockResolvedValue([LINE]);
-    listTranscriptions.mockResolvedValue([]);
+    listTranscriptions.mockResolvedValue([GROUND_TRUTH_LAYER]);
     getPagePairing.mockResolvedValue({
       text_lines: [],
       pairing_progress: { paired_lines: 0, total_lines: 0, percent: 0 },
@@ -272,6 +279,30 @@ describe("usePairingState OCR", () => {
     );
     expect(setSelectedTranscriptionLayerId).not.toHaveBeenCalledWith(
       "transcription-1",
+    );
+    expect(view.result.current.approvedTextDraft).toBe("hand-checked text");
+  });
+
+  it("opens Ground truth when the layer that was selected is gone", async () => {
+    // The layer was deleted while the run was in flight. Keeping its id would
+    // leave the selection resolving to no layer at all, which empties the
+    // draft box over approved text the researcher never touched.
+    listPartLines.mockResolvedValue([LINE_WITH_GROUND_TRUTH]);
+    const { view, setSelectedTranscriptionLayerId } = setup({
+      lines: [LINE_WITH_GROUND_TRUTH],
+      selectedTranscriptionLayerId: "deleted-layer-1",
+      groundTruthTranscriptionId: "ground-truth-1",
+    });
+
+    act(() => {
+      view.result.current.selectSegment("line-1");
+    });
+    await act(async () => {
+      await view.result.current.runPageOcr();
+    });
+
+    expect(setSelectedTranscriptionLayerId).toHaveBeenCalledWith(
+      "ground-truth-1",
     );
     expect(view.result.current.approvedTextDraft).toBe("hand-checked text");
   });

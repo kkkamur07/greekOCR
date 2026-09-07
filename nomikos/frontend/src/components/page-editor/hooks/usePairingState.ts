@@ -283,7 +283,9 @@ export function usePairingState({
    * model overwrote my Ground truth" even though the layers are separate rows.
    * So the selection stays where the researcher left it, and the draft box is
    * re-synced to that same layer. With nothing selected yet, Ground truth is
-   * the layer to open, never the model output.
+   * the layer to open, never the model output. A layer deleted while the run
+   * was in flight is the exception: an id the reload no longer carries would
+   * resolve to no layer at all, so it is dropped and Ground truth opens.
    */
   async function refreshAfterOcr() {
     if (!projectId || !documentId || !partId) return;
@@ -293,9 +295,13 @@ export function usePairingState({
     ]);
     setLines(reloadedLines);
     setTranscriptionLayers(layers);
+    const stillPresent = (layerId: string | null) =>
+      layerId !== null && layers.some((layer) => layer.id === layerId)
+        ? layerId
+        : null;
     const layerToShow =
-      selectedTranscriptionLayerId ??
-      groundTruthTranscriptionId ??
+      stillPresent(selectedTranscriptionLayerId) ??
+      stillPresent(groundTruthTranscriptionId) ??
       groundTruthLayer(layers)?.id ??
       null;
     if (layerToShow === null) return;

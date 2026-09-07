@@ -165,7 +165,8 @@ class AnnotationExportService:
                 transcription.transcription.kind == TranscriptionKind.ground_truth
                 and transcription.text.strip()
             ):
-                return transcription.text
+                # The label a trainer fits verbatim: no edge whitespace (ADR 0007).
+                return transcription.text.strip()
         return None
 
     def _paired_text_order(

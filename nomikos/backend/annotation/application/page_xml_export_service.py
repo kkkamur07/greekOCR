@@ -329,7 +329,14 @@ def _is_number_pair(point: list[object]) -> bool:
 
 
 def _ground_truth_text(line: Line) -> str:
+    """The approved text with its edge whitespace removed.
+
+    A trainer reads this back as the label for the crop and learns it verbatim,
+    edge spaces included: the Greek model emits a trailing space on lines whose
+    June export carried one. Nothing in a manuscript line begins or ends with a
+    space, so the export is where it stops (ADR 0007).
+    """
     for transcription in line.transcriptions:
         if transcription.transcription.kind == TranscriptionKind.ground_truth:
-            return transcription.text
+            return transcription.text.strip()
     return ""

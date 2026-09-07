@@ -453,6 +453,7 @@ def test_the_shipped_registry_states_a_crop_for_every_transcribe_model() -> None
 
 
 def _load_training_codec():
+    pytest.importorskip("torch")
     root = str(REPO_ROOT)
     if root not in sys.path:
         sys.path.insert(0, root)

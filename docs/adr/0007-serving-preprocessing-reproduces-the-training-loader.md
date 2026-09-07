@@ -176,8 +176,36 @@ direction of the BiLSTM carries it across the whole line. So the text the traine
 line depends on which lines it shared a batch with, and its validation numbers are batch-layout
 dependent. Serving runs one line per call, which is the trainer at batch 1, and that is the
 correct one of the two: it is the only reading in which the model sees the line and nothing
-else. The leak lives in `src/models/calamari`, outside this change, and is reported rather than
-fixed here.
+else. The leak lives in `src/models/calamari`, which this change does not touch. The fix is
+known and measured: carry the valid time length through the CNN and blank every frame beyond it
+after each layer (zero after a convolution, `-inf` before a max pool so the edge window sees only
+real frames). With that patch applied the trainer agrees with serving on all 819, 204 and 504
+lines at batch sizes 1, 16 and 32 alike, and is a bit-exact no-op for a batch of one. The patch
+and its regression test are kept with the session notes for whoever owns the research tree.
+
+### What the model reproduces, which is not this change's to fix
+
+With serving and trainer identical, everything left against ground truth is the model's own.
+The right check is the one a training set invites: a model scores lower on lines it trained on
+than on its validation split. The polygons Supabase holds today are identical to the polygons
+in the platform export the crops were cut from (504 of 504 Chapter4 lines, 204 of 204 Grec1360
+lines), so these are the training crops.
+
+| document | model | CER on these lines | card val CER | card test CER |
+| --- | --- | --- | --- | --- |
+| Armenian `MS_UCLA_MS` | `armenian-calamari-v1` | 0.023 | 0.092 | 0.072 |
+| Greek `Grec1360` | `greek-calamari-v1` | 0.048 | 0.156 | 0.226 |
+| East Syriac `Chapter4` | `syriac-calamari-v2` | 0.291 | 0.181 | 0.210 |
+
+Armenian and Greek behave as trained-on data. Syriac does not: Chapter4 scores worse than the
+checkpoint's own test split. Part of that is text, not pixels. The published charset has no ASCII
+full stop or colon; the model emits the Syriac marks U+0701 and U+0703 (702 and 95 times) where
+the platform's ground truth has `.` and `:` (726 and 195 times), so the finetuning text was
+normalised to Syriac punctuation and the platform's was not, and 490 of 504 lines can never match
+exactly. Mapping that away and ignoring every combining mark still leaves CER 0.22, which is the
+card's test figure. So the published `best.pt` treats Chapter4 as unseen data: either it is not
+the run that converged on Chapter4, or Chapter4 was not in that run's train split. Only the
+training machine's manifests can say which, and nothing in serving can change it.
 
 ## Costs accepted
 
@@ -194,9 +222,12 @@ restoring a `kraken`-based one.
 
 **The ONNX `preprocessing` metadata string is now known to be wrong on artifacts already
 published.** It says `existing Calamari NumPy preprocessing` on every Calamari graph in the
-registry. Re-exporting to correct a comment would move three digests and three pins for no change
-in behaviour, so it stands. Treat that field as a label somebody wrote once, not as an instruction
-the runtime follows: the runtime follows this record.
+registry. Nothing in the runtime reads it. Correcting it means republishing three artifacts whose
+graph bytes are unchanged and moving three pins, which is a Hub write and a registry change this
+record does not make; metadata-only copies with the corrected label were prepared and verified
+byte-identical in graph, and the exporter string lives in the research tree. Until they are
+published, treat that field as a label somebody wrote once, not as an instruction the runtime
+follows: the runtime follows this record.
 
 **`line_crop` and `line_crop_padding` are required fields with no defaults, and a wrong value is
 silent.** Registering a transcribe model is now two more things to get right, and getting the
@@ -206,17 +237,19 @@ that the value is measured against training pages before it is written, the way 
 were.
 
 **The Syriac padding is pinned to the exporter's constant, not measured.** `syriac-calamari-v2`
-reproduces no ground truth we hold under any crop: on EastSyriac Chapter4 it reads 0/504 lines
-exactly at a CER of about 0.29, unchanged by the padding. Whether that is a data-provenance
-mismatch like Greek's page-width discrepancy or something about the model itself is not known
-yet, so its `line_crop_padding: 12` is the exporter's own `PADDING` pending the training
-manifests, and it is the one value in the registry that measurement has not confirmed.
+reproduces no ground truth we hold under any crop (see "What the model reproduces" above), so
+padding cannot be read off an exact-match count for it. Its `line_crop_padding: 12` is the
+exporter's own `PADDING`, which is what cut the Chapter4 crops in the export the platform holds,
+and serving reproduces the trainer on those crops line for line. It is the one value in the
+registry that a ground-truth measurement has not confirmed.
 
 **Edge whitespace now reaches the platform.** Two Greek lines end in a space the model learned
 from its training text and the approved ground truth does not carry, so they count as ground-truth
 mismatches (55 exact became 53) while being trainer-exact. If an edge trim belongs anywhere it is
 in the comparison, not in the runtime, where it would be one more place the runtime silently
-disagrees with the thing that produced the weights.
+disagrees with the thing that produced the weights. The source is closed instead: both platform
+exporters (`export_service` line packs and `page_xml_export_service`) now strip edge whitespace
+from the ground truth they write, so no future model learns it.
 
 **Any model genuinely trained under the legacy processors can no longer be served.** There is no
 such model in the registry, and if one arrives it needs its recipe carried with it rather than the

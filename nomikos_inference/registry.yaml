@@ -28,8 +28,10 @@ models:
     host_eligibility: local
     # Pinned to the training exporter's own PADDING. Not measured end to end:
     # the Syriac model reproduces no ground truth we hold under any padding
-    # (EastSyriac Chapter4, 0/504 exact, CER about 0.29), so this waits on the
-    # training manifests rather than on a number. See ADR 0007.
+    # (EastSyriac Chapter4, 0/504 exact, CER 0.29 against the card's own test
+    # CER 0.21; its charset has no ASCII full stop or colon, which 490 of the
+    # 504 lines contain). Serving equals the trainer on those crops line for
+    # line, so this is the exporter's PADDING, not a measured value. ADR 0007.
     line_crop: polygon-white
     line_crop_padding: 12
     versions:
