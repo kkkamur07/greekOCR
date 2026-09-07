@@ -1,14 +1,15 @@
 <div align="center">
   <h1>Nomikos</h1>
   <p><strong>Nomikos is an open-source platform for transcribing historical manuscripts you can run in minutes.</strong></p>
-  <img src="landing/assets/screenshots/editor-1280.webp" alt="Nomikos manuscript editor pairing line segments with transcription" width="720">
-  <p><em>In this view, Nomikos pairs line segments with an editable transcription. Models draft the first pass from the page image — researchers correct, review, share, publish, and export.</em></p>
+  <img src="landing/assets/screenshots/editor-1280.webp" alt="The Nomikos page editor open on Grec1360 p.2, a two-page Greek manuscript spread with 51 line segments outlined in green, an HTR model selector in the toolbar, and a paired/unpaired legend" width="720">
+  <p><em>Grec1360 p.2, segmented into 51 lines. Pick an HTR model in the toolbar, let it draft the first pass, then correct, review, share, publish, and export.</em></p>
   <p>
-    <a href="#quick-start"><strong>Quick Start</strong></a> ·
+    <a href="#why-nomikos"><strong>Why Nomikos</strong></a> ·
     <a href="#current-model-support"><strong>Models</strong></a> ·
+    <a href="#accuracy"><strong>Accuracy</strong></a> ·
+    <a href="#quick-start"><strong>Quick Start</strong></a> ·
     <a href="docs/README.md"><strong>Documentation</strong></a> ·
     <a href="https://huggingface.co/nomikos-project"><strong>Hugging Face</strong></a> ·
-    <a href="#explore-nomikos"><strong>Explore</strong></a> ·
     <a href="https://nomikos.app"><strong>Website</strong></a>
   </p>
 
@@ -17,9 +18,15 @@
   <a href="https://huggingface.co/nomikos-project"><img src="https://img.shields.io/badge/Models-Hugging_Face-yellow" alt="Hugging Face models"></a>
 </div>
 
-Upload a manuscript page and Nomikos segments it into written lines, drafts a transcription where a compatible HTR model is available, and hands you a browser editor to correct, review, share, publish, and export. From there, adapt the workflow to your institution, data policy, language, and annotation conventions.
+Upload a manuscript page and Nomikos segments it into written lines, drafts a transcription where a compatible HTR model is available, and hands you a browser editor to correct, review, share, publish, and export. Behind that sit the editor, the API, storage, job state, streaming, and inference that runs on a researcher's laptop or in the cloud, all in this repository. You decide where it runs and which annotation conventions it follows.
 
-Nomikos handles the editor, API, storage, job state, streaming, and local-or-hosted inference needed to turn page images into reviewable research data within boundaries you control.
+## Why Nomikos
+
+- **Keep the expert in the loop.** Models draft segments and transcriptions; researchers correct and approve. Model output is never treated as automatic ground truth.
+- **Operate inside your own data boundary.** Keep application data behind an API you control, with your own hosting, data policy, and review conventions.
+- **Run inference on your own computer.** Point the `nomikos` agent at the platform and run supported BLLA and Calamari models on a researcher's CPU. The agent only makes outbound requests, so it needs no inbound port, VPN, or proxy.
+- **Collaborate through projects and sharing.** Organize work in projects, share documents with colleagues, and publish read-only views behind a secret link that a reader opens without an account.
+- **Correct rather than retype.** Fixing a model draft is faster than transcribing a blank page, and approved work exports in a predictable format for publication or retraining.
 
 ## Built for Research
 
@@ -27,7 +34,55 @@ Nomikos is being developed for the Nomos research ecosystem, with a focus on Syr
 
 The system is expert-in-the-loop by design. Models draft, and researchers decide what is correct. Approved work produces processed line images and transcription files for publication or future model training.
 
-The project has an experimental result of 1.69% character error rate on one held-out Greek line. That is not a platform-wide accuracy guarantee: results depend on the script, the hand, image quality, layout, and training data.
+## Complete Workflow
+
+- **Turn pages into editable data.** Upload or open a page, segment it into lines, generate a model transcription, and pair text with segments.
+- **Watch the queue while you work.** Edit the draft in the browser editor, with job state that says which host ran each job and what is still queued.
+- **Review, share, and publish.** Move documents through review, share them with collaborators, and publish read-only views for readers.
+- **Export training-ready data.** Produce processed line images and transcription files from approved work for publication or future model training.
+- **Extend to new scripts.** Add models through the registry, weights, and publishing workflow. Data preparation, training, and Hub publishing tools are in the repo.
+
+## Current Model Support
+
+Through the pinned runtime registry, Nomikos pages can use:
+
+| Registry id | Task and script | Architecture | Weights |
+| --- | --- | --- | --- |
+| `blla-segment` | Page segmentation, any script | Kraken BLLA | [segmentation-blla](https://huggingface.co/nomikos-project/segmentation-blla) |
+| `greek-calamari-v1` | Line HTR, Byzantine Greek (`grc`) | Calamari | [greek-htr-calamari](https://huggingface.co/nomikos-project/greek-htr-calamari) |
+| `armenian-calamari-v1` | Line HTR, Armenian (`hy`) | Calamari | [armenian-htr-calamari](https://huggingface.co/nomikos-project/armenian-htr-calamari) |
+| `syriac-calamari-v1` | Line HTR, Syriac | Calamari | Card not currently published |
+
+The Greek and Armenian checkpoints are a CNN followed by two bidirectional LSTM layers at line height 48, with a charset of 259 characters for Greek and 96 for Armenian. `syriac-calamari-v1` is pinned in the registry by revision and digest, but its Hugging Face card does not currently resolve, so this README links no page for it. Coptic is expansion work and has no published checkpoint yet.
+
+A model is runtime-supported only after its weights are published, pinned, verified, and added to [nomikos_inference/registry.yaml](nomikos_inference/registry.yaml). Public weights live on [Hugging Face](https://huggingface.co/nomikos-project) and are cached under `~/.nomikos/hf/cache` on first inference. See [models and datasets](docs/inference/models-and-datasets.md) and the [publishing workflow](scripts/hf/README.md) for the pinning, verification, and release steps.
+
+Run supported inference locally:
+
+```bash
+uv tool install nomikos-inference   # or: pip install nomikos-inference
+nomikos pair          # links this machine to your account
+nomikos run           # takes pages from the queue until you stop it
+```
+
+Point it at a different platform with `NOMIKOS_API_URL` or `--api-url`.
+
+## Accuracy
+
+The Hugging Face model cards report these figures. Both come from the same evaluator, `python -m src.evaluate.calamari`, run over each script's held-out finetuning pack (`data/processed/greek/finetuning` and `data/processed/armenian/finetuning`):
+
+| Model | Split | Lines | CER | WER | Exact match | SROIE F1 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| `greek-calamari-v1` | val | 19 | 0.156 | 0.648 | 0.000 | 0.415 |
+| `greek-calamari-v1` | test | 21 | 0.226 | 0.675 | 0.000 | 0.390 |
+| `armenian-calamari-v1` | val | 119 | 0.092 | 0.440 | 0.319 | 0.588 |
+| `armenian-calamari-v1` | test | 120 | 0.072 | 0.340 | 0.458 | 0.701 |
+
+Both checkpoints select `best.pt` on validation CER: 0.156 for Greek, 0.092 for Armenian. The Greek test pack holds 21 lines, which is small enough that its higher CER is as much noise as signal.
+
+For `syriac-calamari-v1`, metrics are not currently published. The Hub repository behind it does not resolve, so there is no card to quote a figure from.
+
+None of this is a platform-wide accuracy guarantee. These are small held-out packs drawn from specific manuscripts, and CER moves with the script, the hand, image quality, layout, and the training data behind the checkpoint.
 
 ## Quick Start
 
@@ -70,21 +125,11 @@ docker compose -f infrastructure/docker-compose.yml logs -f
 docker compose -f infrastructure/docker-compose.yml down
 ```
 
-## Why Nomikos
+## Ways to Run Nomikos
 
-- **Keep the expert in the loop.** Models draft segments and transcriptions; researchers correct and approve. Model output is never treated as automatic ground truth.
-- **Operate inside your own data boundary.** Keep application data behind an API you control, with your own hosting, data policy, and review conventions.
-- **Run inference on your own computer.** Point the `nomikos` agent at the platform and run supported BLLA and Calamari models on a researcher's CPU — no inbound ports, VPN, or proxy required.
-- **Collaborate through projects and sharing.** Organize work in projects, share documents, and publish through secret-link public reading with no session at all.
-- **Aim for a 10x faster first pass.** Correcting a model draft beats transcribing from blank, with exports in a predictable format for research or retraining.
-
-## Complete Workflow
-
-- **Turn pages into editable data.** Upload or open a page, segment it into lines, generate a model transcription, and pair text with segments.
-- **Correct instead of retyping.** Edit the draft in the browser editor, with job state that says which host ran each job and what is still queued.
-- **Review, share, and publish.** Move documents through review, share them with collaborators, and publish read-only views for readers.
-- **Export training-ready data.** Produce processed line images and transcription files from approved work for publication or future model training.
-- **Extend to new scripts.** Add models through the registry, weights, and publishing workflow — data preparation, training, and Hub publishing tools are in the repo.
+- **As a Docker stack.** Run the published Compose services (editor, API, Postgres, workers) for evaluation and development.
+- **As a self-hosted platform.** Deploy the API, storage, and workers on infrastructure you operate. Production today is manual Supabase, Vercel, and Docker-host configuration rather than one-click hosting.
+- **As a local inference agent.** Run `nomikos pair` once, then `nomikos run` to process your queue on your own CPU, against either a local stack or [app.nomikos.app](https://app.nomikos.app).
 
 ## Data Control and Review
 
@@ -93,64 +138,27 @@ Data controls define the boundary around Nomikos:
 - Runs in infrastructure you control, including local Docker evaluation today and manual Supabase + Vercel + worker setup for production.
 - Nothing outside the platform reaches Postgres or private storage. The API owns authentication, authorization, project sharing, and document and job state, and it is the only thing that reads a page image off disk.
 - The public reader is the same API seen through a narrower door: no session, and every route it can reach demands the document's secret share token or answers exactly as if the document did not exist.
-- The local agent opens no port. It claims one page over a short-lived signed link, runs the model, and reports back. An agent that is not running is an announced state, not a failure: work goes to the cloud, and the page says so.
+- The local agent opens no port. It claims one page over a short-lived signed link, runs the model, and reports back. An agent that is not running is an announced state rather than a failure: work goes to the cloud, and the page says so.
 - Job updates travel over Postgres `NOTIFY` to API listeners, then SSE with polling fallback. There is no email or push provider in the current implementation.
 
 See [`docs/security/`](docs/security/), [`docs/architecture.md`](docs/architecture.md), and [`docs/database-design.md`](docs/database-design.md), including auth boundaries, share-link behavior, and rate limiting.
-
-## Current Model Support
-
-Through the pinned runtime registry, Nomikos pages can use:
-
-| Capability | What Nomikos does |
-| --- | --- |
-| Page segmentation | Segments pages into written lines with the [Kraken BLLA model](https://huggingface.co/nomikos-project/segmentation-blla) (`blla-segment`) |
-| Syriac transcription | Transcribes Syriac lines with the [Calamari model](https://huggingface.co/nomikos-project/syriac-htr-calamari) (`syriac-calamari-v1`) |
-| Greek, Coptic, and Armenian HTR | Drafts transcriptions with language-specific models — expansion work, not all published |
-
-A model is runtime-supported only after its weights are published, pinned, verified, and added to [nomikos_inference/registry.yaml](nomikos_inference/registry.yaml). The repo includes data preparation, training, and publishing tools for expanding this catalog.
-
-Run supported inference locally:
-
-```bash
-uv tool install nomikos-inference   # or: pip install nomikos-inference
-nomikos pair          # links this machine to your account
-nomikos run           # takes pages from the queue until you stop it
-```
-
-Point it at a different platform with `NOMIKOS_API_URL` or `--api-url`.
-
-## Ways to Run Nomikos
-
-- **As a browser editor.** Open pages, correct segments and text, and move work through review at `http://localhost:5173` (or [app.nomikos.app](https://app.nomikos.app)).
-- **As a public reader.** Share published documents through secret links — no login required.
-- **As a local inference agent.** Run `nomikos pair` once, then `nomikos run` to process your queue on your own CPU.
-- **As a Docker stack.** Run the published Compose services (editor, API, Postgres, workers) for evaluation and development.
-- **As a self-hosted platform.** Deploy the API, storage, and workers on infrastructure you operate; production today is manual Supabase + Vercel + Docker-host configuration, not one-click hosting.
 
 ## Explore Nomikos
 
 - [Use and host Nomikos](docs/guides/using-and-hosting.md)
 - [Models and datasets](docs/inference/models-and-datasets.md)
 - [Technical architecture](docs/architecture.md)
+- [Architecture decision records](docs/adr/)
 - [Inference service reference](nomikos_inference/README.md)
 - [Model publishing workflow](scripts/hf/README.md)
 - [Testing guide](docs/guides/testing.md)
 - [Production deployment](docs/deployment/production.md)
+- [Documentation index](docs/README.md)
 
 ## Community
 
-Questions, script requests, and model contributions are welcome via [GitHub](https://github.com/kkkamur07/greekOCR), [Hugging Face](https://huggingface.co/nomikos-project), and the [website](https://nomikos.app).
-
-- [Website](https://nomikos.app) — product overview
-- [Application](https://app.nomikos.app) — hosted editor
-- [Hugging Face](https://huggingface.co/nomikos-project) — published weights and datasets
-- [Documentation index](docs/README.md) — guides, architecture, deployment, and security
-
-## Model Hosting
-
-Public weights are hosted on [Hugging Face](https://huggingface.co/nomikos-project) and cached locally under `~/.nomikos/hf/cache` on first inference. See [models and datasets](docs/inference/models-and-datasets.md) and the [publishing workflow](scripts/hf/README.md) for pinning, verification, and release steps.
+Questions, script requests, and model contributions are welcome via [GitHub](https://github.com/kkkamur07/greekOCR), the [Hugging Face organization](https://huggingface.co/nomikos-project), and the [website](https://nomikos.app). The hosted editor is at [app.nomikos.app](https://app.nomikos.app).
 
 ## License
 
-Nomikos is developed as an open-source platform for the Nomos research ecosystem. No `LICENSE` file is published in this snapshot — see the repository and linked documentation for current terms.
+Nomikos is developed as an open-source platform for the Nomos research ecosystem. No `LICENSE` file is published in this snapshot. See the repository and linked documentation for current terms.
