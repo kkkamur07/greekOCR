@@ -99,7 +99,6 @@ def smoke_calamari(
     Returns (recommended_batch_size, seconds_per_step).
     """
     from src.models.calamari.config import default_model_config
-
     from src.models.calamari.model import CalamariTorchModel
 
     print(f"\n{'Calamari  CNN+BiLSTM':^70}")
