@@ -18,7 +18,7 @@
   <a href="https://huggingface.co/nomikos-project"><img src="https://img.shields.io/badge/Models-Hugging_Face-yellow" alt="Hugging Face models"></a>
 </div>
 
-Upload a manuscript page and Nomikos segments it into written lines, drafts a transcription where a compatible HTR model is available, and hands you a browser editor to correct, review, share, publish, and export. Behind that sit the editor, the API, storage, job state, streaming, and inference that runs on a researcher's laptop or in the cloud, all in this repository. You decide where it runs and which annotation conventions it follows.
+Upload a manuscript page and Nomikos segments it into written lines, drafts a transcription where a compatible HTR model is available, and hands you a browser editor to correct, review, share, publish, and export. Behind that sit the editor, the API, storage, job state, streaming, and inference that runs on a researcher's laptop or in the cloud, all in this repository.
 
 ## Why Nomikos
 
@@ -53,7 +53,7 @@ Through the pinned runtime registry, Nomikos pages can use:
 | `armenian-calamari-v1` | Line HTR, Armenian (`hy`) | Calamari | [armenian-htr-calamari](https://huggingface.co/nomikos-project/armenian-htr-calamari) |
 | `syriac-calamari-v1` | Line HTR, Syriac (`syr`) | Calamari | [syriac-htr-calamari](https://huggingface.co/nomikos-project/syriac-htr-calamari) |
 
-All three HTR checkpoints are a CNN followed by two bidirectional LSTM layers at line height 48. The CTC charsets differ by script: 259 characters for Greek, 96 for Armenian, 71 for Syriac. Coptic is expansion work and has no published checkpoint yet.
+All three HTR checkpoints are a CNN followed by two bidirectional LSTM layers at line height 48.
 
 A model is runtime-supported only after its weights are published, pinned, verified, and added to [nomikos_inference/registry.yaml](nomikos_inference/registry.yaml). Public weights live on [Hugging Face](https://huggingface.co/nomikos-project) and are cached under `~/.nomikos/hf/cache` on first inference. See [models and datasets](docs/inference/models-and-datasets.md) and the [publishing workflow](scripts/hf/README.md) for the pinning, verification, and release steps.
 
@@ -80,7 +80,7 @@ The Hugging Face model cards report these figures. All three come from the same 
 | `syriac-calamari-v1` | val | 331 | 0.181 | 0.535 | 0.245 | 0.485 |
 | `syriac-calamari-v1` | test | 335 | 0.210 | 0.577 | 0.245 | 0.452 |
 
-Each checkpoint selects `best.pt` on validation CER: 0.156 for Greek, 0.092 for Armenian, 0.181 for Syriac. Weigh the rows by how much text stands behind them. Syriac was scored on 331 and 335 lines and Armenian on 119 and 120, so those figures are reasonably settled. Greek is the thin one, with 19 validation and 21 test lines, and its higher test CER is as much noise as signal.
+Each checkpoint selects `best.pt` on validation CER: 0.156 for Greek, 0.092 for Armenian, 0.181 for Syriac. Weigh the rows by how much text stands behind them.
 
 None of this is a platform-wide accuracy guarantee. Every pack here comes from specific manuscripts in specific hands, and CER moves with the script, the hand, image quality, layout, and the training data behind the checkpoint.
 
