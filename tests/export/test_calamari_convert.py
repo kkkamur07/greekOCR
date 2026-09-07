@@ -272,9 +272,13 @@ def test_build_state_dict_rejects_unsupported_stack() -> None:
         _build_state_dict,
     )
 
-    # A Calamari model with a second BiLSTM layer is a real, loadable TF graph
-    # but the PyTorch loader is a fixed 6-layer stack. The converter must refuse
-    # it rather than silently map weights onto the wrong modules.
+    # A Calamari model with a second BiLSTM layer is a real, loadable TF graph,
+    # and the PyTorch loader now builds exactly that stack from the checkpoint's
+    # ``lstm_layers`` field. The converter still cannot: its TF variable indices
+    # are a hardcoded reading of the one-BiLSTM SavedModel, and a second BiLSTM
+    # shifts every index after it. Refusing stays correct until somebody extends
+    # the mapping against a real two-layer TF export; silently mapping weights
+    # onto the wrong modules never was.
     metadata = SourceMetadata(
         classes=2,
         charset=["", "a"],

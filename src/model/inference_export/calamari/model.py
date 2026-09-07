@@ -52,11 +52,15 @@ class CalamariTorchModel(nn.Module):
 
         x = x.permute(0, 3, 1, 2)
         for layer in self.layers:
-            if isinstance(layer, LazyBiLSTM):
+            # Only the *first* BiLSTM sits behind the convolutions and has to
+            # flatten ``channel x height`` into a feature vector. A second
+            # stacked BiLSTM is already fed a ``batch x time x feature``
+            # sequence, and running the reshape again would fail on a 3D
+            # tensor, so the reshape is keyed on the rank rather than on the
+            # layer kind.
+            if isinstance(layer, LazyBiLSTM) and x.ndim == 4:
                 x = cnn_to_sequence(x)
-                x = layer(x)
-            else:
-                x = layer(x)
+            x = layer(x)
 
         if x.ndim == 4:
             x = cnn_to_sequence(x)

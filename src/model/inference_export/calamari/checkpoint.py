@@ -20,11 +20,18 @@ from pathlib import Path
 import torch
 from torch import Tensor
 
-from src.model.inference_export.calamari.config import (
-    CalamariTorchConfig,
-    CalamariTorchLayerConfig,
-)
+from src.model.inference_export.calamari.config import default_model_config
 from src.model.inference_export.calamari.model import CalamariTorchModel
+
+# How deep the recurrent stack may be. Calamari checkpoints published before
+# the two-layer models carry no ``lstm_layers`` key at all, and every one of
+# them is a single BiLSTM, so an absent key means one layer rather than an
+# error. Verified against the artifact rather than assumed: the Syriac
+# checkpoint at Hub revision 5ff715e873f1ae3f325ebea4d2c4a95eb5094601 (best.pt
+# sha256 ea711b91...) has payload keys ``format``/``classes``/``line_height``/
+# ``charset``/``state_dict`` and a state dict that stops at ``layers.4.lstm.*``.
+DEFAULT_LSTM_LAYERS = 1
+SUPPORTED_LSTM_LAYERS = (1, 2)
 
 
 class CalamariCheckpointError(ValueError):
@@ -60,6 +67,11 @@ class CalamariCheckpointMetadata:
     charset: tuple[str, ...]
     blank_index: int = 0
     temperature: float = -1.0
+    #: Depth of the recurrent stack. This is the one metadata field the decoder
+    #: does not read: it selects the graph the weights are loaded into, and a
+    #: wrong value fails loudly at ``load_state_dict(strict=True)`` rather than
+    #: quietly transcribing through the wrong topology.
+    lstm_layers: int = DEFAULT_LSTM_LAYERS
 
 
 def load_calamari_checkpoint(
@@ -113,6 +125,17 @@ def load_calamari_checkpoint(
         raise CalamariCheckpointMetadataError(
             "only blank-index zero is supported by the Calamari runtime"
         )
+    lstm_layers = checkpoint.get("lstm_layers", DEFAULT_LSTM_LAYERS)
+    if (
+        not isinstance(lstm_layers, int)
+        or isinstance(lstm_layers, bool)
+        or lstm_layers not in SUPPORTED_LSTM_LAYERS
+    ):
+        # A metadata failure, not a state-dict one: the weights on disk may be
+        # perfectly good, and what is wrong is the shape the checkpoint claims
+        # to have. Reporting this as a state-dict defect would send a
+        # deployment looking at the wrong half of the export.
+        raise CalamariCheckpointMetadataError("invalid Calamari checkpoint lstm_layers")
 
     metadata = CalamariCheckpointMetadata(
         classes=classes,
@@ -120,8 +143,22 @@ def load_calamari_checkpoint(
         charset=tuple(charset),
         blank_index=blank_index,
         temperature=float(temperature),
+        lstm_layers=lstm_layers,
     )
-    model = CalamariTorchModel(_default_config(metadata))
+    # ``default_model_config`` is the single definition of this topology. The
+    # loader used to carry a private copy of it, which had drifted (a dropout
+    # rate of 0.5 against 0.3) and knew only the single-BiLSTM stack, so every
+    # two-layer checkpoint failed here at ``strict=True``. Dropout holds no
+    # weights and is the identity in ``eval()``, so collapsing the two
+    # definitions onto the 0.3 one changes neither the state dict nor a single
+    # logit.
+    model = CalamariTorchModel(
+        default_model_config(
+            classes=metadata.classes,
+            temperature=metadata.temperature,
+            lstm_layers=metadata.lstm_layers,
+        )
+    )
     model.eval()
     # Materialize LazyBiLSTM and LazyLinear before loading the state dict.  The
     # time width is deliberately arbitrary; weights do not depend on it.
@@ -140,58 +177,6 @@ def load_calamari_checkpoint(
     # pass, and dropout must be off for every inference call that follows.
     model.eval()
     return model, metadata
-
-
-def _default_config(metadata: CalamariCheckpointMetadata) -> CalamariTorchConfig:
-    return CalamariTorchConfig(
-        layers=(
-            CalamariTorchLayerConfig(
-                kind="conv2d",
-                name="conv2d_0",
-                filters=40,
-                kernel_size=(3, 3),
-                strides=(1, 1),
-                padding="same",
-                activation="relu",
-            ),
-            CalamariTorchLayerConfig(
-                kind="maxpool2d",
-                name="maxpool2d_0",
-                pool_size=(2, 2),
-                strides=(-1, -1),
-                padding="same",
-            ),
-            CalamariTorchLayerConfig(
-                kind="conv2d",
-                name="conv2d_1",
-                filters=60,
-                kernel_size=(3, 3),
-                strides=(1, 1),
-                padding="same",
-                activation="relu",
-            ),
-            CalamariTorchLayerConfig(
-                kind="maxpool2d",
-                name="maxpool2d_1",
-                pool_size=(2, 2),
-                strides=(-1, -1),
-                padding="same",
-            ),
-            CalamariTorchLayerConfig(
-                kind="bilstm",
-                name="lstm_0",
-                hidden_nodes=200,
-                merge_mode="concat",
-            ),
-            CalamariTorchLayerConfig(
-                kind="dropout",
-                name="dropout_0",
-                rate=0.5,
-            ),
-        ),
-        classes=metadata.classes,
-        temperature=metadata.temperature,
-    )
 
 
 __all__ = [

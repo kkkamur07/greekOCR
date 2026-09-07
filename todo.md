@@ -221,11 +221,17 @@ Two publishing/runtime gaps, both named so they are choices rather than surprise
 `calamari-pytorch-v1` checkpoint `export_calamari_onnx` reads, re-laying out conv/dense/LSTM
 weights without touching their values. The codec (language) is carried verbatim from the config,
 so it is language-agnostic out of the box; `hidden_nodes` is derived from the recurrent-kernel
-shape, not a constant. The one bound is the *architecture*: the PyTorch loader
-(`_default_config` in `src/model/inference_export/calamari/checkpoint.py`) hardcodes the
-6-layer CNN-BiLSTM stack, and the converter validates against it and refuses anything else.
-To support a differently shaped Calamari model, `_default_config` and `CalamariTorchModel`
-must be generalised first; the converter itself already reads the layer list from the config.
+shape, not a constant. The one bound is the *architecture*, and the bound has moved: the
+PyTorch loader now builds one **or** two stacked BiLSTMs from the checkpoint's `lstm_layers`
+field, via the shared `default_model_config` in
+`src/model/inference_export/calamari/config.py`. The converter has not followed, because its
+TF variable indices (`variables/4`..`variables/9` for the BiLSTM, `10`/`11` for the dense head)
+are a hardcoded reading of the one-BiLSTM SavedModel and a second BiLSTM shifts every index
+after it. Nobody has had a two-layer TF SavedModel in hand to establish the new numbering, and
+the published two-layer models did not come through the converter at all: they were trained in
+PyTorch and write `calamari-pytorch-v1` directly (their Hub `config.yaml` is a training config,
+and their payloads carry no `source_sha256`). Extend the converter against a real two-layer TF
+export, not from the shape of the PyTorch side.
 A test (`tests/export/test_calamari_convert.py`) proves TF == PyTorch == ONNX logits to float32
 rounding on a dense panorama, and is the pattern to extend when more languages are published.
 
