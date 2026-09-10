@@ -24,4 +24,10 @@ services:
     # HTTP, so that probe would mark a healthy worker unhealthy.
     healthcheck:
       disable: true
+    # Media lives on the host since the move off Supabase Storage (STORAGE_BACKEND=local).
+    # Same directory the API mounts. Read-only: the worker only ever reads media
+    # (annotation exports); a worker-side write must not be able to alter what
+    # the API serves.
+    volumes:
+      - /data/nomikos/media:/app/backend/media:ro
     restart: unless-stopped
