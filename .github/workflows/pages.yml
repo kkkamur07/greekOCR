@@ -1,0 +1,50 @@
+name: Landing to GitHub Pages
+
+# Publishes landing/ (static marketing site for nomikos.app) to GitHub Pages.
+# Replaces the Vercel `nomikos-landing` project. Pages cannot set HTTP
+# response headers, so the security headers from landing/vercel.json are
+# applied at the Cloudflare edge instead (see docs/deployment/production.md).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "landing/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage the site
+        # vercel.json is Vercel-only; CNAME binds the custom domain; .nojekyll
+        # stops Pages from running Jekyll over a plain static tree.
+        run: |
+          mkdir -p _site
+          cp -R landing/. _site/
+          rm -f _site/vercel.json _site/README.md
+          echo "nomikos.app" > _site/CNAME
+          touch _site/.nojekyll
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
