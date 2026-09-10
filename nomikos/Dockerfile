@@ -60,4 +60,7 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).read()"
 
-CMD ["uvicorn", "backend.core.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+# Worker count comes from WEB_CONCURRENCY (uvicorn reads it when --workers
+# is absent; unset means 1, so local Compose is unchanged). The container host
+# sets it per deployment instead of baking a number into the image.
+CMD ["uvicorn", "backend.core.main:app", "--host", "0.0.0.0", "--port", "8000"]
