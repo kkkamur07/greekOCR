@@ -184,7 +184,8 @@ inference = [
 load-testing = [
     "locust>=2.45.0",
 ]
-# Production platform image / Vercel bundle (no test runner, no server, no OpenCV)
+# Production platform image (no test runner, no OpenCV). Carries its own ASGI
+# server: unlike the Vercel bundle, a container has to serve itself.
 platform-prod = [
     { include-group = "service-core" },
     "asyncpg>=0.30.0",
@@ -205,6 +206,9 @@ platform-prod = [
     # [project].dependencies, which this image deliberately does not install.
     "shapely>=2.1.0",
     "supabase>=2.13.0",
+    # `CMD ["uvicorn", ...]` in nomikos/Dockerfile needs this on PATH. Vercel
+    # supplied the server process; a container has to bring its own.
+    "uvicorn[standard]>=0.32.0",
 ]
 # Nomikos platform API + Postgres + tests (deps only — repo is not installed as a package)
 platform = [
