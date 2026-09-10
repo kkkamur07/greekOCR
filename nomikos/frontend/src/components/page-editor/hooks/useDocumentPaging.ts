@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import type { DocumentPartResponse } from "../../../api/client";
 
 /** The editor route for one page of a document. */
@@ -53,7 +52,6 @@ export function useDocumentPaging({
   documentId,
   routePartId,
 }: UseDocumentPagingArgs) {
-  const router = useRouter();
   const [activePartId, setActivePartId] = useState<string | undefined>(
     routePartId,
   );
