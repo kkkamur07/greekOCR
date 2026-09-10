@@ -1,7 +1,6 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { testRouter } from "../../../vitest.setup";
 import {
   documentWithPages,
   flushPageEditorEffects,
@@ -32,7 +31,13 @@ async function expectEditorOnPage(pageNumber: number): Promise<void> {
 }
 
 describe("PageEditorPlaceholderPage paging", () => {
+  // Paging moves the URL with window.history.pushState rather than a router
+  // navigation (see useDocumentPaging), so the assertions watch the history
+  // API instead of the router mock.
+  let pushState: ReturnType<typeof vi.spyOn>;
+
   beforeEach(() => {
+    pushState = vi.spyOn(window.history, "pushState");
     resetPageEditorApiMocks();
     // Whether the rail is open is remembered across sessions, and the stubbed
     // localStorage outlives a test. Clear it so one test hiding the rail is
@@ -41,6 +46,7 @@ describe("PageEditorPlaceholderPage paging", () => {
   });
 
   afterEach(async () => {
+    pushState.mockRestore();
     await flushPageEditorEffects();
   });
 
@@ -83,7 +89,7 @@ describe("PageEditorPlaceholderPage paging", () => {
     await expectEditorOnPage(3);
 
     // A reload or a shared link has to land back here.
-    expect(testRouter().push).toHaveBeenCalledWith(partHref("part-3"));
+    expect(pushState).toHaveBeenCalledWith(null, "", partHref("part-3"));
 
     // The editor was not torn down and rebuilt around the new page: the
     // control that was pressed is still mounted and still holds focus. A page
@@ -100,12 +106,12 @@ describe("PageEditorPlaceholderPage paging", () => {
     fireEvent.keyDown(window, { key: "PageDown" });
 
     await expectEditorOnPage(2);
-    expect(testRouter().push).toHaveBeenLastCalledWith(partHref("part-2"));
+    expect(pushState).toHaveBeenLastCalledWith(null, "", partHref("part-2"));
 
     fireEvent.keyDown(window, { key: "PageUp" });
 
     await expectEditorOnPage(1);
-    expect(testRouter().push).toHaveBeenLastCalledWith(partHref("part-1"));
+    expect(pushState).toHaveBeenLastCalledWith(null, "", partHref("part-1"));
   });
 
   it("does not page past either end of the document", async () => {
@@ -127,10 +133,10 @@ describe("PageEditorPlaceholderPage paging", () => {
     expect(screen.getByRole("button", { name: "Next page" })).toBeDisabled();
 
     // The last page is the last page: PageDown on it is not a route change.
-    testRouter().push.mockClear();
+    pushState.mockClear();
     fireEvent.keyDown(window, { key: "PageDown" });
     await flushPageEditorEffects();
-    expect(testRouter().push).not.toHaveBeenCalled();
+    expect(pushState).not.toHaveBeenCalled();
   });
 
   it("adopts the page the address bar moves to on its own", async () => {
@@ -186,7 +192,7 @@ describe("PageEditorPlaceholderPage paging", () => {
       screen.getByRole("button", { name: "Page 3" }),
     );
     await expectEditorOnPage(1);
-    expect(testRouter().push).not.toHaveBeenCalled();
+    expect(pushState).not.toHaveBeenCalled();
 
     // Space is how half the keyboard world presses a button, and the canvas
     // must not swallow it into its pan override on the way. The override is

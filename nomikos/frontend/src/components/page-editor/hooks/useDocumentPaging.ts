@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import type { DocumentPartResponse } from "../../../api/client";
 
 /** The editor route for one page of a document. */
@@ -53,7 +52,6 @@ export function useDocumentPaging({
   documentId,
   routePartId,
 }: UseDocumentPagingArgs) {
-  const router = useRouter();
   const [activePartId, setActivePartId] = useState<string | undefined>(
     routePartId,
   );
@@ -77,11 +75,17 @@ export function useDocumentPaging({
       setActivePartId(partId);
       activePartIdRef.current = partId;
       routePartIdRef.current = partId;
-      // push, not replace: paging through a manuscript is history, and Back
-      // should walk it the way it walks any other sequence of pages.
-      router.push(partEditorHref(projectId, documentId, partId));
+      // pushState, not router.push: partId is a dynamic route segment, so a
+      // router navigation re-renders the whole editor tree and refetches every
+      // query under it - the "entire page reloads" feel when paging. The hook's
+      // own state already drives partId, so only the part-scoped queries need to
+      // move. Next integrates the native history API: the URL updates, Back and
+      // Forward still walk the pages (popstate is a real navigation, and the
+      // route-sync effect above picks the new partId up from useParams).
+      // push, not replace: paging through a manuscript is history.
+      window.history.pushState(null, "", partEditorHref(projectId, documentId, partId));
     },
-    [projectId, documentId, router],
+    [projectId, documentId],
   );
 
   return { activePartId, goToPart };
