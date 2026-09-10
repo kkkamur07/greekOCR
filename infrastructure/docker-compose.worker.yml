@@ -1,0 +1,27 @@
+# Platform worker as a standalone Coolify deployment.
+#
+# Same image as the API (nomikos/Dockerfile), different process: it runs the
+# job types the platform executes itself, and it needs a persistent host with a
+# direct database connection - which is why it never ran on Vercel. Coolify's
+# Dockerfile build pack cannot override CMD, so the worker gets its own Compose
+# file; this is the `platform-worker` service from docker-compose.yml without
+# the local db/api/frontend it shares a file with there.
+#
+# Runtime env (DATABASE_URL, SYNC_DATABASE_URL, JOB_WORKER_ENABLED=true,
+# JOB_SSE_NOTIFICATIONS_ENABLED=false, ENVIRONMENT, NOMIKOS_APP_ROOT=/app) is
+# supplied by the deployment, not this file. The worker attaches to the API's
+# Docker network so the database hostname resolves.
+
+name: nomikos-worker
+
+services:
+  platform-worker:
+    build:
+      context: ..
+      dockerfile: nomikos/Dockerfile
+    command: ["python", "-m", "backend.jobs.worker_main"]
+    # The image's HEALTHCHECK probes the API's /health; the worker serves no
+    # HTTP, so that probe would mark a healthy worker unhealthy.
+    healthcheck:
+      disable: true
+    restart: unless-stopped
