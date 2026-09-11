@@ -51,6 +51,61 @@ describe("public getters carry the share token", () => {
     );
   });
 
+  it("drains every layout page and keeps t on each request", async () => {
+    const firstPage = {
+      blocks: [{ id: "b1", part_id: "p1", order: 0, box: [0, 0, 1, 1] }],
+      blocks_truncated: false,
+      lines: [
+        {
+          id: "l1",
+          part_id: "p1",
+          order: 0,
+          points: [],
+          line_transcriptions: [],
+        },
+      ],
+      next_cursor: "cursor-2",
+    };
+    const secondPage = {
+      blocks: [],
+      blocks_truncated: false,
+      lines: [
+        {
+          id: "l2",
+          part_id: "p2",
+          order: 0,
+          points: [],
+          line_transcriptions: [],
+        },
+      ],
+      next_cursor: null,
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(firstPage))
+      .mockResolvedValueOnce(jsonResponse(secondPage));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const layout = await api.getPublicLayout(
+      "project-1",
+      "doc-1",
+      "share-token-1",
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const paths = fetchMock.mock.calls.map(([url]) => {
+      const parsed = new URL(url as string);
+      return parsed.pathname + parsed.search;
+    });
+    expect(paths).toEqual([
+      "/public/projects/project-1/documents/doc-1/layout?t=share-token-1",
+      "/public/projects/project-1/documents/doc-1/layout?cursor=cursor-2&t=share-token-1",
+    ]);
+    expect(layout.lines.map((line) => line.id)).toEqual(["l1", "l2"]);
+    expect(layout.blocks).toEqual(firstPage.blocks);
+    expect(layout.next_cursor).toBe("cursor-2");
+  });
+
   it("appends t to the transcriptions request", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse([]));
     vi.stubGlobal("fetch", fetchMock);

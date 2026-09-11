@@ -514,6 +514,12 @@ export async function fetchBinaryApi(
  * caller must merge it into whatever query string it already has rather than
  * assume it is the only param.
  */
+/**
+ * Upper bound on public layout pages drained per document: 500 lines each, so
+ * 40 pages is 20,000 lines, far beyond any document the reader is meant for.
+ */
+const PUBLIC_LAYOUT_MAX_PAGES = 40;
+
 function withShareToken(path: string, token: string | null): string {
   if (!token) return path;
   const separator = path.includes("?") ? "&" : "?";
@@ -1077,18 +1083,39 @@ export const api = {
       { skipAuth: true },
     ),
 
-  getPublicLayout: (
+  /**
+   * The public layout endpoint is keyset paginated (500 lines per response, the
+   * rest behind ``next_cursor``), so a single request only covers the first
+   * pages of a long document. The reader needs every line to draw any page, so
+   * this drains the cursor and returns one merged response; blocks and
+   * ``blocks_truncated`` come from the first page, which carries them all.
+   */
+  getPublicLayout: async (
     projectId: string,
     documentId: string,
     token: string | null,
-  ) =>
-    apiRequest<PublicLayoutResponse>(
-      withShareToken(
-        `/public/projects/${projectId}/documents/${documentId}/layout`,
-        token,
-      ),
-      { skipAuth: true },
-    ),
+    options: { signal?: AbortSignal } = {},
+  ): Promise<PublicLayoutResponse> => {
+    const path = `/public/projects/${projectId}/documents/${documentId}/layout`;
+    let first: PublicLayoutResponse | undefined;
+    const lines = await collectCursorPages<PublicLineResponse>(
+      async ({ cursor, signal }) => {
+        const query = cursorQuery({ cursor });
+        const page = await apiRequest<PublicLayoutResponse>(
+          withShareToken(query ? `${path}?${query}` : path, token),
+          { skipAuth: true, signal },
+        );
+        first ??= page;
+        return {
+          items: page.lines ?? [],
+          next_cursor: page.next_cursor ?? null,
+        };
+      },
+      { maxPages: PUBLIC_LAYOUT_MAX_PAGES, signal: options.signal },
+    );
+    if (!first) throw new Error("Public layout returned no pages.");
+    return { ...first, lines };
+  },
 
   listPublicTranscriptions: (
     projectId: string,
