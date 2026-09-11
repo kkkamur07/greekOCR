@@ -515,10 +515,11 @@ export async function fetchBinaryApi(
  * assume it is the only param.
  */
 /**
- * Upper bound on public layout pages drained per document: 500 lines each, so
- * 40 pages is 20,000 lines, far beyond any document the reader is meant for.
+ * Safety valve for the public layout drain: 500 lines per page, so 400 pages is
+ * 200,000 lines. Reaching it does not fail the viewer; the layout comes back
+ * with the lines drained so far and the cursor that would continue it.
  */
-const PUBLIC_LAYOUT_MAX_PAGES = 40;
+const PUBLIC_LAYOUT_MAX_PAGES = 400;
 
 function withShareToken(path: string, token: string | null): string {
   if (!token) return path;
@@ -1097,24 +1098,33 @@ export const api = {
     options: { signal?: AbortSignal } = {},
   ): Promise<PublicLayoutResponse> => {
     const path = `/public/projects/${projectId}/documents/${documentId}/layout`;
-    let first: PublicLayoutResponse | undefined;
-    const lines = await collectCursorPages<PublicLineResponse>(
-      async ({ cursor, signal }) => {
-        const query = cursorQuery({ cursor });
-        const page = await apiRequest<PublicLayoutResponse>(
-          withShareToken(query ? `${path}?${query}` : path, token),
-          { skipAuth: true, signal },
-        );
-        first ??= page;
-        return {
-          items: page.lines ?? [],
-          next_cursor: page.next_cursor ?? null,
-        };
-      },
-      { maxPages: PUBLIC_LAYOUT_MAX_PAGES, signal: options.signal },
-    );
-    if (!first) throw new Error("Public layout returned no pages.");
-    return { ...first, lines };
+    const fetchPage = (cursor: string | null) => {
+      const query = cursorQuery({ cursor });
+      return apiRequest<PublicLayoutResponse>(
+        withShareToken(query ? `${path}?${query}` : path, token),
+        { skipAuth: true, signal: options.signal },
+      );
+    };
+    // Drain every page: blocks come from the first page only, lines from all of them.
+    const first = await fetchPage(null);
+    const lines = [...(first.lines ?? [])];
+    const seenCursors = new Set<string>();
+    let cursor = first.next_cursor ?? null;
+    let pagesFetched = 1;
+    while (cursor && pagesFetched < PUBLIC_LAYOUT_MAX_PAGES) {
+      if (options.signal?.aborted) {
+        throw new DOMException("The request was cancelled.", "AbortError");
+      }
+      if (seenCursors.has(cursor)) {
+        throw new Error("Public layout pagination repeated a cursor.");
+      }
+      seenCursors.add(cursor);
+      const page = await fetchPage(cursor);
+      lines.push(...(page.lines ?? []));
+      cursor = page.next_cursor ?? null;
+      pagesFetched += 1;
+    }
+    return { ...first, lines, next_cursor: cursor };
   },
 
   listPublicTranscriptions: (

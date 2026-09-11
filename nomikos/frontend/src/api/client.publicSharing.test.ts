@@ -103,7 +103,37 @@ describe("public getters carry the share token", () => {
     ]);
     expect(layout.lines.map((line) => line.id)).toEqual(["l1", "l2"]);
     expect(layout.blocks).toEqual(firstPage.blocks);
-    expect(layout.next_cursor).toBe("cursor-2");
+    expect(layout.next_cursor).toBeNull();
+  });
+
+  it("stops draining at the page cap and keeps the cursor instead of failing", async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      const cursor = new URL(url).searchParams.get("cursor");
+      const n = cursor ? Number(cursor.slice(1)) : 0;
+      return Promise.resolve(
+        jsonResponse({
+          blocks: [],
+          blocks_truncated: false,
+          lines: [
+            {
+              id: `l${n}`,
+              part_id: "p1",
+              order: n,
+              points: [],
+              line_transcriptions: [],
+            },
+          ],
+          next_cursor: `c${n + 1}`,
+        }),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const layout = await api.getPublicLayout("project-1", "doc-1", null);
+
+    expect(fetchMock).toHaveBeenCalledTimes(400);
+    expect(layout.lines).toHaveLength(400);
+    expect(layout.next_cursor).toBe("c400");
   });
 
   it("appends t to the transcriptions request", async () => {
