@@ -119,5 +119,5 @@ nomikos_inference/publish/artifacts/staging/**/*.onnx
 # request IPs), so they must never reach the repo.
 backups/
 
-human-guide/
-presentation/
+/human-guide/
+/presentation/
