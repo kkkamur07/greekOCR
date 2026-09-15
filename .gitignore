@@ -118,3 +118,6 @@ nomikos_inference/publish/artifacts/staging/**/*.onnx
 # Database dumps kept for rollback. These contain real user rows (auth records,
 # request IPs), so they must never reach the repo.
 backups/
+
+human-guide/
+presentation/
