@@ -5,6 +5,7 @@ import {
   type ReactZoomPanPinchRef,
 } from "react-zoom-pan-pinch";
 import { resetPanVelocityTracking } from "../../utils/zoomPanVelocity";
+import { useZoomLayerHint } from "../../utils/zoomLayerHint";
 
 type PublicZoomSurfaceProps = {
   children: ReactNode;
@@ -20,9 +21,15 @@ export function PublicZoomSurface({
 }: PublicZoomSurfaceProps) {
   const transformRef = useRef<ReactZoomPanPinchRef>(null!);
   const [zoomLevel, setZoomLevel] = useState(1);
+  const { transforming, markTransforming } = useZoomLayerHint();
 
   return (
-    <div className="pub-zoom-surface" aria-label={ariaLabel}>
+    <div
+      className={`pub-zoom-surface${
+        transforming ? " pub-zoom-surface--transforming" : ""
+      }`}
+      aria-label={ariaLabel}
+    >
       <TransformWrapper
         ref={transformRef}
         initialScale={1}
@@ -58,7 +65,10 @@ export function PublicZoomSurface({
         }}
         // A click after a wheel zoom must not fling the page: see zoomPanVelocity.
         onPanningStart={resetPanVelocityTracking}
-        onTransformed={(ref) => setZoomLevel(ref.state.scale)}
+        onTransformed={(ref) => {
+          setZoomLevel(ref.state.scale);
+          markTransforming();
+        }}
       >
         {() => (
           <>

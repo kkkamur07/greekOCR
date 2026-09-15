@@ -31,6 +31,7 @@ import {
 import type { PageEditorCanvasSettings } from "./pageEditorSettings";
 import { segmentNumbersById, segmentsInNumberOrder } from "./segmentNumbering";
 import { resetPanVelocityTracking } from "../../utils/zoomPanVelocity";
+import { useZoomLayerHint } from "../../utils/zoomLayerHint";
 import { PageEditorCanvasIsland } from "./PageEditorCanvasIsland";
 import { useSmoothWheelZoom } from "./useSmoothWheelZoom";
 
@@ -559,6 +560,7 @@ export function PageEditorCanvas({
 }: PageEditorCanvasProps) {
   const [zoomLevel, setZoomLevel] = useState(1);
   const [spaceHeld, setSpaceHeld] = useState(false);
+  const { transforming, markTransforming } = useZoomLayerHint();
   const [draftEnd, setDraftEnd] = useState<LinePoint | null>(null);
   const [draftPolygonCursor, setDraftPolygonCursor] =
     useState<LinePoint | null>(null);
@@ -806,7 +808,9 @@ export function PageEditorCanvas({
 
   return (
     <div
-      className={`pe-canvas-host${spaceHeld ? " pe-canvas-host--panning" : ""}`}
+      className={`pe-canvas-host${spaceHeld ? " pe-canvas-host--panning" : ""}${
+        transforming ? " pe-canvas-host--transforming" : ""
+      }`}
       ref={hostRef}
       onContextMenu={(event) => event.preventDefault()}
       // Every new press starts out as a click; only panning past the threshold
@@ -903,7 +907,10 @@ export function PageEditorCanvas({
             panMovedRef.current = true;
           }
         }}
-        onTransformed={(ref) => setZoomLevel(ref.state.scale)}
+        onTransformed={(ref) => {
+          setZoomLevel(ref.state.scale);
+          markTransforming();
+        }}
       >
         {({ resetTransform }) => (
           <>

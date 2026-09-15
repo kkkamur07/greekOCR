@@ -1303,7 +1303,9 @@ button {
   min-height: 480px;
   background: var(--surface-2);
 }
-.pub-zoom-surface .react-transform-component {
+/* Only while the view is moving: a permanent hint pins the layer's raster
+   scale and the zoomed-in overlay blurs along with the scan. */
+.pub-zoom-surface--transforming .react-transform-component {
   will-change: transform;
 }
 .pub-zoom-surface__wrapper {
