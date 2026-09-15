@@ -113,8 +113,11 @@
 }
 /* The pan/zoom library rewrites this layer's `transform` every frame; promoting
    it keeps the full-resolution scan and its overlay on the compositor instead
-   of repainting them on each step. */
-.pe-canvas-host .react-transform-component {
+   of repainting them on each step. The hint is applied only while the view is
+   actually moving: held permanently it pins the layer's raster scale, so a
+   zoomed-in SVG overlay is stretched from the bitmap rastered at the old scale
+   and blurs like the scan under it instead of staying vector-crisp. */
+.pe-canvas-host--transforming .react-transform-component {
   will-change: transform;
 }
 
