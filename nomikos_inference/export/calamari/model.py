@@ -5,8 +5,8 @@ from __future__ import annotations
 import torch
 from torch import Tensor, nn
 
-from src.model.inference_export.calamari.config import CalamariTorchConfig, require_int
-from src.model.inference_export.calamari.layers import (
+from nomikos_inference.export.calamari.config import CalamariTorchConfig, require_int
+from nomikos_inference.export.calamari.layers import (
     LazyBiLSTM,
     SameConv2d,
     SameMaxPool2d,

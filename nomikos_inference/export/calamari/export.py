@@ -2,12 +2,10 @@
 
 Restored by ADR 0006, which supersedes 0004.
 
-Originally ``src/model/inference_export/calamari/export.py``. The checkpoint
-*loader* that used to live beside this exporter was not retired with it - it
-is how the Torch runtime opens ``best.pt`` today, and now lives at
+The checkpoint *loader* that used to live beside this exporter was not retired
+with it - it is how the Torch runtime opens ``best.pt`` today, and now lives at
 ``inference/architectures/calamari/checkpoint.py`` along with the graph
-(``model.py``, ``layers.py``, ``config.py``) this file imported from
-``src/model/inference_export/calamari/``.
+(``model.py``, ``layers.py``, ``config.py``) this file imports from beside it.
 """
 
 from __future__ import annotations
@@ -18,11 +16,11 @@ from pathlib import Path
 import torch
 from torch import Tensor, nn
 
-from src.model.inference_export.calamari.checkpoint import (
+from nomikos_inference.export.calamari.checkpoint import (
     CalamariCheckpointMetadata,
     load_calamari_checkpoint,
 )
-from src.model.inference_export.calamari.model import CalamariTorchModel
+from nomikos_inference.export.calamari.model import CalamariTorchModel
 
 
 def export_calamari_onnx(

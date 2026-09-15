@@ -176,7 +176,7 @@ revision**, so every cache directory holds a file this runtime must not open.
 `find_hub_artifact` names only `.onnx` for exactly that reason.
 
 PyTorch is not in the published closure. It builds the artifacts and lives in
-`src/model/inference_export/` with the exporters, behind the `export` dependency
+`nomikos_inference/export/` with the exporters, behind the `export` dependency
 group; `tests/inference/unit/test_architecture_contract.py` asserts nothing under
 `nomikos_inference/` imports it.
 

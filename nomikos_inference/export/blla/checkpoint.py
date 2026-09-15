@@ -14,7 +14,7 @@ from functools import lru_cache
 
 import torch
 
-from src.model.inference_export.blla.model import BLLATorchModel
+from nomikos_inference.export.blla.model import BLLATorchModel
 
 
 class BLLACheckpointError(RuntimeError):

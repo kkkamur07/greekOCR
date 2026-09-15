@@ -192,7 +192,7 @@ def test_no_torch_remains_in_the_inference_import_graph() -> None:
 
     This is the guard that keeps the published closure honest. Torch is 475 MB
     of the 817 MB a researcher used to install, and it is *still in this
-    repository* - `src/model/inference_export/` traces the graph with it - so the only thing
+    repository* - `nomikos_inference/export/` traces the graph with it - so the only thing
     standing between the two is that nothing under `nomikos_inference/` imports it. A
     single convenience import would put it back in `[project].dependencies`
     without anyone noticing, because the dev venv has Torch installed and

@@ -1,12 +1,12 @@
 """The Calamari PyTorch graph and its ONNX exporter (export-time only)."""
 
-from src.model.inference_export.calamari.checkpoint import (
+from nomikos_inference.export.calamari.checkpoint import (
     CalamariCheckpointMetadata,
     load_calamari_checkpoint,
 )
-from src.model.inference_export.calamari.config import CalamariTorchConfig, CalamariTorchLayerConfig
-from src.model.inference_export.calamari.export import export_calamari_onnx
-from src.model.inference_export.calamari.model import CalamariTorchModel
+from nomikos_inference.export.calamari.config import CalamariTorchConfig, CalamariTorchLayerConfig
+from nomikos_inference.export.calamari.export import export_calamari_onnx
+from nomikos_inference.export.calamari.model import CalamariTorchModel
 
 __all__ = [
     "CalamariCheckpointMetadata",

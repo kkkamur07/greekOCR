@@ -19,8 +19,8 @@ from nomikos_inference.architectures.blla.blla_preprocessing import (
     MAX_WIDTH_TO_HEIGHT_RATIO,
     preprocess_blla_image,
 )
-from src.model.inference_export.blla import export_blla_onnx
-from src.model.inference_export.blla.model import BLLATorchModel
+from nomikos_inference.export.blla import export_blla_onnx
+from nomikos_inference.export.blla.model import BLLATorchModel
 from tests.fixtures.paths import REPO_ROOT, SEGMENT_PAGE
 
 torch = pytest.importorskip("torch")

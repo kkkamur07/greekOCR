@@ -46,19 +46,17 @@ jobs:
           enable-cache: true
       # `ruff check .` (not an explicit path list) so a new top-level package is
       # linted by default; vendored/generated trees are in tool.ruff.extend-exclude.
+      # (The Torch graphs and the ONNX exporters used to need a second, explicit
+      # `ruff check` because they sat under the excluded `src/` tree. They are
+      # `nomikos_inference/export/` now, so `ruff check .` covers them.)
       - run: uv run --locked --group dev ruff check .
-      # `src/` is excluded wholesale (research + vendored Calamari), but ADR 0006
-      # put code we own inside it: the Torch graphs and the ONNX exporters. Naming
-      # the path explicitly overrides the exclusion, so that tree stays linted
-      # without reopening the whole research tree.
-      - run: uv run --locked --group dev ruff check src/model/inference_export
       # Formatting is a gate, not a suggestion. Without this, `ruff format` drift
       # accumulates silently and every unrelated diff picks up reformatting noise.
       # The path list is not `.`: it must stay identical to the `files:` pattern on
       # the ruff-format pre-commit hook, which deliberately leaves `src/` alone
       # (vendored Calamari fork - reformatting it would fork it from upstream).
       # If the two ever disagree, CI rejects what the hook just produced.
-      - run: uv run --locked --group dev ruff format --check nomikos/backend nomikos_inference scripts/platform tests/nomikos tests/inference tests/export tests/hf src/model/inference_export
+      - run: uv run --locked --group dev ruff format --check nomikos/backend nomikos_inference scripts/platform tests/nomikos tests/inference tests/export tests/hf
       # Types. Non-blocking on purpose - mypy was introduced against an untyped
       # codebase, so this reports the error count on every pull request without
       # gating merges. The runtime groups are installed so the check runs against

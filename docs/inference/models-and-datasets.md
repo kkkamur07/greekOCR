@@ -35,7 +35,7 @@ polytonic Greek, 96 for Armenian, 71 for Syriac.
 The loader validates the graph's own `calamari-onnx-v1` metadata - codec, line
 height, blank index - and verifies the configured artifact digest before opening
 the file. The trained checkpoint is converted to the run artifact by
-`src/model/inference_export/`, and both are published at the same **Hub
+`nomikos_inference/export/`, and both are published at the same **Hub
 revision** (ADR 0006, which supersedes 0004). `tests/export/` runs the graph and
 the artifact on real
 weights and compares them, because a conversion step is exactly where a model

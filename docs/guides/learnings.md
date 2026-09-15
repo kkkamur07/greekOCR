@@ -153,12 +153,12 @@ Hydra config paths they reference do not exist, so none of these commands run
 as written. See `docs/final-code-review-2026-08-06.md` for the exact failures
 before trusting this section.
 
-Training and finetuning use the **vendored TensorFlow Calamari tree** under `src/model/calamari/`. Inference does **not** import that tree - it runs a separate ONNX Runtime graph under `nomikos_inference/architectures/calamari/` and loads `best.onnx` from Hugging Face Hub (`hf://`).
+Training and finetuning use the **vendored TensorFlow Calamari tree** under `src/models/calamari_tf/`. Inference does **not** import that tree - it runs a separate ONNX Runtime graph under `nomikos_inference/architectures/calamari/` and loads `best.onnx` from Hugging Face Hub (`hf://`).
 
 ### Layout
 
 ```text
-src/model/calamari/          # Canonical vendored Calamari (in git)
+src/models/calamari_tf/      # Canonical vendored Calamari (in git)
   calamari_ocr/              # Python package imported at training time
     ocr/dataset/             # Required - do not omit when syncing from upstream
     scripts/train.py
@@ -171,7 +171,7 @@ outputs/                     # Checkpoints (e.g. outputs/calamari-greek-bible/be
 _support_repo/calamari/      # Optional legacy symlink for older scripts (gitignored)
 ```
 
-Training scripts resolve vendored code directly from `src/model/calamari` (`src/train/calamari/train_utils.py`). You do **not** need `_support_repo` unless a one-off script still expects that path.
+Training scripts resolve vendored code directly from `src/models/calamari_tf` (`src/train/calamari/train_utils.py`). You do **not** need `_support_repo` unless a one-off script still expects that path.
 
 ### Quick start
 
@@ -190,16 +190,16 @@ Checkpoints land under `outputs/` (override via Hydra `output.root` in `configs/
 
 ```bash
 mkdir -p _support_repo
-ln -sfn ../src/model/calamari _support_repo/calamari
+ln -sfn ../src/models/calamari_tf _support_repo/calamari
 ```
 
 ### Frequent errors (Calamari)
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| `FileNotFoundError: Local Calamari source not found at .../src/model/calamari` | Incomplete clone | Ensure `src/model/calamari/calamari_ocr/scripts/train.py` exists |
+| `FileNotFoundError: Local Calamari source not found at .../src/models/calamari_tf` | Incomplete clone | Ensure `src/models/calamari_tf/calamari_ocr/scripts/train.py` exists |
 | `ModuleNotFoundError: No module named 'calamari_ocr.ocr.dataset'` | Incomplete vendored tree | Sync full `calamari_ocr/ocr/dataset/` from the Calamari fork |
-| `ModuleNotFoundError: No module named 'calamari_ocr'` with `_support_repo` in traceback | Legacy path expected | Symlink `_support_repo/calamari` → `src/model/calamari` |
+| `ModuleNotFoundError: No module named 'calamari_ocr'` with `_support_repo` in traceback | Legacy path expected | Symlink `_support_repo/calamari` → `src/models/calamari_tf` |
 | Training OOM / very slow on Apple Silicon | TensorFlow + emulation | Prefer Linux + GPU; reduce batch size |
 | `Expected train/ and val/ images under ...` | Wrong pack layout | Pack needs `train/` and `val/` image folders |
 | Checkpoint works in training but inference rejects `.ckpt` | Inference needs the ONNX graph | Export `best.onnx` and publish the graph to Hub |

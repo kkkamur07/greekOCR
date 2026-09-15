@@ -30,7 +30,7 @@ from tests.fixtures.paths import REPO_ROOT
 # src/train/calamari/train_utils.py at training time. Its package __init__ pulls in
 # paiargparse/tfaip, which only exist in the training environment, so load the
 # dependency-free grayscale module straight from its file instead.
-_GRAYSCALE_PATH = REPO_ROOT / "src/model/calamari/calamari_ocr/utils/grayscale.py"
+_GRAYSCALE_PATH = REPO_ROOT / "src/models/calamari_tf/calamari_ocr/utils/grayscale.py"
 
 
 def _load_training_grayscale():

@@ -21,11 +21,11 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 def build_calamari_train_command() -> tuple[list[str], dict[str, str]]:
     """Return the interpreter invocation and env for the vendored Calamari trainer.
 
-    Calamari is not installed as a package; it is imported from src/model/calamari via
+    Calamari is not installed as a package; it is imported from src/models/calamari_tf via
     PYTHONPATH so the fork's preprocessing (notably the grayscale convention in
     calamari_ocr/utils/grayscale.py) is what actually trains.
     """
-    calamari_root = REPO_ROOT / "src" / "model" / "calamari"
+    calamari_root = REPO_ROOT / "src" / "models" / "calamari_tf"
     if not (calamari_root / "calamari_ocr" / "scripts" / "train.py").is_file():
         raise FileNotFoundError(f"Local Calamari source not found at {calamari_root}")
 

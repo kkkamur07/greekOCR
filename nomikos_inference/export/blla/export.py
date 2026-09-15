@@ -14,8 +14,8 @@ from pathlib import Path
 import torch
 from torch import Tensor, nn
 
-from src.model.inference_export.blla.checkpoint import load_blla_model
-from src.model.inference_export.blla.model import BLLATorchModel, _GroupNorm
+from nomikos_inference.export.blla.checkpoint import load_blla_model
+from nomikos_inference.export.blla.model import BLLATorchModel, _GroupNorm
 
 
 class _ExportGroupNorm(nn.Module):

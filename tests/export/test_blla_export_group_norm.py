@@ -15,8 +15,8 @@ from tests.fixtures.paths import REPO_ROOT
 
 torch = pytest.importorskip("torch")
 
-from src.model.inference_export.blla import export_blla_onnx  # noqa: E402
-from src.model.inference_export.blla.model import BLLATorchModel  # noqa: E402
+from nomikos_inference.export.blla import export_blla_onnx  # noqa: E402
+from nomikos_inference.export.blla.model import BLLATorchModel  # noqa: E402
 
 BLLA_CHECKPOINT = (
     REPO_ROOT
@@ -28,11 +28,11 @@ BLLA_CHECKPOINT = (
 def test_export_swap_leaves_the_runtime_model_untouched() -> None:
     """The staged reduction is trace-only: the native oracle must not change."""
 
-    from src.model.inference_export.blla.export import (
+    from nomikos_inference.export.blla.export import (
         _ExportGroupNorm,
         _with_export_group_norm,
     )
-    from src.model.inference_export.blla.model import _GroupNorm
+    from nomikos_inference.export.blla.model import _GroupNorm
 
     model = BLLATorchModel().eval()
     exportable = _with_export_group_norm(model)

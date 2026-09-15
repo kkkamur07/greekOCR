@@ -25,16 +25,16 @@ torch = pytest.importorskip("torch")
 onnx = pytest.importorskip("onnx")
 ort = pytest.importorskip("onnxruntime")
 
-from src.model.inference_export.calamari import (  # noqa: E402
+from nomikos_inference.export.calamari import (  # noqa: E402
     export_calamari_onnx,
     load_calamari_checkpoint,
 )
-from src.model.inference_export.calamari.checkpoint import (  # noqa: E402
+from nomikos_inference.export.calamari.checkpoint import (  # noqa: E402
     CalamariCheckpointMetadataError,
     CalamariCheckpointStateDictError,
 )
-from src.model.inference_export.calamari.config import default_model_config  # noqa: E402
-from src.model.inference_export.calamari.model import CalamariTorchModel  # noqa: E402
+from nomikos_inference.export.calamari.config import default_model_config  # noqa: E402
+from nomikos_inference.export.calamari.model import CalamariTorchModel  # noqa: E402
 
 LINE_HEIGHT = 48
 CLASSES = 11

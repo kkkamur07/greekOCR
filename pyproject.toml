@@ -60,16 +60,18 @@ packages = ["nomikos_inference"]
 # holds no web server" is now true by construction rather than by an exclude
 # list somebody has to keep correct.
 #
-# Two trees below are the exception, and they are here on purpose. `src/hf/` and
-# `src/inference/` moved into this directory so that the repository has one
-# import root instead of two, which is a question about where code is *edited*.
+# Three trees below are the exception, and they are here on purpose. `src/hf/`,
+# `src/inference/` and the Torch export tooling moved into this directory so that
+# the repository has one import root instead of two, which is a question about
+# where code is *edited*.
 # Where code is *published* is a different question, and ADR 0002 already
 # answered it: runtime `hf://` resolution ships (it is on the inference path),
-# publish-side tooling and the training-stack predictors do not. Moving a
-# directory must not silently reverse that, so each one is named here, and
-# `uv build` on this commit emits the same wheel file listing, path for path,
-# as the commit before it. Anything new that lands under either tree is excluded with
-# it; a genuinely shippable module belongs somewhere else in the package.
+# publish-side tooling, the training-stack predictors and the export tooling do
+# not. Moving a directory must not silently reverse that, so each one is named
+# here, and `uv build` on this commit emits the same wheel file listing, path for
+# path, as the commit before it. Anything new that lands under any of those trees
+# is excluded with it; a genuinely shippable module belongs somewhere else in the
+# package.
 exclude = [
     "/nomikos_inference/CONTEXT.md",
     # Publish-side only: staging validation, model cards, collection sync, and
@@ -81,6 +83,9 @@ exclude = [
     # neither of which is in `[project].dependencies` and neither of which is
     # going to be: nothing that trains a model is part of what runs one.
     "/nomikos_inference/predictors",
+    # Torch-only export tooling (ADR 0006), not on the inference path: it traces
+    # the `.onnx` a researcher runs, and Torch is not in `[project].dependencies`.
+    "/nomikos_inference/export",
     # Empty placeholder tree from the pre-Hub weights layout. Weights come from
     # the Hub now and are cached under the researcher's home directory.
     "**/.gitkeep",
@@ -100,6 +105,8 @@ include = [
 exclude = [
     "/nomikos_inference/publish",
     "/nomikos_inference/predictors",
+    # Torch-only export tooling (ADR 0006), not on the inference path.
+    "/nomikos_inference/export",
 ]
 
 [dependency-groups]
@@ -117,7 +124,7 @@ train = [
     "transformers>=5.11.0",
 ]
 # Artifact production, not artifact execution (ADR 0006).
-# `src/model/inference_export/` traces the
+# `nomikos_inference/export/` traces the
 # trained PyTorch graph into the `.onnx` the runtime loads, so this is where
 # Torch lives now: on a maintainer's machine, at the moment weights are
 # published, and nowhere near `[project].dependencies`. `safetensors` is here
@@ -315,6 +322,11 @@ omit = [
     # `test_migrations.py` asserts on the schema they produce rather than on
     # their statements.
     "nomikos/infrastructure/alembic/*",
+    # Torch-only export tooling. It is not published in the wheel and is not
+    # type-checked either; `tests/export` skips wholesale when torch is absent,
+    # so counting it here would report a coverage number that depends on which
+    # dependency group happens to be installed.
+    "nomikos_inference/export/*",
 ]
 
 [tool.coverage.paths]
@@ -359,8 +371,9 @@ extend-exclude = [
     # nobody is maintaining to a lint standard, and it carried 555 findings that
     # said nothing about the application. Excluding it here rather than listing
     # per-directory ignores means a new subdirectory under `src/` is covered the
-    # day it appears - the previous list named `src/model` (singular) and silently
-    # missed `src/models` (plural) for exactly that reason.
+    # day it appears. An earlier version of this list named individual research
+    # subdirectories instead, and silently missed every one added after it was
+    # written.
     #
     # This is a suppression and only a suppression. The findings are real; they
     # are recorded in docs/resume-inference-redesign.md. Everything outside `src/`
@@ -472,11 +485,18 @@ strict_equality = true
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
 warn_return_any = false
-# Vendored upstream Calamari fork. Excluded explicitly so a future widening of
-# `files` cannot pull it in.
-exclude = ["^src/model/"]
+# `nomikos_inference/export/` (the Torch graphs and the ONNX exporters) is inside
+# `files` but is Torch-only tooling off the inference path, so it is excluded by
+# name to keep the checked scope what it has always been.
+#
+# The vendored Calamari fork (now `src/models/calamari_tf/`) used to be named
+# here too. It bought nothing: `files` covers `nomikos/backend` and
+# `nomikos_inference` only, nothing in those two trees imports anything under
+# `src/`, and dropping the entry leaves the checked-file count and the error
+# list identical (236 files, 41 errors in 13 files).
+exclude = ["^nomikos_inference/export/"]
 
 [[tool.mypy.overrides]]
-module = ["src.model.*"]
+module = ["nomikos_inference.export.*"]
 follow_imports = "skip"
 ignore_errors = true

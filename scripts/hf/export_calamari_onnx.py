@@ -130,7 +130,7 @@ def export(
     revision: str | None,
 ) -> dict[str, object]:
     """Export the checkpoint and return the provenance report for it."""
-    from src.model.inference_export.calamari import export_calamari_onnx
+    from nomikos_inference.export.calamari import export_calamari_onnx
 
     metadata = export_calamari_onnx(checkpoint_path, destination, opset_version=opset_version)
     return {
