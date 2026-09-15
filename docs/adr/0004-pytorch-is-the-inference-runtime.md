@@ -50,7 +50,7 @@ The Torch graphs already exist and already run, so this is a deletion rather tha
 
 |                                                                               | lines |
 | ----------------------------------------------------------------------------- | ----- |
-| `src/model/inference_export/calamari/{model,layers,config}.py`                | 279   |
+| `nomikos_inference/export/calamari/{model,layers,config}.py`                | 279   |
 | `inference/architectures/blla/blla_model.py`                                  | 142   |
 | `inference/architectures/calamari/{model,layers,config}.py` (re-export shims) | 41    |
 

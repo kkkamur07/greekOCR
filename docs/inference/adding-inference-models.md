@@ -165,7 +165,7 @@ The BLLA runtime loads `blla.onnx` from the registry-pinned
 ```bash
 uv run --group export python -c "
 from pathlib import Path
-from src.model.inference_export.blla import export_blla_onnx
+from nomikos_inference.export.blla import export_blla_onnx
 d = Path('nomikos_inference/publish/artifacts/staging/models/segmentation/blla/v1/stable')
 export_blla_onnx(d / 'blla.safetensors', d / 'blla.onnx', example_width=64)"
 ```
@@ -173,7 +173,7 @@ export_blla_onnx(d / 'blla.safetensors', d / 'blla.onnx', example_width=64)"
 The inference image does not install the Kraken Python package and nothing in
 the repository does: the parity harness Kraken was the oracle for was not
 restored with the rest of the ONNX path, because the Torch graph in
-`src/model/inference_export/` is a closer oracle and is already here.
+`nomikos_inference/export/` is a closer oracle and is already here.
 
 **Verify the export before publishing, not after.** `blla.onnx` was published
 once from a pre-fix exporter and the mistake survived a whole ADR - see ADR 0006.

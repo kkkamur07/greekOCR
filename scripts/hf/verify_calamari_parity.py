@@ -162,7 +162,7 @@ def compare(
     import torch
 
     from nomikos_inference.architectures.calamari.adapter import _decode_greedy
-    from src.model.inference_export.calamari import load_calamari_checkpoint
+    from nomikos_inference.export.calamari import load_calamari_checkpoint
 
     model, metadata = load_calamari_checkpoint(checkpoint_path)
     model.eval()
@@ -241,7 +241,7 @@ def main() -> int:
         print("one of --lines or --synthetic-widths is required", file=sys.stderr)
         return 1
 
-    from src.model.inference_export.calamari import load_calamari_checkpoint
+    from nomikos_inference.export.calamari import load_calamari_checkpoint
 
     _, metadata = load_calamari_checkpoint(args.checkpoint)
 

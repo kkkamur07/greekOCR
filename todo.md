@@ -14,7 +14,7 @@ The `feat/todo-sweep` branch is merged to `main`; what follows is the open backl
 | `pytest tests/export tests/inference tests/hf` | 316 passed, 7 skipped |
 | frontend `vitest` | 51 files, 252 passed |
 | `tsc --noEmit` / `eslint .` | clean / 0 errors, 2 pre-existing warnings |
-| `ruff check . src/model/inference_export` | All checks passed |
+| `ruff check .` | All checks passed |
 | `npm run check:api` | exit 0 |
 
 The 7 skips are the published-artifact assertions, which need
@@ -149,7 +149,7 @@ comment. `src/model` alone has 380, including `F901`, `F403` and `F841` — the 
 genuine-bug-class violations left anywhere in the repository.
 
 Not touched because `src/` is audit-only in this repo by standing instruction: vendored
-Calamari and the research trees are not maintained to a lint standard. `src/model/inference_export/`
+Calamari and the research trees are not maintained to a lint standard. `nomikos_inference/export/`
 is the exception, is ours, and is **already clean**.
 
 **This needs your approval to proceed**, and it is not a small job. If you want it, the
@@ -225,7 +225,7 @@ so it is language-agnostic out of the box; `hidden_nodes` is derived from the re
 shape, not a constant. The one bound is the *architecture*, and the bound has moved: the
 PyTorch loader now builds one **or** two stacked BiLSTMs from the checkpoint's `lstm_layers`
 field, via the shared `default_model_config` in
-`src/model/inference_export/calamari/config.py`. The converter has not followed, because its
+`nomikos_inference/export/calamari/config.py`. The converter has not followed, because its
 TF variable indices (`variables/4`..`variables/9` for the BiLSTM, `10`/`11` for the dense head)
 are a hardcoded reading of the one-BiLSTM SavedModel and a second BiLSTM shifts every index
 after it. Nobody has had a two-layer TF SavedModel in hand to establish the new numbering, and
@@ -302,7 +302,7 @@ never root-caused. Related to the known asyncpg "attached to a different loop" i
 ## Reference
 
 - BLLA root cause, still accurate: `nn.GroupNorm` lowers to `Reshape([0,32,-1]) →
-  InstanceNormalization`. The staged reduction in `src/model/inference_export/blla/export.py`
+  InstanceNormalization`. The staged reduction in `nomikos_inference/export/blla/export.py`
   fixed the catastrophic case (IoU 0.5026 → 1.0000). What remains is width-proportional and
   lives in Torch's own float32 accumulation, not in the export.
 - `docs/final-code-review-2026-08-06.md` — the current audit of `main`, including the ADR

@@ -84,11 +84,11 @@ def _exported(architecture: str, tmp_path_factory: pytest.TempPathFactory) -> Pa
     pytest.importorskip("torch", reason="no published .onnx cached and Torch is unavailable")
     destination = tmp_path_factory.mktemp("onnx") / f"{architecture}.onnx"
     if architecture == "calamari":
-        from src.model.inference_export.calamari import export_calamari_onnx
+        from nomikos_inference.export.calamari import export_calamari_onnx
 
         export_calamari_onnx(CALAMARI_CHECKPOINT, destination)
     else:
-        from src.model.inference_export.blla import export_blla_onnx
+        from nomikos_inference.export.blla import export_blla_onnx
 
         export_blla_onnx(BLLA_CHECKPOINT, destination, example_width=64)
     return destination

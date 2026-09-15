@@ -2,7 +2,7 @@
 
 The Torch graph that used to be re-exported here (``CalamariTorchModel`` and
 its config) is not part of the runtime under ADR 0006. It builds the artifact
-rather than running it, so it lives in ``src/model/inference_export/calamari/``
+rather than running it, so it lives in ``nomikos_inference/export/calamari/``
 and is not in the
 published wheel.
 """

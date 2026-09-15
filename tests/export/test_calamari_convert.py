@@ -26,7 +26,7 @@ from tests.fixtures.paths import REPO_ROOT
 
 torch = pytest.importorskip("torch")
 
-from src.model.inference_export.calamari import load_calamari_checkpoint  # noqa: E402
+from nomikos_inference.export.calamari import load_calamari_checkpoint  # noqa: E402
 
 # The original TF artifact. It is not tracked (it is a ~8 MB SavedModel that
 # predates this repo's packaging) - test fixtures should be committed, so a

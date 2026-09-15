@@ -20,8 +20,8 @@ from pathlib import Path
 import torch
 from torch import Tensor
 
-from src.model.inference_export.calamari.config import default_model_config
-from src.model.inference_export.calamari.model import CalamariTorchModel
+from nomikos_inference.export.calamari.config import default_model_config
+from nomikos_inference.export.calamari.model import CalamariTorchModel
 
 # How deep the recurrent stack may be. Calamari checkpoints published before
 # the two-layer models carry no ``lstm_layers`` key at all, and every one of

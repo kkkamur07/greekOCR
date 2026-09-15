@@ -13,7 +13,7 @@ from pathlib import Path
 
 from safetensors.torch import save_file
 
-from src.model.inference_export.blla.model import BLLATorchModel
+from nomikos_inference.export.blla.model import BLLATorchModel
 
 
 def convert(source: Path, destination: Path) -> None:

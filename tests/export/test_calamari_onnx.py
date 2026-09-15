@@ -19,7 +19,7 @@ torch = pytest.importorskip("torch")
 onnx = pytest.importorskip("onnx")
 ort = pytest.importorskip("onnxruntime")
 
-from src.model.inference_export.calamari import (  # noqa: E402
+from nomikos_inference.export.calamari import (  # noqa: E402
     export_calamari_onnx,
     load_calamari_checkpoint,
 )

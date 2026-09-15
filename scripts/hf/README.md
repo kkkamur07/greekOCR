@@ -24,7 +24,7 @@ nomikos_inference/publish/artifacts/staging/models/greek/calamari/v1/stable/
 Both are published together at one **Hub revision**. `publish_model.py` validates
 the staging leaf with `find_hub_artifact`, which names only `.onnx`, so a leaf
 holding just the checkpoint is refused before anything is uploaded. Export with
-`src/model/inference_export/` - see
+`nomikos_inference/export/` - see
 [adding-inference-models.md](../docs/inference/adding-inference-models.md).
 
 **The `.onnx` is gitignored on purpose.** It is derived from the checkpoint

@@ -40,7 +40,7 @@ for a latency difference the user cannot perceive against a decoder that did not
 ## Decision
 
 ONNX Runtime is the inference runtime for both architectures. PyTorch's role is to *build* the
-artifact: the graph definitions and the exporters live in `src/model/inference_export/`, which
+artifact: the graph definitions and the exporters live in `nomikos_inference/export/`, which
 is not in the published wheel, and Torch is a `export` dependency group rather than a
 `[project]` dependency.
 
@@ -62,7 +62,7 @@ re-raises its first cause instead of returning an empty page.
 | `nomikos_inference/architectures/blla/blla.py` | the archived `blla/onnx.py` |
 | `nomikos_inference/architectures/blla/blla_preprocessing.py` | `preprocess_blla_image_numpy` |
 | `blla_decoder/common.py::resize_heatmaps_nearest` | the same helper, `numpy_support.py` |
-| `src/model/inference_export/{calamari,blla}/export.py` | the archived exporters |
+| `nomikos_inference/export/{calamari,blla}/export.py` | the archived exporters |
 
 `layers.pad_same` regained its tracer branch. Under tracing `x.shape` freezes into Python
 constants, so without `torch._shape_as_tensor` the exported graph pads every line to the width
@@ -163,10 +163,15 @@ convenience import would undo it silently on a machine where Torch is installed.
 `test_no_torch_remains_in_the_inference_import_graph` imports the package in a fresh interpreter
 and asserts nothing Torch-shaped appears in `sys.modules`.
 
-**`src/` is excluded from ruff**, so moving the export tree there means it is no longer linted.
-That exclusion is a deliberate suppression of the research tree recorded elsewhere; the export
-tree inherits it as a side effect rather than by intent, and `ruff check src/model/inference_export`
-still reports on it.
+**The research tree is excluded from ruff**, so putting the export tree there meant it was no
+longer linted by default. That exclusion is a deliberate suppression of the research tree
+recorded elsewhere; the export tree inherited it as a side effect rather than by intent, so a
+second, explicit `ruff check` named the export path and kept reporting on it.
+
+> **2026-09-15.** The export tree moved out of the research tree to
+> `nomikos_inference/export/`, so plain `ruff check .` covers it and the explicit second lint
+> command is gone. It is still held out of the wheel and out of mypy's checked scope, so
+> nothing else in this ADR changes.
 
 ## Consequences
 

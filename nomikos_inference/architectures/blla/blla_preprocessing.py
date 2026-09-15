@@ -55,7 +55,7 @@ from PIL import Image
 #
 # The two agree to six figures, so the drift isn't ONNX Runtime's reduction,
 # it's Torch's own float32 ``group_norm`` at that size. No change to
-# ``src/model/inference_export/blla/export.py`` can close it; only a shorter
+# ``nomikos_inference/export/blla/export.py`` can close it; only a shorter
 # width can.
 MAX_WIDTH_TO_HEIGHT_RATIO = 3
 

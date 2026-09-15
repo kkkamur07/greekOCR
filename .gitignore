@@ -108,7 +108,7 @@ data/
 graphify-out/
 
 # Exported ONNX artifacts in the Hub staging tree (ADR 0006). Derived, not
-# source: `src/model/inference_export/` produces them from the tracked `.pt` /
+# source: `nomikos_inference/export/` produces them from the tracked `.pt` /
 # `.safetensors` beside them, and the published bytes live on the Hub at a
 # pinned revision + digest. Committing a copy would create a third version that
 # can drift from both - which is the exact defect ADR 0006 had to fix, where the
