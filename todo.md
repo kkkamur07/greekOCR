@@ -145,7 +145,7 @@ is irrelevant to the cause.
 ### B1. `src/` holds 576 ruff findings and is excluded wholesale
 
 `pyproject.toml` `extend-exclude` lists `src`, which is a suppression and says so in its own
-comment. `src/model` alone has 380, including `F901`, `F403` and `F841` — the only
+comment. `src/models/calamari_tf` alone has 380, including `F901`, `F403` and `F841` — the only
 genuine-bug-class violations left anywhere in the repository.
 
 Not touched because `src/` is audit-only in this repo by standing instruction: vendored
