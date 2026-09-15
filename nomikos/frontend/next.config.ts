@@ -52,6 +52,7 @@ const nextConfig: NextConfig = {
         source: "/media/:path*",
         destination: `${platformApi}/media/:path*`,
       },
+      { source: "/guides/coptic", destination: "/guides/coptic/index.html" },
     ];
   },
 };
