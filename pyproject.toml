@@ -371,8 +371,9 @@ extend-exclude = [
     # nobody is maintaining to a lint standard, and it carried 555 findings that
     # said nothing about the application. Excluding it here rather than listing
     # per-directory ignores means a new subdirectory under `src/` is covered the
-    # day it appears - the previous list named `src/model` (singular) and silently
-    # missed `src/models` (plural) for exactly that reason.
+    # day it appears. An earlier version of this list named individual research
+    # subdirectories instead, and silently missed every one added after it was
+    # written.
     #
     # This is a suppression and only a suppression. The findings are real; they
     # are recorded in docs/resume-inference-redesign.md. Everything outside `src/`
@@ -484,14 +485,18 @@ strict_equality = true
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
 warn_return_any = false
-# Vendored upstream Calamari fork. Excluded explicitly so a future widening of
-# `files` cannot pull it in. `nomikos_inference/export/` (the Torch graphs and
-# the ONNX exporters) used to sit under `src/model/` and was covered by the same
-# pattern; it is inside `files` now, so the exclusion is carried over by name and
-# the checked scope stays exactly what it was.
-exclude = ["^src/model/", "^nomikos_inference/export/"]
+# `nomikos_inference/export/` (the Torch graphs and the ONNX exporters) is inside
+# `files` but is Torch-only tooling off the inference path, so it is excluded by
+# name to keep the checked scope what it has always been.
+#
+# The vendored Calamari fork (now `src/models/calamari_tf/`) used to be named
+# here too. It bought nothing: `files` covers `nomikos/backend` and
+# `nomikos_inference` only, nothing in those two trees imports anything under
+# `src/`, and dropping the entry leaves the checked-file count and the error
+# list identical (236 files, 41 errors in 13 files).
+exclude = ["^nomikos_inference/export/"]
 
 [[tool.mypy.overrides]]
-module = ["src.model.*", "nomikos_inference.export.*"]
+module = ["nomikos_inference.export.*"]
 follow_imports = "skip"
 ignore_errors = true
