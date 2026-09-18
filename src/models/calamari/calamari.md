@@ -463,12 +463,17 @@ exporter wrote a graph that ran only at its traced width 8, which shipped as
 
 After export, the file is reopened with ONNX, its metadata is replaced, and
 `onnx.checker.check_model()` validates the result before it is saved again.
-The metadata is the full 12-key set the runtime adapter requires: `format`,
+The metadata is the full 12-key set the one exporter writes: `format`,
 `architecture`, `input_layout`, `classes`, `line_height`, `charset`,
 `blank_index`, `temperature`, `lstm_layers`, `preprocessing`, `input_name`, and
-`output_names`. A missing key fails serving outright (the adapter treats it as
-a corrupt artifact), which is the other half of what made the `bdaa22d3` graph
-unservable. This lets a runtime decode output IDs without having to inspect the
+`output_names`. The runtime adapter reads and rejects on six of them (`format`,
+`classes`, `line_height`, `blank_index`, `temperature`, `charset`) and checks the
+input and output names (`image`, `image_lengths`, `logits`, `out_len`) against the
+graph itself rather than the metadata; the remaining keys are provenance the
+exporter writes so trainer and serving artifacts stay alike, and the export test
+pins the full set. A missing `temperature` key fails serving outright (the adapter
+treats it as a corrupt artifact), which is the other half of what made the `bdaa22d3`
+graph unservable. This lets a runtime decode output IDs without having to inspect the
 original PyTorch checkpoint.
 
 ## Practical integration rules
