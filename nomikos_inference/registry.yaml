@@ -20,6 +20,15 @@
 # `preprocessing` string in the ONNX metadata of the artifacts pinned below reads
 # `existing Calamari NumPy preprocessing`; that is a stale label left by an
 # earlier exporter, not an instruction the runtime follows.
+# Coptic (`coptic-calamari-v1`) joins the same crop convention with a measured
+# padding of its own: 12 px, read off 2823 platform Coptic project lines through
+# `best.pt` at batch size 1 (CER 0.0177 at 12 against 0.1890 at 0, minimum flat
+# across 10 to 12; measured 2026-09-18, full curve in
+# docs/inference/models-and-datasets.md). The first published revision (bdaa22d3)
+# was unservable: its best.onnx carried no `temperature` metadata, so the adapter
+# refused to open it, and its time axis was frozen at the traced example length 8,
+# so every real line failed at the LSTM node. The pin below is the corrected
+# publish, which replaces only best.onnx with a fresh export of the same best.pt.
 models:
   syriac-calamari-v2:
     task: transcribe
@@ -90,6 +99,33 @@ models:
         # through a full baseline-pairing pass against the Transkribus XML.
         hub_revision: ed5d74237509a88ab70a9b84fd130b867c9da609
         artifact_sha256: 70f1f652bcbe2bc82d447081f719cd9a340e438e68212334f53fd24e2c51e34d
+
+  coptic-calamari-v1:
+    task: transcribe
+    architecture: calamari
+    device: cpu
+    host_eligibility: local
+    # Measured 2026-09-18 on 2823 platform Coptic project lines through best.pt at
+    # batch size 1: CER 0.0177 at padding 12 against 0.1890 at 0, minimum flat across
+    # 10 to 12; full curve in docs/inference/models-and-datasets.md. Same exporter PADDING as Armenian and Syriac.
+    line_crop: polygon-white
+    line_crop_padding: 12
+    versions:
+      stable:
+        weights_source: hf://nomikos-project/coptic-htr-calamari@stable
+        # Test CER 0.0823 over a 39-character codec (283 test lines), WER 0.591,
+        # exact match 0.431.
+        # Repointed at a corrected export. What stood here was
+        # hub_revision bdaa22d3330815221663ec8ef24027898f60ffbb with
+        # artifact_sha256 e54a97b7c533e7e98a6731ab364745d7adb86eecfa1402fcfa81ca730695de45,
+        # an ONNX with no temperature metadata key, which the adapter refuses to
+        # open, and a time axis frozen at the traced example length 8, so every
+        # real line failed at the LSTM node. Only best.onnx changed: b103b562 is a
+        # fresh export of the same best.pt through nomikos_inference/export,
+        # verified 2823 of 2823 platform lines byte-identical to best.pt at batch
+        # size 1, CER 0.0177.
+        hub_revision: b103b5624ce0bc9b2a80bb937fc9cdb9f3042ba1
+        artifact_sha256: a5a70eb2b3c67000961da21d6f462da070dc7d35f3d1833de1ae5cd3d40096c2
 
   blla-segment:
     task: segment

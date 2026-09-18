@@ -14,8 +14,8 @@ geometry, preserves the legacy `kraken_ceiling` field, and simplifies polygons.
 
 ### Calamari HTR
 
-`greek-calamari-v1`, `armenian-calamari-v1` and `syriac-calamari-v2` run the
-Calamari graph on ONNX Runtime for line transcription. All three are the same
+`greek-calamari-v1`, `armenian-calamari-v1`, `syriac-calamari-v2` and `coptic-calamari-v1` run the
+Calamari graph on ONNX Runtime for line transcription. All four are the same
 topology, retrained per script:
 
 ```text
@@ -29,8 +29,12 @@ The second recurrent layer is the only structural change from the first
 generation of these models, and it is invisible to the runtime: the codec, line
 height (48) and blank index travel in the graph's own `metadata_props`, so a
 deeper stack is a different set of weights and not a different adapter. What
-separates the three is the codec they were trained over: 259 characters for
-polytonic Greek, 96 for Armenian, 71 for Syriac.
+separates the four is the codec they were trained over: 259 characters for
+polytonic Greek, 96 for Armenian, 71 for Syriac, 39 for Coptic. Coptic's structure is
+verified, not assumed: its checkpoint carries `lstm_layers: 2` with BiLSTM weights at
+`layers.4` and `layers.6`, 40/60-filter 3x3 convolutions, and 200-unit LSTM hidden
+states, matching the Syriac checkpoint on every structural field, and the republished
+ONNX records `lstm_layers: 2` in its metadata.
 
 The loader validates the graph's own `calamari-onnx-v1` metadata - codec, line
 height, blank index - and verifies the configured artifact digest before opening
@@ -41,7 +45,7 @@ the artifact on real
 weights and compares them, because a conversion step is exactly where a model
 can drift from what was trained.
 
-All three were trained by the in-house PyTorch trainer
+All three siblings were trained by the in-house PyTorch trainer
 (`src/models/calamari/trainer.py`), not by the vendored TensorFlow Calamari
 tree, which is a research artifact and is not shipped in the inference image.
 That decides what the runtime may feed them: **the serving input must be exactly
@@ -100,10 +104,41 @@ the product.
 | `greek-calamari-v1` | Transcribe | Calamari (ONNX Runtime) | `best.onnx` from the [Hugging Face checkpoint](https://huggingface.co/nomikos-project/greek-htr-calamari), pinned revision |
 | `armenian-calamari-v1` | Transcribe | Calamari (ONNX Runtime) | `best.onnx` from the [Hugging Face checkpoint](https://huggingface.co/nomikos-project/armenian-htr-calamari), pinned revision |
 | `syriac-calamari-v2` | Transcribe | Calamari (ONNX Runtime) | `best.onnx` from the [Hugging Face checkpoint](https://huggingface.co/nomikos-project/syriac-htr-calamari), pinned revision |
+| `coptic-calamari-v1` | Transcribe | Calamari (ONNX Runtime) | `best.onnx` from the [Hugging Face checkpoint](https://huggingface.co/nomikos-project/coptic-htr-calamari), pinned revision |
 
-Coptic is an expansion target rather than a shipped runtime model.
+Coptic is registered at a measured crop padding of 12 px: CER 0.0177 at 12 against 0.1890
+at 0 on 2823 platform Coptic project lines through `best.pt` at batch size 1, minimum flat
+across 10 to 12 (measured 2026-09-18; full curve below). The first pin (`bdaa22d3`) was
+unservable: its `best.onnx` carried no `temperature` metadata key so the adapter refused
+to open it, and its time axis was frozen at the traced example length 8 so every real
+line failed at the LSTM node. The pin now points at `b103b562`, which replaces only
+`best.onnx` with a fresh export of the same `best.pt` through `nomikos_inference/export`,
+verified 2823 of 2823 platform lines byte-identical to `best.pt` at batch size 1,
+CER 0.0177. No
+training-data claim is made for it here: the card gives a held-out test CER of 0.0823 over
+283 lines, and nothing else quoted above was measured for it.
 
-New public models need a compatible adapter, immutable Hub revision, SHA-256
+The padding measurement behind the Coptic pin, 2026-09-18: serving crop bytes through the
+real trainer loader into `best.pt` at batch size 1 with the real trainer decoder, no
+normalisation, over the platform's Coptic project lines (2823 lines, 34491 characters).
+CER falls 10x from padding 0 to the minimum and rises again after it, so the curve is a
+padding signal rather than noise. Paddings 10 and 12 tie within noise (6 edits), and 12 is
+registered because it is the exporter's `PADDING` constant, the value the Armenian and
+Syriac crops used whenever they were not Greek's 0.
+
+| Padding px | CER | Exact / 2823 |
+| --- | ---: | ---: |
+| 0 | 0.1890 | 763 |
+| 2 | 0.1025 | 1297 |
+| 4 | 0.0500 | 1869 |
+| 6 | 0.0274 | 2236 |
+| 8 | 0.0189 | 2441 |
+| 10 | 0.0175 | 2489 |
+| **12** | **0.0177** | **2485** |
+| 16 | 0.0219 | 2434 |
+| 20 | 0.0407 | 2039 |
+
+Four runtime models are registered. A fifth needs a compatible adapter, immutable Hub revision, SHA-256
 digest, registry entry, platform catalog metadata, tests, and a declared host
 eligibility.
 

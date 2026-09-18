@@ -52,8 +52,13 @@ Through the pinned runtime registry, Nomikos pages can use:
 | `greek-calamari-v1` | Line HTR, Byzantine Greek (`grc`) | Calamari | [greek-htr-calamari](https://huggingface.co/nomikos-project/greek-htr-calamari) |
 | `armenian-calamari-v1` | Line HTR, Armenian (`hy`) | Calamari | [armenian-htr-calamari](https://huggingface.co/nomikos-project/armenian-htr-calamari) |
 | `syriac-calamari-v2` | Line HTR, Syriac (`syr`) | Calamari | [syriac-htr-calamari](https://huggingface.co/nomikos-project/syriac-htr-calamari) |
+| `coptic-calamari-v1` | Line HTR, Coptic (`cop`) | Calamari | [coptic-htr-calamari](https://huggingface.co/nomikos-project/coptic-htr-calamari) |
 
-All three HTR checkpoints are a CNN followed by two bidirectional LSTM layers at line height 48.
+All four HTR checkpoints share one architecture: a 40/60-filter CNN followed by two 200-unit
+bidirectional LSTM layers at line height 48. Read off the Coptic and Syriac checkpoints, whose
+structural fields agree exactly (3x3 convolutions 1 to 40 to 60, BiLSTM weights at `layers.4`
+and `layers.6` with 200-unit hidden states, blank index 0, temperature -1.0); each trains
+its own codec.
 
 A model is runtime-supported only after its weights are published, pinned, verified, and added to [nomikos_inference/registry.yaml](nomikos_inference/registry.yaml). Public weights live on [Hugging Face](https://huggingface.co/nomikos-project) and are cached under `~/.nomikos/hf/cache` on first inference. See [models and datasets](docs/inference/models-and-datasets.md) and the [publishing workflow](scripts/hf/README.md) for the pinning, verification, and release steps.
 
@@ -69,7 +74,7 @@ Point it at a different platform with `NOMIKOS_API_URL` or `--api-url`.
 
 ## Accuracy
 
-The Hugging Face model cards report these figures. All three come from the same evaluator, `python -m src.evaluate.calamari`, run over that script's held-out finetuning pack (`data/processed/greek/finetuning`, `data/processed/armenian/finetuning`, `data/processed/syriac/finetuning`):
+The Hugging Face model cards report these figures. The Greek, Armenian and Syriac rows come from the same evaluator, `python -m src.evaluate.calamari`, run over that script's held-out finetuning pack (`data/processed/greek/finetuning`, `data/processed/armenian/finetuning`, `data/processed/syriac/finetuning`). The Coptic test row is the card's held-out test figure, whose validation split and SROIE F1 the card does not give:
 
 | Model | Split | Lines | CER | WER | Exact match | SROIE F1 |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -79,8 +84,9 @@ The Hugging Face model cards report these figures. All three come from the same 
 | `armenian-calamari-v1` | test | 120 | 0.072 | 0.340 | 0.458 | 0.701 |
 | `syriac-calamari-v2` | val | 331 | 0.181 | 0.535 | 0.245 | 0.485 |
 | `syriac-calamari-v2` | test | 335 | 0.210 | 0.577 | 0.245 | 0.452 |
+| `coptic-calamari-v1` | test | 283 | 0.0823 | 0.591 | 0.431 |  |
 
-Each checkpoint selects `best.pt` on validation CER: 0.156 for Greek, 0.092 for Armenian, 0.181 for Syriac. Weigh the rows by how much text stands behind them.
+Each of the Greek, Armenian and Syriac checkpoints selects `best.pt` on validation CER: 0.156 for Greek, 0.092 for Armenian, 0.181 for Syriac. Weigh the rows by how much text stands behind them.
 
 None of this is a platform-wide accuracy guarantee. Every pack here comes from specific manuscripts in specific hands, and CER moves with the script, the hand, image quality, layout, and the training data behind the checkpoint.
 
