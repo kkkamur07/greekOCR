@@ -23,10 +23,12 @@
 # Coptic (`coptic-calamari-v1`) joins the same crop convention with a measured
 # padding of its own: 12 px, read off 2823 platform Coptic project lines through
 # `best.pt` at batch size 1 (CER 0.0177 at 12 against 0.1890 at 0, minimum flat
-# across 10 to 12; parity worker measurement, 2026-09-18). Its pinned revision
-# below is unservable (no `temperature` metadata, time axis frozen at the traced
-# example length 8). The pin below has moved to the corrected publish, which
-# replaces only best.onnx with a fresh export of the same best.pt.
+# across 10 to 12; measured 2026-09-18, full curve in
+# docs/inference/models-and-datasets.md). The first published revision (bdaa22d3)
+# was unservable: its best.onnx carried no `temperature` metadata, so the adapter
+# refused to open it, and its time axis was frozen at the traced example length 8,
+# so every real line failed at the LSTM node. The pin below is the corrected
+# publish, which replaces only best.onnx with a fresh export of the same best.pt.
 models:
   syriac-calamari-v2:
     task: transcribe
@@ -105,7 +107,7 @@ models:
     host_eligibility: local
     # Measured 2026-09-18 on 2823 platform Coptic project lines through best.pt at
     # batch size 1: CER 0.0177 at padding 12 against 0.1890 at 0, minimum flat across
-    # 10 to 12 (parity worker report). Same exporter PADDING as Armenian and Syriac.
+    # 10 to 12; full curve in docs/inference/models-and-datasets.md. Same exporter PADDING as Armenian and Syriac.
     line_crop: polygon-white
     line_crop_padding: 12
     versions:

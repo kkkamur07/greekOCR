@@ -106,7 +106,7 @@ the product.
 
 Coptic is registered at a measured crop padding of 12 px: CER 0.0177 at 12 against 0.1890
 at 0 on 2823 platform Coptic project lines through `best.pt` at batch size 1, minimum flat
-across 10 to 12 (parity worker measurement, 2026-09-18). The first pin (`bdaa22d3`) was
+across 10 to 12 (measured 2026-09-18; full curve below). The first pin (`bdaa22d3`) was
 unservable: its `best.onnx` carried no `temperature` metadata key so the adapter refused
 to open it, and its time axis was frozen at the traced example length 8 so every real
 line failed at the LSTM node. The pin now points at `b103b562`, which replaces only
@@ -115,6 +115,26 @@ verified 2823 of 2823 platform lines byte-identical to `best.pt` at batch size 1
 CER 0.0177. No
 training-data claim is made for it here: the card gives a held-out test CER of 0.0823 over
 283 lines, and nothing else quoted above was measured for it.
+
+The padding measurement behind the Coptic pin, 2026-09-18: serving crop bytes through the
+real trainer loader into `best.pt` at batch size 1 with the real trainer decoder, no
+normalisation, over the platform's Coptic project lines (2823 lines, 34491 characters).
+CER falls 10x from padding 0 to the minimum and rises again after it, so the curve is a
+padding signal rather than noise. Paddings 10 and 12 tie within noise (6 edits), and 12 is
+registered because it is the exporter's `PADDING` constant, the value the Armenian and
+Syriac crops used whenever they were not Greek's 0.
+
+| Padding px | CER | Exact / 2823 |
+| --- | ---: | ---: |
+| 0 | 0.1890 | 763 |
+| 2 | 0.1025 | 1297 |
+| 4 | 0.0500 | 1869 |
+| 6 | 0.0274 | 2236 |
+| 8 | 0.0189 | 2441 |
+| 10 | 0.0175 | 2489 |
+| **12** | **0.0177** | **2485** |
+| 16 | 0.0219 | 2434 |
+| 20 | 0.0407 | 2039 |
 
 Four runtime models are registered. A fifth needs a compatible adapter, immutable Hub revision, SHA-256
 digest, registry entry, platform catalog metadata, tests, and a declared host

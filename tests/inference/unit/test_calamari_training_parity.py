@@ -432,7 +432,8 @@ def test_the_shipped_registry_states_a_crop_for_every_transcribe_model() -> None
     and it is not: it is 125 exact lines out of 204 against 0 out of 204.
     Coptic's 12 is measured: CER 0.0177 at 12 against 0.1890 at 0 on 2823 platform
     Coptic project lines through best.pt at batch size 1, minimum flat across 10
-    to 12 (parity worker report, 2026-09-18)."""
+    to 12, measured 2026-09-18 on the platform's Coptic project lines; full curve
+    in docs/inference/models-and-datasets.md."""
     from nomikos_inference.registry import load_registry
 
     models = load_registry().models
