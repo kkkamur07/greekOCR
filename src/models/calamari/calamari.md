@@ -438,8 +438,12 @@ same decoding and formulas.
 
 ## `export.py`: dynamic-width ONNX deployment export
 
-`export_calamari_onnx()` turns a project checkpoint into an ONNX graph.
-It loads the safe checkpoint, wraps the model so its dictionary output becomes
+`export_calamari_onnx()` turns a project checkpoint into an ONNX graph. It is a
+thin delegate: the one tracing implementation and metadata writer in the
+repository is `nomikos_inference/export/calamari/export.py::export_calamari_onnx`,
+which this entry point calls, so every caller gets the same artifact whether it
+imports the trainer side or the serving side. That exporter loads the safe
+checkpoint, wraps the model so its dictionary output becomes
 the two stable ONNX outputs `(logits, out_len)`, and exports with:
 
 - inputs `image` and `image_lengths`;
@@ -451,12 +455,21 @@ The dummy export image has the saved line height, but dynamic axes allow
 inference callers to supply arbitrary line widths. The exported graph still
 expects NHWC grayscale images and an `image_lengths` tensor.
 
+The length freedom is load-bearing, not incidental. The graph is traced through
+the length-free LSTM path (no packed sequences), because tracing the padded
+path freezes the time axis at the example width: an earlier trainer-side
+exporter wrote a graph that ran only at its traced width 8, which shipped as
+`coptic-htr-calamari@bdaa22d3` and could serve no real line.
+
 After export, the file is reopened with ONNX, its metadata is replaced, and
 `onnx.checker.check_model()` validates the result before it is saved again.
-The metadata describes the `calamari-onnx-v1` format, architecture, layout,
-class count, line height, JSON-encoded Unicode charset, and blank index. This
-lets a runtime decode output IDs without having to inspect the original
-PyTorch checkpoint.
+The metadata is the full 12-key set the runtime adapter requires: `format`,
+`architecture`, `input_layout`, `classes`, `line_height`, `charset`,
+`blank_index`, `temperature`, `lstm_layers`, `preprocessing`, `input_name`, and
+`output_names`. A missing key fails serving outright (the adapter treats it as
+a corrupt artifact), which is the other half of what made the `bdaa22d3` graph
+unservable. This lets a runtime decode output IDs without having to inspect the
+original PyTorch checkpoint.
 
 ## Practical integration rules
 

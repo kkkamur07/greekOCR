@@ -100,6 +100,14 @@ Example: `registry://greek-calamari-v1?tag=stable`.
 
    It exits non-zero if any greedy decode differs between the two.
 
+   This script is the one supported export path: it calls the single exporter in
+   `nomikos_inference/export/calamari`, which the trainer-side entry point
+   (`src/models/calamari/export.py`) delegates to, so all three spellings produce
+   the same graph. A published ONNX must also pass the real-weights check: the
+   `ml` lane opens the pinned artifact through the real adapter and runs
+   representative widths (`tests/inference/integration/test_published_package.py`), which runs nightly
+   because it downloads real weights, so run it before every publish.
+
 2. Dry-run, then upload:
 
    ```bash

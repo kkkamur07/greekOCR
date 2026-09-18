@@ -239,6 +239,9 @@ New `hf://` entries should include both `hub_revision` and `artifact_sha256`; se
 the migration note in [`docs/inference/adding-inference-models.md`](../docs/inference/adding-inference-models.md).
 
 **Adding a model:** step-by-step checklist in [`docs/inference/adding-inference-models.md`](../docs/inference/adding-inference-models.md).
+Export through the one supported path (`scripts/hf/export_calamari_onnx.py`, the single exporter every
+entry point delegates to) and prove the pinned artifact serves before publishing: the nightly `ml` lane
+opens it through the real adapter and runs representative widths.
 
 ## Admission control
 
