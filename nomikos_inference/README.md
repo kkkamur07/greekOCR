@@ -227,8 +227,9 @@ Job callbacks use a tagged output union: `output.kind` is either `segment` or `t
 
 - `greek-calamari-v1`, `armenian-calamari-v1`, `syriac-calamari-v2`, `coptic-calamari-v1` - transcribe,
   Calamari architecture, one Hub repo and pinned revision + digest each. Same
-  graph, one codec per script, so the entries differ only in `weights_source`
-  and the pins.
+  architecture (40/60-filter CNN, two 200-unit BiLSTMs, line height 48; read off the
+  Coptic and Syriac checkpoints, which agree on every structural field), one codec
+  per script, so the entries differ only in codec, `weights_source`, and the pins.
 - `blla-segment` - segment, BLLA `blla.onnx` weights
 
 Weights are resolved at runtime from the Hub cache (`~/.nomikos/hf/cache/`) or, in a source

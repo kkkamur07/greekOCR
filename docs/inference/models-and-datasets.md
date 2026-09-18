@@ -15,7 +15,7 @@ geometry, preserves the legacy `kraken_ceiling` field, and simplifies polygons.
 ### Calamari HTR
 
 `greek-calamari-v1`, `armenian-calamari-v1`, `syriac-calamari-v2` and `coptic-calamari-v1` run the
-Calamari graph on ONNX Runtime for line transcription. The first three are the same
+Calamari graph on ONNX Runtime for line transcription. All four are the same
 topology, retrained per script:
 
 ```text
@@ -29,10 +29,12 @@ The second recurrent layer is the only structural change from the first
 generation of these models, and it is invisible to the runtime: the codec, line
 height (48) and blank index travel in the graph's own `metadata_props`, so a
 deeper stack is a different set of weights and not a different adapter. What
-separates the three siblings is the codec they were trained over: 259 characters for
-polytonic Greek, 96 for Armenian, 71 for Syriac. Coptic's pinned artifact carries a
-39-character codec at the same line height (48); its recurrent depth is not stated
-in the graph metadata, so no topology claim is made for it here.
+separates the four is the codec they were trained over: 259 characters for
+polytonic Greek, 96 for Armenian, 71 for Syriac, 39 for Coptic. Coptic's structure is
+verified, not assumed: its checkpoint carries `lstm_layers: 2` with BiLSTM weights at
+`layers.4` and `layers.6`, 40/60-filter 3x3 convolutions, and 200-unit LSTM hidden
+states, matching the Syriac checkpoint on every structural field, and the republished
+ONNX records `lstm_layers: 2` in its metadata.
 
 The loader validates the graph's own `calamari-onnx-v1` metadata - codec, line
 height, blank index - and verifies the configured artifact digest before opening

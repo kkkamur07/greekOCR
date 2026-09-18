@@ -172,7 +172,7 @@ def test_the_hub_cache_defaults_under_the_researchers_home_directory(
 def real_page_run(installed_package: dict[str, Path], tmp_path_factory) -> dict:
     """Segment and transcribe a real page through the installed package.
 
-    One session-scoped run rather than one per assertion: it downloads both
+    One session-scoped run rather than one per assertion: it downloads three
     **Hub artifact**s and runs both architectures, and every question below is
     about the same execution.
     """
@@ -195,12 +195,21 @@ transcribe = run_model(
     image_bytes=pathlib.Path({str(TRANSCRIBE_LINE)!r}).read_bytes(),
     params={{"line_index": 0}},
 )
+coptic = run_model(
+    task=InferenceTask.transcribe,
+    registry_model_id="coptic-calamari-v1",
+    registry_tag="stable",
+    image_bytes=pathlib.Path({str(TRANSCRIBE_LINE)!r}).read_bytes(),
+    params={{"line_index": 0}},
+)
 print(json.dumps({{
     "lines": len(segment.lines),
     "blocks": len(segment.blocks),
     "adapter": segment.lines[0].source_metadata.get("adapter"),
     "text": transcribe.text,
     "confidence": transcribe.confidence,
+    "coptic_text": coptic.text,
+    "coptic_confidence": coptic.confidence,
 }}))
 """
     output = _run_installed(installed_package, source, env={"HF_CACHE_ROOT": str(cache_root)})
@@ -217,6 +226,10 @@ def test_a_real_page_is_segmented_and_transcribed_through_the_installed_package(
     assert result["adapter"] == "blla"
     assert result["text"].strip() != ""
     assert 0.0 <= result["confidence"] <= 1.0
+    # The line is not Coptic script, so no text claim: the point is the third
+    # artifact resolved, ran, and answered through the same runner.
+    assert isinstance(result["coptic_text"], str)
+    assert 0.0 <= result["coptic_confidence"] <= 1.0
 
 
 # `test_the_installed_package_resolves_hf_weights_and_records_their_provenance` stood here
@@ -252,13 +265,108 @@ def test_the_cached_artifacts_match_the_digests_the_registry_pins(
         assert manifest["hub_revision"] == version["hub_revision"]
         checked += 1
 
-    assert checked == 2
+    assert checked == 3
 
 
 # `test_a_corrupted_artifact_is_rejected_by_the_installed_verifier` stood here. Accept and
 # reject for `verify_artifact_sha256` are `tests/hf/test_artifacts.py`; this ran the same
 # two calls in a subprocess to show the function is in the wheel, which `real_page_run`
-# above already shows by resolving two digest-pinned artifacts through it and running them.
+# above already shows by resolving three digest-pinned artifacts through it and running them.
+
+
+@pytest.fixture(scope="session")
+def coptic_widths_run(
+    installed_package: dict[str, Path], tmp_path_factory: pytest.TempPathFactory
+) -> dict:
+    """The Coptic artifact through the installed session loader, at four widths.
+
+    One session-scoped run: it resolves `coptic-calamari-v1` out of the installed
+    wheel's own bundled **Registry** into its own **Hub cache**, so the download
+    revision, the digest check, and the graph under test are all the shipped ones.
+    """
+    cache_root = tmp_path_factory.mktemp("coptic-hub-cache")
+    source = """
+import hashlib, json
+import numpy as np
+from io import BytesIO
+from PIL import Image
+from nomikos_inference.registry import load_registry, get_model_entry
+from nomikos_inference.weights import resolve_weights_source
+from nomikos_inference.architectures.calamari.adapter import _load_session
+from nomikos_inference.architectures.calamari.preprocessing import (
+    preprocess_line_image_bytes_to_calamari_tensor,
+)
+
+entry = get_model_entry(load_registry(), "coptic-calamari-v1", "stable")
+version = entry.versions["stable"]
+path = resolve_weights_source(
+    version.weights_source,
+    registry_model_id="coptic-calamari-v1",
+    registry_tag="stable",
+    hub_revision=version.hub_revision,
+    artifact_sha256=version.artifact_sha256,
+    architecture="calamari",
+)
+digest = hashlib.sha256(path.read_bytes()).hexdigest()
+session, charset, line_height = _load_session(str(path), None)
+rng = np.random.default_rng(11)
+widths = []
+for width in [8, 64, 517, 1200]:
+    canvas = np.full((48, width), 255, dtype=np.uint8)
+    canvas[8:40, 2:max(3, width - 2)] = 0
+    buffer = BytesIO()
+    Image.fromarray(canvas, mode="L").save(buffer, format="PNG")
+    tensor = preprocess_line_image_bytes_to_calamari_tensor(
+        buffer.getvalue(), line_height=line_height
+    ).astype(np.float32)
+    logits, out_len = session.run(
+        ["logits", "out_len"],
+        {
+            "image": tensor,
+            "image_lengths": np.asarray([tensor.shape[1]], dtype=np.int64),
+        },
+    )
+    widths.append({
+        "width": width,
+        "out_len": int(np.asarray(out_len)[0]),
+        "logit_time": int(np.asarray(logits).shape[1]),
+    })
+print(json.dumps({
+    "digest": digest,
+    "line_height": line_height,
+    "classes": len(charset),
+    "widths": widths,
+}))
+"""
+    output = _run_installed(installed_package, source, env={"HF_CACHE_ROOT": str(cache_root)})
+    return {"result": _last_json_line(output), "cache_root": cache_root}
+
+
+def test_the_coptic_artifact_runs_representative_widths(coptic_widths_run: dict) -> None:
+    """The Coptic graph runs at every serving width, not just the traced one.
+
+    The first published Coptic ONNX failed the adapter's temperature gate, and past
+    that gate it ran only at the traced example width 8: every real line crashed at
+    the LSTM node. So width 8 passing alongside wider widths is the point of this
+    test, not an arbitrary small input: a frozen time axis passes 8 alone and fails
+    everything else. `out_len` growing with width is the shape-level proof the time
+    axis is dynamic end to end.
+    """
+    import yaml
+
+    result = coptic_widths_run["result"]
+    pin = yaml.safe_load((REPO_ROOT / "nomikos_inference" / "registry.yaml").read_text())["models"][
+        "coptic-calamari-v1"
+    ]["versions"]["stable"]
+
+    assert result["digest"] == pin["artifact_sha256"]
+    assert result["line_height"] == 48
+    assert result["classes"] == 39
+    assert [run["width"] for run in result["widths"]] == [8, 64, 517, 1200]
+    out_lens = [run["out_len"] for run in result["widths"]]
+    assert out_lens == sorted(out_lens) and len(set(out_lens)) == len(out_lens)
+    for run in result["widths"]:
+        assert run["out_len"] == run["logit_time"]
 
 
 @pytest.mark.parametrize("platform", TARGET_PLATFORMS)

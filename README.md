@@ -54,7 +54,11 @@ Through the pinned runtime registry, Nomikos pages can use:
 | `syriac-calamari-v2` | Line HTR, Syriac (`syr`) | Calamari | [syriac-htr-calamari](https://huggingface.co/nomikos-project/syriac-htr-calamari) |
 | `coptic-calamari-v1` | Line HTR, Coptic (`cop`) | Calamari | [coptic-htr-calamari](https://huggingface.co/nomikos-project/coptic-htr-calamari) |
 
-The Greek, Armenian and Syriac HTR checkpoints are a CNN followed by two bidirectional LSTM layers at line height 48.
+All four HTR checkpoints share one architecture: a 40/60-filter CNN followed by two 200-unit
+bidirectional LSTM layers at line height 48. Read off the Coptic and Syriac checkpoints, whose
+structural fields agree exactly (3x3 convolutions 1 to 40 to 60, BiLSTM weights at `layers.4`
+and `layers.6` with 200-unit hidden states, blank index 0, temperature -1.0); each trains
+its own codec.
 
 A model is runtime-supported only after its weights are published, pinned, verified, and added to [nomikos_inference/registry.yaml](nomikos_inference/registry.yaml). Public weights live on [Hugging Face](https://huggingface.co/nomikos-project) and are cached under `~/.nomikos/hf/cache` on first inference. See [models and datasets](docs/inference/models-and-datasets.md) and the [publishing workflow](scripts/hf/README.md) for the pinning, verification, and release steps.
 
