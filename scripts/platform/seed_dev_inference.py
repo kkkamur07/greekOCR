@@ -3,7 +3,7 @@
 
 The editor's model pickers list rows from ``inference_models``, not from
 ``registry.yaml``, so a registry entry is invisible in dev until this script
-puts a row beside it. It seeds the three Calamari transcribe models and the
+puts a row beside it. It seeds the four Calamari transcribe models and the
 BLLA segment model, and is an upsert: re-running it after a registry edit
 rewrites the existing rows rather than duplicating them.
 
@@ -21,7 +21,7 @@ Overrides, both optional and both comma-separated:
 * ``DEFAULT_SEGMENT_MODEL`` - the segment row, and the model the project-level
   segment binding points at.
 * ``DEFAULT_TRANSCRIBE_MODEL`` - the transcribe rows to seed *instead of* the
-  three defaults, for a dev database that should only see one script.
+  four defaults, for a dev database that should only see one script.
 """
 
 import asyncio
@@ -53,7 +53,7 @@ def _ids(env_var: str, default: tuple[str, ...]) -> tuple[str, ...]:
 SEGMENT_MODELS = _ids("DEFAULT_SEGMENT_MODEL", ("blla-segment",))
 TRANSCRIBE_MODELS = _ids(
     "DEFAULT_TRANSCRIBE_MODEL",
-    ("greek-calamari-v1", "armenian-calamari-v1", "syriac-calamari-v2"),
+    ("greek-calamari-v1", "armenian-calamari-v1", "syriac-calamari-v2", "coptic-calamari-v1"),
 )
 BINDING_PROJECT_SLUG = os.environ.get(
     "BINDING_PROJECT_SLUG",
@@ -174,7 +174,7 @@ async def main() -> None:
         return
 
     # The project-level segment binding still points at one model, the first
-    # seeded. Transcribe stays unbound on purpose: three scripts are now in the
+    # seeded. Transcribe stays unbound on purpose: four scripts are now in the
     # catalog and picking one of them as a workspace default here would put a
     # Greek model in front of a Syriac manuscript.
     segment_binding = await _upsert_project_binding(
