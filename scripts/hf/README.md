@@ -191,6 +191,10 @@ preprocessed line tensors and reports max/mean absolute logits difference,
 per-timestep argmax agreement, and whether the greedy decodes are
 byte-identical, exiting non-zero if any decode differs. Point `--lines` at real
 line crops; `--synthetic-widths` is a labelled fallback, not a substitute.
+Then run the nightly real-weights lane (`pytest
+tests/inference/integration/test_published_package.py -m ml`), which opens the pinned
+artifact through the real adapter and runs representative widths: parity proves the export matches
+its checkpoint, the lane proves the artifact serves.
 
 `convert_calamari.py` is the TF → PyTorch weight re-layout that feeds
 `export_calamari_onnx`. It reads only the single-BiLSTM TF stack; models trained
