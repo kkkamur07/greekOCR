@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 from PIL import Image
 
 from nomikos_inference.architectures.ppocr_det.preprocessing import (
@@ -87,9 +88,5 @@ def test_custom_limit_side_len_is_respected() -> None:
 def test_non_positive_limit_is_rejected() -> None:
     image = Image.new("RGB", (96, 96), "white")
 
-    try:
+    with pytest.raises(ValueError):
         preprocess_ppocr_det_image(image, limit_side_len=0)
-    except ValueError:
-        pass
-    else:
-        raise AssertionError("expected ValueError for limit_side_len=0")

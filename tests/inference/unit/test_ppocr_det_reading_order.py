@@ -138,3 +138,47 @@ def test_real_spread_reads_left_column_before_right() -> None:
     assert any(cx < middle for cx in centres)
     assert any(cx >= middle for cx in centres)
     _assert_left_column_precedes_right(both)
+
+
+def test_fragments_of_one_visual_line_share_a_row() -> None:
+    left = _quad(0, 100, 300, 140)
+    right = _quad(320, 97, 900, 137)
+    below = _quad(0, 150, 900, 190)
+    quads = [left, right, below]
+
+    assert _ids_in_order(quads, direction="ltr") == [0, 1, 2]
+    assert _ids_in_order(quads, direction="rtl") == [1, 0, 2]
+
+
+def test_tall_initial_joins_the_first_row_without_chaining() -> None:
+    initial = _quad(0, 100, 60, 260)
+    first = _quad(70, 100, 900, 140)
+    second = _quad(70, 160, 900, 200)
+    third = _quad(70, 220, 900, 260)
+    quads = [initial, first, second, third]
+
+    assert _ids_in_order(quads) == [0, 1, 2, 3]
+
+    flipped = quads[::-1]
+    rerun = [flipped[i] for i in _ids_in_order(flipped)]
+    assert [id(quad) for quad in rerun] == [id(quad) for quad in quads]
+
+
+def _spread_with_header(header_ymin: float) -> list[DetectedQuad]:
+    header = _quad(0, header_ymin, 1900, header_ymin + 40)
+    left = [_quad(0, 100 + 60 * i, 900, 140 + 60 * i) for i in range(5)]
+    right = [_quad(1000, 100 + 60 * i, 1900, 140 + 60 * i) for i in range(5)]
+    return [header, *left, *right]
+
+
+def test_spanning_header_reads_as_its_own_band() -> None:
+    quads = _spread_with_header(50)
+
+    assert _ids_in_order(quads, direction="ltr") == [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    assert _ids_in_order(quads, direction="rtl") == [0, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5]
+
+
+def test_spanning_header_between_rows_splits_the_bands() -> None:
+    quads = _spread_with_header(250)
+
+    assert _ids_in_order(quads, direction="ltr") == [1, 2, 3, 6, 7, 8, 0, 4, 5, 9, 10]

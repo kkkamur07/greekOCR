@@ -121,30 +121,40 @@ def box_score_fast(bitmap: np.ndarray, box: np.ndarray) -> float:
 def order_quad_clockwise(points: np.ndarray) -> np.ndarray:
     """Order four corners clockwise starting from the top left.
 
-    PaddleX returns ``get_mini_boxes`` order directly; the segment contract
-    wants a canonical start corner, so the sums and differences method picks
-    top left (smallest x plus y), bottom right, top right and bottom left,
-    with a shoelace guard for the orientation.
+    The input is expected in ``get_mini_boxes`` order (left pair then right
+    pair, top first within each pair), which is already a proper ring; this
+    only pins the start corner and the orientation, by index permutation, so
+    a corner can never be duplicated or lost however steep the quad is. The
+    start corner is the top of the two leftmost corners, matching what
+    ``get_mini_boxes`` emits first; a ring that runs counter-clockwise is
+    reversed past the start corner. Clockwise is measured in image
+    coordinates (y down), where it is a positive shoelace area.
     """
 
     corners = np.asarray(points, dtype=np.float64).reshape(-1, 2)
-    sums = corners[:, 0] + corners[:, 1]
-    diffs = corners[:, 0] - corners[:, 1]
-    top_left = int(np.argmin(sums))
-    bottom_right = int(np.argmax(sums))
-    top_right = int(np.argmax(diffs))
-    bottom_left = int(np.argmin(diffs))
-    ordered = corners[[top_left, top_right, bottom_right, bottom_left]]
-    # In image coordinates (y down) a visually clockwise ring has positive
-    # signed area; a mirrored pick is repaired by reversing past the start.
+    if len(corners) != 4:
+        raise ValueError("order_quad_clockwise needs exactly four corners")
+    # Stable sort, so equal inputs always give equal outputs; the strict
+    # y comparison mirrors ``get_mini_boxes``.
+    by_x = sorted(range(4), key=lambda i: (corners[i][0], corners[i][1]))
+    left_pair, right_pair = by_x[:2], by_x[2:]
+    if corners[left_pair[1]][1] > corners[left_pair[0]][1]:
+        left_top, left_bottom = left_pair
+    else:
+        left_top, left_bottom = left_pair[1], left_pair[0]
+    if corners[right_pair[1]][1] > corners[right_pair[0]][1]:
+        right_top, right_bottom = right_pair
+    else:
+        right_top, right_bottom = right_pair[1], right_pair[0]
+    order = [left_top, right_top, right_bottom, left_bottom]
+    ring = corners[order]
     area = float(
-        np.sum(
-            ordered[:, 0] * np.roll(ordered[:, 1], -1) - np.roll(ordered[:, 0], -1) * ordered[:, 1]
-        )
+        np.sum(ring[:, 0] * np.roll(ring[:, 1], -1) - np.roll(ring[:, 0], -1) * ring[:, 1])
     )
     if area < 0:
-        ordered = ordered[[0, 3, 2, 1]]
-    return ordered
+        order = [order[0], order[3], order[2], order[1]]
+        ring = corners[order]
+    return ring
 
 
 def detect_lines(
