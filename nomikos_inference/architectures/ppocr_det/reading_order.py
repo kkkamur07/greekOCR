@@ -28,7 +28,9 @@ WIDE_WIDTH_FRACTION = 1.5
 # fraction of the column's width.
 SPANNING_OVERLAP_FRACTION = 0.10
 # Two quads in a column share a row when their y ranges overlap by at least
-# half of the shorter height.
+# half of the shorter height and they sit side by side (x overlap below half
+# of the narrower width). Stacked quads in the same x range are different
+# lines however much they overlap vertically.
 ROW_OVERLAP_FRACTION = 0.5
 # A quad taller than this multiple of its column's median line height (an
 # enlarged initial or figure) joins the first row it overlaps without
@@ -79,64 +81,100 @@ def _nearest_column(ranges: list[tuple[float, float]], xmin: float, xmax: float)
     return best
 
 
+def _shares_row(
+    xmin: float,
+    xmax: float,
+    ymin: float,
+    ymax: float,
+    height: float,
+    row_xmin: float,
+    row_xmax: float,
+    row_ymin: float,
+    row_ymax: float,
+) -> bool:
+    """Whether a quad belongs to a row with the given x and y ranges."""
+    shorter_h = min(height, row_ymax - row_ymin)
+    if _overlap(ymin, ymax, row_ymin, row_ymax) < ROW_OVERLAP_FRACTION * shorter_h:
+        return False
+    # The side-by-side rule reuses the half-width threshold of the column
+    # rule: stacked quads sharing an x range are separate lines.
+    narrower_w = min(xmax - xmin, row_xmax - row_xmin)
+    return _overlap(xmin, xmax, row_xmin, row_xmax) < COLUMN_OVERLAP_FRACTION * narrower_w
+
+
 def _row_order(
     members: list[int],
     extents: list[tuple[float, ...]],
+    geoms: list[tuple[float, ...]],
     column_builders: set[int],
     direction: str,
 ) -> list[int]:
     """Order one column's members top to bottom, row by row.
 
     Rows group transitively along the centre-y sequence: each quad is
-    compared with the current row's y range, so a tall initial met midway
+    compared with the current row's ranges, so a tall initial met midway
     cannot chain the lines above and below it into one row. Tall quads join
-    the first row they overlap and never extend it.
+    the first row they overlap and never extend it. Every tie-break is
+    geometric (centre, then coordinates), never the input index, so the
+    result does not depend on input order.
     """
-    by_y = sorted(members, key=lambda i: (extents[i][3], extents[i][2], i))
+    by_y = sorted(members, key=lambda i: (extents[i][3], extents[i][2], geoms[i]))
     heights = sorted(extents[i][7] for i in members if i in column_builders)
     median_height = heights[len(heights) // 2]
     rows: list[list[int]] = []
     row_ranges: list[list[float]] = []
     for index in by_y:
+        xmin, xmax = extents[index][0], extents[index][1]
         ymin, ymax, height = extents[index][5], extents[index][6], extents[index][7]
         if median_height > 0 and height > TALL_HEIGHT_FRACTION * median_height:
             target = None
-            for position, (row_ymin, row_ymax) in enumerate(row_ranges):
-                shorter = min(height, row_ymax - row_ymin)
-                if _overlap(ymin, ymax, row_ymin, row_ymax) >= ROW_OVERLAP_FRACTION * shorter:
+            for position, row_range in enumerate(row_ranges):
+                if _shares_row(
+                    xmin,
+                    xmax,
+                    ymin,
+                    ymax,
+                    height,
+                    row_range[2],
+                    row_range[3],
+                    row_range[0],
+                    row_range[1],
+                ):
                     target = position
                     break
             if target is None:
                 rows.append([index])
-                row_ranges.append([ymin, ymax])
+                row_ranges.append([ymin, ymax, xmin, xmax])
             else:
                 rows[target].append(index)
             continue
         if row_ranges:
-            row_ymin, row_ymax = row_ranges[-1]
-            shorter = min(height, row_ymax - row_ymin)
-            if _overlap(ymin, ymax, row_ymin, row_ymax) >= ROW_OVERLAP_FRACTION * shorter:
+            row_ymin, row_ymax, row_xmin, row_xmax = row_ranges[-1]
+            if _shares_row(xmin, xmax, ymin, ymax, height, row_xmin, row_xmax, row_ymin, row_ymax):
                 rows[-1].append(index)
                 row_ranges[-1][0] = min(row_ymin, ymin)
                 row_ranges[-1][1] = max(row_ymax, ymax)
+                row_ranges[-1][2] = min(row_xmin, xmin)
+                row_ranges[-1][3] = max(row_xmax, xmax)
                 continue
         rows.append([index])
-        row_ranges.append([ymin, ymax])
-    # Rows read by their top-most centre y.
+        row_ranges.append([ymin, ymax, xmin, xmax])
+    # Rows read by their top-most centre y, ties broken geometrically.
     ranked = sorted(
         range(len(rows)),
         key=lambda position: (
             min(extents[i][3] for i in rows[position]),
             row_ranges[position][0],
             row_ranges[position][1],
+            tuple(sorted(geoms[i] for i in rows[position])),
         ),
     )
     reading = []
     for position in ranked:
         if direction == "ltr":
-            reading.extend(sorted(rows[position], key=lambda i: (extents[i][2], i)))
+            reading.extend(sorted(rows[position], key=lambda i: (extents[i][2], geoms[i])))
         else:
-            reading.extend(sorted(rows[position], key=lambda i: (-extents[i][2], i)))
+            reading.extend(sorted(rows[position], key=lambda i: (-extents[i][2], geoms[i])))
     return reading
 
 
@@ -148,7 +186,8 @@ def order_lines(quads: list[DetectedQuad], *, direction: str = "ltr") -> list[in
     one overlapped column or, when spanning two or more, read as bands of
     their own. Columns run left to right for ``"ltr"`` and right to left for
     ``"rtl"``; inside a column quads run row by row, each row across the
-    page. Equal inputs give equal outputs.
+    page. Every tie-break is geometric, so equal inputs give equal outputs
+    whatever order they arrive in.
     """
 
     if direction not in ("ltr", "rtl"):
@@ -157,6 +196,7 @@ def order_lines(quads: list[DetectedQuad], *, direction: str = "ltr") -> list[in
     if count == 0:
         return []
     extents = _extents(quads)
+    geoms = [tuple(float(c) for point in quad.points for c in point) for quad in quads]
     widths = sorted(extent[4] for extent in extents)
     median_width = widths[count // 2]
     # The median quad itself can never be narrow or wide, so at least one
@@ -259,7 +299,7 @@ def order_lines(quads: list[DetectedQuad], *, direction: str = "ltr") -> list[in
         reverse=(direction == "rtl"),
     )
     sequenced = [
-        _row_order(members, extents, builder_sets[position], direction)
+        _row_order(members, extents, geoms, builder_sets[position], direction)
         for position, members in enumerate(ordered_columns)
     ]
     if not spanning:
@@ -267,7 +307,7 @@ def order_lines(quads: list[DetectedQuad], *, direction: str = "ltr") -> list[in
 
     # Spanning quads split the page into horizontal bands: everything above a
     # band's centre reads first, then the band, then everything below.
-    spanning_sorted = sorted(spanning, key=lambda i: (extents[i][3], extents[i][2], i))
+    spanning_sorted = sorted(spanning, key=lambda i: (extents[i][3], extents[i][2], geoms[i]))
     span_cys = [extents[i][3] for i in spanning_sorted]
 
     def _segment(index: int) -> int:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 import json
 from pathlib import Path
 
@@ -182,3 +183,50 @@ def test_spanning_header_between_rows_splits_the_bands() -> None:
     quads = _spread_with_header(250)
 
     assert _ids_in_order(quads, direction="ltr") == [1, 2, 3, 6, 7, 8, 0, 4, 5, 9, 10]
+
+
+def test_stacked_overlapping_lines_read_top_to_bottom_in_every_permutation() -> None:
+    """Adjacent lines whose boxes overlap are separate rows, not fragments.
+
+    Quads 113, 109 and 96 of the measured c13 page share one x range and
+    overlap vertically by more than half the shorter height; they are three
+    tightly spaced Coptic lines and must read top first whatever order they
+    arrive in.
+    """
+    top = _quad(873, 218, 1066, 261)
+    middle = _quad(870, 236, 1069, 284)
+    bottom = _quad(869, 299, 1073, 346)
+
+    for permutation in itertools.permutations([top, middle, bottom]):
+        arranged = list(permutation)
+        assert [arranged[i] for i in _ids_in_order(arranged)] == [top, middle, bottom]
+
+
+def _shuffled(count: int, seed: int) -> list[int]:
+    """Deterministic Fisher-Yates permutation without the random module."""
+    order = list(range(count))
+    state = seed * 2 + 1
+    for i in range(count - 1, 0, -1):
+        state = (1103515245 * state + 12345) % (2**31)
+        j = state % (i + 1)
+        order[i], order[j] = order[j], order[i]
+    return order
+
+
+def test_measured_pages_read_identically_under_shuffling() -> None:
+    """Ten seeded shuffles of every measured page map back to the base order."""
+    paths = sorted(DETECTION_DIR.glob("medium-1920-*.json"))
+    if not paths:
+        pytest.skip("measured detector output is not present")
+    assert paths
+    for path in paths:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        quads = [
+            DetectedQuad(points=[[float(x), float(y)] for x, y in quad], score=0.9)
+            for quad in payload["polygons"]
+        ]
+        base = order_lines(quads)
+        for seed in range(10):
+            permutation = _shuffled(len(quads), seed)
+            rerun = [permutation[i] for i in order_lines([quads[i] for i in permutation])]
+            assert rerun == base, f"{path.name} seed={seed}"
