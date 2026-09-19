@@ -30,6 +30,7 @@ class RegistryArchitecture(StrEnum):
     calamari = "calamari"
     blla = "blla"
     blla_segment = "blla-segment"
+    ppocr_det = "ppocr-det"
 
 
 class LineCrop(StrEnum):
