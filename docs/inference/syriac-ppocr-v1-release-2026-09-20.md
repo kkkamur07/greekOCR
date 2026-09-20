@@ -92,9 +92,12 @@ to 6. The dev seed script already lists `syriac-ppocr-v1` in
    `nomikos/backend/ml/infrastructure/orm_models.py`, table
    `inference_models`):
 
+   The `id` column has only an app-side default (`uuid.uuid4` in the ORM, no
+   server default), so raw SQL must supply it explicitly via `gen_random_uuid()`.
+
    ```sql
-   INSERT INTO inference_models (name, provider, task, artifact_ref, default_params)
-   VALUES ('syriac-ppocr-v1', 'ppocr', 'transcribe', 'registry://syriac-ppocr-v1?tag=stable', '{"device": "cpu"}')
+   INSERT INTO inference_models (id, name, provider, task, artifact_ref, default_params)
+   VALUES (gen_random_uuid(), 'syriac-ppocr-v1', 'ppocr', 'transcribe', 'registry://syriac-ppocr-v1?tag=stable', '{"device": "cpu"}')
    ON CONFLICT (name) DO UPDATE SET
      provider = EXCLUDED.provider,
      task = EXCLUDED.task,
