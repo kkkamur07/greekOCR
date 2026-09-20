@@ -75,15 +75,15 @@ side; the local contract shape keeps both, so each side has its own
 normaliser and lines pair on ``line_id`` only.
 
 (f) Failed lines are absent from the summary: the indexes are positions
-in the dispatched region order. A whole-page job is dispatched all part
-lines in ``(Line.order, Line.created_at)`` sequence
-(``nomikos/backend/jobs/application/inference_dispatcher.py:156-170``),
-so the order is rebuilt from the sorted page lines and trusted only
-when its length fits the summary plus the failures and the surviving
-positions match the result ids in order; a selective job maps indexes
-through its own ``payload.line_ids``. Mapped failures are run locally
-and reported per line as failed on the platform, and any run with one
-in scope is a MISMATCH, never IDENTICAL.
+in the dispatched region order. The dispatcher filters its
+``(Line.order, Line.created_at)`` rows by the payload id set, so one
+dispatched order serves both cases: the sorted page lines, filtered to
+``payload.line_ids`` when the job has them
+(``nomikos/backend/jobs/application/inference_dispatcher.py:156-170``).
+It is trusted only when its length fits the summary plus the failures
+and the surviving positions match the result ids in order. Mapped
+failures are run locally and reported per line as failed on the
+platform, and any run with one in scope is a MISMATCH, never IDENTICAL.
 """
 
 from __future__ import annotations
@@ -1393,13 +1393,42 @@ def run_comparison(
     result_ids = [
         str(line.get("line_id")) for line in platform_lines if line.get("line_id") is not None
     ]
-    failed_ids: list[str] = []
+    # One dispatched order for both cases: the dispatcher filters its
+    # database-ordered rows by the payload id set, so failed indexes are
+    # positions in (order, created_at) sequence, never in payload order
+    # (inference_dispatcher.py:156-170, load_lines order).
     payload_ids = payload.get("line_ids")
     if isinstance(payload_ids, list) and payload_ids:
-        job_ordered_ids = [str(line_id) for line_id in payload_ids]
-        for index in failed_indexes:
-            if 0 <= index < len(job_ordered_ids):
-                failed_ids.append(job_ordered_ids[index])
+        selective_ids: list[str] | None = [str(line_id) for line_id in payload_ids]
+    else:
+        selective_ids = None
+    candidate_ids = selective_ids if selective_ids is not None else result_ids
+    page_ids = {str(line.get("id")) for line in part_lines}
+    early_missing = [line_id for line_id in candidate_ids if line_id not in page_ids]
+    sorted_page = _sort_part_lines(part_lines)
+    failed_ids = []
+    if early_missing:
+        requested_ids = candidate_ids
+        missing_ids = early_missing
+    else:
+        if selective_ids is not None:
+            wanted = set(selective_ids)
+            dispatched_ids = [
+                str(line.get("id")) for line in sorted_page if str(line.get("id")) in wanted
+            ]
+        else:
+            dispatched_ids = [str(line.get("id")) for line in sorted_page]
+        if failed_indexes:
+            failed_set = set(failed_indexes)
+            kept_ids = [
+                line_id for pos, line_id in enumerate(dispatched_ids) if pos not in failed_set
+            ]
+            trusted = (
+                len(dispatched_ids) == len(result_ids) + len(failed_indexes)
+                and kept_ids == result_ids
+            )
+            if trusted:
+                failed_ids = [dispatched_ids[index] for index in sorted(failed_set)]
             else:
                 return _transcribe_unmappable(
                     args,
@@ -1416,42 +1445,11 @@ def run_comparison(
                     summary,
                     out_dir,
                 )
-    elif not failed_indexes:
-        job_ordered_ids = result_ids
-    else:
-        # Whole-page jobs carry no line_ids: the worker was dispatched the
-        # page lines in (order, created_at) sequence with one region per line
-        # (inference_dispatcher.py:163-170, load_lines order), so the failed
-        # indexes are positions in that same order, rebuilt here with the
-        # existing page sort.
-        dispatched_ids = [str(line.get("id")) for line in _sort_part_lines(part_lines)]
-        failed_set = set(failed_indexes)
-        kept_ids = [line_id for pos, line_id in enumerate(dispatched_ids) if pos not in failed_set]
-        if len(dispatched_ids) == len(result_ids) + len(failed_indexes) and kept_ids == result_ids:
-            failed_ids = [dispatched_ids[index] for index in sorted(failed_set)]
-            job_ordered_ids = dispatched_ids
+        if args.line_limit is not None:
+            requested_ids = dispatched_ids[: args.line_limit]
         else:
-            return _transcribe_unmappable(
-                args,
-                model_entry,
-                registry_model_id,
-                registry_tag,
-                model_uuid,
-                job_id,
-                base_params,
-                transcription_id,
-                model_verification,
-                len(result_ids) + len(failed_indexes),
-                len(result_ids),
-                summary,
-                out_dir,
-            )
-    if args.line_limit is not None:
-        requested_ids = job_ordered_ids[: args.line_limit]
-    else:
-        requested_ids = job_ordered_ids
-    page_ids = {str(line.get("id")) for line in part_lines}
-    missing_ids = [line_id for line_id in requested_ids if line_id not in page_ids]
+            requested_ids = dispatched_ids
+        missing_ids = [line_id for line_id in requested_ids if line_id not in page_ids]
     if missing_ids:
         reason = (
             f"job line {missing_ids[0]} no longer exists on the page "

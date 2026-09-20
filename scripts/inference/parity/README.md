@@ -33,7 +33,8 @@ only). Staleness: model-produced stored lines must name the job;
 newer foreign lines give NOT_COMPARABLE, older ones fall under
 the protected gate (`--allow-merged` overrides). Transcribe
 compares the job's own line ids (first N with `--line-limit`);
-missing lines give NOT_COMPARABLE, failed lines map through the
-dispatched order and are reported per line, any in scope forces
+missing lines give NOT_COMPARABLE, failed indexes map through
+dispatch order (page order, filtered to the job's ids, never
+payload order) and are reported per line, any in scope forces
 MISMATCH. Header shows requested vs compared counts; IDENTICAL
 needs them equal (worker version is not exposed).

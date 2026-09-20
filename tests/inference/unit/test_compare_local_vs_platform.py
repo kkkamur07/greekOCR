@@ -1144,10 +1144,7 @@ def test_whole_page_failed_line_unmappable_is_not_comparable(tmp_path, monkeypat
     assert report["comparison"]["reason"] == "failed line indexes cannot be mapped to line ids"
 
 
-def test_payload_ids_failed_index_is_mismatch(tmp_path, monkeypatch):
-    monkeypatch.setenv("NOMIKOS_TOKEN", "dummy")
-    ids = ["A", "B", "C", "D", "E"]
-    stub_transcribe_run(monkeypatch, ids)
+def selective_job(payload_ids, page_ids, failed_id, failed_index):
     job = {
         "id": "job-1",
         "status": "done",
@@ -1156,22 +1153,30 @@ def test_payload_ids_failed_index_is_mismatch(tmp_path, monkeypatch):
         "document_part_id": "part-1",
         "payload": {
             "ml_params": {"model": "syriac-ppocr-v1"},
-            "line_ids": ids,
+            "line_ids": payload_ids,
         },
         "result": {
             "transcription_id": "t-1",
             "lines": [
                 {"line_id": line_id, "text": f"text {line_id}", "confidence": 0.9}
-                for line_id in ids
-                if line_id != "D"
+                for line_id in page_ids
+                if line_id != failed_id
             ],
-            "failed_line_indexes": [3],
+            "failed_line_indexes": [failed_index],
         },
     }
     part_lines = [
         {"id": line_id, "order": index, "points": BOX_A, "created_at": "2026-01-01"}
-        for index, line_id in enumerate(ids)
+        for index, line_id in enumerate(page_ids)
     ]
+    return job, part_lines
+
+
+def test_payload_ids_failed_index_is_mismatch(tmp_path, monkeypatch):
+    monkeypatch.setenv("NOMIKOS_TOKEN", "dummy")
+    page_ids = ["A", "B", "C", "D", "E"]
+    stub_transcribe_run(monkeypatch, page_ids)
+    job, part_lines = selective_job(["C", "A", "E", "B", "D"], page_ids, "D", 3)
     code, out_dir = run_transcribe_main(job, part_lines, tmp_path, [])
     assert code == 1
     report = json.loads(Path(out_dir, "report.json").read_text(encoding="utf-8"))
@@ -1181,6 +1186,23 @@ def test_payload_ids_failed_index_is_mismatch(tmp_path, monkeypatch):
     ]
     assert len(failed_entries) == 1
     assert failed_entries[0]["platform_error"] is not None
+
+
+def test_reversed_payload_ids_fail_first_in_page_order(tmp_path, monkeypatch):
+    monkeypatch.setenv("NOMIKOS_TOKEN", "dummy")
+    page_ids = ["A", "B", "C", "D", "E"]
+    stub_transcribe_run(monkeypatch, page_ids)
+    job, part_lines = selective_job(list(reversed(page_ids)), page_ids, "A", 0)
+    code, out_dir = run_transcribe_main(job, part_lines, tmp_path, [])
+    assert code == 1
+    report = json.loads(Path(out_dir, "report.json").read_text(encoding="utf-8"))
+    assert report["comparison"]["verdict"] == "MISMATCH"
+    failed_entries = [
+        item
+        for item in report["comparison"]["line_differences"]
+        if item["platform_error"] is not None
+    ]
+    assert [item["line_id"] for item in failed_entries] == ["A"]
 
 
 def test_limit_ignores_failed_line_outside_subset(tmp_path, monkeypatch):
