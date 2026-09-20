@@ -22,7 +22,7 @@ describe("PageEditorModelSelect", () => {
       <PageEditorModelSelect
         label="Seg"
         ariaLabel="Segmentation model"
-        models={[model("seg-a", "blla-segment"), model("seg-b", "pp-ocr")]}
+        models={[model("seg-a", "kraken"), model("seg-b", "pp-ocr")]}
         selectedModelId={null}
         onSelectedModelIdChange={() => {}}
         includeDefaultOption
@@ -35,7 +35,7 @@ describe("PageEditorModelSelect", () => {
     }));
     expect(options).toEqual([
       { value: "", text: "Default" },
-      { value: "seg-a", text: "blla-segment" },
+      { value: "seg-a", text: "kraken" },
       { value: "seg-b", text: "pp-ocr" },
     ]);
   });

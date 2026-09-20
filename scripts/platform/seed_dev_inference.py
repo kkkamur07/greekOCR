@@ -4,8 +4,8 @@
 The editor's model pickers list rows from ``inference_models``, not from
 ``registry.yaml``, so a registry entry is invisible in dev until this script
 puts a row beside it. It seeds the five transcribe models (four Calamari and
-one PP-OCR) and the BLLA segment model, and is an upsert: re-running it
-after a registry edit
+one PP-OCR) and the two segment models (kraken and ppocr), and is an
+upsert: re-running it after a registry edit
 rewrites the existing rows rather than duplicating them.
 
 Task and provider are read out of ``registry.yaml`` rather than restated here.
@@ -51,7 +51,42 @@ def _ids(env_var: str, default: tuple[str, ...]) -> tuple[str, ...]:
     return override or default
 
 
-SEGMENT_MODELS = _ids("DEFAULT_SEGMENT_MODEL", ("blla-segment",))
+SEGMENT_MODELS = _ids("DEFAULT_SEGMENT_MODEL", ("blla-segment", "ppocr-segment"))
+
+# Catalog display names for segment registry ids. The pickers render
+# ``inference_models.name`` while dispatch parses the registry id out of
+# ``artifact_ref``, so the name is only a label. Ids without an entry here
+# keep their registry id as the display name.
+SEGMENT_DISPLAY_NAMES: dict[str, str] = {
+    "blla-segment": "kraken",
+    "ppocr-segment": "ppocr",
+}
+
+
+def display_name_for(registry_id: str) -> str:
+    """Return the catalog display name for a segment registry id."""
+    return SEGMENT_DISPLAY_NAMES.get(registry_id, registry_id)
+
+
+def artifact_ref_for(registry_id: str) -> str:
+    """Return the dispatch ref for a registry id (never a display name)."""
+    return f"registry://{registry_id}?tag=stable"
+
+
+def registry_id_from_artifact_ref(artifact_ref: str) -> str:
+    """Parse the registry id back out of a dispatch ref."""
+    ref = artifact_ref.removeprefix("registry://")
+    return ref.split("?", 1)[0]
+
+
+def candidate_names_for(registry_id: str) -> tuple[str, ...]:
+    """Return every name a catalog row for this id may still carry."""
+    display_name = display_name_for(registry_id)
+    if display_name == registry_id:
+        return (registry_id,)
+    return (registry_id, display_name)
+
+
 TRANSCRIBE_MODELS = _ids(
     "DEFAULT_TRANSCRIBE_MODEL",
     (
@@ -98,15 +133,23 @@ async def _upsert_model(*, name: str, task: InferenceTask) -> InferenceModel:
             f"{name!r} is a {entry.task.value} model in registry.yaml, seeded here as {task.value}"
         )
     provider = _PROVIDER_BY_ARCHITECTURE[entry.architecture]
-    artifact_ref = f"registry://{name}?tag=stable"
+    display_name = display_name_for(name)
+    artifact_ref = artifact_ref_for(name)
     default_params = {"device": entry.device.value}
 
     async with system_session() as session:
-        result = await session.execute(select(InferenceModel).where(InferenceModel.name == name))
+        result = await session.execute(
+            select(InferenceModel).where(InferenceModel.artifact_ref == artifact_ref)
+        )
         model = result.scalar_one_or_none()
         if model is None:
+            result = await session.execute(
+                select(InferenceModel).where(InferenceModel.name.in_(candidate_names_for(name)))
+            )
+            model = result.scalar_one_or_none()
+        if model is None:
             model = InferenceModel(
-                name=name,
+                name=display_name,
                 provider=provider,
                 task=task,
                 artifact_ref=artifact_ref,
@@ -114,6 +157,7 @@ async def _upsert_model(*, name: str, task: InferenceTask) -> InferenceModel:
             )
             session.add(model)
         else:
+            model.name = display_name
             model.provider = provider
             model.task = task
             model.artifact_ref = artifact_ref

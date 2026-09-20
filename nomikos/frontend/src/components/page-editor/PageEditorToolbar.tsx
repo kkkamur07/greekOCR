@@ -193,9 +193,15 @@ export function PageEditorToolbar({
   const selectedModelName =
     transcribeModels.find((model) => model.id === selectedTranscribeModelId)
       ?.name ?? "not selected";
-  const selectedSegmentModelName =
-    segmentModels.find((model) => model.id === selectedSegmentModelId)?.name ??
-    "Default";
+  const selectedSegmentModel = segmentModels.find(
+    (model) => model.id === selectedSegmentModelId,
+  );
+  const selectedSegmentModelName = selectedSegmentModel?.name ?? "Default";
+  // The tooltip names the model the button will actually use: the chosen
+  // catalog row, or the default binding when none is selected.
+  const segmentTooltip = selectedSegmentModel
+    ? `Segment this page with ${selectedSegmentModel.name}`
+    : "Segment this page with the default model";
 
   // The quick button transcribes what the researcher is looking at: the
   // selected segment if there is one, otherwise the page. Naming the scope on
@@ -351,7 +357,7 @@ export function PageEditorToolbar({
               onActionsOpenChange(false);
               void onRunAutoSegment();
             }}
-            title="Segment this page with blla-segment"
+            title={segmentTooltip}
           >
             <svg
               className="pe-tb-btn__icon"
