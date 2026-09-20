@@ -15,7 +15,9 @@ Nomikos is open research tooling for manuscript HTR workflows: page annotation, 
 - [greek-htr-calamari](https://huggingface.co/nomikos-project/greek-htr-calamari): Byzantine Greek line HTR (Calamari), published. Model card reports CER 0.156 on validation (19 lines) and 0.226 on test (21 lines)
 - [armenian-htr-calamari](https://huggingface.co/nomikos-project/armenian-htr-calamari): Armenian line HTR (Calamari), published. Model card reports CER 0.092 on validation (119 lines) and 0.072 on test (120 lines)
 - [syriac-htr-calamari](https://huggingface.co/nomikos-project/syriac-htr-calamari): Syriac line HTR (Calamari), published. Model card reports CER 0.181 on validation (331 lines) and 0.210 on test (335 lines)
+- [syriac-htr-ppocr_rec](https://huggingface.co/nomikos-project/syriac-htr-ppocr_rec): Syriac line HTR (PP-OCR recognition), published. Torch greedy decode measured CER 0.160 on EastSyriac Chapter4 (sanity figure, not a benchmark)
 - [coptic-htr-calamari](https://huggingface.co/nomikos-project/coptic-htr-calamari): Coptic line HTR (Calamari), published. Model card reports CER 0.082 on test (283 lines)
+- [segmentation-ppocrv6-det](https://huggingface.co/nomikos-project/segmentation-ppocrv6-det): Page segmentation (PP-OCRv6 text detection, ONNX Runtime) with refinement, published
 - Datasets: training and evaluation sets on Hugging Face, coming soon
 - [Author models on Hugging Face](https://huggingface.co/nomikos-project): Published checkpoints
 
