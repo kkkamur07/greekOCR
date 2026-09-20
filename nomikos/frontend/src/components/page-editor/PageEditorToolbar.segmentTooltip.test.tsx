@@ -35,7 +35,10 @@ const SEGMENT_MODELS = [
   segmentModel("seg-ppocr", "ppocr"),
 ];
 
-function toolbar(selectedSegmentModelId: string | null) {
+function toolbar(
+  segmentModels: InferenceModelResponse[],
+  selectedSegmentModelId: string | null,
+) {
   render(
     <PageEditorToolbar
       projectId="project-1"
@@ -61,7 +64,7 @@ function toolbar(selectedSegmentModelId: string | null) {
       transcribeModels={[]}
       selectedTranscribeModelId={null}
       onSelectedTranscribeModelIdChange={() => {}}
-      segmentModels={SEGMENT_MODELS}
+      segmentModels={segmentModels}
       selectedSegmentModelId={selectedSegmentModelId}
       onSelectedSegmentModelIdChange={() => {}}
       onRunAutoSegment={() => {}}
@@ -96,20 +99,18 @@ function toolbar(selectedSegmentModelId: string | null) {
 
 describe("PageEditorToolbar segment tooltip", () => {
   it("names the selected segment model", () => {
-    expect(toolbar("seg-kraken").getAttribute("title")).toBe(
+    expect(toolbar(SEGMENT_MODELS, "seg-kraken").getAttribute("title")).toBe(
       "Segment this page with kraken",
     );
   });
 
   it("follows the selection instead of a hard-coded model", () => {
-    expect(toolbar("seg-ppocr").getAttribute("title")).toBe(
+    expect(toolbar(SEGMENT_MODELS, "seg-ppocr").getAttribute("title")).toBe(
       "Segment this page with ppocr",
     );
   });
 
-  it("falls back to the default model when none is selected", () => {
-    expect(toolbar(null).getAttribute("title")).toBe(
-      "Segment this page with the default model",
-    );
+  it("says only Segment this page when the catalog is empty", () => {
+    expect(toolbar([], null).getAttribute("title")).toBe("Segment this page");
   });
 });
