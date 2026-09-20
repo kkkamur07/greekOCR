@@ -975,3 +975,114 @@ def test_report_files_are_owner_only(tmp_path, monkeypatch):
     for name in ("report.json", "report.md"):
         mode = stat_module.S_IMODE(os.stat(Path(out_dir, name)).st_mode)
         assert mode == 0o600, (name, oct(mode))
+
+
+def five_line_job(line_ids, result_ids=None, missing_page_ids=()):
+    ids = list(line_ids)
+    result = result_ids if result_ids is not None else ids
+    job = {
+        "id": "job-1",
+        "status": "done",
+        "type": "transcribe",
+        "document_id": "doc-1",
+        "document_part_id": "part-1",
+        "payload": {"ml_params": {"model": "syriac-ppocr-v1"}, "line_ids": ids},
+        "result": {
+            "transcription_id": "t-1",
+            "lines": [
+                {"line_id": line_id, "text": f"text {line_id}", "confidence": 0.9}
+                for line_id in result
+            ],
+        },
+    }
+    part_lines = [
+        {"id": line_id, "order": index, "points": BOX_A, "created_at": "2026-01-01"}
+        for index, line_id in enumerate(ids)
+        if line_id not in missing_page_ids
+    ]
+    return job, part_lines
+
+
+def stub_transcribe_run(monkeypatch, line_ids):
+    stub_run_model(
+        monkeypatch,
+        {
+            "lines": [
+                {
+                    "line_id": line_id,
+                    "line_index": index,
+                    "output": {
+                        "text": f"text {line_id}",
+                        "confidence": 0.9,
+                        "character_confidences": [],
+                    },
+                }
+                for index, line_id in enumerate(line_ids)
+            ]
+        },
+    )
+
+
+def run_transcribe_main(job, part_lines, tmp_path, extra_args):
+    transport = FakeTransport(
+        {
+            ("GET", "/inference/models"): json_route(FAKE_CATALOG),
+            ("GET", "/jobs/job-1"): json_route(job),
+            ("GET", "/parts/part-1/lines"): json_route(part_lines),
+            ("GET", "/media/parts/part-1"): lambda m, u, b: (200, b"fake-bytes"),
+        }
+    )
+    out_dir = str(tmp_path / "out")
+    code = nmk.main(
+        [
+            "--task",
+            "transcribe",
+            "--model",
+            "syriac",
+            "--job-id",
+            "job-1",
+            "--out",
+            out_dir,
+            *extra_args,
+            *BASE_ARGS,
+        ],
+        transport=transport,
+    )
+    return code, out_dir
+
+
+def test_limit_with_all_job_lines_present_is_identical(tmp_path, monkeypatch):
+    monkeypatch.setenv("NOMIKOS_TOKEN", "dummy")
+    ids = [f"L{i}" for i in range(5)]
+    stub_transcribe_run(monkeypatch, ids[:2])
+    job, part_lines = five_line_job(ids)
+    code, out_dir = run_transcribe_main(job, part_lines, tmp_path, ["--line-limit", "2"])
+    assert code == 0
+    report = json.loads(Path(out_dir, "report.json").read_text(encoding="utf-8"))
+    assert report["comparison"]["verdict"] == "IDENTICAL"
+    assert report["header"]["lines_requested"] == 2
+    assert report["header"]["lines_compared"] == 2
+
+
+def test_limit_with_missing_job_line_is_not_comparable(tmp_path, monkeypatch):
+    monkeypatch.setenv("NOMIKOS_TOKEN", "dummy")
+    ids = [f"L{i}" for i in range(5)]
+    stub_transcribe_run(monkeypatch, ["L0"])
+    job, part_lines = five_line_job(ids, missing_page_ids=("L1",))
+    code, out_dir = run_transcribe_main(job, part_lines, tmp_path, ["--line-limit", "2"])
+    assert code == 3
+    report = json.loads(Path(out_dir, "report.json").read_text(encoding="utf-8"))
+    assert report["comparison"]["verdict"] == "NOT_COMPARABLE"
+    assert "job line L1 no longer exists on the page" in report["comparison"]["reason"]
+
+
+def test_no_limit_with_missing_job_line_is_not_comparable(tmp_path, monkeypatch):
+    monkeypatch.setenv("NOMIKOS_TOKEN", "dummy")
+    ids = [f"L{i}" for i in range(5)]
+    stub_transcribe_run(monkeypatch, [i for i in ids if i != "L3"])
+    job, part_lines = five_line_job(ids, missing_page_ids=("L3",))
+    code, out_dir = run_transcribe_main(job, part_lines, tmp_path, [])
+    assert code == 3
+    report = json.loads(Path(out_dir, "report.json").read_text(encoding="utf-8"))
+    assert report["comparison"]["verdict"] == "NOT_COMPARABLE"
+    assert "job line L3 no longer exists on the page" in report["comparison"]["reason"]

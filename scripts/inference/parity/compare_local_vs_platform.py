@@ -869,6 +869,10 @@ def render_report_markdown(report: dict[str, Any]) -> str:
         lines.append(f"Merge summary: {json.dumps(header['merge_summary'], sort_keys=True)}")
     if header.get("transcription_id") is not None:
         lines.append(f"Transcription: {header['transcription_id']}")
+    if header.get("lines_requested") is not None:
+        lines.append(f"Lines requested: {header['lines_requested']}")
+    if header.get("lines_compared") is not None:
+        lines.append(f"Lines compared: {header['lines_compared']}")
     lines.extend(["", "## Comparison", ""])
     if comparison.get("verdict") == "NOT_COMPARABLE":
         lines.append(f"No comparison: {comparison.get('reason', 'not comparable')}")
@@ -1333,21 +1337,55 @@ def run_comparison(
         )
 
     part_lines = client.list_part_lines(args.project_id, args.document_id, part_id)
-    job_line_ids = payload.get("line_ids")
-    params, _ = build_transcribe_params(
-        part_lines,
-        list(job_line_ids) if isinstance(job_line_ids, list) else None,
-        base_params,
-        args.line_limit,
-    )
-    image_bytes = client.page_image_bytes(part_id)
-    local_dump = _run_local(args.task, registry_model_id, registry_tag, image_bytes, params)
     summary = job.get("result") if isinstance(job.get("result"), dict) else {}
     transcription_id, platform_lines, failed_indexes = parse_platform_transcribe(summary)
-    limited_ids = {str(region["line_id"]) for region in params["lines"]}
-    platform_lines = [line for line in platform_lines if str(line.get("line_id")) in limited_ids]
+    payload_ids = payload.get("line_ids")
+    if isinstance(payload_ids, list) and payload_ids:
+        job_ordered_ids = [str(line_id) for line_id in payload_ids]
+    else:
+        job_ordered_ids = [
+            str(line.get("line_id")) for line in platform_lines if line.get("line_id") is not None
+        ]
+    if args.line_limit is not None:
+        requested_ids = job_ordered_ids[: args.line_limit]
+    else:
+        requested_ids = job_ordered_ids
+    page_ids = {str(line.get("id")) for line in part_lines}
+    missing_ids = [line_id for line_id in requested_ids if line_id not in page_ids]
+    if missing_ids:
+        reason = (
+            f"job line {missing_ids[0]} no longer exists on the page "
+            f"({len(missing_ids)} of {len(requested_ids)} requested lines missing)"
+        )
+        print(reason, file=sys.stderr)
+        header = _base_header(
+            args,
+            model_entry,
+            registry_model_id,
+            registry_tag,
+            model_uuid,
+            job_id,
+            dict(base_params),
+            None,
+            None,
+        )
+        header["transcription_id"] = transcription_id
+        header["model_verification"] = model_verification
+        header["lines_requested"] = len(requested_ids)
+        header["lines_compared"] = len(requested_ids) - len(missing_ids)
+        comparison = {
+            "verdict": "NOT_COMPARABLE",
+            "reason": reason,
+            "missing_line_ids": missing_ids,
+        }
+        return _write_report(args, header, comparison, None, summary, out_dir)
+    params, _ = build_transcribe_params(part_lines, requested_ids or None, base_params, None)
+    image_bytes = client.page_image_bytes(part_id)
+    local_dump = _run_local(args.task, registry_model_id, registry_tag, image_bytes, params)
+    requested_set = set(requested_ids)
+    platform_subset = [line for line in platform_lines if str(line.get("line_id")) in requested_set]
     comparison = compare_transcribe_lines(
-        local_dump.get("lines", []), platform_lines, failed_indexes
+        local_dump.get("lines", []), platform_subset, failed_indexes
     )
     header = _base_header(
         args,
@@ -1362,6 +1400,8 @@ def run_comparison(
     )
     header["transcription_id"] = transcription_id
     header["model_verification"] = model_verification
+    header["lines_requested"] = len(requested_ids) if requested_ids else len(params["lines"])
+    header["lines_compared"] = len(platform_subset)
     return _write_report(args, header, comparison, local_dump, summary, out_dir)
 
 

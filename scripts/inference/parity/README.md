@@ -14,9 +14,8 @@ python scripts/inference/parity/compare_local_vs_platform.py \
   --out /tmp/nmk-parity/run1
 ```
 
-Credentials: `NOMIKOS_TOKEN`, or `NOMIKOS_EMAIL` plus
-`NOMIKOS_PASSWORD`, or `--env-file PATH` (also `LOCUST_*`).
-Secrets never reach the report.
+Credentials: `NOMIKOS_TOKEN`, email plus password, or `--env-file`
+(`LOCUST_*` work too). Secrets never reach the report.
 
 ## Safety
 
@@ -34,6 +33,8 @@ compares stored part lines, never `job.result` (merge summary
 only). Staleness rule: every model-produced stored line must name
 the selected job in `source_metadata.job_id`; newer foreign lines
 give NOT_COMPARABLE, older ones fall under the protected gate
-(`--allow-merged` overrides). `--line-limit N` compares only the
-first N transcribe lines on both sides (worker version is not
-exposed by the API).
+(`--allow-merged` overrides). Transcribe compares the job's own
+line ids (first N with `--line-limit`); a job line missing from
+the page gives NOT_COMPARABLE. The header shows requested vs
+compared counts; IDENTICAL needs them equal. Worker version is
+not exposed by the API.
