@@ -75,6 +75,14 @@ caption) reads as its own band between the rows above and below it. Narrow
 quads (marginal notes, page numbers, initials) attach to the nearest column
 without splitting it.
 
+Sessions are created with `ORT_ENABLE_EXTENDED`, sequential execution, 1
+inter-op thread and 4 intra-op threads: EXTENDED is about 2x faster than
+the ALL default with identical boxes, and 4 threads measured 5.85 s on c13
+against 11.0 s at 2 threads and 3.6 s at 8
+(docs/inference/ppocrv6-onnx-performance-2026-09-20.md). The intra-op
+count comes from `NOMIKOS_PPOCR_DET_THREADS` (integer 1 to 64, default 4);
+an invalid value fails the run with a clear error.
+
 ## Decisions and their reasons
 
 Boxes, not baselines: PP-OCRv6 emits boxes and the segment contract needs a
@@ -131,6 +139,23 @@ vertical position (grec-p4 box 49). Watermarks, page labels and marginal
 text are returned as ordinary lines interleaved with body text (vat-1r
 diagonal library stamps 1-4 and right-margin fragments 57, 59, 62, 64),
 which is expected from the known gaps below.
+
+## Publication and registry
+
+The artifact is published at
+`hf://nomikos-project/segmentation-ppocrv6-det@stable` (file
+`ppocrv6-det.onnx`), pinned in `nomikos_inference/registry.yaml` under
+model id `ppocrv6-det-medium` by Hub commit
+`5091b556c838ce540fde886ead2546fd5feadf62` and artifact SHA-256
+`09e4c827c5bb20a0344374bbf8b88d41b7c8bf2be3a0db82ffed3bf090eacfe3`.
+The download was verified back from the Hub at the pinned revision before
+registering.
+
+How to make it selectable: a row in the platform `inference_models`
+catalog table is what exposes a model, inserted by the maintainer; the
+page editor has no segment-model picker yet, and the segment endpoint
+already accepts `model_id`. Nothing is deployed and this model is not the
+default segmenter.
 
 ## Known gaps
 
