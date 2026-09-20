@@ -215,6 +215,13 @@ def test_the_cache_directory_resolves_to_the_graph_not_the_checkpoint(tmp_path: 
 
     assert find_hub_artifact(blla_dir, architecture="blla").name == "blla.onnx"
 
+    ppocr_dir = tmp_path / "ppocr"
+    ppocr_dir.mkdir()
+    (ppocr_dir / "a.onnx").write_bytes(b"alphabetically first graph")
+    (ppocr_dir / "ppocrv6-det.onnx").write_bytes(b"graph")
+
+    assert find_hub_artifact(ppocr_dir, architecture="ppocr-det").name == "ppocrv6-det.onnx"
+
 
 # --- Integrity is checked before the artifact is opened -----------------------
 

@@ -8,6 +8,7 @@ before the file is opened.
 
 from __future__ import annotations
 
+import math
 import os
 from collections.abc import Mapping
 from functools import lru_cache
@@ -130,19 +131,26 @@ def _load_ppocr_det_session(
         raise PPOCRDetUnavailableError("unable to load PP-OCRv6 det ONNX model") from error
 
 
-def _positive_float_param(params: Mapping[str, Any], key: str, default: float) -> float:
-    """Parse a caller-supplied positive number, falling back to the default.
+def _bounded_float_param(
+    params: Mapping[str, Any], key: str, default: float, minimum: float, maximum: float
+) -> float:
+    """Parse a caller-supplied number inside documented bounds.
 
-    Like the blla helper of the same shape: upper bounds belong to admission
-    where they exist, and an unparseable or non-positive value means "use the
-    default" rather than failing the page.
+    Bools, non-numeric values, non-finite values and out-of-range values
+    raise the same ``ValueError`` the other bounds checks raise, naming the
+    param and the bound, instead of failing the page silently later (``inf``
+    thresholds empty the page, ``inf`` unclip ratios crash the offsetter).
     """
     value = params.get(key, default)
+    if isinstance(value, bool):
+        raise ValueError(f"{key} must be a number between {minimum} and {maximum}")
     try:
         parsed = float(value)
     except (TypeError, ValueError):
-        return default
-    return parsed if parsed > 0 else default
+        raise ValueError(f"{key} must be a number between {minimum} and {maximum}") from None
+    if not math.isfinite(parsed) or not minimum <= parsed <= maximum:
+        raise ValueError(f"{key} must be a number between {minimum} and {maximum}")
+    return parsed
 
 
 def _limit_side_len(params: Mapping[str, Any]) -> int:
@@ -151,7 +159,7 @@ def _limit_side_len(params: Mapping[str, Any]) -> int:
         raise ValueError("limit_side_len must be an integer")
     try:
         parsed = int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         raise ValueError("limit_side_len must be an integer") from None
     if isinstance(value, float) and float(parsed) != value:
         raise ValueError("limit_side_len must be an integer")
@@ -165,26 +173,28 @@ def _limit_side_len(params: Mapping[str, Any]) -> int:
 def _max_candidates(params: Mapping[str, Any]) -> int:
     value = params.get("max_candidates", DEFAULT_MAX_CANDIDATES)
     if isinstance(value, bool):
-        raise ValueError("max_candidates must be an integer")
+        raise ValueError("max_candidates must be an integer between 1 and 10000")
     try:
         parsed = int(value)
-    except (TypeError, ValueError):
-        raise ValueError("max_candidates must be an integer") from None
+    except (TypeError, ValueError, OverflowError):
+        raise ValueError("max_candidates must be an integer between 1 and 10000") from None
     if isinstance(value, float) and float(parsed) != value:
-        raise ValueError("max_candidates must be an integer")
-    if parsed <= 0:
-        raise ValueError("max_candidates must be positive")
+        raise ValueError("max_candidates must be an integer between 1 and 10000")
+    if not 1 <= parsed <= 10000:
+        raise ValueError("max_candidates must be an integer between 1 and 10000")
     return parsed
 
 
 def _baseline_fraction(params: Mapping[str, Any]) -> float:
     value = params.get("baseline_fraction", DEFAULT_BASELINE_FRACTION)
+    if isinstance(value, bool):
+        raise ValueError("baseline_fraction must be a number between 0 and 1")
     try:
         parsed = float(value)
     except (TypeError, ValueError):
-        raise ValueError("baseline_fraction must be a number") from None
-    if not 0 <= parsed <= 1:
-        raise ValueError("baseline_fraction must be between 0 and 1")
+        raise ValueError("baseline_fraction must be a number between 0 and 1") from None
+    if not math.isfinite(parsed) or not 0 <= parsed <= 1:
+        raise ValueError("baseline_fraction must be a number between 0 and 1")
     return parsed
 
 
@@ -224,21 +234,23 @@ def run_ppocr_det_segment(
     _resolve_ppocr_det_artifact(model_path, artifact_sha256)
     resolved = params or {}
     limit = _limit_side_len(resolved)
-    thresh = _positive_float_param(resolved, "thresh", DEFAULT_THRESH)
-    box_thresh = _positive_float_param(resolved, "box_thresh", DEFAULT_BOX_THRESH)
-    unclip_ratio = _positive_float_param(resolved, "unclip_ratio", DEFAULT_UNCLIP_RATIO)
+    thresh = _bounded_float_param(resolved, "thresh", DEFAULT_THRESH, 0, 1)
+    box_thresh = _bounded_float_param(resolved, "box_thresh", DEFAULT_BOX_THRESH, 0, 1)
+    unclip_ratio = _bounded_float_param(resolved, "unclip_ratio", DEFAULT_UNCLIP_RATIO, 0, 5)
     max_candidates = _max_candidates(resolved)
     fraction = _baseline_fraction(resolved)
     direction = _reading_direction(resolved)
     merge_fragments = _bool_param(resolved, "merge_fragments", True)
     resolve_overlaps = _bool_param(resolved, "resolve_overlaps", True)
     noise_policy = _noise_policy(resolved)
-    merge_gap_ratio = _positive_float_param(resolved, "merge_gap_ratio", DEFAULT_MERGE_GAP_RATIO)
-    merge_max_height_ratio = _positive_float_param(
-        resolved, "merge_max_height_ratio", DEFAULT_MERGE_MAX_HEIGHT_RATIO
+    merge_gap_ratio = _bounded_float_param(
+        resolved, "merge_gap_ratio", DEFAULT_MERGE_GAP_RATIO, 0, 10
     )
-    overlap_cut_threshold = _positive_float_param(
-        resolved, "overlap_cut_threshold", DEFAULT_OVERLAP_CUT_THRESHOLD
+    merge_max_height_ratio = _bounded_float_param(
+        resolved, "merge_max_height_ratio", DEFAULT_MERGE_MAX_HEIGHT_RATIO, 1, 10
+    )
+    overlap_cut_threshold = _bounded_float_param(
+        resolved, "overlap_cut_threshold", DEFAULT_OVERLAP_CUT_THRESHOLD, 0.05, 1
     )
 
     with open_image_bytes(image_bytes) as image:

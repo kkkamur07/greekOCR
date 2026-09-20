@@ -306,6 +306,63 @@ def test_bad_refinement_params_raise(monkeypatch: pytest.MonkeyPatch, tmp_path: 
             _run_with_session(monkeypatch, tmp_path, _two_line_map(), params=params)
 
 
+@pytest.mark.parametrize(
+    ("key", "bad"),
+    [
+        ("thresh", 1.5),
+        ("box_thresh", -0.1),
+        ("unclip_ratio", 6.0),
+        ("max_candidates", 0),
+        ("baseline_fraction", 1.5),
+        ("limit_side_len", 100),
+        ("merge_gap_ratio", 11.0),
+        ("merge_max_height_ratio", 0.5),
+        ("overlap_cut_threshold", 0.01),
+    ],
+)
+def test_out_of_range_params_raise(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, key: str, bad: object
+) -> None:
+    with pytest.raises(ValueError, match=key):
+        _run_with_session(monkeypatch, tmp_path, _two_line_map(), params={key: bad})
+
+
+@pytest.mark.parametrize("raw", [float("inf"), float("nan"), "wide", True])
+@pytest.mark.parametrize(
+    "key",
+    [
+        "thresh",
+        "box_thresh",
+        "unclip_ratio",
+        "baseline_fraction",
+        "merge_gap_ratio",
+        "merge_max_height_ratio",
+        "overlap_cut_threshold",
+    ],
+)
+def test_non_finite_unparseable_or_bool_floats_raise(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, key: str, raw: object
+) -> None:
+    with pytest.raises(ValueError, match=key):
+        _run_with_session(monkeypatch, tmp_path, _two_line_map(), params={key: raw})
+
+
+@pytest.mark.parametrize("raw", [float("inf"), float("nan"), "huge", True])
+def test_non_finite_unparseable_or_bool_side_len_raise(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, raw: object
+) -> None:
+    with pytest.raises(ValueError, match="limit_side_len"):
+        _run_with_session(monkeypatch, tmp_path, _two_line_map(), params={"limit_side_len": raw})
+
+
+@pytest.mark.parametrize("raw", [float("inf"), float("nan"), "many", True, 0, 10001])
+def test_bad_max_candidates_raise(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, raw: object
+) -> None:
+    with pytest.raises(ValueError, match="max_candidates"):
+        _run_with_session(monkeypatch, tmp_path, _two_line_map(), params={"max_candidates": raw})
+
+
 def test_run_model_dispatches_ppocr_det(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """The runner hands a ``ppocr-det`` entry to the new adapter verbatim."""
     monkeypatch.setattr("nomikos_inference.jobs.runner.validate_image_bytes", lambda *_args: None)
