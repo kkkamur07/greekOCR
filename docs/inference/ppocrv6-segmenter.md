@@ -280,6 +280,12 @@ quad|poly|both` (default `quad`) selects the served geometry; `both` runs
 off, defaults and drop in each mode and prints a per-page and overall
 quad-vs-poly comparison (mean polygon points, mean polygon over quad area,
 mean overlap between consecutive lines per mode, seconds per page per mode).
+With `--box-type quad` or `--box-type poly` the overlay is
+`<page>.refined.overlay.jpg`. With `--box-type both` each mode writes its
+own overlay, `<page>.refined.quad.overlay.jpg` and
+`<page>.refined.poly.overlay.jpg`, and the per-page JSON carries
+`suspect_numbers_quad` and `suspect_numbers_poly` instead of
+`suspect_numbers`.
 
 ## Polygon output (0.4.1)
 
