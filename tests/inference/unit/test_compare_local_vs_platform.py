@@ -1,13 +1,17 @@
 """Unit tests for the local vs platform parity harness.
 
 No network and no model weights: the API transport is faked and the
-runner is stubbed where the full flow is exercised.
+runner is stubbed where the full flow is exercised. Platform fixtures
+use the real backend shapes: stored part lines for segment (with the
+``external_id``/``job_id`` keys the merge adds to ``source_metadata``)
+and the flat ``transcription_id``/``lines`` summary for transcribe.
 """
 
 from __future__ import annotations
 
 import importlib.util
 import json
+import math
 import os
 from pathlib import Path
 
@@ -49,10 +53,14 @@ FAKE_CATALOG = [
     },
 ]
 
+BOX_A = [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0]]
+BOX_B = [[0.0, 20.0], [10.0, 20.0], [10.0, 30.0], [0.0, 30.0]]
+BASE_A = [[0.0, 7.0], [10.0, 7.0]]
 
-def seg_line(order, points, baseline=None, kind="polygon"):
+
+def seg_local(order, points, baseline=None, kind="polygon"):
     return {
-        "external_id": f"line-{order}",
+        "external_id": f"ppocr-det-line-{order + 1}",
         "order": order,
         "kind": kind,
         "points": points,
@@ -62,13 +70,39 @@ def seg_line(order, points, baseline=None, kind="polygon"):
     }
 
 
-BOX_A = [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0]]
-BOX_B = [[0.0, 20.0], [10.0, 20.0], [10.0, 30.0], [0.0, 30.0]]
-BASE_A = [[0.0, 7.0], [10.0, 7.0]]
+def seg_stored(line_id, order, points, baseline=None, created="2026-01-01T00:00:00"):
+    return {
+        "id": line_id,
+        "order": order,
+        "points": points,
+        "baseline": {"points": baseline} if baseline is not None else {"points": []},
+        "mask": None,
+        "kind": "polygon",
+        "source_metadata": {
+            "role": "line",
+            "suspect": False,
+            "external_id": f"ppocr-det-line-{order + 1}",
+            "job_id": "job-1",
+        },
+        "created_at": created,
+    }
 
 
 def shift(points, delta):
     return [[x + delta, y + delta] for x, y in points]
+
+
+def tr_local(line_id, index, text, confidence=0.9, error=None):
+    return {
+        "line_id": line_id,
+        "line_index": index,
+        "output": {"text": text, "confidence": confidence, "character_confidences": []},
+        "error": error,
+    }
+
+
+def tr_flat(line_id, text, confidence=0.9):
+    return {"line_id": line_id, "text": text, "confidence": confidence}
 
 
 def test_resolve_model_by_display_name_registry_id_and_uuid():
@@ -84,63 +118,62 @@ def test_resolve_model_by_display_name_registry_id_and_uuid():
         nmk.resolve_model(FAKE_CATALOG, "no-such-model")
 
 
-def test_segment_identical():
-    lines = [seg_line(0, BOX_A, BASE_A), seg_line(1, BOX_B)]
-    result = nmk.compare_segment_lines(lines, [dict(line) for line in lines])
+def test_segment_identical_against_stored_shape():
+    local = [seg_local(0, BOX_A, BASE_A), seg_local(1, BOX_B)]
+    platform = [seg_stored("a", 0, BOX_A, BASE_A), seg_stored("b", 1, BOX_B)]
+    result = nmk.compare_segment_lines(local, platform)
     assert result["verdict"] == "IDENTICAL"
     assert result["local_line_count"] == result["platform_line_count"] == 2
 
 
 def test_segment_numeric_shift():
-    local = [seg_line(0, BOX_A, BASE_A)]
-    platform = [seg_line(0, shift(BOX_A, 0.5), shift(BASE_A, 0.5))]
+    local = [seg_local(0, BOX_A, BASE_A)]
+    platform = [seg_stored("a", 0, shift(BOX_A, 0.5), shift(BASE_A, 0.5))]
     result = nmk.compare_segment_lines(local, platform)
     assert result["verdict"] == "NUMERIC"
     assert result["max_coordinate_diff"] == pytest.approx(0.5)
 
 
 def test_segment_reordered_is_mismatch_with_order_differences():
-    local = [seg_line(0, BOX_A, BASE_A), seg_line(1, BOX_B)]
-    platform = [seg_line(0, BOX_B), seg_line(1, BOX_A, BASE_A)]
+    local = [seg_local(0, BOX_A, BASE_A), seg_local(1, BOX_B)]
+    platform = [seg_stored("a", 0, BOX_B), seg_stored("b", 1, BOX_A, BASE_A)]
     result = nmk.compare_segment_lines(local, platform)
     assert result["verdict"] == "MISMATCH"
     assert result["order_differences"]
 
 
 def test_segment_missing_line():
-    local = [seg_line(0, BOX_A, BASE_A), seg_line(1, BOX_B)]
-    platform = [seg_line(0, BOX_A, BASE_A)]
+    local = [seg_local(0, BOX_A, BASE_A), seg_local(1, BOX_B)]
+    platform = [seg_stored("a", 0, BOX_A, BASE_A)]
     result = nmk.compare_segment_lines(local, platform)
     assert result["verdict"] == "MISMATCH"
     assert result["only_local"] == [1]
     assert result["platform_line_count"] == 1
 
 
-def tr_line(line_id, index, text, confidence=0.9):
-    return {
-        "line_id": line_id,
-        "line_index": index,
-        "output": {"text": text, "confidence": confidence, "character_confidences": []},
-    }
+def test_segment_empty_is_not_identical():
+    result = nmk.compare_segment_lines([], [])
+    assert result["verdict"] == "EMPTY"
 
 
-def test_transcribe_identical():
-    lines = [tr_line("a", 0, "hello"), tr_line("b", 1, "world")]
-    result = nmk.compare_transcribe_lines(lines, [dict(line) for line in lines])
+def test_transcribe_identical_against_flat_shape():
+    local = [tr_local("a", 0, "hello"), tr_local("b", 1, "world")]
+    platform = [tr_flat("a", "hello", 0.9), tr_flat("b", "world", 0.9)]
+    result = nmk.compare_transcribe_lines(local, platform)
     assert result["verdict"] == "IDENTICAL"
 
 
 def test_transcribe_confidence_only():
-    local = [tr_line("a", 0, "hello", 0.9)]
-    platform = [tr_line("a", 0, "hello", 0.5)]
+    local = [tr_local("a", 0, "hello", 0.9)]
+    platform = [tr_flat("a", "hello", 0.5)]
     result = nmk.compare_transcribe_lines(local, platform)
     assert result["verdict"] == "CONFIDENCE_ONLY"
     assert result["max_confidence_diff"] == pytest.approx(0.4)
 
 
 def test_transcribe_text_diff_lists_both_texts():
-    local = [tr_line("a", 0, "hello")]
-    platform = [tr_line("a", 0, "hallo")]
+    local = [tr_local("a", 0, "hello")]
+    platform = [tr_flat("a", "hallo")]
     result = nmk.compare_transcribe_lines(local, platform)
     assert result["verdict"] == "MISMATCH"
     assert len(result["line_differences"]) == 1
@@ -148,6 +181,89 @@ def test_transcribe_text_diff_lists_both_texts():
     assert diff["local_text"] == "hello"
     assert diff["platform_text"] == "hallo"
     assert result["max_cer"] > 0.0
+
+
+def test_transcribe_error_mismatch_is_mismatch():
+    local = [tr_local("a", 0, "hello", error="Line could not be transcribed")]
+    platform = [tr_flat("a", "hello", 0.9)]
+    result = nmk.compare_transcribe_lines(local, platform)
+    assert result["verdict"] == "MISMATCH"
+
+
+def test_transcribe_empty_is_not_identical():
+    result = nmk.compare_transcribe_lines([], [])
+    assert result["verdict"] == "EMPTY"
+
+
+def test_transcribe_surfaces_failed_line_indexes():
+    local = [tr_local("a", 0, "hello")]
+    platform = [tr_flat("a", "hello", 0.9)]
+    result = nmk.compare_transcribe_lines(local, platform, failed_line_indexes=[1])
+    assert result["verdict"] == "IDENTICAL"
+    assert result["failed_line_indexes"] == [1]
+
+
+def rotated(rect, degrees):
+    cx = sum(point[0] for point in rect) / len(rect)
+    cy = sum(point[1] for point in rect) / len(rect)
+    radians = math.radians(degrees)
+    cosine, sine = math.cos(radians), math.sin(radians)
+    return [
+        [
+            cx + (x - cx) * cosine - (y - cy) * sine,
+            cy + (x - cx) * sine + (y - cy) * cosine,
+        ]
+        for x, y in rect
+    ]
+
+
+def check_iou_properties():
+    box = [[0.0, 0.0], [10.0, 0.0], [10.0, 2.0], [0.0, 2.0]]
+    turned = rotated(box, 30)
+    assert nmk.polygon_iou(turned, turned) == pytest.approx(1.0)
+    far = [[x + 50.0, y + 50.0] for x, y in box]
+    assert nmk.polygon_iou(box, far) == 0.0
+    half = [[5.0, 0.0], [15.0, 0.0], [15.0, 2.0], [5.0, 2.0]]
+    assert nmk.polygon_iou(box, half) == pytest.approx(1.0 / 3.0)
+    for angle in (0, 15, 45, 90):
+        for dx, dy in ((0, 0), (3, 1), (20, 0)):
+            first = rotated(box, angle)
+            second = [[x + dx, y + dy] for x, y in rotated(box, angle + 10)]
+            score = nmk.polygon_iou(first, second)
+            assert 0.0 <= score <= 1.0
+
+
+def test_polygon_iou_with_shapely():
+    assert nmk._HAS_SHAPELY
+    check_iou_properties()
+
+
+def test_polygon_iou_fallback(monkeypatch):
+    monkeypatch.setattr(nmk, "_HAS_SHAPELY", False)
+    check_iou_properties()
+
+
+def test_build_transcribe_params_order_filter_index():
+    part_lines = [
+        {"id": "b", "order": 1, "points": BOX_B, "created_at": "2026-01-02"},
+        {"id": "a", "order": 0, "points": BOX_A, "created_at": "2026-01-01"},
+        {"id": "c", "order": 0, "points": BOX_A, "created_at": "2026-01-03"},
+    ]
+    params, ordered = nmk.build_transcribe_params(part_lines, ["c", "a"], {}, None)
+    assert [line["id"] for line in ordered] == ["a", "c"]
+    assert [region["line_index"] for region in params["lines"]] == [0, 1]
+    assert [region["line_id"] for region in params["lines"]] == ["a", "c"]
+
+
+def test_build_transcribe_params_empty_raises():
+    with pytest.raises(nmk.ApiError):
+        nmk.build_transcribe_params([], None, {}, None)
+    with pytest.raises(nmk.ApiError):
+        nmk.build_transcribe_params(
+            [{"id": "a", "order": 0, "points": BOX_A}], ["missing"], {}, None
+        )
+    with pytest.raises(nmk.ApiError):
+        nmk.build_transcribe_params([{"id": "a", "order": 0, "points": BOX_A}], None, {}, 0)
 
 
 class FakeTransport:
@@ -171,6 +287,18 @@ def json_route(payload, status=200):
     return handler
 
 
+BASE_ARGS = [
+    "--api",
+    "http://127.0.0.1:9",
+    "--project-id",
+    "proj-1",
+    "--document-id",
+    "doc-1",
+    "--part-id",
+    "part-1",
+]
+
+
 def test_segment_enqueue_without_flag_makes_no_network_call():
     transport = FakeTransport({})
     code = nmk.main(
@@ -178,16 +306,9 @@ def test_segment_enqueue_without_flag_makes_no_network_call():
             "--task",
             "segment",
             "--enqueue",
-            "--project-id",
-            "x",
-            "--document-id",
-            "y",
-            "--part-id",
-            "z",
             "--model",
             "ppocr",
-            "--api",
-            "http://127.0.0.1:9",
+            *BASE_ARGS,
         ],
         transport=transport,
     )
@@ -195,33 +316,99 @@ def test_segment_enqueue_without_flag_makes_no_network_call():
     assert transport.calls == []
 
 
-def test_secrets_never_appear_in_report(tmp_path, monkeypatch):
-    secret = "super-secret-token-value-xyz"
-    monkeypatch.setenv("NOMIKOS_TOKEN", secret)
-    job = {
-        "id": "job-1",
-        "status": "done",
-        "error": None,
-        "document_part_id": "part-1",
-        "project_id": "proj-1",
-        "document_id": "doc-1",
-        "payload": {"ml_params": {"note": secret}},
-        "result": {"blocks": [], "lines": []},
-    }
-    routes = {
-        ("GET", "/inference/models"): json_route(FAKE_CATALOG),
-        ("GET", "/jobs/job-1"): json_route(job),
-        ("GET", "/media/parts/part-1"): lambda m, u, b: (200, b"fake-bytes"),
-    }
-    transport = FakeTransport(routes)
+def test_failed_job_path(tmp_path, monkeypatch):
+    monkeypatch.setenv("NOMIKOS_TOKEN", "dummy")
+    job = {"id": "job-1", "status": "failed", "type": "segment", "error": "boom"}
+    transport = FakeTransport(
+        {
+            ("GET", "/inference/models"): json_route(FAKE_CATALOG),
+            ("GET", "/jobs/job-1"): json_route(job),
+        }
+    )
+    code = nmk.main(
+        [
+            "--task",
+            "segment",
+            "--model",
+            "ppocr",
+            "--job-id",
+            "job-1",
+            "--out",
+            str(tmp_path / "out"),
+            *BASE_ARGS,
+        ],
+        transport=transport,
+    )
+    assert code == 2
 
+
+def test_job_type_mismatch(tmp_path, monkeypatch):
+    monkeypatch.setenv("NOMIKOS_TOKEN", "dummy")
+    job = {"id": "job-1", "status": "done", "type": "segment", "payload": {}, "result": {}}
+    transport = FakeTransport(
+        {
+            ("GET", "/inference/models"): json_route(FAKE_CATALOG),
+            ("GET", "/jobs/job-1"): json_route(job),
+        }
+    )
+    code = nmk.main(
+        [
+            "--task",
+            "transcribe",
+            "--model",
+            "syriac",
+            "--job-id",
+            "job-1",
+            "--out",
+            str(tmp_path / "out"),
+            *BASE_ARGS,
+        ],
+        transport=transport,
+    )
+    assert code == 2
+
+
+def merge_summary(**overrides):
+    summary = {
+        "blocks_count": 1,
+        "lines_count": 1,
+        "added_lines": 1,
+        "pruned_lines": 0,
+        "preserved_manual_lines": 0,
+        "preserved_transcribed_lines": 0,
+        "skipped_covered_lines": 0,
+    }
+    summary.update(overrides)
+    return summary
+
+
+def stub_run_model(monkeypatch, payload):
     import nomikos_inference.jobs.runner as runner_module
 
     class FakeResponse:
         def model_dump(self, mode="json"):
-            return {"blocks": [], "lines": []}
+            return payload
 
     monkeypatch.setattr(runner_module, "run_model", lambda **kwargs: FakeResponse())
+
+
+def test_segment_not_comparable_gate(tmp_path, monkeypatch):
+    monkeypatch.setenv("NOMIKOS_TOKEN", "dummy")
+    job = {
+        "id": "job-1",
+        "status": "done",
+        "type": "segment",
+        "payload": {"ml_params": {}},
+        "result": merge_summary(preserved_manual_lines=1),
+    }
+    stored = [seg_stored("a", 0, BOX_A, BASE_A)]
+    transport = FakeTransport(
+        {
+            ("GET", "/inference/models"): json_route(FAKE_CATALOG),
+            ("GET", "/jobs/job-1"): json_route(job),
+            ("GET", "/parts/part-1/lines"): json_route(stored),
+        }
+    )
     out_dir = str(tmp_path / "out")
     code = nmk.main(
         [
@@ -231,14 +418,104 @@ def test_secrets_never_appear_in_report(tmp_path, monkeypatch):
             "ppocr",
             "--job-id",
             "job-1",
-            "--project-id",
-            "proj-1",
-            "--document-id",
-            "doc-1",
-            "--part-id",
-            "part-1",
             "--out",
             out_dir,
+            *BASE_ARGS,
+        ],
+        transport=transport,
+    )
+    assert code == 3
+    report = json.loads(Path(out_dir, "report.json").read_text(encoding="utf-8"))
+    assert report["comparison"]["verdict"] == "NOT_COMPARABLE"
+    assert report["header"]["merge_summary"]["preserved_manual_lines"] == 1
+    markdown = Path(out_dir, "report.md").read_text(encoding="utf-8")
+    assert "NOT_COMPARABLE" in markdown
+
+
+def test_segment_allow_merged_compares(tmp_path, monkeypatch):
+    monkeypatch.setenv("NOMIKOS_TOKEN", "dummy")
+    stub_run_model(monkeypatch, {"blocks": [], "lines": [seg_local(0, BOX_A, BASE_A)]})
+    job = {
+        "id": "job-1",
+        "status": "done",
+        "type": "segment",
+        "payload": {"ml_params": {}},
+        "result": merge_summary(preserved_manual_lines=1),
+    }
+    stored = [seg_stored("a", 0, BOX_A, BASE_A)]
+    transport = FakeTransport(
+        {
+            ("GET", "/inference/models"): json_route(FAKE_CATALOG),
+            ("GET", "/jobs/job-1"): json_route(job),
+            ("GET", "/parts/part-1/lines"): json_route(stored),
+            ("GET", "/media/parts/part-1"): lambda m, u, b: (200, b"fake-bytes"),
+        }
+    )
+    out_dir = str(tmp_path / "out")
+    code = nmk.main(
+        [
+            "--task",
+            "segment",
+            "--model",
+            "ppocr",
+            "--job-id",
+            "job-1",
+            "--allow-merged",
+            "--out",
+            out_dir,
+            *BASE_ARGS,
+        ],
+        transport=transport,
+    )
+    assert code == 0
+
+
+def test_secrets_never_appear_in_report(tmp_path, monkeypatch):
+    secret = "super-secret-token-value-xyz"
+    monkeypatch.setenv("NOMIKOS_TOKEN", secret)
+    stub_run_model(
+        monkeypatch,
+        {
+            "lines": [
+                {
+                    "line_id": "L1",
+                    "line_index": 0,
+                    "output": {"text": "hi", "confidence": 0.9, "character_confidences": []},
+                }
+            ]
+        },
+    )
+    job = {
+        "id": "job-1",
+        "status": "done",
+        "type": "transcribe",
+        "payload": {"ml_params": {"note": secret}, "line_ids": ["L1"]},
+        "result": {
+            "transcription_id": "t-1",
+            "lines": [{"line_id": "L1", "text": "hi", "confidence": 0.9}],
+        },
+    }
+    part_lines = [{"id": "L1", "order": 0, "points": BOX_A, "created_at": "2026-01-01"}]
+    transport = FakeTransport(
+        {
+            ("GET", "/inference/models"): json_route(FAKE_CATALOG),
+            ("GET", "/jobs/job-1"): json_route(job),
+            ("GET", "/parts/part-1/lines"): json_route(part_lines),
+            ("GET", "/media/parts/part-1"): lambda m, u, b: (200, b"fake-bytes"),
+        }
+    )
+    out_dir = str(tmp_path / "out")
+    code = nmk.main(
+        [
+            "--task",
+            "transcribe",
+            "--model",
+            "syriac",
+            "--job-id",
+            "job-1",
+            "--out",
+            out_dir,
+            *BASE_ARGS,
         ],
         transport=transport,
     )

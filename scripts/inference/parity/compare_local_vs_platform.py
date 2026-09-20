@@ -47,6 +47,32 @@ verbatim into ``TranscribeLineRegion.points``
 (``nomikos_inference/contracts/transcribe.py:42-44``). This script builds
 the local line list from the same ``GET .../parts/{part_id}/lines``
 endpoint, sorted the same way, filtered to the job ``line_ids``.
+
+(d) Stored segment lines carry the model polygon. ``job.result`` for a
+segment job is only the merge summary (counts such as ``added_lines``),
+written at ``nomikos/backend/jobs/application/job_callback_service.py:308``
+from ``_apply_segment_merge``
+(``nomikos/backend/jobs/application/job_callback_service.py:122-139``), so
+the platform side is read back from ``GET .../parts/{part_id}/lines``
+after the job is done. The callback maps the worker response onto the
+canonical DTO field for field with no coordinate transform
+(``nomikos/backend/ml/application/segment_mapping.py:14-40``), and the
+merge stores ``points``, ``baseline``, ``mask`` and ``kind`` verbatim on
+the ``Line`` row
+(``nomikos/backend/document/application/segment_merge_service.py:127-143``);
+only ``source_metadata`` gains ``external_id`` and ``job_id`` keys
+(``nomikos/backend/document/application/segment_merge_service.py:122-126``),
+which the comparator ignores. Compare stored ``points`` with local
+``points`` like with like.
+
+(e) Transcribe job results are flat summaries
+(``nomikos/backend/document/application/transcribe_merge_service.py:95-118``):
+``{"transcription_id": ..., "lines": [{"line_id", "text", "confidence"}]}``
+with an optional ``failed_line_indexes`` list added by the callback
+(``nomikos/backend/jobs/application/job_callback_service.py:229``). There
+is no per-line ``output`` object and no ``line_index`` on the platform
+side; the local contract shape keeps both, so each side has its own
+normaliser and lines pair on ``line_id`` only.
 """
 
 from __future__ import annotations
@@ -66,6 +92,13 @@ try:
     import httpx as _httpx
 except ImportError:
     _httpx = None
+
+try:
+    from shapely.geometry import Polygon as _ShapelyPolygon
+except ImportError:
+    _ShapelyPolygon = None
+
+_HAS_SHAPELY = _ShapelyPolygon is not None
 
 SEGMENT_REPLACE_FLAG = "i_know_segment_replaces_the_lines"
 TERMINAL_STATUSES = ("done", "failed", "cancelled")
@@ -205,70 +238,139 @@ def _polygon_area(points: list[list[float]]) -> float:
     return abs(total) / 2.0
 
 
-def _clip_half_plane(
-    polygon: list[list[float]], edge: int, bound: float, keep_below: bool
+def _convex_hull(points: list[list[float]]) -> list[list[float]]:
+    """Monotone chain convex hull, counter-clockwise, no duplicate endpoint."""
+    unique = sorted({(point[0], point[1]) for point in points})
+    if len(unique) <= 1:
+        return [list(point) for point in unique]
+
+    def cross(
+        origin: tuple[float, float], first: tuple[float, float], second: tuple[float, float]
+    ) -> float:
+        return (first[0] - origin[0]) * (second[1] - origin[1]) - (first[1] - origin[1]) * (
+            second[0] - origin[0]
+        )
+
+    lower: list[tuple[float, float]] = []
+    for point in unique:
+        while len(lower) >= 2 and cross(lower[-2], lower[-1], point) <= 0:
+            lower.pop()
+        lower.append(point)
+    upper: list[tuple[float, float]] = []
+    for point in reversed(unique):
+        while len(upper) >= 2 and cross(upper[-2], upper[-1], point) <= 0:
+            upper.pop()
+        upper.append(point)
+    return [[x, y] for x, y in (lower[:-1] + upper[:-1])]
+
+
+def _clip_against_edge(
+    polygon: list[list[float]],
+    edge_start: list[float],
+    edge_end: list[float],
 ) -> list[list[float]]:
+    """Clip a polygon to the left of the directed edge (Sutherland-Hodgman)."""
     if not polygon:
         return []
-    axis = edge % 2
     out: list[list[float]] = []
+    edge_x = edge_end[0] - edge_start[0]
+    edge_y = edge_end[1] - edge_start[1]
+
+    def inside(point: list[float]) -> bool:
+        return edge_x * (point[1] - edge_start[1]) - edge_y * (point[0] - edge_start[0]) >= 0
+
+    def intersect(first: list[float], second: list[float]) -> list[float]:
+        direction_x = second[0] - first[0]
+        direction_y = second[1] - first[1]
+        denom = edge_x * direction_y - edge_y * direction_x
+        if denom == 0.0:
+            return list(second)
+        ratio = (edge_x * (first[1] - edge_start[1]) - edge_y * (first[0] - edge_start[0])) / denom
+        return [first[0] + ratio * direction_x, first[1] + ratio * direction_y]
+
     count = len(polygon)
     for index in range(count):
         current = polygon[index]
         previous = polygon[index - 1]
-        c_in = current[axis] <= bound if keep_below else current[axis] >= bound
-        p_in = previous[axis] <= bound if keep_below else previous[axis] >= bound
+        c_in = inside(current)
+        p_in = inside(previous)
         if c_in:
             if not p_in:
-                denom = current[axis] - previous[axis]
-                ratio = (bound - previous[axis]) / denom if denom else 0.0
-                out.append(
-                    [
-                        previous[0] + ratio * (current[0] - previous[0]),
-                        previous[1] + ratio * (current[1] - previous[1]),
-                    ]
-                )
+                out.append(intersect(previous, current))
             out.append(current)
         elif p_in:
-            denom = current[axis] - previous[axis]
-            ratio = (bound - previous[axis]) / denom if denom else 0.0
-            out.append(
-                [
-                    previous[0] + ratio * (current[0] - previous[0]),
-                    previous[1] + ratio * (current[1] - previous[1]),
-                ]
-            )
+            out.append(intersect(previous, current))
     return out
 
 
-def polygon_intersection_area(first: list[list[float]], second: list[list[float]]) -> float:
-    if len(first) < 3 or len(second) < 3:
-        return 0.0
-    xs = [point[0] for point in second]
-    ys = [point[1] for point in second]
+def _convex_intersection_area(first: list[list[float]], second: list[list[float]]) -> float:
+    """Intersection area of two convex polygons via Sutherland-Hodgman clipping."""
     clipped = [list(point) for point in first]
-    for edge, bound, keep_below in (
-        (0, min(xs), False),
-        (0, max(xs), True),
-        (1, min(ys), False),
-        (1, max(ys), True),
-    ):
-        clipped = _clip_half_plane(clipped, edge, bound, keep_below)
+    count = len(second)
+    for index in range(count):
+        clipped = _clip_against_edge(clipped, second[index], second[(index + 1) % count])
         if len(clipped) < 3:
             return 0.0
     return _polygon_area(clipped)
 
 
+def _shapely_areas(
+    first: list[list[float]], second: list[list[float]]
+) -> tuple[float, float] | None:
+    """Intersection and union areas via shapely, or None when unusable."""
+    if not _HAS_SHAPELY or _ShapelyPolygon is None:
+        return None
+    try:
+        shape_first = _ShapelyPolygon(first).buffer(0)
+        shape_second = _ShapelyPolygon(second).buffer(0)
+        return (
+            float(shape_first.intersection(shape_second).area),
+            float(shape_first.union(shape_second).area),
+        )
+    except Exception:
+        return None
+
+
+def polygon_intersection_area(first: list[list[float]], second: list[list[float]]) -> float:
+    if len(first) < 3 or len(second) < 3:
+        return 0.0
+    areas = _shapely_areas(first, second)
+    if areas is not None:
+        return areas[0]
+    hull_first = _convex_hull(first)
+    hull_second = _convex_hull(second)
+    if len(hull_first) < 3 or len(hull_second) < 3:
+        return 0.0
+    return _convex_intersection_area(hull_first, hull_second)
+
+
 def polygon_iou(first: list[list[float]], second: list[list[float]]) -> float:
-    area_first = _polygon_area(first)
-    area_second = _polygon_area(second)
+    areas = _shapely_areas(first, second)
+    if areas is not None:
+        inter, union = areas
+        if union <= 0.0:
+            return 0.0
+        return min(1.0, max(0.0, inter / union))
+    area_first = _polygon_area(_convex_hull(first))
+    area_second = _polygon_area(_convex_hull(second))
     if area_first <= 0.0 or area_second <= 0.0:
         return 0.0
     inter = polygon_intersection_area(first, second)
     union = area_first + area_second - inter
     if union <= 0.0:
         return 0.0
-    return inter / union
+    return min(1.0, max(0.0, inter / union))
+
+
+_SEGMENT_RANKS = {"IDENTICAL": 0, "NUMERIC": 1, "MISMATCH": 2}
+_TRANSCRIBE_RANKS = {"IDENTICAL": 0, "CONFIDENCE_ONLY": 1, "MISMATCH": 2}
+
+
+def _worsen(current: str, candidate: str, ranks: dict[str, int]) -> str:
+    """A verdict only ever gets worse; never downgrade a worse verdict."""
+    if ranks[candidate] > ranks[current]:
+        return candidate
+    return current
 
 
 def _norm_segment_line(line: dict[str, Any]) -> dict[str, Any]:
@@ -303,8 +405,13 @@ def compare_segment_lines(
         "order_differences": [],
         "line_differences": [],
     }
+    if not local and not platform:
+        result["verdict"] = "EMPTY"
+        result["max_coordinate_diff"] = 0.0
+        return result
+    verdict = "IDENTICAL"
     if len(local) != len(platform):
-        result["verdict"] = "MISMATCH"
+        verdict = _worsen(verdict, "MISMATCH", _SEGMENT_RANKS)
     pairs = list(zip(local_by_order, platform_by_order, strict=False))
     max_diff = 0.0
     for position, (left, right) in enumerate(pairs):
@@ -378,9 +485,10 @@ def compare_segment_lines(
         index for index in range(len(platform)) if index not in matched_platform
     ]
     if result["only_local"] or result["only_platform"] or result["line_differences"]:
-        result["verdict"] = "MISMATCH"
+        verdict = _worsen(verdict, "MISMATCH", _SEGMENT_RANKS)
     elif max_diff > 0.0:
-        result["verdict"] = "NUMERIC"
+        verdict = _worsen(verdict, "NUMERIC", _SEGMENT_RANKS)
+    result["verdict"] = verdict
     result["max_coordinate_diff"] = max_diff
     return result
 
@@ -408,7 +516,8 @@ def character_error_rate(reference: str, hypothesis: str) -> float:
     return _levenshtein(reference, hypothesis) / len(reference)
 
 
-def _norm_transcribe_line(line: dict[str, Any]) -> dict[str, Any]:
+def _norm_local_transcribe_line(line: dict[str, Any]) -> dict[str, Any]:
+    """Local contract shape: per-line ``output`` with text and confidence."""
     output = line.get("output") or {}
     return {
         "line_id": line.get("line_id"),
@@ -419,13 +528,24 @@ def _norm_transcribe_line(line: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _norm_platform_transcribe_line(line: dict[str, Any]) -> dict[str, Any]:
+    """Platform summary shape: flat ``line_id``, ``text``, ``confidence``."""
+    return {
+        "line_id": line.get("line_id"),
+        "line_index": None,
+        "text": line.get("text", ""),
+        "confidence": line.get("confidence"),
+        "error": None,
+    }
+
+
 def compare_transcribe_lines(
-    local_lines: list[dict[str, Any]], platform_lines: list[dict[str, Any]]
+    local_lines: list[dict[str, Any]],
+    platform_lines: list[dict[str, Any]],
+    failed_line_indexes: list[int] | None = None,
 ) -> dict[str, Any]:
-    local = [_norm_transcribe_line(line) for line in local_lines]
-    platform = [_norm_transcribe_line(line) for line in platform_lines]
-    by_id_local = {line["line_id"]: line for line in local if line["line_id"] is not None}
-    by_id_platform = {line["line_id"]: line for line in platform if line["line_id"] is not None}
+    local = [_norm_local_transcribe_line(line) for line in local_lines]
+    platform = [_norm_platform_transcribe_line(line) for line in platform_lines]
     result: dict[str, Any] = {
         "local_line_count": len(local),
         "platform_line_count": len(platform),
@@ -435,23 +555,23 @@ def compare_transcribe_lines(
         "max_cer": 0.0,
         "only_local": [],
         "only_platform": [],
+        "failed_line_indexes": list(failed_line_indexes or []),
     }
+    if not local and not platform:
+        result["verdict"] = "EMPTY"
+        return result
+    verdict = "IDENTICAL"
     if len(local) != len(platform):
-        result["verdict"] = "MISMATCH"
-    if by_id_local and len(by_id_local) == len(local) and len(by_id_platform) == len(platform):
-        pairs = [
-            (line, by_id_platform.get(line["line_id"]))
-            for line in sorted(local, key=lambda item: item["line_index"] or 0)
-        ]
-    else:
-        ordered_local = sorted(local, key=lambda item: item["line_index"] or 0)
-        ordered_platform = sorted(platform, key=lambda item: item["line_index"] or 0)
-        pairs = list(zip(ordered_local, ordered_platform, strict=False))
-    for left, right in pairs:
-        if right is None:
-            result["only_local"].append(left["line_id"])
-            result["verdict"] = "MISMATCH"
+        verdict = _worsen(verdict, "MISMATCH", _TRANSCRIBE_RANKS)
+    by_id_platform = {line["line_id"]: line for line in platform if line["line_id"] is not None}
+    local_order = sorted(local, key=lambda item: (item["line_index"] is None, item["line_index"]))
+    for left in local_order:
+        line_id = left["line_id"]
+        if line_id is None or line_id not in by_id_platform:
+            result["only_local"].append(line_id)
+            verdict = _worsen(verdict, "MISMATCH", _TRANSCRIBE_RANKS)
             continue
+        right = by_id_platform[line_id]
         left_text = left["text"] or ""
         right_text = right["text"] or ""
         cer = character_error_rate(right_text, left_text)
@@ -460,37 +580,53 @@ def compare_transcribe_lines(
         if left["confidence"] is not None and right["confidence"] is not None:
             conf_diff = abs(float(left["confidence"]) - float(right["confidence"]))
             result["max_confidence_diff"] = max(result["max_confidence_diff"], conf_diff)
+        text_equal = left_text == right_text
+        error_equal = (left["error"] or None) == (right["error"] or None)
         entry: dict[str, Any] = {
-            "line_id": left["line_id"],
+            "line_id": line_id,
             "line_index": left["line_index"],
             "local_text": left_text,
             "platform_text": right_text,
-            "text_equal": left_text == right_text,
+            "text_equal": text_equal,
             "cer": cer,
             "confidence_diff": conf_diff,
             "local_error": left["error"],
             "platform_error": right["error"],
         }
-        if (
-            not entry["text_equal"]
-            or (conf_diff is not None and conf_diff > _CONFIDENCE_EPS)
-            or (left["error"] or None) != (right["error"] or None)
-        ):
+        if not text_equal or not error_equal:
             result["line_differences"].append(entry)
+            verdict = _worsen(verdict, "MISMATCH", _TRANSCRIBE_RANKS)
+        elif conf_diff is not None and conf_diff > _CONFIDENCE_EPS:
+            result["line_differences"].append(entry)
+            verdict = _worsen(verdict, "CONFIDENCE_ONLY", _TRANSCRIBE_RANKS)
     local_ids = {line["line_id"] for line in local}
     platform_ids = {line["line_id"] for line in platform}
     result["only_platform"] = sorted(
         str(item) for item in (platform_ids - local_ids) if item is not None
     )
     if result["only_local"] or result["only_platform"]:
-        result["verdict"] = "MISMATCH"
-    elif result["line_differences"]:
-        texts_equal = all(item["text_equal"] for item in result["line_differences"])
-        if texts_equal:
-            result["verdict"] = "CONFIDENCE_ONLY"
-        else:
-            result["verdict"] = "MISMATCH"
+        verdict = _worsen(verdict, "MISMATCH", _TRANSCRIBE_RANKS)
+    result["verdict"] = verdict
     return result
+
+
+def parse_platform_transcribe(
+    result: Any,
+) -> tuple[str | None, list[dict[str, Any]], list[int]]:
+    """Split the flat platform transcribe summary into its parts."""
+    if not isinstance(result, dict):
+        raise ApiError("platform transcribe result is not an object")
+    lines = result.get("lines")
+    if not isinstance(lines, list):
+        raise ApiError("platform transcribe result has no lines list")
+    failed = result.get("failed_line_indexes") or []
+    failed_indexes = [int(index) for index in failed if isinstance(index, int)]
+    transcription_id = result.get("transcription_id")
+    return (
+        str(transcription_id) if transcription_id is not None else None,
+        [line for line in lines if isinstance(line, dict)],
+        failed_indexes,
+    )
 
 
 class ApiError(Exception):
@@ -519,9 +655,12 @@ class ApiClient:
         self, method: str, url: str, headers: dict[str, str], body: bytes | None
     ) -> tuple[int, bytes]:
         if _httpx is not None:
-            with _httpx.Client(timeout=60.0) as client:
-                response = client.request(method, url, headers=headers, content=body)
-                return response.status_code, response.content
+            try:
+                with _httpx.Client(timeout=60.0, follow_redirects=True) as client:
+                    response = client.request(method, url, headers=headers, content=body)
+                    return response.status_code, response.content
+            except _httpx.HTTPError as error:
+                raise ApiError(f"{method} {url} failed: {error}") from error
         data = body if method in ("POST", "PUT", "PATCH") else None
         request = _urlrequest.Request(  # noqa: S310
             url, data=data, method=method, headers=headers or {}
@@ -659,33 +798,6 @@ def _model_dump(value: Any) -> Any:
     return value
 
 
-def platform_result_lines(task: str, result: Any) -> list[dict[str, Any]]:
-    if not isinstance(result, dict):
-        return []
-    if task == "segment":
-        lines = result.get("lines")
-        return list(lines) if isinstance(lines, list) else []
-    lines = result.get("lines")
-    if isinstance(lines, list):
-        return list(lines)
-    return []
-
-
-def worker_version_from_job(job: dict[str, Any]) -> str | None:
-    for container in (job.get("result"), job.get("payload"), job.get("metadata")):
-        if isinstance(container, dict):
-            for key in (
-                "worker_version",
-                "nomikos_inference_version",
-                "inference_version",
-                "artifact_sha256",
-            ):
-                value = container.get(key)
-                if isinstance(value, str) and value:
-                    return value
-    return None
-
-
 def build_transcribe_params(
     part_lines: list[dict[str, Any]],
     job_line_ids: list[str] | None,
@@ -713,6 +825,12 @@ def build_transcribe_params(
                 "points": line.get("points"),
             }
         )
+    if not regions:
+        raise ApiError(
+            "no line regions to transcribe (empty line_ids intersection "
+            "or --line-limit 0); the platform refuses empty transcribe jobs, "
+            "so the local run would transcribe the whole page instead"
+        )
     params = dict(base_params)
     params.pop("lines", None)
     params["lines"] = regions
@@ -725,26 +843,43 @@ def render_report_markdown(report: dict[str, Any]) -> str:
     lines = [
         "# Parity report: local vs platform",
         "",
-        f"Task: {header['task']}",
-        f"Model: {header['model_name']} (registry {header['registry_model_id']}, "
-        f"tag {header['registry_tag']})",
-        f"Job: {header['job_id']}",
-        f"Verdict: {comparison['verdict']}",
-        "",
-        "## Header",
-        "",
-        f"API host: {header['api_host']}",
-        f"Local nomikos_inference: {header['local_nomikos_inference_version']}",
-        f"Local onnxruntime: {header['local_onnxruntime_version']}",
-        f"Worker version: {header['worker_version']}",
-        f"Image sha256: {header['image_sha256']} ({header['image_bytes']} bytes)",
-        f"Params: {json.dumps(header['params'], sort_keys=True)}",
-        "",
-        "## Comparison",
-        "",
-        f"Local lines: {comparison.get('local_line_count')}",
-        f"Platform lines: {comparison.get('platform_line_count')}",
     ]
+    if comparison.get("verdict") == "NOT_COMPARABLE":
+        lines.append(
+            "NOTICE: the part held protected lines "
+            "(manual, transcribed, or covered), so the stored lines are not "
+            "the pure model output. Re-run with --allow-merged to compare anyway."
+        )
+        lines.append("")
+    lines.extend(
+        [
+            f"Task: {header['task']}",
+            f"Model: {header['model_name']} (registry {header['registry_model_id']}, "
+            f"tag {header['registry_tag']})",
+            f"Job: {header['job_id']}",
+            f"Verdict: {comparison['verdict']}",
+            "",
+            "## Header",
+            "",
+            f"API host: {header['api_host']}",
+            f"Local nomikos_inference: {header['local_nomikos_inference_version']}",
+            f"Local onnxruntime: {header['local_onnxruntime_version']}",
+            "Worker version: not exposed by the API",
+            f"Image sha256: {header['image_sha256']} ({header['image_bytes']} bytes)",
+            f"Params: {json.dumps(header['params'], sort_keys=True)}",
+        ]
+    )
+    if header.get("merge_summary") is not None:
+        lines.append(f"Merge summary: {json.dumps(header['merge_summary'], sort_keys=True)}")
+    if header.get("transcription_id") is not None:
+        lines.append(f"Transcription: {header['transcription_id']}")
+    lines.extend(["", "## Comparison", ""])
+    if comparison.get("verdict") == "NOT_COMPARABLE":
+        lines.append("No comparison: stored lines mix model output with protected lines.")
+        lines.append("")
+        return "\n".join(lines) + "\n"
+    lines.append(f"Local lines: {comparison.get('local_line_count')}")
+    lines.append(f"Platform lines: {comparison.get('platform_line_count')}")
     if header["task"] == "segment":
         lines.append(f"Max coordinate diff (px): {comparison.get('max_coordinate_diff')}")
         if comparison.get("order_differences"):
@@ -758,6 +893,8 @@ def render_report_markdown(report: dict[str, Any]) -> str:
     else:
         lines.append(f"Max CER: {comparison.get('max_cer')}")
         lines.append(f"Max confidence diff: {comparison.get('max_confidence_diff')}")
+        if comparison.get("failed_line_indexes"):
+            lines.append(f"Failed line indexes: {comparison['failed_line_indexes']}")
         for item in comparison.get("line_differences", [])[:50]:
             lines.append(
                 f"Line {item.get('line_id')} (index {item.get('line_index')}): "
@@ -774,18 +911,26 @@ def render_report_markdown(report: dict[str, Any]) -> str:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Compare a local nomikos_inference run with the same platform job."
+        description=(
+            "Compare a local nomikos_inference run with the same platform job. "
+            "--project-id, --document-id and --part-id are required for both tasks."
+        )
     )
-    parser.add_argument("--api", default="https://api.nomikos.app")
+    parser.add_argument("--api", required=True)
     parser.add_argument("--env-file", default=None)
-    parser.add_argument("--project-id", default=None)
-    parser.add_argument("--document-id", default=None)
-    parser.add_argument("--part-id", default=None)
-    parser.add_argument("--task", choices=("segment", "transcribe"), default=None)
+    parser.add_argument("--project-id", required=True)
+    parser.add_argument("--document-id", required=True)
+    parser.add_argument("--part-id", required=True)
+    parser.add_argument("--task", choices=("segment", "transcribe"), required=True)
     parser.add_argument("--model", default=None)
     parser.add_argument("--job-id", default=None)
     parser.add_argument("--enqueue", action="store_true")
     parser.add_argument("--i-know-segment-replaces-the-lines", action="store_true")
+    parser.add_argument(
+        "--allow-merged",
+        action="store_true",
+        help="compare segment output even when the part holds protected lines",
+    )
     parser.add_argument("--line-limit", type=int, default=None)
     parser.add_argument("--out", default=None)
     parser.add_argument("--timeout", type=float, default=600.0)
@@ -826,6 +971,108 @@ def collect_secret_values(args: argparse.Namespace) -> list[str]:
     return [secret for secret in secrets if secret]
 
 
+_MODEL_IDENTIFYING_KEYS = ("registry_model_id", "registry_id", "model", "model_id")
+
+
+def cross_check_model(payload: dict[str, Any], registry_model_id: str, model_uuid: str) -> None:
+    """Fail when the job payload names a different model than --model resolved."""
+    ml_params = payload.get("ml_params")
+    if not isinstance(ml_params, dict):
+        return
+    for key in (*_MODEL_IDENTIFYING_KEYS, "artifact_ref"):
+        value = ml_params.get(key)
+        if value is None:
+            continue
+        text = str(value)
+        if key == "artifact_ref":
+            try:
+                candidate, _ = parse_artifact_ref(text)
+            except ValueError:
+                continue
+        else:
+            candidate = text
+        if candidate not in (registry_model_id, model_uuid):
+            raise ApiError(
+                f"job payload {key} {text!r} disagrees with --model "
+                f"(registry {registry_model_id}, id {model_uuid})"
+            )
+
+
+def _sort_part_lines(part_lines: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return sorted(
+        part_lines,
+        key=lambda line: (
+            line.get("order") if isinstance(line.get("order"), int) else 0,
+            str(line.get("created_at") or ""),
+        ),
+    )
+
+
+_EXIT_BY_VERDICT = {
+    "IDENTICAL": 0,
+    "NUMERIC": 1,
+    "CONFIDENCE_ONLY": 1,
+    "MISMATCH": 1,
+    "EMPTY": 3,
+    "NOT_COMPARABLE": 3,
+}
+
+
+def _write_report(
+    args: argparse.Namespace,
+    header: dict[str, Any],
+    comparison: dict[str, Any],
+    local_dump: Any,
+    platform_result: Any,
+    out_dir: str,
+) -> int:
+    secrets = collect_secret_values(args)
+    report: dict[str, Any] = {
+        "header": header,
+        "comparison": comparison,
+        "local_result": local_dump,
+        "platform_result": platform_result,
+    }
+    report = _scrub(report, secrets)
+    os.makedirs(out_dir, exist_ok=True)
+    with open(os.path.join(out_dir, "report.json"), "w", encoding="utf-8") as handle:
+        json.dump(report, handle, indent=2, sort_keys=True, default=str)
+    markdown = render_report_markdown(report)
+    with open(os.path.join(out_dir, "report.md"), "w", encoding="utf-8") as handle:
+        handle.write(markdown)
+    verdict = comparison.get("verdict", "MISMATCH")
+    print(f"Verdict: {verdict} (report in {out_dir})")
+    return _EXIT_BY_VERDICT.get(verdict, 1)
+
+
+def _base_header(
+    args: argparse.Namespace,
+    model_entry: dict[str, Any],
+    registry_model_id: str,
+    registry_tag: str,
+    model_uuid: str,
+    job_id: str,
+    params: dict[str, Any],
+    image_sha256: str | None,
+    image_size: int | None,
+) -> dict[str, Any]:
+    versions = local_package_versions()
+    return {
+        "api_host": args.api,
+        "task": args.task,
+        "model_name": model_entry.get("name"),
+        "registry_model_id": registry_model_id,
+        "registry_tag": registry_tag,
+        "model_id": model_uuid,
+        "job_id": job_id,
+        "local_nomikos_inference_version": versions["nomikos_inference"],
+        "local_onnxruntime_version": versions["onnxruntime"],
+        "params": params,
+        "image_sha256": image_sha256,
+        "image_bytes": image_size,
+    }
+
+
 def run_comparison(
     args: argparse.Namespace,
     client: ApiClient,
@@ -847,8 +1094,6 @@ def run_comparison(
 
     job_id = args.job_id
     if args.enqueue:
-        if not (args.project_id and args.document_id and args.part_id):
-            raise ApiError("--enqueue needs --project-id, --document-id and --part-id")
         if args.task == "segment":
             current = client.list_part_lines(args.project_id, args.document_id, args.part_id)
             print(f"Part currently has {len(current)} lines; segment will replace them.")
@@ -874,89 +1119,132 @@ def run_comparison(
             file=sys.stderr,
         )
         return 2
-    part_id = str(job.get("document_part_id") or args.part_id or "")
-    if not part_id:
-        raise ApiError("job has no document_part_id and --part-id was not given")
+    if str(job.get("type")) != args.task:
+        raise ApiError(f"job {job_id} has type {job.get('type')!r} but --task is {args.task!r}")
+    print("Note: registry id and tag come from --model, the job does not record them.")
     payload = job.get("payload") if isinstance(job.get("payload"), dict) else {}
+    cross_check_model(payload, registry_model_id, model_uuid)
     base_params = payload.get("ml_params") if isinstance(payload.get("ml_params"), dict) else {}
     params: dict[str, Any] = dict(base_params)
-    project_id = str(job.get("project_id") or args.project_id or "")
-    document_id = str(job.get("document_id") or args.document_id or "")
-    if args.task == "transcribe":
-        if not (project_id and document_id):
-            raise ApiError("transcribe needs --project-id and --document-id")
-        part_lines = client.list_part_lines(project_id, document_id, part_id)
-        job_line_ids = payload.get("line_ids")
-        params, _ = build_transcribe_params(
-            part_lines,
-            list(job_line_ids) if isinstance(job_line_ids, list) else None,
-            base_params,
-            args.line_limit,
+    part_id = args.part_id
+
+    if args.task == "segment":
+        stored_lines = _sort_part_lines(
+            client.list_part_lines(args.project_id, args.document_id, part_id)
+        )
+        summary = job.get("result") if isinstance(job.get("result"), dict) else {}
+        protected = sum(
+            int(summary.get(key) or 0)
+            for key in (
+                "preserved_manual_lines",
+                "preserved_transcribed_lines",
+                "skipped_covered_lines",
+            )
+        )
+        if protected > 0 and not args.allow_merged:
+            print(
+                "Stored lines mix model output with protected lines; "
+                "re-run with --allow-merged to compare anyway.",
+                file=sys.stderr,
+            )
+            header = _base_header(
+                args,
+                model_entry,
+                registry_model_id,
+                registry_tag,
+                model_uuid,
+                job_id,
+                params,
+                None,
+                None,
+            )
+            header["merge_summary"] = summary
+            comparison: dict[str, Any] = {
+                "verdict": "NOT_COMPARABLE",
+                "protected_lines": protected,
+                "merge_summary": summary,
+                "stored_line_count": len(stored_lines),
+            }
+            return _write_report(
+                args, header, comparison, None, {"merge_summary": summary}, out_dir
+            )
+        image_bytes = client.page_image_bytes(part_id)
+        local_dump = _run_local(args.task, registry_model_id, registry_tag, image_bytes, params)
+        comparison = compare_segment_lines(local_dump.get("lines", []), stored_lines)
+        header = _base_header(
+            args,
+            model_entry,
+            registry_model_id,
+            registry_tag,
+            model_uuid,
+            job_id,
+            params,
+            hashlib.sha256(image_bytes).hexdigest(),
+            len(image_bytes),
+        )
+        header["merge_summary"] = summary
+        return _write_report(
+            args,
+            header,
+            comparison,
+            local_dump,
+            {"merge_summary": summary, "lines": stored_lines},
+            out_dir,
         )
 
+    part_lines = client.list_part_lines(args.project_id, args.document_id, part_id)
+    job_line_ids = payload.get("line_ids")
+    params, _ = build_transcribe_params(
+        part_lines,
+        list(job_line_ids) if isinstance(job_line_ids, list) else None,
+        base_params,
+        args.line_limit,
+    )
     image_bytes = client.page_image_bytes(part_id)
-    image_sha256 = hashlib.sha256(image_bytes).hexdigest()
+    local_dump = _run_local(args.task, registry_model_id, registry_tag, image_bytes, params)
+    summary = job.get("result") if isinstance(job.get("result"), dict) else {}
+    transcription_id, platform_lines, failed_indexes = parse_platform_transcribe(summary)
+    comparison = compare_transcribe_lines(
+        local_dump.get("lines", []), platform_lines, failed_indexes
+    )
+    header = _base_header(
+        args,
+        model_entry,
+        registry_model_id,
+        registry_tag,
+        model_uuid,
+        job_id,
+        params,
+        hashlib.sha256(image_bytes).hexdigest(),
+        len(image_bytes),
+    )
+    header["transcription_id"] = transcription_id
+    return _write_report(args, header, comparison, local_dump, summary, out_dir)
 
+
+def _run_local(
+    task: str,
+    registry_model_id: str,
+    registry_tag: str,
+    image_bytes: bytes,
+    params: dict[str, Any],
+) -> Any:
     from nomikos_inference.contracts.common import InferenceTask
     from nomikos_inference.jobs.runner import run_model
 
     os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
     local_response = run_model(
-        task=InferenceTask(args.task),
+        task=InferenceTask(task),
         registry_model_id=registry_model_id,
         registry_tag=registry_tag,
         image_bytes=image_bytes,
         params=params,
     )
-    local_dump = _model_dump(local_response)
-    platform_result = job.get("result") if isinstance(job.get("result"), dict) else {}
-    if args.task == "segment":
-        comparison = compare_segment_lines(
-            local_dump.get("lines", []), platform_result_lines("segment", platform_result)
-        )
-    else:
-        comparison = compare_transcribe_lines(
-            local_dump.get("lines", []), platform_result_lines("transcribe", platform_result)
-        )
-    versions = local_package_versions()
-    secrets = collect_secret_values(args)
-    header = {
-        "api_host": args.api,
-        "task": args.task,
-        "model_name": model_entry.get("name"),
-        "registry_model_id": registry_model_id,
-        "registry_tag": registry_tag,
-        "model_id": model_uuid,
-        "job_id": job_id,
-        "local_nomikos_inference_version": versions["nomikos_inference"],
-        "local_onnxruntime_version": versions["onnxruntime"],
-        "worker_version": worker_version_from_job(job),
-        "params": params,
-        "image_sha256": image_sha256,
-        "image_bytes": len(image_bytes),
-    }
-    report: dict[str, Any] = {
-        "header": header,
-        "comparison": comparison,
-        "local_result": local_dump,
-        "platform_result": platform_result,
-    }
-    report = _scrub(report, secrets)
-    os.makedirs(out_dir, exist_ok=True)
-    with open(os.path.join(out_dir, "report.json"), "w", encoding="utf-8") as handle:
-        json.dump(report, handle, indent=2, sort_keys=True, default=str)
-    markdown = render_report_markdown(report)
-    with open(os.path.join(out_dir, "report.md"), "w", encoding="utf-8") as handle:
-        handle.write(markdown)
-    print(f"Verdict: {comparison['verdict']} (report in {out_dir})")
-    return 0 if comparison["verdict"] == "IDENTICAL" else 1
+    return _model_dump(local_response)
 
 
 def main(argv: list[str] | None = None, transport: Any = None) -> int:
     args = build_parser().parse_args(argv)
-    if args.task is None:
-        print("missing required --task (segment|transcribe)", file=sys.stderr)
-        return 2
     if args.task == "segment" and args.enqueue and not args.i_know_segment_replaces_the_lines:
         print(
             "Refusing: a segment job replaces the part lines. "
