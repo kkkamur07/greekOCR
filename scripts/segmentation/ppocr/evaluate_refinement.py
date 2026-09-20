@@ -247,7 +247,9 @@ def _poly_quad_area_ratios(
     return ratios
 
 
-def _draw_overlay(page: str, image_bytes: bytes, lines: list, output_dir: Path) -> list[int]:
+def _draw_overlay(
+    page: str, image_bytes: bytes, lines: list, output_dir: Path, mode: str | None = None
+) -> list[int]:
     """Reading-order overlay: body quads green with numbers, suspects red.
 
     Drawing mirrors verify_adapter.py (green quads, order numbers beside the
@@ -277,10 +279,10 @@ def _draw_overlay(page: str, image_bytes: bytes, lines: list, output_dir: Path) 
         )
         baseline = np.asarray(line["baseline"]["points"], dtype=np.float64)
         if not suspect:
-            cv2.line(
+            cv2.polylines(
                 canvas,
-                (int(baseline[0][0]), int(baseline[0][1])),
-                (int(baseline[1][0]), int(baseline[1][1])),
+                [baseline.astype(np.int32).reshape(-1, 1, 2)],
+                False,
                 (0, 255, 255),
                 thickness,
                 cv2.LINE_AA,
@@ -314,9 +316,11 @@ def _draw_overlay(page: str, image_bytes: bytes, lines: list, output_dir: Path) 
             cv2.LINE_AA,
         )
     output_dir.mkdir(parents=True, exist_ok=True)
-    ok = cv2.imwrite(
-        str(output_dir / f"{page}.refined.overlay.jpg"), canvas, [cv2.IMWRITE_JPEG_QUALITY, 90]
-    )
+    if mode is None:
+        overlay_name = f"{page}.refined.overlay.jpg"
+    else:
+        overlay_name = f"{page}.refined.{mode}.overlay.jpg"
+    ok = cv2.imwrite(str(output_dir / overlay_name), canvas, [cv2.IMWRITE_JPEG_QUALITY, 90])
     if not ok:
         raise RuntimeError(f"could not write overlay for page {page}")
     return suspect_numbers
@@ -457,20 +461,38 @@ def main() -> int:
             totals[name]["wrong"] += wrong
             totals[name]["merged"] += merged
         if not sweep and page in OVERLAY_PAGES:
-            defaults = run_ppocr_det_segment(
-                image_bytes, model_path=args.onnx, artifact_sha256=args.artifact_sha256, params=None
-            )
-            serial = [
-                {
-                    "points": line.points,
-                    "baseline": line.baseline,
-                    "source_metadata": line.source_metadata,
-                }
-                for line in defaults.lines
-            ]
-            numbers = _draw_overlay(page, image_bytes, serial, args.output_dir)
-            pages[page]["suspect_numbers"] = numbers
-            print(f"{page} suspect line numbers: {numbers}", flush=True)
+            overlay_modes = ("quad", "poly") if args.box_type == "both" else (mode,)
+            for overlay_mode in overlay_modes:
+                defaults = run_ppocr_det_segment(
+                    image_bytes,
+                    model_path=args.onnx,
+                    artifact_sha256=args.artifact_sha256,
+                    params={"box_type": overlay_mode},
+                )
+                serial = [
+                    {
+                        "points": line.points,
+                        "baseline": line.baseline,
+                        "source_metadata": line.source_metadata,
+                    }
+                    for line in defaults.lines
+                ]
+                numbers = _draw_overlay(
+                    page,
+                    image_bytes,
+                    serial,
+                    args.output_dir,
+                    mode=overlay_mode if args.box_type == "both" else None,
+                )
+                if args.box_type == "both":
+                    pages[page][f"suspect_numbers_{overlay_mode}"] = numbers
+                    print(
+                        f"{page} {overlay_mode} suspect line numbers: {numbers}",
+                        flush=True,
+                    )
+                else:
+                    pages[page]["suspect_numbers"] = numbers
+                    print(f"{page} suspect line numbers: {numbers}", flush=True)
     for name in variants:
         total = totals[name]
         precision = total["tp"] / (total["tp"] + total["fp"]) if total["tp"] + total["fp"] else 0.0
