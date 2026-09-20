@@ -99,3 +99,18 @@ against the 0.5 px gate. (The first version used a shapely unclip and
 measured 2.2 to 3.2 px max; replacing it with PaddleX's own pyclipper
 unclip gave exact parity.) Full table and reading order notes are
 in `docs/inference/ppocrv6-segmenter.md`.
+
+## `profile_onnx.py`
+
+Follow-up performance tooling for the 2026-09-20 slowdown analysis (the
+accepted export ran about 4x slower than Paddle mkldnn). Same box, same
+venv, same arguments as `verify_parity.py`, plus `--perfdir` for its
+outputs. Subcommands: `counts` (node type census), `profile` (onnxruntime
+profiler, top nodes), `sessions` (cheap session options, split with
+`--only` so no command runs over 3 minutes), `candidate` (checker, shape
+cases and c13 timing for one file), `compare` (numerics of EXTENDED and
+denormal_as_zero against the default on 3 pages), `final` (accepted file
+at EXTENDED on 3 pages plus the big tensor, at 8 and 2 threads, and Paddle
+on the big tensor). Findings and the serving recommendation are in
+`docs/inference/ppocrv6-onnx-performance-2026-09-20.md`: use
+`ORT_ENABLE_EXTENDED` with 2 intra-op threads per process.
