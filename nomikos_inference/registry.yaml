@@ -144,3 +144,22 @@ models:
         # baselines at min IoU 1.00. See ADR 0006.
         hub_revision: 5c20a584b39988a25dfc682f9fe634ac1b4a42dd
         artifact_sha256: d3e9c086541157a2f55209bc4802206478231e7637c12ee4884504f94d6c4ed3
+
+  ppocr-segment:
+    task: segment
+    architecture: ppocr-det
+    device: cpu
+    host_eligibility: local
+    versions:
+      stable:
+        weights_source: hf://nomikos-project/segmentation-ppocrv6-det@stable
+        # Converted from PaddlePaddle/PP-OCRv6_medium_det at Hub revision
+        # 8e0f56fb2ef86b461d99cfc7ac5c137738985f61 (Apache-2.0) with
+        # paddle2onnx at opset 21, dynamic batch, height and width. The ONNX
+        # reproduces Paddle on 28 page and cap cases with zero box delta at
+        # 0.000 px, and the adapter reproduces the Paddle pipeline boxes at
+        # 0.000 px on all 14 reference pages. See
+        # docs/inference/ppocrv6-onnx-parity-2026-09-19.md and
+        # docs/inference/ppocrv6-segmenter.md. Not the default segmenter.
+        hub_revision: 2274480436df3f1717dcf570eea01cc294294dc6
+        artifact_sha256: 09e4c827c5bb20a0344374bbf8b88d41b7c8bf2be3a0db82ffed3bf090eacfe3

@@ -6,6 +6,7 @@ Models, registry, Hub weights, and the **inference agent** that runs them.
 | -------------------------------------------------------- | ------------------------------------------------------- |
 | [models-and-datasets.md](models-and-datasets.md)         | Runtime models, dataset workflow, and current support   |
 | [adding-inference-models.md](adding-inference-models.md) | End-to-end checklist for a new segment/transcribe model |
+| [ppocrv6-segmenter.md](ppocrv6-segmenter.md) | PP-OCRv6 medium detection segmenter: adoption, serving, and end to end validation |
 
 **Service implementation:** [`nomikos_inference/README.md`](../../nomikos_inference/README.md)  
 **Domain vocabulary:** [`nomikos_inference/CONTEXT.md`](../../nomikos_inference/CONTEXT.md)  
