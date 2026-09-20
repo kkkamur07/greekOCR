@@ -61,3 +61,42 @@ The ONNX itself is never committed to git; it stays in the artifact
 directories. Full results, including the per-page parity table, the
 shape-coverage table and timing, are in
 `docs/inference/ppocrv6-onnx-parity-2026-09-19.md`.
+
+## Serving adapter check (`verify_adapter.py`)
+
+The parity proof above covers the exported graph; `verify_adapter.py`
+measures the serving adapter (`run_ppocr_det_segment`: PIL decode,
+preprocessing, shapely DB postprocess) on real weights. For each of the 14
+reference fixtures it reads the page BYTES, calls the same entry point
+production uses with `params=None`, and compares the returned line quads
+with the fixture boxes: counts, then greedy one-to-one matching by quad
+centre with corner-SET distances (each corner counts only its nearest
+corner in the matched box, since corner order may differ). It writes
+`results.json` and one `<page>.overlay.jpg` per page (adapter quads in
+reading order in green with numbers beside each quad's left edge,
+synthetic baselines in yellow, unmatched fixture boxes in red) and exits
+non-zero unless every page has identical counts, nothing unmatched, and
+max corner distance at most 2.0 px.
+
+```bash
+PYTHONPATH=. PYTHONDONTWRITEBYTECODE=1 /Users/krishuagarwal/Desktop/Programming/python/greekOCR/.venv/bin/python \
+  scripts/segmentation/ppocr/verify_adapter.py \
+  --fixtures /Users/krishuagarwal/Desktop/Programming/python/greekOCR-wt/_ppocr-parity/fixtures \
+  --images /Users/krishuagarwal/Desktop/Programming/python/greekOCR-wt/_orli-env/server/images \
+  --grec-images /Users/krishuagarwal/Desktop/Programming/python/greekOCR-wt/_ppocr-parity/adapter-e2e \
+  --onnx /Users/krishuagarwal/Desktop/Programming/python/greekOCR-wt/_ppocr-parity/pp-ocrv6-medium-det.onnx \
+  --output-dir /Users/krishuagarwal/Desktop/Programming/python/greekOCR-wt/_ppocr-parity/adapter-e2e
+```
+
+Each image is matched to its fixture by SHA-256 before use. The 12 Coptic
+pages come from the server image directory; `grec-p1.webp` and `grec-p4.jpg`
+live on the reference box (`nomikos:/root/ppocrv6-bench-20260919/images/`)
+and are fetched with scp into the output directory, whose SHA-256 match is
+then verified the same way. The ONNX digest defaults to the pinned artifact
+(`--artifact-sha256` overrides it). Measured 2026-09-20: identical counts
+on all 14 pages with nothing unmatched, but max corner distance 2.2 to
+3.2 px against the 2.0 px gate. Cause analysis showed the PIL decode is
+pixel-identical to cv2 while PaddleX's own pyclipper unclip over the same
+probability maps reproduces the fixtures at 0.000 px, so the error is the
+shapely-for-pyclipper substitution. Full table and reading order notes are
+in `docs/inference/ppocrv6-segmenter.md`.
