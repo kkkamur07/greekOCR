@@ -72,3 +72,83 @@ def test_default_segment_ids_offer_both_models(
     monkeypatch.delenv("DEFAULT_SEGMENT_MODEL", raising=False)
     reloaded = importlib.reload(seed_module)
     assert set(reloaded.SEGMENT_MODELS) == {"blla-segment", "ppocr-segment"}
+
+
+def test_duplicate_artifact_ref_rows_converge_to_display_name(
+    seed_module: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two rows sharing one artifact_ref (old and new name) seed to one row."""
+    import asyncio
+
+    from backend.ml.infrastructure.orm_models import InferenceModel, InferenceTask
+
+    ref = seed_module.artifact_ref_for("blla-segment")
+
+    class FakeScalars:
+        def __init__(self, rows: list) -> None:
+            self._rows = rows
+
+        def all(self) -> list:
+            return list(self._rows)
+
+    class FakeResult:
+        def __init__(self, rows: list) -> None:
+            self._rows = rows
+
+        def scalars(self) -> FakeScalars:
+            return FakeScalars(self._rows)
+
+    class FakeSession:
+        def __init__(self, rows: list) -> None:
+            self._rows = list(rows)
+            self.deleted = []
+
+        async def __aenter__(self) -> FakeSession:
+            return self
+
+        async def __aexit__(self, *exc: object) -> bool:
+            return False
+
+        async def execute(self, stmt: object) -> FakeResult:
+            return FakeResult(self._rows)
+
+        async def delete(self, obj: object) -> None:
+            self.deleted.append(obj)
+            if obj in self._rows:
+                self._rows.remove(obj)
+
+        async def flush(self) -> None:
+            return None
+
+        async def commit(self) -> None:
+            return None
+
+        async def refresh(self, obj: object) -> None:
+            return None
+
+    old = InferenceModel(
+        name="blla-segment",
+        provider="kraken",
+        task=InferenceTask.segment,
+        artifact_ref=ref,
+        default_params={"device": "cpu"},
+        created_at=datetime(2026, 1, 1),
+    )
+    new = InferenceModel(
+        name="kraken",
+        provider="kraken",
+        task=InferenceTask.segment,
+        artifact_ref=ref,
+        default_params={"device": "cpu"},
+        created_at=datetime(2026, 2, 1),
+    )
+    session = FakeSession([old, new])
+    monkeypatch.setattr(seed_module, "system_session", lambda: session)
+
+    model = asyncio.run(seed_module._upsert_model(name="blla-segment", task=InferenceTask.segment))
+
+    assert model.name == "kraken"
+    assert model.artifact_ref == ref
+    assert session.deleted == [old]
+    assert session._rows == [model]
+    assert len(session._rows) == 1

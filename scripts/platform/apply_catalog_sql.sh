@@ -37,6 +37,18 @@ current inference_models rows, and prints the SQL it would send, indented.
 With --apply it sends the file with psql -v ON_ERROR_STOP=1 over stdin inside
 the container, then prints the rows again. --rows-only shows the current rows
 and exits. Flags may come before or after the file.
+
+Container, database, and user names that come back from the server or from
+env overrides are accepted only when they match ^[A-Za-z0-9_.-]+$.
+Anything else is refused before use.
+
+Exit codes:
+  0  success (look-only, rows-only, or applied)
+  1  usage error (unknown flag, missing file)
+  2  no Postgres container on this host
+  3  no database holds the known models
+  4  more than one database holds the known models
+  5  refusing an unsafe container, database, or user name
 EOF
 }
 
@@ -77,18 +89,36 @@ echo "== opening one connection to $SSH_TARGET (enter the password once)"
 run true
 echo "== host: $SSH_TARGET ($(run hostname))"
 
+# Remote identifiers come from the server or env overrides and are placed in
+# remote shell commands, so each one is validated before use. Exit code 5
+# means an unsafe container, database, or user name was refused.
+check_safe_name() {
+  kind="$1"
+  value="$2"
+  case "$value" in
+    ""|*[!A-Za-z0-9_.-]*)
+      echo "refusing unsafe $kind name: $value" >&2
+      exit 5
+      ;;
+  esac
+}
+
 # 1. Find Postgres containers (Coolify names them with a random suffix).
 if [ -z "${PG_CONTAINER:-}" ]; then
   # bash 3.2 on macOS has no mapfile; container names never contain spaces.
   # shellcheck disable=SC2207
   CANDIDATES=($(run "docker ps --format '{{.Names}} {{.Image}}'" | awk 'tolower($2) ~ /postgres|pgvector|timescale/ {print $1}'))
 else
+  check_safe_name "container" "$PG_CONTAINER"
   CANDIDATES=("$PG_CONTAINER")
 fi
 if [ "${#CANDIDATES[@]}" -eq 0 ]; then
   echo "No Postgres container on this host. The API's database is somewhere else."
   exit 2
 fi
+for candidate in "${CANDIDATES[@]}"; do
+  check_safe_name "container" "$candidate"
+done
 
 # Rows that identify production (present since 2026-09-07): the production
 # database must already hold these model names.
@@ -101,9 +131,11 @@ holds_must_have() {
 
 FOUND=""
 if [ -n "${PG_DATABASE:-}" ]; then
+  check_safe_name "database" "$PG_DATABASE"
   C="${CANDIDATES[0]}"
-  U="$(run "docker exec $C printenv POSTGRES_USER" 2>/dev/null || echo postgres)"
-  NAMES="$(run "docker exec $C psql -U $U -d $PG_DATABASE -Atc \"select name from inference_models order by name\"" 2>/dev/null | tr '\n' ' ' | sed 's/ $//' || true)"
+  U="$(run "docker exec \"$C\" printenv POSTGRES_USER" 2>/dev/null || echo postgres)"
+  check_safe_name "user" "$U"
+  NAMES="$(run "docker exec \"$C\" psql -U \"$U\" -d \"$PG_DATABASE\" -Atc \"select name from inference_models order by name\"" 2>/dev/null | tr '\n' ' ' | sed 's/ $//' || true)"
   echo "== candidate: container=$C user=$U db=$PG_DATABASE"
   echo "   inference_models: $NAMES"
   holds_must_have "$NAMES" || { echo "Database $PG_DATABASE does not hold the known models ($MUST_HAVE). Not changing anything."; exit 3; }
@@ -113,10 +145,12 @@ else
   # known models. More than one match is a refusal, not a guess.
   MATCHES=""
   for c in "${CANDIDATES[@]}"; do
-    U="$(run "docker exec $c printenv POSTGRES_USER" 2>/dev/null || echo postgres)"
-    DBS="$(run "docker exec $c psql -U $U -d postgres -Atc \"select datname from pg_database where not datistemplate\"" 2>/dev/null || true)"
+    U="$(run "docker exec \"$c\" printenv POSTGRES_USER" 2>/dev/null || echo postgres)"
+    check_safe_name "user" "$U"
+    DBS="$(run "docker exec \"$c\" psql -U \"$U\" -d postgres -Atc \"select datname from pg_database where not datistemplate\"" 2>/dev/null || true)"
     for d in $DBS; do
-      NAMES="$(run "docker exec $c psql -U $U -d $d -Atc \"select name from inference_models order by name\"" 2>/dev/null | tr '\n' ' ' | sed 's/ $//' || true)"
+      check_safe_name "database" "$d"
+      NAMES="$(run "docker exec \"$c\" psql -U \"$U\" -d \"$d\" -Atc \"select name from inference_models order by name\"" 2>/dev/null | tr '\n' ' ' | sed 's/ $//' || true)"
       [ -n "$NAMES" ] || continue
       echo "== candidate: container=$c user=$U db=$d"
       echo "   inference_models: $NAMES"
@@ -139,9 +173,12 @@ else
   FOUND="$(printf '%s' "$MATCHES" | head -n 1)"
 fi
 IFS='|' read -r C U D <<<"$FOUND"
+check_safe_name "container" "$C"
+check_safe_name "user" "$U"
+check_safe_name "database" "$D"
 echo "== production database: container=$C user=$U db=$D"
 echo "== rows now:"
-run "docker exec $C psql -U $U -d $D -c \"$SHOW\""
+run "docker exec \"$C\" psql -U \"$U\" -d \"$D\" -c \"$SHOW\""
 
 if [ "$ROWS_ONLY" -eq 1 ]; then
   exit 0
@@ -155,6 +192,6 @@ fi
 
 # 3. Apply. The SQL travels over stdin, so nothing is written on the server.
 echo "== applying $SQL_FILE"
-run "docker exec -i $C psql -v ON_ERROR_STOP=1 -U $U -d $D" < "$SQL_FILE"
+run "docker exec -i \"$C\" psql -v ON_ERROR_STOP=1 -U \"$U\" -d \"$D\"" < "$SQL_FILE"
 echo "== rows after:"
-run "docker exec $C psql -U $U -d $D -c \"$SHOW\""
+run "docker exec \"$C\" psql -U \"$U\" -d \"$D\" -c \"$SHOW\""

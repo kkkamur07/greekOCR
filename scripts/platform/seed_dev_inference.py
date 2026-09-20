@@ -30,7 +30,7 @@ import os
 from collections.abc import Sequence
 
 from _bootstrap import ensure_nomikos_on_path
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 ensure_nomikos_on_path()
 
@@ -148,20 +148,30 @@ async def _upsert_model(*, name: str, task: InferenceTask) -> InferenceModel:
     default_params = {"device": entry.device.value}
 
     async with system_session() as session:
+        # artifact_ref is not unique, so the old name and the new name can
+        # both be present with the same ref. One query fetches every row
+        # matching the ref or the candidate names, then all but one are
+        # removed: the row already carrying the display name wins, else the
+        # oldest row wins. This never calls scalar_one_or_none on the ref,
+        # which would raise before the duplicates could be removed.
         result = await session.execute(
-            select(InferenceModel).where(InferenceModel.artifact_ref == artifact_ref)
-        )
-        model = result.scalar_one_or_none()
-        if model is None:
-            result = await session.execute(
-                select(InferenceModel)
-                .where(InferenceModel.name.in_(candidate_names_for(name)))
-                .order_by(InferenceModel.created_at, InferenceModel.name)
+            select(InferenceModel).where(
+                or_(
+                    InferenceModel.artifact_ref == artifact_ref,
+                    InferenceModel.name.in_(candidate_names_for(name)),
+                )
             )
-            model, duplicates = split_duplicate_models(result.scalars().all())
-            for duplicate in duplicates:
-                await session.delete(duplicate)
-            if duplicates:
+        )
+        rows = list(result.scalars().all())
+        model = None
+        if rows:
+            named = [row for row in rows if row.name == display_name]
+            pool = named or rows
+            model = min(pool, key=lambda row: (row.created_at, row.name))
+            for duplicate in rows:
+                if duplicate is not model:
+                    await session.delete(duplicate)
+            if len(rows) > 1:
                 await session.flush()
         if model is None:
             model = InferenceModel(
