@@ -145,7 +145,7 @@ models:
         hub_revision: 5c20a584b39988a25dfc682f9fe634ac1b4a42dd
         artifact_sha256: d3e9c086541157a2f55209bc4802206478231e7637c12ee4884504f94d6c4ed3
 
-  ppocrv6-det-medium:
+  ppocr-segment:
     task: segment
     architecture: ppocr-det
     device: cpu

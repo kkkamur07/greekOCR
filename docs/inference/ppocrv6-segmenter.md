@@ -145,7 +145,7 @@ which is expected from the known gaps below.
 The artifact is published at
 `hf://nomikos-project/segmentation-ppocrv6-det@stable` (file
 `ppocrv6-det.onnx`), pinned in `nomikos_inference/registry.yaml` under
-model id `ppocrv6-det-medium` by Hub commit
+model id `ppocr-segment` by Hub commit
 `5091b556c838ce540fde886ead2546fd5feadf62` and artifact SHA-256
 `09e4c827c5bb20a0344374bbf8b88d41b7c8bf2be3a0db82ffed3bf090eacfe3`.
 The download was verified back from the Hub at the pinned revision before

@@ -375,7 +375,7 @@ def ppocr_pages_run(
 ) -> dict:
     """The ppocr-det artifact through the installed runner, at two page sizes.
 
-    One session-scoped run: it resolves `ppocrv6-det-medium` out of the installed
+    One session-scoped run: it resolves `ppocr-segment` out of the installed
     wheel's own bundled **Registry** into its own **Hub cache**, so the download
     revision, the digest check, and the graph under test are all the shipped ones.
     The pages are synthetic white canvases with three rendered text lines; the
@@ -393,11 +393,11 @@ from nomikos_inference.jobs.runner import run_model
 from nomikos_inference.registry import load_registry, get_model_entry
 from nomikos_inference.weights import resolve_weights_source
 
-entry = get_model_entry(load_registry(), "ppocrv6-det-medium", "stable")
+entry = get_model_entry(load_registry(), "ppocr-segment", "stable")
 version = entry.versions["stable"]
 path = resolve_weights_source(
     version.weights_source,
-    registry_model_id="ppocrv6-det-medium",
+    registry_model_id="ppocr-segment",
     registry_tag="stable",
     hub_revision=version.hub_revision,
     artifact_sha256=version.artifact_sha256,
@@ -418,7 +418,7 @@ for width, height in [(480, 320), (317, 205)]:
     canvas.save(buffer, format="PNG")
     response = run_model(
         task=InferenceTask.segment,
-        registry_model_id="ppocrv6-det-medium",
+        registry_model_id="ppocr-segment",
         registry_tag="stable",
         image_bytes=buffer.getvalue(),
     )
@@ -449,7 +449,7 @@ def test_the_ppocr_det_artifact_segments_synthetic_pages(ppocr_pages_run: dict) 
 
     result = ppocr_pages_run["result"]
     pin = yaml.safe_load((REPO_ROOT / "nomikos_inference" / "registry.yaml").read_text())["models"][
-        "ppocrv6-det-medium"
+        "ppocr-segment"
     ]["versions"]["stable"]
 
     assert result["digest"] == pin["artifact_sha256"]
