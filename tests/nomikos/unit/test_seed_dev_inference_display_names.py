@@ -12,7 +12,8 @@ from __future__ import annotations
 import importlib
 import sys
 from collections.abc import Iterator
-from types import ModuleType
+from datetime import datetime
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
@@ -47,7 +48,6 @@ def test_artifact_refs_use_registry_ids_never_display_names(
     assert seed_module.artifact_ref_for("ppocr-segment") == "registry://ppocr-segment?tag=stable"
     for registry_id, display_name in seed_module.SEGMENT_DISPLAY_NAMES.items():
         ref = seed_module.artifact_ref_for(registry_id)
-        assert seed_module.registry_id_from_artifact_ref(ref) == registry_id
         assert ref.split("://", 1)[1].split("?", 1)[0] == registry_id
         assert display_name != registry_id
 
@@ -56,6 +56,14 @@ def test_candidate_names_cover_old_and_new_rows(seed_module: ModuleType) -> None
     assert seed_module.candidate_names_for("blla-segment") == ("blla-segment", "kraken")
     assert seed_module.candidate_names_for("ppocr-segment") == ("ppocr-segment", "ppocr")
     assert seed_module.candidate_names_for("greek-calamari-v1") == ("greek-calamari-v1",)
+
+
+def test_duplicate_name_rows_keep_the_oldest(seed_module: ModuleType) -> None:
+    old = SimpleNamespace(name="blla-segment", created_at=datetime(2026, 1, 1))
+    new = SimpleNamespace(name="kraken", created_at=datetime(2026, 2, 1))
+    keep, delete = seed_module.split_duplicate_models([new, old])
+    assert keep is old
+    assert delete == [new]
 
 
 def test_default_segment_ids_offer_both_models(

@@ -27,6 +27,7 @@ Overrides, both optional and both comma-separated:
 
 import asyncio
 import os
+from collections.abc import Sequence
 
 from _bootstrap import ensure_nomikos_on_path
 from sqlalchemy import select
@@ -73,18 +74,27 @@ def artifact_ref_for(registry_id: str) -> str:
     return f"registry://{registry_id}?tag=stable"
 
 
-def registry_id_from_artifact_ref(artifact_ref: str) -> str:
-    """Parse the registry id back out of a dispatch ref."""
-    ref = artifact_ref.removeprefix("registry://")
-    return ref.split("?", 1)[0]
-
-
 def candidate_names_for(registry_id: str) -> tuple[str, ...]:
     """Return every name a catalog row for this id may still carry."""
     display_name = display_name_for(registry_id)
     if display_name == registry_id:
         return (registry_id,)
     return (registry_id, display_name)
+
+
+def split_duplicate_models(
+    models: Sequence[InferenceModel],
+) -> tuple[InferenceModel | None, list[InferenceModel]]:
+    """Keep the oldest of several same-name rows, mark the rest for deletion.
+
+    A dev database can hold both the old registry-id name and the new display
+    name (an old seed plus a hand-made row). Ordering by created_at then name
+    keeps the choice deterministic.
+    """
+    ordered = sorted(models, key=lambda model: (model.created_at, model.name))
+    if not ordered:
+        return None, []
+    return ordered[0], list(ordered[1:])
 
 
 TRANSCRIBE_MODELS = _ids(
@@ -144,9 +154,15 @@ async def _upsert_model(*, name: str, task: InferenceTask) -> InferenceModel:
         model = result.scalar_one_or_none()
         if model is None:
             result = await session.execute(
-                select(InferenceModel).where(InferenceModel.name.in_(candidate_names_for(name)))
+                select(InferenceModel)
+                .where(InferenceModel.name.in_(candidate_names_for(name)))
+                .order_by(InferenceModel.created_at, InferenceModel.name)
             )
-            model = result.scalar_one_or_none()
+            model, duplicates = split_duplicate_models(result.scalars().all())
+            for duplicate in duplicates:
+                await session.delete(duplicate)
+            if duplicates:
+                await session.flush()
         if model is None:
             model = InferenceModel(
                 name=display_name,
