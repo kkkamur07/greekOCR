@@ -24,7 +24,7 @@ Upload a manuscript page and Nomikos segments it into written lines, drafts a tr
 
 - **Keep the expert in the loop.** Models draft segments and transcriptions; researchers correct and approve. Model output is never treated as automatic ground truth.
 - **Operate inside your own data boundary.** Keep application data behind an API you control, with your own hosting, data policy, and review conventions.
-- **Run inference on your own computer.** Point the `nomikos` agent at the platform and run supported BLLA and Calamari models on a researcher's CPU. The agent only makes outbound requests, so it needs no inbound port, VPN, or proxy.
+- **Run inference on your own computer.** Point the `nomikos` agent at the platform and run supported BLLA, Calamari, and PP-OCR models on a researcher's CPU. The agent only makes outbound requests, so it needs no inbound port, VPN, or proxy.
 - **Collaborate through projects and sharing.** Organize work in projects, share documents with colleagues, and publish read-only views behind a secret link that a reader opens without an account.
 - **Correct rather than retype.** Fixing a model draft is faster than transcribing a blank page, and approved work exports in a predictable format for publication or retraining.
 
@@ -49,12 +49,16 @@ Through the pinned runtime registry, Nomikos pages can use:
 | Registry id | Task and script | Architecture | Weights |
 | --- | --- | --- | --- |
 | `blla-segment` | Page segmentation, any script | Kraken BLLA | [segmentation-blla](https://huggingface.co/nomikos-project/segmentation-blla) |
+| `ppocr-segment` | Page segmentation, any script | PP-OCRv6 detection (ONNX Runtime) | [segmentation-ppocrv6-det](https://huggingface.co/nomikos-project/segmentation-ppocrv6-det) |
 | `greek-calamari-v1` | Line HTR, Byzantine Greek (`grc`) | Calamari | [greek-htr-calamari](https://huggingface.co/nomikos-project/greek-htr-calamari) |
 | `armenian-calamari-v1` | Line HTR, Armenian (`hy`) | Calamari | [armenian-htr-calamari](https://huggingface.co/nomikos-project/armenian-htr-calamari) |
 | `syriac-calamari-v2` | Line HTR, Syriac (`syr`) | Calamari | [syriac-htr-calamari](https://huggingface.co/nomikos-project/syriac-htr-calamari) |
+| `syriac-ppocr-v1` | Line HTR, Syriac (`syr`) | PP-OCRv6 recognition (ONNX Runtime) | [syriac-htr-ppocr_rec](https://huggingface.co/nomikos-project/syriac-htr-ppocr_rec) |
 | `coptic-calamari-v1` | Line HTR, Coptic (`cop`) | Calamari | [coptic-htr-calamari](https://huggingface.co/nomikos-project/coptic-htr-calamari) |
 
-All four HTR checkpoints share one architecture: a 40/60-filter CNN followed by two 200-unit
+In the platform pickers the segmenters appear as kraken (blla-segment) and ppocr (ppocr-segment); kraken is preselected and there is no Default entry.
+
+All four Calamari HTR checkpoints share one architecture: a 40/60-filter CNN followed by two 200-unit
 bidirectional LSTM layers at line height 48. Read off the Coptic and Syriac checkpoints, whose
 structural fields agree exactly (3x3 convolutions 1 to 40 to 60, BiLSTM weights at `layers.4`
 and `layers.6` with 200-unit hidden states, blank index 0, temperature -1.0); each trains

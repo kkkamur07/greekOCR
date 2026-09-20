@@ -132,7 +132,11 @@ updated to match `VERSION`.
 creates `InferenceModel` rows with `registry://<model-id>?tag=stable` artifact
 references and project-level bindings. Its defaults are
 `blla-segment` for segmentation and `syriac-calamari-v2` for
-transcription.
+transcription. The catalog also includes `ppocr-segment` (page
+segmentation, PP-OCRv6 detection) and `syriac-ppocr-v1` (Syriac line
+HTR, PP-OCR recognition). In the platform pickers the segmenters appear
+as kraken (blla-segment) and ppocr (ppocr-segment); kraken is
+preselected and there is no Default entry.
 
 ```bash
 uv run --group platform python scripts/platform/seed_dev_inference.py
