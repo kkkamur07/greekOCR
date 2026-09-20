@@ -1086,3 +1086,111 @@ def test_no_limit_with_missing_job_line_is_not_comparable(tmp_path, monkeypatch)
     report = json.loads(Path(out_dir, "report.json").read_text(encoding="utf-8"))
     assert report["comparison"]["verdict"] == "NOT_COMPARABLE"
     assert "job line L3 no longer exists on the page" in report["comparison"]["reason"]
+
+
+def whole_page_job(result_ids, failed_indexes, extra_page_ids=()):
+    ids = [f"L{i}" for i in range(5)]
+    job = {
+        "id": "job-1",
+        "status": "done",
+        "type": "transcribe",
+        "document_id": "doc-1",
+        "document_part_id": "part-1",
+        "payload": {"ml_params": {"model": "syriac-ppocr-v1"}},
+        "result": {
+            "transcription_id": "t-1",
+            "lines": [
+                {"line_id": line_id, "text": f"text {line_id}", "confidence": 0.9}
+                for line_id in result_ids
+            ],
+            "failed_line_indexes": failed_indexes,
+        },
+    }
+    page_ids = list(ids) + list(extra_page_ids)
+    part_lines = [
+        {"id": line_id, "order": index, "points": BOX_A, "created_at": "2026-01-01"}
+        for index, line_id in enumerate(page_ids)
+    ]
+    return job, part_lines
+
+
+def test_whole_page_failed_line_is_mismatch(tmp_path, monkeypatch):
+    monkeypatch.setenv("NOMIKOS_TOKEN", "dummy")
+    ids = [f"L{i}" for i in range(5)]
+    stub_transcribe_run(monkeypatch, ids)
+    job, part_lines = whole_page_job([i for i in ids if i != "L2"], [2])
+    code, out_dir = run_transcribe_main(job, part_lines, tmp_path, [])
+    assert code == 1
+    report = json.loads(Path(out_dir, "report.json").read_text(encoding="utf-8"))
+    assert report["comparison"]["verdict"] == "MISMATCH"
+    failed_entries = [
+        item for item in report["comparison"]["line_differences"] if item["line_id"] == "L2"
+    ]
+    assert len(failed_entries) == 1
+    assert failed_entries[0]["platform_error"] is not None
+    assert report["header"]["lines_requested"] == 5
+    assert report["header"]["lines_compared"] == 5
+
+
+def test_whole_page_failed_line_unmappable_is_not_comparable(tmp_path, monkeypatch):
+    monkeypatch.setenv("NOMIKOS_TOKEN", "dummy")
+    ids = [f"L{i}" for i in range(5)]
+    stub_transcribe_run(monkeypatch, ids)
+    job, part_lines = whole_page_job([i for i in ids if i != "L2"], [2], extra_page_ids=("LX",))
+    code, out_dir = run_transcribe_main(job, part_lines, tmp_path, [])
+    assert code == 3
+    report = json.loads(Path(out_dir, "report.json").read_text(encoding="utf-8"))
+    assert report["comparison"]["verdict"] == "NOT_COMPARABLE"
+    assert report["comparison"]["reason"] == "failed line indexes cannot be mapped to line ids"
+
+
+def test_payload_ids_failed_index_is_mismatch(tmp_path, monkeypatch):
+    monkeypatch.setenv("NOMIKOS_TOKEN", "dummy")
+    ids = ["A", "B", "C", "D", "E"]
+    stub_transcribe_run(monkeypatch, ids)
+    job = {
+        "id": "job-1",
+        "status": "done",
+        "type": "transcribe",
+        "document_id": "doc-1",
+        "document_part_id": "part-1",
+        "payload": {
+            "ml_params": {"model": "syriac-ppocr-v1"},
+            "line_ids": ids,
+        },
+        "result": {
+            "transcription_id": "t-1",
+            "lines": [
+                {"line_id": line_id, "text": f"text {line_id}", "confidence": 0.9}
+                for line_id in ids
+                if line_id != "D"
+            ],
+            "failed_line_indexes": [3],
+        },
+    }
+    part_lines = [
+        {"id": line_id, "order": index, "points": BOX_A, "created_at": "2026-01-01"}
+        for index, line_id in enumerate(ids)
+    ]
+    code, out_dir = run_transcribe_main(job, part_lines, tmp_path, [])
+    assert code == 1
+    report = json.loads(Path(out_dir, "report.json").read_text(encoding="utf-8"))
+    assert report["comparison"]["verdict"] == "MISMATCH"
+    failed_entries = [
+        item for item in report["comparison"]["line_differences"] if item["line_id"] == "D"
+    ]
+    assert len(failed_entries) == 1
+    assert failed_entries[0]["platform_error"] is not None
+
+
+def test_limit_ignores_failed_line_outside_subset(tmp_path, monkeypatch):
+    monkeypatch.setenv("NOMIKOS_TOKEN", "dummy")
+    ids = [f"L{i}" for i in range(5)]
+    stub_transcribe_run(monkeypatch, ids[:2])
+    job, part_lines = whole_page_job([i for i in ids if i != "L4"], [4])
+    code, out_dir = run_transcribe_main(job, part_lines, tmp_path, ["--line-limit", "2"])
+    assert code == 0
+    report = json.loads(Path(out_dir, "report.json").read_text(encoding="utf-8"))
+    assert report["comparison"]["verdict"] == "IDENTICAL"
+    assert report["header"]["lines_requested"] == 2
+    assert report["header"]["lines_compared"] == 2

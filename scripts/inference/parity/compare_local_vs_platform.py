@@ -73,6 +73,17 @@ with an optional ``failed_line_indexes`` list added by the callback
 is no per-line ``output`` object and no ``line_index`` on the platform
 side; the local contract shape keeps both, so each side has its own
 normaliser and lines pair on ``line_id`` only.
+
+(f) Failed lines are absent from the summary: the indexes are positions
+in the dispatched region order. A whole-page job is dispatched all part
+lines in ``(Line.order, Line.created_at)`` sequence
+(``nomikos/backend/jobs/application/inference_dispatcher.py:156-170``),
+so the order is rebuilt from the sorted page lines and trusted only
+when its length fits the summary plus the failures and the surviving
+positions match the result ids in order; a selective job maps indexes
+through its own ``payload.line_ids``. Mapped failures are run locally
+and reported per line as failed on the platform, and any run with one
+in scope is a MISMATCH, never IDENTICAL.
 """
 
 from __future__ import annotations
@@ -543,9 +554,11 @@ def compare_transcribe_lines(
     local_lines: list[dict[str, Any]],
     platform_lines: list[dict[str, Any]],
     failed_line_indexes: list[int] | None = None,
+    failed_line_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     local = [_norm_local_transcribe_line(line) for line in local_lines]
     platform = [_norm_platform_transcribe_line(line) for line in platform_lines]
+    failed_ids = {str(line_id) for line_id in (failed_line_ids or [])}
     result: dict[str, Any] = {
         "local_line_count": len(local),
         "platform_line_count": len(platform),
@@ -580,8 +593,9 @@ def compare_transcribe_lines(
         if left["confidence"] is not None and right["confidence"] is not None:
             conf_diff = abs(float(left["confidence"]) - float(right["confidence"]))
             result["max_confidence_diff"] = max(result["max_confidence_diff"], conf_diff)
+        platform_error = "failed on the platform" if line_id in failed_ids else None
         text_equal = left_text == right_text
-        error_equal = (left["error"] or None) == (right["error"] or None)
+        error_equal = (left["error"] or None) == platform_error
         entry: dict[str, Any] = {
             "line_id": line_id,
             "line_index": left["line_index"],
@@ -591,7 +605,7 @@ def compare_transcribe_lines(
             "cer": cer,
             "confidence_diff": conf_diff,
             "local_error": left["error"],
-            "platform_error": right["error"],
+            "platform_error": platform_error,
         }
         if not text_equal or not error_equal:
             result["line_differences"].append(entry)
@@ -896,10 +910,11 @@ def render_report_markdown(report: dict[str, Any]) -> str:
         if comparison.get("failed_line_indexes"):
             lines.append(f"Failed line indexes: {comparison['failed_line_indexes']}")
         for item in comparison.get("line_differences", [])[:50]:
+            marker = " [platform failed]" if item.get("platform_error") else ""
             lines.append(
                 f"Line {item.get('line_id')} (index {item.get('line_index')}): "
                 f"local {item.get('local_text')!r} platform {item.get('platform_text')!r} "
-                f"CER {item.get('cer')}"
+                f"CER {item.get('cer')}{marker}"
             )
         if comparison.get("only_local"):
             lines.append(f"Only local: {comparison['only_local']}")
@@ -1074,6 +1089,42 @@ _EXIT_BY_VERDICT = {
     "EMPTY": 3,
     "NOT_COMPARABLE": 3,
 }
+
+
+def _transcribe_unmappable(
+    args: argparse.Namespace,
+    model_entry: dict[str, Any],
+    registry_model_id: str,
+    registry_tag: str,
+    model_uuid: str,
+    job_id: str,
+    base_params: dict[str, Any],
+    transcription_id: str | None,
+    model_verification: str,
+    lines_requested: int,
+    lines_compared: int,
+    summary: dict[str, Any],
+    out_dir: str,
+) -> int:
+    reason = "failed line indexes cannot be mapped to line ids"
+    print(reason, file=sys.stderr)
+    header = _base_header(
+        args,
+        model_entry,
+        registry_model_id,
+        registry_tag,
+        model_uuid,
+        job_id,
+        dict(base_params),
+        None,
+        None,
+    )
+    header["transcription_id"] = transcription_id
+    header["model_verification"] = model_verification
+    header["lines_requested"] = lines_requested
+    header["lines_compared"] = lines_compared
+    comparison = {"verdict": "NOT_COMPARABLE", "reason": reason}
+    return _write_report(args, header, comparison, None, summary, out_dir)
 
 
 def _write_private_file(path: str, content: str) -> None:
@@ -1339,13 +1390,62 @@ def run_comparison(
     part_lines = client.list_part_lines(args.project_id, args.document_id, part_id)
     summary = job.get("result") if isinstance(job.get("result"), dict) else {}
     transcription_id, platform_lines, failed_indexes = parse_platform_transcribe(summary)
+    result_ids = [
+        str(line.get("line_id")) for line in platform_lines if line.get("line_id") is not None
+    ]
+    failed_ids: list[str] = []
     payload_ids = payload.get("line_ids")
     if isinstance(payload_ids, list) and payload_ids:
         job_ordered_ids = [str(line_id) for line_id in payload_ids]
+        for index in failed_indexes:
+            if 0 <= index < len(job_ordered_ids):
+                failed_ids.append(job_ordered_ids[index])
+            else:
+                return _transcribe_unmappable(
+                    args,
+                    model_entry,
+                    registry_model_id,
+                    registry_tag,
+                    model_uuid,
+                    job_id,
+                    base_params,
+                    transcription_id,
+                    model_verification,
+                    len(result_ids) + len(failed_indexes),
+                    len(result_ids),
+                    summary,
+                    out_dir,
+                )
+    elif not failed_indexes:
+        job_ordered_ids = result_ids
     else:
-        job_ordered_ids = [
-            str(line.get("line_id")) for line in platform_lines if line.get("line_id") is not None
-        ]
+        # Whole-page jobs carry no line_ids: the worker was dispatched the
+        # page lines in (order, created_at) sequence with one region per line
+        # (inference_dispatcher.py:163-170, load_lines order), so the failed
+        # indexes are positions in that same order, rebuilt here with the
+        # existing page sort.
+        dispatched_ids = [str(line.get("id")) for line in _sort_part_lines(part_lines)]
+        failed_set = set(failed_indexes)
+        kept_ids = [line_id for pos, line_id in enumerate(dispatched_ids) if pos not in failed_set]
+        if len(dispatched_ids) == len(result_ids) + len(failed_indexes) and kept_ids == result_ids:
+            failed_ids = [dispatched_ids[index] for index in sorted(failed_set)]
+            job_ordered_ids = dispatched_ids
+        else:
+            return _transcribe_unmappable(
+                args,
+                model_entry,
+                registry_model_id,
+                registry_tag,
+                model_uuid,
+                job_id,
+                base_params,
+                transcription_id,
+                model_verification,
+                len(result_ids) + len(failed_indexes),
+                len(result_ids),
+                summary,
+                out_dir,
+            )
     if args.line_limit is not None:
         requested_ids = job_ordered_ids[: args.line_limit]
     else:
@@ -1384,8 +1484,14 @@ def run_comparison(
     local_dump = _run_local(args.task, registry_model_id, registry_tag, image_bytes, params)
     requested_set = set(requested_ids)
     platform_subset = [line for line in platform_lines if str(line.get("line_id")) in requested_set]
+    present_ids = {str(line.get("line_id")) for line in platform_subset}
+    for failed_id in failed_ids:
+        if failed_id in requested_set and failed_id not in present_ids:
+            platform_subset.append({"line_id": failed_id, "text": "", "confidence": None})
+            present_ids.add(failed_id)
+    failed_in_scope = [failed_id for failed_id in failed_ids if failed_id in requested_set]
     comparison = compare_transcribe_lines(
-        local_dump.get("lines", []), platform_subset, failed_indexes
+        local_dump.get("lines", []), platform_subset, failed_indexes, failed_in_scope
     )
     header = _base_header(
         args,
