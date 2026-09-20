@@ -53,6 +53,8 @@ case "$last" in
   *"select datname"*)
     if [ "$MODE" = "two-dbs" ]; then
       printf 'prod_one\nprod_two\n'
+    elif [ "$MODE" = "evil-db" ]; then
+      printf 'nomikos;touch /tmp/pwned\n'
     else
       echo "prod_main"
     fi
@@ -208,6 +210,32 @@ elif [ -e "$LOG" ]; then
   fail "(g) --help makes zero ssh calls"
 else
   pass "(g) --help prints usage with zero ssh calls"
+fi
+
+# (h) evil discovered database name: exit 5, never placed in a remote command.
+run_script evil-db "$TMP/change.sql"
+if [ "$CODE" -ne 5 ]; then
+  fail "(h) evil database name exits 5 (got $CODE)"
+elif ! grep -q "refusing unsafe database name" "$ERR"; then
+  fail "(h) evil database name prints a refusal on stderr"
+elif grep -q "nomikos;touch" "$LOG"; then
+  fail "(h) evil database name never reaches a remote command"
+else
+  pass "(h) evil database name exits 5 and never reaches a remote command"
+fi
+
+# (i) unsafe PG_CONTAINER override: exit 5 before any ssh call uses it.
+export PG_CONTAINER='bad;touch /tmp/pwned'
+run_script normal "$TMP/change.sql"
+unset PG_CONTAINER
+if [ "$CODE" -ne 5 ]; then
+  fail "(i) unsafe PG_CONTAINER exits 5 (got $CODE)"
+elif ! grep -q "refusing unsafe container name" "$ERR"; then
+  fail "(i) unsafe PG_CONTAINER prints a refusal on stderr"
+elif grep -q "bad;touch" "$LOG"; then
+  fail "(i) unsafe PG_CONTAINER never reaches a remote command"
+else
+  pass "(i) unsafe PG_CONTAINER exits 5 and never reaches a remote command"
 fi
 
 echo "passed=$PASS failed=$FAIL"
