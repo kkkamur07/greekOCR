@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -169,6 +170,11 @@ type PartContentSetters = {
  * the page does, so a page turn fetches only what is the page's own: its
  * layout, its Segments, its pairing and its model binding. A cold load and a
  * finished job (which may have written a new layer) fetch everything.
+ *
+ * `segmentChoiceIsExplicitRef` is what keeps an explicit picker choice for
+ * the rest of the document. The picker's change handler sets it, a
+ * document-level load clears it, and the selection below reads it at apply
+ * time so a choice made while the read is in flight still wins.
  */
 async function fetchPartContent(
   projectId: string,
@@ -176,7 +182,13 @@ async function fetchPartContent(
   partId: string,
   apply: <T>(setter: (value: T) => void, value: T) => void,
   setters: PartContentSetters,
-  { documentLevel }: { documentLevel: boolean },
+  {
+    documentLevel,
+    segmentChoiceIsExplicitRef,
+  }: {
+    documentLevel: boolean;
+    segmentChoiceIsExplicitRef?: { current: boolean };
+  },
 ): Promise<void> {
   const [
     layoutResult,
@@ -314,20 +326,26 @@ async function fetchPartContent(
     });
     // Unlike the HTR picker, "Default" (null) is a real choice here, so a
     // missing binding selects it rather than the first catalog row: a new
-    // catalog row must not silently change what runs. On a page turn the
-    // catalog is null and an explicit choice already on screen is kept.
-    apply(setters.setSelectedSegmentModelId, (current: string | null) =>
-      resolvedSegmentModel
+    // catalog row must not silently change what runs. An explicit choice wins
+    // over bindings for the rest of the document: on a document-level load
+    // the flag was cleared before this read, so the binding if any else null
+    // applies; on a page turn an explicit choice keeps the current value,
+    // else the binding if any else the current value is kept.
+    apply(setters.setSelectedSegmentModelId, (current: string | null) => {
+      if (segmentChoiceIsExplicitRef?.current) return current;
+      return resolvedSegmentModel
         ? resolvedSegmentModel.id
         : segmentModels
           ? null
-          : current,
-    );
+          : current;
+    });
   } else {
     apply(setters.setTranscribeModels, []);
     apply(setters.setSelectedTranscribeModelId, null);
     apply(setters.setSegmentModels, []);
-    apply(setters.setSelectedSegmentModelId, null);
+    apply(setters.setSelectedSegmentModelId, (current: string | null) =>
+      segmentChoiceIsExplicitRef?.current ? current : null,
+    );
   }
 }
 
@@ -393,6 +411,20 @@ export function usePageEditorData(
   const [selectedSegmentModelId, setSelectedSegmentModelId] = useState<
     string | null
   >(null);
+
+  /**
+   * Whether the segment picker choice came from the user. Set by the
+   * picker's change handler, cleared on a document-level load. While set,
+   * page turns keep the choice instead of applying the next part's binding.
+   */
+  const segmentChoiceIsExplicitRef = useRef(false);
+  const handleSelectedSegmentModelIdChange = useCallback(
+    (value: SetStateAction<string | null>) => {
+      segmentChoiceIsExplicitRef.current = true;
+      setSelectedSegmentModelId(value);
+    },
+    [],
+  );
 
   /**
    * Which read of this part is the newest, counted across every effect that
@@ -483,6 +515,10 @@ export function usePageEditorData(
     const carriedPart = carriedDocument
       ? resolvePart(carriedDocument, partId)
       : null;
+    const isDocumentLoad = !carriedPart;
+    if (isDocumentLoad) {
+      segmentChoiceIsExplicitRef.current = false;
+    }
 
     setLoading(!carriedPart);
     setPartLoading(true);
@@ -553,7 +589,7 @@ export function usePageEditorData(
             setSegmentModels,
             setSelectedSegmentModelId,
           },
-          { documentLevel: !carriedPart },
+          { documentLevel: !carriedPart, segmentChoiceIsExplicitRef },
         );
       } catch (err) {
         if (isUnauthorized(err)) {
@@ -636,7 +672,7 @@ export function usePageEditorData(
           setSegmentModels,
           setSelectedSegmentModelId,
         },
-        { documentLevel: true },
+        { documentLevel: true, segmentChoiceIsExplicitRef },
       );
     });
 
@@ -688,7 +724,7 @@ export function usePageEditorData(
     setSelectedTranscribeModelId,
     segmentModels,
     selectedSegmentModelId,
-    setSelectedSegmentModelId,
+    setSelectedSegmentModelId: handleSelectedSegmentModelIdChange,
     parts,
     partIndex,
   };

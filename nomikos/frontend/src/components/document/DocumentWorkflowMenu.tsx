@@ -52,8 +52,8 @@ export function DocumentWorkflowMenu({
     [],
   );
   /**
-   * Null means "Default": `model_id` is not sent and the backend resolves the
-   * binding or the worker's own default, exactly as before this picker
+   * Null means "Default": `model_id: null` is sent and the backend resolves
+   * the binding or the worker's own default, exactly as before this picker
    * existed.
    */
   const [selectedSegmentModelId, setSelectedSegmentModelId] = useState<

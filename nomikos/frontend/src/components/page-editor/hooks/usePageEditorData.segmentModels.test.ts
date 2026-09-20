@@ -38,6 +38,12 @@ const DOCUMENT = {
   ],
 };
 
+const DOCUMENT_TWO = {
+  id: "document-2",
+  project_id: "project-1",
+  parts: [{ id: "part-3", order: 0 }],
+};
+
 const EMPTY_PAIRING = {
   text_lines: [],
   pairing_progress: { paired_lines: 0, total_lines: 0, percent: 0 },
@@ -158,5 +164,142 @@ describe("usePageEditorData segment models", () => {
       "seg-a",
       "seg-b",
     ]);
+  });
+
+  it("keeps an explicit choice when the next page is bound to another model", async () => {
+    resolvePartModelBinding.mockImplementation(
+      (
+        _projectId: string,
+        _documentId: string,
+        partId: string,
+        task: string,
+      ) => {
+        if (task === "transcribe")
+          return Promise.resolve({ model: TRANSCRIBE_MODEL });
+        if (task === "segment" && partId === "part-2")
+          return Promise.resolve({ model: SEGMENT_B });
+        return Promise.reject(new Error("no binding"));
+      },
+    );
+
+    const { result, rerender } = renderHook(
+      ({ partId }: { partId: string }) =>
+        usePageEditorData("project-1", "document-1", partId),
+      { initialProps: { partId: "part-1" } },
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.selectedSegmentModelId).toBeNull();
+
+    act(() => {
+      result.current.setSelectedSegmentModelId("seg-a");
+    });
+    expect(result.current.selectedSegmentModelId).toBe("seg-a");
+
+    rerender({ partId: "part-2" });
+    await waitFor(() => expect(result.current.partLoading).toBe(false));
+
+    expect(result.current.selectedSegmentModelId).toBe("seg-a");
+  });
+
+  it("follows the binding on a page turn without an explicit choice", async () => {
+    resolvePartModelBinding.mockImplementation(
+      (
+        _projectId: string,
+        _documentId: string,
+        partId: string,
+        task: string,
+      ) => {
+        if (task === "transcribe")
+          return Promise.resolve({ model: TRANSCRIBE_MODEL });
+        if (task === "segment" && partId === "part-2")
+          return Promise.resolve({ model: SEGMENT_B });
+        return Promise.reject(new Error("no binding"));
+      },
+    );
+
+    const { result, rerender } = renderHook(
+      ({ partId }: { partId: string }) =>
+        usePageEditorData("project-1", "document-1", partId),
+      { initialProps: { partId: "part-1" } },
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.selectedSegmentModelId).toBeNull();
+
+    rerender({ partId: "part-2" });
+    await waitFor(() => expect(result.current.partLoading).toBe(false));
+
+    expect(result.current.selectedSegmentModelId).toBe("seg-b");
+  });
+
+  it("resets an explicit choice on a document-level load to the new binding", async () => {
+    getDocument.mockImplementation((projectId: unknown, documentId: unknown) =>
+      Promise.resolve(documentId === "document-2" ? DOCUMENT_TWO : DOCUMENT),
+    );
+    resolvePartModelBinding.mockImplementation(
+      (
+        _projectId: string,
+        _documentId: string,
+        partId: string,
+        task: string,
+      ) => {
+        if (task === "transcribe")
+          return Promise.resolve({ model: TRANSCRIBE_MODEL });
+        if (task === "segment" && partId === "part-3")
+          return Promise.resolve({ model: SEGMENT_B });
+        return Promise.reject(new Error("no binding"));
+      },
+    );
+
+    const { result, rerender } = renderHook(
+      ({ documentId, partId }: { documentId: string; partId: string }) =>
+        usePageEditorData("project-1", documentId, partId),
+      { initialProps: { documentId: "document-1", partId: "part-1" } },
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => {
+      result.current.setSelectedSegmentModelId("seg-a");
+    });
+    expect(result.current.selectedSegmentModelId).toBe("seg-a");
+
+    rerender({ documentId: "document-2", partId: "part-3" });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.selectedSegmentModelId).toBe("seg-b");
+  });
+
+  it("resets an explicit choice on a document-level load to Default when unbound", async () => {
+    getDocument.mockImplementation((projectId: unknown, documentId: unknown) =>
+      Promise.resolve(documentId === "document-2" ? DOCUMENT_TWO : DOCUMENT),
+    );
+    resolvePartModelBinding.mockImplementation(
+      (
+        _projectId: string,
+        _documentId: string,
+        _partId: string,
+        task: string,
+      ) => {
+        if (task === "transcribe")
+          return Promise.resolve({ model: TRANSCRIBE_MODEL });
+        return Promise.reject(new Error("no binding"));
+      },
+    );
+
+    const { result, rerender } = renderHook(
+      ({ documentId, partId }: { documentId: string; partId: string }) =>
+        usePageEditorData("project-1", documentId, partId),
+      { initialProps: { documentId: "document-1", partId: "part-1" } },
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => {
+      result.current.setSelectedSegmentModelId("seg-a");
+    });
+    expect(result.current.selectedSegmentModelId).toBe("seg-a");
+
+    rerender({ documentId: "document-2", partId: "part-3" });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.selectedSegmentModelId).toBeNull();
   });
 });
