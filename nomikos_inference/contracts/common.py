@@ -28,6 +28,7 @@ class InferenceJobStatus(StrEnum):
 
 class RegistryArchitecture(StrEnum):
     calamari = "calamari"
+    ppocr_rec = "ppocr_rec"
     blla = "blla"
     blla_segment = "blla-segment"
 
