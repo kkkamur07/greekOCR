@@ -196,12 +196,13 @@ export function PageEditorToolbar({
   const selectedSegmentModel = segmentModels.find(
     (model) => model.id === selectedSegmentModelId,
   );
-  const selectedSegmentModelName = selectedSegmentModel?.name ?? "Default";
-  // The tooltip names the model the button will actually use: the chosen
-  // catalog row, or the default binding when none is selected.
+  const selectedSegmentModelName = selectedSegmentModel?.name ?? "not selected";
+  // The tooltip names the model the button will actually use. Null only
+  // happens while the catalog is empty or failed to load, when the select
+  // is disabled and the request omits the model id.
   const segmentTooltip = selectedSegmentModel
     ? `Segment this page with ${selectedSegmentModel.name}`
-    : "Segment this page with the default model";
+    : "Segment this page";
 
   // The quick button transcribes what the researcher is looking at: the
   // selected segment if there is one, otherwise the page. Naming the scope on
@@ -347,7 +348,6 @@ export function PageEditorToolbar({
             selectedModelId={selectedSegmentModelId}
             onSelectedModelIdChange={onSelectedSegmentModelIdChange}
             disabled={processing}
-            includeDefaultOption
           />
           <button
             type="button"

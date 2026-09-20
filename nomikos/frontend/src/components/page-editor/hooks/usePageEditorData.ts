@@ -25,6 +25,7 @@ import {
   redirectToLogin,
 } from "../../../auth/session";
 import { useBackgroundJobs } from "../../../context/BackgroundJobsContext";
+import { resolveSegmentModelId } from "../segmentModelChoice";
 
 function accessMessage(error: ApiError): string {
   if (error.status === 401) {
@@ -324,27 +325,39 @@ async function fetchPartContent(
         ? [resolvedSegmentModel, ...catalog]
         : catalog;
     });
-    // Unlike the HTR picker, "Default" (null) is a real choice here, so a
-    // missing binding selects it rather than the first catalog row: a new
-    // catalog row must not silently change what runs. An explicit choice wins
-    // over bindings for the rest of the document: on a document-level load
-    // the flag was cleared before this read, so the binding if any else null
-    // applies; on a page turn an explicit choice keeps the current value,
-    // else the binding if any else the current value is kept.
+    // There is no empty choice here: one catalog row is always selected, so
+    // a new catalog row must not silently change what runs. An explicit
+    // choice wins over bindings for the rest of the document: on a
+    // document-level load the flag was cleared before this read, so the
+    // binding if any else the canonical row else the first row applies; on
+    // a page turn an explicit choice keeps the current value, else the
+    // binding if any else the current value is kept.
     apply(setters.setSelectedSegmentModelId, (current: string | null) => {
-      if (segmentChoiceIsExplicitRef?.current) return current;
-      return resolvedSegmentModel
-        ? resolvedSegmentModel.id
-        : segmentModels
-          ? null
-          : current;
+      const persisted = segmentChoiceIsExplicitRef?.current ? current : null;
+      if (!segmentModels) {
+        if (persisted) return persisted;
+        return resolvedSegmentModel ? resolvedSegmentModel.id : current;
+      }
+      const catalog =
+        resolvedSegmentModel &&
+        !segmentModels.some((model) => model.id === resolvedSegmentModel.id)
+          ? [resolvedSegmentModel, ...segmentModels]
+          : segmentModels;
+      return resolveSegmentModelId(
+        catalog,
+        persisted,
+        resolvedSegmentModel?.id ?? null,
+      );
     });
   } else {
     apply(setters.setTranscribeModels, []);
     apply(setters.setSelectedTranscribeModelId, null);
     apply(setters.setSegmentModels, []);
-    apply(setters.setSelectedSegmentModelId, (current: string | null) =>
-      segmentChoiceIsExplicitRef?.current ? current : null,
+    // The catalog failed to load: keep whatever was selected (null on a
+    // fresh load), so the request omits the model id exactly as before.
+    apply(
+      setters.setSelectedSegmentModelId,
+      (current: string | null) => current,
     );
   }
 }
@@ -403,10 +416,11 @@ export function usePageEditorData(
     [],
   );
   /**
-   * Null means "Default": `model_id` is not sent and the backend resolves
-   * the binding or the worker's own default, exactly as before this picker
-   * existed. It is never initialised from `segmentModels[0]`, and a page
-   * turn keeps an explicit choice (see fetchPartContent).
+   * One of the `segmentModels` ids once the catalog loads: the picker has
+   * no empty entry, so the segment request always carries it. Null only
+   * while the catalog is empty or failed to load, when the select is
+   * disabled and `model_id` is not sent. A page turn keeps an explicit
+   * choice (see fetchPartContent).
    */
   const [selectedSegmentModelId, setSelectedSegmentModelId] = useState<
     string | null
