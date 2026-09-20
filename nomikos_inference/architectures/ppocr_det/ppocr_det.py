@@ -8,6 +8,7 @@ before the file is opened.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping
 from functools import lru_cache
 from pathlib import Path
@@ -34,6 +35,12 @@ DEFAULT_THRESH = 0.2
 DEFAULT_BOX_THRESH = 0.45
 DEFAULT_UNCLIP_RATIO = 1.4
 DEFAULT_MAX_CANDIDATES = 3000
+# Inference workers share one box: four processes on 8 cores. EXTENDED is
+# about 2x faster than the ALL default with identical boxes, and on c13 it
+# measured 5.85 s at 4 threads against 11.0 s at 2 threads and 3.6 s at 8
+# (docs/inference/ppocrv6-onnx-performance-2026-09-20.md).
+DEFAULT_PPOCR_DET_THREADS = 4
+MAX_PPOCR_DET_THREADS = 64
 
 
 class PPOCRDetUnavailableError(RuntimeError):
@@ -54,6 +61,26 @@ def _resolve_ppocr_det_artifact(
     )
 
 
+def _session_threads() -> int:
+    """Intra-op threads for the detector session, from the environment."""
+    raw = os.environ.get("NOMIKOS_PPOCR_DET_THREADS")
+    if raw is None or raw == "":
+        return DEFAULT_PPOCR_DET_THREADS
+    try:
+        threads = int(raw)
+    except ValueError:
+        raise PPOCRDetUnavailableError(
+            "NOMIKOS_PPOCR_DET_THREADS must be an integer between 1 and "
+            f"{MAX_PPOCR_DET_THREADS}, got {raw!r}"
+        ) from None
+    if not 1 <= threads <= MAX_PPOCR_DET_THREADS:
+        raise PPOCRDetUnavailableError(
+            "NOMIKOS_PPOCR_DET_THREADS must be an integer between 1 and "
+            f"{MAX_PPOCR_DET_THREADS}, got {raw!r}"
+        )
+    return threads
+
+
 @lru_cache(maxsize=4)
 def _load_ppocr_det_session(
     model_path: str,
@@ -68,8 +95,14 @@ def _load_ppocr_det_session(
     try:
         import onnxruntime as ort
 
+        options = ort.SessionOptions()
+        options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_EXTENDED
+        options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+        options.inter_op_num_threads = 1
+        options.intra_op_num_threads = _session_threads()
         session = ort.InferenceSession(
             model_path,
+            sess_options=options,
             providers=["CPUExecutionProvider"],
         )
         inputs = session.get_inputs()

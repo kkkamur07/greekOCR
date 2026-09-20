@@ -13,6 +13,7 @@ from types import SimpleNamespace
 
 import cv2
 import numpy as np
+import onnxruntime as ort
 import pytest
 from PIL import Image
 
@@ -172,6 +173,78 @@ def test_past_the_line_cap_the_highest_scores_survive() -> None:
     # Survivors are numbered in reading (top to bottom) order.
     assert response.lines[0].points[0][1] == 0.0
     assert response.lines[0].external_id == "ppocr-det-line-1"
+
+
+def _fake_ort_session_class(seen: dict) -> type:
+    """An InferenceSession stand-in that records its construction arguments."""
+
+    class FakeORTSession:
+        def __init__(
+            self, path: str, sess_options: object = None, providers: object = None
+        ) -> None:
+            seen["path"] = path
+            seen["options"] = sess_options
+            seen["providers"] = providers
+
+        def get_inputs(self) -> list[SimpleNamespace]:
+            return [SimpleNamespace(name="x", shape=[1, 3, None, None])]
+
+        def get_outputs(self) -> list[SimpleNamespace]:
+            return [SimpleNamespace(name="y", shape=[1, 1, None, None])]
+
+    return FakeORTSession
+
+
+def test_session_uses_extended_sequential_options(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    ppocr_det._load_ppocr_det_session.cache_clear()
+    monkeypatch.delenv("NOMIKOS_PPOCR_DET_THREADS", raising=False)
+    seen: dict = {}
+    monkeypatch.setattr(ort, "InferenceSession", _fake_ort_session_class(seen))
+    artifact = tmp_path / "ppocrv6-threads-default.onnx"
+    artifact.write_bytes(b"fake onnx graph")
+
+    _, input_name, output_name = ppocr_det._load_ppocr_det_session(str(artifact), None)
+
+    assert (input_name, output_name) == ("x", "y")
+    assert seen["providers"] == ["CPUExecutionProvider"]
+    assert (
+        seen["options"].graph_optimization_level == ort.GraphOptimizationLevel.ORT_ENABLE_EXTENDED
+    )
+    assert seen["options"].execution_mode == ort.ExecutionMode.ORT_SEQUENTIAL
+    assert seen["options"].inter_op_num_threads == 1
+    assert seen["options"].intra_op_num_threads == 4
+
+
+def test_session_threads_come_from_the_environment(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    ppocr_det._load_ppocr_det_session.cache_clear()
+    monkeypatch.setenv("NOMIKOS_PPOCR_DET_THREADS", "12")
+    seen: dict = {}
+    monkeypatch.setattr(ort, "InferenceSession", _fake_ort_session_class(seen))
+    artifact = tmp_path / "ppocrv6-threads-env.onnx"
+    artifact.write_bytes(b"fake onnx graph")
+
+    ppocr_det._load_ppocr_det_session(str(artifact), None)
+
+    assert seen["options"].intra_op_num_threads == 12
+
+
+@pytest.mark.parametrize("raw", ["0", "-3", "65", "banana", "4.5"])
+def test_bad_session_threads_raise(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, raw: str
+) -> None:
+    ppocr_det._load_ppocr_det_session.cache_clear()
+    monkeypatch.setenv("NOMIKOS_PPOCR_DET_THREADS", raw)
+    seen: dict = {}
+    monkeypatch.setattr(ort, "InferenceSession", _fake_ort_session_class(seen))
+    artifact = tmp_path / "ppocrv6-threads-bad.onnx"
+    artifact.write_bytes(b"fake onnx graph")
+
+    with pytest.raises(PPOCRDetUnavailableError, match="NOMIKOS_PPOCR_DET_THREADS"):
+        ppocr_det._load_ppocr_det_session(str(artifact), None)
 
 
 def test_run_model_dispatches_ppocr_det(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
