@@ -55,17 +55,26 @@ coordinates with rounding and clipping. The unclip expansion is PaddleX
 `pyclipper` with `JT_ROUND` for the offsetting), declared in
 `[project].dependencies` as `pyclipper>=1.4.0`.
 
-Params and defaults:
+Params, defaults and bounds:
 
-| Param | Default | Meaning |
-|-------|---------|---------|
-| `limit_side_len` | 1920 (320 to 4000) | max side the page is scaled down to |
-| `thresh` | 0.2 | probability map binarisation threshold |
-| `box_thresh` | 0.45 | minimum mean probability inside a quad |
-| `unclip_ratio` | 1.4 | box expansion factor |
-| `max_candidates` | 3000 | most contours considered |
-| `baseline_fraction` | 0.75 | where the synthetic baseline sits down the quad |
-| `reading_direction` | `ltr` | `ltr` or `rtl` column order |
+| Param | Default | Bounds | Meaning |
+|-------|---------|--------|---------|
+| `limit_side_len` | 1920 | integer 320 to 4000 | max side the page is scaled down to |
+| `thresh` | 0.2 | 0 to 1 | probability map binarisation threshold |
+| `box_thresh` | 0.45 | 0 to 1 | minimum mean probability inside a quad |
+| `unclip_ratio` | 1.4 | 0 to 5 | box expansion factor |
+| `max_candidates` | 3000 | integer 1 to 10000 | most contours considered |
+| `baseline_fraction` | 0.75 | 0 to 1 | where the synthetic baseline sits down the quad |
+| `reading_direction` | `ltr` | `ltr` or `rtl` | column order |
+| `merge_fragments` | true | boolean | merge row fragments into visual lines |
+| `resolve_overlaps` | true | boolean | cut stacked neighbours, drop duplicates |
+| `noise_policy` | `flag` | `flag`, `drop` or `off` | what happens to suspect lines |
+| `merge_gap_ratio` | 1.5 | 0 to 10 | max merge gap in page median line heights |
+| `merge_max_height_ratio` | 2.0 | 1 to 10 | max member height ratio inside a merge |
+| `overlap_cut_threshold` | 0.20 | 0.05 to 1 | shared area fraction that counts as overlap |
+
+Non-finite values, bools where a number belongs and out-of-range values
+are rejected with a message naming the param and the bound.
 
 Reading order (`reading_order.py`): quads group transitively into columns by
 horizontal overlap, columns run left to right (`ltr`) or right to left
@@ -98,8 +107,10 @@ replaced by the exact PaddleX algorithm for full parity (see below).
 ## End to end validation
 
 `scripts/segmentation/ppocr/verify_adapter.py` feeds each of the 14
-reference pages as bytes through the production entry point with
-`params=None` and compares the returned quads with the Paddle pipeline
+reference pages as bytes through the production entry point with refinement
+switched off (`merge_fragments` false, `resolve_overlaps` false,
+`noise_policy` off, so the gate measures the detector and nothing else)
+and compares the returned quads with the Paddle pipeline
 fixtures (`_ppocr-parity/fixtures/`, cap 1920): counts, then greedy
 one-to-one matching by quad centre with corner-SET distances. Gate:
 identical counts, no unmatched boxes, max corner distance at most 0.5 px.
@@ -140,6 +151,85 @@ text are returned as ordinary lines interleaved with body text (vat-1r
 diagonal library stamps 1-4 and right-margin fragments 57, 59, 62, 64),
 which is expected from the known gaps below.
 
+## Refinement stage
+
+Between detection and the response the adapter refines raw quads into
+manuscript lines (`refinement.py`, pure geometry over the page's own
+medians and the column bands `reading_order.py` builds, which refinement
+shares through `layout_lines`). Order: detect, merge, resolve overlaps,
+classify suspects, order, build the response.
+
+Merge: inside one column, quads that the row grouping puts in the same row
+are one visual line. Row mates merge along x while the gap is at most
+`merge_gap_ratio` (1.5) page median quad heights, unless one member is
+taller than `merge_max_height_ratio` (2.0) times another. A tall
+multi-line initial never merges: it stays its own line with
+`source_metadata.role = "initial"`. A merged boundary is the polygon union
+of its members plus a bridge over the gap inside their shared y range (a
+valid simple polygon, never much taller than one text line, because the
+transcription crop is the boundary's bounding box with a polygon mask).
+Its baseline runs from the outer left end of the leftmost member's
+baseline to the outer right end of the rightmost member's. Score is the
+area-weighted mean; `source_metadata.merged_from` records the count.
+
+Overlaps: after merging, pairs sharing at least `overlap_cut_threshold`
+(0.20) of the smaller polygon are stacked (cut apart at the mid-baseline
+line until they share zero area, unless the cut would remove more than
+half of either polygon), duplicates (coinciding baselines, over half
+shared: only the higher score survives, the one case that removes a
+detection by default) or marked `overlap_unresolved` and left. On the 14
+fixture pages the 0.20 default behaves: 194 pre-merge pairs in 20-50%
+collapse to zero-area cuts except 8 genuinely ambiguous lines that stay
+marked (plus 5 pre-merge pairs above 50%, all grec-p4 duplicates).
+
+Suspects: a singleton that is not an initial is a suspect when it lies
+outside every builder column band (`suspect_reason` `outside_bands`),
+unless it sits strictly between two bands inside the text block top to
+bottom (a gutter numeral keeps its place and is never a suspect by angle
+either); any other non-initial whose bounding-box angle is over 20 degrees
+off the page dominant angle is a suspect (`suspect_reason` `angle`).
+Measured on the 12 Coptic pages against the benchmark matching: 0 of 1002
+real lines flagged with 36 of 106 unmatched detections caught (34%; 49% of
+the non-ignore ones). `noise_policy` `flag` (default) orders suspects after
+every body line; `drop` removes them; `off` changes nothing. With all three
+refinement switches off the adapter output is byte identical to the
+unrefined path.
+
+## Refinement evaluation
+
+`scripts/segmentation/ppocr/evaluate_refinement.py` runs the adapter on
+the 12 Coptic pages with refinement off, defaults and `drop`, scoring each
+against the benchmark target lines with the benchmark's matching (a port
+of `axis`, `assign` and `finish` from
+`server/ppocrv6-quality_eval_20260919.py`; the port recovers 1002 of 1018
+care targets where the benchmark tool recovers 1008, so it is a consistent
+off-vs-defaults comparator rather than identical tooling):
+
+| variant | detections | P | R | F1 | alone | pairs | suspects | wrong |
+|---------|------------|---|---|----|-------|-------|----------|-------|
+| off | 1147 | 0.9065 | 0.9902 | 0.9465 | 1008 | 181 | 0 | 0 |
+| defaults | 1108 | 0.9321 | 0.9843 | 0.9575 | 1002 | 2 | 36 | 0 |
+| drop | 1072 | 0.9644 | 0.9843 | 0.9742 | 1002 | 2 | 0 | 0 |
+
+Alone means care targets covered by exactly one detection; pairs means
+line pairs sharing at least 20% area; wrong means real lines flagged as
+suspects. Pass gate, line by line: recall under defaults (0.9843) is BELOW
+refinement off (0.9902), so the gate FAILS by 6 net lines (8 lost where a
+merge joined a real line to an adjacent fragment and the union axis covers
+neither target polygon, against 2 fragmentations fixed on c14 and c21);
+precision under drop (0.9644) is strictly higher than off (0.9065); the 2
+remaining pairs are the marked-unresolved ones on vat-2r and c21 with zero
+unmarked pairs left; 0 real lines flagged against the 1% budget; c13
+suspects (top sticker 129, bottom stamp 130) read after every body line,
+and vat-1r suspects (headers 69-70, mid fragment 51, margin square 72,
+footers 73-74) read after every body line, while the tall diagonal
+watermarks (lines 1-3, role initial) and the right-margin strip (line 52)
+stay in body order.
+
+Refined overlays (`<page>.refined.overlay.jpg` in
+`_ppocr-parity/refinement/`) draw body quads green with order numbers,
+baselines yellow and suspects red.
+
 ## Publication and registry
 
 The artifact is published at
@@ -160,9 +250,17 @@ default segmenter.
 ## Known gaps
 
 * No region or column blocks: every line hangs under one full-page block.
-* Enlarged initials can be separate boxes.
-* Neighbouring boxes can overlap.
-* Watermarks and page labels and marginal text are returned as ordinary
-  lines.
+* Refinement merges row fragments that share a row, and 7 such merges
+  on the benchmark join a real line to an adjacent fragment so the union
+  axis covers neither target polygon (8 targets lost against 2
+  fragmentations fixed: recall 0.9843 under defaults against 0.9902 with
+  refinement off, net 6 lines; the evaluation table above).
+* Tall non-text shapes take `role` `initial` and are exempt from suspect
+  flagging, so the vat-1r diagonal watermarks (lines 1-3) and the
+  right-margin strip (line 52) stay in body order, as do the c13 top
+  shelfmark (inside its column band) and the centred footer bars.
+* Small inside-band edge fragments are geometrically indistinguishable
+  from narrow real lines and are never flagged; the suspect rule catches
+  36 of 106 unmatched detections and no more by design.
 * The model is not the default segmenter until complete OCR crops are
   validated.
