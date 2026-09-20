@@ -46,11 +46,17 @@ exceeds `limit_side_len` with each side rounded to a multiple of 32 (floor
 CHW float32 batch tensor.
 
 DB postprocess (`postprocessing.py`) mirrors PaddleX 3.7.0 `DBPostProcess`
-in quad mode: binarise at `thresh`, `cv2.findContours` over at most
+in both modes: binarise at `thresh`, `cv2.findContours` over at most
 `max_candidates` contours, minimum-area rectangles with a minimum side of 3,
 `box_score_fast` gated at `box_thresh`, unclip expansion, a second
 minimum-area rectangle with a minimum side of 5, then scaling back to source
-coordinates with rounding and clipping. The unclip expansion is PaddleX
+coordinates with rounding and clipping. Poly mode (the default, see
+"Polygon output (0.4.1)" below) additionally builds each contour's polygon
+(`approxPolyDP` at 0.002 times the arc length, `box_score_fast` on the
+polygon, unclip keeping the largest path, the same minimum side of 5 and
+the same scaling) and falls back to the quad when that fails. Quad mode
+(`box_type: "quad"`) skips the polygon and is byte-identical to 0.4.0.
+The unclip expansion is PaddleX
 3.7.0's own algorithm (OpenCV area and perimeter for the offset distance,
 `pyclipper` with `JT_ROUND` for the offsetting), declared in
 `[project].dependencies` as `pyclipper>=1.4.0`.
@@ -66,6 +72,7 @@ Params, defaults and bounds:
 | `max_candidates` | 3000 | integer 1 to 10000 | most contours considered |
 | `baseline_fraction` | 0.75 | 0 to 1 | where the synthetic baseline sits down the quad |
 | `reading_direction` | `ltr` | `ltr` or `rtl` | column order |
+| `box_type` | `poly` | `poly` or `quad` | served geometry: line polygons, or four-point quads exactly as in 0.4.0 |
 | `merge_fragments` | true | boolean | merge row fragments into visual lines |
 | `resolve_overlaps` | true | boolean | cut stacked neighbours, drop duplicates |
 | `noise_policy` | `flag` | `flag`, `drop` or `off` | what happens to suspect lines |
@@ -96,9 +103,12 @@ an invalid value fails the run with a clear error.
 ## Decisions and their reasons
 
 Boxes, not baselines: PP-OCRv6 emits boxes and the segment contract needs a
-baseline per line, so the adapter synthesises one across the quad at
-`baseline_fraction` 0.75 of the way from the top edge to the bottom edge,
-where kraken baselines sit near the bottom of the letter bodies.
+baseline per line, so in quad mode the adapter synthesises one across the
+quad at `baseline_fraction` 0.75 of the way from the top edge to the bottom
+edge, where kraken baselines sit near the bottom of the letter bodies. In
+poly mode the baseline is a polyline sampled 8 to 16 times along the quad
+long axis at `baseline_fraction` between the polygon's upper and lower
+edges (within 1 px of the quad baseline on straight lines).
 
 Pyclipper instead of shapely: the unclip call was first written with
 shapely `buffer` to avoid a native dependency, but the parity measurement
@@ -108,7 +118,8 @@ replaced by the exact PaddleX algorithm for full parity (see below).
 ## End to end validation
 
 `scripts/segmentation/ppocr/verify_adapter.py` feeds each of the 14
-reference pages as bytes through the production entry point with refinement
+reference pages as bytes through the production entry point in quad mode
+(`box_type` `quad`) with refinement
 switched off (`merge_fragments` false, `resolve_overlaps` false,
 `noise_policy` off, so the gate measures the detector and nothing else)
 and compares the returned quads with the Paddle pipeline
@@ -168,10 +179,14 @@ is taller than `merge_max_height_ratio` (2.0) times another. Fragments of one
 visual line sit side by side; row mates that overlap belong to the
 overlap stage, so the merge stage refuses them. A tall
 multi-line initial never merges: it stays its own line with
-`source_metadata.role = "initial"`. A merged boundary is the polygon union
+`source_metadata.role = "initial"`. In quad mode a merged boundary is the
+polygon union
 of its members plus a bridge over the gap inside their shared y range (a
 valid simple polygon, never much taller than one text line, because the
-transcription crop is the boundary's bounding box with a polygon mask).
+transcription crop is the boundary's bounding box with a polygon mask). In
+poly mode the served outline is the pyclipper union of the member polygons
+when they touch and the convex hull of their points otherwise, simplified
+as described under "Polygon output (0.4.1)".
 Its baseline runs from the outer left end of the leftmost member's
 baseline to the outer right end of the rightmost member's. Score is the
 area-weighted mean; `source_metadata.merged_from` records the count.
@@ -259,8 +274,51 @@ condition from the review; the decision taken was the overlap lower bound
 above, which keeps both pairs split at the 0.1 default.
 
 Refined overlays (`<page>.refined.overlay.jpg` in
-`_ppocr-parity/refinement/`) draw body quads green with order numbers,
-baselines yellow and suspects red.
+`_ppocr-parity/refinement/`) draw body outlines green with order numbers,
+baselines yellow and suspects red. `evaluate_refinement.py --box-type
+quad|poly|both` (default `quad`) selects the served geometry; `both` runs
+off, defaults and drop in each mode and prints a per-page and overall
+quad-vs-poly comparison (mean polygon points, mean polygon over quad area,
+mean overlap between consecutive lines per mode, seconds per page per mode).
+
+## Polygon output (0.4.1)
+
+By default the segmenter returns a polygon that follows each detected text
+line instead of a four-point quad. Every detection still computes its quad
+exactly as before and uses it unchanged for all grouping, ordering, merge,
+overlap, suspect and role decisions, so line-level precision and recall do
+not move; only the served mask (`points`) and baseline change.
+On the 12 Coptic pages the defaults variant scores identically in both
+modes:
+
+| variant | detections | P | R | F1 | alone | pairs | suspects | wrong |
+|---------|------------|---|---|----|-------|-------|----------|-------|
+| defaults quad | 1136 | 0.9164 | 0.9912 | 0.9523 | 1009 | 2 | 52 | 0 |
+| defaults poly | 1136 | 0.9164 | 0.9912 | 0.9523 | 1009 | 2 | 52 | 0 |
+
+(The off and drop variants match too. The script matches by axis sampling
+inside the target polygons, not by polygon IoU, and the identical counts
+confirm the decisions never read the polygons.) The served polygons average
+12.4 points and 0.84 of their quad area, and the mean overlap between
+consecutive lines drops from 0.070 (quads) to 0.009 (polygons), so
+transcription crops pull in far less ink from neighbouring lines.
+
+Polygon construction ports Paddle's `polygons_from_bitmap` (`approxPolyDP`
+epsilon 0.002 times the arc length, `box_score_fast` on the polygon,
+pyclipper `JT_ROUND` unclip keeping the largest path, the same minimum side
+of 5 and the same scaling). Overlap cuts clip each polygon with the same
+mid-baseline half-plane as the quads. Served outlines are simplified with
+`approxPolyDP` at epsilon max(1.0 px, 0.01 times the page median line
+height), capped at 64 points, at least 4 points, with no repeated
+consecutive points, clipped to the page, and checked with pyclipper
+`SimplifyPolygon` keeping the largest piece. A contour whose polygon step
+fails keeps its quad as its polygon with
+`source_metadata.polygon_fallback: true`, so no line is ever lost.
+
+Old behaviour: pass `box_type: "quad"` for responses byte-identical to
+0.4.0 (the parity gate above runs in quad mode and still passes at 0.000 px
+on all 14 pages). Poly mode costs about 1% time per page on the Coptic set
+(0.79 s against 0.78 s per page).
 
 ## Publication and registry
 

@@ -121,6 +121,11 @@ ratio, prints a sweep table (recall, precision, F1, lines lost against
 off with page and line, lines fixed, merged count) with a per-ratio sweep
 summary in the JSON, and skips the overlays.
 `--merge-max-overlap-ratio` sweeps the same way at gap 0.25.
+`--box-type quad|poly|both` (default `quad`) selects the served geometry;
+`both` runs off, defaults and drop in each mode and additionally prints a
+per-page and overall quad-vs-poly comparison (mean polygon points, mean
+polygon over quad area, mean overlap between consecutive lines per mode,
+seconds per page per mode) into `poly_stats` in the JSON.
 
 ## `profile_onnx.py`
 
