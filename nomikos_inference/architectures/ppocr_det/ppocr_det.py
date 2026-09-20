@@ -8,6 +8,7 @@ before the file is opened.
 
 from __future__ import annotations
 
+import math
 import os
 from collections.abc import Mapping
 from functools import lru_cache
@@ -20,9 +21,18 @@ from nomikos_inference.admission import open_image_bytes
 from nomikos_inference.architectures.artifact import ArtifactHandle, resolve_artifact
 from nomikos_inference.architectures.ppocr_det.postprocessing import detect_lines
 from nomikos_inference.architectures.ppocr_det.preprocessing import preprocess_ppocr_det_image
+from nomikos_inference.architectures.ppocr_det.reading_order import layout_lines
+from nomikos_inference.architectures.ppocr_det.refinement import (
+    DEFAULT_MERGE_GAP_RATIO,
+    DEFAULT_MERGE_MAX_HEIGHT_RATIO,
+    DEFAULT_MERGE_MAX_OVERLAP_RATIO,
+    DEFAULT_OVERLAP_CUT_THRESHOLD,
+    refine_to_lines,
+)
 from nomikos_inference.architectures.ppocr_det.response import (
     DEFAULT_BASELINE_FRACTION,
     build_ppocr_det_response,
+    build_refined_ppocr_det_response,
 )
 from nomikos_inference.contracts.segment import SegmentRunResponse
 
@@ -122,19 +132,26 @@ def _load_ppocr_det_session(
         raise PPOCRDetUnavailableError("unable to load PP-OCRv6 det ONNX model") from error
 
 
-def _positive_float_param(params: Mapping[str, Any], key: str, default: float) -> float:
-    """Parse a caller-supplied positive number, falling back to the default.
+def _bounded_float_param(
+    params: Mapping[str, Any], key: str, default: float, minimum: float, maximum: float
+) -> float:
+    """Parse a caller-supplied number inside documented bounds.
 
-    Like the blla helper of the same shape: upper bounds belong to admission
-    where they exist, and an unparseable or non-positive value means "use the
-    default" rather than failing the page.
+    Bools, non-numeric values, non-finite values and out-of-range values
+    raise the same ``ValueError`` the other bounds checks raise, naming the
+    param and the bound, instead of failing the page silently later (``inf``
+    thresholds empty the page, ``inf`` unclip ratios crash the offsetter).
     """
     value = params.get(key, default)
+    if isinstance(value, bool):
+        raise ValueError(f"{key} must be a number between {minimum} and {maximum}")
     try:
         parsed = float(value)
     except (TypeError, ValueError):
-        return default
-    return parsed if parsed > 0 else default
+        raise ValueError(f"{key} must be a number between {minimum} and {maximum}") from None
+    if not math.isfinite(parsed) or not minimum <= parsed <= maximum:
+        raise ValueError(f"{key} must be a number between {minimum} and {maximum}")
+    return parsed
 
 
 def _limit_side_len(params: Mapping[str, Any]) -> int:
@@ -143,7 +160,7 @@ def _limit_side_len(params: Mapping[str, Any]) -> int:
         raise ValueError("limit_side_len must be an integer")
     try:
         parsed = int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         raise ValueError("limit_side_len must be an integer") from None
     if isinstance(value, float) and float(parsed) != value:
         raise ValueError("limit_side_len must be an integer")
@@ -157,26 +174,28 @@ def _limit_side_len(params: Mapping[str, Any]) -> int:
 def _max_candidates(params: Mapping[str, Any]) -> int:
     value = params.get("max_candidates", DEFAULT_MAX_CANDIDATES)
     if isinstance(value, bool):
-        raise ValueError("max_candidates must be an integer")
+        raise ValueError("max_candidates must be an integer between 1 and 10000")
     try:
         parsed = int(value)
-    except (TypeError, ValueError):
-        raise ValueError("max_candidates must be an integer") from None
+    except (TypeError, ValueError, OverflowError):
+        raise ValueError("max_candidates must be an integer between 1 and 10000") from None
     if isinstance(value, float) and float(parsed) != value:
-        raise ValueError("max_candidates must be an integer")
-    if parsed <= 0:
-        raise ValueError("max_candidates must be positive")
+        raise ValueError("max_candidates must be an integer between 1 and 10000")
+    if not 1 <= parsed <= 10000:
+        raise ValueError("max_candidates must be an integer between 1 and 10000")
     return parsed
 
 
 def _baseline_fraction(params: Mapping[str, Any]) -> float:
     value = params.get("baseline_fraction", DEFAULT_BASELINE_FRACTION)
+    if isinstance(value, bool):
+        raise ValueError("baseline_fraction must be a number between 0 and 1")
     try:
         parsed = float(value)
     except (TypeError, ValueError):
-        raise ValueError("baseline_fraction must be a number") from None
-    if not 0 <= parsed <= 1:
-        raise ValueError("baseline_fraction must be between 0 and 1")
+        raise ValueError("baseline_fraction must be a number between 0 and 1") from None
+    if not math.isfinite(parsed) or not 0 <= parsed <= 1:
+        raise ValueError("baseline_fraction must be a number between 0 and 1")
     return parsed
 
 
@@ -185,6 +204,20 @@ def _reading_direction(params: Mapping[str, Any]) -> str:
     if direction not in ("ltr", "rtl"):
         raise ValueError('reading_direction must be "ltr" or "rtl"')
     return direction
+
+
+def _bool_param(params: Mapping[str, Any], key: str, default: bool) -> bool:
+    value = params.get(key, default)
+    if isinstance(value, bool):
+        return value
+    raise ValueError(f"{key} must be true or false")
+
+
+def _noise_policy(params: Mapping[str, Any]) -> str:
+    policy = params.get("noise_policy", "flag")
+    if policy in ("flag", "drop", "off"):
+        return policy
+    raise ValueError('noise_policy must be "flag", "drop" or "off"')
 
 
 def run_ppocr_det_segment(
@@ -202,12 +235,27 @@ def run_ppocr_det_segment(
     _resolve_ppocr_det_artifact(model_path, artifact_sha256)
     resolved = params or {}
     limit = _limit_side_len(resolved)
-    thresh = _positive_float_param(resolved, "thresh", DEFAULT_THRESH)
-    box_thresh = _positive_float_param(resolved, "box_thresh", DEFAULT_BOX_THRESH)
-    unclip_ratio = _positive_float_param(resolved, "unclip_ratio", DEFAULT_UNCLIP_RATIO)
+    thresh = _bounded_float_param(resolved, "thresh", DEFAULT_THRESH, 0, 1)
+    box_thresh = _bounded_float_param(resolved, "box_thresh", DEFAULT_BOX_THRESH, 0, 1)
+    unclip_ratio = _bounded_float_param(resolved, "unclip_ratio", DEFAULT_UNCLIP_RATIO, 0, 5)
     max_candidates = _max_candidates(resolved)
     fraction = _baseline_fraction(resolved)
     direction = _reading_direction(resolved)
+    merge_fragments = _bool_param(resolved, "merge_fragments", True)
+    resolve_overlaps = _bool_param(resolved, "resolve_overlaps", True)
+    noise_policy = _noise_policy(resolved)
+    merge_gap_ratio = _bounded_float_param(
+        resolved, "merge_gap_ratio", DEFAULT_MERGE_GAP_RATIO, 0, 10
+    )
+    merge_max_overlap_ratio = _bounded_float_param(
+        resolved, "merge_max_overlap_ratio", DEFAULT_MERGE_MAX_OVERLAP_RATIO, 0, 2
+    )
+    merge_max_height_ratio = _bounded_float_param(
+        resolved, "merge_max_height_ratio", DEFAULT_MERGE_MAX_HEIGHT_RATIO, 1, 10
+    )
+    overlap_cut_threshold = _bounded_float_param(
+        resolved, "overlap_cut_threshold", DEFAULT_OVERLAP_CUT_THRESHOLD, 0.05, 1
+    )
 
     with open_image_bytes(image_bytes) as image:
         image = image.convert("RGB")
@@ -234,12 +282,36 @@ def run_ppocr_det_segment(
             unclip_ratio=unclip_ratio,
             max_candidates=max_candidates,
         )
-        return build_ppocr_det_response(
+        if not merge_fragments and not resolve_overlaps and noise_policy == "off":
+            return build_ppocr_det_response(
+                width,
+                height,
+                quads,
+                baseline_fraction=fraction,
+                reading_direction=direction,
+            )
+        layout = layout_lines(quads, direction=direction)
+        items = refine_to_lines(
+            quads,
+            layout,
+            baseline_fraction=fraction,
+            merge=merge_fragments,
+            resolve=resolve_overlaps,
+            classify=noise_policy != "off",
+            merge_gap_ratio=merge_gap_ratio,
+            merge_max_overlap_ratio=merge_max_overlap_ratio,
+            merge_max_height_ratio=merge_max_height_ratio,
+            overlap_cut_threshold=overlap_cut_threshold,
+        )
+        return build_refined_ppocr_det_response(
             width,
             height,
             quads,
+            items,
+            layout,
             baseline_fraction=fraction,
             reading_direction=direction,
+            noise_policy=noise_policy,
         )
 
 

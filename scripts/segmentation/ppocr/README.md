@@ -67,8 +67,10 @@ shape-coverage table and timing, are in
 The parity proof above covers the exported graph; `verify_adapter.py`
 measures the serving adapter (`run_ppocr_det_segment`: PIL decode,
 preprocessing, pyclipper DB postprocess) on real weights. For each of the 14
-reference fixtures it reads the page BYTES, calls the same entry point
-production uses with `params=None`, and compares the returned line quads
+reference fixtures it reads the page BYTES, calls the production entry
+point with refinement switched off (`merge_fragments` false,
+`resolve_overlaps` false, `noise_policy` off, so the gate measures the
+detector and nothing else), and compares the returned line quads
 with the fixture boxes: counts, then greedy one-to-one matching by quad
 centre with corner-SET distances (each corner counts only its nearest
 corner in the matched box, since corner order may differ). It writes
@@ -99,6 +101,26 @@ against the 0.5 px gate. (The first version used a shapely unclip and
 measured 2.2 to 3.2 px max; replacing it with PaddleX's own pyclipper
 unclip gave exact parity.) Full table and reading order notes are
 in `docs/inference/ppocrv6-segmenter.md`.
+
+## Refinement evaluation (`evaluate_refinement.py`)
+
+`evaluate_refinement.py` runs the adapter on the 12 Coptic benchmark pages
+with refinement off, defaults and `drop`, scoring each response against the
+benchmark target lines with the benchmark's matching (a port of `axis`,
+`assign` and `finish` from
+`server/ppocrv6-quality_eval_20260919.py`; the port recovers 1002 of 1018
+care targets where the benchmark tool recovers 1008). It prints detections,
+precision, recall, F1, targets covered by exactly one detection, pairs
+sharing at least 20% area, suspects flagged and real lines wrongly flagged,
+and writes reading-order overlays for vat-1r and c13 with suspects in red
+into the output directory. Needs `--fixtures` and `--images` as above plus
+`--gt` (the ground truth recon directory) and `--onnx` with
+`--artifact-sha256`. With `--merge-gap-ratio` (repeatable or comma
+separated) one run scores the defaults and drop variants at each gap
+ratio, prints a sweep table (recall, precision, F1, lines lost against
+off with page and line, lines fixed, merged count) with a per-ratio sweep
+summary in the JSON, and skips the overlays.
+`--merge-max-overlap-ratio` sweeps the same way at gap 0.25.
 
 ## `profile_onnx.py`
 

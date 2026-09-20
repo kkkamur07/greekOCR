@@ -23,8 +23,11 @@ The one PaddleX rule not reproduced is the ``max_side_limit`` recap inside
 ``resize_image_type0``: with the admitted ``limit_side_len`` range
 (320 to 4000) the 32-rounded sides can never exceed the PaddleX cap of 4000,
 so the recap is unreachable. Tiny images (height plus width below 64), which
-PaddleX zero pads, are likewise unreachable: admission rejects empty images
-and manuscript pages are orders of magnitude larger.
+PaddleX zero pads to at least 32 a side with the image top left before the
+multiple-of-32 logic, are reproduced below: the ratios are over the padded
+dims exactly as PaddleX computes them, while the box mapping back to source
+pixels divides by the resized dims against the original size, which is what
+PaddleX's own ``dest`` over ``width`` scale does.
 """
 
 from __future__ import annotations
@@ -84,10 +87,19 @@ def preprocess_ppocr_det_image(
     if width <= 0 or height <= 0:
         raise ValueError("PP-OCRv6 det input image must not be empty")
 
-    resized_w, resized_h = _resized_dims(width, height, limit_side_len)
     # ``np.asarray`` of a PIL RGB image is HWC RGB; reversing the last axis is
     # the BGR order ``cv2.imread`` would have produced in the PaddleX pipeline.
     bgr = np.asarray(rgb)[:, :, ::-1]
+    # PaddleX ``DetResizeForTest.resize`` zero pads images with height plus
+    # width below 64 to at least 32 a side, image top left, before the
+    # multiple-of-32 resize runs over the padded dims.
+    padded_height, padded_width = height, width
+    if height + width < 64:
+        padded_height, padded_width = max(32, height), max(32, width)
+        canvas = np.zeros((padded_height, padded_width, 3), dtype=np.uint8)
+        canvas[:height, :width, :] = bgr
+        bgr = canvas
+    resized_w, resized_h = _resized_dims(padded_width, padded_height, limit_side_len)
     # Default interpolation is bilinear, matching PaddleX's bare
     # ``cv2.resize(img, (w, h))`` call.
     resized = cv2.resize(bgr, (resized_w, resized_h))
@@ -102,8 +114,8 @@ def preprocess_ppocr_det_image(
     meta = PPOCRDetMeta(
         orig_width=width,
         orig_height=height,
-        ratio_h=resized_h / float(height),
-        ratio_w=resized_w / float(width),
+        ratio_h=resized_h / float(padded_height),
+        ratio_w=resized_w / float(padded_width),
     )
     return tensor, meta
 

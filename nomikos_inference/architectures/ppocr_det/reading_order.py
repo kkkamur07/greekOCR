@@ -11,6 +11,8 @@ band between the rows above and below it.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from nomikos_inference.architectures.ppocr_det.postprocessing import DetectedQuad
 
 # A quad counts as narrow (a marginal note, page number or initial) when its
@@ -102,14 +104,14 @@ def _shares_row(
     return _overlap(xmin, xmax, row_xmin, row_xmax) < COLUMN_OVERLAP_FRACTION * narrower_w
 
 
-def _row_order(
+def _row_groups(
     members: list[int],
     extents: list[tuple[float, ...]],
     geoms: list[tuple[float, ...]],
     column_builders: set[int],
     direction: str,
-) -> list[int]:
-    """Order one column's members top to bottom, row by row.
+) -> list[list[int]]:
+    """Group one column's members into rows, top to bottom.
 
     Rows group transitively along the centre-y sequence: each quad is
     compared with the current row's ranges, so a tall initial met midway
@@ -169,24 +171,65 @@ def _row_order(
             tuple(sorted(geoms[i] for i in rows[position])),
         ),
     )
-    reading = []
+    grouped = []
     for position in ranked:
         if direction == "ltr":
-            reading.extend(sorted(rows[position], key=lambda i: (extents[i][2], geoms[i])))
+            grouped.append(sorted(rows[position], key=lambda i: (extents[i][2], geoms[i])))
         else:
-            reading.extend(sorted(rows[position], key=lambda i: (-extents[i][2], geoms[i])))
-    return reading
+            grouped.append(sorted(rows[position], key=lambda i: (-extents[i][2], geoms[i])))
+    return grouped
 
 
-def order_lines(quads: list[DetectedQuad], *, direction: str = "ltr") -> list[int]:
-    """Return quad indices in reading order.
+def _row_order(
+    members: list[int],
+    extents: list[tuple[float, ...]],
+    geoms: list[tuple[float, ...]],
+    column_builders: set[int],
+    direction: str,
+) -> list[int]:
+    """Order one column's members top to bottom, row by row."""
+    return [
+        index
+        for row in _row_groups(members, extents, geoms, column_builders, direction)
+        for index in row
+    ]
 
-    Columns group transitively by x overlap; narrow quads attach to the
-    nearest column without splitting it, and wide quads either join their
-    one overlapped column or, when spanning two or more, read as bands of
-    their own. Columns run left to right for ``"ltr"`` and right to left for
-    ``"rtl"``; inside a column quads run row by row, each row across the
-    page. Every tie-break is geometric, so equal inputs give equal outputs
+
+@dataclass(frozen=True)
+class ColumnLayout:
+    """One column: its members, row groups and reading sequence.
+
+    ``builders`` are the full-width members that found the column; the
+    text band is their x range, while attached narrow or wide members may
+    stick out past it.
+    """
+
+    members: tuple[int, ...]
+    builders: tuple[int, ...]
+    rows: tuple[tuple[int, ...], ...]
+    sequence: tuple[int, ...]
+    xmin: float
+    xmax: float
+
+
+@dataclass(frozen=True)
+class PageLayout:
+    """Column and row structure refinement shares with ordering."""
+
+    columns: tuple[ColumnLayout, ...]
+    column_order: tuple[int, ...]
+    spanning: tuple[int, ...]
+    direction: str
+    centre_y: tuple[float, ...]
+
+
+def layout_lines(quads: list[DetectedQuad], *, direction: str = "ltr") -> PageLayout:
+    """Group quads into columns and rows, shared by ordering and refinement.
+
+    Columns are in canonical left to right order with ``column_order`` giving
+    the reading sequence; each column carries its row groups top to bottom
+    and its flat reading ``sequence``. Spanning quads are sorted top to
+    bottom. Every tie-break is geometric, so equal inputs give equal outputs
     whatever order they arrive in.
     """
 
@@ -194,7 +237,9 @@ def order_lines(quads: list[DetectedQuad], *, direction: str = "ltr") -> list[in
         raise ValueError('reading direction must be "ltr" or "rtl"')
     count = len(quads)
     if count == 0:
-        return []
+        return PageLayout(
+            columns=(), column_order=(), spanning=(), direction=direction, centre_y=()
+        )
     extents = _extents(quads)
     geoms = [tuple(float(c) for point in quad.points for c in point) for quad in quads]
     widths = sorted(extent[4] for extent in extents)
@@ -302,33 +347,70 @@ def order_lines(quads: list[DetectedQuad], *, direction: str = "ltr") -> list[in
         _row_order(members, extents, geoms, builder_sets[position], direction)
         for position, members in enumerate(ordered_columns)
     ]
-    if not spanning:
-        return [index for position in column_order for index in sequenced[position]]
+    spanning_sorted = sorted(spanning, key=lambda i: (extents[i][3], extents[i][2], geoms[i]))
+    built_columns = tuple(
+        ColumnLayout(
+            members=tuple(members),
+            builders=tuple(sorted(builder_sets[position])),
+            rows=tuple(
+                tuple(row)
+                for row in _row_groups(members, extents, geoms, builder_sets[position], direction)
+            ),
+            sequence=tuple(sequenced[position]),
+            xmin=ranges[position][0],
+            xmax=ranges[position][1],
+        )
+        for position, members in enumerate(ordered_columns)
+    )
+    return PageLayout(
+        columns=built_columns,
+        column_order=tuple(column_order),
+        spanning=tuple(spanning_sorted),
+        direction=direction,
+        centre_y=tuple(extent[3] for extent in extents),
+    )
+
+
+def order_lines(quads: list[DetectedQuad], *, direction: str = "ltr") -> list[int]:
+    """Return quad indices in reading order.
+
+    Columns group transitively by x overlap; narrow quads attach to the
+    nearest column without splitting it, and wide quads either join their
+    one overlapped column or, when spanning two or more, read as bands of
+    their own. Columns run left to right for ``"ltr"`` and right to left for
+    ``"rtl"``; inside a column quads run row by row, each row across the
+    page. Every tie-break is geometric, so equal inputs give equal outputs
+    whatever order they arrive in.
+    """
+
+    layout = layout_lines(quads, direction=direction)
+    sequenced = [list(column.sequence) for column in layout.columns]
+    if not layout.spanning:
+        return [index for position in layout.column_order for index in sequenced[position]]
 
     # Spanning quads split the page into horizontal bands: everything above a
     # band's centre reads first, then the band, then everything below.
-    spanning_sorted = sorted(spanning, key=lambda i: (extents[i][3], extents[i][2], geoms[i]))
-    span_cys = [extents[i][3] for i in spanning_sorted]
+    span_cys = [layout.centre_y[i] for i in layout.spanning]
 
     def _segment(index: int) -> int:
         band = 0
         for centre_y in span_cys:
-            if centre_y < extents[index][3]:
+            if centre_y < layout.centre_y[index]:
                 band += 1
             else:
                 break
         return band
 
     reading: list[int] = []
-    for band, span in enumerate(spanning_sorted):
-        for position in column_order:
+    for band, span in enumerate(layout.spanning):
+        for position in layout.column_order:
             reading.extend(index for index in sequenced[position] if _segment(index) == band)
         reading.append(span)
-    for position in column_order:
+    for position in layout.column_order:
         reading.extend(
-            index for index in sequenced[position] if _segment(index) == len(spanning_sorted)
+            index for index in sequenced[position] if _segment(index) == len(layout.spanning)
         )
     return reading
 
 
-__all__ = ["order_lines"]
+__all__ = ["ColumnLayout", "PageLayout", "layout_lines", "order_lines"]

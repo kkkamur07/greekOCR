@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from nomikos_inference.architectures.ppocr_det.postprocessing import DetectedQuad
-from nomikos_inference.architectures.ppocr_det.reading_order import order_lines
+from nomikos_inference.architectures.ppocr_det.reading_order import layout_lines, order_lines
 
 DETECTION_DIR = Path(
     "/Users/krishuagarwal/Desktop/Programming/python/greekOCR-wt/_orli-env/server/"
@@ -211,6 +211,34 @@ def _shuffled(count: int, seed: int) -> list[int]:
         j = state % (i + 1)
         order[i], order[j] = order[j], order[i]
     return order
+
+
+def test_layout_lines_exposes_the_rows_ordering_reads() -> None:
+    quads = [
+        _quad(600, 100, 900, 130),
+        _quad(100, 200, 400, 230),
+        _quad(600, 200, 900, 230),
+        _quad(100, 100, 400, 130),
+    ]
+
+    layout = layout_lines(quads, direction="ltr")
+
+    assert len(layout.columns) == 2
+    assert layout.spanning == ()
+    assert all(len(column.rows) == 2 for column in layout.columns)
+    assert {tuple(sorted(column.members)) for column in layout.columns} == {(1, 3), (0, 2)}
+    flat = [
+        index for position in layout.column_order for index in layout.columns[position].sequence
+    ]
+    assert flat == order_lines(quads, direction="ltr")
+
+
+def test_layout_lines_empty_input_gives_empty_layout() -> None:
+    layout = layout_lines([])
+
+    assert layout.columns == ()
+    assert layout.spanning == ()
+    assert order_lines([]) == []
 
 
 def test_measured_pages_read_identically_under_shuffling() -> None:

@@ -90,6 +90,11 @@ def find_hub_artifact(cache_dir: Path, *, architecture: str | None) -> Path:
         if candidate.is_file():
             return candidate
 
+    if architecture in ("ppocr-det", "ppocr_det"):
+        candidate = cache_dir / "ppocrv6-det.onnx"
+        if candidate.is_file():
+            return candidate
+
     for path in sorted(cache_dir.glob("*.onnx")):
         if path.is_file():
             return path

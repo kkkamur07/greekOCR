@@ -4,10 +4,12 @@
 The ONNX graph itself was already shown to reproduce Paddle exactly
 (`docs/inference/ppocrv6-onnx-parity-2026-09-19.md`); what nobody had measured
 is the serving adapter (`run_ppocr_det_segment`: PIL decode, numpy/OpenCV
-preprocessing, shapely DB postprocess) on real weights. This script is that
+preprocessing, pyclipper DB postprocess) on real weights. This script is that
 measurement. For each of the 14 reference fixtures (produced by the full
 `paddleocr.TextDetection` pipeline at cap 1920) it reads the page BYTES, calls
-the same entry point production uses with `params=None`, and compares the
+the production entry point with refinement switched off (`merge_fragments`,
+`resolve_overlaps` and `noise_policy=off`, so the gate measures the detector
+and nothing else), and compares the
 returned line quads with the fixture boxes: counts, then one-to-one nearest
 matching by quad centre with corner-SET distances (corner order may differ
 between the two, so for each corner only its nearest corner in the matched
@@ -237,7 +239,11 @@ def main() -> int:
             image_bytes,
             model_path=args.onnx,
             artifact_sha256=args.artifact_sha256,
-            params=None,
+            params={
+                "merge_fragments": False,
+                "resolve_overlaps": False,
+                "noise_policy": "off",
+            },
         )
         fixture_boxes = [
             np.asarray(box, dtype=np.float64).reshape(4, 2) for box in fixture["boxes"]
@@ -293,7 +299,11 @@ def main() -> int:
     report = {
         "onnx": str(args.onnx),
         "artifact_sha256": args.artifact_sha256,
-        "params": None,
+        "params": {
+            "merge_fragments": False,
+            "resolve_overlaps": False,
+            "noise_policy": "off",
+        },
         "gate": {
             "identical_counts": True,
             "no_unmatched": True,

@@ -54,9 +54,38 @@ def test_sides_round_to_multiples_of_32_with_a_floor() -> None:
     assert meta.ratio_h == 0.96
     assert meta.ratio_w == 0.96
 
-    tiny, _ = preprocess_ppocr_det_image(Image.new("RGB", (10, 10), "white"))
+    tiny, tiny_meta = preprocess_ppocr_det_image(Image.new("RGB", (10, 10), "white"))
 
     assert tiny.shape == (1, 3, 32, 32)
+    assert tiny_meta.ratio_h == 1.0
+    assert tiny_meta.ratio_w == 1.0
+
+
+def test_tiny_image_is_zero_padded_with_content_top_left() -> None:
+    # PaddleX `image_padding`: images with height plus width below 64 are
+    # zero padded to at least 32 a side, content top left, before the
+    # multiple-of-32 resize runs over the padded dims.
+    tensor, meta = preprocess_ppocr_det_image(Image.new("RGB", (10, 10), (10, 20, 30)))
+
+    assert tensor.shape == (1, 3, 32, 32)
+    assert meta.ratio_h == 1.0
+    assert meta.ratio_w == 1.0
+    expected_inside = [
+        (value / 255 - mean) / std
+        for value, mean, std in zip((30, 20, 10), PPOCR_DET_MEAN, PPOCR_DET_STD, strict=True)
+    ]
+    expected_pad = [
+        (0 / 255 - mean) / std for mean, std in zip(PPOCR_DET_MEAN, PPOCR_DET_STD, strict=True)
+    ]
+    np.testing.assert_allclose(
+        tensor[0, :, 5, 5], np.array(expected_inside, dtype=np.float32), rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        tensor[0, :, 0, 20], np.array(expected_pad, dtype=np.float32), rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        tensor[0, :, 20, 0], np.array(expected_pad, dtype=np.float32), rtol=1e-5
+    )
 
 
 def test_normalisation_matches_paddlex_bgr_channel_order() -> None:
