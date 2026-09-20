@@ -70,7 +70,8 @@ preprocessing, pyclipper DB postprocess) on real weights. For each of the 14
 reference fixtures it reads the page BYTES, calls the production entry
 point with refinement switched off (`merge_fragments` false,
 `resolve_overlaps` false, `noise_policy` off, so the gate measures the
-detector and nothing else), and compares the returned line quads
+detector and nothing else) in quad mode (`box_type` quad, pinning the quad
+path now that the serving default is polygons), and compares the returned line quads
 with the fixture boxes: counts, then greedy one-to-one matching by quad
 centre with corner-SET distances (each corner counts only its nearest
 corner in the matched box, since corner order may differ). It writes
