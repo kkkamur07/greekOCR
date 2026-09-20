@@ -60,6 +60,33 @@ models:
         hub_revision: a19a2368fe7d9e607a71b7817f0cac819a91320a
         artifact_sha256: f890eb1a46a51dd7c93636f74d5ceb2831676bd64311ece8c719df12980514a4
 
+  syriac-ppocr-v1:
+    task: transcribe
+    architecture: ppocr_rec
+    device: cpu
+    host_eligibility: local
+    # Kraken extracts the line polygon without a margin, so the registry
+    # padding stays 0 and the 16 px white horizontal padding is applied
+    # inside the adapter from the ONNX metadata (pad 16, pad_fill 255,
+    # line height 96). That padding path is unmeasured end to end on
+    # platform crops. Sanity figures only, not a benchmark: the Calamari
+    # entry above measures CER 0.29 on EastSyriac Chapter4, while this
+    # model's Torch greedy decode measured 0.160 on the same pages
+    # (display order on both sides).
+    line_crop: polygon-white
+    line_crop_padding: 0
+    versions:
+      stable:
+        weights_source: hf://nomikos-project/syriac-htr-ppocr_rec@stable
+        # First publication of the PP-OCR Syriac recognition export, so
+        # there is no prior pin to record here, unlike the Calamari entry.
+        # ADR 0006 moved the digest off the native checkpoint, so what is
+        # pinned here is the digest of model.onnx and never of the
+        # ppocr-syriac.safetensors export input. Both fields are supplied
+        # together or not at all for an hf:// source.
+        hub_revision: 19e8d1f23fd7a2bc272d303fb02616bbdcfcd08e
+        artifact_sha256: a839d951ea443f3fb04acbbde88ad263b984f39a4e50b49adb78e9ad742c8a22
+
   greek-calamari-v1:
     task: transcribe
     architecture: calamari

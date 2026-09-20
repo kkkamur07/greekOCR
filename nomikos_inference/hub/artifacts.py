@@ -85,6 +85,11 @@ def find_hub_artifact(cache_dir: Path, *, architecture: str | None) -> Path:
             if candidate.is_file():
                 return candidate
 
+    if architecture == "ppocr_rec":
+        candidate = cache_dir / "model.onnx"
+        if candidate.is_file():
+            return candidate
+
     if architecture in (None, "blla", "blla-segment", "blla_segment", "kraken_segment"):
         candidate = cache_dir / "blla.onnx"
         if candidate.is_file():

@@ -17,10 +17,10 @@ assert the serving output is byte-identical to it. No weights and no ``ml``
 marker: this has to run in the default job, because the default job is where a
 preprocessing change lands.
 
-One crop function serves all three models. What is per model is the padding it
-was exported with: Greek used 0 and the other two used 12, so the crop parity
-test runs at both and the second half of this file covers the registry fields
-that carry the number.
+One crop function serves all four Calamari models. What is per model is the
+padding it was exported with: Greek used 0 and the other three used 12, so
+the crop parity test runs at both and the second half of this file covers
+the registry fields that carry the number.
 """
 
 from __future__ import annotations
@@ -426,7 +426,7 @@ def test_a_segment_entry_may_not_set_a_crop_field(field: dict) -> None:
 
 
 def test_the_shipped_registry_states_a_crop_for_every_transcribe_model() -> None:
-    """The real file, not a fixture: these four are what production serves.
+    """The real file, not a fixture: these five are what production serves.
 
     Greek's 0 is the one that has to survive an edit. It looks like an omission
     and it is not: it is 125 exact lines out of 204 against 0 out of 204.
@@ -447,6 +447,7 @@ def test_the_shipped_registry_states_a_crop_for_every_transcribe_model() -> None
         "syriac-calamari-v2": (LineCrop.polygon_white, 12),
         "greek-calamari-v1": (LineCrop.polygon_white, 0),
         "armenian-calamari-v1": (LineCrop.polygon_white, 12),
+        "syriac-ppocr-v1": (LineCrop.polygon_white, 0),
         "coptic-calamari-v1": (LineCrop.polygon_white, 12),
     }
 
