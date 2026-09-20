@@ -179,9 +179,12 @@ area-weighted mean; `source_metadata.merged_from` records the count.
 Overlaps: after merging, pairs sharing at least `overlap_cut_threshold`
 (0.20) of the smaller polygon are stacked (cut apart at the mid-baseline
 line until they share zero area, unless the cut would remove more than
-half of either polygon), duplicates (coinciding baselines, over half
-shared: only the higher score survives, the one case that removes a
-detection by default) or marked `overlap_unresolved` and left. On the 14
+half of either polygon), duplicates (coinciding baselines with shared area
+over the larger polygon above half: only the higher score survives, the
+one case that removes a detection by default), containment pairs (shared
+over the smaller above the threshold but over the larger at or below half:
+both marked `overlap_unresolved` and left) or marked `overlap_unresolved`
+and left. A work with role `initial` is never dropped. On the 14
 fixture pages the 0.20 default behaves: 194 pre-merge pairs in 20-50%
 collapse to zero-area cuts, and 6 lines carry the mark (a vat-2r pair that
 still shares above 0.20, plus one pair each on c13 and grec-p4 where a

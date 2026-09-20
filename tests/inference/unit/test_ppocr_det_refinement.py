@@ -309,6 +309,68 @@ def test_off_changes_nothing() -> None:
     assert min(point[0] for point in response.lines[0].points) == 430.0
 
 
+def test_containment_small_higher_score_both_survive_unresolved() -> None:
+    quads = _column(0, 100, [0, 25, 50], height=15.0)
+    quads.append(_quad(0, 70, 100, 100, score=0.7))
+    quads.append(_quad(10, 78, 50, 92, score=0.9))
+
+    works = _refine(quads)
+    pair = [work for work in works if set(work.members) & {3, 4}]
+
+    assert len(pair) == 2
+    assert len(works) == len(quads)
+    assert all(work.overlap_unresolved for work in pair)
+
+
+def test_containment_small_lower_score_both_survive_unresolved() -> None:
+    quads = _column(0, 100, [0, 25, 50], height=15.0)
+    quads.append(_quad(0, 70, 100, 100, score=0.9))
+    quads.append(_quad(10, 78, 50, 92, score=0.7))
+
+    works = _refine(quads)
+    pair = [work for work in works if set(work.members) & {3, 4}]
+
+    assert len(pair) == 2
+    assert len(works) == len(quads)
+    assert all(work.overlap_unresolved for work in pair)
+
+
+def test_near_identical_shifted_two_px_drops_the_lower_score() -> None:
+    quads = _column(0, 100, [0, 25, 50], height=15.0)
+    quads.append(_quad(0, 70, 100, 100, score=0.9))
+    quads.append(_quad(2, 70, 102, 100, score=0.7))
+
+    works = _refine(quads)
+
+    assert len(works) == len(quads) - 1
+    survivor = [work for work in works if 3 in work.members or 4 in work.members]
+    assert len(survivor) == 1
+    assert survivor[0].score == pytest.approx(0.9)
+
+
+def test_initial_overlapping_line_by_ninety_percent_both_survive() -> None:
+    quads = _column(0, 100, [0, 25, 50], height=15.0)
+    quads.append(_quad(0, 70, 100, 100, score=0.9))
+    quads.append(_quad(0, 70, 90, 100, score=0.7))
+
+    layout = layout_lines(quads, direction="ltr")
+    merged = merge_row_fragments(quads, layout)
+    for work in merged:
+        if 4 in work.members:
+            work.role = "initial"
+    heights = [
+        max(point[1] for point in quad.points) - min(point[1] for point in quad.points)
+        for quad in quads
+    ]
+    median_height = sorted(heights)[len(heights) // 2]
+    works = resolve_overlaps(merged, layout, median_height=median_height)
+    pair = [work for work in works if set(work.members) & {3, 4}]
+
+    assert len(pair) == 2
+    assert len(works) == len(quads)
+    assert all(work.overlap_unresolved for work in pair)
+
+
 def test_cut_that_would_remove_more_than_half_marks_unresolved() -> None:
     # The small box sits exactly on the mid-baseline line, so its keep-side
     # piece is exactly half and the guard refuses the cut.

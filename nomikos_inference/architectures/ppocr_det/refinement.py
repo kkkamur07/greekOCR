@@ -254,6 +254,13 @@ def _shared_ratio(left: _Work, right: _Work) -> float:
     return left.poly.intersection(right.poly).area / smaller
 
 
+def _shared_over_larger(left: _Work, right: _Work) -> float:
+    larger = max(left.area, right.area)
+    if larger <= 0:
+        return 0.0
+    return left.poly.intersection(right.poly).area / larger
+
+
 def _baseline_distance(left: _Work, right: _Work) -> float:
     """Perpendicular distance between the two baseline midpoints."""
     first = np.asarray(left.baseline, dtype=float)
@@ -360,9 +367,16 @@ def resolve_overlaps(
     Pairs sharing at least ``cut_threshold`` of the smaller polygon: stacked
     pairs (baseline distance at least half the page median line spacing) are
     clipped apart at the mid-baseline line until they share zero area, unless
-    the cut would remove more than half of either polygon; coinciding
-    baselines with more than half shared are duplicates where only the higher
-    score survives; anything else is marked ``overlap_unresolved`` and left.
+    the cut would remove more than half of either polygon. A pair is a
+    duplicate only when the two polygons are nearly the same region: shared
+    area divided by the larger polygon's area is above
+    ``DUPLICATE_SHARED_RATIO`` (0.50) and the baseline distance is below half
+    the line spacing; only then is the lower score dropped. A containment
+    pair (shared over the smaller above the cut threshold, shared over the
+    larger at or below 0.50, baselines coinciding) is never dropped: both are
+    marked ``overlap_unresolved`` and left. A work with ``role == "initial"``
+    is never dropped, whatever the ratios: the pair is marked unresolved
+    instead. Anything else is marked ``overlap_unresolved`` and left.
     """
     spacing = _median_line_spacing(layout, median_height)
     for _ in range(_MAX_OVERLAP_PASSES):
@@ -383,12 +397,19 @@ def resolve_overlaps(
             if ratio < cut_threshold:
                 continue
             distance = _baseline_distance(left, right)
-            if ratio > DUPLICATE_SHARED_RATIO and distance < spacing / 2:
-                if (right.score, right.members) > (left.score, left.members):
-                    left.dropped = True
+            if distance < spacing / 2:
+                if left.role == "initial" or right.role == "initial":
+                    left.overlap_unresolved = True
+                    right.overlap_unresolved = True
+                elif _shared_over_larger(left, right) > DUPLICATE_SHARED_RATIO:
+                    if (right.score, right.members) > (left.score, left.members):
+                        left.dropped = True
+                    else:
+                        right.dropped = True
+                    changed = True
                 else:
-                    right.dropped = True
-                changed = True
+                    left.overlap_unresolved = True
+                    right.overlap_unresolved = True
             elif distance >= spacing / 2:
                 if _cut_pair(left, right):
                     changed = True
