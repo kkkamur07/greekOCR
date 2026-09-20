@@ -16,7 +16,8 @@ from nomikos_inference.contracts.segment import SegmentBlock, SegmentLine, Segme
 DEFAULT_BASELINE_FRACTION = 0.75
 
 
-def _baseline_points(quad: list[list[float]], fraction: float) -> list[list[float]]:
+def synthetic_baseline_points(quad: list[list[float]], fraction: float) -> list[list[float]]:
+    """Two-point baseline across a clockwise quad at ``fraction`` down."""
     top_left, top_right, bottom_right, bottom_left = quad
     left = [
         top_left[0] + fraction * (bottom_left[0] - top_left[0]),
@@ -27,6 +28,10 @@ def _baseline_points(quad: list[list[float]], fraction: float) -> list[list[floa
         top_right[1] + fraction * (bottom_right[1] - top_right[1]),
     ]
     return [left, right]
+
+
+def _baseline_points(quad: list[list[float]], fraction: float) -> list[list[float]]:
+    return synthetic_baseline_points(quad, fraction)
 
 
 def build_ppocr_det_response(
@@ -85,4 +90,4 @@ def build_ppocr_det_response(
     return SegmentRunResponse(blocks=[block] if lines else [], lines=lines)
 
 
-__all__ = ["build_ppocr_det_response"]
+__all__ = ["build_ppocr_det_response", "synthetic_baseline_points"]
