@@ -23,7 +23,7 @@ from dataclasses import dataclass
 
 import cv2
 import numpy as np
-from shapely.geometry import MultiPolygon, Polygon
+import pyclipper
 
 # PaddleX's ``min_size`` (3) and ``min_size + 2`` (5): the pre-expansion floor
 # drops specks, the post-expansion floor drops boxes the expansion failed to
@@ -43,20 +43,17 @@ class DetectedQuad:
 def unclip(points: np.ndarray, ratio: float) -> np.ndarray | None:
     """Expand a contour by ``area * ratio / perimeter`` with round joins.
 
-    PaddleX implements this with pyclipper (``JT_ROUND``); this uses
-    ``shapely``'s ``buffer`` with round joins instead, so no new dependency
-    is needed. The function is kept isolated (single input, single output)
-    so it can be swapped for pyclipper if the parity measurement ever shows
-    more than 2 px of corner error. Returns ``None`` when the offset
-    collapses or splits, which the caller treats as a dropped candidate.
+    This is PaddleX 3.7.0 ``DBPostProcess.unclip`` verbatim: the offset
+    distance comes from OpenCV area and perimeter, and the offsetting
+    itself is ``pyclipper`` with ``JT_ROUND``. When the offset splits into
+    several paths the first one wins, exactly as PaddleX's ``Execute``
+    fallback does. Returns ``None`` when the offset collapses, which the
+    caller treats as a dropped candidate.
     """
 
     contour = np.asarray(points, dtype=np.float32).reshape(-1, 2)
     if len(contour) < 3:
         return None
-    # Area and perimeter come from OpenCV exactly as in PaddleX, so the
-    # offset distance matches even though the offsetting itself is shapely.
-    # (OpenCV needs float32 here, while the buffering below uses float64.)
     area = float(cv2.contourArea(contour))
     length = float(cv2.arcLength(contour, True))
     if length <= 0:
@@ -64,17 +61,15 @@ def unclip(points: np.ndarray, ratio: float) -> np.ndarray | None:
     distance = area * ratio / length
     if distance <= 0:
         return None
-    polygon = Polygon(np.asarray(contour, dtype=np.float64))
-    if not polygon.is_valid or polygon.area <= 0:
-        polygon = polygon.buffer(0)
-        if polygon.is_empty:
-            return None
-    expanded = polygon.buffer(distance, join_style="round")
-    if expanded.is_empty or isinstance(expanded, MultiPolygon):
+    offset = pyclipper.PyclipperOffset()
+    offset.AddPath(contour, pyclipper.JT_ROUND, pyclipper.ET_CLOSEDPOLYGON)
+    try:
+        expanded = np.array(offset.Execute(distance))
+    except ValueError:
+        expanded = np.array(offset.Execute(distance)[0])
+    if expanded.size == 0:
         return None
-    coords = np.asarray(expanded.exterior.coords, dtype=np.float64)
-    if len(coords) >= 2 and np.allclose(coords[0], coords[-1]):
-        coords = coords[:-1]
+    coords = np.asarray(expanded.reshape(-1, 2), dtype=np.float64)
     if len(coords) < 3:
         return None
     return coords

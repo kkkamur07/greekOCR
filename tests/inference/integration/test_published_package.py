@@ -369,6 +369,97 @@ def test_the_coptic_artifact_runs_representative_widths(coptic_widths_run: dict)
         assert run["out_len"] == run["logit_time"]
 
 
+@pytest.fixture(scope="session")
+def ppocr_pages_run(
+    installed_package: dict[str, Path], tmp_path_factory: pytest.TempPathFactory
+) -> dict:
+    """The ppocr-det artifact through the installed runner, at two page sizes.
+
+    One session-scoped run: it resolves `ppocrv6-det-medium` out of the installed
+    wheel's own bundled **Registry** into its own **Hub cache**, so the download
+    revision, the digest check, and the graph under test are all the shipped ones.
+    The pages are synthetic white canvases with three rendered text lines; the
+    second size is not a multiple of 32, so the 32-rounding resize path is
+    exercised too.
+    """
+    cache_root = tmp_path_factory.mktemp("ppocr-hub-cache")
+    source = """
+import hashlib, json
+import numpy as np
+from io import BytesIO
+from PIL import Image, ImageDraw, ImageFont
+from nomikos_inference.contracts.common import InferenceTask
+from nomikos_inference.jobs.runner import run_model
+from nomikos_inference.registry import load_registry, get_model_entry
+from nomikos_inference.weights import resolve_weights_source
+
+entry = get_model_entry(load_registry(), "ppocrv6-det-medium", "stable")
+version = entry.versions["stable"]
+path = resolve_weights_source(
+    version.weights_source,
+    registry_model_id="ppocrv6-det-medium",
+    registry_tag="stable",
+    hub_revision=version.hub_revision,
+    artifact_sha256=version.artifact_sha256,
+    architecture="ppocr-det",
+)
+digest = hashlib.sha256(path.read_bytes()).hexdigest()
+# Rendered text, not solid bars: the detector answers strokes, and a solid
+# black rectangle scores a max probability near 0.007, so bars alone
+# detect nothing.
+font = ImageFont.load_default(size=28)
+pages = []
+for width, height in [(480, 320), (317, 205)]:
+    canvas = Image.new("RGB", (width, height), "white")
+    draw = ImageDraw.Draw(canvas)
+    for top in (40, 120, 200):
+        draw.text((40, top), "the quick brown fox jumps over", font=font, fill="black")
+    buffer = BytesIO()
+    canvas.save(buffer, format="PNG")
+    response = run_model(
+        task=InferenceTask.segment,
+        registry_model_id="ppocrv6-det-medium",
+        registry_tag="stable",
+        image_bytes=buffer.getvalue(),
+    )
+    pages.append({
+        "width": width,
+        "height": height,
+        "blocks": len(response.blocks),
+        "lines": len(response.lines),
+    })
+print(json.dumps({
+    "digest": digest,
+    "hub_revision": version.hub_revision,
+    "pages": pages,
+}))
+"""
+    output = _run_installed(installed_package, source, env={"HF_CACHE_ROOT": str(cache_root)})
+    return {"result": _last_json_line(output), "cache_root": cache_root}
+
+
+def test_the_ppocr_det_artifact_segments_synthetic_pages(ppocr_pages_run: dict) -> None:
+    """The published detector answers through the installed runner.
+
+    The entry resolves from the wheel's bundled **Registry**, the downloaded
+    bytes match the pinned digest, and both page sizes (one off the 32 grid)
+    come back as a valid segment response with at least one line.
+    """
+    import yaml
+
+    result = ppocr_pages_run["result"]
+    pin = yaml.safe_load((REPO_ROOT / "nomikos_inference" / "registry.yaml").read_text())["models"][
+        "ppocrv6-det-medium"
+    ]["versions"]["stable"]
+
+    assert result["digest"] == pin["artifact_sha256"]
+    assert result["hub_revision"] == pin["hub_revision"]
+    assert [page["width"] for page in result["pages"]] == [480, 317]
+    for page in result["pages"]:
+        assert page["blocks"] == 1
+        assert page["lines"] >= 1
+
+
 @pytest.mark.parametrize("platform", TARGET_PLATFORMS)
 def test_every_target_platform_resolves_without_an_accelerator_wheel(
     installed_package: dict[str, Path], tmp_path: Path, platform: str
