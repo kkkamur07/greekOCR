@@ -77,39 +77,53 @@ function canReuseDocument(
 }
 
 /**
- * The transcribe model picker's contents for one page. The catalog is the
+ * The model pickers' contents for one page. The catalog is the
  * document-level half and is only refetched when the caller passes it; the
- * binding is resolved for every page, since it can be bound per part.
+ * bindings are resolved for every page, since they can be bound per part.
+ *
+ * Both pickers read the one `listInferenceModels()` call: the catalog is
+ * filtered by task, never fetched twice.
  */
-async function loadTranscribeModels(
+async function loadEditorModels(
   projectId: string,
   documentId: string,
   partId: string,
   catalog: Promise<InferenceModelResponse[]> | null,
 ): Promise<{
-  models: InferenceModelResponse[] | null;
-  resolvedModel: InferenceModelResponse | null;
+  transcribeModels: InferenceModelResponse[] | null;
+  resolvedTranscribeModel: InferenceModelResponse | null;
+  segmentModels: InferenceModelResponse[] | null;
+  resolvedSegmentModel: InferenceModelResponse | null;
 }> {
-  let models: InferenceModelResponse[] | null = null;
+  let catalogModels: InferenceModelResponse[] | null = null;
   if (catalog) {
     try {
-      models = (await catalog).filter((model) => model.task === "transcribe");
+      catalogModels = await catalog;
     } catch {
-      models = [];
+      catalogModels = [];
     }
   }
+  const transcribeModels = catalogModels
+    ? catalogModels.filter((model) => model.task === "transcribe")
+    : null;
+  const segmentModels = catalogModels
+    ? catalogModels.filter((model) => model.task === "segment")
+    : null;
 
-  try {
-    const resolved = await api.resolvePartModelBinding(
-      projectId,
-      documentId,
-      partId,
-      "transcribe",
-    );
-    return { models, resolvedModel: resolved.model };
-  } catch {
-    return { models, resolvedModel: null };
-  }
+  const [transcribeResult, segmentResult] = await Promise.allSettled([
+    api.resolvePartModelBinding(projectId, documentId, partId, "transcribe"),
+    api.resolvePartModelBinding(projectId, documentId, partId, "segment"),
+  ]);
+  return {
+    transcribeModels,
+    resolvedTranscribeModel:
+      transcribeResult.status === "fulfilled"
+        ? transcribeResult.value.model
+        : null,
+    segmentModels,
+    resolvedSegmentModel:
+      segmentResult.status === "fulfilled" ? segmentResult.value.model : null,
+  };
 }
 
 type PartContentSetters = {
@@ -137,6 +151,8 @@ type PartContentSetters = {
   >;
   setTranscribeModels: Dispatch<SetStateAction<InferenceModelResponse[]>>;
   setSelectedTranscribeModelId: Dispatch<SetStateAction<string | null>>;
+  setSegmentModels: Dispatch<SetStateAction<InferenceModelResponse[]>>;
+  setSelectedSegmentModelId: Dispatch<SetStateAction<string | null>>;
 };
 
 /**
@@ -175,7 +191,7 @@ async function fetchPartContent(
       ? api.listTranscriptions(projectId, documentId)
       : Promise.resolve(null),
     api.getPagePairing(projectId, documentId, partId),
-    loadTranscribeModels(
+    loadEditorModels(
       projectId,
       documentId,
       partId,
@@ -266,26 +282,52 @@ async function fetchPartContent(
   }
 
   if (modelsResult.status === "fulfilled") {
-    const { models, resolvedModel } = modelsResult.value;
-    // On a page turn `models` is null and the catalog already on screen is
-    // kept; the bound model still joins it if the catalog does not list it.
+    const {
+      transcribeModels,
+      resolvedTranscribeModel,
+      segmentModels,
+      resolvedSegmentModel,
+    } = modelsResult.value;
+    // On a page turn the catalogs are null and the catalogs already on screen
+    // are kept; a bound model still joins its catalog if the catalog does not
+    // list it.
     apply(setters.setTranscribeModels, (current: InferenceModelResponse[]) => {
-      const catalog = models ?? current;
-      return resolvedModel &&
-        !catalog.some((model) => model.id === resolvedModel.id)
-        ? [resolvedModel, ...catalog]
+      const catalog = transcribeModels ?? current;
+      return resolvedTranscribeModel &&
+        !catalog.some((model) => model.id === resolvedTranscribeModel.id)
+        ? [resolvedTranscribeModel, ...catalog]
         : catalog;
     });
     apply(setters.setSelectedTranscribeModelId, (current: string | null) =>
-      resolvedModel
-        ? resolvedModel.id
-        : models
-          ? (models[0]?.id ?? null)
+      resolvedTranscribeModel
+        ? resolvedTranscribeModel.id
+        : transcribeModels
+          ? (transcribeModels[0]?.id ?? null)
+          : current,
+    );
+    apply(setters.setSegmentModels, (current: InferenceModelResponse[]) => {
+      const catalog = segmentModels ?? current;
+      return resolvedSegmentModel &&
+        !catalog.some((model) => model.id === resolvedSegmentModel.id)
+        ? [resolvedSegmentModel, ...catalog]
+        : catalog;
+    });
+    // Unlike the HTR picker, "Default" (null) is a real choice here, so a
+    // missing binding selects it rather than the first catalog row: a new
+    // catalog row must not silently change what runs. On a page turn the
+    // catalog is null and an explicit choice already on screen is kept.
+    apply(setters.setSelectedSegmentModelId, (current: string | null) =>
+      resolvedSegmentModel
+        ? resolvedSegmentModel.id
+        : segmentModels
+          ? null
           : current,
     );
   } else {
     apply(setters.setTranscribeModels, []);
     apply(setters.setSelectedTranscribeModelId, null);
+    apply(setters.setSegmentModels, []);
+    apply(setters.setSelectedSegmentModelId, null);
   }
 }
 
@@ -337,6 +379,18 @@ export function usePageEditorData(
     InferenceModelResponse[]
   >([]);
   const [selectedTranscribeModelId, setSelectedTranscribeModelId] = useState<
+    string | null
+  >(null);
+  const [segmentModels, setSegmentModels] = useState<InferenceModelResponse[]>(
+    [],
+  );
+  /**
+   * Null means "Default": `model_id` is not sent and the backend resolves
+   * the binding or the worker's own default, exactly as before this picker
+   * existed. It is never initialised from `segmentModels[0]`, and a page
+   * turn keeps an explicit choice (see fetchPartContent).
+   */
+  const [selectedSegmentModelId, setSelectedSegmentModelId] = useState<
     string | null
   >(null);
 
@@ -496,6 +550,8 @@ export function usePageEditorData(
             setPairingProgress,
             setTranscribeModels,
             setSelectedTranscribeModelId,
+            setSegmentModels,
+            setSelectedSegmentModelId,
           },
           { documentLevel: !carriedPart },
         );
@@ -577,6 +633,8 @@ export function usePageEditorData(
           setPairingProgress,
           setTranscribeModels,
           setSelectedTranscribeModelId,
+          setSegmentModels,
+          setSelectedSegmentModelId,
         },
         { documentLevel: true },
       );
@@ -628,6 +686,9 @@ export function usePageEditorData(
     transcribeModels,
     selectedTranscribeModelId,
     setSelectedTranscribeModelId,
+    segmentModels,
+    selectedSegmentModelId,
+    setSelectedSegmentModelId,
     parts,
     partIndex,
   };

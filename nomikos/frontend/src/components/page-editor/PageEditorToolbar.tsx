@@ -53,6 +53,9 @@ type PageEditorToolbarProps = {
   transcribeModels: InferenceModelResponse[];
   selectedTranscribeModelId: string | null;
   onSelectedTranscribeModelIdChange: (modelId: string | null) => void;
+  segmentModels: InferenceModelResponse[];
+  selectedSegmentModelId: string | null;
+  onSelectedSegmentModelIdChange: (modelId: string | null) => void;
   onRunAutoSegment: () => void;
   onRunSegmentOcr: () => void;
   onRunPageOcr: () => void;
@@ -108,6 +111,9 @@ export function PageEditorToolbar({
   transcribeModels,
   selectedTranscribeModelId,
   onSelectedTranscribeModelIdChange,
+  segmentModels,
+  selectedSegmentModelId,
+  onSelectedSegmentModelIdChange,
   onRunAutoSegment,
   onRunSegmentOcr,
   onRunPageOcr,
@@ -187,6 +193,9 @@ export function PageEditorToolbar({
   const selectedModelName =
     transcribeModels.find((model) => model.id === selectedTranscribeModelId)
       ?.name ?? "not selected";
+  const selectedSegmentModelName =
+    segmentModels.find((model) => model.id === selectedSegmentModelId)?.name ??
+    "Default";
 
   // The quick button transcribes what the researcher is looking at: the
   // selected segment if there is one, otherwise the page. Naming the scope on
@@ -306,11 +315,11 @@ export function PageEditorToolbar({
       <div className="pe-toolbar__actions">
         <div className="pe-toolbar__cluster">
           <PageEditorModelSelect
-            transcribeModels={transcribeModels}
-            selectedTranscribeModelId={selectedTranscribeModelId}
-            onSelectedTranscribeModelIdChange={
-              onSelectedTranscribeModelIdChange
-            }
+            label="HTR"
+            ariaLabel="HTR transcription model"
+            models={transcribeModels}
+            selectedModelId={selectedTranscribeModelId}
+            onSelectedModelIdChange={onSelectedTranscribeModelIdChange}
             disabled={processing}
           />
         </div>
@@ -325,6 +334,15 @@ export function PageEditorToolbar({
           role="group"
           aria-label="Run inference"
         >
+          <PageEditorModelSelect
+            label="Seg"
+            ariaLabel="Segmentation model"
+            models={segmentModels}
+            selectedModelId={selectedSegmentModelId}
+            onSelectedModelIdChange={onSelectedSegmentModelIdChange}
+            disabled={processing}
+            includeDefaultOption
+          />
           <button
             type="button"
             className="pe-tb-btn"
@@ -395,7 +413,7 @@ export function PageEditorToolbar({
             <div className="pe-dropdown" role="menu" aria-label="Workflow">
               <div className="pe-dd-section">Segment</div>
               <p className="pe-dd-model">
-                Engine <strong>blla-segment</strong> (fixed)
+                Model <strong>{selectedSegmentModelName}</strong>
               </p>
               <button
                 type="button"
