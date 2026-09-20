@@ -126,6 +126,9 @@ export function PageEditorPlaceholderPage() {
     transcribeModels,
     selectedTranscribeModelId,
     setSelectedTranscribeModelId,
+    segmentModels,
+    selectedSegmentModelId,
+    setSelectedSegmentModelId,
     parts,
     partIndex,
   } = editorData;
@@ -204,6 +207,7 @@ export function PageEditorPlaceholderPage() {
     selectedSegmentId: pairing.selectedSegmentId,
     setSelectedSegmentId: pairing.setSelectedSegmentId,
     setApprovedTextDraft: pairing.setApprovedTextDraft,
+    selectedSegmentModelId,
     onDrawComplete: () => setDrawMode("none"),
     setSubmissionRefusal,
     trackJobAndWait: jobQueue.trackAndWait,
@@ -443,6 +447,9 @@ export function PageEditorPlaceholderPage() {
             transcribeModels={transcribeModels}
             selectedTranscribeModelId={selectedTranscribeModelId}
             onSelectedTranscribeModelIdChange={setSelectedTranscribeModelId}
+            segmentModels={segmentModels}
+            selectedSegmentModelId={selectedSegmentModelId}
+            onSelectedSegmentModelIdChange={setSelectedSegmentModelId}
             onRunAutoSegment={runAutoSegment}
             onRunSegmentOcr={runSegmentOcr}
             onRunPageOcr={runPageOcr}

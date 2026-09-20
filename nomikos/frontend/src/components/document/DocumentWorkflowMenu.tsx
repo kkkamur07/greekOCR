@@ -1,5 +1,9 @@
-import { useState } from "react";
-import { api, type DocumentWorkflowCounts } from "../../api/client";
+import { useEffect, useState } from "react";
+import {
+  api,
+  type DocumentWorkflowCounts,
+  type InferenceModelResponse,
+} from "../../api/client";
 import { ApiError } from "../../api/errors";
 import {
   ActionMenu,
@@ -11,8 +15,8 @@ import {
   ActionMenuWarning,
 } from "../ui/ActionMenu";
 import { toast } from "../ui/toast";
+import { PageEditorModelSelect } from "../page-editor/PageEditorModelSelect";
 import {
-  SEGMENT_ENGINE_NAME,
   TRANSCRIBE_MODEL_NAME,
   batchQueuedMessage,
   pageCountLabel,
@@ -44,18 +48,51 @@ export function DocumentWorkflowMenu({
 }: DocumentWorkflowMenuProps) {
   const [confirmingResegment, setConfirmingResegment] = useState(false);
   const [running, setRunning] = useState(false);
+  const [segmentModels, setSegmentModels] = useState<InferenceModelResponse[]>(
+    [],
+  );
+  /**
+   * Null means "Default": `model_id: null` is sent and the backend resolves
+   * the binding or the worker's own default, exactly as before this picker
+   * existed.
+   */
+  const [selectedSegmentModelId, setSelectedSegmentModelId] = useState<
+    string | null
+  >(null);
+
+  // The segment catalog for the picker. A failed request leaves only
+  // "Default" and does not block segmenting.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const catalog = await api.listInferenceModels();
+        if (!cancelled) {
+          setSegmentModels(catalog.filter((model) => model.task === "segment"));
+        }
+      } catch {
+        if (!cancelled) setSegmentModels([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, documentId]);
 
   const total = counts?.total ?? 0;
   const unsegmented = counts?.unsegmented ?? 0;
   const unpaired = counts?.unpaired ?? 0;
   const busy = disabled || running || counts === null;
+  const selectedSegmentModelName =
+    segmentModels.find((model) => model.id === selectedSegmentModelId)?.name ??
+    null;
 
   async function runSegment(scope: "unsegmented" | "all", close: () => void) {
     setRunning(true);
     try {
       const result = await api.enqueueDocumentSegment(projectId, documentId, {
         scope,
-        model_id: null,
+        model_id: selectedSegmentModelId,
       });
       toast.success(batchQueuedMessage(result));
       onJobsQueued();
@@ -105,7 +142,7 @@ export function DocumentWorkflowMenu({
             destructive
             busy={running}
             question={`Re-segment every page (${pageCountLabel(total)})?`}
-            detail="Lines with approved text, a pairing or hand-drawn geometry stay. Every other line is redrawn and the model's unapproved text on it is discarded. There is no undo."
+            detail={`Lines with approved text, a pairing or hand-drawn geometry stay. Every other line is redrawn and the model's unapproved text on it is discarded. There is no undo. Runs with ${selectedSegmentModelName ?? "the default model"}.`}
             confirmLabel={
               running ? "Queueing…" : `Yes, re-segment ${pageCountLabel(total)}`
             }
@@ -115,9 +152,15 @@ export function DocumentWorkflowMenu({
         ) : (
           <>
             <ActionMenuSection>Segment</ActionMenuSection>
-            <ActionMenuCaption>
-              Engine <strong>{SEGMENT_ENGINE_NAME}</strong> (fixed)
-            </ActionMenuCaption>
+            <PageEditorModelSelect
+              label="Seg"
+              ariaLabel="Segmentation model"
+              models={segmentModels}
+              selectedModelId={selectedSegmentModelId}
+              onSelectedModelIdChange={setSelectedSegmentModelId}
+              disabled={busy}
+              includeDefaultOption
+            />
             <ActionMenuItem
               label="Segment unsegmented pages"
               meta={String(unsegmented)}

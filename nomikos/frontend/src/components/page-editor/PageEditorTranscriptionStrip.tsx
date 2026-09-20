@@ -169,9 +169,11 @@ export function PageEditorTranscriptionStrip({
           disabled={ocrRunning}
         />
         <PageEditorModelSelect
-          transcribeModels={transcribeModels}
-          selectedTranscribeModelId={selectedTranscribeModelId}
-          onSelectedTranscribeModelIdChange={onSelectedTranscribeModelIdChange}
+          label="HTR"
+          ariaLabel="HTR transcription model"
+          models={transcribeModels}
+          selectedModelId={selectedTranscribeModelId}
+          onSelectedModelIdChange={onSelectedTranscribeModelIdChange}
           disabled={ocrRunning}
         />
         <span className="pe-strip__bar-spacer" />

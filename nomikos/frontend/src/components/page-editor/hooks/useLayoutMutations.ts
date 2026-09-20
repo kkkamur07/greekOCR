@@ -70,6 +70,12 @@ type LayoutMutationsInput = {
   selectedSegmentId: string | null;
   setSelectedSegmentId: Dispatch<SetStateAction<string | null>>;
   setApprovedTextDraft: Dispatch<SetStateAction<string>>;
+  /**
+   * Null means "Default": `model_id` is not sent and the backend resolves
+   * the binding or the worker's own default, exactly as before the picker
+   * existed.
+   */
+  selectedSegmentModelId?: string | null;
   onDrawComplete: () => void;
   /**
    * Where a refused submission is explained. It is a standing line rather than
@@ -102,6 +108,7 @@ export function useLayoutMutations({
   selectedSegmentId,
   setSelectedSegmentId,
   setApprovedTextDraft,
+  selectedSegmentModelId = null,
   onDrawComplete,
   setSubmissionRefusal,
   subscribeToJobCompletion,
@@ -581,8 +588,10 @@ export function useLayoutMutations({
     return `Kraken segmentation completed using raw Kraken boundaries (${segmentCount} Segment(s)).`;
   }
 
-  async function runAutoSegment() {
+  async function runAutoSegment(modelId?: string | null) {
     if (!projectId || !documentId || !partId) return;
+    const chosenModelId =
+      modelId === undefined ? selectedSegmentModelId : modelId;
     if (
       lines.length > 0 &&
       !window.confirm(
@@ -602,7 +611,12 @@ export function useLayoutMutations({
     };
 
     try {
-      const enqueued = await api.segmentPart(projectId, documentId, partId, {});
+      const enqueued = await api.segmentPart(
+        projectId,
+        documentId,
+        partId,
+        chosenModelId ? { model_id: chosenModelId } : {},
+      );
       await trackJobAndWait(enqueued, jobMeta, {
         timeoutMs: INFERENCE_JOB_WAIT_CEILING_MS,
       });

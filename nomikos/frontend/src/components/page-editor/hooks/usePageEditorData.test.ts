@@ -263,7 +263,9 @@ describe("usePageEditorData page turn", () => {
       "part-2",
     );
     expect(getPagePairing).toHaveBeenCalledTimes(2);
-    expect(resolvePartModelBinding).toHaveBeenCalledTimes(2);
+    // One resolve per task per page: transcribe and segment bindings are
+    // each bound per part, so a page turn resolves both.
+    expect(resolvePartModelBinding).toHaveBeenCalledTimes(4);
     // The document's did not, and what was on screen is still there.
     expect(listTranscriptions).toHaveBeenCalledTimes(1);
     expect(listInferenceModels).toHaveBeenCalledTimes(1);
