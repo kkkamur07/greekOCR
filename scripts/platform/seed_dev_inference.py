@@ -27,13 +27,16 @@ Overrides, both optional and both comma-separated:
 
 import asyncio
 import os
+import uuid
 from collections.abc import Sequence
 
 from _bootstrap import ensure_nomikos_on_path
-from sqlalchemy import or_, select
+from sqlalchemy import delete, or_, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
 ensure_nomikos_on_path()
 
+from backend.jobs.infrastructure.orm_models import Job  # noqa: E402
 from backend.ml.infrastructure.orm_models import (  # noqa: E402
     InferenceModel,
     InferenceTask,
@@ -134,6 +137,40 @@ _PROVIDER_BY_ARCHITECTURE: dict[RegistryArchitecture, str] = {
 }
 
 
+def _binding_scope(binding: ModelBinding) -> tuple:
+    """Return the scope that makes two bindings for one task collide."""
+    return (binding.task, binding.project_id, binding.document_id, binding.document_part_id)
+
+
+async def repoint_model_references(
+    session: AsyncSession, duplicate_id: uuid.UUID, keep_id: uuid.UUID
+) -> None:
+    """Move bindings and jobs from a duplicate model row to the kept row.
+
+    Runs before the duplicate row is deleted so its bindings are not
+    cascade-deleted and its jobs are not nulled. A duplicate binding whose
+    scope the kept row already covers is deleted instead of repointed, since
+    one scope holds one binding; only that conflicting row is removed.
+    """
+    keep_result = await session.execute(
+        select(ModelBinding).where(ModelBinding.model_id == keep_id)
+    )
+    keep_scopes = {_binding_scope(binding) for binding in keep_result.scalars().all()}
+    duplicate_result = await session.execute(
+        select(ModelBinding).where(ModelBinding.model_id == duplicate_id)
+    )
+    for binding in duplicate_result.scalars().all():
+        scope = _binding_scope(binding)
+        if scope in keep_scopes:
+            await session.execute(delete(ModelBinding).where(ModelBinding.id == binding.id))
+        else:
+            await session.execute(
+                update(ModelBinding).where(ModelBinding.id == binding.id).values(model_id=keep_id)
+            )
+            keep_scopes.add(scope)
+    await session.execute(update(Job).where(Job.model_id == duplicate_id).values(model_id=keep_id))
+
+
 async def _upsert_model(*, name: str, task: InferenceTask) -> InferenceModel:
     """Write one catalog row for a registry model id, creating or rewriting it.
 
@@ -170,6 +207,7 @@ async def _upsert_model(*, name: str, task: InferenceTask) -> InferenceModel:
         rows = list(result.scalars().all())
         model, duplicates = split_duplicate_models(rows, display_name)
         for duplicate in duplicates:
+            await repoint_model_references(session, duplicate.id, model.id)
             await session.delete(duplicate)
         if duplicates:
             await session.flush()
