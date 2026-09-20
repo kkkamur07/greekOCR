@@ -20,9 +20,17 @@ from nomikos_inference.admission import open_image_bytes
 from nomikos_inference.architectures.artifact import ArtifactHandle, resolve_artifact
 from nomikos_inference.architectures.ppocr_det.postprocessing import detect_lines
 from nomikos_inference.architectures.ppocr_det.preprocessing import preprocess_ppocr_det_image
+from nomikos_inference.architectures.ppocr_det.reading_order import layout_lines
+from nomikos_inference.architectures.ppocr_det.refinement import (
+    DEFAULT_MERGE_GAP_RATIO,
+    DEFAULT_MERGE_MAX_HEIGHT_RATIO,
+    DEFAULT_OVERLAP_CUT_THRESHOLD,
+    refine_to_lines,
+)
 from nomikos_inference.architectures.ppocr_det.response import (
     DEFAULT_BASELINE_FRACTION,
     build_ppocr_det_response,
+    build_refined_ppocr_det_response,
 )
 from nomikos_inference.contracts.segment import SegmentRunResponse
 
@@ -187,6 +195,20 @@ def _reading_direction(params: Mapping[str, Any]) -> str:
     return direction
 
 
+def _bool_param(params: Mapping[str, Any], key: str, default: bool) -> bool:
+    value = params.get(key, default)
+    if isinstance(value, bool):
+        return value
+    raise ValueError(f"{key} must be true or false")
+
+
+def _noise_policy(params: Mapping[str, Any]) -> str:
+    policy = params.get("noise_policy", "flag")
+    if policy in ("flag", "drop", "off"):
+        return policy
+    raise ValueError('noise_policy must be "flag", "drop" or "off"')
+
+
 def run_ppocr_det_segment(
     image_bytes: bytes,
     *,
@@ -208,6 +230,16 @@ def run_ppocr_det_segment(
     max_candidates = _max_candidates(resolved)
     fraction = _baseline_fraction(resolved)
     direction = _reading_direction(resolved)
+    merge_fragments = _bool_param(resolved, "merge_fragments", True)
+    resolve_overlaps = _bool_param(resolved, "resolve_overlaps", True)
+    noise_policy = _noise_policy(resolved)
+    merge_gap_ratio = _positive_float_param(resolved, "merge_gap_ratio", DEFAULT_MERGE_GAP_RATIO)
+    merge_max_height_ratio = _positive_float_param(
+        resolved, "merge_max_height_ratio", DEFAULT_MERGE_MAX_HEIGHT_RATIO
+    )
+    overlap_cut_threshold = _positive_float_param(
+        resolved, "overlap_cut_threshold", DEFAULT_OVERLAP_CUT_THRESHOLD
+    )
 
     with open_image_bytes(image_bytes) as image:
         image = image.convert("RGB")
@@ -234,12 +266,35 @@ def run_ppocr_det_segment(
             unclip_ratio=unclip_ratio,
             max_candidates=max_candidates,
         )
-        return build_ppocr_det_response(
+        if not merge_fragments and not resolve_overlaps and noise_policy == "off":
+            return build_ppocr_det_response(
+                width,
+                height,
+                quads,
+                baseline_fraction=fraction,
+                reading_direction=direction,
+            )
+        layout = layout_lines(quads, direction=direction)
+        items = refine_to_lines(
+            quads,
+            layout,
+            baseline_fraction=fraction,
+            merge=merge_fragments,
+            resolve=resolve_overlaps,
+            classify=noise_policy != "off",
+            merge_gap_ratio=merge_gap_ratio,
+            merge_max_height_ratio=merge_max_height_ratio,
+            overlap_cut_threshold=overlap_cut_threshold,
+        )
+        return build_refined_ppocr_det_response(
             width,
             height,
             quads,
+            items,
+            layout,
             baseline_fraction=fraction,
             reading_direction=direction,
+            noise_policy=noise_policy,
         )
 
 

@@ -247,6 +247,65 @@ def test_bad_session_threads_raise(
         ppocr_det._load_ppocr_det_session(str(artifact), None)
 
 
+def _run_with_spied_builders(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    params: dict | None,
+) -> dict:
+    from nomikos_inference.contracts.segment import SegmentRunResponse
+
+    calls: dict = {}
+    artifact = tmp_path / "ppocrv6-branch.onnx"
+    artifact.write_bytes(b"fake onnx graph")
+    session = FakeSession(_two_line_map())
+    monkeypatch.setattr(
+        ppocr_det, "_load_ppocr_det_session", lambda _path, _fingerprint: (session, "x", "y")
+    )
+
+    def fake_plain(*_args: object, **_kwargs: object) -> SegmentRunResponse:
+        calls["plain"] = True
+        return SegmentRunResponse(blocks=[], lines=[])
+
+    def fake_refined(*_args: object, **_kwargs: object) -> SegmentRunResponse:
+        calls["refined"] = True
+        return SegmentRunResponse(blocks=[], lines=[])
+
+    monkeypatch.setattr(ppocr_det, "build_ppocr_det_response", fake_plain)
+    monkeypatch.setattr(ppocr_det, "build_refined_ppocr_det_response", fake_refined)
+    run_ppocr_det_segment(_page_bytes(), model_path=artifact, artifact_sha256=None, params=params)
+    return calls
+
+
+def test_all_refinement_off_uses_the_plain_response(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls = _run_with_spied_builders(
+        monkeypatch,
+        tmp_path,
+        {"merge_fragments": False, "resolve_overlaps": False, "noise_policy": "off"},
+    )
+
+    assert calls == {"plain": True}
+
+
+def test_refinement_on_uses_the_refined_response(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls = _run_with_spied_builders(monkeypatch, tmp_path, None)
+
+    assert calls == {"refined": True}
+
+
+def test_bad_refinement_params_raise(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    for params in (
+        {"merge_fragments": "yes"},
+        {"resolve_overlaps": 1},
+        {"noise_policy": "delete"},
+    ):
+        with pytest.raises(ValueError):
+            _run_with_session(monkeypatch, tmp_path, _two_line_map(), params=params)
+
+
 def test_run_model_dispatches_ppocr_det(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """The runner hands a ``ppocr-det`` entry to the new adapter verbatim."""
     monkeypatch.setattr("nomikos_inference.jobs.runner.validate_image_bytes", lambda *_args: None)

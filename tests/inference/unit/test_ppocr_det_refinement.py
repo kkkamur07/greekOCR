@@ -163,6 +163,127 @@ def test_six_percent_overlap_is_left_alone() -> None:
     assert not any(work.overlap_unresolved for work in works)
 
 
+def _classify(quads: list[DetectedQuad]):
+    from nomikos_inference.architectures.ppocr_det.refinement import classify_suspects
+
+    layout = layout_lines(quads, direction="ltr")
+    heights = [
+        max(point[1] for point in quad.points) - min(point[1] for point in quad.points)
+        for quad in quads
+    ]
+    median_height = sorted(heights)[len(heights) // 2]
+    merged = merge_row_fragments(quads, layout)
+    works = resolve_overlaps(merged, layout, median_height=median_height)
+    classify_suspects(works, layout, quads)
+    return works, layout
+
+
+def test_outside_singleton_is_a_suspect_with_its_reason() -> None:
+    quads = _column(0, 100, [0, 40, 80])
+    quads.append(_quad(430, 30, 450, 50))
+
+    works, _ = _classify(quads)
+    flagged = [work for work in works if work.suspect]
+
+    assert len(flagged) == 1
+    assert flagged[0].suspect_reason == "outside_bands"
+    assert flagged[0].merged_from == 1
+
+
+def test_gutter_numeral_between_two_columns_is_not_a_suspect() -> None:
+    quads = _column(0, 100, [0, 40, 80])
+    quads.extend(_column(300, 400, [0, 40, 80]))
+    quads.append(_quad(190, 30, 210, 50))
+
+    works, _ = _classify(quads)
+
+    assert not any(work.suspect for work in works)
+
+
+def test_tall_initial_is_not_a_suspect_despite_its_angle() -> None:
+    quads = _column(0, 200, [0, 40, 80])
+    quads.append(_quad(60, 120, 200, 140))
+    quads.append(_quad(0, 100, 50, 160))
+
+    works, _ = _classify(quads)
+
+    assert not any(work.suspect for work in works)
+    assert sum(1 for work in works if work.role == "initial") == 1
+
+
+def test_steep_diagonal_is_an_angle_suspect() -> None:
+    quads = _column(0, 200, [0, 40, 80, 120])
+    diagonal = DetectedQuad(
+        points=[[80.0, 160.0], [120.0, 160.0], [140.0, 200.0], [100.0, 200.0]],
+        score=0.9,
+    )
+    quads.append(diagonal)
+
+    works, _ = _classify(quads)
+    flagged = [work for work in works if work.suspect]
+
+    assert len(flagged) == 1
+    assert flagged[0].suspect_reason == "angle"
+
+
+def test_merged_line_outside_its_band_is_not_a_suspect() -> None:
+    quads = _column(0, 200, [0, 40, 80])
+    quads.append(_quad(0, 120, 120, 140, score=0.8))
+    quads.append(_quad(100, 122, 220, 142, score=0.6))
+
+    works, _ = _classify(quads)
+
+    assert not any(work.suspect for work in works)
+    assert sum(1 for work in works if work.merged_from == 2) == 1
+
+
+def _respond(quads: list[DetectedQuad], noise_policy: str, classify: bool):
+    from nomikos_inference.architectures.ppocr_det.refinement import refine_to_lines
+    from nomikos_inference.architectures.ppocr_det.response import (
+        build_refined_ppocr_det_response,
+    )
+
+    layout = layout_lines(quads, direction="ltr")
+    items = refine_to_lines(quads, layout, classify=classify)
+    return build_refined_ppocr_det_response(
+        500, 300, quads, items, layout, noise_policy=noise_policy
+    )
+
+
+def _suspect_page() -> list[DetectedQuad]:
+    # The suspect sits above the body in reading order, so `flag` must move it.
+    quads = [_quad(430, -40, 450, -20)]
+    quads.extend(_column(0, 200, [0, 40]))
+    return quads
+
+
+def test_flag_orders_suspects_last() -> None:
+    response = _respond(_suspect_page(), "flag", True)
+
+    assert len(response.lines) == 3
+    assert [line.order for line in response.lines] == [0, 1, 2]
+    assert response.lines[-1].source_metadata.get("suspect") is True
+    assert response.lines[-1].source_metadata.get("suspect_reason") == "outside_bands"
+    assert not any(line.source_metadata.get("suspect") for line in response.lines[:2])
+    assert min(point[0] for point in response.lines[-1].points) == 430.0
+
+
+def test_drop_removes_suspects() -> None:
+    response = _respond(_suspect_page(), "drop", True)
+
+    assert len(response.lines) == 2
+    assert not any(line.source_metadata.get("suspect") for line in response.lines)
+
+
+def test_off_changes_nothing() -> None:
+    response = _respond(_suspect_page(), "off", False)
+
+    assert len(response.lines) == 3
+    assert not any(line.source_metadata.get("suspect") for line in response.lines)
+    # Natural reading order keeps the top suspect first: nothing is moved.
+    assert min(point[0] for point in response.lines[0].points) == 430.0
+
+
 def test_cut_that_would_remove_more_than_half_marks_unresolved() -> None:
     # The small box sits exactly on the mid-baseline line, so its keep-side
     # piece is exactly half and the guard refuses the cut.

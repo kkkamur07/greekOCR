@@ -25,6 +25,14 @@ DEFAULT_MERGE_GAP_RATIO = 1.5
 DEFAULT_MERGE_MAX_HEIGHT_RATIO = 2.0
 DEFAULT_OVERLAP_CUT_THRESHOLD = 0.20
 DUPLICATE_SHARED_RATIO = 0.50
+# A detection counts as inside a column band when it stays within this
+# tolerance of the band edges. Measured at 1 px: tighter clips real merged
+# lines that stick out past their builders, looser admits margin noise.
+BAND_TOLERANCE_PX = 1.0
+# Bounding-box angle off the page dominant angle that marks a non-text
+# shape. Real text lines sit within a few degrees; initials are exempt by
+# role rather than by angle.
+SUSPECT_ANGLE_DEGREES = 20.0
 _MAX_OVERLAP_PASSES = 100
 
 
@@ -392,11 +400,169 @@ def resolve_overlaps(
     return [work for work in works if not work.dropped]
 
 
+def _builder_bands(layout: PageLayout, quads: list[DetectedQuad]) -> list[tuple[float, float]]:
+    """Text bands: x ranges over each column's founding builders."""
+    bands: list[tuple[float, float]] = []
+    for column in layout.columns:
+        if not column.builders:
+            continue
+        xs = [point[0] for i in column.builders for point in quads[i].points]
+        bands.append((min(xs), max(xs)))
+    return sorted(bands)
+
+
+def _text_block(layout: PageLayout, quads: list[DetectedQuad]) -> tuple[float, float] | None:
+    """Top and bottom of the builders' overall y range."""
+    ys = [
+        point[1] for column in layout.columns for i in column.builders for point in quads[i].points
+    ]
+    if not ys:
+        return None
+    return min(ys), max(ys)
+
+
+def _bbox_angle(points: list[list[float]]) -> float:
+    xs = [point[0] for point in points]
+    ys = [point[1] for point in points]
+    width, height = max(xs) - min(xs), max(ys) - min(ys)
+    if width <= 0:
+        return 90.0
+    return float(np.degrees(np.arctan2(height, width)))
+
+
+def classify_suspects(
+    works: list[_Work],
+    layout: PageLayout,
+    quads: list[DetectedQuad],
+) -> None:
+    """Flag non-text detections in place, never deleting.
+
+    A singleton that is not an initial is a suspect when it lies outside
+    every builder column band, unless it sits strictly between two bands
+    inside the text block top to bottom (a gutter numeral between two
+    columns keeps its place and is never a suspect by angle either). Any
+    other non-initial whose bounding-box angle is more than
+    ``SUSPECT_ANGLE_DEGREES`` off the page dominant angle is a suspect
+    whatever its position. Merged lines always have a column home.
+    """
+    bands = _builder_bands(layout, quads)
+    block = _text_block(layout, quads)
+    angles = [
+        _bbox_angle([[float(x), float(y)] for x, y in work.poly.exterior.coords]) for work in works
+    ]
+    dominant = _median(angles, 0.0)
+    pairs = list(zip(bands, bands[1:], strict=False))
+    for position, work in enumerate(works):
+        if work.role == "initial":
+            continue
+        xmin, ymin, xmax, ymax = work.poly.bounds
+        centre_y = (ymin + ymax) / 2.0
+        in_gutter = (
+            block is not None
+            and block[0] <= centre_y <= block[1]
+            and any(
+                xmin > left_high and xmax < right_low for (_, left_high), (right_low, _) in pairs
+            )
+        )
+        if in_gutter:
+            continue
+        outside = not any(
+            xmin >= low - BAND_TOLERANCE_PX and xmax <= high + BAND_TOLERANCE_PX
+            for low, high in bands
+        )
+        if outside and work.merged_from == 1:
+            work.suspect = True
+            work.suspect_reason = "outside_bands"
+            continue
+        if abs(angles[position] - dominant) > SUSPECT_ANGLE_DEGREES:
+            work.suspect = True
+            work.suspect_reason = "angle"
+
+
+def refine_to_lines(
+    quads: list[DetectedQuad],
+    layout: PageLayout,
+    *,
+    baseline_fraction: float = 0.75,
+    merge: bool = True,
+    resolve: bool = True,
+    classify: bool = True,
+    merge_gap_ratio: float = DEFAULT_MERGE_GAP_RATIO,
+    merge_max_height_ratio: float = DEFAULT_MERGE_MAX_HEIGHT_RATIO,
+    overlap_cut_threshold: float = DEFAULT_OVERLAP_CUT_THRESHOLD,
+) -> list[RefinedLine]:
+    """Run the refinement stage and return unordered manuscript lines."""
+    heights = [_bbox(quad.points)[3] - _bbox(quad.points)[1] for quad in quads]
+    median_height = _median(heights, 1.0)
+    if merge:
+        works = merge_row_fragments(
+            quads,
+            layout,
+            gap_ratio=merge_gap_ratio,
+            height_ratio=merge_max_height_ratio,
+            baseline_fraction=baseline_fraction,
+        )
+    else:
+        works = [_work_of_quad(i, quad, baseline_fraction) for i, quad in enumerate(quads)]
+        _mark_initials(works, quads, layout, merge_max_height_ratio)
+    if resolve:
+        works = resolve_overlaps(
+            works, layout, cut_threshold=overlap_cut_threshold, median_height=median_height
+        )
+    if classify:
+        classify_suspects(works, layout, quads)
+    lines = []
+    for work in works:
+        ring = [list(point) for point in work.poly.exterior.coords]
+        if len(ring) >= 2 and ring[0] == ring[-1]:
+            ring = ring[:-1]
+        lines.append(
+            RefinedLine(
+                points=[[float(x), float(y)] for x, y in ring],
+                baseline=[
+                    [float(work.baseline[0][0]), float(work.baseline[0][1])],
+                    [float(work.baseline[1][0]), float(work.baseline[1][1])],
+                ],
+                score=work.score,
+                members=work.members,
+                role=work.role,
+                suspect=work.suspect,
+                suspect_reason=work.suspect_reason,
+                merged_from=work.merged_from,
+                overlap_unresolved=work.overlap_unresolved,
+            )
+        )
+    return lines
+
+
+def _mark_initials(
+    works: list[_Work],
+    quads: list[DetectedQuad],
+    layout: PageLayout,
+    height_ratio: float,
+) -> None:
+    """Flag tall singletons as initials when merging is switched off."""
+    heights = {i: _bbox(quad.points)[3] - _bbox(quad.points)[1] for i, quad in enumerate(quads)}
+    builder_heights = [heights[i] for column in layout.columns for i in column.builders]
+    reference_all = _median(builder_heights, 1.0)
+    for column in layout.columns:
+        for row in column.rows:
+            for index in row:
+                mates = [heights[j] for j in row if j != index]
+                reference = _median(mates, reference_all)
+                if reference > 0 and heights[index] > height_ratio * reference:
+                    works[index].role = "initial"
+
+
 __all__ = [
+    "BAND_TOLERANCE_PX",
     "DEFAULT_MERGE_GAP_RATIO",
     "DEFAULT_MERGE_MAX_HEIGHT_RATIO",
     "DEFAULT_OVERLAP_CUT_THRESHOLD",
+    "SUSPECT_ANGLE_DEGREES",
     "RefinedLine",
+    "classify_suspects",
     "merge_row_fragments",
+    "refine_to_lines",
     "resolve_overlaps",
 ]
