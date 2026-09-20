@@ -25,7 +25,7 @@ Example::
         --output-dir /Users/krishuagarwal/Desktop/Programming/python/greekOCR-wt/_ppocr-parity/adapter-e2e
 
 The exit code is the gate: 0 when every page has identical counts, no
-unmatched boxes on either side, and max corner distance at most 2.0 px.
+unmatched boxes on either side, and max corner distance at most 0.5 px.
 """
 
 from __future__ import annotations
@@ -57,7 +57,7 @@ PAGES = (
 )
 IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff")
 DEFAULT_ARTIFACT_SHA256 = "09e4c827c5bb20a0344374bbf8b88d41b7c8bf2be3a0db82ffed3bf090eacfe3"
-MAX_CORNER_PX = 2.0
+MAX_CORNER_PX = 0.5
 
 
 def _parse_args() -> argparse.Namespace:

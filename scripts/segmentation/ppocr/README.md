@@ -66,7 +66,7 @@ shape-coverage table and timing, are in
 
 The parity proof above covers the exported graph; `verify_adapter.py`
 measures the serving adapter (`run_ppocr_det_segment`: PIL decode,
-preprocessing, shapely DB postprocess) on real weights. For each of the 14
+preprocessing, pyclipper DB postprocess) on real weights. For each of the 14
 reference fixtures it reads the page BYTES, calls the same entry point
 production uses with `params=None`, and compares the returned line quads
 with the fixture boxes: counts, then greedy one-to-one matching by quad
@@ -76,7 +76,7 @@ corner in the matched box, since corner order may differ). It writes
 reading order in green with numbers beside each quad's left edge,
 synthetic baselines in yellow, unmatched fixture boxes in red) and exits
 non-zero unless every page has identical counts, nothing unmatched, and
-max corner distance at most 2.0 px.
+max corner distance at most 0.5 px.
 
 ```bash
 PYTHONPATH=. PYTHONDONTWRITEBYTECODE=1 /Users/krishuagarwal/Desktop/Programming/python/greekOCR/.venv/bin/python \
@@ -94,9 +94,8 @@ live on the reference box (`nomikos:/root/ppocrv6-bench-20260919/images/`)
 and are fetched with scp into the output directory, whose SHA-256 match is
 then verified the same way. The ONNX digest defaults to the pinned artifact
 (`--artifact-sha256` overrides it). Measured 2026-09-20: identical counts
-on all 14 pages with nothing unmatched, but max corner distance 2.2 to
-3.2 px against the 2.0 px gate. Cause analysis showed the PIL decode is
-pixel-identical to cv2 while PaddleX's own pyclipper unclip over the same
-probability maps reproduces the fixtures at 0.000 px, so the error is the
-shapely-for-pyclipper substitution. Full table and reading order notes are
+on all 14 pages with nothing unmatched and 0.000 px corner distance
+against the 0.5 px gate. (The first version used a shapely unclip and
+measured 2.2 to 3.2 px max; replacing it with PaddleX's own pyclipper
+unclip gave exact parity.) Full table and reading order notes are
 in `docs/inference/ppocrv6-segmenter.md`.

@@ -66,7 +66,11 @@ def test_three_rotated_rectangles_return_expanded_quads() -> None:
         matched, sorted(rects, key=lambda rect: rect[0][1]), strict=True
     ):
         expected = _expected_expanded_corners(center, size, angle)
-        assert _corner_error(quad.points, expected) <= 2.0
+        # PaddleX's pyclipper offset rounds to integer coordinates over a
+        # pixelated contour, so rotated corners can sit about 3 px off the
+        # analytic rectangle. Exact parity is pinned by the PaddleX test
+        # below and the end to end fixtures, not by this bound.
+        assert _corner_error(quad.points, expected) <= 3.5
         assert quad.score > 0.9
 
 
@@ -121,22 +125,34 @@ def test_quads_are_clockwise_from_top_left() -> None:
     assert area > 0
 
 
-def test_unclip_expands_by_area_times_ratio_over_perimeter() -> None:
-    square = np.array([[0.0, 0.0], [100.0, 0.0], [100.0, 100.0], [0.0, 100.0]])
+def test_unclip_matches_paddlex_on_a_pinned_box() -> None:
+    from nomikos_inference.architectures.ppocr_det.postprocessing import get_mini_boxes
 
-    expanded = unclip(square, 1.4)
+    box = np.array([[10.0, 10.0], [110.0, 10.0], [110.0, 40.0], [10.0, 40.0]])
+
+    expanded = unclip(box, 1.4)
 
     assert expanded is not None
-    # Distance is 100*100*1.4/400 = 35, so the buffered square spans -35..135.
-    assert expanded[:, 0].min() <= -33.0
-    assert expanded[:, 0].max() >= 133.0
-    assert expanded[:, 1].min() <= -33.0
-    assert expanded[:, 1].max() >= 133.0
+    # Expected minibox computed once with PaddleX 3.7.0's own unclip
+    # (cv2 distance, PyclipperOffset JT_ROUND) in a throwaway venv.
+    grown, side = get_mini_boxes(expanded)
+    np.testing.assert_allclose(
+        np.asarray(grown),
+        np.array([[-6.0, -6.0], [126.0, -6.0], [126.0, 56.0], [-6.0, 56.0]]),
+        atol=1e-9,
+    )
+    assert side == 62.0
 
 
 def test_unclip_returns_none_for_degenerate_input() -> None:
     assert unclip(np.zeros((0, 2)), 1.4) is None
     assert unclip(np.array([[1.0, 1.0], [1.0, 1.0]]), 1.4) is None
+
+
+def test_unclip_drops_a_zero_area_box_without_an_exception() -> None:
+    collinear = np.array([[0.0, 0.0], [10.0, 0.0], [20.0, 0.0]])
+
+    assert unclip(collinear, 1.4) is None
 
 
 def _shoelace(points: np.ndarray) -> float:

@@ -50,10 +50,10 @@ in quad mode: binarise at `thresh`, `cv2.findContours` over at most
 `max_candidates` contours, minimum-area rectangles with a minimum side of 3,
 `box_score_fast` gated at `box_thresh`, unclip expansion, a second
 minimum-area rectangle with a minimum side of 5, then scaling back to source
-coordinates with rounding and clipping. One deliberate substitution: the
-unclip expansion uses shapely `buffer` with round joins where PaddleX uses
-pyclipper `JT_ROUND`, so the repo needs no new dependency. The measured cost
-of that substitution is in the next section.
+coordinates with rounding and clipping. The unclip expansion is PaddleX
+3.7.0's own algorithm (OpenCV area and perimeter for the offset distance,
+`pyclipper` with `JT_ROUND` for the offsetting), declared in
+`[project].dependencies` as `pyclipper>=1.4.0`.
 
 Params and defaults:
 
@@ -82,9 +82,10 @@ baseline per line, so the adapter synthesises one across the quad at
 `baseline_fraction` 0.75 of the way from the top edge to the bottom edge,
 where kraken baselines sit near the bottom of the letter bodies.
 
-Shapely in place of pyclipper: pyclipper is a native extension the inference
-image does not carry, and the unclip call is isolated to one function so it
-can be swapped if parity ever demands it. Parity demanded it: see below.
+Pyclipper instead of shapely: the unclip call was first written with
+shapely `buffer` to avoid a native dependency, but the parity measurement
+showed up to 3.162 px corner error with a mean near 0.85 px, so it was
+replaced by the exact PaddleX algorithm for full parity (see below).
 
 ## End to end validation
 
@@ -93,42 +94,28 @@ reference pages as bytes through the production entry point with
 `params=None` and compares the returned quads with the Paddle pipeline
 fixtures (`_ppocr-parity/fixtures/`, cap 1920): counts, then greedy
 one-to-one matching by quad centre with corner-SET distances. Gate:
-identical counts, no unmatched boxes, max corner distance at most 2.0 px.
+identical counts, no unmatched boxes, max corner distance at most 0.5 px.
 
 | page | fixture | adapter | unmatched | max px | mean px |
 |------|---------|---------|-----------|--------|---------|
-| vat-1r | 78 | 78 | 0 / 0 | 2.236 | 0.883 |
-| vat-1v | 71 | 71 | 0 / 0 | 2.828 | 0.760 |
-| vat-2r | 69 | 69 | 0 / 0 | 2.236 | 0.841 |
-| vat-2v | 64 | 64 | 0 / 0 | 2.828 | 0.872 |
-| vat-3r | 69 | 69 | 0 / 0 | 2.236 | 0.882 |
-| vat-7v | 67 | 67 | 0 / 0 | 2.236 | 0.844 |
-| c10 | 65 | 65 | 0 / 0 | 2.828 | 0.920 |
-| c11 | 131 | 131 | 0 / 0 | 3.162 | 0.897 |
-| c12 | 130 | 130 | 0 / 0 | 2.236 | 0.820 |
-| c13 | 135 | 135 | 0 / 0 | 2.236 | 0.916 |
-| c14 | 138 | 138 | 0 / 0 | 2.236 | 0.850 |
-| c21 | 130 | 130 | 0 / 0 | 2.236 | 0.842 |
-| grec-p1 | 29 | 29 | 0 / 0 | 2.236 | 0.969 |
-| grec-p4 | 57 | 57 | 0 / 0 | 2.236 | 0.892 |
+| vat-1r | 78 | 78 | 0 / 0 | 0.000 | 0.000 |
+| vat-1v | 71 | 71 | 0 / 0 | 0.000 | 0.000 |
+| vat-2r | 69 | 69 | 0 / 0 | 0.000 | 0.000 |
+| vat-2v | 64 | 64 | 0 / 0 | 0.000 | 0.000 |
+| vat-3r | 69 | 69 | 0 / 0 | 0.000 | 0.000 |
+| vat-7v | 67 | 67 | 0 / 0 | 0.000 | 0.000 |
+| c10 | 65 | 65 | 0 / 0 | 0.000 | 0.000 |
+| c11 | 131 | 131 | 0 / 0 | 0.000 | 0.000 |
+| c12 | 130 | 130 | 0 / 0 | 0.000 | 0.000 |
+| c13 | 135 | 135 | 0 / 0 | 0.000 | 0.000 |
+| c14 | 138 | 138 | 0 / 0 | 0.000 | 0.000 |
+| c21 | 130 | 130 | 0 / 0 | 0.000 | 0.000 |
+| grec-p1 | 29 | 29 | 0 / 0 | 0.000 | 0.000 |
+| grec-p4 | 57 | 57 | 0 / 0 | 0.000 | 0.000 |
 
-Counts are identical on all 14 pages with nothing unmatched, but the gate
-fails: max corner distance exceeds 2.0 px on every page. Cause analysis
-(throwaway scripts under `_ppocr-parity/adapter-e2e/`, not in git) isolated
-the two known risks:
-
-* PIL against cv2 decode: pixel-identical on the tested pages (JPG and
-  webp), same tensor shapes, max abs tensor difference 0.0. The decode is
-  not the cause.
-* Shapely against pyclipper: PaddleX 3.7.0's own `unclip` (read from the
-  published source) run over the adapter's own probability maps reproduces
-  the fixtures at 0.000 px max and mean on the three worst pages, while the
-  shipped shapely path sits at 2.2 to 3.2 px max. The corner error is the
-  shapely-for-pyclipper substitution.
-
-The adapter must change (or the gate must be revisited) before this model
-serves production traffic; that fix is a separate decision and is not made
-here. Per-page overlays (`<page>.overlay.jpg` beside `results.json` in
+The gate passes on all 14 pages: identical counts, nothing unmatched, and
+0.000 px corner distance throughout. The PIL decode was checked against a
+cv2 decode and is pixel-identical, so the decode contributes nothing. Per-page overlays (`<page>.overlay.jpg` beside `results.json` in
 `_ppocr-parity/adapter-e2e/`) show quads in reading order with synthetic
 baselines; no fixture box went unmatched on any page.
 
