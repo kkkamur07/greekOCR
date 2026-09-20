@@ -61,3 +61,18 @@ The ONNX itself is never committed to git; it stays in the artifact
 directories. Full results, including the per-page parity table, the
 shape-coverage table and timing, are in
 `docs/inference/ppocrv6-onnx-parity-2026-09-19.md`.
+
+## `profile_onnx.py`
+
+Follow-up performance tooling for the 2026-09-20 slowdown analysis (the
+accepted export ran about 4x slower than Paddle mkldnn). Same box, same
+venv, same arguments as `verify_parity.py`, plus `--perfdir` for its
+outputs. Subcommands: `counts` (node type census), `profile` (onnxruntime
+profiler, top nodes), `sessions` (cheap session options, split with
+`--only` so no command runs over 3 minutes), `candidate` (checker, shape
+cases and c13 timing for one file), `compare` (numerics of EXTENDED and
+denormal_as_zero against the default on 3 pages), `final` (accepted file
+at EXTENDED on 3 pages plus the big tensor, at 8 and 2 threads, and Paddle
+on the big tensor). Findings and the serving recommendation are in
+`docs/inference/ppocrv6-onnx-performance-2026-09-20.md`: use
+`ORT_ENABLE_EXTENDED` with 2 intra-op threads per process.
