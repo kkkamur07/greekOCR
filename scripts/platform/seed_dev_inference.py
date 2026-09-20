@@ -4,8 +4,8 @@
 The editor's model pickers list rows from ``inference_models``, not from
 ``registry.yaml``, so a registry entry is invisible in dev until this script
 puts a row beside it. It seeds the five transcribe models (four Calamari and
-one PP-OCR) and the BLLA segment model, and is an upsert: re-running it
-after a registry edit
+one PP-OCR) and the two segment models (kraken and ppocr), and is an
+upsert: re-running it after a registry edit
 rewrites the existing rows rather than duplicating them.
 
 Task and provider are read out of ``registry.yaml`` rather than restated here.
@@ -27,12 +27,16 @@ Overrides, both optional and both comma-separated:
 
 import asyncio
 import os
+import uuid
+from collections.abc import Sequence
 
 from _bootstrap import ensure_nomikos_on_path
-from sqlalchemy import select
+from sqlalchemy import delete, or_, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
 ensure_nomikos_on_path()
 
+from backend.jobs.infrastructure.orm_models import Job  # noqa: E402
 from backend.ml.infrastructure.orm_models import (  # noqa: E402
     InferenceModel,
     InferenceTask,
@@ -51,7 +55,56 @@ def _ids(env_var: str, default: tuple[str, ...]) -> tuple[str, ...]:
     return override or default
 
 
-SEGMENT_MODELS = _ids("DEFAULT_SEGMENT_MODEL", ("blla-segment",))
+SEGMENT_MODELS = _ids("DEFAULT_SEGMENT_MODEL", ("blla-segment", "ppocr-segment"))
+
+# Catalog display names for segment registry ids. The pickers render
+# ``inference_models.name`` while dispatch parses the registry id out of
+# ``artifact_ref``, so the name is only a label. Ids without an entry here
+# keep their registry id as the display name.
+SEGMENT_DISPLAY_NAMES: dict[str, str] = {
+    "blla-segment": "kraken",
+    "ppocr-segment": "ppocr",
+}
+
+
+def display_name_for(registry_id: str) -> str:
+    """Return the catalog display name for a segment registry id."""
+    return SEGMENT_DISPLAY_NAMES.get(registry_id, registry_id)
+
+
+def artifact_ref_for(registry_id: str) -> str:
+    """Return the dispatch ref for a registry id (never a display name)."""
+    return f"registry://{registry_id}?tag=stable"
+
+
+def candidate_names_for(registry_id: str) -> tuple[str, ...]:
+    """Return every name a catalog row for this id may still carry."""
+    display_name = display_name_for(registry_id)
+    if display_name == registry_id:
+        return (registry_id,)
+    return (registry_id, display_name)
+
+
+def split_duplicate_models(
+    rows: Sequence[InferenceModel],
+    display_name: str,
+) -> tuple[InferenceModel | None, list[InferenceModel]]:
+    """Keep one of several duplicate rows, mark the rest for deletion.
+
+    A dev database can hold both the old registry-id name and the new display
+    name (an old seed plus a hand-made row). The row already carrying the
+    display name wins, else the oldest wins, with ties broken by name so the
+    choice stays deterministic.
+    """
+    candidates = list(rows)
+    if not candidates:
+        return None, []
+    named = [row for row in candidates if row.name == display_name]
+    pool = named or candidates
+    keep = min(pool, key=lambda row: (row.created_at, row.name))
+    return keep, [row for row in candidates if row is not keep]
+
+
 TRANSCRIBE_MODELS = _ids(
     "DEFAULT_TRANSCRIBE_MODEL",
     (
@@ -84,6 +137,40 @@ _PROVIDER_BY_ARCHITECTURE: dict[RegistryArchitecture, str] = {
 }
 
 
+def _binding_scope(binding: ModelBinding) -> tuple:
+    """Return the scope that makes two bindings for one task collide."""
+    return (binding.task, binding.project_id, binding.document_id, binding.document_part_id)
+
+
+async def repoint_model_references(
+    session: AsyncSession, duplicate_id: uuid.UUID, keep_id: uuid.UUID
+) -> None:
+    """Move bindings and jobs from a duplicate model row to the kept row.
+
+    Runs before the duplicate row is deleted so its bindings are not
+    cascade-deleted and its jobs are not nulled. A duplicate binding whose
+    scope the kept row already covers is deleted instead of repointed, since
+    one scope holds one binding; only that conflicting row is removed.
+    """
+    keep_result = await session.execute(
+        select(ModelBinding).where(ModelBinding.model_id == keep_id)
+    )
+    keep_scopes = {_binding_scope(binding) for binding in keep_result.scalars().all()}
+    duplicate_result = await session.execute(
+        select(ModelBinding).where(ModelBinding.model_id == duplicate_id)
+    )
+    for binding in duplicate_result.scalars().all():
+        scope = _binding_scope(binding)
+        if scope in keep_scopes:
+            await session.execute(delete(ModelBinding).where(ModelBinding.id == binding.id))
+        else:
+            await session.execute(
+                update(ModelBinding).where(ModelBinding.id == binding.id).values(model_id=keep_id)
+            )
+            keep_scopes.add(scope)
+    await session.execute(update(Job).where(Job.model_id == duplicate_id).values(model_id=keep_id))
+
+
 async def _upsert_model(*, name: str, task: InferenceTask) -> InferenceModel:
     """Write one catalog row for a registry model id, creating or rewriting it.
 
@@ -98,15 +185,35 @@ async def _upsert_model(*, name: str, task: InferenceTask) -> InferenceModel:
             f"{name!r} is a {entry.task.value} model in registry.yaml, seeded here as {task.value}"
         )
     provider = _PROVIDER_BY_ARCHITECTURE[entry.architecture]
-    artifact_ref = f"registry://{name}?tag=stable"
+    display_name = display_name_for(name)
+    artifact_ref = artifact_ref_for(name)
     default_params = {"device": entry.device.value}
 
     async with system_session() as session:
-        result = await session.execute(select(InferenceModel).where(InferenceModel.name == name))
-        model = result.scalar_one_or_none()
+        # artifact_ref is not unique, so the old name and the new name can
+        # both be present with the same ref. One query fetches every row
+        # matching the ref or the candidate names, then all but one are
+        # removed: the row already carrying the display name wins, else the
+        # oldest row wins. This never calls scalar_one_or_none on the ref,
+        # which would raise before the duplicates could be removed.
+        result = await session.execute(
+            select(InferenceModel).where(
+                or_(
+                    InferenceModel.artifact_ref == artifact_ref,
+                    InferenceModel.name.in_(candidate_names_for(name)),
+                )
+            )
+        )
+        rows = list(result.scalars().all())
+        model, duplicates = split_duplicate_models(rows, display_name)
+        for duplicate in duplicates:
+            await repoint_model_references(session, duplicate.id, model.id)
+            await session.delete(duplicate)
+        if duplicates:
+            await session.flush()
         if model is None:
             model = InferenceModel(
-                name=name,
+                name=display_name,
                 provider=provider,
                 task=task,
                 artifact_ref=artifact_ref,
@@ -114,6 +221,7 @@ async def _upsert_model(*, name: str, task: InferenceTask) -> InferenceModel:
             )
             session.add(model)
         else:
+            model.name = display_name
             model.provider = provider
             model.task = task
             model.artifact_ref = artifact_ref

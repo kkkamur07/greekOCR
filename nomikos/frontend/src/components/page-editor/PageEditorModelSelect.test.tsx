@@ -17,15 +17,14 @@ function model(id: string, name: string): InferenceModelResponse {
 }
 
 describe("PageEditorModelSelect", () => {
-  it("renders Default first for the segment variant, then the catalog names", () => {
+  it("renders only the catalog names, with no Default entry", () => {
     render(
       <PageEditorModelSelect
         label="Seg"
         ariaLabel="Segmentation model"
-        models={[model("seg-a", "blla-segment"), model("seg-b", "pp-ocr")]}
-        selectedModelId={null}
+        models={[model("seg-a", "kraken"), model("seg-b", "pp-ocr")]}
+        selectedModelId="seg-a"
         onSelectedModelIdChange={() => {}}
-        includeDefaultOption
       />,
     );
 
@@ -34,8 +33,7 @@ describe("PageEditorModelSelect", () => {
       text: option.textContent,
     }));
     expect(options).toEqual([
-      { value: "", text: "Default" },
-      { value: "seg-a", text: "blla-segment" },
+      { value: "seg-a", text: "kraken" },
       { value: "seg-b", text: "pp-ocr" },
     ]);
   });
@@ -60,11 +58,11 @@ describe("PageEditorModelSelect", () => {
     expect(screen.queryByRole("option", { name: "Default" })).toBeNull();
     expect(screen.getByRole("option", { name: "blla-greek-v2" })).toBeTruthy();
 
-    fireEvent.change(select, { target: { value: "" } });
-    expect(onChange).toHaveBeenCalledWith(null);
+    fireEvent.change(select, { target: { value: "htr-1" } });
+    expect(onChange).toHaveBeenCalledWith("htr-1");
   });
 
-  it("renders Default only and stays enabled with zero segment models", () => {
+  it("shows No models and disables the select when the catalog is empty", () => {
     render(
       <PageEditorModelSelect
         label="Seg"
@@ -72,33 +70,14 @@ describe("PageEditorModelSelect", () => {
         models={[]}
         selectedModelId={null}
         onSelectedModelIdChange={() => {}}
-        includeDefaultOption
       />,
     );
 
     const select = screen.getByRole("combobox", {
       name: "Segmentation model",
     }) as HTMLSelectElement;
-    expect(select.disabled).toBe(false);
-    expect(screen.getAllByRole("option")).toHaveLength(1);
-    expect(screen.getByRole("option", { name: "Default" })).toBeTruthy();
-  });
-
-  it("shows No models and disables the HTR variant when the catalog is empty", () => {
-    render(
-      <PageEditorModelSelect
-        label="HTR"
-        ariaLabel="HTR transcription model"
-        models={[]}
-        selectedModelId={null}
-        onSelectedModelIdChange={() => {}}
-      />,
-    );
-
-    const select = screen.getByRole("combobox", {
-      name: "HTR transcription model",
-    }) as HTMLSelectElement;
     expect(select.disabled).toBe(true);
+    expect(screen.getAllByRole("option")).toHaveLength(1);
     expect(screen.getByRole("option", { name: "No models" })).toBeTruthy();
   });
 });

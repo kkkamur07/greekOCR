@@ -23,8 +23,18 @@ vi.mock("../ui/toast", () => ({
 
 const COUNTS = { total: 3, reviewed: 0, unsegmented: 1, unpaired: 0 };
 const SEGMENT_MODELS = [
-  { id: "seg-a", task: "segment", name: "blla-segment" },
-  { id: "seg-b", task: "segment", name: "pp-ocr" },
+  {
+    id: "seg-a",
+    task: "segment",
+    name: "kraken",
+    artifact_ref: "registry://blla-segment?tag=stable",
+  },
+  {
+    id: "seg-b",
+    task: "segment",
+    name: "pp-ocr",
+    artifact_ref: "registry://ppocr-segment?tag=stable",
+  },
   { id: "htr-1", task: "transcribe", name: "htr" },
 ];
 
@@ -51,7 +61,7 @@ describe("DocumentWorkflowMenu segment picker", () => {
     });
   });
 
-  it("sends model_id null for Default and the id for a chosen model", async () => {
+  it("renders no Default option and preselects the canonical row", async () => {
     openMenu();
 
     await screen.findByRole("combobox", {
@@ -62,10 +72,12 @@ describe("DocumentWorkflowMenu segment picker", () => {
       text: option.textContent,
     }));
     expect(options).toEqual([
-      { value: "", text: "Default" },
-      { value: "seg-a", text: "blla-segment" },
+      { value: "seg-a", text: "kraken" },
       { value: "seg-b", text: "pp-ocr" },
     ]);
+    expect(
+      screen.getByRole("combobox", { name: "Segmentation model" }),
+    ).toHaveValue("seg-a");
 
     fireEvent.click(
       screen.getByRole("menuitem", { name: /segment unsegmented pages/i }),
@@ -74,15 +86,18 @@ describe("DocumentWorkflowMenu segment picker", () => {
       expect(enqueueDocumentSegment).toHaveBeenCalledWith(
         "project-1",
         "document-1",
-        { scope: "unsegmented", model_id: null },
+        { scope: "unsegmented", model_id: "seg-a" },
       ),
     );
+  });
 
-    fireEvent.click(screen.getByRole("button", { name: /workflow/i }));
-    const reopenedSelect = screen.getByRole("combobox", {
+  it("sends the id for a chosen model", async () => {
+    openMenu();
+
+    const select = await screen.findByRole("combobox", {
       name: "Segmentation model",
     });
-    fireEvent.change(reopenedSelect, { target: { value: "seg-b" } });
+    fireEvent.change(select, { target: { value: "seg-b" } });
     fireEvent.click(
       screen.getByRole("menuitem", { name: /segment unsegmented pages/i }),
     );
@@ -95,14 +110,14 @@ describe("DocumentWorkflowMenu segment picker", () => {
     );
   });
 
-  it("names the chosen model in the re-segment confirm, and the default when none is chosen", async () => {
+  it("names the chosen model in the re-segment confirm", async () => {
     openMenu();
     await screen.findByRole("combobox", { name: "Segmentation model" });
 
     fireEvent.click(
       screen.getByRole("menuitem", { name: /re-segment every page/i }),
     );
-    expect(screen.getByText(/runs with the default model/i)).toBeTruthy();
+    expect(screen.getByText(/runs with kraken/i)).toBeTruthy();
 
     fireEvent.click(screen.getByRole("menuitem", { name: "Cancel" }));
     fireEvent.change(
@@ -124,7 +139,7 @@ describe("DocumentWorkflowMenu segment picker", () => {
     );
   });
 
-  it("leaves only Default and still segments when the catalog request fails", async () => {
+  it("shows No models and still segments when the catalog request fails", async () => {
     listInferenceModels.mockRejectedValue(new Error("offline"));
     openMenu();
 
@@ -132,6 +147,7 @@ describe("DocumentWorkflowMenu segment picker", () => {
       name: "Segmentation model",
     });
     expect(screen.getAllByRole("option")).toHaveLength(1);
+    expect(screen.getByRole("option", { name: "No models" })).toBeTruthy();
 
     fireEvent.click(
       screen.getByRole("menuitem", { name: /segment unsegmented pages/i }),

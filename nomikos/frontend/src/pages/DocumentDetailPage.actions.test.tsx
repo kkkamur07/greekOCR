@@ -226,11 +226,14 @@ describe("DocumentDetailPage action toolbar", () => {
     ).toBeTruthy();
     expect(within(menu).getByText("Segment")).toBeTruthy();
     expect(within(menu).getByText("Transcribe")).toBeTruthy();
-    // The segment engine caption became a picker: Default plus the catalog.
+    // The segment engine caption became a picker: the catalog rows, or
+    // No models while the catalog mock is empty.
     expect(
       within(menu).getByRole("combobox", { name: "Segmentation model" }),
     ).toBeTruthy();
-    expect(within(menu).getByRole("option", { name: "Default" })).toBeTruthy();
+    expect(
+      within(menu).getByRole("option", { name: "No models" }),
+    ).toBeTruthy();
     expect(within(menu).getByText(/Model/)).toHaveTextContent(
       "Model blla-greek-v2",
     );
