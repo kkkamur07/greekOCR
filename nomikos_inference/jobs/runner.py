@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,13 @@ from nomikos_inference.architectures.calamari import (
 from nomikos_inference.architectures.calamari.preprocessing import (
     TRAINING_CROP_PADDING,
     crop_line,
+)
+from nomikos_inference.architectures.ppocr_rec.adapter import (
+    TranscribeLineFailure as PPOCRRecLineFailure,
+)
+from nomikos_inference.architectures.ppocr_rec.adapter import (
+    run_ppocr_rec_transcribe,
+    run_ppocr_rec_transcribe_many,
 )
 from nomikos_inference.contracts.common import InferenceTask, LineCrop, RegistryArchitecture
 from nomikos_inference.contracts.segment import SegmentRunResponse
@@ -103,6 +111,8 @@ def _transcribe_batch(
     artifact_sha256: str | None,
     line_crop: LineCrop = LineCrop.polygon_white,
     line_crop_padding: int = TRAINING_CROP_PADDING,
+    run_many: Callable[..., list[Any]] | None = None,
+    line_failure: type | None = None,
 ) -> TranscribeBatchRunResponse:
     """Transcribe every requested line, keeping per-line failures per-line.
 
@@ -146,7 +156,15 @@ def _transcribe_batch(
         # partial success, and the cause is the caller's geometry.
         raise ValueError("no transcribable line regions in request")
 
-    outcomes = run_calamari_transcribe_many(
+    # Resolved here rather than as argument defaults so tests can stub the
+    # module-level entry points: a default would bind the original function
+    # at definition time and ignore the stub.
+    if run_many is None:
+        run_many = run_calamari_transcribe_many
+    if line_failure is None:
+        line_failure = TranscribeLineFailure
+
+    outcomes = run_many(
         crops,
         checkpoint_path=checkpoint_path,
         artifact_sha256=artifact_sha256,
@@ -155,7 +173,7 @@ def _transcribe_batch(
     outputs: dict[int, TranscribeRunResponse] = {}
     for position, outcome in zip(cropped_positions, outcomes, strict=True):
         region = line_regions[position]
-        if isinstance(outcome, TranscribeLineFailure):
+        if isinstance(outcome, line_failure):
             logger.warning(
                 "transcribe line failed (line_index=%s, line_id=%s)",
                 region.line_index,
@@ -168,7 +186,8 @@ def _transcribe_batch(
 
     # ``run_calamari_transcribe_many`` re-raises when every line it was given
     # failed, so at least one output survives here and the response can never be
-    # an all-error batch dressed up as a success.
+    # an all-error batch dressed up as a success. The same holds for the
+    # PP-OCR recognition entry point, which shares this batch loop.
     return TranscribeBatchRunResponse(
         lines=[
             TranscribeBatchLineResult(
@@ -242,6 +261,28 @@ def run_model(
                     ),
                 )
             return run_calamari_transcribe(
+                image_bytes,
+                checkpoint_path=weights_path,
+                artifact_sha256=version.artifact_sha256,
+            )
+        if entry.architecture == RegistryArchitecture.ppocr_rec:
+            line_regions = _line_regions_from_params(params)
+            if line_regions:
+                return _transcribe_batch(
+                    image_bytes,
+                    line_regions,
+                    checkpoint_path=weights_path,
+                    artifact_sha256=version.artifact_sha256,
+                    line_crop=entry.line_crop or LineCrop.polygon_white,
+                    line_crop_padding=(
+                        TRAINING_CROP_PADDING
+                        if entry.line_crop_padding is None
+                        else entry.line_crop_padding
+                    ),
+                    run_many=run_ppocr_rec_transcribe_many,
+                    line_failure=PPOCRRecLineFailure,
+                )
+            return run_ppocr_rec_transcribe(
                 image_bytes,
                 checkpoint_path=weights_path,
                 artifact_sha256=version.artifact_sha256,

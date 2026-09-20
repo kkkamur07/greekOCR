@@ -38,6 +38,7 @@ import pytest
 from PIL import Image
 
 from nomikos_inference.architectures.calamari import adapter as calamari_adapter
+from nomikos_inference.architectures.ppocr_rec import adapter as ppocr_rec_adapter
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -72,6 +73,14 @@ def _run_calamari(artifact: Path, artifact_sha256: str | None) -> object:
     )
 
 
+def _run_ppocr(artifact: Path, artifact_sha256: str | None) -> object:
+    return ppocr_rec_adapter.run_ppocr_rec_transcribe_many(
+        [_page_bytes()],
+        checkpoint_path=artifact,
+        artifact_sha256=artifact_sha256,
+    )
+
+
 def _run_blla_native(artifact: Path, artifact_sha256: str | None) -> object:
     from nomikos_inference.architectures.blla.blla import run_blla_segment
 
@@ -97,6 +106,13 @@ def _execution_paths() -> list[ExecutionPath]:
             foreign_suffix=".pt",
             unusable_error=calamari_adapter.CalamariUnavailableError,
             run=_run_calamari,
+        ),
+        ExecutionPath(
+            name="ppocr-rec-onnx",
+            native_suffix=".onnx",
+            foreign_suffix=".safetensors",
+            unusable_error=ppocr_rec_adapter.PPOCRRecUnavailableError,
+            run=_run_ppocr,
         ),
         ExecutionPath(
             name="blla-onnx",
@@ -211,6 +227,10 @@ def test_no_torch_remains_in_the_inference_import_graph() -> None:
         "    'nomikos_inference.architectures.isolation',\n"
         "    'nomikos_inference.architectures.calamari',\n"
         "    'nomikos_inference.architectures.calamari.adapter',\n"
+        "    'nomikos_inference.architectures.ppocr_rec',\n"
+        "    'nomikos_inference.architectures.ppocr_rec.adapter',\n"
+        "    'nomikos_inference.architectures.ppocr_rec.preprocessing',\n"
+        "    'nomikos_inference.architectures.ppocr_rec.bidi',\n"
         "    'nomikos_inference.architectures.blla',\n"
         "    'nomikos_inference.architectures.blla.blla',\n"
         "    'nomikos_inference.architectures.blla.blla_runtime',\n"

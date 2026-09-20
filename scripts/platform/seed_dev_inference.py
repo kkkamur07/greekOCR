@@ -53,7 +53,7 @@ def _ids(env_var: str, default: tuple[str, ...]) -> tuple[str, ...]:
 SEGMENT_MODELS = _ids("DEFAULT_SEGMENT_MODEL", ("blla-segment",))
 TRANSCRIBE_MODELS = _ids(
     "DEFAULT_TRANSCRIBE_MODEL",
-    ("greek-calamari-v1", "armenian-calamari-v1", "syriac-calamari-v2"),
+    ("greek-calamari-v1", "armenian-calamari-v1", "syriac-calamari-v2", "syriac-ppocr-v1"),
 )
 BINDING_PROJECT_SLUG = os.environ.get(
     "BINDING_PROJECT_SLUG",
@@ -73,6 +73,7 @@ _PROVIDER_BY_ARCHITECTURE: dict[RegistryArchitecture, str] = {
     RegistryArchitecture.blla: "kraken",
     RegistryArchitecture.blla_segment: "kraken",
     RegistryArchitecture.calamari: "calamari",
+    RegistryArchitecture.ppocr_rec: "kraken",
 }
 
 
