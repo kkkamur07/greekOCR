@@ -845,11 +845,7 @@ def render_report_markdown(report: dict[str, Any]) -> str:
         "",
     ]
     if comparison.get("verdict") == "NOT_COMPARABLE":
-        lines.append(
-            "NOTICE: the part held protected lines "
-            "(manual, transcribed, or covered), so the stored lines are not "
-            "the pure model output. Re-run with --allow-merged to compare anyway."
-        )
+        lines.append(f"NOTICE: {comparison.get('reason', 'not comparable')}")
         lines.append("")
     lines.extend(
         [
@@ -875,7 +871,7 @@ def render_report_markdown(report: dict[str, Any]) -> str:
         lines.append(f"Transcription: {header['transcription_id']}")
     lines.extend(["", "## Comparison", ""])
     if comparison.get("verdict") == "NOT_COMPARABLE":
-        lines.append("No comparison: stored lines mix model output with protected lines.")
+        lines.append(f"No comparison: {comparison.get('reason', 'not comparable')}")
         lines.append("")
         return "\n".join(lines) + "\n"
     lines.append(f"Local lines: {comparison.get('local_line_count')}")
@@ -931,6 +927,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="compare segment output even when the part holds protected lines",
     )
+    parser.add_argument(
+        "--trust-job-model",
+        action="store_true",
+        help="compare against a job whose model cannot be verified from its payload",
+    )
     parser.add_argument("--line-limit", type=int, default=None)
     parser.add_argument("--out", default=None)
     parser.add_argument("--timeout", type=float, default=600.0)
@@ -974,11 +975,16 @@ def collect_secret_values(args: argparse.Namespace) -> list[str]:
 _MODEL_IDENTIFYING_KEYS = ("registry_model_id", "registry_id", "model", "model_id")
 
 
-def cross_check_model(payload: dict[str, Any], registry_model_id: str, model_uuid: str) -> None:
-    """Fail when the job payload names a different model than --model resolved."""
+def cross_check_model(payload: dict[str, Any], registry_model_id: str, model_uuid: str) -> bool:
+    """Fail when the job payload names a different model than --model resolved.
+
+    Returns True when the payload carries a readable identifier that agrees,
+    False when it carries nothing identifying the model.
+    """
     ml_params = payload.get("ml_params")
     if not isinstance(ml_params, dict):
-        return
+        return False
+    verified = False
     for key in (*_MODEL_IDENTIFYING_KEYS, "artifact_ref"):
         value = ml_params.get(key)
         if value is None:
@@ -991,11 +997,59 @@ def cross_check_model(payload: dict[str, Any], registry_model_id: str, model_uui
                 continue
         else:
             candidate = text
+        verified = True
         if candidate not in (registry_model_id, model_uuid):
             raise ApiError(
                 f"job payload {key} {text!r} disagrees with --model "
                 f"(registry {registry_model_id}, id {model_uuid})"
             )
+    return verified
+
+
+def _parse_dt(value: Any) -> Any:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        text = value.strip()
+        if text.endswith(("Z", "z")):
+            text = text[:-1] + "+00:00"
+        parsed = _datetime.datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=_datetime.UTC)
+    return parsed
+
+
+_MODEL_LINE_SOURCES = ("kraken", "model")
+
+
+def segment_staleness_reason(
+    stored_lines: list[dict[str, Any]], job_id: str, job_completed_at: Any
+) -> str | None:
+    """Name why stored lines no longer represent the selected segment job.
+
+    Every model-produced stored line (``source`` kraken or model, not manual
+    geometry) must name the selected job in ``source_metadata.job_id``
+    (stamped by ``SegmentMergeService``). A line naming another job that was
+    created after the selected job finished is newer state, so the stored
+    lines are not the pure model output. Older foreign lines are pre-existing
+    state covered by the protected-lines gate instead.
+    """
+    finished = _parse_dt(job_completed_at)
+    for line in stored_lines:
+        if line.get("manual_geometry"):
+            continue
+        if str(line.get("source") or "") not in _MODEL_LINE_SOURCES:
+            continue
+        meta = line.get("source_metadata")
+        if isinstance(meta, dict) and str(meta.get("job_id") or "") == str(job_id):
+            continue
+        created = _parse_dt(line.get("created_at"))
+        if created is not None and finished is not None and created <= finished:
+            continue
+        return f"lines no longer come from job {job_id}"
+    return None
 
 
 def _sort_part_lines(part_lines: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1018,6 +1072,14 @@ _EXIT_BY_VERDICT = {
 }
 
 
+def _write_private_file(path: str, content: str) -> None:
+    """Write a report file readable only by its owner."""
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write(content)
+    os.chmod(path, 0o600)
+
+
 def _write_report(
     args: argparse.Namespace,
     header: dict[str, Any],
@@ -1034,12 +1096,13 @@ def _write_report(
         "platform_result": platform_result,
     }
     report = _scrub(report, secrets)
-    os.makedirs(out_dir, exist_ok=True)
-    with open(os.path.join(out_dir, "report.json"), "w", encoding="utf-8") as handle:
-        json.dump(report, handle, indent=2, sort_keys=True, default=str)
-    markdown = render_report_markdown(report)
-    with open(os.path.join(out_dir, "report.md"), "w", encoding="utf-8") as handle:
-        handle.write(markdown)
+    os.makedirs(out_dir, mode=0o700, exist_ok=True)
+    os.chmod(out_dir, 0o700)
+    _write_private_file(
+        os.path.join(out_dir, "report.json"),
+        json.dumps(report, indent=2, sort_keys=True, default=str),
+    )
+    _write_private_file(os.path.join(out_dir, "report.md"), render_report_markdown(report))
     verdict = comparison.get("verdict", "MISMATCH")
     print(f"Verdict: {verdict} (report in {out_dir})")
     return _EXIT_BY_VERDICT.get(verdict, 1)
@@ -1101,8 +1164,18 @@ def run_comparison(
                 args.project_id, args.document_id, args.part_id, model_uuid
             )
         else:
+            if args.line_limit is not None and args.line_limit < 1:
+                raise ApiError("--line-limit must be at least 1")
+            enqueue_ids: list[str] | None = None
+            if args.line_limit is not None:
+                candidates = _sort_part_lines(
+                    client.list_part_lines(args.project_id, args.document_id, args.part_id)
+                )
+                enqueue_ids = [str(line.get("id")) for line in candidates[: args.line_limit]]
+                if not enqueue_ids:
+                    raise ApiError("no line regions to transcribe (--line-limit 0 on no lines)")
             created = client.enqueue_transcribe(
-                args.project_id, args.document_id, args.part_id, model_uuid, None
+                args.project_id, args.document_id, args.part_id, model_uuid, enqueue_ids
             )
         job_id = str(created.get("job_id") or created.get("id"))
         if not job_id or job_id == "None":
@@ -1121,9 +1194,44 @@ def run_comparison(
         return 2
     if str(job.get("type")) != args.task:
         raise ApiError(f"job {job_id} has type {job.get('type')!r} but --task is {args.task!r}")
+    if (
+        str(job.get("document_id")) != args.document_id
+        or str(job.get("document_part_id")) != args.part_id
+    ):
+        raise ApiError(
+            f"job {job_id} targets document {job.get('document_id')} "
+            f"part {job.get('document_part_id')} but --document-id is "
+            f"{args.document_id} and --part-id is {args.part_id}"
+        )
     print("Note: registry id and tag come from --model, the job does not record them.")
     payload = job.get("payload") if isinstance(job.get("payload"), dict) else {}
-    cross_check_model(payload, registry_model_id, model_uuid)
+    model_verified = cross_check_model(payload, registry_model_id, model_uuid)
+    if model_verified:
+        model_verification = "verified"
+    elif args.enqueue:
+        model_verification = "enqueued by this run"
+    elif args.trust_job_model:
+        model_verification = "model of the job not verified"
+    else:
+        reason = (
+            "model of the job could not be verified; "
+            "re-run with --trust-job-model to compare anyway"
+        )
+        print(reason, file=sys.stderr)
+        header = _base_header(
+            args,
+            model_entry,
+            registry_model_id,
+            registry_tag,
+            model_uuid,
+            job_id,
+            dict(payload.get("ml_params") or {}),
+            None,
+            None,
+        )
+        header["model_verification"] = "model of the job not verified"
+        comparison = {"verdict": "NOT_COMPARABLE", "reason": reason}
+        return _write_report(args, header, comparison, None, job.get("result"), out_dir)
     base_params = payload.get("ml_params") if isinstance(payload.get("ml_params"), dict) else {}
     params: dict[str, Any] = dict(base_params)
     part_id = args.part_id
@@ -1133,6 +1241,31 @@ def run_comparison(
             client.list_part_lines(args.project_id, args.document_id, part_id)
         )
         summary = job.get("result") if isinstance(job.get("result"), dict) else {}
+        stale_reason = segment_staleness_reason(stored_lines, job_id, job.get("completed_at"))
+        if stale_reason is not None:
+            print(stale_reason, file=sys.stderr)
+            header = _base_header(
+                args,
+                model_entry,
+                registry_model_id,
+                registry_tag,
+                model_uuid,
+                job_id,
+                params,
+                None,
+                None,
+            )
+            header["merge_summary"] = summary
+            header["model_verification"] = model_verification
+            comparison = {
+                "verdict": "NOT_COMPARABLE",
+                "reason": stale_reason,
+                "merge_summary": summary,
+                "stored_line_count": len(stored_lines),
+            }
+            return _write_report(
+                args, header, comparison, None, {"merge_summary": summary}, out_dir
+            )
         protected = sum(
             int(summary.get(key) or 0)
             for key in (
@@ -1159,8 +1292,14 @@ def run_comparison(
                 None,
             )
             header["merge_summary"] = summary
-            comparison: dict[str, Any] = {
+            header["model_verification"] = model_verification
+            comparison = {
                 "verdict": "NOT_COMPARABLE",
+                "reason": (
+                    "the part held protected lines (manual, transcribed, or covered), "
+                    "so the stored lines are not the pure model output. "
+                    "Re-run with --allow-merged to compare anyway."
+                ),
                 "protected_lines": protected,
                 "merge_summary": summary,
                 "stored_line_count": len(stored_lines),
@@ -1183,6 +1322,7 @@ def run_comparison(
             len(image_bytes),
         )
         header["merge_summary"] = summary
+        header["model_verification"] = model_verification
         return _write_report(
             args,
             header,
@@ -1204,6 +1344,8 @@ def run_comparison(
     local_dump = _run_local(args.task, registry_model_id, registry_tag, image_bytes, params)
     summary = job.get("result") if isinstance(job.get("result"), dict) else {}
     transcription_id, platform_lines, failed_indexes = parse_platform_transcribe(summary)
+    limited_ids = {str(region["line_id"]) for region in params["lines"]}
+    platform_lines = [line for line in platform_lines if str(line.get("line_id")) in limited_ids]
     comparison = compare_transcribe_lines(
         local_dump.get("lines", []), platform_lines, failed_indexes
     )
@@ -1219,6 +1361,7 @@ def run_comparison(
         len(image_bytes),
     )
     header["transcription_id"] = transcription_id
+    header["model_verification"] = model_verification
     return _write_report(args, header, comparison, local_dump, summary, out_dir)
 
 

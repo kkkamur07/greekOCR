@@ -70,7 +70,15 @@ def seg_local(order, points, baseline=None, kind="polygon"):
     }
 
 
-def seg_stored(line_id, order, points, baseline=None, created="2026-01-01T00:00:00"):
+def seg_stored(
+    line_id,
+    order,
+    points,
+    baseline=None,
+    created="2026-01-01T00:00:00",
+    job_id="job-1",
+    source="kraken",
+):
     return {
         "id": line_id,
         "order": order,
@@ -78,11 +86,13 @@ def seg_stored(line_id, order, points, baseline=None, created="2026-01-01T00:00:
         "baseline": {"points": baseline} if baseline is not None else {"points": []},
         "mask": None,
         "kind": "polygon",
+        "source": source,
+        "manual_geometry": False,
         "source_metadata": {
             "role": "line",
             "suspect": False,
             "external_id": f"ppocr-det-line-{order + 1}",
-            "job_id": "job-1",
+            "job_id": job_id,
         },
         "created_at": created,
     }
@@ -398,6 +408,8 @@ def test_segment_not_comparable_gate(tmp_path, monkeypatch):
         "id": "job-1",
         "status": "done",
         "type": "segment",
+        "document_id": "doc-1",
+        "document_part_id": "part-1",
         "payload": {"ml_params": {}},
         "result": merge_summary(preserved_manual_lines=1),
     }
@@ -420,6 +432,7 @@ def test_segment_not_comparable_gate(tmp_path, monkeypatch):
             "job-1",
             "--out",
             out_dir,
+            "--trust-job-model",
             *BASE_ARGS,
         ],
         transport=transport,
@@ -439,6 +452,9 @@ def test_segment_allow_merged_compares(tmp_path, monkeypatch):
         "id": "job-1",
         "status": "done",
         "type": "segment",
+        "document_id": "doc-1",
+        "document_part_id": "part-1",
+        "completed_at": "2026-01-02T00:00:00+00:00",
         "payload": {"ml_params": {}},
         "result": merge_summary(preserved_manual_lines=1),
     }
@@ -461,6 +477,7 @@ def test_segment_allow_merged_compares(tmp_path, monkeypatch):
             "--job-id",
             "job-1",
             "--allow-merged",
+            "--trust-job-model",
             "--out",
             out_dir,
             *BASE_ARGS,
@@ -489,7 +506,256 @@ def test_secrets_never_appear_in_report(tmp_path, monkeypatch):
         "id": "job-1",
         "status": "done",
         "type": "transcribe",
+        "document_id": "doc-1",
+        "document_part_id": "part-1",
         "payload": {"ml_params": {"note": secret}, "line_ids": ["L1"]},
+        "result": {
+            "transcription_id": "t-1",
+            "lines": [{"line_id": "L1", "text": "hi", "confidence": 0.9}],
+        },
+    }
+    part_lines = [{"id": "L1", "order": 0, "points": BOX_A, "created_at": "2026-01-01"}]
+    transport = FakeTransport(
+        {
+            ("GET", "/inference/models"): json_route(FAKE_CATALOG),
+            ("GET", "/jobs/job-1"): json_route(job),
+            ("GET", "/parts/part-1/lines"): json_route(part_lines),
+            ("GET", "/media/parts/part-1"): lambda m, u, b: (200, b"fake-bytes"),
+        }
+    )
+    out_dir = str(tmp_path / "out")
+    code = nmk.main(
+        [
+            "--task",
+            "transcribe",
+            "--model",
+            "syriac",
+            "--job-id",
+            "job-1",
+            "--out",
+            out_dir,
+            "--trust-job-model",
+            *BASE_ARGS,
+        ],
+        transport=transport,
+    )
+    assert code == 0
+    report_json = Path(out_dir, "report.json").read_text(encoding="utf-8")
+    report_md = Path(out_dir, "report.md").read_text(encoding="utf-8")
+    assert secret not in report_json
+    assert secret not in report_md
+    assert "[REDACTED]" in report_json
+    assert os.environ["NOMIKOS_TOKEN"] == secret
+
+
+def test_job_for_another_part_is_rejected_before_media(tmp_path, monkeypatch):
+    monkeypatch.setenv("NOMIKOS_TOKEN", "dummy")
+    job = {
+        "id": "job-9",
+        "status": "done",
+        "type": "transcribe",
+        "document_id": "doc-1",
+        "document_part_id": "other-part",
+        "payload": {"ml_params": {}, "line_ids": ["L1"]},
+        "result": {"transcription_id": "t-9", "lines": []},
+    }
+    transport = FakeTransport(
+        {
+            ("GET", "/inference/models"): json_route(FAKE_CATALOG),
+            ("GET", "/jobs/job-9"): json_route(job),
+            ("GET", "/media/parts/other-part"): lambda m, u, b: (200, b"nope"),
+        }
+    )
+    code = nmk.main(
+        [
+            "--task",
+            "transcribe",
+            "--model",
+            "syriac",
+            "--job-id",
+            "job-9",
+            "--out",
+            str(tmp_path / "out"),
+            *BASE_ARGS,
+        ],
+        transport=transport,
+    )
+    assert code == 2
+    assert not [call for call in transport.calls if "/media/" in call[1]]
+
+
+def test_segment_staleness_matching_job_compares(tmp_path, monkeypatch):
+    monkeypatch.setenv("NOMIKOS_TOKEN", "dummy")
+    stub_run_model(monkeypatch, {"blocks": [], "lines": [seg_local(0, BOX_A, BASE_A)]})
+    job = {
+        "id": "job-1",
+        "status": "done",
+        "type": "segment",
+        "document_id": "doc-1",
+        "document_part_id": "part-1",
+        "completed_at": "2026-01-02T00:00:00+00:00",
+        "payload": {"ml_params": {}},
+        "result": merge_summary(),
+    }
+    stored = [seg_stored("a", 0, BOX_A, BASE_A, created="2026-01-01T12:00:00+00:00")]
+    transport = FakeTransport(
+        {
+            ("GET", "/inference/models"): json_route(FAKE_CATALOG),
+            ("GET", "/jobs/job-1"): json_route(job),
+            ("GET", "/parts/part-1/lines"): json_route(stored),
+            ("GET", "/media/parts/part-1"): lambda m, u, b: (200, b"fake-bytes"),
+        }
+    )
+    code = nmk.main(
+        [
+            "--task",
+            "segment",
+            "--model",
+            "ppocr",
+            "--job-id",
+            "job-1",
+            "--trust-job-model",
+            "--out",
+            str(tmp_path / "out"),
+            *BASE_ARGS,
+        ],
+        transport=transport,
+    )
+    assert code == 0
+
+
+def test_segment_staleness_newer_lines_are_not_comparable(tmp_path, monkeypatch):
+    monkeypatch.setenv("NOMIKOS_TOKEN", "dummy")
+    job = {
+        "id": "job-1",
+        "status": "done",
+        "type": "segment",
+        "document_id": "doc-1",
+        "document_part_id": "part-1",
+        "completed_at": "2026-01-02T00:00:00+00:00",
+        "payload": {"ml_params": {}},
+        "result": merge_summary(),
+    }
+    stored = [
+        seg_stored("a", 0, BOX_A, BASE_A, created="2026-01-03T00:00:00+00:00", job_id="job-9")
+    ]
+    transport = FakeTransport(
+        {
+            ("GET", "/inference/models"): json_route(FAKE_CATALOG),
+            ("GET", "/jobs/job-1"): json_route(job),
+            ("GET", "/parts/part-1/lines"): json_route(stored),
+        }
+    )
+    out_dir = str(tmp_path / "out")
+    code = nmk.main(
+        [
+            "--task",
+            "segment",
+            "--model",
+            "ppocr",
+            "--job-id",
+            "job-1",
+            "--trust-job-model",
+            "--out",
+            out_dir,
+            *BASE_ARGS,
+        ],
+        transport=transport,
+    )
+    assert code == 3
+    report = json.loads(Path(out_dir, "report.json").read_text(encoding="utf-8"))
+    assert report["comparison"]["verdict"] == "NOT_COMPARABLE"
+    assert report["comparison"]["reason"] == "lines no longer come from job job-1"
+
+
+def test_transcribe_line_limit_narrows_both_sides(tmp_path, monkeypatch):
+    monkeypatch.setenv("NOMIKOS_TOKEN", "dummy")
+    ids = [f"L{i}" for i in range(5)]
+    stub_run_model(
+        monkeypatch,
+        {
+            "lines": [
+                {
+                    "line_id": line_id,
+                    "line_index": index,
+                    "output": {
+                        "text": f"text {line_id}",
+                        "confidence": 0.9,
+                        "character_confidences": [],
+                    },
+                }
+                for index, line_id in enumerate(ids[:2])
+            ]
+        },
+    )
+    job = {
+        "id": "job-1",
+        "status": "done",
+        "type": "transcribe",
+        "document_id": "doc-1",
+        "document_part_id": "part-1",
+        "payload": {"ml_params": {}, "line_ids": ids},
+        "result": {
+            "transcription_id": "t-1",
+            "lines": [
+                {"line_id": line_id, "text": f"text {line_id}", "confidence": 0.9}
+                for line_id in ids
+            ],
+        },
+    }
+    part_lines = [
+        {"id": line_id, "order": index, "points": BOX_A, "created_at": "2026-01-01"}
+        for index, line_id in enumerate(ids)
+    ]
+    transport = FakeTransport(
+        {
+            ("GET", "/inference/models"): json_route(FAKE_CATALOG),
+            ("GET", "/jobs/job-1"): json_route(job),
+            ("GET", "/parts/part-1/lines"): json_route(part_lines),
+            ("GET", "/media/parts/part-1"): lambda m, u, b: (200, b"fake-bytes"),
+        }
+    )
+    code = nmk.main(
+        [
+            "--task",
+            "transcribe",
+            "--model",
+            "syriac",
+            "--job-id",
+            "job-1",
+            "--line-limit",
+            "2",
+            "--trust-job-model",
+            "--out",
+            str(tmp_path / "out"),
+            *BASE_ARGS,
+        ],
+        transport=transport,
+    )
+    assert code == 0
+
+
+def test_model_verified_by_payload_identifier(tmp_path, monkeypatch):
+    monkeypatch.setenv("NOMIKOS_TOKEN", "dummy")
+    stub_run_model(
+        monkeypatch,
+        {
+            "lines": [
+                {
+                    "line_id": "L1",
+                    "line_index": 0,
+                    "output": {"text": "hi", "confidence": 0.9, "character_confidences": []},
+                }
+            ]
+        },
+    )
+    job = {
+        "id": "job-1",
+        "status": "done",
+        "type": "transcribe",
+        "document_id": "doc-1",
+        "document_part_id": "part-1",
+        "payload": {"ml_params": {"model": "syriac-ppocr-v1"}, "line_ids": ["L1"]},
         "result": {
             "transcription_id": "t-1",
             "lines": [{"line_id": "L1", "text": "hi", "confidence": 0.9}],
@@ -520,9 +786,192 @@ def test_secrets_never_appear_in_report(tmp_path, monkeypatch):
         transport=transport,
     )
     assert code == 0
-    report_json = Path(out_dir, "report.json").read_text(encoding="utf-8")
-    report_md = Path(out_dir, "report.md").read_text(encoding="utf-8")
-    assert secret not in report_json
-    assert secret not in report_md
-    assert "[REDACTED]" in report_json
-    assert os.environ["NOMIKOS_TOKEN"] == secret
+    report = json.loads(Path(out_dir, "report.json").read_text(encoding="utf-8"))
+    assert report["header"]["model_verification"] == "verified"
+
+
+def test_model_unverifiable_without_flag_is_not_comparable(tmp_path, monkeypatch):
+    monkeypatch.setenv("NOMIKOS_TOKEN", "dummy")
+    job = {
+        "id": "job-1",
+        "status": "done",
+        "type": "transcribe",
+        "document_id": "doc-1",
+        "document_part_id": "part-1",
+        "payload": {"ml_params": {}, "line_ids": ["L1"]},
+        "result": {"transcription_id": "t-1", "lines": []},
+    }
+    transport = FakeTransport(
+        {
+            ("GET", "/inference/models"): json_route(FAKE_CATALOG),
+            ("GET", "/jobs/job-1"): json_route(job),
+        }
+    )
+    out_dir = str(tmp_path / "out")
+    code = nmk.main(
+        [
+            "--task",
+            "transcribe",
+            "--model",
+            "syriac",
+            "--job-id",
+            "job-1",
+            "--out",
+            out_dir,
+            *BASE_ARGS,
+        ],
+        transport=transport,
+    )
+    assert code == 3
+    report = json.loads(Path(out_dir, "report.json").read_text(encoding="utf-8"))
+    assert report["comparison"]["verdict"] == "NOT_COMPARABLE"
+
+
+def test_model_unverifiable_with_flag_says_so(tmp_path, monkeypatch):
+    monkeypatch.setenv("NOMIKOS_TOKEN", "dummy")
+    stub_run_model(
+        monkeypatch,
+        {
+            "lines": [
+                {
+                    "line_id": "L1",
+                    "line_index": 0,
+                    "output": {"text": "hi", "confidence": 0.9, "character_confidences": []},
+                }
+            ]
+        },
+    )
+    job = {
+        "id": "job-1",
+        "status": "done",
+        "type": "transcribe",
+        "document_id": "doc-1",
+        "document_part_id": "part-1",
+        "payload": {"ml_params": {}, "line_ids": ["L1"]},
+        "result": {
+            "transcription_id": "t-1",
+            "lines": [{"line_id": "L1", "text": "hi", "confidence": 0.9}],
+        },
+    }
+    part_lines = [{"id": "L1", "order": 0, "points": BOX_A, "created_at": "2026-01-01"}]
+    transport = FakeTransport(
+        {
+            ("GET", "/inference/models"): json_route(FAKE_CATALOG),
+            ("GET", "/jobs/job-1"): json_route(job),
+            ("GET", "/parts/part-1/lines"): json_route(part_lines),
+            ("GET", "/media/parts/part-1"): lambda m, u, b: (200, b"fake-bytes"),
+        }
+    )
+    out_dir = str(tmp_path / "out")
+    code = nmk.main(
+        [
+            "--task",
+            "transcribe",
+            "--model",
+            "syriac",
+            "--job-id",
+            "job-1",
+            "--trust-job-model",
+            "--out",
+            out_dir,
+            *BASE_ARGS,
+        ],
+        transport=transport,
+    )
+    assert code == 0
+    report = json.loads(Path(out_dir, "report.json").read_text(encoding="utf-8"))
+    assert report["header"]["model_verification"] == "model of the job not verified"
+
+
+def test_model_identifier_disagreement_is_an_error(tmp_path, monkeypatch):
+    monkeypatch.setenv("NOMIKOS_TOKEN", "dummy")
+    job = {
+        "id": "job-1",
+        "status": "done",
+        "type": "transcribe",
+        "document_id": "doc-1",
+        "document_part_id": "part-1",
+        "payload": {"ml_params": {"model": "other-model"}, "line_ids": ["L1"]},
+        "result": {"transcription_id": "t-1", "lines": []},
+    }
+    transport = FakeTransport(
+        {
+            ("GET", "/inference/models"): json_route(FAKE_CATALOG),
+            ("GET", "/jobs/job-1"): json_route(job),
+        }
+    )
+    code = nmk.main(
+        [
+            "--task",
+            "transcribe",
+            "--model",
+            "syriac",
+            "--job-id",
+            "job-1",
+            "--trust-job-model",
+            "--out",
+            str(tmp_path / "out"),
+            *BASE_ARGS,
+        ],
+        transport=transport,
+    )
+    assert code == 2
+
+
+def test_report_files_are_owner_only(tmp_path, monkeypatch):
+    import stat as stat_module
+
+    monkeypatch.setenv("NOMIKOS_TOKEN", "dummy")
+    stub_run_model(
+        monkeypatch,
+        {
+            "lines": [
+                {
+                    "line_id": "L1",
+                    "line_index": 0,
+                    "output": {"text": "hi", "confidence": 0.9, "character_confidences": []},
+                }
+            ]
+        },
+    )
+    job = {
+        "id": "job-1",
+        "status": "done",
+        "type": "transcribe",
+        "document_id": "doc-1",
+        "document_part_id": "part-1",
+        "payload": {"ml_params": {"model": "syriac-ppocr-v1"}, "line_ids": ["L1"]},
+        "result": {
+            "transcription_id": "t-1",
+            "lines": [{"line_id": "L1", "text": "hi", "confidence": 0.9}],
+        },
+    }
+    part_lines = [{"id": "L1", "order": 0, "points": BOX_A, "created_at": "2026-01-01"}]
+    transport = FakeTransport(
+        {
+            ("GET", "/inference/models"): json_route(FAKE_CATALOG),
+            ("GET", "/jobs/job-1"): json_route(job),
+            ("GET", "/parts/part-1/lines"): json_route(part_lines),
+            ("GET", "/media/parts/part-1"): lambda m, u, b: (200, b"fake-bytes"),
+        }
+    )
+    out_dir = str(tmp_path / "out")
+    code = nmk.main(
+        [
+            "--task",
+            "transcribe",
+            "--model",
+            "syriac",
+            "--job-id",
+            "job-1",
+            "--out",
+            out_dir,
+            *BASE_ARGS,
+        ],
+        transport=transport,
+    )
+    assert code == 0
+    assert stat_module.S_IMODE(os.stat(out_dir).st_mode) == 0o700
+    for name in ("report.json", "report.md"):
+        mode = stat_module.S_IMODE(os.stat(Path(out_dir, name)).st_mode)
+        assert mode == 0o600, (name, oct(mode))
