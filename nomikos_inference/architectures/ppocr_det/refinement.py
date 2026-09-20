@@ -21,7 +21,7 @@ from nomikos_inference.architectures.ppocr_det.postprocessing import DetectedQua
 from nomikos_inference.architectures.ppocr_det.reading_order import PageLayout
 from nomikos_inference.architectures.ppocr_det.response import synthetic_baseline_points
 
-DEFAULT_MERGE_GAP_RATIO = 1.5
+DEFAULT_MERGE_GAP_RATIO = 0.25
 DEFAULT_MERGE_MAX_HEIGHT_RATIO = 2.0
 DEFAULT_OVERLAP_CUT_THRESHOLD = 0.20
 DUPLICATE_SHARED_RATIO = 0.50

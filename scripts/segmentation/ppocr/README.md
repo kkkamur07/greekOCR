@@ -115,7 +115,11 @@ sharing at least 20% area, suspects flagged and real lines wrongly flagged,
 and writes reading-order overlays for vat-1r and c13 with suspects in red
 into the output directory. Needs `--fixtures` and `--images` as above plus
 `--gt` (the ground truth recon directory) and `--onnx` with
-`--artifact-sha256`.
+`--artifact-sha256`. With `--merge-gap-ratio` (repeatable or comma
+separated) one run scores the defaults and drop variants at each gap
+ratio, prints a sweep table (recall, precision, F1, lines lost against
+off with page and line, lines fixed, merged count) with a per-ratio sweep
+summary in the JSON, and skips the overlays.
 
 ## `profile_onnx.py`
 

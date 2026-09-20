@@ -70,7 +70,26 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--onnx", type=Path, required=True, help="Adapter ONNX artifact")
     parser.add_argument("--artifact-sha256", default=None, help="Expected SHA-256 of the ONNX")
     parser.add_argument("--output-dir", type=Path, required=True, help="Where overlays go")
+    parser.add_argument(
+        "--merge-gap-ratio",
+        action="append",
+        default=[],
+        help=(
+            "Score the defaults and drop variants at these merge gap ratios "
+            "(repeatable or comma separated). In sweep mode overlays are "
+            "skipped and the JSON gains a per-ratio sweep summary."
+        ),
+    )
     return parser.parse_args()
+
+
+def _sweep_ratios(raw: list[str]) -> list[float]:
+    ratios = []
+    for chunk in raw:
+        ratios.extend(float(part) for part in chunk.split(",") if part.strip())
+    if not ratios:
+        raise ValueError("--merge-gap-ratio needs at least one number")
+    return ratios
 
 
 def _sha256(data: bytes) -> str:
@@ -156,7 +175,15 @@ def _score_page(targets: list[dict], polygons: list[Polygon]) -> dict:
     fps = sorted(set(range(len(polygons))) - used - set(ignored))
     fns = sorted(set(care) - {g for _, g in paired})
     alone = sum(1 for _, g in paired if sum(1 for p in range(len(polygons)) if eligible[p, g]) == 1)
+    paired_ids = sorted(targets[g]["id"] for _, g in paired)
+    alone_ids = sorted(
+        targets[g]["id"]
+        for _, g in paired
+        if sum(1 for p in range(len(polygons)) if eligible[p, g]) == 1
+    )
     return {
+        "paired_ids": paired_ids,
+        "alone_ids": alone_ids,
         "n_gt": len(care),
         "n_pred": len(polygons),
         "tp": len(paired),
@@ -257,11 +284,28 @@ def main() -> int:
     from nomikos_inference.architectures.ppocr_det import run_ppocr_det_segment
 
     args = _parse_args()
-    variants = {
-        "off": {"merge_fragments": False, "resolve_overlaps": False, "noise_policy": "off"},
-        "defaults": None,
-        "drop": {"noise_policy": "drop"},
-    }
+    sweep = _sweep_ratios(args.merge_gap_ratio) if args.merge_gap_ratio else []
+    if sweep:
+        variants: dict[str, dict | None] = {
+            "off": {
+                "merge_fragments": False,
+                "resolve_overlaps": False,
+                "noise_policy": "off",
+            },
+        }
+        for ratio in sweep:
+            variants[f"gap-{ratio}"] = {"merge_gap_ratio": ratio}
+            variants[f"drop-{ratio}"] = {"noise_policy": "drop", "merge_gap_ratio": ratio}
+    else:
+        variants = {
+            "off": {
+                "merge_fragments": False,
+                "resolve_overlaps": False,
+                "noise_policy": "off",
+            },
+            "defaults": None,
+            "drop": {"noise_policy": "drop"},
+        }
     totals = {
         name: {
             "tp": 0,
@@ -272,6 +316,7 @@ def main() -> int:
             "pairs": 0,
             "suspects": 0,
             "wrong": 0,
+            "merged": 0,
         }
         for name in variants
     }
@@ -299,18 +344,23 @@ def main() -> int:
                 if line.source_metadata.get("suspect", False)
             ]
             wrong = sum(1 for p in suspects if p in scored["matched_pred"])
+            merged = sum(
+                1 for line in response.lines if line.source_metadata.get("merged_from", 1) > 1
+            )
             pages[page][name] = {
                 **scored,
                 "pairs": _pairs_above(polygons, PAIR_THRESHOLD),
                 "suspects": len(suspects),
                 "wrong": wrong,
+                "merged": merged,
             }
             for key in ("tp", "fp", "fn", "n_pred", "alone"):
                 totals[name][key] += scored[key]
             totals[name]["pairs"] += pages[page][name]["pairs"]
             totals[name]["suspects"] += len(suspects)
             totals[name]["wrong"] += wrong
-        if page in OVERLAY_PAGES:
+            totals[name]["merged"] += merged
+        if not sweep and page in OVERLAY_PAGES:
             defaults = run_ppocr_det_segment(
                 image_bytes, model_path=args.onnx, artifact_sha256=args.artifact_sha256, params=None
             )
@@ -334,16 +384,61 @@ def main() -> int:
             if 2 * total["tp"] + total["fp"] + total["fn"]
             else 0.0
         )
+        total["precision"] = precision
+        total["recall"] = recall
+        total["f1"] = f1
         print(
             f"{name} detections={total['n_pred']} P={precision:.4f} R={recall:.4f} "
             f"F1={f1:.4f} alone={total['alone']} pairs={total['pairs']} "
-            f"suspects={total['suspects']} wrong={total['wrong']}",
+            f"suspects={total['suspects']} wrong={total['wrong']} merged={total['merged']}",
             flush=True,
         )
+    payload: dict = {"pages": pages, "totals": totals}
+    if sweep:
+        payload["sweep"] = _summarise_sweep(pages, totals, sweep)
     (args.output_dir / "refinement-evaluation.json").write_text(
-        json.dumps({"pages": pages, "totals": totals}, indent=2) + "\n", encoding="utf-8"
+        json.dumps(payload, indent=2, default=str) + "\n", encoding="utf-8"
     )
     return 0
+
+
+def _summarise_sweep(pages: dict, totals: dict, sweep: list[float]) -> dict:
+    """Per-ratio summary: metrics, lines lost against off, lines fixed, merges."""
+    summary = {}
+    print("ratio R P Pdrop F1 F1drop lost fixed merged", flush=True)
+    for ratio in sweep:
+        gap, drop = totals[f"gap-{ratio}"], totals[f"drop-{ratio}"]
+        lost: dict[str, list] = {}
+        fixed: dict[str, list] = {}
+        for page, entry in pages.items():
+            off_paired = set(entry["off"]["paired_ids"])
+            off_alone = set(entry["off"]["alone_ids"])
+            gap_paired = set(entry[f"gap-{ratio}"]["paired_ids"])
+            gap_alone = set(entry[f"gap-{ratio}"]["alone_ids"])
+            page_lost = sorted(off_paired - gap_paired)
+            page_fixed = sorted(gap_alone - off_alone)
+            if page_lost:
+                lost[page] = page_lost
+            if page_fixed:
+                fixed[page] = page_fixed
+        summary[str(ratio)] = {
+            "recall": gap["recall"],
+            "precision": gap["precision"],
+            "precision_drop": drop["precision"],
+            "f1": gap["f1"],
+            "f1_drop": drop["f1"],
+            "lost": lost,
+            "fixed": fixed,
+            "merged": gap["merged"],
+        }
+        print(
+            f"{ratio} R={gap['recall']:.4f} P={gap['precision']:.4f} "
+            f"Pdrop={drop['precision']:.4f} F1={gap['f1']:.4f} "
+            f"F1drop={drop['f1']:.4f} lost={sum(len(v) for v in lost.values())} "
+            f"fixed={sum(len(v) for v in fixed.values())} merged={gap['merged']}",
+            flush=True,
+        )
+    return summary
 
 
 if __name__ == "__main__":
