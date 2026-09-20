@@ -225,10 +225,11 @@ Job callbacks use a tagged output union: `output.kind` is either `segment` or `t
 
 `nomikos_inference/registry.yaml` lists available models and weight locations. Example entries:
 
-- `greek-calamari-v1`, `armenian-calamari-v1`, `syriac-calamari-v2` - transcribe,
+- `greek-calamari-v1`, `armenian-calamari-v1`, `syriac-calamari-v2`, `coptic-calamari-v1` - transcribe,
   Calamari architecture, one Hub repo and pinned revision + digest each. Same
-  graph, one codec per script, so the entries differ only in `weights_source`
-  and the pins.
+  architecture (40/60-filter CNN, two 200-unit BiLSTMs, line height 48; read off the
+  Coptic and Syriac checkpoints, which agree on every structural field), one codec
+  per script, so the entries differ only in codec, `weights_source`, and the pins.
 - `blla-segment` - segment, BLLA `blla.onnx` weights
 
 Weights are resolved at runtime from the Hub cache (`~/.nomikos/hf/cache/`) or, in a source
@@ -238,6 +239,9 @@ New `hf://` entries should include both `hub_revision` and `artifact_sha256`; se
 the migration note in [`docs/inference/adding-inference-models.md`](../docs/inference/adding-inference-models.md).
 
 **Adding a model:** step-by-step checklist in [`docs/inference/adding-inference-models.md`](../docs/inference/adding-inference-models.md).
+Export through the one supported path (`scripts/hf/export_calamari_onnx.py`, the single exporter every
+entry point delegates to) and prove the pinned artifact serves before publishing: the nightly `ml` lane
+opens it through the real adapter and runs representative widths.
 
 ## Admission control
 

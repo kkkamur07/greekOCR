@@ -5,15 +5,15 @@ import {
 } from "../../inference/executionTarget";
 
 /**
- * The engine and model the document-level jobs run with.
+ * The model the document-level transcribe job runs with.
  *
- * Named here as constants because the batch routes take `model_id: null` and
- * resolve the binding themselves: there is no per-document choice to offer, so
- * a request to `/inference/models` would only be able to confirm what the
- * server was going to do anyway. When the batch routes start accepting a model
- * these become a read of the resolved binding instead.
+ * Named here as a constant because the batch transcribe route takes
+ * `model_id: null` and resolves the binding itself: there is no per-document
+ * choice to offer, so a request to `/inference/models` would only be able to
+ * confirm what the server was going to do anyway. Segmentation used to read
+ * the same way; it now offers a picker in `DocumentWorkflowMenu` and in the
+ * page editor toolbar, so no engine name lives here any more.
  */
-export const SEGMENT_ENGINE_NAME = "blla-segment";
 export const TRANSCRIBE_MODEL_NAME = "blla-greek-v2";
 
 export function pageCountLabel(count: number): string {

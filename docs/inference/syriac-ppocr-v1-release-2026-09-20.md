@@ -54,7 +54,7 @@ pages (display order on both sides).
 
 The shipped-registry snapshot test
 (`test_the_shipped_registry_states_a_crop_for_every_transcribe_model`) was
-extended with the fourth entry; it still asserts every transcribe model states
+extended with the fifth entry; it still asserts every transcribe model states
 its crop.
 
 ## Local verification
@@ -79,7 +79,7 @@ its crop.
 Checklist order follows `docs/inference/adding-inference-models.md` steps 4
 to 6. The dev seed script already lists `syriac-ppocr-v1` in
 `TRANSCRIBE_MODELS`, and the provider mapping already covers the architecture
-(`RegistryArchitecture.ppocr_rec` to `"kraken"`).
+(`RegistryArchitecture.ppocr_rec` to `"ppocr"`).
 
 1. Dev catalog row. Run the seed script (upsert, safe to re-run):
 
@@ -94,7 +94,7 @@ to 6. The dev seed script already lists `syriac-ppocr-v1` in
 
    ```sql
    INSERT INTO inference_models (name, provider, task, artifact_ref, default_params)
-   VALUES ('syriac-ppocr-v1', 'kraken', 'transcribe', 'registry://syriac-ppocr-v1?tag=stable', '{"device": "cpu"}')
+   VALUES ('syriac-ppocr-v1', 'ppocr', 'transcribe', 'registry://syriac-ppocr-v1?tag=stable', '{"device": "cpu"}')
    ON CONFLICT (name) DO UPDATE SET
      provider = EXCLUDED.provider,
      task = EXCLUDED.task,

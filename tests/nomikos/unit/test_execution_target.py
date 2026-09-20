@@ -157,6 +157,7 @@ def _model(artifact_ref: str, task: InferenceTask = InferenceTask.transcribe) ->
         ("registry://syriac-calamari-v2?tag=stable", "syriac-calamari-v2"),
         ("registry://greek-calamari-v1?tag=stable", "greek-calamari-v1"),
         ("registry://armenian-calamari-v1?tag=stable", "armenian-calamari-v1"),
+        ("registry://coptic-calamari-v1?tag=stable", "coptic-calamari-v1"),
         ("registry://blla-segment", "blla-segment"),
     ],
 )
@@ -190,7 +191,7 @@ def test_the_shipped_registry_models_are_lite_and_may_run_on_either_host() -> No
 
 @pytest.mark.parametrize(
     "registry_model_id",
-    ["greek-calamari-v1", "armenian-calamari-v1", "syriac-calamari-v2"],
+    ["greek-calamari-v1", "armenian-calamari-v1", "syriac-calamari-v2", "coptic-calamari-v1"],
 )
 def test_every_transcribe_script_may_run_on_a_researchers_laptop(registry_model_id: str) -> None:
     """``DEFAULT_REGISTRY_MODEL_IDS`` names only one transcribe model, so the test

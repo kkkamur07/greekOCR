@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -77,39 +78,53 @@ function canReuseDocument(
 }
 
 /**
- * The transcribe model picker's contents for one page. The catalog is the
+ * The model pickers' contents for one page. The catalog is the
  * document-level half and is only refetched when the caller passes it; the
- * binding is resolved for every page, since it can be bound per part.
+ * bindings are resolved for every page, since they can be bound per part.
+ *
+ * Both pickers read the one `listInferenceModels()` call: the catalog is
+ * filtered by task, never fetched twice.
  */
-async function loadTranscribeModels(
+async function loadEditorModels(
   projectId: string,
   documentId: string,
   partId: string,
   catalog: Promise<InferenceModelResponse[]> | null,
 ): Promise<{
-  models: InferenceModelResponse[] | null;
-  resolvedModel: InferenceModelResponse | null;
+  transcribeModels: InferenceModelResponse[] | null;
+  resolvedTranscribeModel: InferenceModelResponse | null;
+  segmentModels: InferenceModelResponse[] | null;
+  resolvedSegmentModel: InferenceModelResponse | null;
 }> {
-  let models: InferenceModelResponse[] | null = null;
+  let catalogModels: InferenceModelResponse[] | null = null;
   if (catalog) {
     try {
-      models = (await catalog).filter((model) => model.task === "transcribe");
+      catalogModels = await catalog;
     } catch {
-      models = [];
+      catalogModels = [];
     }
   }
+  const transcribeModels = catalogModels
+    ? catalogModels.filter((model) => model.task === "transcribe")
+    : null;
+  const segmentModels = catalogModels
+    ? catalogModels.filter((model) => model.task === "segment")
+    : null;
 
-  try {
-    const resolved = await api.resolvePartModelBinding(
-      projectId,
-      documentId,
-      partId,
-      "transcribe",
-    );
-    return { models, resolvedModel: resolved.model };
-  } catch {
-    return { models, resolvedModel: null };
-  }
+  const [transcribeResult, segmentResult] = await Promise.allSettled([
+    api.resolvePartModelBinding(projectId, documentId, partId, "transcribe"),
+    api.resolvePartModelBinding(projectId, documentId, partId, "segment"),
+  ]);
+  return {
+    transcribeModels,
+    resolvedTranscribeModel:
+      transcribeResult.status === "fulfilled"
+        ? transcribeResult.value.model
+        : null,
+    segmentModels,
+    resolvedSegmentModel:
+      segmentResult.status === "fulfilled" ? segmentResult.value.model : null,
+  };
 }
 
 type PartContentSetters = {
@@ -137,6 +152,8 @@ type PartContentSetters = {
   >;
   setTranscribeModels: Dispatch<SetStateAction<InferenceModelResponse[]>>;
   setSelectedTranscribeModelId: Dispatch<SetStateAction<string | null>>;
+  setSegmentModels: Dispatch<SetStateAction<InferenceModelResponse[]>>;
+  setSelectedSegmentModelId: Dispatch<SetStateAction<string | null>>;
 };
 
 /**
@@ -153,6 +170,11 @@ type PartContentSetters = {
  * the page does, so a page turn fetches only what is the page's own: its
  * layout, its Segments, its pairing and its model binding. A cold load and a
  * finished job (which may have written a new layer) fetch everything.
+ *
+ * `segmentChoiceIsExplicitRef` is what keeps an explicit picker choice for
+ * the rest of the document. The picker's change handler sets it, a
+ * document-level load clears it, and the selection below reads it at apply
+ * time so a choice made while the read is in flight still wins.
  */
 async function fetchPartContent(
   projectId: string,
@@ -160,7 +182,13 @@ async function fetchPartContent(
   partId: string,
   apply: <T>(setter: (value: T) => void, value: T) => void,
   setters: PartContentSetters,
-  { documentLevel }: { documentLevel: boolean },
+  {
+    documentLevel,
+    segmentChoiceIsExplicitRef,
+  }: {
+    documentLevel: boolean;
+    segmentChoiceIsExplicitRef?: { current: boolean };
+  },
 ): Promise<void> {
   const [
     layoutResult,
@@ -175,7 +203,7 @@ async function fetchPartContent(
       ? api.listTranscriptions(projectId, documentId)
       : Promise.resolve(null),
     api.getPagePairing(projectId, documentId, partId),
-    loadTranscribeModels(
+    loadEditorModels(
       projectId,
       documentId,
       partId,
@@ -266,26 +294,58 @@ async function fetchPartContent(
   }
 
   if (modelsResult.status === "fulfilled") {
-    const { models, resolvedModel } = modelsResult.value;
-    // On a page turn `models` is null and the catalog already on screen is
-    // kept; the bound model still joins it if the catalog does not list it.
+    const {
+      transcribeModels,
+      resolvedTranscribeModel,
+      segmentModels,
+      resolvedSegmentModel,
+    } = modelsResult.value;
+    // On a page turn the catalogs are null and the catalogs already on screen
+    // are kept; a bound model still joins its catalog if the catalog does not
+    // list it.
     apply(setters.setTranscribeModels, (current: InferenceModelResponse[]) => {
-      const catalog = models ?? current;
-      return resolvedModel &&
-        !catalog.some((model) => model.id === resolvedModel.id)
-        ? [resolvedModel, ...catalog]
+      const catalog = transcribeModels ?? current;
+      return resolvedTranscribeModel &&
+        !catalog.some((model) => model.id === resolvedTranscribeModel.id)
+        ? [resolvedTranscribeModel, ...catalog]
         : catalog;
     });
     apply(setters.setSelectedTranscribeModelId, (current: string | null) =>
-      resolvedModel
-        ? resolvedModel.id
-        : models
-          ? (models[0]?.id ?? null)
+      resolvedTranscribeModel
+        ? resolvedTranscribeModel.id
+        : transcribeModels
+          ? (transcribeModels[0]?.id ?? null)
           : current,
     );
+    apply(setters.setSegmentModels, (current: InferenceModelResponse[]) => {
+      const catalog = segmentModels ?? current;
+      return resolvedSegmentModel &&
+        !catalog.some((model) => model.id === resolvedSegmentModel.id)
+        ? [resolvedSegmentModel, ...catalog]
+        : catalog;
+    });
+    // Unlike the HTR picker, "Default" (null) is a real choice here, so a
+    // missing binding selects it rather than the first catalog row: a new
+    // catalog row must not silently change what runs. An explicit choice wins
+    // over bindings for the rest of the document: on a document-level load
+    // the flag was cleared before this read, so the binding if any else null
+    // applies; on a page turn an explicit choice keeps the current value,
+    // else the binding if any else the current value is kept.
+    apply(setters.setSelectedSegmentModelId, (current: string | null) => {
+      if (segmentChoiceIsExplicitRef?.current) return current;
+      return resolvedSegmentModel
+        ? resolvedSegmentModel.id
+        : segmentModels
+          ? null
+          : current;
+    });
   } else {
     apply(setters.setTranscribeModels, []);
     apply(setters.setSelectedTranscribeModelId, null);
+    apply(setters.setSegmentModels, []);
+    apply(setters.setSelectedSegmentModelId, (current: string | null) =>
+      segmentChoiceIsExplicitRef?.current ? current : null,
+    );
   }
 }
 
@@ -339,6 +399,32 @@ export function usePageEditorData(
   const [selectedTranscribeModelId, setSelectedTranscribeModelId] = useState<
     string | null
   >(null);
+  const [segmentModels, setSegmentModels] = useState<InferenceModelResponse[]>(
+    [],
+  );
+  /**
+   * Null means "Default": `model_id` is not sent and the backend resolves
+   * the binding or the worker's own default, exactly as before this picker
+   * existed. It is never initialised from `segmentModels[0]`, and a page
+   * turn keeps an explicit choice (see fetchPartContent).
+   */
+  const [selectedSegmentModelId, setSelectedSegmentModelId] = useState<
+    string | null
+  >(null);
+
+  /**
+   * Whether the segment picker choice came from the user. Set by the
+   * picker's change handler, cleared on a document-level load. While set,
+   * page turns keep the choice instead of applying the next part's binding.
+   */
+  const segmentChoiceIsExplicitRef = useRef(false);
+  const handleSelectedSegmentModelIdChange = useCallback(
+    (value: SetStateAction<string | null>) => {
+      segmentChoiceIsExplicitRef.current = true;
+      setSelectedSegmentModelId(value);
+    },
+    [],
+  );
 
   /**
    * Which read of this part is the newest, counted across every effect that
@@ -429,6 +515,10 @@ export function usePageEditorData(
     const carriedPart = carriedDocument
       ? resolvePart(carriedDocument, partId)
       : null;
+    const isDocumentLoad = !carriedPart;
+    if (isDocumentLoad) {
+      segmentChoiceIsExplicitRef.current = false;
+    }
 
     setLoading(!carriedPart);
     setPartLoading(true);
@@ -496,8 +586,10 @@ export function usePageEditorData(
             setPairingProgress,
             setTranscribeModels,
             setSelectedTranscribeModelId,
+            setSegmentModels,
+            setSelectedSegmentModelId,
           },
-          { documentLevel: !carriedPart },
+          { documentLevel: !carriedPart, segmentChoiceIsExplicitRef },
         );
       } catch (err) {
         if (isUnauthorized(err)) {
@@ -577,8 +669,10 @@ export function usePageEditorData(
           setPairingProgress,
           setTranscribeModels,
           setSelectedTranscribeModelId,
+          setSegmentModels,
+          setSelectedSegmentModelId,
         },
-        { documentLevel: true },
+        { documentLevel: true, segmentChoiceIsExplicitRef },
       );
     });
 
@@ -628,6 +722,9 @@ export function usePageEditorData(
     transcribeModels,
     selectedTranscribeModelId,
     setSelectedTranscribeModelId,
+    segmentModels,
+    selectedSegmentModelId,
+    setSelectedSegmentModelId: handleSelectedSegmentModelIdChange,
     parts,
     partIndex,
   };

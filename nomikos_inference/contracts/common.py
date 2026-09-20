@@ -51,6 +51,11 @@ class LineCrop(StrEnum):
       Its finetuning crops were exported with no padding.
     * ``armenian-calamari-v1`` on the full MS_UCLA_MS document reads 664/819
       exact at padding 12.
+    * ``coptic-calamari-v1`` on 2823 platform Coptic project lines through
+      ``best.pt`` at batch size 1 reads CER 0.0177 at padding 12 against 0.1890
+      at padding 0, minimum flat across 10 to 12, measured 2026-09-18 on the
+      platform's Coptic project lines; full curve in
+      ``docs/inference/models-and-datasets.md``.
 
     The enum stays a single-value enum rather than collapsing to a bool because
     the field then still names the convention, and a second convention (should a

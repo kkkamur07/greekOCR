@@ -10,11 +10,16 @@ from nomikos_inference.weights import resolve_weights_source
 # Tests bundled model metadata loads correctly. Does not run inference.
 
 
-# The three scripts are one model family: same graph, same device, same
+# The four scripts are one model family: same graph, same device, same
 # eligibility, one Hub repo and codec each. Parametrizing says that out loud, and
-# means adding a fourth script is a one-line change here rather than a fourth
+# means adding a fifth script is a one-line change here rather than a fifth
 # copy of the same six assertions.
-TRANSCRIBE_MODEL_IDS = ("greek-calamari-v1", "armenian-calamari-v1", "syriac-calamari-v2")
+TRANSCRIBE_MODEL_IDS = (
+    "greek-calamari-v1",
+    "armenian-calamari-v1",
+    "syriac-calamari-v2",
+    "coptic-calamari-v1",
+)
 
 
 @pytest.mark.parametrize("registry_model_id", TRANSCRIBE_MODEL_IDS)
