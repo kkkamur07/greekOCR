@@ -61,7 +61,7 @@ def test_candidate_names_cover_old_and_new_rows(seed_module: ModuleType) -> None
 def test_duplicate_name_rows_keep_the_oldest(seed_module: ModuleType) -> None:
     old = SimpleNamespace(name="blla-segment", created_at=datetime(2026, 1, 1))
     new = SimpleNamespace(name="kraken", created_at=datetime(2026, 2, 1))
-    keep, delete = seed_module.split_duplicate_models([new, old])
+    keep, delete = seed_module.split_duplicate_models([new, old], "ppocr")
     assert keep is old
     assert delete == [new]
 

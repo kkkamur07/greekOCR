@@ -83,18 +83,23 @@ def candidate_names_for(registry_id: str) -> tuple[str, ...]:
 
 
 def split_duplicate_models(
-    models: Sequence[InferenceModel],
+    rows: Sequence[InferenceModel],
+    display_name: str,
 ) -> tuple[InferenceModel | None, list[InferenceModel]]:
-    """Keep the oldest of several same-name rows, mark the rest for deletion.
+    """Keep one of several duplicate rows, mark the rest for deletion.
 
     A dev database can hold both the old registry-id name and the new display
-    name (an old seed plus a hand-made row). Ordering by created_at then name
-    keeps the choice deterministic.
+    name (an old seed plus a hand-made row). The row already carrying the
+    display name wins, else the oldest wins, with ties broken by name so the
+    choice stays deterministic.
     """
-    ordered = sorted(models, key=lambda model: (model.created_at, model.name))
-    if not ordered:
+    candidates = list(rows)
+    if not candidates:
         return None, []
-    return ordered[0], list(ordered[1:])
+    named = [row for row in candidates if row.name == display_name]
+    pool = named or candidates
+    keep = min(pool, key=lambda row: (row.created_at, row.name))
+    return keep, [row for row in candidates if row is not keep]
 
 
 TRANSCRIBE_MODELS = _ids(
@@ -163,16 +168,11 @@ async def _upsert_model(*, name: str, task: InferenceTask) -> InferenceModel:
             )
         )
         rows = list(result.scalars().all())
-        model = None
-        if rows:
-            named = [row for row in rows if row.name == display_name]
-            pool = named or rows
-            model = min(pool, key=lambda row: (row.created_at, row.name))
-            for duplicate in rows:
-                if duplicate is not model:
-                    await session.delete(duplicate)
-            if len(rows) > 1:
-                await session.flush()
+        model, duplicates = split_duplicate_models(rows, display_name)
+        for duplicate in duplicates:
+            await session.delete(duplicate)
+        if duplicates:
+            await session.flush()
         if model is None:
             model = InferenceModel(
                 name=display_name,
