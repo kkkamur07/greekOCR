@@ -42,8 +42,8 @@ def _column(x0: float, x1: float, ys: list[float], height: float = 20.0) -> list
 
 def test_row_mates_merge_into_one_valid_polygon() -> None:
     quads = _column(0, 200, [0, 40, 80])
-    left = _quad(0, 120, 120, 140, score=0.8)
-    right = _quad(100, 122, 220, 142, score=0.6)
+    left = _quad(0, 120, 100, 140, score=0.8)
+    right = _quad(103, 122, 220, 142, score=0.6)
     quads.extend([left, right])
 
     works = _refine(quads)
@@ -54,8 +54,10 @@ def test_row_mates_merge_into_one_valid_polygon() -> None:
     assert merged[0].poly.is_valid
     left_poly = Polygon(left.points)
     right_poly = Polygon(right.points)
-    # The members overlap, so the union is smaller than the sum of areas.
-    assert merged[0].poly.area >= max(left_poly.area, right_poly.area) - 1e-6
+    # Side-by-side members, so the union is both areas plus the small
+    # bridge over the 3 px gap inside their shared y range.
+    assert merged[0].poly.area >= left_poly.area + right_poly.area - 1e-6
+    assert merged[0].poly.area < left_poly.area + right_poly.area + 200
     assert merged[0].poly.covers(left_poly)
     assert merged[0].poly.covers(right_poly)
     expected = (0.8 * left_poly.area + 0.6 * right_poly.area) / (left_poly.area + right_poly.area)
@@ -226,10 +228,33 @@ def test_steep_diagonal_is_an_angle_suspect() -> None:
     assert flagged[0].suspect_reason == "angle"
 
 
+def test_row_mates_overlapping_by_half_a_line_do_not_merge() -> None:
+    quads = _column(0, 200, [0, 40, 80])
+    quads.append(_quad(0, 120, 100, 140))
+    quads.append(_quad(90, 120, 200, 140))
+
+    works = _refine(quads)
+
+    assert all(work.merged_from == 1 for work in works)
+    assert len(works) == len(quads)
+
+
+def test_row_mates_with_a_tenth_line_gap_do_merge() -> None:
+    quads = _column(0, 200, [0, 40, 80])
+    quads.append(_quad(0, 120, 100, 140))
+    quads.append(_quad(102, 120, 200, 140))
+
+    works = _refine(quads)
+    merged = [work for work in works if work.merged_from == 2]
+
+    assert len(merged) == 1
+    assert len(works) == len(quads) - 1
+
+
 def test_merged_line_outside_its_band_is_not_a_suspect() -> None:
     quads = _column(0, 200, [0, 40, 80])
-    quads.append(_quad(0, 120, 120, 140, score=0.8))
-    quads.append(_quad(100, 122, 220, 142, score=0.6))
+    quads.append(_quad(0, 120, 100, 140, score=0.8))
+    quads.append(_quad(103, 122, 220, 142, score=0.6))
 
     works, _ = _classify(quads)
 

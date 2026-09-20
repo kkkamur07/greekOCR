@@ -25,6 +25,7 @@ from nomikos_inference.architectures.ppocr_det.reading_order import layout_lines
 from nomikos_inference.architectures.ppocr_det.refinement import (
     DEFAULT_MERGE_GAP_RATIO,
     DEFAULT_MERGE_MAX_HEIGHT_RATIO,
+    DEFAULT_MERGE_MAX_OVERLAP_RATIO,
     DEFAULT_OVERLAP_CUT_THRESHOLD,
     refine_to_lines,
 )
@@ -246,6 +247,9 @@ def run_ppocr_det_segment(
     merge_gap_ratio = _bounded_float_param(
         resolved, "merge_gap_ratio", DEFAULT_MERGE_GAP_RATIO, 0, 10
     )
+    merge_max_overlap_ratio = _bounded_float_param(
+        resolved, "merge_max_overlap_ratio", DEFAULT_MERGE_MAX_OVERLAP_RATIO, 0, 2
+    )
     merge_max_height_ratio = _bounded_float_param(
         resolved, "merge_max_height_ratio", DEFAULT_MERGE_MAX_HEIGHT_RATIO, 1, 10
     )
@@ -295,6 +299,7 @@ def run_ppocr_det_segment(
             resolve=resolve_overlaps,
             classify=noise_policy != "off",
             merge_gap_ratio=merge_gap_ratio,
+            merge_max_overlap_ratio=merge_max_overlap_ratio,
             merge_max_height_ratio=merge_max_height_ratio,
             overlap_cut_threshold=overlap_cut_threshold,
         )

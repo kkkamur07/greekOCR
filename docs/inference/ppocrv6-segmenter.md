@@ -70,6 +70,7 @@ Params, defaults and bounds:
 | `resolve_overlaps` | true | boolean | cut stacked neighbours, drop duplicates |
 | `noise_policy` | `flag` | `flag`, `drop` or `off` | what happens to suspect lines |
 | `merge_gap_ratio` | 0.25 | 0 to 10 | max merge gap in page median line heights |
+| `merge_max_overlap_ratio` | 0.1 | 0 to 2 | max member overlap in median heights inside a merge |
 | `merge_max_height_ratio` | 2.0 | 1 to 10 | max member height ratio inside a merge |
 | `overlap_cut_threshold` | 0.20 | 0.05 to 1 | shared area fraction that counts as overlap |
 
@@ -161,8 +162,11 @@ classify suspects, order, build the response.
 
 Merge: inside one column, quads that the row grouping puts in the same row
 are one visual line. Row mates merge along x while the gap is at most
-`merge_gap_ratio` (0.25) page median quad heights, unless one member is
-taller than `merge_max_height_ratio` (2.0) times another. A tall
+`merge_gap_ratio` (0.25) page median quad heights and the members overlap
+by at most `merge_max_overlap_ratio` (0.1) median heights, unless one member
+is taller than `merge_max_height_ratio` (2.0) times another. Fragments of one
+visual line sit side by side; row mates that overlap belong to the
+overlap stage, so the merge stage refuses them. A tall
 multi-line initial never merges: it stays its own line with
 `source_metadata.role = "initial"`. A merged boundary is the polygon union
 of its members plus a bridge over the gap inside their shared y range (a
@@ -191,8 +195,8 @@ unless it sits strictly between two bands inside the text block top to
 bottom (a gutter numeral keeps its place and is never a suspect by angle
 either); any other non-initial whose bounding-box angle is over 20 degrees
 off the page dominant angle is a suspect (`suspect_reason` `angle`).
-Measured on the 12 Coptic pages against the benchmark matching: 0 of 1007
-real lines flagged with 47 of 106 unmatched detections caught (44%; 64% of
+Measured on the 12 Coptic pages against the benchmark matching: 0 of 1009
+real lines flagged with 52 of 106 unmatched detections caught (49%; 71% of
 the non-ignore ones; fewer merges than at the old 1.5 gap leave more
 singletons to flag). `noise_policy` `flag` (default) orders suspects after
 every body line; `drop` removes them; `off` changes nothing. With all three
@@ -212,22 +216,28 @@ off-vs-defaults comparator rather than identical tooling):
 | variant | detections | P | R | F1 | alone | pairs | suspects | wrong |
 |---------|------------|---|---|----|-------|-------|----------|-------|
 | off | 1147 | 0.9065 | 0.9902 | 0.9465 | 1008 | 181 | 0 | 0 |
-| defaults | 1127 | 0.9222 | 0.9892 | 0.9545 | 1007 | 1 | 47 | 0 |
-| drop | 1080 | 0.9636 | 0.9892 | 0.9762 | 1007 | 1 | 0 | 0 |
+| defaults | 1136 | 0.9164 | 0.9912 | 0.9523 | 1009 | 2 | 52 | 0 |
+| drop | 1084 | 0.9619 | 0.9912 | 0.9763 | 1009 | 2 | 0 | 0 |
 
 Alone means care targets covered by exactly one detection; pairs means
 line pairs sharing at least 20% area; wrong means real lines flagged as
-suspects. Pass gate, line by line: recall under defaults (0.9892) is BELOW
-refinement off (0.9902), so the gate FAILS by 1 net line (2 lost, both
-merges of a real line with an overlapping fragment whose members touch:
-vat-1r gap minus 20 px at minus 0.45 median heights, c13 gap minus 6 px at
-minus 0.18; against 1 fragmentation fixed on c21); precision under drop
-(0.9636) is strictly higher than off (0.9065); the 1 remaining pair is
-vat-2r lines 31-32 with both sides marked unresolved and zero unmarked
-pairs left; 0 real lines flagged against the 1% budget; c13 suspects (129,
-130 of 130 lines) and vat-1r suspects (lines 69-76 of 76) read after every
-body line, while the tall diagonal watermarks (role initial) and the
-right-margin strip stay in body order.
+suspects. Pass gate, line by line: recall under defaults (0.9912) is ABOVE
+refinement off (0.9902), so the gate PASSES with 0 lines lost and 1
+fragmentation fixed on c21; precision under drop (0.9619) is strictly
+higher than off (0.9065); the 2 remaining pairs are vat-2r lines 32-33
+and c14 lines 30-31 with both sides marked unresolved and zero unmarked
+pairs left; 0 real lines flagged against the 1% budget; c13 suspects
+(129-133 of 133 lines) and vat-1r suspects (lines 70-77 of 77) read after
+every body line, while the tall diagonal watermarks (role initial) and
+the right-margin strip stay in body order.
+
+Overlap sweep behind the 0.1 default (`--merge-max-overlap-ratio
+0.0,0.05,0.1,0.2,0.3` at gap 0.25): recall 0.9902, 0.9902, 0.9912,
+0.9902, 0.9902 with 0, 0, 0, 1, 1 lines lost against off and 0, 0, 1, 1,
+1 fragmentations fixed. The default is the largest value that loses zero
+lines: at 0.2 the c13 overlapping pair (gap minus 0.18 median heights)
+merges again and loses its target, while the vat-1r pair (gap minus 0.45)
+stays split at every swept value and the c21 fix holds from 0.1 up.
 
 Gap sweep behind the 0.25 default (`--merge-gap-ratio
 0.25,0.5,0.75,1.0,1.5`, one run scores defaults and drop at each ratio):
@@ -241,8 +251,9 @@ vat-3r gap 1.08 killing both members), which is a labelling convention,
 not a merge error, and the rule was not changed to chase it. The 2
 persistent losses have overlapping members, so no gap ratio can separate
 them: each joins a real line to a fragment matching no care target, and
-the union axis covers neither target polygon. That is the union-axis stop
-condition from the review: reported here, no silent fix.
+the union axis covers neither target polygon. That was the union-axis stop
+condition from the review; the decision taken was the overlap lower bound
+above, which keeps both pairs split at the 0.1 default.
 
 Refined overlays (`<page>.refined.overlay.jpg` in
 `_ppocr-parity/refinement/`) draw body quads green with order numbers,
@@ -269,19 +280,17 @@ default segmenter.
 ## Known gaps
 
 * No region or column blocks: every line hangs under one full-page block.
-* Refinement merges row fragments that share a row, and 2 such merges
-  on the benchmark join a real line to an overlapping adjacent fragment
-  so the union axis covers neither target polygon (vat-1r, c13; 2 targets
-  lost against 1 fragmentation fixed: recall 0.9892 under defaults
-  against 0.9902 with refinement off, net 1 line; the evaluation table
-  above). The members overlap, so no gap ratio separates them; this is
-  the reported union-axis stop condition, awaiting a decision.
+* Refinement merges row fragments that share a row, refusing members
+  that overlap by more than 0.1 median heights (those belong to the
+  overlap stage). On the benchmark this loses no target line and fixes
+  one fragmentation on c21: recall 0.9912 under defaults against 0.9902
+  with refinement off; the evaluation table above.
 * Tall non-text shapes take `role` `initial` and are exempt from suspect
   flagging, so the vat-1r diagonal watermarks (lines 1-3) and the
   right-margin strip (line 52) stay in body order, as do the c13 top
   shelfmark (inside its column band) and the centred footer bars.
 * Small inside-band edge fragments are geometrically indistinguishable
   from narrow real lines and are never flagged; the suspect rule catches
-  47 of 106 unmatched detections and no more by design.
+  52 of 106 unmatched detections and no more by design.
 * The model is not the default segmenter until complete OCR crops are
   validated.

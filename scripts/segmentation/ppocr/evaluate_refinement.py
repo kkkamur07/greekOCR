@@ -80,15 +80,25 @@ def _parse_args() -> argparse.Namespace:
             "skipped and the JSON gains a per-ratio sweep summary."
         ),
     )
+    parser.add_argument(
+        "--merge-max-overlap-ratio",
+        action="append",
+        default=[],
+        help=(
+            "Score the defaults and drop variants at gap 0.25 for these "
+            "merge max-overlap ratios (repeatable or comma separated). "
+            "Same sweep output style as --merge-gap-ratio."
+        ),
+    )
     return parser.parse_args()
 
 
-def _sweep_ratios(raw: list[str]) -> list[float]:
+def _sweep_ratios(raw: list[str], flag: str) -> list[float]:
     ratios = []
     for chunk in raw:
         ratios.extend(float(part) for part in chunk.split(",") if part.strip())
     if not ratios:
-        raise ValueError("--merge-gap-ratio needs at least one number")
+        raise ValueError(f"{flag} needs at least one number")
     return ratios
 
 
@@ -284,8 +294,15 @@ def main() -> int:
     from nomikos_inference.architectures.ppocr_det import run_ppocr_det_segment
 
     args = _parse_args()
-    sweep = _sweep_ratios(args.merge_gap_ratio) if args.merge_gap_ratio else []
-    if sweep:
+    gap_sweep = (
+        _sweep_ratios(args.merge_gap_ratio, "--merge-gap-ratio") if args.merge_gap_ratio else []
+    )
+    overlap_sweep = (
+        _sweep_ratios(args.merge_max_overlap_ratio, "--merge-max-overlap-ratio")
+        if args.merge_max_overlap_ratio
+        else []
+    )
+    if gap_sweep or overlap_sweep:
         variants: dict[str, dict | None] = {
             "off": {
                 "merge_fragments": False,
@@ -293,10 +310,24 @@ def main() -> int:
                 "noise_policy": "off",
             },
         }
-        for ratio in sweep:
+        sweep: list[tuple[str, str, str]] = []
+        for ratio in gap_sweep:
             variants[f"gap-{ratio}"] = {"merge_gap_ratio": ratio}
             variants[f"drop-{ratio}"] = {"noise_policy": "drop", "merge_gap_ratio": ratio}
+            sweep.append((str(ratio), f"gap-{ratio}", f"drop-{ratio}"))
+        for ratio in overlap_sweep:
+            variants[f"ov-{ratio}"] = {
+                "merge_gap_ratio": 0.25,
+                "merge_max_overlap_ratio": ratio,
+            }
+            variants[f"dropov-{ratio}"] = {
+                "noise_policy": "drop",
+                "merge_gap_ratio": 0.25,
+                "merge_max_overlap_ratio": ratio,
+            }
+            sweep.append((str(ratio), f"ov-{ratio}", f"dropov-{ratio}"))
     else:
+        sweep = []
         variants = {
             "off": {
                 "merge_fragments": False,
@@ -402,26 +433,26 @@ def main() -> int:
     return 0
 
 
-def _summarise_sweep(pages: dict, totals: dict, sweep: list[float]) -> dict:
+def _summarise_sweep(pages: dict, totals: dict, sweep: list[tuple[str, str, str]]) -> dict:
     """Per-ratio summary: metrics, lines lost against off, lines fixed, merges."""
     summary = {}
     print("ratio R P Pdrop F1 F1drop lost fixed merged", flush=True)
-    for ratio in sweep:
-        gap, drop = totals[f"gap-{ratio}"], totals[f"drop-{ratio}"]
+    for ratio, gap_name, drop_name in sweep:
+        gap, drop = totals[gap_name], totals[drop_name]
         lost: dict[str, list] = {}
         fixed: dict[str, list] = {}
         for page, entry in pages.items():
             off_paired = set(entry["off"]["paired_ids"])
             off_alone = set(entry["off"]["alone_ids"])
-            gap_paired = set(entry[f"gap-{ratio}"]["paired_ids"])
-            gap_alone = set(entry[f"gap-{ratio}"]["alone_ids"])
+            gap_paired = set(entry[gap_name]["paired_ids"])
+            gap_alone = set(entry[gap_name]["alone_ids"])
             page_lost = sorted(off_paired - gap_paired)
             page_fixed = sorted(gap_alone - off_alone)
             if page_lost:
                 lost[page] = page_lost
             if page_fixed:
                 fixed[page] = page_fixed
-        summary[str(ratio)] = {
+        summary[ratio] = {
             "recall": gap["recall"],
             "precision": gap["precision"],
             "precision_drop": drop["precision"],

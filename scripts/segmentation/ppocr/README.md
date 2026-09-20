@@ -120,6 +120,7 @@ separated) one run scores the defaults and drop variants at each gap
 ratio, prints a sweep table (recall, precision, F1, lines lost against
 off with page and line, lines fixed, merged count) with a per-ratio sweep
 summary in the JSON, and skips the overlays.
+`--merge-max-overlap-ratio` sweeps the same way at gap 0.25.
 
 ## `profile_onnx.py`
 

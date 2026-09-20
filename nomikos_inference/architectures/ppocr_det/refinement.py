@@ -22,6 +22,7 @@ from nomikos_inference.architectures.ppocr_det.reading_order import PageLayout
 from nomikos_inference.architectures.ppocr_det.response import synthetic_baseline_points
 
 DEFAULT_MERGE_GAP_RATIO = 0.25
+DEFAULT_MERGE_MAX_OVERLAP_RATIO = 0.1
 DEFAULT_MERGE_MAX_HEIGHT_RATIO = 2.0
 DEFAULT_OVERLAP_CUT_THRESHOLD = 0.20
 DUPLICATE_SHARED_RATIO = 0.50
@@ -134,6 +135,7 @@ def merge_row_fragments(
     layout: PageLayout,
     *,
     gap_ratio: float = DEFAULT_MERGE_GAP_RATIO,
+    max_overlap_ratio: float = DEFAULT_MERGE_MAX_OVERLAP_RATIO,
     height_ratio: float = DEFAULT_MERGE_MAX_HEIGHT_RATIO,
     baseline_fraction: float = 0.75,
 ) -> list[_Work]:
@@ -141,7 +143,10 @@ def merge_row_fragments(
 
     Inside one column, quads that the row grouping puts in the same row are
     one visual line: runs along x merge when the gap is at most
-    ``gap_ratio`` times the page median quad height. A member taller than
+    ``gap_ratio`` times the page median quad height and the members overlap
+    by at most ``max_overlap_ratio`` times the median height. Fragments of
+    one visual line sit side by side; row mates that overlap belong to the
+    overlap stage, not the merge stage. A member taller than
     ``height_ratio`` times a run mate never merges: a tall multi-line
     initial stays its own line with ``role`` ``"initial"``. Merging never
     crosses columns; spanning quads pass through untouched.
@@ -195,7 +200,11 @@ def merge_row_fragments(
                 gap = xmin - run_xmax
                 new_max = max(run_max_h, height)
                 new_min = min(run_min_h, height)
-                if gap <= gap_ratio * median_height and new_max <= height_ratio * new_min:
+                if (
+                    gap <= gap_ratio * median_height
+                    and gap >= -max_overlap_ratio * median_height
+                    and new_max <= height_ratio * new_min
+                ):
                     run.append(index)
                     run_max_h, run_min_h, run_xmax = new_max, new_min, max(run_xmax, xmax)
                 else:
@@ -488,6 +497,7 @@ def refine_to_lines(
     resolve: bool = True,
     classify: bool = True,
     merge_gap_ratio: float = DEFAULT_MERGE_GAP_RATIO,
+    merge_max_overlap_ratio: float = DEFAULT_MERGE_MAX_OVERLAP_RATIO,
     merge_max_height_ratio: float = DEFAULT_MERGE_MAX_HEIGHT_RATIO,
     overlap_cut_threshold: float = DEFAULT_OVERLAP_CUT_THRESHOLD,
 ) -> list[RefinedLine]:
@@ -499,6 +509,7 @@ def refine_to_lines(
             quads,
             layout,
             gap_ratio=merge_gap_ratio,
+            max_overlap_ratio=merge_max_overlap_ratio,
             height_ratio=merge_max_height_ratio,
             baseline_fraction=baseline_fraction,
         )
@@ -557,6 +568,7 @@ def _mark_initials(
 __all__ = [
     "BAND_TOLERANCE_PX",
     "DEFAULT_MERGE_GAP_RATIO",
+    "DEFAULT_MERGE_MAX_OVERLAP_RATIO",
     "DEFAULT_MERGE_MAX_HEIGHT_RATIO",
     "DEFAULT_OVERLAP_CUT_THRESHOLD",
     "SUSPECT_ANGLE_DEGREES",
