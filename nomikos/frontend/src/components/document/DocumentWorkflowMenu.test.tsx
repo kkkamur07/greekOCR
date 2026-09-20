@@ -23,7 +23,7 @@ vi.mock("../ui/toast", () => ({
 
 const COUNTS = { total: 3, reviewed: 0, unsegmented: 1, unpaired: 0 };
 const SEGMENT_MODELS = [
-  { id: "seg-a", task: "segment", name: "blla-segment" },
+  { id: "seg-a", task: "segment", name: "kraken" },
   { id: "seg-b", task: "segment", name: "pp-ocr" },
   { id: "htr-1", task: "transcribe", name: "htr" },
 ];
@@ -63,7 +63,7 @@ describe("DocumentWorkflowMenu segment picker", () => {
     }));
     expect(options).toEqual([
       { value: "", text: "Default" },
-      { value: "seg-a", text: "blla-segment" },
+      { value: "seg-a", text: "kraken" },
       { value: "seg-b", text: "pp-ocr" },
     ]);
 
