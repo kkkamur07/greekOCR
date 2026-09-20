@@ -206,11 +206,14 @@ def _reading_direction(params: Mapping[str, Any]) -> str:
     return direction
 
 
+#: Served geometry when the caller names none: line polygons. The library
+#: helpers (``detect_lines``, ``refine_to_lines``, both response builders)
+#: all default to ``"quad"``; this is the served default only.
 DEFAULT_BOX_TYPE = "poly"
 
 
-def _box_type(params: Mapping[str, Any]) -> str:
-    box_type = params.get("box_type", DEFAULT_BOX_TYPE)
+def _box_type(params: Mapping[str, Any], default: str = "quad") -> str:
+    box_type = params.get("box_type", default)
     if box_type not in ("poly", "quad"):
         raise ValueError('box_type must be "poly" or "quad"')
     return box_type
@@ -251,7 +254,7 @@ def run_ppocr_det_segment(
     max_candidates = _max_candidates(resolved)
     fraction = _baseline_fraction(resolved)
     direction = _reading_direction(resolved)
-    box_type = _box_type(resolved)
+    box_type = _box_type(resolved, DEFAULT_BOX_TYPE)
     merge_fragments = _bool_param(resolved, "merge_fragments", True)
     resolve_overlaps = _bool_param(resolved, "resolve_overlaps", True)
     noise_policy = _noise_policy(resolved)

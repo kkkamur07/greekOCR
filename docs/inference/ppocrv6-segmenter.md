@@ -294,11 +294,14 @@ modes:
 | variant | detections | P | R | F1 | alone | pairs | suspects | wrong |
 |---------|------------|---|---|----|-------|-------|----------|-------|
 | defaults quad | 1136 | 0.9164 | 0.9912 | 0.9523 | 1009 | 2 | 52 | 0 |
-| defaults poly | 1136 | 0.9164 | 0.9912 | 0.9523 | 1009 | 2 | 52 | 0 |
+| defaults poly | 1136 | 0.9164 | 0.9912 | 0.9523 | 1009 | 1 | 52 | 0 |
 
-(The off and drop variants match too. The script matches by axis sampling
-inside the target polygons, not by polygon IoU, and the identical counts
-confirm the decisions never read the polygons.) The served polygons average
+(The off and drop variants match on every score too. The script matches by
+axis sampling inside the target polygons, not by polygon IoU, and the
+identical counts confirm the decisions never read the polygons. `pairs`
+counts served-geometry overlap, so it runs lower in poly mode: the vat-2v
+pair the round-0 outlines still shared above 20% no longer reaches 20%
+once the merged outline is clipped to its merged quad.) The served polygons average
 12.4 points and 0.84 of their quad area, and the mean overlap between
 consecutive lines drops from 0.070 (quads) to 0.009 (polygons), so
 transcription crops pull in far less ink from neighbouring lines.

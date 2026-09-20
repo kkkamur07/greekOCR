@@ -43,23 +43,28 @@ def _poly_points_for(
     baseline_fraction: float,
     image_width: int,
     image_height: int,
+    median_height: float,
 ) -> tuple[list[list[float]], list[list[float]], bool]:
-    """Served polygon and baseline polyline for one unrefined detection."""
+    """Served polygon and baseline polyline for one unrefined detection.
+
+    Simplification uses the page median line height, like the refined path,
+    so one tall initial cannot loosen every other line's epsilon.
+    """
     quad_points = [[float(x), float(y)] for x, y in quad.points]
     outline = quad.polygon if quad.polygon is not None else quad_points
     fallback = bool(quad.polygon_fallback) or quad.polygon is None
-    height = max(point[1] for point in quad_points) - min(point[1] for point in quad_points)
+    quad_baseline = _baseline_points(quad_points, baseline_fraction)
     simplified = simplify_outline(
         outline,
-        median_height=max(height, 1.0),
+        median_height=median_height,
         page_width=image_width,
         page_height=image_height,
     )
     if simplified is None:
-        return quad_points, _baseline_points(quad_points, baseline_fraction), True
-    baseline = polyline_baseline(simplified, quad_points, baseline_fraction)
+        return quad_points, quad_baseline, True
+    baseline = polyline_baseline(simplified, quad_points, baseline_fraction, baseline=quad_baseline)
     if baseline is None:
-        baseline = _baseline_points(quad_points, baseline_fraction)
+        baseline = quad_baseline
     return simplified, baseline, fallback
 
 
@@ -99,6 +104,14 @@ def build_ppocr_det_response(
         },
     )
 
+    heights = [
+        max(float(point[1]) for point in quad.points)
+        - min(float(point[1]) for point in quad.points)
+        for quad in survivors
+    ]
+    ordered_heights = sorted(heights)
+    median_height = ordered_heights[len(ordered_heights) // 2] if ordered_heights else 1.0
+
     lines = []
     for position, quad_index in enumerate(reading):
         quad = survivors[quad_index]
@@ -110,7 +123,7 @@ def build_ppocr_det_response(
         }
         if box_type == "poly":
             served_points, served_baseline, fallback = _poly_points_for(
-                quad, baseline_fraction, image_width, image_height
+                quad, baseline_fraction, image_width, image_height, median_height
             )
             if fallback:
                 source_metadata["polygon_fallback"] = True

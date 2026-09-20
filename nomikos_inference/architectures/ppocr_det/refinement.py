@@ -262,7 +262,8 @@ def _merge_run(
     member_outlines = [work.outline for work in members if work.outline is not None]
     merged_outline = union_outlines(member_outlines) if member_outlines else None
     if merged_outline is None and member_outlines:
-        merged_outline = convex_hull_of([point for outline in member_outlines for point in outline])
+        hull = convex_hull_of([point for outline in member_outlines for point in outline])
+        merged_outline = intersect_outline(hull, ring) or hull
     return _Work(
         poly=merged,
         baseline=baseline,
@@ -376,22 +377,25 @@ def _cut_pair(left: _Work, right: _Work) -> bool:
             return False
         kept.append((piece, baseline))
         rects.append([[float(x), float(y)] for x, y in corners])
-    cut_outlines: list[list[list[float]] | None] = []
-    for work, rect in zip((left, right), rects, strict=True):
-        if work.outline is None:
-            cut_outlines.append(None)
-            continue
-        cut = intersect_outline(work.outline, rect)
-        if cut is None or ring_area(cut) <= 0.5 * ring_area(work.outline):
-            return False
-        cut_outlines.append(cut)
+    # Quads decide, polygons follow: the quad cut lands first so a polygon
+    # failure can never veto it. When a polygon cut fails, the cut quad
+    # piece stands in as that line's outline with ``polygon_fallback`` set.
     old_areas = (left.area, right.area)
+    old_outline_areas = {
+        id(work): ring_area(work.outline) for work in (left, right) if work.outline is not None
+    }
     for work, (piece, baseline) in zip((left, right), kept, strict=True):
         work.poly = piece
         work.baseline = baseline
         work.area = piece.area
-    for work, cut in zip((left, right), cut_outlines, strict=True):
-        if cut is not None:
+    for work, rect in zip((left, right), rects, strict=True):
+        if work.outline is None:
+            continue
+        cut = intersect_outline(work.outline, rect)
+        if cut is None or ring_area(cut) <= 0.5 * old_outline_areas[id(work)]:
+            work.outline = dedup_ring(_quad_ring_of(work))
+            work.polygon_fallback = True
+        else:
             work.outline = dedup_ring(cut)
     return abs(left.area - old_areas[0]) > 1e-9 or abs(right.area - old_areas[1]) > 1e-9
 
@@ -588,7 +592,7 @@ def _poly_output_for(
             ],
             True,
         )
-    baseline = polyline_baseline(simplified, quad_ring, baseline_fraction)
+    baseline = polyline_baseline(simplified, quad_ring, baseline_fraction, baseline=work.baseline)
     if baseline is None:
         baseline = [
             [float(work.baseline[0][0]), float(work.baseline[0][1])],

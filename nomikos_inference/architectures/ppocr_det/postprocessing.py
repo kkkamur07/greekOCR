@@ -7,7 +7,7 @@ Quad mode (``box_type="quad"``) is ``boxes_from_bitmap``: binarise at
 ``get_mini_boxes`` with a minimum side of 3, ``box_score_fast`` gated at
 ``box_thresh``, unclip expansion, a second ``get_mini_boxes`` with a minimum
 side of 5, then scaling back to source coordinates with rounding and
-clipping. Poly mode (``box_type="poly"``, the default) is
+clipping. Poly mode (``box_type="poly"``, passed explicitly by the served entry point) is
 ``polygons_from_bitmap``: the same contour also goes through
 ``approxPolyDP`` with epsilon 0.002 times its arc length (skipped under 4
 points), ``box_score_fast`` on the polygon gated at ``box_thresh``, unclip
@@ -260,17 +260,17 @@ def detect_lines(
     box_thresh: float = 0.45,
     unclip_ratio: float = 1.4,
     max_candidates: int = 3000,
-    box_type: str = "poly",
+    box_type: str = "quad",
 ) -> list[DetectedQuad]:
     """Run the DB postprocess over one probability map.
 
     ``prob_map`` is the ``(H, W)`` detector output in resized-image space;
     the returned quads are in original image coordinates, clockwise from the
     top left, each with its ``box_score_fast`` score. With
-    ``box_type="poly"`` (the default) each detection also carries its
-    polygon, built from the same contour that produced the quad; with
-    ``box_type="quad"`` the loop below is exactly the old quad pipeline and
-    the polygon stays ``None``.
+    ``box_type="poly"`` each detection also carries its polygon, built from
+    the same contour that produced the quad; with ``box_type="quad"`` (the
+    default) the loop below is exactly the old quad pipeline and the polygon
+    stays ``None``. The served entry point passes ``"poly"`` explicitly.
     """
 
     if box_type not in ("quad", "poly"):

@@ -20,6 +20,23 @@ MAX_POLYGON_POINTS = 64
 #: Tolerance for dropping collinear baseline samples, in pixels.
 BASELINE_COLLINEAR_PX = 0.5
 
+#: Fixed scale for served-space pyclipper calls. Clipper works in integers,
+#: so served coordinates (which carry fractions) are scaled up before each
+#: call and back down after; detector-space unclip calls that mirror Paddle
+#: stay untouched so quad mode output never moves.
+CLIPPER_SCALE = 1000.0
+
+
+def _to_clipper(path: object) -> list:
+    """Scale one served-space ring up to integer Clipper coordinates."""
+    return pyclipper.scale_to_clipper(_ring(path).tolist(), CLIPPER_SCALE)
+
+
+def _from_clipper(paths: object) -> list[list[list[float]]]:
+    """Scale Clipper integer output back down to served coordinates."""
+    scaled = pyclipper.scale_from_clipper(paths, CLIPPER_SCALE)
+    return [[[float(x), float(y)] for x, y in path] for path in scaled]
+
 
 def _ring(points: object) -> np.ndarray:
     return np.asarray(points, dtype=np.float64).reshape(-1, 2)
@@ -74,11 +91,12 @@ def union_outlines(outlines: list[object]) -> list[list[float]] | None:
     for outline in outlines:
         ring = _ring(outline)
         if len(ring) >= 3 and ring_area(ring) > 0:
-            clipper.AddPath(ring, pyclipper.PT_SUBJECT, True)
+            clipper.AddPath(_to_clipper(ring), pyclipper.PT_SUBJECT, True)
     try:
         solution = clipper.Execute(pyclipper.CT_UNION, pyclipper.PFT_NONZERO, pyclipper.PFT_NONZERO)
     except pyclipper.ClipperException:
         return None
+    solution = _from_clipper(solution)
     paths = [_ring(path) for path in solution if len(_ring(path)) >= 3 and ring_area(path) > 0]
     if len(paths) != 1:
         return None
@@ -91,14 +109,15 @@ def intersect_outline(outline: object, rect: list[list[float]]) -> list[list[flo
     if len(ring) < 3 or ring_area(ring) <= 0:
         return None
     clipper = pyclipper.Pyclipper()
-    clipper.AddPath(ring, pyclipper.PT_SUBJECT, True)
-    clipper.AddPath(_ring(rect), pyclipper.PT_CLIP, True)
+    clipper.AddPath(_to_clipper(ring), pyclipper.PT_SUBJECT, True)
+    clipper.AddPath(_to_clipper(rect), pyclipper.PT_CLIP, True)
     try:
         solution = clipper.Execute(
             pyclipper.CT_INTERSECTION, pyclipper.PFT_NONZERO, pyclipper.PFT_NONZERO
         )
     except pyclipper.ClipperException:
         return None
+    solution = _from_clipper(solution)
     paths = [_ring(path) for path in solution if len(_ring(path)) >= 3 and ring_area(path) > 0]
     if not paths:
         return None
@@ -125,7 +144,8 @@ def simplify_outline(
     """Douglas-Peucker a polygon for serving; ``None`` when unusable.
 
     Epsilon is ``max(1.0 px, 0.01 * median page line height)``, raised until
-    the ring fits ``MAX_POLYGON_POINTS``. The result is deduped, clipped to
+    the ring fits ``MAX_POLYGON_POINTS`` (with a uniform subsample fallback
+    so the cap always holds). The result is deduped, clipped to
     the page, and checked with ``SimplifyPolygon`` keeping the largest
     piece; anything under 4 points is ``None`` so the caller falls back to
     the quad.
@@ -140,11 +160,14 @@ def simplify_outline(
         if len(approx) <= MAX_POLYGON_POINTS:
             break
         epsilon *= 1.5
+    if len(approx) > MAX_POLYGON_POINTS:
+        index = np.round(np.linspace(0, len(approx) - 1, MAX_POLYGON_POINTS)).astype(int)
+        approx = approx[index]
     cleaned = clip_ring_to_page(approx, page_width, page_height)
     if len(cleaned) < 3:
         return None
     try:
-        pieces = pyclipper.SimplifyPolygon(cleaned, True)
+        pieces = _from_clipper(pyclipper.SimplifyPolygon(_to_clipper(cleaned), True))
     except pyclipper.ClipperException:
         return None
     candidates = [
@@ -158,8 +181,17 @@ def simplify_outline(
     return best
 
 
-def _long_axis(quad_ring: object) -> tuple[np.ndarray, np.ndarray, float, float]:
-    """Principal axis of a quad ring: origin, unit vector, min and max u."""
+def _long_axis(
+    quad_ring: object,
+    anchor: np.ndarray | None = None,
+) -> tuple[np.ndarray, np.ndarray, float, float]:
+    """Principal axis of a quad ring: origin, unit vector, min and max u.
+
+    ``eigh`` returns the axis with an arbitrary sign, so ``anchor`` (the
+    quad's own two-point baseline direction) pins it: the axis is flipped
+    when it points against the anchor. The anchor is never reduced to an
+    ``axis[0] > 0`` rule, which would break vertical lines.
+    """
     ring = _ring(quad_ring)
     origin = ring.mean(axis=0)
     centred = ring - origin
@@ -168,8 +200,29 @@ def _long_axis(quad_ring: object) -> tuple[np.ndarray, np.ndarray, float, float]
     axis = np.asarray(vecs[:, 1], dtype=np.float64)
     norm = float(np.linalg.norm(axis))
     axis = np.array([1.0, 0.0]) if norm <= 0 else axis / norm
+    if anchor is not None and float(np.linalg.norm(anchor)) > 0 and float(axis @ anchor) < 0:
+        axis = -axis
     proj = (ring - origin) @ axis
     return origin, axis, float(proj.min()), float(proj.max())
+
+
+def _quad_baseline_anchor(
+    quad_ring: object,
+    baseline: object | None,
+) -> np.ndarray | None:
+    """Two-point quad baseline direction used to orient the long axis.
+
+    An explicit ``baseline`` (the quad mode direction, always top left to
+    top right) wins; otherwise the quad ring's own top edge stands in.
+    """
+    if baseline is not None:
+        ends = np.asarray(baseline, dtype=np.float64).reshape(-1, 2)
+        if len(ends) >= 2:
+            return np.asarray(ends[-1] - ends[0], dtype=np.float64)
+    corners = _ring(quad_ring)
+    if len(corners) >= 2:
+        return np.asarray(corners[1] - corners[0], dtype=np.float64)
+    return None
 
 
 def polyline_baseline(
@@ -178,19 +231,25 @@ def polyline_baseline(
     fraction: float,
     *,
     samples: int | None = None,
+    baseline: object | None = None,
 ) -> list[list[float]] | None:
     """Baseline polyline across a polygon along the quad long axis.
 
-    ``samples`` (8 to 16) x positions span the quad axis; at each, the
-    polygon's upper and lower boundary give a point at ``fraction`` between
-    them. Collinear runs collapse, so a straight line reduces to two points
-    on the quad baseline. Returns ``None`` when the polygon has no usable
+    ``samples`` (8 to 16) x positions span the quad axis end to end; at
+    each, the polygon's upper and lower boundary give a point at
+    ``fraction`` between them. ``baseline`` is the quad's own two-point
+    baseline and pins the axis direction, so the polyline runs the same
+    way as the quad baseline. Samples past the polygon ends reuse the
+    nearest kept point at the axis end instead of dropping out, and
+    collinear runs collapse, so a straight line reduces to two points on
+    the quad baseline. Returns ``None`` when the polygon has no usable
     crossings.
     """
     ring = _ring(outline)
     if len(ring) < 3 or ring_area(ring) <= 0:
         return None
-    origin, axis, _, _ = _long_axis(quad_ring)
+    anchor = _quad_baseline_anchor(quad_ring, baseline)
+    origin, axis, _, _ = _long_axis(quad_ring, anchor)
     normal = np.array([-axis[1], axis[0]])
     if normal[1] < 0 or (normal[1] == 0 and normal[0] < 0):
         normal = -normal
@@ -207,9 +266,9 @@ def polyline_baseline(
         (outline_u[i], outline_v[i], outline_u[(i + 1) % len(ring)], outline_v[(i + 1) % len(ring)])
         for i in range(len(ring))
     ]
-    points: list[list[float]] = []
+    slots: list[tuple[float, float | None]] = []
     for step in range(count):
-        pos = low + (high - low) * (step + 0.5) / count
+        pos = low + (high - low) * step / (count - 1)
         crossings: list[float] = []
         for u1, v1, u2, v2 in edges:
             if (u1 <= pos < u2) or (u2 <= pos < u1):
@@ -217,13 +276,31 @@ def polyline_baseline(
             elif u1 == pos and u2 == pos:
                 crossings.extend([float(v1), float(v2)])
         if len(crossings) < 2:
+            slots.append((pos, None))
             continue
         top, bottom = min(crossings), max(crossings)
-        at = top + float(fraction) * (bottom - top)
+        slots.append((pos, top + float(fraction) * (bottom - top)))
+    kept = [(pos, at) for pos, at in slots if at is not None]
+    if len(kept) < 2:
+        return None
+    first_pos, first_at = kept[0]
+    last_pos, last_at = kept[-1]
+    filled = [
+        (pos, first_at if pos < first_pos else (last_at if pos > last_pos else at))
+        if at is None
+        else (pos, at)
+        for pos, at in slots
+    ]
+    # Step 0 sits at ``low`` and the last step at ``high``, so the ends are
+    # always covered after the fill above; interior gaps with no crossings
+    # stay out.
+    series = [(pos, at) for pos, at in filled if at is not None]
+    if len(series) < 2:
+        return None
+    points = []
+    for pos, at in series:
         point = origin + pos * axis + at * normal
         points.append([float(point[0]), float(point[1])])
-    if len(points) < 2:
-        return None
     return _drop_collinear(points)
 
 
@@ -254,6 +331,7 @@ def _drop_collinear(points: list[list[float]]) -> list[list[float]]:
 
 __all__ = [
     "BASELINE_COLLINEAR_PX",
+    "CLIPPER_SCALE",
     "MAX_POLYGON_POINTS",
     "clip_ring_to_page",
     "convex_hull_of",
