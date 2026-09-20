@@ -21,6 +21,7 @@ from nomikos_inference.architectures.calamari.preprocessing import (
     TRAINING_CROP_PADDING,
     crop_line,
 )
+from nomikos_inference.architectures.ppocr_det import run_ppocr_det_segment
 from nomikos_inference.architectures.ppocr_rec.adapter import (
     TranscribeLineFailure as PPOCRRecLineFailure,
 )
@@ -235,6 +236,13 @@ def run_model(
             RegistryArchitecture.blla_segment,
         }:
             return run_blla_segment(
+                image_bytes,
+                model_path=weights_path,
+                artifact_sha256=version.artifact_sha256,
+                params=params,
+            )
+        if entry.architecture == RegistryArchitecture.ppocr_det:
+            return run_ppocr_det_segment(
                 image_bytes,
                 model_path=weights_path,
                 artifact_sha256=version.artifact_sha256,

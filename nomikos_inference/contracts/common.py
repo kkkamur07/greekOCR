@@ -31,6 +31,7 @@ class RegistryArchitecture(StrEnum):
     ppocr_rec = "ppocr_rec"
     blla = "blla"
     blla_segment = "blla-segment"
+    ppocr_det = "ppocr-det"
 
 
 class LineCrop(StrEnum):
