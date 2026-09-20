@@ -206,6 +206,19 @@ def _reading_direction(params: Mapping[str, Any]) -> str:
     return direction
 
 
+#: Served geometry when the caller names none: line polygons. The library
+#: helpers (``detect_lines``, ``refine_to_lines``, both response builders)
+#: all default to ``"quad"``; this is the served default only.
+DEFAULT_BOX_TYPE = "poly"
+
+
+def _box_type(params: Mapping[str, Any], default: str = "quad") -> str:
+    box_type = params.get("box_type", default)
+    if box_type not in ("poly", "quad"):
+        raise ValueError('box_type must be "poly" or "quad"')
+    return box_type
+
+
 def _bool_param(params: Mapping[str, Any], key: str, default: bool) -> bool:
     value = params.get(key, default)
     if isinstance(value, bool):
@@ -241,6 +254,7 @@ def run_ppocr_det_segment(
     max_candidates = _max_candidates(resolved)
     fraction = _baseline_fraction(resolved)
     direction = _reading_direction(resolved)
+    box_type = _box_type(resolved, DEFAULT_BOX_TYPE)
     merge_fragments = _bool_param(resolved, "merge_fragments", True)
     resolve_overlaps = _bool_param(resolved, "resolve_overlaps", True)
     noise_policy = _noise_policy(resolved)
@@ -281,6 +295,7 @@ def run_ppocr_det_segment(
             box_thresh=box_thresh,
             unclip_ratio=unclip_ratio,
             max_candidates=max_candidates,
+            box_type=box_type,
         )
         if not merge_fragments and not resolve_overlaps and noise_policy == "off":
             return build_ppocr_det_response(
@@ -289,6 +304,7 @@ def run_ppocr_det_segment(
                 quads,
                 baseline_fraction=fraction,
                 reading_direction=direction,
+                box_type=box_type,
             )
         layout = layout_lines(quads, direction=direction)
         items = refine_to_lines(
@@ -302,6 +318,9 @@ def run_ppocr_det_segment(
             merge_max_overlap_ratio=merge_max_overlap_ratio,
             merge_max_height_ratio=merge_max_height_ratio,
             overlap_cut_threshold=overlap_cut_threshold,
+            box_type=box_type,
+            page_width=width,
+            page_height=height,
         )
         return build_refined_ppocr_det_response(
             width,
@@ -312,6 +331,7 @@ def run_ppocr_det_segment(
             baseline_fraction=fraction,
             reading_direction=direction,
             noise_policy=noise_policy,
+            box_type=box_type,
         )
 
 
