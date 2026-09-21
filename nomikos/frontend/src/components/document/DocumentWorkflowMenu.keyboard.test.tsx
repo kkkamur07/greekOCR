@@ -195,11 +195,14 @@ describe("DocumentWorkflowMenu keyboard access", () => {
     fireEvent.click(undo);
     fireEvent.blur(undo, { relatedTarget: null });
 
-    await waitFor(() =>
-      expect(screen.queryByRole("button", { name: "Undo" })).toBeNull(),
-    );
+    // Waiting for the Undo button to go is not enough: it is also absent
+    // while the undo write runs, when the select still shows the pick. The
+    // settled state is the select back on the restored model.
+    await waitFor(() => {
+      expect(segmentSelect()).toHaveValue("seg-a");
+      expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+    });
     expect(menu).toBeInTheDocument();
-    expect(segmentSelect()).toHaveValue("seg-a");
   });
 
   it("orders pickers and run items in DOM order", async () => {

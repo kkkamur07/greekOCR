@@ -166,13 +166,15 @@ describe("DocumentWorkflowMenu sets the project default", () => {
     fireEvent.change(segmentSelect(), { target: { value: "seg-b" } });
     fireEvent.click(await screen.findByRole("button", { name: "Undo" }));
 
-    await waitFor(() => expect(segmentSelect()).toHaveValue("seg-a"));
+    // One undo per pick, and the line speaks for the project again.
+    await waitFor(() => {
+      expect(segmentSelect()).toHaveValue("seg-a");
+      expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+      expect(screen.getByText("Project default")).toBeTruthy();
+    });
     expect(rows()).toEqual([
       { id: "binding-1", task: "segment", model_id: "seg-a" },
     ]);
-    // One undo per pick, and the line speaks for the project again.
-    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
-    expect(screen.getByText("Project default")).toBeTruthy();
   });
 
   it("undoes a first pick by clearing the binding it created", async () => {
@@ -191,9 +193,35 @@ describe("DocumentWorkflowMenu sets the project default", () => {
     );
     expect(rows()).toEqual([]);
     // Back to the model the picker showed before the pick, and no claim.
-    await waitFor(() => expect(segmentSelect()).toHaveValue("seg-a"));
-    expect(screen.queryByText("Project default")).toBeNull();
+    await waitFor(() => {
+      expect(segmentSelect()).toHaveValue("seg-a");
+      expect(screen.queryByText("Project default")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+    });
+  });
+
+  it("keeps the pick on screen until the undo write lands", async () => {
+    serveBindings([]);
+    openMenu();
+    await screen.findByRole("option", { name: "pp-ocr" });
+
+    fireEvent.change(segmentSelect(), { target: { value: "seg-b" } });
+    const slowDelete = deferred<void>();
+    deleteProjectModelBinding.mockReturnValue(slowDelete.promise);
+    fireEvent.click(await screen.findByRole("button", { name: "Undo" }));
+
+    // The offer goes as soon as the write starts, but the project still
+    // stores the pick, so that is what the picker shows meanwhile. This is
+    // the window a test that waits only for the button to go lands in.
+    await waitFor(() => expect(screen.getByText("Saving…")).toBeTruthy());
     expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+    expect(segmentSelect()).toHaveValue("seg-b");
+
+    slowDelete.resolve();
+    await waitFor(() => {
+      expect(segmentSelect()).toHaveValue("seg-a");
+      expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+    });
   });
 
   it("keeps the stored state when the undo fails", async () => {
@@ -208,11 +236,13 @@ describe("DocumentWorkflowMenu sets the project default", () => {
     fireEvent.change(segmentSelect(), { target: { value: "seg-b" } });
     fireEvent.click(await screen.findByRole("button", { name: "Undo" }));
 
-    await waitFor(() => expect(error).toHaveBeenCalledWith("No access"));
     // The pick is what the project stores, so that is what the menu shows.
-    expect(segmentSelect()).toHaveValue("seg-b");
-    expect(screen.getByText("Project default")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+    await waitFor(() => {
+      expect(error).toHaveBeenCalledWith("No access");
+      expect(segmentSelect()).toHaveValue("seg-b");
+      expect(screen.getByText("Project default")).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+    });
   });
 
   it("takes the undo offer away when the menu is closed", async () => {
@@ -227,8 +257,10 @@ describe("DocumentWorkflowMenu sets the project default", () => {
     fireEvent.click(screen.getByRole("button", { name: /workflow/i }));
 
     await screen.findByRole("option", { name: "pp-ocr" });
-    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
-    expect(screen.getByText("Project default")).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+      expect(screen.getByText("Project default")).toBeTruthy();
+    });
   });
 
   it("marks a stored default without writing anything", async () => {
@@ -253,8 +285,10 @@ describe("DocumentWorkflowMenu sets the project default", () => {
 
     fireEvent.change(segmentSelect(), { target: { value: "seg-b" } });
 
-    await waitFor(() => expect(error).toHaveBeenCalledWith("No access"));
-    expect(segmentSelect()).toHaveValue("seg-a");
+    await waitFor(() => {
+      expect(error).toHaveBeenCalledWith("No access");
+      expect(segmentSelect()).toHaveValue("seg-a");
+    });
   });
 
   it("keeps the pick for the run when the project has no stored default", async () => {
@@ -264,9 +298,11 @@ describe("DocumentWorkflowMenu sets the project default", () => {
 
     fireEvent.change(segmentSelect(), { target: { value: "seg-b" } });
 
-    await waitFor(() => expect(error).toHaveBeenCalledWith("No access"));
     // Nothing stored to fall back to, so the run keeps the model it replaced.
-    expect(segmentSelect()).toHaveValue("seg-a");
+    await waitFor(() => {
+      expect(error).toHaveBeenCalledWith("No access");
+      expect(segmentSelect()).toHaveValue("seg-a");
+    });
     expect(screen.queryByText("Project default")).toBeNull();
   });
 
