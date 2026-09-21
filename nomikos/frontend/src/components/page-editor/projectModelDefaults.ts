@@ -17,12 +17,34 @@ import { ApiError } from "../../api/errors";
  * is neither the project on screen nor news for the person.
  */
 export type ProjectDefaultResult =
-  | { ok: true; superseded?: false; binding: ProjectBinding | null }
+  | {
+      ok: true;
+      superseded?: false;
+      /**
+       * True when the write looked at the project's rows, found the one it
+       * was about changed by somebody else, and therefore wrote nothing. The
+       * hook still adopted what it read, so `binding` is what the project
+       * holds now, not what this call wanted to put there.
+       */
+      stale?: boolean;
+      binding: ProjectBinding | null;
+    }
   | { ok: false; superseded?: false; message: string }
   | { ok: false; superseded: true };
 
 /** How often a clear re-lists after a 404 before it gives up. */
 const CLEAR_ATTEMPTS = 3;
+
+/**
+ * What one write leaves the hook to store: the row for its own task, plus the
+ * whole project's rows when the write read them and so knows better than the
+ * state it started from.
+ */
+type WriteOutcome = {
+  binding: ProjectBinding | null;
+  bindings?: ProjectBinding[];
+  stale?: boolean;
+};
 
 export type ProjectBinding = Pick<
   ModelBindingResponse,
@@ -121,6 +143,73 @@ export async function clearProjectDefault(
   throw new Error(
     "Could not clear the project default: it keeps being replaced.",
   );
+}
+
+/**
+ * What one pick wrote, so an undo can tell its own row from a newer one.
+ * `bindingId` is null when the pick's answer carried no row, which only a
+ * test double does; the model id alone is then the test.
+ */
+export type PickRecord = { modelId: string; bindingId: string | null };
+
+/**
+ * What an undo did, and what the project holds now. `stale` means the undo
+ * found somebody else's value under the pick and left it alone.
+ */
+export type UndoOutcome = {
+  binding: ProjectBinding | null;
+  bindings: ProjectBinding[];
+  stale: boolean;
+};
+
+/**
+ * Taking a pick back, without taking anyone else's choice with it.
+ *
+ * A project default belongs to the whole project, so between the pick and the
+ * Undo another member may have set their own. Reversing blindly would put the
+ * older value back over theirs, or delete their row outright. So the undo
+ * reads the project's rows first and only reverses while the row for this
+ * task is still the one the pick wrote. Otherwise it writes nothing and
+ * reports what it read, for the surface to adopt and say so.
+ */
+export async function undoProjectDefault(
+  store: BindingStore,
+  projectId: string,
+  task: InferenceTask,
+  pick: PickRecord,
+  previousModelId: string | null,
+): Promise<UndoOutcome> {
+  const bindings = await store.list(projectId);
+  const current = bindings.find((binding) => binding.task === task) ?? null;
+  // Cleared by somebody else, so there is nothing of ours left to take back.
+  if (!current) return { binding: null, bindings, stale: true };
+  const ours =
+    current.model_id === pick.modelId &&
+    (pick.bindingId === null || current.id === pick.bindingId);
+  if (!ours) return { binding: current, bindings, stale: true };
+  const rest = bindings.filter((binding) => binding.task !== task);
+  try {
+    if (previousModelId) {
+      const binding = await store.update(
+        projectId,
+        current.id,
+        previousModelId,
+      );
+      return { binding, bindings: [...rest, binding], stale: false };
+    }
+    await store.remove(projectId, current.id);
+    return { binding: null, bindings: rest, stale: false };
+  } catch (err) {
+    if (!(err instanceof ApiError) || err.status !== 404) throw err;
+    // The row went between the read and the write, so somebody else is
+    // changing this default right now. Leave it to them and report theirs.
+    const fresh = await store.list(projectId);
+    return {
+      binding: fresh.find((binding) => binding.task === task) ?? null,
+      bindings: fresh,
+      stale: true,
+    };
+  }
 }
 
 /**
@@ -229,7 +318,7 @@ export function useProjectModelDefaults(
   const runWrite = useCallback(
     async (
       task: InferenceTask,
-      write: (id: string) => Promise<ProjectBinding | null>,
+      write: (id: string) => Promise<WriteOutcome>,
       failureMessage: string,
     ): Promise<ProjectDefaultResult> => {
       const writeProjectId = projectId;
@@ -244,18 +333,28 @@ export function useProjectModelDefaults(
         return true;
       };
       try {
-        const saved = await write(writeProjectId);
+        const outcome = await write(writeProjectId);
         if (!settle()) return { ok: false, superseded: true };
         // The write outranks a list still in flight, and owns `loading` from
         // here: see generationRef.
         generationRef.current += 1;
-        setBindings((current) => [
-          ...current.filter((binding) => binding.task !== task),
-          ...(saved ? [saved] : []),
-        ]);
+        if (outcome.bindings) {
+          // The write read the project's rows, so take all of them: they are
+          // newer than anything this hook held.
+          setBindings(outcome.bindings);
+        } else {
+          setBindings((current) => [
+            ...current.filter((binding) => binding.task !== task),
+            ...(outcome.binding ? [outcome.binding] : []),
+          ]);
+        }
         setLoadFailed(false);
         setLoading(false);
-        return { ok: true, binding: saved };
+        return {
+          ok: true,
+          stale: outcome.stale ?? false,
+          binding: outcome.binding,
+        };
       } catch (err) {
         if (!settle()) return { ok: false, superseded: true };
         const message = err instanceof Error ? err.message : failureMessage;
@@ -270,7 +369,9 @@ export function useProjectModelDefaults(
     (task: InferenceTask, modelId: string): Promise<ProjectDefaultResult> =>
       runWrite(
         task,
-        (id) => saveProjectDefault(resolvedStore, id, task, modelId),
+        async (id) => ({
+          binding: await saveProjectDefault(resolvedStore, id, task, modelId),
+        }),
         "Could not save the project default.",
       ),
     [runWrite, resolvedStore],
@@ -282,9 +383,29 @@ export function useProjectModelDefaults(
         task,
         async (id) => {
           await clearProjectDefault(resolvedStore, id, task);
-          return null;
+          return { binding: null };
         },
         "Could not clear the project default.",
+      ),
+    [runWrite, resolvedStore],
+  );
+
+  /**
+   * Take one pick back, but only while the project still holds it: see
+   * `undoProjectDefault`. A `stale` answer means somebody else's choice is
+   * there now and was left alone.
+   */
+  const undoDefault = useCallback(
+    (
+      task: InferenceTask,
+      pick: PickRecord,
+      previousModelId: string | null,
+    ): Promise<ProjectDefaultResult> =>
+      runWrite(
+        task,
+        (id) =>
+          undoProjectDefault(resolvedStore, id, task, pick, previousModelId),
+        "Could not undo the project default.",
       ),
     [runWrite, resolvedStore],
   );
@@ -303,6 +424,7 @@ export function useProjectModelDefaults(
     defaultModelId,
     saveDefault,
     clearDefault,
+    undoDefault,
     refresh,
   };
 }

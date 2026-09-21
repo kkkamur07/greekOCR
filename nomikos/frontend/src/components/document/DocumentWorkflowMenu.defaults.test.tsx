@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DocumentWorkflowMenu } from "./DocumentWorkflowMenu";
 
 vi.mock("../ui/toast", () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
+  toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() },
 }));
 
 const CATALOG = [

@@ -33,7 +33,7 @@ vi.mock("../../api/client", () => ({
 }));
 
 vi.mock("../ui/toast", () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
+  toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() },
 }));
 
 const COUNTS = { total: 3, reviewed: 0, unsegmented: 1, unpaired: 0 };

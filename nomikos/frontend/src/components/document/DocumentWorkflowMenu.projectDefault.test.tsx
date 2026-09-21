@@ -12,6 +12,7 @@ const deleteProjectModelBinding = vi.fn();
 const enqueueDocumentSegment = vi.fn();
 const enqueueDocumentTranscribe = vi.fn();
 const error = vi.fn();
+const info = vi.fn();
 
 vi.mock("../../api/client", () => ({
   api: {
@@ -32,8 +33,16 @@ vi.mock("../../api/client", () => ({
 }));
 
 vi.mock("../ui/toast", () => ({
-  toast: { success: vi.fn(), error: (...args: unknown[]) => error(...args) },
+  toast: {
+    success: vi.fn(),
+    info: (...args: unknown[]) => info(...args),
+    error: (...args: unknown[]) => error(...args),
+  },
 }));
+
+/** What the menu says when an undo finds somebody else's choice. */
+const UNDO_STALE =
+  "The project default was changed in the meantime, nothing was undone.";
 
 const COUNTS = { total: 3, reviewed: 0, unsegmented: 1, unpaired: 2 };
 const CATALOG = [
@@ -109,7 +118,21 @@ function serveBindings(initial: StoredBinding[]) {
       rows = rows.filter((r) => r.id !== bindingId);
     },
   );
-  return () => rows;
+  const read = () => rows;
+  /** What another member's write looks like from this side of the network. */
+  read.set = (next: StoredBinding[]) => {
+    rows = [...next];
+  };
+  return read;
+}
+
+/** Every write the four endpoints have seen, for asserting that none happened. */
+function writeCounts() {
+  return {
+    create: createProjectModelBinding.mock.calls.length,
+    update: updateProjectModelBinding.mock.calls.length,
+    remove: deleteProjectModelBinding.mock.calls.length,
+  };
 }
 
 describe("DocumentWorkflowMenu sets the project default", () => {
@@ -261,6 +284,63 @@ describe("DocumentWorkflowMenu sets the project default", () => {
       expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
       expect(screen.getByText("Project default")).toBeTruthy();
     });
+  });
+
+  it("leaves another member's newer default alone instead of undoing over it", async () => {
+    const serve = serveBindings([]);
+    openMenu();
+    await screen.findByRole("option", { name: "pp-ocr" });
+
+    fireEvent.change(segmentSelect(), { target: { value: "seg-b" } });
+    await screen.findByRole("button", { name: "Undo" });
+
+    // Somebody else picked their own model for the project in the meantime.
+    serve.set([{ id: "binding-other", task: "segment", model_id: "seg-a" }]);
+    const before = writeCounts();
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+
+    await waitFor(() => {
+      expect(info).toHaveBeenCalledWith(UNDO_STALE);
+      // Their choice is what the project holds, so that is what the menu says.
+      expect(segmentSelect()).toHaveValue("seg-a");
+      expect(screen.getByText("Project default")).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+    });
+    expect(writeCounts()).toEqual(before);
+    expect(serve()).toEqual([
+      { id: "binding-other", task: "segment", model_id: "seg-a" },
+    ]);
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it("writes nothing when another member cleared the default before the undo", async () => {
+    const serve = serveBindings([
+      { id: "binding-1", task: "segment", model_id: "seg-a" },
+    ]);
+    openMenu();
+    await waitFor(() => expect(segmentSelect()).toHaveValue("seg-a"));
+
+    fireEvent.change(segmentSelect(), { target: { value: "seg-b" } });
+    await screen.findByRole("button", { name: "Undo" });
+
+    // Somebody else cleared it: putting the old model back would be a choice
+    // nobody made.
+    serve.set([]);
+    const before = writeCounts();
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+
+    await waitFor(() => {
+      expect(info).toHaveBeenCalledWith(UNDO_STALE);
+      expect(screen.queryByText("Project default")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+      // The project stores nothing, so the picker is back to a run choice.
+      expect(segmentSelect()).toHaveValue("seg-a");
+    });
+    expect(writeCounts()).toEqual(before);
+    expect(serve()).toEqual([]);
+    expect(error).not.toHaveBeenCalled();
   });
 
   it("marks a stored default without writing anything", async () => {

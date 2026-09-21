@@ -27,7 +27,7 @@ vi.mock("../../api/client", () => ({
 }));
 
 vi.mock("../ui/toast", () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
+  toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() },
 }));
 
 const COUNTS = { total: 3, reviewed: 0, unsegmented: 1, unpaired: 2 };
@@ -46,6 +46,24 @@ const CATALOG = [
   },
   { id: "htr-1", task: "transcribe", name: "htr" },
 ];
+
+/**
+ * The bindings endpoints as one small stateful server. A list that always
+ * answers the same rows would let an undo look done without deleting
+ * anything, so a write has to be visible to the next read.
+ */
+function serveBindings() {
+  let rows: { id: string; task: string; model_id: string }[] = [];
+  listProjectModelBindings.mockImplementation(async () => [...rows]);
+  createProjectModelBinding.mockImplementation(async (_projectId, body) => {
+    const row = { id: `binding-${body.task}`, ...body };
+    rows = [...rows.filter((r) => r.task !== body.task), row];
+    return row;
+  });
+  deleteProjectModelBinding.mockImplementation(async (_projectId, id) => {
+    rows = rows.filter((r) => r.id !== id);
+  });
+}
 
 /** The menu plus a focus target outside it, for focus-leave checks. */
 function openMenu() {
@@ -72,13 +90,7 @@ describe("DocumentWorkflowMenu keyboard access", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     listInferenceModels.mockResolvedValue(CATALOG);
-    listProjectModelBindings.mockResolvedValue([]);
-    createProjectModelBinding.mockResolvedValue({
-      id: "binding-1",
-      task: "segment",
-      model_id: "seg-b",
-    });
-    deleteProjectModelBinding.mockResolvedValue(undefined);
+    serveBindings();
   });
 
   it("keeps the popup open on Tab inside a picker", async () => {
@@ -202,6 +214,10 @@ describe("DocumentWorkflowMenu keyboard access", () => {
       expect(segmentSelect()).toHaveValue("seg-a");
       expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
     });
+    expect(deleteProjectModelBinding).toHaveBeenCalledWith(
+      "project-1",
+      "binding-segment",
+    );
     expect(menu).toBeInTheDocument();
   });
 

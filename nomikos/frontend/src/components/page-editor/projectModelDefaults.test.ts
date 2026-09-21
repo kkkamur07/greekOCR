@@ -5,6 +5,7 @@ import { ApiError } from "../../api/errors";
 import {
   clearProjectDefault,
   saveProjectDefault,
+  undoProjectDefault,
   useProjectModelDefaults,
   type BindingStore,
   type ProjectBinding,
@@ -235,6 +236,151 @@ describe("clearProjectDefault", () => {
     };
     await expect(
       clearProjectDefault(failing, "project-1", "segment"),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+});
+
+describe("undoProjectDefault", () => {
+  const PICK = { modelId: "seg-b", bindingId: "binding-1" };
+
+  it("puts the previous model back when the pick is still the default", async () => {
+    const store = storeWith([
+      { id: "binding-1", task: "segment", model_id: "seg-b" },
+    ]);
+    const outcome = await undoProjectDefault(
+      store,
+      "project-1",
+      "segment",
+      PICK,
+      "seg-a",
+    );
+    expect(outcome.stale).toBe(false);
+    expect(outcome.binding).toMatchObject({
+      id: "binding-1",
+      model_id: "seg-a",
+    });
+    expect(store.calls).toEqual({ create: 0, update: 1, remove: 0 });
+    expect(await store.list("project-1")).toEqual([
+      { id: "binding-1", task: "segment", model_id: "seg-a" },
+    ]);
+  });
+
+  it("deletes the binding when the pick created the project's first one", async () => {
+    const store = storeWith([
+      { id: "binding-1", task: "segment", model_id: "seg-b" },
+    ]);
+    const outcome = await undoProjectDefault(
+      store,
+      "project-1",
+      "segment",
+      PICK,
+      null,
+    );
+    expect(outcome.stale).toBe(false);
+    expect(outcome.binding).toBeNull();
+    expect(store.calls).toEqual({ create: 0, update: 0, remove: 1 });
+    expect(await store.list("project-1")).toEqual([]);
+  });
+
+  it("writes nothing when another member set their own model in between", async () => {
+    const store = storeWith([
+      { id: "binding-1", task: "segment", model_id: "seg-c" },
+    ]);
+    const outcome = await undoProjectDefault(
+      store,
+      "project-1",
+      "segment",
+      PICK,
+      "seg-a",
+    );
+    expect(outcome.stale).toBe(true);
+    expect(outcome.binding).toMatchObject({ model_id: "seg-c" });
+    expect(outcome.bindings).toEqual([
+      { id: "binding-1", task: "segment", model_id: "seg-c" },
+    ]);
+    expect(store.calls).toEqual({ create: 0, update: 0, remove: 0 });
+  });
+
+  it("writes nothing when another member cleared the default in between", async () => {
+    const store = storeWith([]);
+    const outcome = await undoProjectDefault(
+      store,
+      "project-1",
+      "segment",
+      PICK,
+      "seg-a",
+    );
+    expect(outcome.stale).toBe(true);
+    expect(outcome.binding).toBeNull();
+    expect(store.calls).toEqual({ create: 0, update: 0, remove: 0 });
+  });
+
+  it("writes nothing when the same model sits under a new row", async () => {
+    // A collaborator cleared the default and set the same model again: same
+    // model id, new row. The pick that would be undone is gone all the same.
+    const store = storeWith([
+      { id: "binding-new", task: "segment", model_id: "seg-b" },
+    ]);
+    const outcome = await undoProjectDefault(
+      store,
+      "project-1",
+      "segment",
+      PICK,
+      "seg-a",
+    );
+    expect(outcome.stale).toBe(true);
+    expect(store.calls).toEqual({ create: 0, update: 0, remove: 0 });
+  });
+
+  it("leaves the other tasks alone", async () => {
+    const store = storeWith([
+      { id: "binding-1", task: "segment", model_id: "seg-b" },
+      { id: "binding-2", task: "transcribe", model_id: "htr-greek" },
+    ]);
+    const outcome = await undoProjectDefault(
+      store,
+      "project-1",
+      "segment",
+      PICK,
+      null,
+    );
+    expect(outcome.bindings).toEqual([
+      { id: "binding-2", task: "transcribe", model_id: "htr-greek" },
+    ]);
+  });
+
+  it("adopts what is there when the row goes between the read and the write", async () => {
+    let rows: ProjectBinding[] = [
+      { id: "binding-1", task: "segment", model_id: "seg-b" },
+    ];
+    const racing: BindingStore = {
+      ...storeWith([]),
+      list: async () => [...rows],
+      remove: async () => {
+        rows = [{ id: "binding-new", task: "segment", model_id: "seg-c" }];
+        throw new ApiError("Model binding not found", 404);
+      },
+    };
+    const outcome = await undoProjectDefault(
+      racing,
+      "project-1",
+      "segment",
+      PICK,
+      null,
+    );
+    expect(outcome.stale).toBe(true);
+    expect(outcome.binding).toMatchObject({ model_id: "seg-c" });
+  });
+
+  it("rethrows a failure that is not a missing row", async () => {
+    const failing: BindingStore = {
+      ...storeWith([{ id: "binding-1", task: "segment", model_id: "seg-b" }]),
+      update: async () => {
+        throw new ApiError("No access", 403);
+      },
+    };
+    await expect(
+      undoProjectDefault(failing, "project-1", "segment", PICK, "seg-a"),
     ).rejects.toMatchObject({ status: 403 });
   });
 });
@@ -514,5 +660,57 @@ describe("useProjectModelDefaults", () => {
     });
     expect(result.current.loading).toBe(false);
     expect(result.current.defaultModelId("segment")).toBe("seg-a");
+  });
+  it("undoes a pick through the hook and moves the default back", async () => {
+    const store = storeWith([
+      { id: "binding-1", task: "segment", model_id: "seg-a" },
+    ]);
+    const { result } = renderHook(() =>
+      useProjectModelDefaults("project-1", store),
+    );
+    await waitFor(() => expect(result.current.known).toBe(true));
+
+    await act(async () => {
+      await result.current.saveDefault("segment", "seg-b");
+    });
+    let undone!: Awaited<ReturnType<typeof result.current.undoDefault>>;
+    await act(async () => {
+      undone = await result.current.undoDefault(
+        "segment",
+        { modelId: "seg-b", bindingId: "binding-1" },
+        "seg-a",
+      );
+    });
+    expect(undone).toMatchObject({ ok: true, stale: false });
+    expect(result.current.defaultModelId("segment")).toBe("seg-a");
+    expect(store.calls.remove).toBe(0);
+  });
+
+  it("adopts another member's default instead of undoing over it", async () => {
+    const store = storeWith([
+      { id: "binding-1", task: "segment", model_id: "seg-b" },
+    ]);
+    const { result } = renderHook(() =>
+      useProjectModelDefaults("project-1", store),
+    );
+    await waitFor(() => expect(result.current.known).toBe(true));
+
+    // Somebody else moved the project on after this session's pick.
+    await store.update("project-1", "binding-1", "seg-c");
+    const writesBefore = { ...store.calls };
+
+    let undone!: Awaited<ReturnType<typeof result.current.undoDefault>>;
+    await act(async () => {
+      undone = await result.current.undoDefault(
+        "segment",
+        { modelId: "seg-b", bindingId: "binding-1" },
+        "seg-a",
+      );
+    });
+    expect(undone).toMatchObject({ ok: true, stale: true });
+    expect(store.calls).toEqual(writesBefore);
+    // The hook now speaks for the project as it is, not as the pick left it.
+    expect(result.current.defaultModelId("segment")).toBe("seg-c");
+    expect(result.current.saving).toBe(false);
   });
 });

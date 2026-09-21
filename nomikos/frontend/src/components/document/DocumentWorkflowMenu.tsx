@@ -15,7 +15,10 @@ import {
 } from "../ui/ActionMenu";
 import { toast } from "../ui/toast";
 import { PageEditorModelSelect } from "../page-editor/PageEditorModelSelect";
-import { useProjectModelDefaults } from "../page-editor/projectModelDefaults";
+import {
+  useProjectModelDefaults,
+  type PickRecord,
+} from "../page-editor/projectModelDefaults";
 import { resolveSegmentModelId } from "../page-editor/segmentModelChoice";
 import { resolveTranscribeModelId } from "../page-editor/transcribeModelChoice";
 import { batchQueuedMessage, pageCountLabel } from "./documentActionCopy";
@@ -26,7 +29,13 @@ type UndoEntry = {
   storedModelId: string | null;
   /** What the picker showed before the pick, for a project with no binding. */
   runModelId: string | null;
+  /** What the pick wrote, so the undo can recognise its own row later. */
+  pick: PickRecord;
 };
+
+/** Said once, when an undo finds somebody else's choice where the pick was. */
+const UNDO_STALE_MESSAGE =
+  "The project default was changed in the meantime, nothing was undone.";
 
 /** The accessible name of each section's select, for putting focus back. */
 const MODEL_SELECT_LABEL: Record<InferenceTask, string> = {
@@ -158,10 +167,15 @@ export function DocumentWorkflowMenu({
     restoreFocus(task);
     if (saved.superseded) return;
     if (saved.ok) {
-      // What the pick replaced, so the line under it can offer the way back.
+      // What the pick replaced, so the line under it can offer the way back,
+      // and what it wrote, so the way back knows its own row from a newer one.
       setUndoable((current) => ({
         ...current,
-        [task]: { storedModelId, runModelId: previousModelId },
+        [task]: {
+          storedModelId,
+          runModelId: previousModelId,
+          pick: { modelId, bindingId: saved.binding?.id ?? null },
+        },
       }));
       return;
     }
@@ -175,15 +189,21 @@ export function DocumentWorkflowMenu({
   /**
    * Put the project back the way the pick found it: the binding it replaced,
    * or no binding at all when the project had none.
+   *
+   * Only while the pick is still what the project holds. This default belongs
+   * to everyone in the project, and another member may have set their own
+   * since; undoing over that would take their choice away without a word.
    */
   async function undoPick(
     task: InferenceTask,
     entry: UndoEntry,
     setExplicit: (modelId: string | null) => void,
   ) {
-    const undone = entry.storedModelId
-      ? await projectDefaults.saveDefault(task, entry.storedModelId)
-      : await projectDefaults.clearDefault(task);
+    const undone = await projectDefaults.undoDefault(
+      task,
+      entry.pick,
+      entry.storedModelId,
+    );
     restoreFocus(task);
     if (undone.superseded) return;
     // One undo per pick, whichever way it went: after this the line speaks
@@ -194,6 +214,13 @@ export function DocumentWorkflowMenu({
       setExplicit(
         projectDefaults.defaultModelId(task) ? null : entry.runModelId,
       );
+      return;
+    }
+    if (undone.stale) {
+      // Somebody else's choice stands. The picker follows the project again,
+      // and falls back to the run choice when they cleared the default.
+      toast.info(UNDO_STALE_MESSAGE);
+      setExplicit(undone.binding ? null : entry.runModelId);
       return;
     }
     setExplicit(entry.storedModelId ? null : entry.runModelId);
