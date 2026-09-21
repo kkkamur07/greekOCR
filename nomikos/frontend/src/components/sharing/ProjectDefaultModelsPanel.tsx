@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type InferenceModelResponse } from "../../api/client";
 import { useProjectModelDefaults } from "../page-editor/projectModelDefaults";
+import { ModelSelectRow } from "../ui/ModelSelectRow";
 import { toast } from "../ui/toast";
 
 type ProjectDefaultModelsPanelProps = {
@@ -86,38 +87,20 @@ export function ProjectDefaultModelsPanel({
     models: InferenceModelResponse[],
   ) {
     const saving = defaults.saving === task;
-    const inputId = `project-default-${task}`;
     return (
-      <div className="default-models__row">
-        <label className="default-models__label" htmlFor={inputId}>
-          {label}
-        </label>
-        <div className="default-models__control">
-          <select
-            id={inputId}
-            className="default-models__select"
-            // The select always shows the stored binding, so a failed save
-            // snaps back to what the project actually has.
-            value={defaults.defaultModelId(task) ?? NO_DEFAULT}
-            disabled={saving || models.length === 0}
-            onChange={(event) =>
-              void handleChange(task, models, event.target.value)
-            }
-          >
-            <option value={NO_DEFAULT}>No default</option>
-            {models.map((model) => (
-              <option key={model.id} value={model.id}>
-                {model.name}
-              </option>
-            ))}
-          </select>
-          {saving && (
-            <span className="default-models__saving" role="status">
-              Saving…
-            </span>
-          )}
-        </div>
-      </div>
+      <ModelSelectRow
+        key={task}
+        id={`project-default-${task}`}
+        label={label}
+        // The select always shows the stored binding, so a failed save snaps
+        // back to what the project actually has.
+        value={defaults.defaultModelId(task) ?? NO_DEFAULT}
+        options={models}
+        emptyLabel="No default"
+        disabled={saving}
+        saving={saving}
+        onChange={(value) => void handleChange(task, models, value)}
+      />
     );
   }
 
