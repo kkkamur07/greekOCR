@@ -12,9 +12,9 @@ import { ApiError } from "../../api/errors";
  * caller rather than only into `error` state, so the toast at the call site
  * says what the API said instead of reading a value React has not set yet.
  *
- * `superseded` marks a response the caller must act on in no way at all: a
- * newer write for the same task started while this one was in flight, so its
- * outcome is neither the project's state nor news for the person.
+ * `superseded` marks a response the caller must act on in no way at all: the
+ * hook has moved to another project since the write started, so this outcome
+ * is neither the project on screen nor news for the person.
  */
 export type ProjectDefaultResult =
   | { ok: true; superseded?: false; binding: ProjectBinding | null }
@@ -131,6 +131,11 @@ export async function clearProjectDefault(
  * empty `bindings` after a failed read means "we do not know", and a surface
  * that draws it as "No default" tells the researcher something about their
  * project that nobody checked. Callers wait, or say they could not look.
+ *
+ * There is one `saving` for the whole project, not one per task: every
+ * control the hook feeds is disabled while a write runs, so a second write
+ * cannot start and two writes can never race. `savingTask` is for the label
+ * on the row being written, nothing else.
  */
 export function useProjectModelDefaults(
   projectId: string | undefined,
@@ -140,43 +145,22 @@ export function useProjectModelDefaults(
   const [bindings, setBindings] = useState<ProjectBinding[]>([]);
   const [loading, setLoading] = useState<boolean>(Boolean(projectId));
   const [loadFailed, setLoadFailed] = useState(false);
-  /** The tasks with a write in flight, so one task's save never freezes the other. */
-  const [saving, setSaving] = useState<ReadonlySet<InferenceTask>>(
-    () => new Set(),
-  );
+  const [saving, setSaving] = useState(false);
+  const [savingTask, setSavingTask] = useState<InferenceTask | null>(null);
   const [error, setError] = useState<string | null>(null);
   /**
-   * Which load is newest. A save that lands while the initial list is still
-   * in flight must win over it: without this the late list would overwrite
-   * the just-saved default with the server rows it left behind.
+   * Which load is newest. A write that lands while a list is still in flight
+   * must win over it: without this the late list would overwrite the
+   * just-saved default with the server rows it left behind. The winner owns
+   * `loading` from then on, so an invalidated load never leaves it true.
    */
   const generationRef = useRef(0);
   /**
-   * The newest write per task. A slower older write must not land on top of a
-   * newer choice, so a response whose number is no longer the task's latest
-   * changes nothing and tells the caller nothing.
+   * The project the hook is on right now. A write started for one project
+   * must not land after the surface has moved to another: its answer is about
+   * a project nobody is looking at.
    */
-  const writeSeqRef = useRef<Partial<Record<InferenceTask, number>>>({});
-
-  const beginWrite = useCallback((task: InferenceTask): number => {
-    const seq = (writeSeqRef.current[task] ?? 0) + 1;
-    writeSeqRef.current[task] = seq;
-    setSaving((current) => new Set(current).add(task));
-    setError(null);
-    return seq;
-  }, []);
-
-  const endWrite = useCallback((task: InferenceTask, seq: number): boolean => {
-    const latest = writeSeqRef.current[task] === seq;
-    if (latest) {
-      setSaving((current) => {
-        const next = new Set(current);
-        next.delete(task);
-        return next;
-      });
-    }
-    return latest;
-  }, []);
+  const projectIdRef = useRef<string | undefined>(projectId);
 
   const load = useCallback(
     async (id: string, cancelled?: () => boolean): Promise<void> => {
@@ -191,22 +175,29 @@ export function useProjectModelDefaults(
         if (!isCurrent()) return;
         setBindings(Array.isArray(rows) ? rows : []);
         setLoadFailed(false);
+        setLoading(false);
       } catch {
         if (!isCurrent()) return;
         setBindings([]);
         setLoadFailed(true);
-      } finally {
-        if (isCurrent()) setLoading(false);
+        setLoading(false);
       }
     },
     [resolvedStore],
   );
 
   useEffect(() => {
+    projectIdRef.current = projectId;
+    // Nothing read from the last project survives the change of project, not
+    // its bindings and not a write it had in flight.
+    setBindings([]);
+    setLoadFailed(false);
+    setSaving(false);
+    setSavingTask(null);
+    setError(null);
     if (!projectId) {
-      setBindings([]);
+      generationRef.current += 1;
       setLoading(false);
-      setLoadFailed(false);
       return;
     }
     let cancelled = false;
@@ -231,67 +222,71 @@ export function useProjectModelDefaults(
     await load(projectId);
   }, [projectId, load]);
 
-  const saveDefault = useCallback(
+  /**
+   * Runs one write and settles the hook's state on its answer. A write whose
+   * project is no longer the hook's changes nothing at all.
+   */
+  const runWrite = useCallback(
     async (
       task: InferenceTask,
-      modelId: string,
+      write: (id: string) => Promise<ProjectBinding | null>,
+      failureMessage: string,
     ): Promise<ProjectDefaultResult> => {
-      if (!projectId) return { ok: false, message: "No project" };
-      const seq = beginWrite(task);
+      const writeProjectId = projectId;
+      if (!writeProjectId) return { ok: false, message: "No project" };
+      setSaving(true);
+      setSavingTask(task);
+      setError(null);
+      const settle = () => {
+        if (projectIdRef.current !== writeProjectId) return false;
+        setSaving(false);
+        setSavingTask(null);
+        return true;
+      };
       try {
-        const saved = await saveProjectDefault(
-          resolvedStore,
-          projectId,
-          task,
-          modelId,
-        );
-        if (!endWrite(task, seq)) return { ok: false, superseded: true };
-        // A save outranks an initial list still in flight; see generationRef.
+        const saved = await write(writeProjectId);
+        if (!settle()) return { ok: false, superseded: true };
+        // The write outranks a list still in flight, and owns `loading` from
+        // here: see generationRef.
         generationRef.current += 1;
         setBindings((current) => [
           ...current.filter((binding) => binding.task !== task),
-          saved,
+          ...(saved ? [saved] : []),
         ]);
         setLoadFailed(false);
+        setLoading(false);
         return { ok: true, binding: saved };
       } catch (err) {
-        if (!endWrite(task, seq)) return { ok: false, superseded: true };
-        const message =
-          err instanceof Error
-            ? err.message
-            : "Could not save the project default.";
+        if (!settle()) return { ok: false, superseded: true };
+        const message = err instanceof Error ? err.message : failureMessage;
         setError(message);
         return { ok: false, message };
       }
     },
-    [projectId, resolvedStore, beginWrite, endWrite],
+    [projectId],
+  );
+
+  const saveDefault = useCallback(
+    (task: InferenceTask, modelId: string): Promise<ProjectDefaultResult> =>
+      runWrite(
+        task,
+        (id) => saveProjectDefault(resolvedStore, id, task, modelId),
+        "Could not save the project default.",
+      ),
+    [runWrite, resolvedStore],
   );
 
   const clearDefault = useCallback(
-    async (task: InferenceTask): Promise<ProjectDefaultResult> => {
-      if (!projectId) return { ok: false, message: "No project" };
-      const seq = beginWrite(task);
-      try {
-        await clearProjectDefault(resolvedStore, projectId, task);
-        if (!endWrite(task, seq)) return { ok: false, superseded: true };
-        // A clear outranks an initial list still in flight; see generationRef.
-        generationRef.current += 1;
-        setBindings((current) =>
-          current.filter((binding) => binding.task !== task),
-        );
-        setLoadFailed(false);
-        return { ok: true, binding: null };
-      } catch (err) {
-        if (!endWrite(task, seq)) return { ok: false, superseded: true };
-        const message =
-          err instanceof Error
-            ? err.message
-            : "Could not clear the project default.";
-        setError(message);
-        return { ok: false, message };
-      }
-    },
-    [projectId, resolvedStore, beginWrite, endWrite],
+    (task: InferenceTask): Promise<ProjectDefaultResult> =>
+      runWrite(
+        task,
+        async (id) => {
+          await clearProjectDefault(resolvedStore, id, task);
+          return null;
+        },
+        "Could not clear the project default.",
+      ),
+    [runWrite, resolvedStore],
   );
 
   return {
@@ -300,7 +295,10 @@ export function useProjectModelDefaults(
     loadFailed,
     /** True once a list came back, so a surface may speak about the defaults. */
     known: Boolean(projectId) && !loading && !loadFailed,
+    /** One write at a time, so this disables every control the hook feeds. */
     saving,
+    /** Which row that write is about, for its own label. */
+    savingTask,
     error,
     defaultModelId,
     saveDefault,

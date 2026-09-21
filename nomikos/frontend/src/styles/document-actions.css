@@ -184,6 +184,24 @@
   line-height: 14px;
   color: var(--text-3);
 }
+/* The way back from a pick that moved the project, in the line's own size. */
+.action-menu__model-undo {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--navy);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.action-menu__model-undo:disabled {
+  color: var(--text-4);
+  cursor: default;
+}
+.action-menu__model-undo:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
 .action-menu__model .pe-model__label {
   font-size: 0.75rem;
   font-weight: 500;

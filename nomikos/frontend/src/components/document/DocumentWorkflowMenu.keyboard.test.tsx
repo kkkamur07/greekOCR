@@ -8,6 +8,7 @@ const enqueueDocumentSegment = vi.fn();
 const enqueueDocumentTranscribe = vi.fn();
 const listProjectModelBindings = vi.fn();
 const createProjectModelBinding = vi.fn();
+const deleteProjectModelBinding = vi.fn();
 
 vi.mock("../../api/client", () => ({
   api: {
@@ -20,6 +21,8 @@ vi.mock("../../api/client", () => ({
       listProjectModelBindings(...args),
     createProjectModelBinding: (...args: unknown[]) =>
       createProjectModelBinding(...args),
+    deleteProjectModelBinding: (...args: unknown[]) =>
+      deleteProjectModelBinding(...args),
   },
 }));
 
@@ -75,6 +78,7 @@ describe("DocumentWorkflowMenu keyboard access", () => {
       task: "segment",
       model_id: "seg-b",
     });
+    deleteProjectModelBinding.mockResolvedValue(undefined);
   });
 
   it("keeps the popup open on Tab inside a picker", async () => {
@@ -173,6 +177,29 @@ describe("DocumentWorkflowMenu keyboard access", () => {
       screen.getByRole("menu", { name: "Document workflow" }),
     ).toBeInTheDocument();
     await waitFor(() => expect(segmentSelect()).not.toBeDisabled());
+  });
+
+  it("keeps the popup open when Undo is activated from the keyboard", async () => {
+    const menu = openMenu();
+    await screen.findByRole("option", { name: "pp-ocr" });
+    const select = segmentSelect() as HTMLSelectElement;
+    select.focus();
+    fireEvent.change(select, { target: { value: "seg-b" } });
+
+    const undo = await screen.findByRole("button", { name: "Undo" });
+    undo.focus();
+    expect(document.activeElement).toBe(undo);
+    // Enter on a plain button inside the popup is a click, and the menu's own
+    // key handling must leave it alone.
+    fireEvent.keyDown(undo, { key: "Enter" });
+    fireEvent.click(undo);
+    fireEvent.blur(undo, { relatedTarget: null });
+
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Undo" })).toBeNull(),
+    );
+    expect(menu).toBeInTheDocument();
+    expect(segmentSelect()).toHaveValue("seg-a");
   });
 
   it("orders pickers and run items in DOM order", async () => {

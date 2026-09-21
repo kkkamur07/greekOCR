@@ -90,7 +90,7 @@ export function ProjectDefaultModelsPanel({
     label: string,
     models: InferenceModelResponse[],
   ) {
-    const saving = defaults.saving.has(task);
+    const saving = defaults.savingTask === task;
     return (
       <ModelSelectRow
         key={task}
@@ -101,9 +101,10 @@ export function ProjectDefaultModelsPanel({
         value={defaults.defaultModelId(task) ?? NO_DEFAULT}
         options={models}
         emptyLabel="No default"
-        // Until a list of the bindings comes back, no value here would be the
+        // One write at a time, so a save on either row freezes both. Until a
+        // list of the bindings comes back, no value here would be the
         // project's; an unknown default must not be offered as "No default".
-        disabled={saving || !defaults.known}
+        disabled={defaults.saving || !defaults.known}
         saving={saving}
         onChange={(value) => void handleChange(task, models, value)}
       />

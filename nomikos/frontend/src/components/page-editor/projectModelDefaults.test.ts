@@ -409,7 +409,7 @@ describe("useProjectModelDefaults", () => {
     expect(result.current.defaultModelId("segment")).toBe("seg-a");
   });
 
-  it("holds saving per task, so one write does not freeze the other", async () => {
+  it("holds one saving state, so a write freezes both rows", async () => {
     const store = storeWith([]);
     let release!: (binding: ProjectBinding) => void;
     const gate = new Promise<ProjectBinding>((resolve) => {
@@ -425,53 +425,94 @@ describe("useProjectModelDefaults", () => {
     await act(async () => {
       pending = result.current.saveDefault("segment", "seg-a");
     });
-    expect(result.current.saving.has("segment")).toBe(true);
-    expect(result.current.saving.has("transcribe")).toBe(false);
+    // One state for the project: the row being written names itself, and
+    // every control the hook feeds is frozen, so no second write can start.
+    expect(result.current.saving).toBe(true);
+    expect(result.current.savingTask).toBe("segment");
 
     await act(async () => {
       release({ id: "binding-1", task: "segment", model_id: "seg-a" });
       await pending;
     });
-    expect(result.current.saving.has("segment")).toBe(false);
+    expect(result.current.saving).toBe(false);
+    expect(result.current.savingTask).toBeNull();
   });
 
-  it("lets the newer write for a task win over a slower older one", async () => {
-    const store = storeWith([]);
-    const gates: Array<(binding: ProjectBinding) => void> = [];
-    const racing: BindingStore = {
-      ...store,
-      create: async (_projectId, task, modelId) =>
-        new Promise<ProjectBinding>((resolve) => {
-          gates.push(() =>
-            resolve({ id: "binding-1", task, model_id: modelId }),
-          );
-        }),
+  it("drops a write that lands after the project changed", async () => {
+    const rows: Record<string, ProjectBinding[]> = {
+      "project-a": [],
+      "project-b": [{ id: "binding-b", task: "segment", model_id: "seg-b" }],
     };
-    const { result } = renderHook(() =>
-      useProjectModelDefaults("project-1", racing),
+    let release!: (binding: ProjectBinding) => void;
+    const gate = new Promise<ProjectBinding>((resolve) => {
+      release = resolve;
+    });
+    const store: BindingStore = {
+      ...storeWith([]),
+      list: async (projectId) => [...(rows[projectId] ?? [])],
+      create: async () => gate,
+    };
+    const { result, rerender } = renderHook(
+      ({ projectId }) => useProjectModelDefaults(projectId, store),
+      { initialProps: { projectId: "project-a" } },
     );
     await waitFor(() => expect(result.current.known).toBe(true));
 
-    let older!: Promise<unknown>;
-    let newer!: Promise<unknown>;
+    let pending!: Promise<unknown>;
     await act(async () => {
-      older = result.current.saveDefault("segment", "seg-old");
-      newer = result.current.saveDefault("segment", "seg-new");
-      await waitFor(() => expect(gates).toHaveLength(2));
+      pending = result.current.saveDefault("segment", "seg-a");
     });
 
-    let newerResult: unknown;
-    let olderResult: unknown;
+    rerender({ projectId: "project-b" });
+    await waitFor(() =>
+      expect(result.current.defaultModelId("segment")).toBe("seg-b"),
+    );
+
+    let stale: unknown;
     await act(async () => {
-      // The newer write answers first, the older one only afterwards.
-      gates[1]();
-      newerResult = await newer;
-      gates[0]();
-      olderResult = await older;
+      release({ id: "binding-a", task: "segment", model_id: "seg-a" });
+      stale = await pending;
     });
 
-    expect(newerResult).toMatchObject({ ok: true });
-    expect(olderResult).toMatchObject({ ok: false, superseded: true });
-    expect(result.current.defaultModelId("segment")).toBe("seg-new");
+    // A's answer is about a project nobody is looking at any more.
+    expect(stale).toMatchObject({ ok: false, superseded: true });
+    expect(result.current.defaultModelId("segment")).toBe("seg-b");
+    expect(result.current.loading).toBe(false);
+    expect(result.current.known).toBe(true);
+    expect(result.current.saving).toBe(false);
+  });
+
+  it("ends loading even when a write invalidates the list in flight", async () => {
+    let releaseList!: (rows: ProjectBinding[]) => void;
+    const listGate = new Promise<ProjectBinding[]>((resolve) => {
+      releaseList = resolve;
+    });
+    let listed = 0;
+    const store: BindingStore = {
+      ...storeWith([]),
+      list: async () => {
+        listed += 1;
+        return listed === 1 ? listGate : [];
+      },
+    };
+    const { result } = renderHook(() =>
+      useProjectModelDefaults("project-1", store),
+    );
+    await waitFor(() => expect(listed).toBe(1));
+    expect(result.current.loading).toBe(true);
+
+    await act(async () => {
+      await result.current.saveDefault("segment", "seg-a");
+    });
+    // The write knows the bindings, so it owns `loading` from here: the list
+    // it invalidated must not leave the card waiting forever.
+    expect(result.current.loading).toBe(false);
+    expect(result.current.known).toBe(true);
+
+    await act(async () => {
+      releaseList([]);
+    });
+    expect(result.current.loading).toBe(false);
+    expect(result.current.defaultModelId("segment")).toBe("seg-a");
   });
 });

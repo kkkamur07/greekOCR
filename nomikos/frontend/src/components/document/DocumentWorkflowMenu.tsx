@@ -20,6 +20,21 @@ import { resolveSegmentModelId } from "../page-editor/segmentModelChoice";
 import { resolveTranscribeModelId } from "../page-editor/transcribeModelChoice";
 import { batchQueuedMessage, pageCountLabel } from "./documentActionCopy";
 
+/** What one pick replaced, kept only as long as its Undo is on offer. */
+type UndoEntry = {
+  /** The binding the project had before the pick, or null when it had none. */
+  storedModelId: string | null;
+  /** What the picker showed before the pick, for a project with no binding. */
+  runModelId: string | null;
+};
+
+/** The accessible name of each section's select, for putting focus back. */
+const MODEL_SELECT_LABEL: Record<InferenceTask, string> = {
+  segment: "Segmentation model",
+  transcribe: "HTR transcription model",
+  binarize: "Binarization model",
+};
+
 type DocumentWorkflowMenuProps = {
   projectId: string;
   documentId: string;
@@ -64,6 +79,12 @@ export function DocumentWorkflowMenu({
   const [explicitTranscribeModelId, setExplicitTranscribeModelId] = useState<
     string | null
   >(null);
+  /**
+   * What the last pick in each section replaced, while its Undo is on offer.
+   */
+  const [undoable, setUndoable] = useState<
+    Partial<Record<InferenceTask, UndoEntry>>
+  >({});
   const projectDefaults = useProjectModelDefaults(projectId);
 
   /**
@@ -132,18 +153,71 @@ export function DocumentWorkflowMenu({
   ) {
     setExplicit(modelId);
     if (!modelId || !projectDefaults.known) return;
-    // The select loses focus while it is disabled for the write; a keyboard
-    // user gets their place in the menu back when it returns.
-    const focused = globalThis.document.activeElement;
+    const storedModelId = projectDefaults.defaultModelId(task);
     const saved = await projectDefaults.saveDefault(task, modelId);
-    if (focused instanceof HTMLSelectElement && focused.isConnected) {
-      focused.focus();
+    restoreFocus(task);
+    if (saved.superseded) return;
+    if (saved.ok) {
+      // What the pick replaced, so the line under it can offer the way back.
+      setUndoable((current) => ({
+        ...current,
+        [task]: { storedModelId, runModelId: previousModelId },
+      }));
+      return;
     }
-    if (saved.ok || saved.superseded) return;
+    forgetUndo(task);
     toast.error(saved.message);
     // Never leave the select showing a model the project did not save: back
     // to the stored default, or to the pick it replaced when there is none.
     setExplicit(projectDefaults.defaultModelId(task) ? null : previousModelId);
+  }
+
+  /**
+   * Put the project back the way the pick found it: the binding it replaced,
+   * or no binding at all when the project had none.
+   */
+  async function undoPick(
+    task: InferenceTask,
+    entry: UndoEntry,
+    setExplicit: (modelId: string | null) => void,
+  ) {
+    const undone = entry.storedModelId
+      ? await projectDefaults.saveDefault(task, entry.storedModelId)
+      : await projectDefaults.clearDefault(task);
+    restoreFocus(task);
+    if (undone.superseded) return;
+    // One undo per pick, whichever way it went: after this the line speaks
+    // for the project again, not for what just happened.
+    forgetUndo(task);
+    if (!undone.ok) {
+      toast.error(undone.message);
+      setExplicit(
+        projectDefaults.defaultModelId(task) ? null : entry.runModelId,
+      );
+      return;
+    }
+    setExplicit(entry.storedModelId ? null : entry.runModelId);
+  }
+
+  function forgetUndo(task: InferenceTask) {
+    setUndoable((current) => {
+      if (!current[task]) return current;
+      const next = { ...current };
+      delete next[task];
+      return next;
+    });
+  }
+
+  /**
+   * A write disables the picker and takes the Undo line away with it, so
+   * whatever the person was standing on is gone by the time it lands. Put
+   * them back on that section's select.
+   */
+  function restoreFocus(task: InferenceTask) {
+    const select = globalThis.document.querySelector<HTMLSelectElement>(
+      `select[aria-label="${MODEL_SELECT_LABEL[task]}"]`,
+    );
+    select?.focus();
   }
 
   /**
@@ -152,11 +226,40 @@ export function DocumentWorkflowMenu({
    * is merely what the catalog offered first.
    */
   function defaultNote(task: InferenceTask, selectedModelId: string | null) {
-    if (projectDefaults.saving.has(task)) return "Saving…";
+    if (projectDefaults.savingTask === task) return "Saving…";
     if (!projectDefaults.known || !selectedModelId) return "";
     return projectDefaults.defaultModelId(task) === selectedModelId
       ? "Project default"
       : "";
+  }
+
+  /** The line under one picker: the undo offer if there is one, else the note. */
+  function modelNote(
+    task: InferenceTask,
+    selectedModelId: string | null,
+    setExplicit: (modelId: string | null) => void,
+  ) {
+    const entry = undoable[task];
+    if (entry && projectDefaults.savingTask !== task) {
+      return (
+        <p className="action-menu__model-note">
+          Saved as project default.{" "}
+          <button
+            type="button"
+            className="action-menu__model-undo"
+            disabled={projectDefaults.saving}
+            onClick={() => void undoPick(task, entry, setExplicit)}
+          >
+            Undo
+          </button>
+        </p>
+      );
+    }
+    return (
+      <p className="action-menu__model-note">
+        {defaultNote(task, selectedModelId)}
+      </p>
+    );
   }
 
   async function runSegment(scope: "unsegmented" | "all", close: () => void) {
@@ -205,7 +308,10 @@ export function DocumentWorkflowMenu({
       menuLabel="Document workflow"
       wide
       onOpenChange={(open) => {
-        if (!open) setConfirmingResegment(false);
+        if (open) return;
+        setConfirmingResegment(false);
+        // The offer belongs to the menu that was open, not to the next one.
+        setUndoable({});
       }}
     >
       {(close) =>
@@ -235,7 +341,7 @@ export function DocumentWorkflowMenu({
             >
               <PageEditorModelSelect
                 label="Model"
-                ariaLabel="Segmentation model"
+                ariaLabel={MODEL_SELECT_LABEL.segment}
                 models={segmentModels}
                 selectedModelId={selectedSegmentModelId}
                 onSelectedModelIdChange={(modelId) =>
@@ -246,11 +352,13 @@ export function DocumentWorkflowMenu({
                     setExplicitSegmentModelId,
                   )
                 }
-                disabled={busy || projectDefaults.saving.has("segment")}
+                disabled={busy || projectDefaults.saving}
               />
-              <p className="action-menu__model-note">
-                {defaultNote("segment", selectedSegmentModelId)}
-              </p>
+              {modelNote(
+                "segment",
+                selectedSegmentModelId,
+                setExplicitSegmentModelId,
+              )}
             </div>
             <ActionMenuItem
               label="Segment unsegmented pages"
@@ -277,7 +385,7 @@ export function DocumentWorkflowMenu({
             >
               <PageEditorModelSelect
                 label="Model"
-                ariaLabel="HTR transcription model"
+                ariaLabel={MODEL_SELECT_LABEL.transcribe}
                 models={transcribeModels}
                 selectedModelId={selectedTranscribeModelId}
                 onSelectedModelIdChange={(modelId) =>
@@ -288,11 +396,13 @@ export function DocumentWorkflowMenu({
                     setExplicitTranscribeModelId,
                   )
                 }
-                disabled={busy || projectDefaults.saving.has("transcribe")}
+                disabled={busy || projectDefaults.saving}
               />
-              <p className="action-menu__model-note">
-                {defaultNote("transcribe", selectedTranscribeModelId)}
-              </p>
+              {modelNote(
+                "transcribe",
+                selectedTranscribeModelId,
+                setExplicitTranscribeModelId,
+              )}
             </div>
             <ActionMenuItem
               label="Transcribe unpaired pages"

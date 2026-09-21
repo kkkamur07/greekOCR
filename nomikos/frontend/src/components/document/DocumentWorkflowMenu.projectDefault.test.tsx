@@ -8,6 +8,7 @@ const listInferenceModels = vi.fn();
 const listProjectModelBindings = vi.fn();
 const createProjectModelBinding = vi.fn();
 const updateProjectModelBinding = vi.fn();
+const deleteProjectModelBinding = vi.fn();
 const enqueueDocumentSegment = vi.fn();
 const enqueueDocumentTranscribe = vi.fn();
 const error = vi.fn();
@@ -21,6 +22,8 @@ vi.mock("../../api/client", () => ({
       createProjectModelBinding(...args),
     updateProjectModelBinding: (...args: unknown[]) =>
       updateProjectModelBinding(...args),
+    deleteProjectModelBinding: (...args: unknown[]) =>
+      deleteProjectModelBinding(...args),
     enqueueDocumentSegment: (...args: unknown[]) =>
       enqueueDocumentSegment(...args),
     enqueueDocumentTranscribe: (...args: unknown[]) =>
@@ -74,11 +77,46 @@ function transcribeSelect(): HTMLSelectElement {
   }) as HTMLSelectElement;
 }
 
+type StoredBinding = { id: string; task: string; model_id: string };
+
+/**
+ * The bindings endpoints as one small stateful server: a write is visible to
+ * the next read, which is what `saveProjectDefault` and `clearProjectDefault`
+ * both walk through before they touch anything.
+ */
+function serveBindings(initial: StoredBinding[]) {
+  let rows = [...initial];
+  listProjectModelBindings.mockImplementation(async () => [...rows]);
+  createProjectModelBinding.mockImplementation(async (_projectId, body) => {
+    const row = { id: `binding-${body.task}`, ...body };
+    rows = [...rows.filter((r) => r.task !== body.task), row];
+    return row;
+  });
+  updateProjectModelBinding.mockImplementation(
+    async (_projectId, bindingId, body) => {
+      const previous = rows.find((r) => r.id === bindingId);
+      const row = {
+        id: bindingId,
+        task: previous ? previous.task : "segment",
+        ...body,
+      };
+      rows = [...rows.filter((r) => r.id !== bindingId), row];
+      return row;
+    },
+  );
+  deleteProjectModelBinding.mockImplementation(
+    async (_projectId, bindingId) => {
+      rows = rows.filter((r) => r.id !== bindingId);
+    },
+  );
+  return () => rows;
+}
+
 describe("DocumentWorkflowMenu sets the project default", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     listInferenceModels.mockResolvedValue(CATALOG);
-    listProjectModelBindings.mockResolvedValue([]);
+    serveBindings([]);
     enqueueDocumentSegment.mockResolvedValue({
       queued: 1,
       skipped: 0,
@@ -91,7 +129,7 @@ describe("DocumentWorkflowMenu sets the project default", () => {
     });
   });
 
-  it("saves the pick as the project default and says so", async () => {
+  it("saves the pick as the project default and offers the way back", async () => {
     const write = deferred<unknown>();
     createProjectModelBinding.mockReturnValue(write.promise);
     openMenu();
@@ -100,20 +138,97 @@ describe("DocumentWorkflowMenu sets the project default", () => {
     fireEvent.change(segmentSelect(), { target: { value: "seg-b" } });
 
     await waitFor(() => expect(screen.getByText("Saving…")).toBeTruthy());
-    // Only the task being written is frozen; the other picker stays usable.
+    // One write at a time for the whole project, so both pickers are frozen.
     expect(segmentSelect()).toBeDisabled();
-    expect(transcribeSelect()).not.toBeDisabled();
+    expect(transcribeSelect()).toBeDisabled();
 
     write.resolve({ id: "binding-1", task: "segment", model_id: "seg-b" });
 
     await waitFor(() =>
-      expect(screen.getByText("Project default")).toBeTruthy(),
+      expect(screen.getByText("Saved as project default.")).toBeTruthy(),
     );
+    expect(screen.getByRole("button", { name: "Undo" })).toBeTruthy();
     expect(createProjectModelBinding).toHaveBeenCalledWith("project-1", {
       task: "segment",
       model_id: "seg-b",
     });
     expect(segmentSelect()).toHaveValue("seg-b");
+    expect(transcribeSelect()).not.toBeDisabled();
+  });
+
+  it("undoes the pick back to the binding it replaced", async () => {
+    const rows = serveBindings([
+      { id: "binding-1", task: "segment", model_id: "seg-a" },
+    ]);
+    openMenu();
+    await waitFor(() => expect(segmentSelect()).toHaveValue("seg-a"));
+
+    fireEvent.change(segmentSelect(), { target: { value: "seg-b" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Undo" }));
+
+    await waitFor(() => expect(segmentSelect()).toHaveValue("seg-a"));
+    expect(rows()).toEqual([
+      { id: "binding-1", task: "segment", model_id: "seg-a" },
+    ]);
+    // One undo per pick, and the line speaks for the project again.
+    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+    expect(screen.getByText("Project default")).toBeTruthy();
+  });
+
+  it("undoes a first pick by clearing the binding it created", async () => {
+    const rows = serveBindings([]);
+    openMenu();
+    await screen.findByRole("option", { name: "pp-ocr" });
+
+    fireEvent.change(segmentSelect(), { target: { value: "seg-b" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Undo" }));
+
+    await waitFor(() =>
+      expect(deleteProjectModelBinding).toHaveBeenCalledWith(
+        "project-1",
+        "binding-segment",
+      ),
+    );
+    expect(rows()).toEqual([]);
+    // Back to the model the picker showed before the pick, and no claim.
+    await waitFor(() => expect(segmentSelect()).toHaveValue("seg-a"));
+    expect(screen.queryByText("Project default")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+  });
+
+  it("keeps the stored state when the undo fails", async () => {
+    serveBindings([{ id: "binding-1", task: "segment", model_id: "seg-a" }]);
+    const write = updateProjectModelBinding.getMockImplementation()!;
+    updateProjectModelBinding
+      .mockImplementationOnce(write)
+      .mockRejectedValueOnce(new ApiError("No access", 403));
+    openMenu();
+    await waitFor(() => expect(segmentSelect()).toHaveValue("seg-a"));
+
+    fireEvent.change(segmentSelect(), { target: { value: "seg-b" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Undo" }));
+
+    await waitFor(() => expect(error).toHaveBeenCalledWith("No access"));
+    // The pick is what the project stores, so that is what the menu shows.
+    expect(segmentSelect()).toHaveValue("seg-b");
+    expect(screen.getByText("Project default")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+  });
+
+  it("takes the undo offer away when the menu is closed", async () => {
+    serveBindings([]);
+    openMenu();
+    await screen.findByRole("option", { name: "pp-ocr" });
+
+    fireEvent.change(segmentSelect(), { target: { value: "seg-b" } });
+    await screen.findByRole("button", { name: "Undo" });
+
+    fireEvent.click(screen.getByRole("button", { name: /workflow/i }));
+    fireEvent.click(screen.getByRole("button", { name: /workflow/i }));
+
+    await screen.findByRole("option", { name: "pp-ocr" });
+    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+    expect(screen.getByText("Project default")).toBeTruthy();
   });
 
   it("marks a stored default without writing anything", async () => {

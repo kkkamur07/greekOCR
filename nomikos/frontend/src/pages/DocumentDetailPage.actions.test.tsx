@@ -501,7 +501,8 @@ describe("DocumentDetailPage action toolbar", () => {
         model_id: "seg-b",
       }),
     );
-    expect(await screen.findByText("Project default")).toBeTruthy();
+    expect(await screen.findByText("Saved as project default.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Undo" })).toBeTruthy();
   });
 
   it("opens, walks, activates and closes a menu with the keyboard alone", async () => {
