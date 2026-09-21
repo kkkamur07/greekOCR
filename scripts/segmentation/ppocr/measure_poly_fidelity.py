@@ -37,9 +37,24 @@ MODEL = Path(
     "/Users/krishuagarwal/Desktop/Programming/python/greekOCR-wt/_ppocr-parity/pp-ocrv6-medium-det.onnx"
 )
 PAGES = (
-    ("c13", Path("/Users/krishuagarwal/Desktop/Programming/python/greekOCR-wt/_orli-env/pagexml-verify/c13.jpg")),
-    ("vat-1r", Path("/Users/krishuagarwal/Desktop/Programming/python/greekOCR-wt/_orli-env/pagexml-verify/vat-1r.jpg")),
-    ("grec-p4", Path("/Users/krishuagarwal/Desktop/Programming/python/greekOCR-wt/_ppocr-parity/adapter-e2e/grec-p4.jpg")),
+    (
+        "c13",
+        Path(
+            "/Users/krishuagarwal/Desktop/Programming/python/greekOCR-wt/_orli-env/pagexml-verify/c13.jpg"
+        ),
+    ),
+    (
+        "vat-1r",
+        Path(
+            "/Users/krishuagarwal/Desktop/Programming/python/greekOCR-wt/_orli-env/pagexml-verify/vat-1r.jpg"
+        ),
+    ),
+    (
+        "grec-p4",
+        Path(
+            "/Users/krishuagarwal/Desktop/Programming/python/greekOCR-wt/_ppocr-parity/adapter-e2e/grec-p4.jpg"
+        ),
+    ),
     ("segment-page", None),
 )
 
@@ -119,10 +134,7 @@ def _kept_cut(
             mask,
             [
                 np.array(
-                    [
-                        [int(round(float(x) - x0)), int(round(float(y) - y0))]
-                        for x, y in poly
-                    ],
+                    [[int(round(float(x) - x0)), int(round(float(y) - y0))] for x, y in poly],
                     dtype=np.int32,
                 )
             ],
@@ -183,7 +195,9 @@ def main() -> int:
             data, model_path=MODEL, artifact_sha256=None, params={"box_type": "poly"}
         )
         seconds = time.perf_counter() - started
-        polys = [np.asarray(line.points, dtype=np.float64).reshape(-1, 2) for line in response.lines]
+        polys = [
+            np.asarray(line.points, dtype=np.float64).reshape(-1, 2) for line in response.lines
+        ]
         anchors = zone_polys.get(name, polys)
         ink, med_h = _ink_page(grey, anchors)
         kept, cut = _kept_cut(polys, anchors, ink, med_h)
