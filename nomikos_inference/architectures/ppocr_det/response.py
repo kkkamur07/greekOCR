@@ -5,6 +5,9 @@ from __future__ import annotations
 from typing import Any
 
 from nomikos_inference.architectures.ppocr_det.polygons import (
+    DEFAULT_OUTLINE_TOLERANCE_PX,
+    DEFAULT_VERTICAL_GROWTH,
+    grow_outlines_vertical,
     polyline_baseline,
     simplify_outline,
 )
@@ -43,12 +46,13 @@ def _poly_points_for(
     baseline_fraction: float,
     image_width: int,
     image_height: int,
-    median_height: float,
-) -> tuple[list[list[float]], list[list[float]], bool]:
-    """Served polygon and baseline polyline for one unrefined detection.
+    outline_tolerance_px: float,
+) -> tuple[list[list[float]], list[list[float]], list[list[float]], bool]:
+    """Ungrown polygon, quad ring and baseline polyline for one detection.
 
-    Simplification uses the page median line height, like the refined path,
-    so one tall initial cannot loosen every other line's epsilon.
+    Returns the simplified outline, the quad ring and baseline the growth
+    step needs for direction, the baseline polyline sampled from the ungrown
+    outline, and whether the quad stood in as the polygon.
     """
     quad_points = [[float(x), float(y)] for x, y in quad.points]
     outline = quad.polygon if quad.polygon is not None else quad_points
@@ -56,16 +60,16 @@ def _poly_points_for(
     quad_baseline = _baseline_points(quad_points, baseline_fraction)
     simplified = simplify_outline(
         outline,
-        median_height=median_height,
+        outline_tolerance_px=outline_tolerance_px,
         page_width=image_width,
         page_height=image_height,
     )
     if simplified is None:
-        return quad_points, quad_baseline, True
+        return quad_points, quad_points, quad_baseline, True
     baseline = polyline_baseline(simplified, quad_points, baseline_fraction, baseline=quad_baseline)
     if baseline is None:
         baseline = quad_baseline
-    return simplified, baseline, fallback
+    return simplified, quad_points, baseline, fallback
 
 
 def build_ppocr_det_response(
@@ -76,13 +80,16 @@ def build_ppocr_det_response(
     baseline_fraction: float = DEFAULT_BASELINE_FRACTION,
     reading_direction: str = "ltr",
     box_type: str = "quad",
+    outline_tolerance_px: float = DEFAULT_OUTLINE_TOLERANCE_PX,
+    vertical_growth: float = DEFAULT_VERTICAL_GROWTH,
 ) -> SegmentRunResponse:
     """Number detection quads in reading order under one full-page block.
 
     Past ``MAX_SEGMENT_LINES`` the highest scoring quads survive (score ties
     keep input order), then the survivors are ordered; numbering always
     follows reading order from 1. With ``box_type="poly"`` each line serves
-    its polygon and a baseline polyline; the quad path is unchanged.
+    its polygon grown across the line and a baseline polyline sampled from
+    the ungrown outline; the quad path is unchanged.
     """
 
     if box_type not in ("quad", "poly"):
@@ -90,6 +97,24 @@ def build_ppocr_det_response(
     ranked = sorted(range(len(quads)), key=lambda i: (-quads[i].score, i))
     survivors = [quads[i] for i in ranked[:MAX_SEGMENT_LINES]]
     reading = order_lines(survivors, direction=reading_direction)
+    per_survivor: list[tuple] = []
+    grown_points: list[list[list[float]]] = []
+    if box_type == "poly":
+        for quad in survivors:
+            per_survivor.append(
+                _poly_points_for(
+                    quad, baseline_fraction, image_width, image_height, outline_tolerance_px
+                )
+            )
+        grown_points = grow_outlines_vertical(
+            [simplified for simplified, _, _, _ in per_survivor],
+            [ring for _, ring, _, _ in per_survivor],
+            factor=float(vertical_growth),
+            baselines=[_baseline_points(quad.points, baseline_fraction) for quad in survivors],
+            page_width=image_width,
+            page_height=image_height,
+            outline_tolerance_px=outline_tolerance_px,
+        )
 
     block = SegmentBlock(
         external_id="ppocr-det-block-1",
@@ -104,14 +129,6 @@ def build_ppocr_det_response(
         },
     )
 
-    heights = [
-        max(float(point[1]) for point in quad.points)
-        - min(float(point[1]) for point in quad.points)
-        for quad in survivors
-    ]
-    ordered_heights = sorted(heights)
-    median_height = ordered_heights[len(ordered_heights) // 2] if ordered_heights else 1.0
-
     lines = []
     for position, quad_index in enumerate(reading):
         quad = survivors[quad_index]
@@ -122,9 +139,7 @@ def build_ppocr_det_response(
             "baseline_fraction": float(baseline_fraction),
         }
         if box_type == "poly":
-            served_points, served_baseline, fallback = _poly_points_for(
-                quad, baseline_fraction, image_width, image_height, median_height
-            )
+            _, _, served_baseline, fallback = per_survivor[quad_index]
             if fallback:
                 source_metadata["polygon_fallback"] = True
             lines.append(
@@ -134,7 +149,7 @@ def build_ppocr_det_response(
                     block_external_id=block.external_id,
                     baseline={"points": served_baseline},
                     mask=None,
-                    points=served_points,
+                    points=grown_points[quad_index],
                     kraken_ceiling=None,
                     source_metadata=source_metadata,
                 )

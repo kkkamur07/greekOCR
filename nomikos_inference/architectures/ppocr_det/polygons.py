@@ -9,6 +9,8 @@ polygons that the served masks are drawn from.
 
 from __future__ import annotations
 
+import math
+
 import cv2
 import numpy as np
 import pyclipper
@@ -16,6 +18,22 @@ import pyclipper
 #: Hard cap on served polygon points; the simplifier raises epsilon until
 #: the ring fits.
 MAX_POLYGON_POINTS = 64
+
+#: Default serving tolerance for the page-space outline fit, in pixels.
+#: 0.5 px keeps the same ink as 0.25 px for fewer points.
+DEFAULT_OUTLINE_TOLERANCE_PX = 0.5
+
+#: Default vertical growth factor for served outlines. Each polygon grows
+#: across its line (never along it) about its own centre line, so ascenders
+#: and descenders stay inside the transcription mask where the pitch allows.
+DEFAULT_VERTICAL_GROWTH = 1.35
+
+#: Supersampling for the growth overlap resolution. Contested pixels go to
+#: the line whose ungrown polygon is nearer, which needs subpixel masks;
+#: 3x keeps the boundary within a third of a pixel of the true Voronoi edge.
+#: 2x was tried and dropped: half-integer grown edges round up a whole
+#: pixel there, inflating every line by a pixel and leaving tie strips.
+_GROWTH_SUPERSAMPLE = 3
 
 #: Tolerance for dropping collinear baseline samples, in pixels.
 BASELINE_COLLINEAR_PX = 0.5
@@ -137,23 +155,23 @@ def convex_hull_of(points: object) -> list[list[float]]:
 def simplify_outline(
     outline: object,
     *,
-    median_height: float,
+    outline_tolerance_px: float = DEFAULT_OUTLINE_TOLERANCE_PX,
     page_width: float | None = None,
     page_height: float | None = None,
 ) -> list[list[float]] | None:
     """Douglas-Peucker a polygon for serving; ``None`` when unusable.
 
-    Epsilon is ``max(1.0 px, 0.01 * median page line height)``, raised until
-    the ring fits ``MAX_POLYGON_POINTS`` (with a uniform subsample fallback
-    so the cap always holds). The result is deduped, clipped to
-    the page, and checked with ``SimplifyPolygon`` keeping the largest
-    piece; anything under 4 points is ``None`` so the caller falls back to
-    the quad.
+    Epsilon is ``outline_tolerance_px`` (0.5 px by default, which keeps the
+    same ink as 0.25 px for fewer points), raised until the ring fits
+    ``MAX_POLYGON_POINTS`` (with a uniform subsample fallback so the cap
+    always holds). The result is deduped, clipped to the page, and checked
+    with ``SimplifyPolygon`` keeping the largest piece; anything under 4
+    points is ``None`` so the caller falls back to the quad.
     """
     ring = _ring(outline).astype(np.float32)
     if len(ring) < 3:
         return None
-    epsilon = max(1.0, 0.01 * float(median_height))
+    epsilon = max(float(outline_tolerance_px), 1e-9)
     approx = ring
     for _ in range(25):
         approx = cv2.approxPolyDP(ring, epsilon, True).reshape(-1, 2)
@@ -329,13 +347,192 @@ def _drop_collinear(points: list[list[float]]) -> list[list[float]]:
     return kept
 
 
+def _growth_frame(
+    quad_ring: object,
+    baseline: object | None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Centre line frame of one text line: origin, along axis, across normal.
+
+    The along axis is the quad long axis pinned to the baseline direction,
+    so slanted lines grow perpendicular to their own direction. The sign of
+    the axis does not matter for growth, which is symmetric about the origin.
+    """
+    anchor = _quad_baseline_anchor(quad_ring, baseline)
+    origin, axis, _, _ = _long_axis(quad_ring, anchor)
+    normal = np.array([-axis[1], axis[0]])
+    return origin, axis, normal
+
+
+def _grow_ring(
+    ring: np.ndarray,
+    origin: np.ndarray,
+    axis: np.ndarray,
+    normal: np.ndarray,
+    factor: float,
+) -> np.ndarray:
+    """Scale a ring across the line only, about its centre line."""
+    rel = ring - origin
+    return origin + np.outer(rel @ axis, axis) + np.outer(factor * (rel @ normal), normal)
+
+
+def _raster_supersampled(
+    poly: np.ndarray, x0: float, y0: float, width: int, height: int, ss: int
+) -> np.ndarray:
+    """Boolean mask of a polygon over a page window at ``ss`` times scale."""
+    mask = np.zeros((height * ss, width * ss), dtype=np.uint8)
+    cv2.fillPoly(mask, [(((poly - np.array([x0, y0])) * ss).astype(np.int32))], 255)
+    return mask > 0
+
+
+def _contested_losses(
+    own_distance: np.ndarray, other_distance: np.ndarray, other: int, index: int
+) -> np.ndarray:
+    """Contested pixels the neighbour wins outright.
+
+    Strictly nearer pixels, plus exact ties when the neighbour has the
+    lower index, so every shared pixel has exactly one owner and no strip
+    lands in two transcription crops. A pixel stays in both masks only when
+    neither distance is strictly smaller, which for two floats means exactly
+    equal, so the equality branch is complete with no epsilon. Distances
+    compare exactly as the distance transform computed them.
+    """
+    return (other_distance < own_distance) | ((other_distance == own_distance) & (other < index))
+
+
+def grow_outlines_vertical(
+    outlines: list[object],
+    quad_rings: list[object],
+    *,
+    factor: float = DEFAULT_VERTICAL_GROWTH,
+    baselines: list[object | None] | None = None,
+    page_width: float | None = None,
+    page_height: float | None = None,
+    outline_tolerance_px: float = DEFAULT_OUTLINE_TOLERANCE_PX,
+) -> list[list[list[float]]]:
+    """Grow served outlines across their lines and split neighbour overlaps.
+
+    Each outline is scaled by ``factor`` perpendicular to its quad long axis
+    about the quad centre (the along-line extent never moves), which covers
+    ascenders and descenders where the pitch allows. Where grown outlines
+    overlap, each contested pixel goes to the line whose ungrown outline is
+    nearer, with exact ties kept by the lower index, so the boundary follows
+    both shapes and no pixel lands in two outlines; where there is no
+    neighbour the grown outline stands. Results are integer points clipped
+    to the page
+    and capped at ``MAX_POLYGON_POINTS``; any line whose grown contour is
+    unusable keeps its ungrown outline. ``factor == 1.0`` returns the inputs
+    unchanged. Quads and baselines are read only for direction, never moved.
+    """
+    if baselines is None:
+        baselines = [None] * len(outlines)
+    if factor == 1.0:
+        return [outline for outline in outlines]
+    rings = [_ring(outline) for outline in outlines]
+    frames = [
+        _growth_frame(quad, baseline) for quad, baseline in zip(quad_rings, baselines, strict=True)
+    ]
+    grown = [
+        _grow_ring(ring, origin, axis, normal, float(factor))
+        for ring, (origin, axis, normal) in zip(rings, frames, strict=True)
+    ]
+    boxes = [
+        (float(g[:, 0].min()), float(g[:, 0].max()), float(g[:, 1].min()), float(g[:, 1].max()))
+        for g in grown
+    ]
+    box_array = np.asarray(boxes, dtype=np.float64).reshape(-1, 4)
+    ss = _GROWTH_SUPERSAMPLE
+    approx_ss = max(float(outline_tolerance_px), 1e-9) * ss
+    served: list[list[list[float]]] = []
+    for index, ring in enumerate(rings):
+        fallback = dedup_ring(ring)
+        low_x, high_x, low_y, high_y = boxes[index]
+        x0 = int(math.floor(low_x - 2))
+        x1 = int(math.ceil(high_x + 2))
+        y0 = int(math.floor(low_y - 2))
+        y1 = int(math.ceil(high_y + 2))
+        if page_width is not None:
+            x0 = max(0, x0)
+            x1 = min(int(math.ceil(float(page_width))), x1)
+        if page_height is not None:
+            y0 = max(0, y0)
+            y1 = min(int(math.ceil(float(page_height))), y1)
+        if x1 <= x0 or y1 <= y0:
+            served.append(fallback)
+            continue
+        width, height = x1 - x0, y1 - y0
+        grown_mask = _raster_supersampled(grown[index], x0, y0, width, height, ss)
+        keep = grown_mask.copy()
+        # Contenders first: only lines whose grown masks truly share pixels
+        # need distance transforms, so isolated lines skip them entirely.
+        hits = (
+            (box_array[:, 1] >= x0)
+            & (box_array[:, 0] <= x1)
+            & (box_array[:, 3] >= y0)
+            & (box_array[:, 2] <= y1)
+        )
+        hits[index] = False
+        contenders: dict[int, np.ndarray] = {}
+        for other in np.flatnonzero(hits).tolist():
+            other_mask = _raster_supersampled(grown[other], x0, y0, width, height, ss)
+            if (grown_mask & other_mask).any():
+                contenders[int(other)] = other_mask
+        if contenders:
+            plain_mask = _raster_supersampled(ring, x0, y0, width, height, ss)
+            own_distance = cv2.distanceTransform((~plain_mask).astype(np.uint8), cv2.DIST_L2, 3)
+            for other, other_mask in contenders.items():
+                zone = grown_mask & other_mask
+                other_plain = _raster_supersampled(rings[other], x0, y0, width, height, ss)
+                other_distance = cv2.distanceTransform(
+                    (~other_plain).astype(np.uint8), cv2.DIST_L2, 3
+                )
+                # Stable ownership: the nearer outline wins, and on an exact
+                # tie the lower index keeps the pixel, so no strip lands in
+                # two transcription crops.
+                keep[zone & _contested_losses(own_distance, other_distance, other, index)] = False
+        contours, _ = cv2.findContours(
+            keep.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )
+        if not contours:
+            served.append(fallback)
+            continue
+        biggest = max(contours, key=cv2.contourArea)
+        approx = cv2.approxPolyDP(biggest, approx_ss, True).reshape(-1, 2).astype(np.float64)
+        approx = approx / ss + np.array([x0, y0])
+        if len(approx) < 4:
+            served.append(fallback)
+            continue
+        rounded = [[float(round(float(x))), float(round(float(y)))] for x, y in approx]
+        cleaned = clip_ring_to_page(dedup_ring(rounded), page_width, page_height)
+        if len(cleaned) > MAX_POLYGON_POINTS:
+            pick = np.round(np.linspace(0, len(cleaned) - 1, MAX_POLYGON_POINTS)).astype(int)
+            cleaned = dedup_ring([cleaned[i] for i in pick])
+        if len(cleaned) < 4:
+            served.append(fallback)
+            continue
+        try:
+            pieces = _from_clipper(pyclipper.SimplifyPolygon(_to_clipper(cleaned), True))
+        except pyclipper.ClipperException:
+            served.append(fallback)
+            continue
+        candidates = [piece for piece in pieces if len(_ring(piece)) >= 3 and ring_area(piece) > 0]
+        if not candidates:
+            served.append(fallback)
+            continue
+        best = dedup_ring(max(candidates, key=ring_area))
+        served.append(best if len(best) >= 4 else fallback)
+    return served
+
+
 __all__ = [
     "BASELINE_COLLINEAR_PX",
     "CLIPPER_SCALE",
+    "DEFAULT_OUTLINE_TOLERANCE_PX",
+    "DEFAULT_VERTICAL_GROWTH",
     "MAX_POLYGON_POINTS",
     "clip_ring_to_page",
     "convex_hull_of",
     "dedup_ring",
+    "grow_outlines_vertical",
     "intersect_outline",
     "polyline_baseline",
     "ring_area",
