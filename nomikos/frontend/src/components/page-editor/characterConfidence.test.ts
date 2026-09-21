@@ -167,6 +167,21 @@ describe("groupConfidenceRuns", () => {
     expect(runs[0].text).toBe("\u{10900}a");
   });
 
+  it("scores an astral character and a following Syriac letter separately", () => {
+    // The backend counts Python code points (one entry per code point), so an
+    // astral character is one entry holding a surrogate pair. The cluster walk
+    // consumes entries in matching UTF-16 units, so the pair stays in its own
+    // cluster and each letter keeps its own score.
+    const runs = groupConfidenceRuns([
+      { char: "\u{10900}", confidence: 0.42 },
+      { char: "\u0710", confidence: 0.96 },
+    ]);
+
+    expect(runs.map((run) => run.text)).toEqual(["\u{10900}", "\u0710"]);
+    expect(runs[0].confidence).toBe(0.42);
+    expect(runs[1].confidence).toBe(0.96);
+  });
+
   it("returns nothing for empty input", () => {
     expect(groupConfidenceRuns([])).toEqual([]);
   });
