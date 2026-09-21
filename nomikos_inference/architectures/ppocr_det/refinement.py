@@ -18,8 +18,11 @@ from shapely.geometry import LineString, Polygon
 from shapely.ops import unary_union
 
 from nomikos_inference.architectures.ppocr_det.polygons import (
+    DEFAULT_OUTLINE_TOLERANCE_PX,
+    DEFAULT_VERTICAL_GROWTH,
     convex_hull_of,
     dedup_ring,
+    grow_outlines_vertical,
     intersect_outline,
     polyline_baseline,
     ring_area,
@@ -565,26 +568,29 @@ def _quad_ring_of(work: _Work) -> list[list[float]]:
 def _poly_output_for(
     work: _Work,
     baseline_fraction: float,
-    median_height: float,
+    outline_tolerance_px: float,
     page_width: float | None,
     page_height: float | None,
-) -> tuple[list[list[float]], list[list[float]], bool]:
-    """Simplified outline and polyline baseline for one refined work.
+) -> tuple[list[list[float]], list[list[float]], list[list[float]], bool]:
+    """Simplified outline, quad ring and polyline baseline for one work.
 
-    Returns the served points, the baseline polyline, and whether the quad
-    stood in as the polygon.
+    Returns the ungrown simplified outline, the quad ring and baseline the
+    growth step needs for direction, the baseline polyline, and whether the
+    quad stood in as the polygon. Growth runs page-wide after this, so the
+    served points here are still ungrown.
     """
     quad_ring = _quad_ring_of(work)
     outline = work.outline if work.outline is not None else quad_ring
     fallback = work.polygon_fallback or work.outline is None
     simplified = simplify_outline(
         outline,
-        median_height=median_height,
+        outline_tolerance_px=outline_tolerance_px,
         page_width=page_width,
         page_height=page_height,
     )
     if simplified is None:
         return (
+            quad_ring,
             quad_ring,
             [
                 [float(work.baseline[0][0]), float(work.baseline[0][1])],
@@ -598,7 +604,67 @@ def _poly_output_for(
             [float(work.baseline[0][0]), float(work.baseline[0][1])],
             [float(work.baseline[1][0]), float(work.baseline[1][1])],
         ]
-    return simplified, baseline, fallback
+    return simplified, quad_ring, baseline, fallback
+
+
+def _poly_lines(
+    works: list[_Work],
+    *,
+    baseline_fraction: float,
+    page_width: float | None,
+    page_height: float | None,
+    outline_tolerance_px: float,
+    vertical_growth: float,
+) -> list[RefinedLine]:
+    """Served poly lines for refined works: simplify, grow page-wide, emit.
+
+    Simplification and baselines run per work from the ungrown outlines;
+    growth runs once over the whole page so neighbour overlaps split by
+    nearest ungrown outline. Growth never feeds back into grouping.
+    """
+    ungrown: list[list[list[float]]] = []
+    quad_rings: list[list[list[float]]] = []
+    work_baselines: list[list[list[float]]] = []
+    baselines: list[list[list[float]]] = []
+    fallbacks: list[bool] = []
+    for work in works:
+        simplified, quad_ring, baseline, fallback = _poly_output_for(
+            work, baseline_fraction, outline_tolerance_px, page_width, page_height
+        )
+        ungrown.append(simplified)
+        quad_rings.append(quad_ring)
+        work_baselines.append(
+            [
+                [float(work.baseline[0][0]), float(work.baseline[0][1])],
+                [float(work.baseline[1][0]), float(work.baseline[1][1])],
+            ]
+        )
+        baselines.append(baseline)
+        fallbacks.append(fallback)
+    grown = grow_outlines_vertical(
+        ungrown,
+        quad_rings,
+        factor=float(vertical_growth),
+        baselines=work_baselines,
+        page_width=page_width,
+        page_height=page_height,
+        outline_tolerance_px=outline_tolerance_px,
+    )
+    return [
+        RefinedLine(
+            points=points,
+            baseline=baseline,
+            score=work.score,
+            members=work.members,
+            role=work.role,
+            suspect=work.suspect,
+            suspect_reason=work.suspect_reason,
+            merged_from=work.merged_from,
+            overlap_unresolved=work.overlap_unresolved,
+            polygon_fallback=fallback,
+        )
+        for work, points, baseline, fallback in zip(works, grown, baselines, fallbacks, strict=True)
+    ]
 
 
 def refine_to_lines(
@@ -616,12 +682,16 @@ def refine_to_lines(
     box_type: str = "quad",
     page_width: float | None = None,
     page_height: float | None = None,
+    outline_tolerance_px: float = DEFAULT_OUTLINE_TOLERANCE_PX,
+    vertical_growth: float = DEFAULT_VERTICAL_GROWTH,
 ) -> list[RefinedLine]:
     """Run the refinement stage and return unordered manuscript lines.
 
-    With ``box_type="poly"`` every line carries its simplified polygon and
-    a baseline polyline; the quad path is unchanged. Grouping, merge,
-    overlap, suspect and role decisions always read the quads.
+    With ``box_type="poly"`` every line carries its simplified polygon grown
+    across the line and a baseline polyline; the quad path is unchanged.
+    Grouping, merge, overlap, suspect and role decisions always read the
+    quads. Baselines are sampled from the ungrown outlines, so growth never
+    moves them.
     """
     if box_type not in ("quad", "poly"):
         raise ValueError('box_type must be "poly" or "quad"')
@@ -645,27 +715,17 @@ def refine_to_lines(
         )
     if classify:
         classify_suspects(works, layout, quads)
+    if box_type == "poly":
+        return _poly_lines(
+            works,
+            baseline_fraction=baseline_fraction,
+            page_width=page_width,
+            page_height=page_height,
+            outline_tolerance_px=outline_tolerance_px,
+            vertical_growth=vertical_growth,
+        )
     lines = []
     for work in works:
-        if box_type == "poly":
-            points, baseline, fallback = _poly_output_for(
-                work, baseline_fraction, median_height, page_width, page_height
-            )
-            lines.append(
-                RefinedLine(
-                    points=points,
-                    baseline=baseline,
-                    score=work.score,
-                    members=work.members,
-                    role=work.role,
-                    suspect=work.suspect,
-                    suspect_reason=work.suspect_reason,
-                    merged_from=work.merged_from,
-                    overlap_unresolved=work.overlap_unresolved,
-                    polygon_fallback=fallback,
-                )
-            )
-            continue
         ring = _quad_ring_of(work)
         lines.append(
             RefinedLine(

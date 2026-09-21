@@ -19,7 +19,14 @@ import numpy as np
 
 from nomikos_inference.admission import open_image_bytes
 from nomikos_inference.architectures.artifact import ArtifactHandle, resolve_artifact
-from nomikos_inference.architectures.ppocr_det.postprocessing import detect_lines
+from nomikos_inference.architectures.ppocr_det.polygons import (
+    DEFAULT_OUTLINE_TOLERANCE_PX,
+    DEFAULT_VERTICAL_GROWTH,
+)
+from nomikos_inference.architectures.ppocr_det.postprocessing import (
+    DEFAULT_CONTOUR_TOLERANCE_PX,
+    detect_lines,
+)
 from nomikos_inference.architectures.ppocr_det.preprocessing import preprocess_ppocr_det_image
 from nomikos_inference.architectures.ppocr_det.reading_order import layout_lines
 from nomikos_inference.architectures.ppocr_det.refinement import (
@@ -270,6 +277,15 @@ def run_ppocr_det_segment(
     overlap_cut_threshold = _bounded_float_param(
         resolved, "overlap_cut_threshold", DEFAULT_OVERLAP_CUT_THRESHOLD, 0.05, 1
     )
+    contour_tolerance_px = _bounded_float_param(
+        resolved, "contour_tolerance_px", DEFAULT_CONTOUR_TOLERANCE_PX, 0, 10
+    )
+    outline_tolerance_px = _bounded_float_param(
+        resolved, "outline_tolerance_px", DEFAULT_OUTLINE_TOLERANCE_PX, 0, 10
+    )
+    vertical_growth = _bounded_float_param(
+        resolved, "vertical_growth", DEFAULT_VERTICAL_GROWTH, 1.0, 2.0
+    )
 
     with open_image_bytes(image_bytes) as image:
         image = image.convert("RGB")
@@ -296,6 +312,7 @@ def run_ppocr_det_segment(
             unclip_ratio=unclip_ratio,
             max_candidates=max_candidates,
             box_type=box_type,
+            contour_tolerance_px=contour_tolerance_px,
         )
         if not merge_fragments and not resolve_overlaps and noise_policy == "off":
             return build_ppocr_det_response(
@@ -305,6 +322,8 @@ def run_ppocr_det_segment(
                 baseline_fraction=fraction,
                 reading_direction=direction,
                 box_type=box_type,
+                outline_tolerance_px=outline_tolerance_px,
+                vertical_growth=vertical_growth,
             )
         layout = layout_lines(quads, direction=direction)
         items = refine_to_lines(
@@ -321,6 +340,8 @@ def run_ppocr_det_segment(
             box_type=box_type,
             page_width=width,
             page_height=height,
+            outline_tolerance_px=outline_tolerance_px,
+            vertical_growth=vertical_growth,
         )
         return build_refined_ppocr_det_response(
             width,
