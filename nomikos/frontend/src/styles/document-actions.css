@@ -159,22 +159,32 @@
 
 /*
   One row per picker: the word "Model", the select taking the rest of the
-  width, on the same left edge as the items above and below it.
+  width, on the same left edge as the items above and below it, and the line
+  under it. A grid, so the note starts exactly at the select's left edge: the
+  visible label sizes the first column and the picker's
+  own label element steps out of the way with `display: contents`. The note is
+  always rendered, empty when there is nothing to say, so that the items below
+  sit at the same height in both sections whatever it says.
 */
 .action-menu__model {
-  display: flex;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
   align-items: center;
+  gap: 0 var(--space-2);
   padding: 2px 10px 8px;
 }
 .action-menu__model .pe-model {
-  display: flex;
-  flex: 1;
-  min-width: 0;
-  align-items: center;
-  gap: var(--space-2);
+  display: contents;
+}
+.action-menu__model-note {
+  grid-column: 2;
+  margin: 3px 0 0;
+  min-height: 14px;
+  font-size: 0.6875rem;
+  line-height: 14px;
+  color: var(--text-3);
 }
 .action-menu__model .pe-model__label {
-  flex-shrink: 0;
   font-size: 0.75rem;
   font-weight: 500;
   letter-spacing: normal;
@@ -182,7 +192,6 @@
   color: var(--text-3);
 }
 .action-menu__model .pe-model__select {
-  flex: 1;
   min-width: 0;
   max-width: none;
 }

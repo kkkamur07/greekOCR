@@ -151,6 +151,27 @@ describe("ProjectDefaultModelsPanel", () => {
     expect(success).toHaveBeenCalledWith("Default segmentation model cleared");
   });
 
+  it("says it could not read the defaults instead of showing No default", async () => {
+    listProjectModelBindings.mockRejectedValueOnce(new Error("offline"));
+    listProjectModelBindings.mockResolvedValue([
+      { id: "binding-1", task: "segment", model_id: "seg-ppocr" },
+    ]);
+    panel();
+
+    await screen.findByText("Could not load the project defaults.");
+    // An unknown default is never drawn as a state the project is in.
+    expect(segmentRow()).toBeDisabled();
+    expect(transcribeRow()).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    await waitFor(() => expect(segmentRow()).toHaveValue("seg-ppocr"));
+    expect(
+      screen.queryByText("Could not load the project defaults."),
+    ).toBeNull();
+    expect(segmentRow()).not.toBeDisabled();
+  });
+
   it("returns the select to the stored value when the save fails", async () => {
     listProjectModelBindings.mockResolvedValue([
       { id: "binding-1", task: "segment", model_id: "seg-kraken" },

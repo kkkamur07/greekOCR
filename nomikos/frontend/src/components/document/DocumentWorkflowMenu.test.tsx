@@ -13,6 +13,8 @@ const listInferenceModels = vi.fn();
 const enqueueDocumentSegment = vi.fn();
 const enqueueDocumentTranscribe = vi.fn();
 const listProjectModelBindings = vi.fn();
+const createProjectModelBinding = vi.fn();
+const updateProjectModelBinding = vi.fn();
 
 vi.mock("../../api/client", () => ({
   api: {
@@ -23,6 +25,10 @@ vi.mock("../../api/client", () => ({
       enqueueDocumentTranscribe(...args),
     listProjectModelBindings: (...args: unknown[]) =>
       listProjectModelBindings(...args),
+    createProjectModelBinding: (...args: unknown[]) =>
+      createProjectModelBinding(...args),
+    updateProjectModelBinding: (...args: unknown[]) =>
+      updateProjectModelBinding(...args),
   },
 }));
 
@@ -65,6 +71,19 @@ describe("DocumentWorkflowMenu segment picker", () => {
     vi.clearAllMocks();
     listInferenceModels.mockResolvedValue(SEGMENT_MODELS);
     listProjectModelBindings.mockResolvedValue([]);
+    // Picking a model now saves it as the project default, so every test in
+    // here needs the write to answer.
+    createProjectModelBinding.mockImplementation(async (_projectId, body) => ({
+      id: `binding-${body.task}`,
+      ...body,
+    }));
+    updateProjectModelBinding.mockImplementation(
+      async (_projectId, bindingId, body) => ({
+        id: bindingId,
+        task: "segment",
+        ...body,
+      }),
+    );
     enqueueDocumentSegment.mockResolvedValue({
       queued: 1,
       skipped: 0,
@@ -212,6 +231,19 @@ describe("DocumentWorkflowMenu transcribe picker", () => {
     vi.clearAllMocks();
     listInferenceModels.mockResolvedValue(SEGMENT_MODELS);
     listProjectModelBindings.mockResolvedValue([]);
+    // Picking a model now saves it as the project default, so every test in
+    // here needs the write to answer.
+    createProjectModelBinding.mockImplementation(async (_projectId, body) => ({
+      id: `binding-${body.task}`,
+      ...body,
+    }));
+    updateProjectModelBinding.mockImplementation(
+      async (_projectId, bindingId, body) => ({
+        id: bindingId,
+        task: "segment",
+        ...body,
+      }),
+    );
     enqueueDocumentSegment.mockResolvedValue({
       queued: 1,
       skipped: 0,

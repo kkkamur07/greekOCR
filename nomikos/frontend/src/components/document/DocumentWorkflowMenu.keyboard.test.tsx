@@ -7,6 +7,7 @@ const listInferenceModels = vi.fn();
 const enqueueDocumentSegment = vi.fn();
 const enqueueDocumentTranscribe = vi.fn();
 const listProjectModelBindings = vi.fn();
+const createProjectModelBinding = vi.fn();
 
 vi.mock("../../api/client", () => ({
   api: {
@@ -17,6 +18,8 @@ vi.mock("../../api/client", () => ({
       enqueueDocumentTranscribe(...args),
     listProjectModelBindings: (...args: unknown[]) =>
       listProjectModelBindings(...args),
+    createProjectModelBinding: (...args: unknown[]) =>
+      createProjectModelBinding(...args),
   },
 }));
 
@@ -67,6 +70,11 @@ describe("DocumentWorkflowMenu keyboard access", () => {
     vi.clearAllMocks();
     listInferenceModels.mockResolvedValue(CATALOG);
     listProjectModelBindings.mockResolvedValue([]);
+    createProjectModelBinding.mockResolvedValue({
+      id: "binding-1",
+      task: "segment",
+      model_id: "seg-b",
+    });
   });
 
   it("keeps the popup open on Tab inside a picker", async () => {
@@ -144,6 +152,27 @@ describe("DocumentWorkflowMenu keyboard access", () => {
     expect(document.activeElement).toBe(
       screen.getByRole("menuitem", { name: /transcribe unpaired pages/i }),
     );
+  });
+
+  it("keeps the popup open when a picker is changed from the keyboard", async () => {
+    const menu = openMenu();
+    await screen.findByRole("option", { name: "pp-ocr" });
+    const select = segmentSelect() as HTMLSelectElement;
+    select.focus();
+
+    // A keyboard change is a change event with focus still on the select; the
+    // write that follows disables it for a moment, which must not read as
+    // focus leaving the popup.
+    fireEvent.keyDown(select, { key: "ArrowDown" });
+    fireEvent.change(select, { target: { value: "seg-b" } });
+    fireEvent.blur(select, { relatedTarget: null });
+
+    await waitFor(() => expect(createProjectModelBinding).toHaveBeenCalled());
+    expect(menu).toBeInTheDocument();
+    expect(
+      screen.getByRole("menu", { name: "Document workflow" }),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(segmentSelect()).not.toBeDisabled());
   });
 
   it("orders pickers and run items in DOM order", async () => {

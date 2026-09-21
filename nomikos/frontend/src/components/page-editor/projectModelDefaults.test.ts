@@ -159,18 +159,68 @@ describe("clearProjectDefault", () => {
   });
 
   it("treats a binding deleted in the meantime as cleared", async () => {
-    const store = storeWith([
+    let rows: ProjectBinding[] = [
       { id: "binding-1", task: "segment", model_id: "seg-a" },
-    ]);
+    ];
     const racing: BindingStore = {
-      ...store,
+      ...storeWith([]),
+      list: async () => [...rows],
       remove: async () => {
+        // Someone else deleted it between the list and this call.
+        rows = [];
         throw new ApiError("Model binding not found", 404);
       },
     };
     await expect(
       clearProjectDefault(racing, "project-1", "segment"),
     ).resolves.toBeUndefined();
+  });
+
+  it("deletes the row that replaced a stale id instead of reporting success", async () => {
+    let rows: ProjectBinding[] = [
+      { id: "binding-old", task: "segment", model_id: "seg-a" },
+    ];
+    const removed: string[] = [];
+    const racing: BindingStore = {
+      ...storeWith([]),
+      list: async () => [...rows],
+      remove: async (_projectId, bindingId) => {
+        removed.push(bindingId);
+        if (bindingId === "binding-old") {
+          // A collaborator replaced the binding: same task, new id.
+          rows = [{ id: "binding-new", task: "segment", model_id: "seg-b" }];
+          throw new ApiError("Model binding not found", 404);
+        }
+        rows = rows.filter((row) => row.id !== bindingId);
+      },
+    };
+
+    await expect(
+      clearProjectDefault(racing, "project-1", "segment"),
+    ).resolves.toBeUndefined();
+
+    expect(removed).toEqual(["binding-old", "binding-new"]);
+    expect(rows).toEqual([]);
+  });
+
+  it("gives up rather than call a default cleared that is still there", async () => {
+    let created = 0;
+    const racing: BindingStore = {
+      ...storeWith([]),
+      // Every list answers with a fresh row under a fresh id.
+      list: async () => {
+        created += 1;
+        return [
+          { id: `binding-${created}`, task: "segment", model_id: "seg-a" },
+        ];
+      },
+      remove: async () => {
+        throw new ApiError("Model binding not found", 404);
+      },
+    };
+    await expect(
+      clearProjectDefault(racing, "project-1", "segment"),
+    ).rejects.toThrow(/keeps being replaced/);
   });
 
   it("rethrows a failure that is not a missing binding", async () => {
@@ -328,5 +378,100 @@ describe("useProjectModelDefaults", () => {
     const list = vi.spyOn(store, "list");
     renderHook(() => useProjectModelDefaults(undefined, store));
     expect(list).not.toHaveBeenCalled();
+  });
+
+  it("reports a failed read as unknown rather than as no defaults", async () => {
+    const store = storeWith([]);
+    let listed = 0;
+    const offline: BindingStore = {
+      ...store,
+      list: async () => {
+        listed += 1;
+        if (listed === 1) throw new ApiError("offline", 503);
+        return [{ id: "binding-1", task: "segment", model_id: "seg-a" }];
+      },
+    };
+    const { result } = renderHook(() =>
+      useProjectModelDefaults("project-1", offline),
+    );
+
+    await waitFor(() => expect(result.current.loadFailed).toBe(true));
+    expect(result.current.loading).toBe(false);
+    expect(result.current.known).toBe(false);
+    expect(result.current.defaultModelId("segment")).toBeNull();
+
+    // "Try again" is the way back, and a good read clears the doubt.
+    await act(async () => {
+      await result.current.refresh();
+    });
+    expect(result.current.loadFailed).toBe(false);
+    expect(result.current.known).toBe(true);
+    expect(result.current.defaultModelId("segment")).toBe("seg-a");
+  });
+
+  it("holds saving per task, so one write does not freeze the other", async () => {
+    const store = storeWith([]);
+    let release!: (binding: ProjectBinding) => void;
+    const gate = new Promise<ProjectBinding>((resolve) => {
+      release = resolve;
+    });
+    const slow: BindingStore = { ...store, create: async () => gate };
+    const { result } = renderHook(() =>
+      useProjectModelDefaults("project-1", slow),
+    );
+    await waitFor(() => expect(result.current.known).toBe(true));
+
+    let pending!: Promise<unknown>;
+    await act(async () => {
+      pending = result.current.saveDefault("segment", "seg-a");
+    });
+    expect(result.current.saving.has("segment")).toBe(true);
+    expect(result.current.saving.has("transcribe")).toBe(false);
+
+    await act(async () => {
+      release({ id: "binding-1", task: "segment", model_id: "seg-a" });
+      await pending;
+    });
+    expect(result.current.saving.has("segment")).toBe(false);
+  });
+
+  it("lets the newer write for a task win over a slower older one", async () => {
+    const store = storeWith([]);
+    const gates: Array<(binding: ProjectBinding) => void> = [];
+    const racing: BindingStore = {
+      ...store,
+      create: async (_projectId, task, modelId) =>
+        new Promise<ProjectBinding>((resolve) => {
+          gates.push(() =>
+            resolve({ id: "binding-1", task, model_id: modelId }),
+          );
+        }),
+    };
+    const { result } = renderHook(() =>
+      useProjectModelDefaults("project-1", racing),
+    );
+    await waitFor(() => expect(result.current.known).toBe(true));
+
+    let older!: Promise<unknown>;
+    let newer!: Promise<unknown>;
+    await act(async () => {
+      older = result.current.saveDefault("segment", "seg-old");
+      newer = result.current.saveDefault("segment", "seg-new");
+      await waitFor(() => expect(gates).toHaveLength(2));
+    });
+
+    let newerResult: unknown;
+    let olderResult: unknown;
+    await act(async () => {
+      // The newer write answers first, the older one only afterwards.
+      gates[1]();
+      newerResult = await newer;
+      gates[0]();
+      olderResult = await older;
+    });
+
+    expect(newerResult).toMatchObject({ ok: true });
+    expect(olderResult).toMatchObject({ ok: false, superseded: true });
+    expect(result.current.defaultModelId("segment")).toBe("seg-new");
   });
 });

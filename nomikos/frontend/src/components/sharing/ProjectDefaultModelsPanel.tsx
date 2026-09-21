@@ -68,11 +68,15 @@ export function ProjectDefaultModelsPanel({
     const noun = TASK_NOUN[task];
     if (value === NO_DEFAULT) {
       const cleared = await defaults.clearDefault(task);
+      // A superseded write is not this row's state any more; the newer one
+      // speaks for it.
+      if (cleared.superseded) return;
       if (cleared.ok) toast.success(`Default ${noun} model cleared`);
       else toast.error(cleared.message);
       return;
     }
     const saved = await defaults.saveDefault(task, value);
+    if (saved.superseded) return;
     if (saved.ok) {
       const name = models.find((model) => model.id === value)?.name ?? value;
       toast.success(`Default ${noun} model set to ${name}`);
@@ -86,7 +90,7 @@ export function ProjectDefaultModelsPanel({
     label: string,
     models: InferenceModelResponse[],
   ) {
-    const saving = defaults.saving === task;
+    const saving = defaults.saving.has(task);
     return (
       <ModelSelectRow
         key={task}
@@ -97,7 +101,9 @@ export function ProjectDefaultModelsPanel({
         value={defaults.defaultModelId(task) ?? NO_DEFAULT}
         options={models}
         emptyLabel="No default"
-        disabled={saving}
+        // Until a list of the bindings comes back, no value here would be the
+        // project's; an unknown default must not be offered as "No default".
+        disabled={saving || !defaults.known}
         saving={saving}
         onChange={(value) => void handleChange(task, models, value)}
       />
@@ -111,6 +117,18 @@ export function ProjectDefaultModelsPanel({
         New segmentation and transcription jobs in this project start with these
         models. Anyone can still pick another model for a single run.
       </p>
+      {defaults.loadFailed && (
+        <p className="model-row-message">
+          Could not load the project defaults.{" "}
+          <button
+            type="button"
+            className="model-row-retry"
+            onClick={() => void defaults.refresh()}
+          >
+            Try again
+          </button>
+        </p>
+      )}
       {row("segment", "Segmentation", segmentModels)}
       {row("transcribe", "Transcription", transcribeModels)}
     </div>

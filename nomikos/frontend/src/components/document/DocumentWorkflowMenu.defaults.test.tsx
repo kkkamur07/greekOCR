@@ -37,9 +37,10 @@ function jsonResponse(value: unknown, status = 200): Response {
 
 /**
  * Queuing a job used to store the chosen model as the project default when
- * the project had none. The project page is now the only writer, so a run
- * must touch no binding at all: with the real API client underneath, the
- * only request a run may make is the job itself.
+ * the project had none, from inside the API client. Setting the default is
+ * now an explicit act: picking a model in the menu writes the binding, and
+ * running a job writes nothing at all. With the real API client underneath,
+ * the only request a run may make is the job itself.
  */
 describe("DocumentWorkflowMenu and the project defaults", () => {
   let calls: string[];

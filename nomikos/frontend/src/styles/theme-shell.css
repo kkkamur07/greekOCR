@@ -516,6 +516,25 @@ button {
 .model-row-group {
   margin: 0;
 }
+/* Said when the bindings could not be read, in place of a state nobody knows. */
+.model-row-message {
+  margin: 0 0 10px;
+  font-size: 0.75rem;
+  color: var(--text-4);
+}
+.model-row-retry {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--navy);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.model-row-retry:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
 .model-row__label {
   flex: 0 0 132px;
   font-size: 0.75rem;

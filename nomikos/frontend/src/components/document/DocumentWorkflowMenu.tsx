@@ -3,6 +3,7 @@ import {
   api,
   type DocumentWorkflowCounts,
   type InferenceModelResponse,
+  type InferenceTask,
 } from "../../api/client";
 import { ApiError } from "../../api/errors";
 import {
@@ -116,6 +117,48 @@ export function DocumentWorkflowMenu({
     segmentModels.find((model) => model.id === selectedSegmentModelId)?.name ??
     null;
 
+  /**
+   * Picking a model here sets the project default, at once and with no
+   * button: the same binding the project page's card writes, through the same
+   * hook. Until the bindings are known, the pick still chooses the model for
+   * this run but writes nothing, because a write would be guessing at what it
+   * replaces.
+   */
+  async function chooseModel(
+    task: InferenceTask,
+    modelId: string | null,
+    previousModelId: string | null,
+    setExplicit: (modelId: string | null) => void,
+  ) {
+    setExplicit(modelId);
+    if (!modelId || !projectDefaults.known) return;
+    // The select loses focus while it is disabled for the write; a keyboard
+    // user gets their place in the menu back when it returns.
+    const focused = globalThis.document.activeElement;
+    const saved = await projectDefaults.saveDefault(task, modelId);
+    if (focused instanceof HTMLSelectElement && focused.isConnected) {
+      focused.focus();
+    }
+    if (saved.ok || saved.superseded) return;
+    toast.error(saved.message);
+    // Never leave the select showing a model the project did not save: back
+    // to the stored default, or to the pick it replaced when there is none.
+    setExplicit(projectDefaults.defaultModelId(task) ? null : previousModelId);
+  }
+
+  /**
+   * The one small line under a picker. It says only what is known: nothing
+   * while the bindings are unread or unreadable, and nothing for a model that
+   * is merely what the catalog offered first.
+   */
+  function defaultNote(task: InferenceTask, selectedModelId: string | null) {
+    if (projectDefaults.saving.has(task)) return "Saving…";
+    if (!projectDefaults.known || !selectedModelId) return "";
+    return projectDefaults.defaultModelId(task) === selectedModelId
+      ? "Project default"
+      : "";
+  }
+
   async function runSegment(scope: "unsegmented" | "all", close: () => void) {
     setRunning(true);
     try {
@@ -195,9 +238,19 @@ export function DocumentWorkflowMenu({
                 ariaLabel="Segmentation model"
                 models={segmentModels}
                 selectedModelId={selectedSegmentModelId}
-                onSelectedModelIdChange={setExplicitSegmentModelId}
-                disabled={busy}
+                onSelectedModelIdChange={(modelId) =>
+                  void chooseModel(
+                    "segment",
+                    modelId,
+                    selectedSegmentModelId,
+                    setExplicitSegmentModelId,
+                  )
+                }
+                disabled={busy || projectDefaults.saving.has("segment")}
               />
+              <p className="action-menu__model-note">
+                {defaultNote("segment", selectedSegmentModelId)}
+              </p>
             </div>
             <ActionMenuItem
               label="Segment unsegmented pages"
@@ -227,9 +280,19 @@ export function DocumentWorkflowMenu({
                 ariaLabel="HTR transcription model"
                 models={transcribeModels}
                 selectedModelId={selectedTranscribeModelId}
-                onSelectedModelIdChange={setExplicitTranscribeModelId}
-                disabled={busy}
+                onSelectedModelIdChange={(modelId) =>
+                  void chooseModel(
+                    "transcribe",
+                    modelId,
+                    selectedTranscribeModelId,
+                    setExplicitTranscribeModelId,
+                  )
+                }
+                disabled={busy || projectDefaults.saving.has("transcribe")}
               />
+              <p className="action-menu__model-note">
+                {defaultNote("transcribe", selectedTranscribeModelId)}
+              </p>
             </div>
             <ActionMenuItem
               label="Transcribe unpaired pages"
