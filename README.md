@@ -83,7 +83,7 @@ Point it at a different platform with `NOMIKOS_API_URL` or `--api-url`.
 
 ## Accuracy
 
-Test character error rate (CER) of each transcription model, as reported on its Hugging Face model card. Lower is better.
+Test character error rate (CER) of each transcription model. Lower is better. Values come from the Hugging Face model cards, except `syriac-ppocr-v1`, whose approximate figure is reported by the model's authors and is not directly comparable.
 
 | Model | Script | Test CER |
 | --- | --- | ---: |
