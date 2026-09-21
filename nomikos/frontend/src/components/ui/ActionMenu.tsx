@@ -141,11 +141,14 @@ export function ActionMenu({
   /**
    * Tab is never intercepted, so the popup has to notice focus leaving on its
    * own. A move inside (arrows, or Tab between the popup's own controls)
-   * keeps it open; a move anywhere else closes it, leaving focus wherever the
-   * browser put it.
+   * keeps it open; a move to a real target outside closes it, leaving focus
+   * wherever the browser put it. A null target (a Safari click that moves no
+   * focus, a press on a non-focusable spot, a window blur) closes nothing:
+   * outside pointer presses already have their own mousedown handling.
    */
   function handleMenuFocusOut(event: FocusEvent<HTMLDivElement>) {
-    if (!wrapRef.current?.contains(event.relatedTarget as Node | null)) {
+    const next = event.relatedTarget;
+    if (next instanceof Node && !wrapRef.current?.contains(next)) {
       close();
     }
   }
