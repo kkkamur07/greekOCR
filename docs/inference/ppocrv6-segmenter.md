@@ -51,11 +51,11 @@ in both modes: binarise at `thresh`, `cv2.findContours` over at most
 `box_score_fast` gated at `box_thresh`, unclip expansion, a second
 minimum-area rectangle with a minimum side of 5, then scaling back to source
 coordinates with rounding and clipping. Poly mode (the default, see
-"Polygon output (0.4.1)" below) additionally builds each contour's polygon
-(`approxPolyDP` at 0.002 times the arc length, `box_score_fast` on the
+"Polygon output (0.4.2)" below) additionally builds each contour's polygon
+(`approxPolyDP` at `contour_tolerance_px`, `box_score_fast` on the
 polygon, unclip keeping the largest path, the same minimum side of 5 and
 the same scaling) and falls back to the quad when that fails. Quad mode
-(`box_type: "quad"`) skips the polygon and is byte-identical to 0.4.0.
+(`box_type: "quad"`) skips the polygon and is byte-identical to 0.4.1.
 The unclip expansion is PaddleX
 3.7.0's own algorithm (OpenCV area and perimeter for the offset distance,
 `pyclipper` with `JT_ROUND` for the offsetting), declared in
@@ -80,6 +80,9 @@ Params, defaults and bounds:
 | `merge_max_overlap_ratio` | 0.1 | 0 to 2 | max member overlap in median heights inside a merge |
 | `merge_max_height_ratio` | 2.0 | 1 to 10 | max member height ratio inside a merge |
 | `overlap_cut_threshold` | 0.20 | 0.05 to 1 | shared area fraction that counts as overlap |
+| `contour_tolerance_px` | 0.5 | 0 to 10 | contour fit tolerance in detector pixels |
+| `outline_tolerance_px` | 0.5 | 0 to 10 | served outline fit tolerance in page pixels |
+| `vertical_growth` | 1.35 | 1.0 to 2.0 | served outline growth across the line (1.0 disables it) |
 
 Non-finite values, bools where a number belongs and out-of-range values
 are rejected with a message naming the param and the bound.
@@ -186,7 +189,7 @@ valid simple polygon, never much taller than one text line, because the
 transcription crop is the boundary's bounding box with a polygon mask). In
 poly mode the served outline is the pyclipper union of the member polygons
 when they touch and the convex hull of their points otherwise, simplified
-as described under "Polygon output (0.4.1)".
+as described under "Polygon output (0.4.2)".
 Its baseline runs from the outer left end of the leftmost member's
 baseline to the outer right end of the rightmost member's. Score is the
 area-weighted mean; `source_metadata.merged_from` records the count.
@@ -287,47 +290,75 @@ own overlay, `<page>.refined.quad.overlay.jpg` and
 `suspect_numbers_quad` and `suspect_numbers_poly` instead of
 `suspect_numbers`.
 
-## Polygon output (0.4.1)
+## Polygon output (0.4.2)
 
 By default the segmenter returns a polygon that follows each detected text
-line instead of a four-point quad. Every detection still computes its quad
-exactly as before and uses it unchanged for all grouping, ordering, merge,
-overlap, suspect and role decisions, so line-level precision and recall do
-not move; only the served mask (`points`) and baseline change.
-On the 12 Coptic pages the defaults variant scores identically in both
-modes:
+line and covers whole letters instead of a four-point quad. Every
+detection still computes its quad exactly as before and uses it unchanged
+for all grouping, ordering, merge, overlap, suspect and role decisions, so
+line-level precision and recall do not move; only the served mask
+(`points`) changes, and baselines are sampled from the ungrown outlines.
+On the 12 Coptic pages every variant scores identically in both modes:
 
 | variant | detections | P | R | F1 | alone | pairs | suspects | wrong |
 |---------|------------|---|---|----|-------|-------|----------|-------|
+| off quad | 1147 | 0.9065 | 0.9902 | 0.9465 | 1008 | 181 | 0 | 0 |
+| off poly | 1147 | 0.9065 | 0.9902 | 0.9465 | 1008 | 0 | 0 | 0 |
 | defaults quad | 1136 | 0.9164 | 0.9912 | 0.9523 | 1009 | 2 | 52 | 0 |
 | defaults poly | 1136 | 0.9164 | 0.9912 | 0.9523 | 1009 | 1 | 52 | 0 |
+| drop quad | 1084 | 0.9619 | 0.9912 | 0.9763 | 1009 | 2 | 0 | 0 |
+| drop poly | 1084 | 0.9619 | 0.9912 | 0.9763 | 1009 | 1 | 0 | 0 |
 
-(The off and drop variants match on every score too. The script matches by
-axis sampling inside the target polygons, not by polygon IoU, and the
-identical counts confirm the decisions never read the polygons. `pairs`
-counts served-geometry overlap, so it runs lower in poly mode: the vat-2v
-pair the round-0 outlines still shared above 20% no longer reaches 20%
-once the merged outline is clipped to its merged quad.) The served polygons average
-12.4 points and 0.84 of their quad area, and the mean overlap between
-consecutive lines drops from 0.070 (quads) to 0.009 (polygons), so
-transcription crops pull in far less ink from neighbouring lines.
+(The script matches by axis sampling inside the target polygons, not by
+polygon IoU, and the identical counts confirm the decisions never read the
+polygons. `pairs` counts served-geometry overlap, so it runs lower in poly
+mode.) The served polygons average 33.0 points and 0.97 of their quad
+area, and the mean overlap between consecutive lines drops from 0.070
+(quads) to 0.007 (polygons), so transcription crops pull in far less ink
+from neighbouring lines while keeping more of their own.
 
-Polygon construction ports Paddle's `polygons_from_bitmap` (`approxPolyDP`
-epsilon 0.002 times the arc length, `box_score_fast` on the polygon,
-pyclipper `JT_ROUND` unclip keeping the largest path, the same minimum side
-of 5 and the same scaling). Overlap cuts clip each polygon with the same
-mid-baseline half-plane as the quads. Served outlines are simplified with
-`approxPolyDP` at epsilon max(1.0 px, 0.01 times the page median line
-height), capped at 64 points, at least 4 points, with no repeated
-consecutive points, clipped to the page, and checked with pyclipper
-`SimplifyPolygon` keeping the largest piece. A contour whose polygon step
-fails keeps its quad as its polygon with
-`source_metadata.polygon_fallback: true`, so no line is ever lost.
+Polygon construction ports Paddle's `polygons_from_bitmap`, except the
+contour fit uses the fixed `contour_tolerance_px` (0.5 detector pixels)
+instead of 0.002 times the arc length, so the polygon keeps the wiggles
+that follow the ink (`box_score_fast` on the polygon, pyclipper `JT_ROUND`
+unclip keeping the largest path, the same minimum side of 5 and the same
+scaling). Overlap cuts clip each polygon with the same mid-baseline
+half-plane as the quads. Served outlines are simplified with
+`approxPolyDP` at `outline_tolerance_px` (0.5 page pixels), capped at 64
+points, at least 4 points, with no repeated consecutive points, clipped to
+the page, and checked with pyclipper `SimplifyPolygon` keeping the largest
+piece. Then each outline grows by `vertical_growth` (1.35) across its own
+line direction about its centre line, never along it; where grown outlines
+overlap, each contested pixel goes to the line whose ungrown outline is
+nearer, with exact ties kept by the lower index so no pixel lands in two
+outlines, and where there is no neighbour the grown outline stands. Growth
+runs page-wide after all grouping decisions, so it can never merge, cut or
+reclassify a line. A contour whose polygon step fails keeps its quad as
+its polygon with `source_metadata.polygon_fallback: true`, so no line is
+ever lost.
+
+Fidelity on four pages (zones from the 0.4.1 polygons; crop kept is zone
+ink inside the transcription-style integer mask):
+
+| page | lines | pts/line 0.4.1 | pts/line 0.4.2 | adj overlap 0.4.1 | adj overlap 0.4.2 | crop kept 0.4.1 | crop kept 0.4.2 |
+|------|-------|----------------|----------------|-------------------|-------------------|-----------------|-----------------|
+| c13 | 133 | 11.5 | 33.8 | 0.000 | 0.000 | 0.865 | 0.926 |
+| vat-1r | 77 | 14.9 | 40.4 | 0.001 | 0.001 | 0.861 | 0.891 |
+| grec-p4 | 57 | 10.3 | 30.5 | 0.016 | 0.018 | 0.885 | 0.923 |
+| segment-page | 29 | 11.8 | 36.0 | 0.000 | 0.001 | 0.800 | 0.854 |
+
+Ink kept rises on every page (about 14 percent of a line's ink used to lie
+outside its polygon, where transcription erases it) while adjacent overlap
+stays at 0.02 or below. Before and after crops (two full lines per page,
+same crop, 3 px outline) are filed beside the measurement JSON; on each
+page the old thin band slices through ascenders and descenders while the
+new band covers whole letters.
 
 Old behaviour: pass `box_type: "quad"` for responses byte-identical to
-0.4.0 (the parity gate above runs in quad mode and still passes at 0.000 px
-on all 14 pages). Poly mode costs about 1% time per page on the Coptic set
-(0.79 s against 0.78 s per page).
+0.4.1 (the parity gate above runs in quad mode and still passes at 0.000 px
+on all 14 pages). The growth stage costs 0.03 to 0.08 s per page in
+isolation (min of 5, detection cached); end to end timing on the four pages
+is dominated by ONNX inference variance on shared machines.
 
 ## Publication and registry
 
