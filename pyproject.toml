@@ -12,6 +12,7 @@ name = "nomikos-inference"
 version = "0.4.2"
 description = "Manuscript segmentation and transcription runtime for the nomikos platform"
 readme = "nomikos_inference/README.md"
+license = "Apache-2.0"
 requires-python = ">=3.11,<3.13"
 # [project].dependencies is the closure that reaches a researcher's laptop.
 # Anything added here is downloaded by every `uv tool install nomikos-inference`,
