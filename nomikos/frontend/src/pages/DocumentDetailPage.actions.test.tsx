@@ -203,7 +203,7 @@ describe("DocumentDetailPage action toolbar", () => {
     expect(screen.getByText(/3 pages · 1 reviewed · updated/)).toBeTruthy();
   });
 
-  it("opens the Workflow menu with both segment scopes, the model captions and the warning", async () => {
+  it("opens the Workflow menu with both segment scopes, the model pickers and the re-segment note", async () => {
     renderDocumentPage();
     await screen.findByRole("heading", { name: "Chapter 4" });
 
@@ -217,15 +217,17 @@ describe("DocumentDetailPage action toolbar", () => {
     );
     expect(
       within(menu).getByRole("menuitem", {
-        name: /Segment unsegmented pages\s*2/,
+        name: /Segment unsegmented pages\s*2 pages/,
       }),
     ).toBeTruthy();
     expect(
-      within(menu).getByRole("menuitem", { name: /Re-segment every page\s*3/ }),
+      within(menu).getByRole("menuitem", {
+        name: /Re-segment every page.*3 pages/,
+      }),
     ).toBeTruthy();
     expect(
       within(menu).getByRole("menuitem", {
-        name: /Transcribe unpaired pages\s*3/,
+        name: /Transcribe unpaired pages\s*3 pages/,
       }),
     ).toBeTruthy();
     expect(within(menu).getByText("Segment")).toBeTruthy();
@@ -242,7 +244,9 @@ describe("DocumentDetailPage action toolbar", () => {
       within(menu).getAllByRole("option", { name: "No models" }),
     ).toHaveLength(2);
     expect(
-      within(menu).getByText(/Re-segmenting discards unapproved machine text/),
+      within(menu).getByText(
+        "Discards unapproved machine text on untouched lines.",
+      ),
     ).toBeTruthy();
   });
 

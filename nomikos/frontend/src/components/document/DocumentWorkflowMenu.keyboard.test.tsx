@@ -7,8 +7,6 @@ const listInferenceModels = vi.fn();
 const enqueueDocumentSegment = vi.fn();
 const enqueueDocumentTranscribe = vi.fn();
 const listProjectModelBindings = vi.fn();
-const createProjectModelBinding = vi.fn();
-const updateProjectModelBinding = vi.fn();
 
 vi.mock("../../api/client", () => ({
   api: {
@@ -19,13 +17,7 @@ vi.mock("../../api/client", () => ({
       enqueueDocumentTranscribe(...args),
     listProjectModelBindings: (...args: unknown[]) =>
       listProjectModelBindings(...args),
-    createProjectModelBinding: (...args: unknown[]) =>
-      createProjectModelBinding(...args),
-    updateProjectModelBinding: (...args: unknown[]) =>
-      updateProjectModelBinding(...args),
   },
-  whenProjectDefaultSettled: () => Promise.resolve(),
-  subscribeProjectDefaultWritten: () => () => {},
 }));
 
 vi.mock("../ui/toast", () => ({
@@ -154,7 +146,7 @@ describe("DocumentWorkflowMenu keyboard access", () => {
     );
   });
 
-  it("orders pickers, default buttons and run items in DOM order", async () => {
+  it("orders pickers and run items in DOM order", async () => {
     const menu = openMenu();
     await screen.findByRole("combobox", { name: "HTR transcription model" });
     const tabbables = Array.from(
@@ -164,28 +156,10 @@ describe("DocumentWorkflowMenu keyboard access", () => {
     );
     expect(tabbables).toEqual([
       "Segmentation model",
-      "Set as project default",
       expect.stringMatching(/segment unsegmented pages/i),
       expect.stringMatching(/re-segment every page/i),
       "HTR transcription model",
-      "Set as project default",
       expect.stringMatching(/transcribe unpaired pages/i),
     ]);
-  });
-
-  it("does not intercept Enter or Space on the default button", async () => {
-    openMenu();
-    await screen.findByRole("combobox", { name: "HTR transcription model" });
-    const button = screen.getAllByRole("button", {
-      name: "Set as project default",
-    })[0];
-    expect(button.tagName).toBe("BUTTON");
-    (button as HTMLButtonElement).focus();
-    fireEvent.keyDown(button, { key: "Enter" });
-    fireEvent.keyDown(button, { key: " " });
-    expect(document.activeElement).toBe(button);
-    expect(
-      screen.queryByRole("menu", { name: "Document workflow" }),
-    ).toBeTruthy();
   });
 });

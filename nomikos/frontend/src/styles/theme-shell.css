@@ -487,6 +487,59 @@ button {
   white-space: nowrap;
 }
 
+/*
+  Default models card on the project page. Two rows that share a left edge
+  and a baseline: the label column is fixed so the selects line up, and the
+  saving note sits at the row's right without moving the select.
+*/
+.default-models__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: 10px;
+}
+.default-models__row:last-child {
+  margin-bottom: 0;
+}
+.default-models__label {
+  flex: 0 0 96px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-3);
+}
+.default-models__control {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-2);
+}
+.default-models__select {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 0.8125rem;
+  padding: 6px 10px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+}
+.default-models__select:disabled {
+  color: var(--text-4);
+  background: var(--surface-2);
+}
+.default-models__select:focus-visible {
+  outline: none;
+  border-color: var(--navy);
+  box-shadow: 0 0 0 3px rgba(13, 31, 60, 0.08);
+}
+.default-models__saving {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  color: var(--text-4);
+}
+
 .field-check {
   display: inline-flex;
   align-items: center;

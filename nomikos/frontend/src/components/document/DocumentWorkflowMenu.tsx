@@ -11,11 +11,9 @@ import {
   ActionMenuDivider,
   ActionMenuItem,
   ActionMenuSection,
-  ActionMenuWarning,
 } from "../ui/ActionMenu";
 import { toast } from "../ui/toast";
 import { PageEditorModelSelect } from "../page-editor/PageEditorModelSelect";
-import { ProjectModelDefaultControl } from "../page-editor/ProjectModelDefaultControl";
 import { useProjectModelDefaults } from "../page-editor/projectModelDefaults";
 import { resolveSegmentModelId } from "../page-editor/segmentModelChoice";
 import { resolveTranscribeModelId } from "../page-editor/transcribeModelChoice";
@@ -125,10 +123,6 @@ export function DocumentWorkflowMenu({
         scope,
         model_id: selectedSegmentModelId,
       });
-      // The enqueue may have stored the chosen model as the project default;
-      // re-read so the quiet state shows without a reload. Fire and forget:
-      // the toast must not wait for the bindings round trip.
-      void projectDefaults.refresh();
       toast.success(batchQueuedMessage(result));
       onJobsQueued();
       close();
@@ -150,10 +144,6 @@ export function DocumentWorkflowMenu({
         documentId,
         { scope: "unpaired", model_id: selectedTranscribeModelId },
       );
-      // The enqueue may have stored the chosen model as the project default;
-      // re-read so the quiet state shows without a reload. Fire and forget:
-      // the toast must not wait for the bindings round trip.
-      void projectDefaults.refresh();
       toast.success(batchQueuedMessage(result));
       onJobsQueued();
       close();
@@ -195,66 +185,56 @@ export function DocumentWorkflowMenu({
         ) : (
           <>
             <ActionMenuSection>Segment</ActionMenuSection>
-            <div role="group" aria-label="Segment">
+            <div
+              className="action-menu__model"
+              role="group"
+              aria-label="Segment"
+            >
               <PageEditorModelSelect
-                label="Seg"
+                label="Model"
                 ariaLabel="Segmentation model"
                 models={segmentModels}
                 selectedModelId={selectedSegmentModelId}
                 onSelectedModelIdChange={setExplicitSegmentModelId}
                 disabled={busy}
               />
-              <ProjectModelDefaultControl
-                projectId={projectId}
-                task="segment"
-                selectedModelId={selectedSegmentModelId}
-                defaultModelId={projectDefaults.defaultModelId("segment")}
-                saving={projectDefaults.saving === "segment"}
-                saveError={projectDefaults.error}
-                onSave={projectDefaults.saveDefault}
-              />
             </div>
             <ActionMenuItem
               label="Segment unsegmented pages"
-              meta={String(unsegmented)}
+              meta={pageCountLabel(unsegmented)}
+              quietMeta
               disabled={busy || unsegmented === 0}
               onSelect={() => void runSegment("unsegmented", close)}
             />
             <ActionMenuItem
               destructive
               label="Re-segment every page"
-              meta={String(total)}
+              detail="Discards unapproved machine text on untouched lines."
+              meta={pageCountLabel(total)}
+              quietMeta
               disabled={busy || total === 0}
               onSelect={() => setConfirmingResegment(true)}
             />
-            <ActionMenuWarning>
-              Re-segmenting discards unapproved machine text on lines nobody has
-              touched. Only the top item is safe.
-            </ActionMenuWarning>
             <ActionMenuDivider />
             <ActionMenuSection>Transcribe</ActionMenuSection>
-            <div role="group" aria-label="Transcribe">
+            <div
+              className="action-menu__model"
+              role="group"
+              aria-label="Transcribe"
+            >
               <PageEditorModelSelect
-                label="HTR"
+                label="Model"
                 ariaLabel="HTR transcription model"
                 models={transcribeModels}
                 selectedModelId={selectedTranscribeModelId}
                 onSelectedModelIdChange={setExplicitTranscribeModelId}
                 disabled={busy}
               />
-              <ProjectModelDefaultControl
-                projectId={projectId}
-                task="transcribe"
-                selectedModelId={selectedTranscribeModelId}
-                defaultModelId={projectDefaults.defaultModelId("transcribe")}
-                saving={projectDefaults.saving === "transcribe"}
-                saveError={projectDefaults.error}
-                onSave={projectDefaults.saveDefault}
-              />
             </div>
             <ActionMenuItem
               label="Transcribe unpaired pages"
-              meta={String(unpaired)}
+              meta={pageCountLabel(unpaired)}
+              quietMeta
               disabled={busy || unpaired === 0}
               onSelect={() => void runTranscribe(close)}
             />

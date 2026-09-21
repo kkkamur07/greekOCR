@@ -2,12 +2,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   api,
-  subscribeProjectDefaultWritten,
-  whenProjectDefaultSettled,
   type InferenceTask,
   type ModelBindingResponse,
 } from "../../api/client";
 import { ApiError } from "../../api/errors";
+
+/**
+ * What a save or a clear answers with. The message travels back to the
+ * caller rather than only into `error` state, so the toast at the call site
+ * says what the API said instead of reading a value React has not set yet.
+ */
+export type ProjectDefaultResult =
+  { ok: true; binding: ProjectBinding | null } | { ok: false; message: string };
 
 export type ProjectBinding = Pick<
   ModelBindingResponse,
@@ -26,6 +32,7 @@ export type BindingStore = {
     bindingId: string,
     modelId: string,
   ) => Promise<ProjectBinding>;
+  remove: (projectId: string, bindingId: string) => Promise<void>;
 };
 
 export function apiBindingStore(): BindingStore {
@@ -37,12 +44,14 @@ export function apiBindingStore(): BindingStore {
       api.updateProjectModelBinding(projectId, bindingId, {
         model_id: modelId,
       }),
+    remove: (projectId, bindingId) =>
+      api.deleteProjectModelBinding(projectId, bindingId),
   };
 }
 
 /**
- * Explicit "Set as project default": POST when the project has no binding for
- * the task, PATCH the binding when one exists. A 409 from the create means a
+ * Saving a project default: POST when the project has no binding for the
+ * task, PATCH the binding when one exists. A 409 from the create means a
  * collaborator saved one in the meantime, so refetch and PATCH that row
  * instead of failing.
  */
@@ -75,9 +84,31 @@ export async function saveProjectDefault(
 }
 
 /**
- * The project bindings for the pickers' "Set as project default" controls.
+ * Clearing a project default: delete the binding for the task if there is
+ * one. Nothing to delete is success, not an error: a collaborator who
+ * cleared it first left the project in exactly the wanted state.
+ */
+export async function clearProjectDefault(
+  store: BindingStore,
+  projectId: string,
+  task: InferenceTask,
+): Promise<void> {
+  const bindings = await store.list(projectId);
+  const existing = bindings.find((binding) => binding.task === task);
+  if (!existing) return;
+  try {
+    await store.remove(projectId, existing.id);
+  } catch (err) {
+    // Already gone; the caller wanted no binding and there is none.
+    if (!(err instanceof ApiError) || err.status !== 404) throw err;
+  }
+}
+
+/**
+ * The project bindings behind the project page's default models card and
+ * behind every picker's preselection.
  * A failed load reads as "no defaults", never as an error banner: the pickers
- * keep their binding-or-catalog fallback and the control simply hides.
+ * keep their binding-or-catalog fallback.
  */
 export function useProjectModelDefaults(
   projectId: string | undefined,
@@ -126,15 +157,13 @@ export function useProjectModelDefaults(
   );
 
   /**
-   * Re-read the project bindings, after waiting out the automatic write in
-   * flight if any. A late initial list never wins over newer state: every
-   * read carries the same generation guard as the mount load.
+   * Re-read the project bindings. A late initial list never wins over newer
+   * state: every read carries the same generation guard as the mount load.
    */
   const refresh = useCallback(async (): Promise<void> => {
     if (!projectId) return;
     const generation = ++generationRef.current;
     const isCurrent = () => generationRef.current === generation;
-    await whenProjectDefaultSettled();
     try {
       const rows = await resolvedStore.list(projectId);
       if (isCurrent()) setBindings(Array.isArray(rows) ? rows : []);
@@ -143,23 +172,12 @@ export function useProjectModelDefaults(
     }
   }, [projectId, resolvedStore]);
 
-  // The automatic write lives in the API client, outside this state, so the
-  // client announces each stored binding and this re-reads. No polling, no
-  // timers: the notification fires once the write completes.
-  useEffect(() => {
-    if (!projectId) return;
-    return subscribeProjectDefaultWritten((info) => {
-      if (info.projectId !== projectId) return;
-      void refresh();
-    });
-  }, [projectId, refresh]);
-
   const saveDefault = useCallback(
     async (
       task: InferenceTask,
       modelId: string,
-    ): Promise<ProjectBinding | null> => {
-      if (!projectId) return null;
+    ): Promise<ProjectDefaultResult> => {
+      if (!projectId) return { ok: false, message: "No project" };
       setSaving(task);
       setError(null);
       try {
@@ -175,14 +193,14 @@ export function useProjectModelDefaults(
           ...current.filter((binding) => binding.task !== task),
           saved,
         ]);
-        return saved;
+        return { ok: true, binding: saved };
       } catch (err) {
-        setError(
+        const message =
           err instanceof Error
             ? err.message
-            : "Could not save the project default.",
-        );
-        return null;
+            : "Could not save the project default.";
+        setError(message);
+        return { ok: false, message };
       } finally {
         setSaving(null);
       }
@@ -190,5 +208,40 @@ export function useProjectModelDefaults(
     [projectId, resolvedStore],
   );
 
-  return { bindings, saving, error, defaultModelId, saveDefault, refresh };
+  const clearDefault = useCallback(
+    async (task: InferenceTask): Promise<ProjectDefaultResult> => {
+      if (!projectId) return { ok: false, message: "No project" };
+      setSaving(task);
+      setError(null);
+      try {
+        await clearProjectDefault(resolvedStore, projectId, task);
+        // A clear outranks an initial list still in flight; see generationRef.
+        generationRef.current += 1;
+        setBindings((current) =>
+          current.filter((binding) => binding.task !== task),
+        );
+        return { ok: true, binding: null };
+      } catch (err) {
+        const message =
+          err instanceof Error
+            ? err.message
+            : "Could not clear the project default.";
+        setError(message);
+        return { ok: false, message };
+      } finally {
+        setSaving(null);
+      }
+    },
+    [projectId, resolvedStore],
+  );
+
+  return {
+    bindings,
+    saving,
+    error,
+    defaultModelId,
+    saveDefault,
+    clearDefault,
+    refresh,
+  };
 }

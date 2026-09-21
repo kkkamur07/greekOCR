@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "../../api/errors";
 import {
+  clearProjectDefault,
   saveProjectDefault,
   useProjectModelDefaults,
   type BindingStore,
@@ -10,9 +11,9 @@ import {
 } from "./projectModelDefaults";
 
 function storeWith(bindings: ProjectBinding[]): BindingStore & {
-  calls: { create: number; update: number };
+  calls: { create: number; update: number; remove: number };
 } {
-  const calls = { create: 0, update: 0 };
+  const calls = { create: 0, update: 0, remove: 0 };
   let rows = [...bindings];
   return {
     calls,
@@ -37,6 +38,13 @@ function storeWith(bindings: ProjectBinding[]): BindingStore & {
       rows = rows.map((row) => (row.id === bindingId ? updated : row));
       return updated;
     },
+    remove: async (_projectId, bindingId) => {
+      calls.remove += 1;
+      if (!rows.some((row) => row.id === bindingId)) {
+        throw new ApiError("Model binding not found", 404);
+      }
+      rows = rows.filter((row) => row.id !== bindingId);
+    },
   };
 }
 
@@ -50,7 +58,7 @@ describe("saveProjectDefault", () => {
       "htr-syriac",
     );
     expect(saved).toMatchObject({ task: "transcribe", model_id: "htr-syriac" });
-    expect(store.calls).toEqual({ create: 1, update: 0 });
+    expect(store.calls).toEqual({ create: 1, update: 0, remove: 0 });
   });
 
   it("PATCHes the existing binding instead of creating a second row", async () => {
@@ -64,7 +72,7 @@ describe("saveProjectDefault", () => {
       "htr-syriac",
     );
     expect(saved).toMatchObject({ id: "binding-1", model_id: "htr-syriac" });
-    expect(store.calls).toEqual({ create: 0, update: 1 });
+    expect(store.calls).toEqual({ create: 0, update: 1, remove: 0 });
   });
 
   it("leaves a binding that already points at the model alone", async () => {
@@ -78,7 +86,7 @@ describe("saveProjectDefault", () => {
       "seg-a",
     );
     expect(saved).toMatchObject({ id: "binding-1" });
-    expect(store.calls).toEqual({ create: 0, update: 0 });
+    expect(store.calls).toEqual({ create: 0, update: 0, remove: 0 });
   });
 
   it("refetches and PATCHes when a collaborator wins the create race", async () => {
@@ -131,6 +139,56 @@ describe("saveProjectDefault", () => {
   });
 });
 
+describe("clearProjectDefault", () => {
+  it("deletes the binding for the task", async () => {
+    const store = storeWith([
+      { id: "binding-1", task: "transcribe", model_id: "htr-greek" },
+      { id: "binding-2", task: "segment", model_id: "seg-a" },
+    ]);
+    await clearProjectDefault(store, "project-1", "transcribe");
+    expect(store.calls.remove).toBe(1);
+    expect(await store.list("project-1")).toEqual([
+      { id: "binding-2", task: "segment", model_id: "seg-a" },
+    ]);
+  });
+
+  it("does nothing when the task has no binding", async () => {
+    const store = storeWith([]);
+    await clearProjectDefault(store, "project-1", "segment");
+    expect(store.calls.remove).toBe(0);
+  });
+
+  it("treats a binding deleted in the meantime as cleared", async () => {
+    const store = storeWith([
+      { id: "binding-1", task: "segment", model_id: "seg-a" },
+    ]);
+    const racing: BindingStore = {
+      ...store,
+      remove: async () => {
+        throw new ApiError("Model binding not found", 404);
+      },
+    };
+    await expect(
+      clearProjectDefault(racing, "project-1", "segment"),
+    ).resolves.toBeUndefined();
+  });
+
+  it("rethrows a failure that is not a missing binding", async () => {
+    const store = storeWith([
+      { id: "binding-1", task: "segment", model_id: "seg-a" },
+    ]);
+    const failing: BindingStore = {
+      ...store,
+      remove: async () => {
+        throw new ApiError("No access", 403);
+      },
+    };
+    await expect(
+      clearProjectDefault(failing, "project-1", "segment"),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+});
+
 describe("useProjectModelDefaults", () => {
   it("loads the bindings and reports each task default", async () => {
     const store = storeWith([
@@ -177,9 +235,50 @@ describe("useProjectModelDefaults", () => {
     await act(async () => {
       saved = await result.current.saveDefault("transcribe", "htr-syriac");
     });
-    expect(saved).toBeNull();
+    expect(saved).toMatchObject({ ok: false, message: "No access" });
     expect(result.current.error).toMatch(/No access/);
     expect(result.current.defaultModelId("transcribe")).toBe("htr-greek");
+  });
+
+  it("clears through the store and drops the default", async () => {
+    const store = storeWith([
+      { id: "binding-1", task: "segment", model_id: "seg-a" },
+    ]);
+    const { result } = renderHook(() =>
+      useProjectModelDefaults("project-1", store),
+    );
+    await waitFor(() =>
+      expect(result.current.defaultModelId("segment")).toBe("seg-a"),
+    );
+    await act(async () => {
+      await result.current.clearDefault("segment");
+    });
+    expect(result.current.defaultModelId("segment")).toBeNull();
+    expect(store.calls.remove).toBe(1);
+  });
+
+  it("reports a failed clear and keeps the stored default", async () => {
+    const store = storeWith([
+      { id: "binding-1", task: "segment", model_id: "seg-a" },
+    ]);
+    const failing: BindingStore = {
+      ...store,
+      remove: async () => {
+        throw new ApiError("No access", 403);
+      },
+    };
+    const { result } = renderHook(() =>
+      useProjectModelDefaults("project-1", failing),
+    );
+    await waitFor(() =>
+      expect(result.current.defaultModelId("segment")).toBe("seg-a"),
+    );
+    let cleared: unknown;
+    await act(async () => {
+      cleared = await result.current.clearDefault("segment");
+    });
+    expect(cleared).toMatchObject({ ok: false, message: "No access" });
+    expect(result.current.defaultModelId("segment")).toBe("seg-a");
   });
 
   it("keeps a save that lands while the initial list is still in flight", async () => {
