@@ -31,6 +31,8 @@ DEFAULT_VERTICAL_GROWTH = 1.35
 #: Supersampling for the growth overlap resolution. Contested pixels go to
 #: the line whose ungrown polygon is nearer, which needs subpixel masks;
 #: 3x keeps the boundary within a third of a pixel of the true Voronoi edge.
+#: 2x was tried and dropped: half-integer grown edges round up a whole
+#: pixel there, inflating every line by a pixel and leaving tie strips.
 _GROWTH_SUPERSAMPLE = 3
 
 #: Tolerance for dropping collinear baseline samples, in pixels.
@@ -441,9 +443,10 @@ def grow_outlines_vertical(
             continue
         width, height = x1 - x0, y1 - y0
         grown_mask = _raster_supersampled(grown[index], x0, y0, width, height, ss)
-        plain_mask = _raster_supersampled(ring, x0, y0, width, height, ss)
-        own_distance = cv2.distanceTransform((~plain_mask).astype(np.uint8), cv2.DIST_L2, 3)
         keep = grown_mask.copy()
+        # Contenders first: only lines whose grown masks truly share pixels
+        # need distance transforms, so isolated lines skip them entirely.
+        contenders: dict[int, np.ndarray] = {}
         for other, other_grown in enumerate(grown):
             if other == index:
                 continue
@@ -451,12 +454,18 @@ def grow_outlines_vertical(
             if other_box[1] < x0 or other_box[0] > x1 or other_box[3] < y0 or other_box[2] > y1:
                 continue
             other_mask = _raster_supersampled(other_grown, x0, y0, width, height, ss)
-            zone = grown_mask & other_mask
-            if not zone.any():
-                continue
-            other_plain = _raster_supersampled(rings[other], x0, y0, width, height, ss)
-            other_distance = cv2.distanceTransform((~other_plain).astype(np.uint8), cv2.DIST_L2, 3)
-            keep[zone & (other_distance < own_distance)] = False
+            if (grown_mask & other_mask).any():
+                contenders[other] = other_mask
+        if contenders:
+            plain_mask = _raster_supersampled(ring, x0, y0, width, height, ss)
+            own_distance = cv2.distanceTransform((~plain_mask).astype(np.uint8), cv2.DIST_L2, 3)
+            for other, other_mask in contenders.items():
+                zone = grown_mask & other_mask
+                other_plain = _raster_supersampled(rings[other], x0, y0, width, height, ss)
+                other_distance = cv2.distanceTransform(
+                    (~other_plain).astype(np.uint8), cv2.DIST_L2, 3
+                )
+                keep[zone & (other_distance < own_distance)] = False
         contours, _ = cv2.findContours(
             keep.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
         )
