@@ -97,6 +97,16 @@ function toolbar(
   return screen.getByRole("button", { name: "Segment" });
 }
 
+describe("PageEditorToolbar project defaults", () => {
+  // Setting a default happens on the project page now. The editor still
+  // starts on it, but nothing here offers to change it.
+  it("shows no project default text and no make-default button", () => {
+    toolbar(SEGMENT_MODELS, "seg-kraken");
+    expect(screen.queryByText(/project default/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: /default/i })).toBeNull();
+  });
+});
+
 describe("PageEditorToolbar segment tooltip", () => {
   it("names the selected segment model", () => {
     expect(toolbar(SEGMENT_MODELS, "seg-kraken").getAttribute("title")).toBe(

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DocumentWorkflowMenu } from "./DocumentWorkflowMenu";
 
 vi.mock("../ui/toast", () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
+  toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() },
 }));
 
 const CATALOG = [
@@ -28,17 +28,6 @@ const CATALOG = [
   },
 ];
 
-type BindingRow = {
-  id: string;
-  task: string;
-  model_id: string;
-  project_id: string;
-  document_id: null;
-  document_part_id: null;
-  overrides: Record<string, unknown>;
-  created_at: string;
-};
-
 function jsonResponse(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), {
     status,
@@ -47,42 +36,28 @@ function jsonResponse(value: unknown, status = 200): Response {
 }
 
 /**
- * The whole loop with the real API client: no project binding, run a job
- * with a chosen model, the control shows "Project default" without a reload.
+ * Queuing a job used to store the chosen model as the project default when
+ * the project had none, from inside the API client. Setting the default is
+ * now an explicit act: picking a model in the menu writes the binding, and
+ * running a job writes nothing at all. With the real API client underneath,
+ * the only request a run may make is the job itself.
  */
-describe("DocumentWorkflowMenu automatic project default", () => {
-  let rows: BindingRow[];
+describe("DocumentWorkflowMenu and the project defaults", () => {
+  let calls: string[];
 
   beforeEach(() => {
-    rows = [];
+    calls = [];
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
         const method = (init?.method ?? "GET").toUpperCase();
+        calls.push(`${method} ${url.replace(/^https?:\/\/[^/]+/, "")}`);
         if (method === "GET" && url.includes("/inference/models")) {
           return jsonResponse(CATALOG);
         }
         if (method === "GET" && url.includes("/model-bindings")) {
-          return jsonResponse(rows);
-        }
-        if (method === "POST" && url.includes("/model-bindings")) {
-          const body = JSON.parse(String(init?.body)) as {
-            task: string;
-            model_id: string;
-          };
-          const created: BindingRow = {
-            id: `binding-${body.task}`,
-            task: body.task,
-            model_id: body.model_id,
-            project_id: "proj-r2",
-            document_id: null,
-            document_part_id: null,
-            overrides: {},
-            created_at: "2026-09-21T00:00:00Z",
-          };
-          rows = [...rows.filter((row) => row.task !== body.task), created];
-          return jsonResponse(created, 201);
+          return jsonResponse([]);
         }
         if (method === "POST" && url.includes("/jobs/transcribe")) {
           return jsonResponse({ queued: 1, skipped: 0, jobs: [] });
@@ -96,7 +71,7 @@ describe("DocumentWorkflowMenu automatic project default", () => {
     vi.unstubAllGlobals();
   });
 
-  it("shows the quiet state after the first run, without a reload", async () => {
+  it("writes no project binding when a job is queued", async () => {
     render(
       <DocumentWorkflowMenu
         projectId="proj-r2"
@@ -111,27 +86,24 @@ describe("DocumentWorkflowMenu automatic project default", () => {
       name: "HTR transcription model",
     });
     await waitFor(() => expect(select).toHaveValue("htr-1"));
-    expect(screen.queryByText("Project default")).toBeNull();
 
     fireEvent.click(
       screen.getByRole("menuitem", { name: /transcribe unpaired pages/i }),
     );
 
-    // A successful run closes the menu; reopening must show the quiet state
-    // with no reload in between.
+    // A successful run closes the menu.
     await waitFor(() =>
       expect(screen.getByRole("button", { name: /workflow/i })).toHaveAttribute(
         "aria-expanded",
         "false",
       ),
     );
-    fireEvent.click(screen.getByRole("button", { name: /workflow/i }));
 
-    await waitFor(() =>
-      expect(screen.getAllByText("Project default")).toHaveLength(1),
-    );
     expect(
-      screen.getByRole("combobox", { name: "HTR transcription model" }),
-    ).toHaveValue("htr-1");
+      calls.filter(
+        (call) => call.includes("/model-bindings") && !call.startsWith("GET "),
+      ),
+    ).toEqual([]);
+    expect(screen.queryByText(/project default/i)).toBeNull();
   });
 });

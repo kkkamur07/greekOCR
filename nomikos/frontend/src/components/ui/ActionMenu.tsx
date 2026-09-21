@@ -279,6 +279,11 @@ export type ActionMenuItemProps = {
   ariaLabel?: string;
   /** The count or size badge that sits at the end of the row. */
   meta?: string;
+  /**
+   * Draw {@link meta} as muted text rather than a badge, for a count that is
+   * part of reading the row ("7 pages") rather than a label on it.
+   */
+  quietMeta?: boolean;
   /** A second line under the label, for a consequence worth spelling out. */
   detail?: string;
   disabled?: boolean;
@@ -292,6 +297,7 @@ export function ActionMenuItem({
   label,
   ariaLabel,
   meta,
+  quietMeta = false,
   detail,
   disabled = false,
   destructive = false,
@@ -310,7 +316,13 @@ export function ActionMenuItem({
         <span className="action-menu__item-label">{label}</span>
         {detail && <span className="action-menu__item-detail">{detail}</span>}
       </span>
-      {meta && <span className="action-menu__meta">{meta}</span>}
+      {meta && (
+        <span
+          className={`action-menu__meta${quietMeta ? " action-menu__meta--quiet" : ""}`}
+        >
+          {meta}
+        </span>
+      )}
     </button>
   );
 }

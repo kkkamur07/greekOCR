@@ -8,7 +8,7 @@ const enqueueDocumentSegment = vi.fn();
 const enqueueDocumentTranscribe = vi.fn();
 const listProjectModelBindings = vi.fn();
 const createProjectModelBinding = vi.fn();
-const updateProjectModelBinding = vi.fn();
+const deleteProjectModelBinding = vi.fn();
 
 vi.mock("../../api/client", () => ({
   api: {
@@ -21,15 +21,13 @@ vi.mock("../../api/client", () => ({
       listProjectModelBindings(...args),
     createProjectModelBinding: (...args: unknown[]) =>
       createProjectModelBinding(...args),
-    updateProjectModelBinding: (...args: unknown[]) =>
-      updateProjectModelBinding(...args),
+    deleteProjectModelBinding: (...args: unknown[]) =>
+      deleteProjectModelBinding(...args),
   },
-  whenProjectDefaultSettled: () => Promise.resolve(),
-  subscribeProjectDefaultWritten: () => () => {},
 }));
 
 vi.mock("../ui/toast", () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
+  toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() },
 }));
 
 const COUNTS = { total: 3, reviewed: 0, unsegmented: 1, unpaired: 2 };
@@ -48,6 +46,24 @@ const CATALOG = [
   },
   { id: "htr-1", task: "transcribe", name: "htr" },
 ];
+
+/**
+ * The bindings endpoints as one small stateful server. A list that always
+ * answers the same rows would let an undo look done without deleting
+ * anything, so a write has to be visible to the next read.
+ */
+function serveBindings() {
+  let rows: { id: string; task: string; model_id: string }[] = [];
+  listProjectModelBindings.mockImplementation(async () => [...rows]);
+  createProjectModelBinding.mockImplementation(async (_projectId, body) => {
+    const row = { id: `binding-${body.task}`, ...body };
+    rows = [...rows.filter((r) => r.task !== body.task), row];
+    return row;
+  });
+  deleteProjectModelBinding.mockImplementation(async (_projectId, id) => {
+    rows = rows.filter((r) => r.id !== id);
+  });
+}
 
 /** The menu plus a focus target outside it, for focus-leave checks. */
 function openMenu() {
@@ -74,7 +90,7 @@ describe("DocumentWorkflowMenu keyboard access", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     listInferenceModels.mockResolvedValue(CATALOG);
-    listProjectModelBindings.mockResolvedValue([]);
+    serveBindings();
   });
 
   it("keeps the popup open on Tab inside a picker", async () => {
@@ -154,7 +170,58 @@ describe("DocumentWorkflowMenu keyboard access", () => {
     );
   });
 
-  it("orders pickers, default buttons and run items in DOM order", async () => {
+  it("keeps the popup open when a picker is changed from the keyboard", async () => {
+    const menu = openMenu();
+    await screen.findByRole("option", { name: "pp-ocr" });
+    const select = segmentSelect() as HTMLSelectElement;
+    select.focus();
+
+    // A keyboard change is a change event with focus still on the select; the
+    // write that follows disables it for a moment, which must not read as
+    // focus leaving the popup.
+    fireEvent.keyDown(select, { key: "ArrowDown" });
+    fireEvent.change(select, { target: { value: "seg-b" } });
+    fireEvent.blur(select, { relatedTarget: null });
+
+    await waitFor(() => expect(createProjectModelBinding).toHaveBeenCalled());
+    expect(menu).toBeInTheDocument();
+    expect(
+      screen.getByRole("menu", { name: "Document workflow" }),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(segmentSelect()).not.toBeDisabled());
+  });
+
+  it("keeps the popup open when Undo is activated from the keyboard", async () => {
+    const menu = openMenu();
+    await screen.findByRole("option", { name: "pp-ocr" });
+    const select = segmentSelect() as HTMLSelectElement;
+    select.focus();
+    fireEvent.change(select, { target: { value: "seg-b" } });
+
+    const undo = await screen.findByRole("button", { name: "Undo" });
+    undo.focus();
+    expect(document.activeElement).toBe(undo);
+    // Enter on a plain button inside the popup is a click, and the menu's own
+    // key handling must leave it alone.
+    fireEvent.keyDown(undo, { key: "Enter" });
+    fireEvent.click(undo);
+    fireEvent.blur(undo, { relatedTarget: null });
+
+    // Waiting for the Undo button to go is not enough: it is also absent
+    // while the undo write runs, when the select still shows the pick. The
+    // settled state is the select back on the restored model.
+    await waitFor(() => {
+      expect(segmentSelect()).toHaveValue("seg-a");
+      expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+    });
+    expect(deleteProjectModelBinding).toHaveBeenCalledWith(
+      "project-1",
+      "binding-segment",
+    );
+    expect(menu).toBeInTheDocument();
+  });
+
+  it("orders pickers and run items in DOM order", async () => {
     const menu = openMenu();
     await screen.findByRole("combobox", { name: "HTR transcription model" });
     const tabbables = Array.from(
@@ -164,28 +231,10 @@ describe("DocumentWorkflowMenu keyboard access", () => {
     );
     expect(tabbables).toEqual([
       "Segmentation model",
-      "Set as project default",
       expect.stringMatching(/segment unsegmented pages/i),
       expect.stringMatching(/re-segment every page/i),
       "HTR transcription model",
-      "Set as project default",
       expect.stringMatching(/transcribe unpaired pages/i),
     ]);
-  });
-
-  it("does not intercept Enter or Space on the default button", async () => {
-    openMenu();
-    await screen.findByRole("combobox", { name: "HTR transcription model" });
-    const button = screen.getAllByRole("button", {
-      name: "Set as project default",
-    })[0];
-    expect(button.tagName).toBe("BUTTON");
-    (button as HTMLButtonElement).focus();
-    fireEvent.keyDown(button, { key: "Enter" });
-    fireEvent.keyDown(button, { key: " " });
-    expect(document.activeElement).toBe(button);
-    expect(
-      screen.queryByRole("menu", { name: "Document workflow" }),
-    ).toBeTruthy();
   });
 });

@@ -30,12 +30,10 @@ vi.mock("../../api/client", () => ({
     updateProjectModelBinding: (...args: unknown[]) =>
       updateProjectModelBinding(...args),
   },
-  whenProjectDefaultSettled: () => Promise.resolve(),
-  subscribeProjectDefaultWritten: () => () => {},
 }));
 
 vi.mock("../ui/toast", () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
+  toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() },
 }));
 
 const COUNTS = { total: 3, reviewed: 0, unsegmented: 1, unpaired: 0 };
@@ -73,6 +71,19 @@ describe("DocumentWorkflowMenu segment picker", () => {
     vi.clearAllMocks();
     listInferenceModels.mockResolvedValue(SEGMENT_MODELS);
     listProjectModelBindings.mockResolvedValue([]);
+    // Picking a model now saves it as the project default, so every test in
+    // here needs the write to answer.
+    createProjectModelBinding.mockImplementation(async (_projectId, body) => ({
+      id: `binding-${body.task}`,
+      ...body,
+    }));
+    updateProjectModelBinding.mockImplementation(
+      async (_projectId, bindingId, body) => ({
+        id: bindingId,
+        task: "segment",
+        ...body,
+      }),
+    );
     enqueueDocumentSegment.mockResolvedValue({
       queued: 1,
       skipped: 0,
@@ -115,6 +126,31 @@ describe("DocumentWorkflowMenu segment picker", () => {
         { scope: "unsegmented", model_id: "seg-a" },
       ),
     );
+  });
+
+  it("labels each picker Model and counts the pages on each item", async () => {
+    openMenu({ ...COUNTS, unsegmented: 1, total: 3, unpaired: 0 });
+    await screen.findByRole("combobox", { name: "Segmentation model" });
+
+    expect(screen.getAllByText("Model")).toHaveLength(2);
+    expect(screen.queryByText("Seg")).toBeNull();
+    expect(screen.queryByText("HTR")).toBeNull();
+    expect(
+      screen.getByRole("menuitem", {
+        name: /segment unsegmented pages\s*1 page$/i,
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("menuitem", { name: /re-segment every page.*3 pages/i }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("Discards unapproved machine text on untouched lines."),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Only the top item is safe/)).toBeNull();
+    expect(screen.queryByText(/project default/i)).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /set as project default/i }),
+    ).toBeNull();
   });
 
   it("sends the id for a chosen model", async () => {
@@ -195,6 +231,19 @@ describe("DocumentWorkflowMenu transcribe picker", () => {
     vi.clearAllMocks();
     listInferenceModels.mockResolvedValue(SEGMENT_MODELS);
     listProjectModelBindings.mockResolvedValue([]);
+    // Picking a model now saves it as the project default, so every test in
+    // here needs the write to answer.
+    createProjectModelBinding.mockImplementation(async (_projectId, body) => ({
+      id: `binding-${body.task}`,
+      ...body,
+    }));
+    updateProjectModelBinding.mockImplementation(
+      async (_projectId, bindingId, body) => ({
+        id: bindingId,
+        task: "segment",
+        ...body,
+      }),
+    );
     enqueueDocumentSegment.mockResolvedValue({
       queued: 1,
       skipped: 0,
@@ -246,62 +295,5 @@ describe("DocumentWorkflowMenu transcribe picker", () => {
       name: "Segmentation model",
     });
     await waitFor(() => expect(select).toHaveValue("seg-b"));
-  });
-
-  it("POSTs a default when none exists and then shows the quiet state", async () => {
-    createProjectModelBinding.mockResolvedValue({
-      id: "binding-new",
-      task: "segment",
-      model_id: "seg-b",
-    });
-    openMenu();
-    const select = await screen.findByRole("combobox", {
-      name: "Segmentation model",
-    });
-    await waitFor(() => expect(select).toHaveValue("seg-a"));
-    fireEvent.change(select, { target: { value: "seg-b" } });
-    fireEvent.click(
-      screen.getAllByRole("button", { name: "Set as project default" })[0],
-    );
-    await waitFor(() =>
-      expect(createProjectModelBinding).toHaveBeenCalledWith("project-1", {
-        task: "segment",
-        model_id: "seg-b",
-      }),
-    );
-    await waitFor(() =>
-      expect(screen.getAllByText("Project default")).toHaveLength(1),
-    );
-  });
-
-  it("PATCHes the existing binding when one exists", async () => {
-    listProjectModelBindings.mockResolvedValue([
-      { id: "binding-2", task: "segment", model_id: "seg-a" },
-    ]);
-    updateProjectModelBinding.mockResolvedValue({
-      id: "binding-2",
-      task: "segment",
-      model_id: "seg-b",
-    });
-    openMenu();
-    const select = await screen.findByRole("combobox", {
-      name: "Segmentation model",
-    });
-    await waitFor(() => expect(select).toHaveValue("seg-a"));
-    await waitFor(() =>
-      expect(screen.getAllByText("Project default")).toHaveLength(1),
-    );
-    fireEvent.change(select, { target: { value: "seg-b" } });
-    fireEvent.click(
-      screen.getAllByRole("button", { name: "Set as project default" })[0],
-    );
-    await waitFor(() =>
-      expect(updateProjectModelBinding).toHaveBeenCalledWith(
-        "project-1",
-        "binding-2",
-        { model_id: "seg-b" },
-      ),
-    );
-    expect(createProjectModelBinding).not.toHaveBeenCalled();
   });
 });
