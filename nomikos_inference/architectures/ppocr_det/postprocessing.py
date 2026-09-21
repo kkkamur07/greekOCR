@@ -9,7 +9,7 @@ Quad mode (``box_type="quad"``) is ``boxes_from_bitmap``: binarise at
 side of 5, then scaling back to source coordinates with rounding and
 clipping. Poly mode (``box_type="poly"``, passed explicitly by the served entry point) is
 ``polygons_from_bitmap``: the same contour also goes through
-``approxPolyDP`` with epsilon 0.002 times its arc length (skipped under 4
+``approxPolyDP`` with the fixed ``contour_tolerance_px`` (skipped under 4
 points), ``box_score_fast`` on the polygon gated at ``box_thresh``, unclip
 expansion keeping the largest path, the same minimum side check of 5, then
 the same scaling. Every poly detection carries both its quad (used for all
@@ -162,9 +162,11 @@ def order_quad_clockwise(points: np.ndarray) -> np.ndarray:
     return ring
 
 
-#: Approximation scale of the poly branch, from Paddle's
-#: ``polygons_from_bitmap``: epsilon is this times the contour arc length.
-POLY_APPROX_RATIO = 0.002
+#: Default contour tolerance of the poly branch, in detector pixels. Paddle's
+#: ``polygons_from_bitmap`` uses 0.002 times the contour arc length (about
+#: 2.7 px on a full line); the fixed 0.5 px keeps the wiggles that follow
+#: the ink, which the serving simplifier used to flatten back out.
+DEFAULT_CONTOUR_TOLERANCE_PX = 0.5
 
 
 def _unclip_largest(points: np.ndarray, ratio: float) -> np.ndarray | None:
@@ -214,21 +216,24 @@ def _polygon_for_contour(
     height_scale: float,
     orig_width: int,
     orig_height: int,
+    contour_tolerance_px: float = DEFAULT_CONTOUR_TOLERANCE_PX,
 ) -> list[list[float]] | None:
     """Build one Paddle ``polygons_from_bitmap`` polygon, or ``None``.
 
-    Any failure (fewer than 4 points after ``approxPolyDP``, a polygon
-    score under ``box_thresh``, a collapsed unclip, a grown side under
+    The contour fit uses the fixed ``contour_tolerance_px`` instead of
+    Paddle's ratio-scaled epsilon, so the polygon follows the ink. Any
+    failure (fewer than 4 points after ``approxPolyDP``, a polygon score
+    under ``box_thresh``, a collapsed unclip, a grown side under
     ``min_size + 2``) is ``None`` so the caller can fall back to the quad
     and lose no line.
     """
 
-    perimeter = float(cv2.arcLength(np.asarray(contour, dtype=np.float32), True))
-    if perimeter <= 0:
+    contour_points = np.asarray(contour, dtype=np.float32).reshape(-1, 2)
+    if float(cv2.arcLength(contour_points, True)) <= 0:
         return None
-    approx = cv2.approxPolyDP(
-        np.asarray(contour, dtype=np.float32), POLY_APPROX_RATIO * perimeter, True
-    ).reshape(-1, 2)
+    approx = cv2.approxPolyDP(contour_points, max(float(contour_tolerance_px), 1e-9), True).reshape(
+        -1, 2
+    )
     if len(approx) < 4:
         return None
     score = box_score_fast(pred, np.asarray(approx, dtype=np.float64))
@@ -261,6 +266,7 @@ def detect_lines(
     unclip_ratio: float = 1.4,
     max_candidates: int = 3000,
     box_type: str = "quad",
+    contour_tolerance_px: float = DEFAULT_CONTOUR_TOLERANCE_PX,
 ) -> list[DetectedQuad]:
     """Run the DB postprocess over one probability map.
 
@@ -325,6 +331,7 @@ def detect_lines(
             height_scale=height_scale,
             orig_width=orig_width,
             orig_height=orig_height,
+            contour_tolerance_px=contour_tolerance_px,
         )
         if polygon is None:
             quads.append(
@@ -341,8 +348,8 @@ def detect_lines(
 
 
 __all__ = [
+    "DEFAULT_CONTOUR_TOLERANCE_PX",
     "DetectedQuad",
-    "POLY_APPROX_RATIO",
     "box_score_fast",
     "detect_lines",
     "get_mini_boxes",

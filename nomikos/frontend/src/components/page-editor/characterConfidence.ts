@@ -6,18 +6,13 @@ import type {
 export type { CharacterConfidence };
 
 /**
- * A transcription plus per-character scores. The platform API has no such
- * field (`LineTranscriptionResponse` carries one confidence for the whole
- * line), so this is a client-side extension, declared once, here.
- *
- * Nothing populates it today: a local run's `character_confidences` are sent
- * to the server by `persistLocalTranscribe` and are not returned, so every
- * transcription the editor holds falls back to the per-line confidence below.
+ * A transcription plus per-character scores. The platform API carries
+ * `character_confidences` on `LineTranscriptionResponse` (null for
+ * human-written rows and rows written before the column existed), so this is
+ * a plain alias kept for its existing importers, declared once, here.
  */
 export type LineTranscriptionWithCharacterConfidence =
-  LineTranscriptionResponse & {
-    character_confidences?: CharacterConfidence[] | null;
-  };
+  LineTranscriptionResponse;
 
 export function confidenceTierClass(confidence: number): string {
   if (confidence > 0.9) return "ch-high";
@@ -50,19 +45,29 @@ export function formatConfidencePercent(confidence: number): string {
   return `${(confidence * 100).toFixed(1)}%`;
 }
 
+/**
+ * Length in code points: the API aligns `character_confidences` one to one
+ * with the code points of the text, while UTF-16 `length` counts a combining
+ * mark or an astral character differently and would reject a valid array.
+ */
+function codePoints(text: string): string[] {
+  return Array.from(text);
+}
+
 export function characterConfidencesForTranscription(
   transcription: LineTranscriptionWithCharacterConfidence,
 ): CharacterConfidence[] {
   const explicit = transcription.character_confidences;
-  if (explicit && explicit.length === transcription.text.length) {
+  if (explicit && explicit.length === codePoints(transcription.text).length) {
     return explicit;
   }
   if (transcription.confidence === null) {
-    return transcription.text
-      .split("")
-      .map((char) => ({ char, confidence: 0 }));
+    return codePoints(transcription.text).map((char) => ({
+      char,
+      confidence: 0,
+    }));
   }
-  return transcription.text.split("").map((char) => ({
+  return codePoints(transcription.text).map((char) => ({
     char,
     confidence: transcription.confidence as number,
   }));
@@ -72,7 +77,9 @@ export function hasDistinctCharacterConfidences(
   transcription: LineTranscriptionWithCharacterConfidence,
 ): boolean {
   const explicit = transcription.character_confidences;
-  return Boolean(explicit && explicit.length === transcription.text.length);
+  return Boolean(
+    explicit && explicit.length === codePoints(transcription.text).length,
+  );
 }
 
 /**

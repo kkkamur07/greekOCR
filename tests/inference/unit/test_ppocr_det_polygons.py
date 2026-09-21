@@ -98,8 +98,13 @@ def test_straight_blob_baseline_matches_quad_baseline() -> None:
     assert item.members == quad_item.members
     assert len(item.baseline) >= 2
     first, second = quad_item.baseline
-    for point in item.baseline:
+    # Interior samples sit on the quad baseline; the end samples may dip
+    # toward the line centre where the 0.5 px outline keeps the rounded end
+    # caps the old 1.0 px epsilon flattened, so only they are exempt.
+    for point in item.baseline[1:-1]:
         assert _point_to_segment(point, first, second) <= 1.0
+    for point in item.baseline:
+        assert _point_to_segment(point, first, second) <= 6.0
     # Direction: the served polyline runs the same way as the quad baseline.
     poly_direction = np.asarray(item.baseline[-1]) - np.asarray(item.baseline[0])
     quad_direction = np.asarray(second) - np.asarray(first)
@@ -176,7 +181,9 @@ def test_merge_unions_touching_polygons() -> None:
         _quad(100, 120, 200, 140, score=0.6),
     ]
     layout = layout_lines(quads, direction="ltr")
-    poly_items = refine_to_lines(quads, layout, box_type="poly", page_width=300, page_height=300)
+    poly_items = refine_to_lines(
+        quads, layout, box_type="poly", page_width=300, page_height=300, vertical_growth=1.0
+    )
     quad_items = refine_to_lines(quads, layout, box_type="quad")
 
     merged = [item for item in poly_items if item.merged_from == 2]
@@ -196,7 +203,9 @@ def test_merge_hulls_separated_fragments() -> None:
         _quad(103, 122, 220, 142, score=0.6),
     ]
     layout = layout_lines(quads, direction="ltr")
-    items = refine_to_lines(quads, layout, box_type="poly", page_width=300, page_height=300)
+    items = refine_to_lines(
+        quads, layout, box_type="poly", page_width=300, page_height=300, vertical_growth=1.0
+    )
     quad_items = refine_to_lines(quads, layout, box_type="quad")
 
     merged = [item for item in items if item.merged_from == 2]
@@ -221,7 +230,9 @@ def test_overlap_cut_leaves_polygons_disjoint() -> None:
         _quad(0, 85, 100, 110),
     ]
     layout = layout_lines(quads, direction="ltr")
-    poly_items = refine_to_lines(quads, layout, box_type="poly", page_width=200, page_height=200)
+    poly_items = refine_to_lines(
+        quads, layout, box_type="poly", page_width=200, page_height=200, vertical_growth=1.0
+    )
     quad_items = refine_to_lines(quads, layout, box_type="quad")
 
     pair = [item for item in poly_items if set(item.members) & {3, 4}]
@@ -236,7 +247,7 @@ def test_simplify_caps_dense_rings_at_64_points() -> None:
     angles = np.linspace(0, 2 * np.pi, 360, endpoint=False)
     circle = [[100.0 + 80 * float(np.cos(a)), 100.0 + 80 * float(np.sin(a))] for a in angles]
 
-    simplified = simplify_outline(circle, median_height=20.0, page_width=200, page_height=200)
+    simplified = simplify_outline(circle, page_width=200, page_height=200)
 
     assert simplified is not None
     assert 4 <= len(simplified) <= MAX_POLYGON_POINTS
@@ -263,7 +274,9 @@ def test_triangle_blob_falls_back_to_the_quad() -> None:
 def test_polygons_stay_inside_the_page_and_about_one_line_tall() -> None:
     quads = _detect(_banana_map(), "poly", box_thresh=0.2) + _detect(_rect_map(), "poly")
     layout = layout_lines(quads, direction="ltr")
-    items = refine_to_lines(quads, layout, box_type="poly", page_width=160, page_height=160)
+    items = refine_to_lines(
+        quads, layout, box_type="poly", page_width=160, page_height=160, vertical_growth=1.0
+    )
 
     assert len(items) == 2
     quads_by_member = {member: quads[member] for item in items for member in item.members}
@@ -320,7 +333,9 @@ def test_polygon_cut_never_vetoes_quad_cut() -> None:
     quads = [upper, lower]
     layout = layout_lines(quads, direction="ltr")
     quad_items = refine_to_lines(quads, layout, box_type="quad")
-    poly_items = refine_to_lines(quads, layout, box_type="poly", page_width=400, page_height=400)
+    poly_items = refine_to_lines(
+        quads, layout, box_type="poly", page_width=400, page_height=400, vertical_growth=1.0
+    )
 
     assert [item.members for item in poly_items] == [item.members for item in quad_items]
     assert [item.role for item in poly_items] == [item.role for item in quad_items]
@@ -380,7 +395,7 @@ def test_polyline_extent_reaches_quad_ends() -> None:
 def test_served_clipper_calls_keep_fractions() -> None:
     fractional = [[0.0, 0.0], [10.7, 0.2], [10.7, 5.3], [0.4, 5.3]]
 
-    simplified = simplify_outline(fractional, median_height=100.0)
+    simplified = simplify_outline(fractional)
     assert simplified is not None
     assert _ring_deviation(simplified, fractional) <= 0.01
 
@@ -414,7 +429,9 @@ def test_merged_outline_stays_inside_merged_quad() -> None:
     ]
     layout = layout_lines(quads, direction="ltr")
     quad_items = refine_to_lines(quads, layout, box_type="quad")
-    poly_items = refine_to_lines(quads, layout, box_type="poly", page_width=300, page_height=300)
+    poly_items = refine_to_lines(
+        quads, layout, box_type="poly", page_width=300, page_height=300, vertical_growth=1.0
+    )
 
     merged = [item for item in poly_items if item.merged_from == 2]
     assert len(merged) == 1
@@ -422,7 +439,7 @@ def test_merged_outline_stays_inside_merged_quad() -> None:
     assert Polygon(merged[0].points).difference(merged_quad).area <= 0.5
 
 
-def test_unrefined_poly_uses_page_median_height() -> None:
+def test_unrefined_poly_threads_outline_tolerance() -> None:
     teeth = 25
     tall_outline = [[200.0 * i / (teeth - 1), 0.0 if i % 2 == 0 else 2.0] for i in range(teeth)] + [
         [200.0 - 200.0 * i / (teeth - 1), 300.0 if i % 2 == 0 else 298.0] for i in range(teeth)
@@ -436,13 +453,23 @@ def test_unrefined_poly_uses_page_median_height() -> None:
         _quad(0, 320, 200, 440, score=0.8),
         _quad(0, 460, 200, 580, score=0.7),
     ]
-    response = build_ppocr_det_response(200, 600, quads, box_type="poly")
+    # Growth off so the served points equal the simplified outline exactly.
+    response = build_ppocr_det_response(
+        200, 600, quads, box_type="poly", vertical_growth=1.0, outline_tolerance_px=0.5
+    )
 
     tall_line = next(line for line in response.lines if line.source_metadata["score"] == 0.9)
-    expected = simplify_outline(tall_outline, median_height=120.0, page_width=200, page_height=600)
+    expected = simplify_outline(
+        tall_outline, outline_tolerance_px=0.5, page_width=200, page_height=600
+    )
     assert expected is not None
     assert len(expected) > 4
     assert tall_line.points == expected
+    coarse = build_ppocr_det_response(
+        200, 600, quads, box_type="poly", vertical_growth=1.0, outline_tolerance_px=4.0
+    )
+    coarse_line = next(line for line in coarse.lines if line.source_metadata["score"] == 0.9)
+    assert len(coarse_line.points) < len(tall_line.points)
 
 
 def test_simplify_guarantees_64_point_cap(monkeypatch) -> None:
@@ -458,7 +485,7 @@ def test_simplify_guarantees_64_point_cap(monkeypatch) -> None:
         "approxPolyDP",
         lambda contour, epsilon, closed: np.tile(np.asarray(contour), (3, 1)),
     )
-    simplified = simplify_outline(circle, median_height=20.0)
+    simplified = simplify_outline(circle)
 
     assert simplified is not None
     assert len(simplified) <= MAX_POLYGON_POINTS
