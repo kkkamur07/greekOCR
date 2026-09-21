@@ -8,6 +8,8 @@ import type {
 } from "../../api/client";
 import { PageEditorBackLink } from "./PageEditorNavHeader";
 import { PageEditorModelSelect } from "./PageEditorModelSelect";
+import { ProjectModelDefaultControl } from "./ProjectModelDefaultControl";
+import { useProjectModelDefaults } from "./projectModelDefaults";
 import { PageEditorPager } from "./PageEditorPager";
 import { PageEditorSharingMenu } from "./PageEditorSharingMenu";
 import { PageEditorPageXmlButton } from "./PageEditorPageXmlButton";
@@ -190,6 +192,18 @@ export function PageEditorToolbar({
         : "Transcribing"
       : null;
 
+  const projectDefaults = useProjectModelDefaults(projectId);
+
+  /**
+   * Re-read the project defaults after a run starts. The API client may have
+   * stored the chosen model as the default alongside the job; the client's
+   * write announcement plus this refresh move the quiet "Project default"
+   * state without a reload.
+   */
+  const refreshDefaultsAfterRun = () => {
+    void projectDefaults.refresh();
+  };
+
   const selectedModelName =
     transcribeModels.find((model) => model.id === selectedTranscribeModelId)
       ?.name ?? "not selected";
@@ -329,6 +343,15 @@ export function PageEditorToolbar({
             onSelectedModelIdChange={onSelectedTranscribeModelIdChange}
             disabled={processing}
           />
+          <ProjectModelDefaultControl
+            projectId={projectId}
+            task="transcribe"
+            selectedModelId={selectedTranscribeModelId}
+            defaultModelId={projectDefaults.defaultModelId("transcribe")}
+            saving={projectDefaults.saving === "transcribe"}
+            saveError={projectDefaults.error}
+            onSave={projectDefaults.saveDefault}
+          />
         </div>
 
         {/*
@@ -349,6 +372,15 @@ export function PageEditorToolbar({
             onSelectedModelIdChange={onSelectedSegmentModelIdChange}
             disabled={processing}
           />
+          <ProjectModelDefaultControl
+            projectId={projectId}
+            task="segment"
+            selectedModelId={selectedSegmentModelId}
+            defaultModelId={projectDefaults.defaultModelId("segment")}
+            saving={projectDefaults.saving === "segment"}
+            saveError={projectDefaults.error}
+            onSave={projectDefaults.saveDefault}
+          />
           <button
             type="button"
             className="pe-tb-btn"
@@ -356,6 +388,7 @@ export function PageEditorToolbar({
             onClick={() => {
               onActionsOpenChange(false);
               void onRunAutoSegment();
+              refreshDefaultsAfterRun();
             }}
             title={segmentTooltip}
           >
@@ -382,6 +415,7 @@ export function PageEditorToolbar({
               onActionsOpenChange(false);
               if (selectedSegmentId) void onRunSegmentOcr();
               else void onRunPageOcr();
+              refreshDefaultsAfterRun();
             }}
             title={
               selectedTranscribeModelId
@@ -428,6 +462,7 @@ export function PageEditorToolbar({
                 onClick={() => {
                   onActionsOpenChange(false);
                   void onRunAutoSegment();
+                  refreshDefaultsAfterRun();
                 }}
                 className="pe-dd-item"
               >
@@ -447,6 +482,7 @@ export function PageEditorToolbar({
                 onClick={() => {
                   onActionsOpenChange(false);
                   void onRunSegmentOcr();
+                  refreshDefaultsAfterRun();
                 }}
                 className="pe-dd-item"
               >
@@ -461,6 +497,7 @@ export function PageEditorToolbar({
                 onClick={() => {
                   onActionsOpenChange(false);
                   void onRunPageOcr();
+                  refreshDefaultsAfterRun();
                 }}
                 className="pe-dd-item"
               >

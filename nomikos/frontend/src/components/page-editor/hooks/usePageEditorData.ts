@@ -26,6 +26,7 @@ import {
 } from "../../../auth/session";
 import { useBackgroundJobs } from "../../../context/BackgroundJobsContext";
 import { resolveSegmentModelId } from "../segmentModelChoice";
+import { resolveTranscribeModelId } from "../transcribeModelChoice";
 
 function accessMessage(error: ApiError): string {
   if (error.status === 401) {
@@ -186,9 +187,11 @@ async function fetchPartContent(
   {
     documentLevel,
     segmentChoiceIsExplicitRef,
+    transcribeChoiceIsExplicitRef,
   }: {
     documentLevel: boolean;
     segmentChoiceIsExplicitRef?: { current: boolean };
+    transcribeChoiceIsExplicitRef?: { current: boolean };
   },
 ): Promise<void> {
   const [
@@ -311,13 +314,29 @@ async function fetchPartContent(
         ? [resolvedTranscribeModel, ...catalog]
         : catalog;
     });
-    apply(setters.setSelectedTranscribeModelId, (current: string | null) =>
-      resolvedTranscribeModel
-        ? resolvedTranscribeModel.id
-        : transcribeModels
-          ? (transcribeModels[0]?.id ?? null)
-          : current,
-    );
+    // Same order as the segment picker: an explicit choice wins for the rest
+    // of the document, then the binding, then the first catalog row. On a
+    // page turn an explicit choice keeps the current value, else the binding
+    // if any else the current value is kept.
+    apply(setters.setSelectedTranscribeModelId, (current: string | null) => {
+      const persisted = transcribeChoiceIsExplicitRef?.current ? current : null;
+      if (!transcribeModels) {
+        if (persisted) return persisted;
+        return resolvedTranscribeModel ? resolvedTranscribeModel.id : current;
+      }
+      const catalog =
+        resolvedTranscribeModel &&
+        !transcribeModels.some(
+          (model) => model.id === resolvedTranscribeModel.id,
+        )
+          ? [resolvedTranscribeModel, ...transcribeModels]
+          : transcribeModels;
+      return resolveTranscribeModelId(
+        catalog,
+        persisted,
+        resolvedTranscribeModel?.id ?? null,
+      );
+    });
     apply(setters.setSegmentModels, (current: InferenceModelResponse[]) => {
       const catalog = segmentModels ?? current;
       return resolvedSegmentModel &&
@@ -441,6 +460,20 @@ export function usePageEditorData(
   );
 
   /**
+   * Whether the transcribe picker choice came from the user. Same contract as
+   * the segment one above: set by the picker's change handler, cleared on a
+   * document-level load, read when a read lands so an in-flight choice wins.
+   */
+  const transcribeChoiceIsExplicitRef = useRef(false);
+  const handleSelectedTranscribeModelIdChange = useCallback(
+    (value: SetStateAction<string | null>) => {
+      transcribeChoiceIsExplicitRef.current = true;
+      setSelectedTranscribeModelId(value);
+    },
+    [],
+  );
+
+  /**
    * Which read of this part is the newest, counted across every effect that
    * writes the part's state rather than per effect.
    *
@@ -532,6 +565,7 @@ export function usePageEditorData(
     const isDocumentLoad = !carriedPart;
     if (isDocumentLoad) {
       segmentChoiceIsExplicitRef.current = false;
+      transcribeChoiceIsExplicitRef.current = false;
     }
 
     setLoading(!carriedPart);
@@ -603,7 +637,11 @@ export function usePageEditorData(
             setSegmentModels,
             setSelectedSegmentModelId,
           },
-          { documentLevel: !carriedPart, segmentChoiceIsExplicitRef },
+          {
+            documentLevel: !carriedPart,
+            segmentChoiceIsExplicitRef,
+            transcribeChoiceIsExplicitRef,
+          },
         );
       } catch (err) {
         if (isUnauthorized(err)) {
@@ -686,7 +724,11 @@ export function usePageEditorData(
           setSegmentModels,
           setSelectedSegmentModelId,
         },
-        { documentLevel: true, segmentChoiceIsExplicitRef },
+        {
+          documentLevel: true,
+          segmentChoiceIsExplicitRef,
+          transcribeChoiceIsExplicitRef,
+        },
       );
     });
 
@@ -735,7 +777,7 @@ export function usePageEditorData(
     setPairingError: partSetters.setPairingError,
     transcribeModels,
     selectedTranscribeModelId,
-    setSelectedTranscribeModelId,
+    setSelectedTranscribeModelId: handleSelectedTranscribeModelIdChange,
     segmentModels,
     selectedSegmentModelId,
     setSelectedSegmentModelId: handleSelectedSegmentModelIdChange,

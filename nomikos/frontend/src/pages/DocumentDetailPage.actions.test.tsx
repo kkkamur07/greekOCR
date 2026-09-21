@@ -45,6 +45,9 @@ vi.mock("../api/client", async (importOriginal) => {
       updatePartsPublished: vi.fn(),
       getDocumentWorkflowCounts: vi.fn(),
       listInferenceModels: vi.fn(),
+      listProjectModelBindings: vi.fn(),
+      createProjectModelBinding: vi.fn(),
+      updateProjectModelBinding: vi.fn(),
       enqueueDocumentSegment: vi.fn(),
       enqueueDocumentTranscribe: vi.fn(),
       exportDocumentPageXml: vi.fn(),
@@ -141,6 +144,7 @@ describe("DocumentDetailPage action toolbar", () => {
     vi.mocked(api.getDocument).mockResolvedValue(DOCUMENT);
     vi.mocked(api.getDocumentWorkflowCounts).mockResolvedValue(COUNTS);
     vi.mocked(api.listInferenceModels).mockResolvedValue([]);
+    vi.mocked(api.listProjectModelBindings).mockResolvedValue([]);
     vi.mocked(api.enqueueDocumentSegment).mockResolvedValue({
       jobs: [queuedJob("job-1")],
       queued: 3,
@@ -226,17 +230,17 @@ describe("DocumentDetailPage action toolbar", () => {
     ).toBeTruthy();
     expect(within(menu).getByText("Segment")).toBeTruthy();
     expect(within(menu).getByText("Transcribe")).toBeTruthy();
-    // The segment engine caption became a picker: the catalog rows, or
+    // Both engine captions became pickers: the catalog rows, or
     // No models while the catalog mock is empty.
     expect(
       within(menu).getByRole("combobox", { name: "Segmentation model" }),
     ).toBeTruthy();
     expect(
-      within(menu).getByRole("option", { name: "No models" }),
+      within(menu).getByRole("combobox", { name: "HTR transcription model" }),
     ).toBeTruthy();
-    expect(within(menu).getByText(/Model/)).toHaveTextContent(
-      "Model blla-greek-v2",
-    );
+    expect(
+      within(menu).getAllByRole("option", { name: "No models" }),
+    ).toHaveLength(2);
     expect(
       within(menu).getByText(/Re-segmenting discards unapproved machine text/),
     ).toBeTruthy();

@@ -1,0 +1,191 @@
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { DocumentWorkflowMenu } from "./DocumentWorkflowMenu";
+
+const listInferenceModels = vi.fn();
+const enqueueDocumentSegment = vi.fn();
+const enqueueDocumentTranscribe = vi.fn();
+const listProjectModelBindings = vi.fn();
+const createProjectModelBinding = vi.fn();
+const updateProjectModelBinding = vi.fn();
+
+vi.mock("../../api/client", () => ({
+  api: {
+    listInferenceModels: (...args: unknown[]) => listInferenceModels(...args),
+    enqueueDocumentSegment: (...args: unknown[]) =>
+      enqueueDocumentSegment(...args),
+    enqueueDocumentTranscribe: (...args: unknown[]) =>
+      enqueueDocumentTranscribe(...args),
+    listProjectModelBindings: (...args: unknown[]) =>
+      listProjectModelBindings(...args),
+    createProjectModelBinding: (...args: unknown[]) =>
+      createProjectModelBinding(...args),
+    updateProjectModelBinding: (...args: unknown[]) =>
+      updateProjectModelBinding(...args),
+  },
+  whenProjectDefaultSettled: () => Promise.resolve(),
+  subscribeProjectDefaultWritten: () => () => {},
+}));
+
+vi.mock("../ui/toast", () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
+
+const COUNTS = { total: 3, reviewed: 0, unsegmented: 1, unpaired: 2 };
+const CATALOG = [
+  {
+    id: "seg-a",
+    task: "segment",
+    name: "kraken",
+    artifact_ref: "registry://blla-segment?tag=stable",
+  },
+  {
+    id: "seg-b",
+    task: "segment",
+    name: "pp-ocr",
+    artifact_ref: "registry://ppocr-segment?tag=stable",
+  },
+  { id: "htr-1", task: "transcribe", name: "htr" },
+];
+
+/** The menu plus a focus target outside it, for focus-leave checks. */
+function openMenu() {
+  render(
+    <>
+      <button type="button">outside</button>
+      <DocumentWorkflowMenu
+        projectId="project-1"
+        documentId="document-1"
+        counts={COUNTS}
+        onJobsQueued={() => {}}
+      />
+    </>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: /workflow/i }));
+  return screen.getByRole("menu", { name: "Document workflow" });
+}
+
+function segmentSelect(): HTMLElement {
+  return screen.getByRole("combobox", { name: "Segmentation model" });
+}
+
+describe("DocumentWorkflowMenu keyboard access", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listInferenceModels.mockResolvedValue(CATALOG);
+    listProjectModelBindings.mockResolvedValue([]);
+  });
+
+  it("keeps the popup open on Tab inside a picker", async () => {
+    const menu = openMenu();
+    const select = segmentSelect();
+    (select as HTMLSelectElement).focus();
+    fireEvent.keyDown(select, { key: "Tab" });
+    expect(menu).toBeInTheDocument();
+  });
+
+  it("leaves select arrow keys to the select instead of walking the menu", async () => {
+    openMenu();
+    // The select is disabled until the catalog lands; focusing it earlier is
+    // a no-op and would leave focus on the auto-focused first run item.
+    await screen.findByRole("option", { name: "kraken" });
+    const select = segmentSelect();
+    (select as HTMLSelectElement).focus();
+    expect(document.activeElement).toBe(select);
+    fireEvent.keyDown(select, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(select);
+    fireEvent.keyDown(select, { key: "ArrowUp" });
+    expect(document.activeElement).toBe(select);
+  });
+
+  it("closes when focus leaves the popup, not when it moves inside", async () => {
+    const menu = openMenu();
+    const select = segmentSelect();
+    (select as HTMLSelectElement).focus();
+    fireEvent.blur(select, {
+      relatedTarget: screen.getByRole("combobox", {
+        name: "HTR transcription model",
+      }),
+    });
+    expect(menu).toBeInTheDocument();
+
+    fireEvent.blur(select, {
+      relatedTarget: screen.getByRole("button", { name: "outside" }),
+    });
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("menu", { name: "Document workflow" }),
+      ).toBeNull(),
+    );
+  });
+
+  it("closes on Escape and returns focus to the trigger", async () => {
+    openMenu();
+    const select = segmentSelect();
+    (select as HTMLSelectElement).focus();
+    fireEvent.keyDown(select, { key: "Escape" });
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("menu", { name: "Document workflow" }),
+      ).toBeNull(),
+    );
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: /workflow/i }),
+    );
+  });
+
+  it("still walks the run items with arrow keys, wrapping at the ends", async () => {
+    openMenu();
+    const first = screen.getByRole("menuitem", {
+      name: /segment unsegmented pages/i,
+    });
+    const second = screen.getByRole("menuitem", {
+      name: /re-segment every page/i,
+    });
+    (first as HTMLButtonElement).focus();
+    fireEvent.keyDown(first, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(second);
+    fireEvent.keyDown(second, { key: "ArrowUp" });
+    expect(document.activeElement).toBe(first);
+    fireEvent.keyDown(first, { key: "ArrowUp" });
+    expect(document.activeElement).toBe(
+      screen.getByRole("menuitem", { name: /transcribe unpaired pages/i }),
+    );
+  });
+
+  it("orders pickers, default buttons and run items in DOM order", async () => {
+    const menu = openMenu();
+    await screen.findByRole("combobox", { name: "HTR transcription model" });
+    const tabbables = Array.from(
+      menu.querySelectorAll("select, button:not([disabled])"),
+    ).map(
+      (element) => element.getAttribute("aria-label") ?? element.textContent,
+    );
+    expect(tabbables).toEqual([
+      "Segmentation model",
+      "Set as project default",
+      expect.stringMatching(/segment unsegmented pages/i),
+      expect.stringMatching(/re-segment every page/i),
+      "HTR transcription model",
+      "Set as project default",
+      expect.stringMatching(/transcribe unpaired pages/i),
+    ]);
+  });
+
+  it("does not intercept Enter or Space on the default button", async () => {
+    openMenu();
+    await screen.findByRole("combobox", { name: "HTR transcription model" });
+    const button = screen.getAllByRole("button", {
+      name: "Set as project default",
+    })[0];
+    expect(button.tagName).toBe("BUTTON");
+    (button as HTMLButtonElement).focus();
+    fireEvent.keyDown(button, { key: "Enter" });
+    fireEvent.keyDown(button, { key: " " });
+    expect(document.activeElement).toBe(button);
+    expect(
+      screen.queryByRole("menu", { name: "Document workflow" }),
+    ).toBeTruthy();
+  });
+});

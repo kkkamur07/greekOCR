@@ -7,7 +7,6 @@ import {
 import { ApiError } from "../../api/errors";
 import {
   ActionMenu,
-  ActionMenuCaption,
   ActionMenuConfirm,
   ActionMenuDivider,
   ActionMenuItem,
@@ -16,12 +15,11 @@ import {
 } from "../ui/ActionMenu";
 import { toast } from "../ui/toast";
 import { PageEditorModelSelect } from "../page-editor/PageEditorModelSelect";
+import { ProjectModelDefaultControl } from "../page-editor/ProjectModelDefaultControl";
+import { useProjectModelDefaults } from "../page-editor/projectModelDefaults";
 import { resolveSegmentModelId } from "../page-editor/segmentModelChoice";
-import {
-  TRANSCRIBE_MODEL_NAME,
-  batchQueuedMessage,
-  pageCountLabel,
-} from "./documentActionCopy";
+import { resolveTranscribeModelId } from "../page-editor/transcribeModelChoice";
+import { batchQueuedMessage, pageCountLabel } from "./documentActionCopy";
 
 type DocumentWorkflowMenuProps = {
   projectId: string;
@@ -52,31 +50,59 @@ export function DocumentWorkflowMenu({
   const [segmentModels, setSegmentModels] = useState<InferenceModelResponse[]>(
     [],
   );
+  const [transcribeModels, setTranscribeModels] = useState<
+    InferenceModelResponse[]
+  >([]);
+  /**
+   * The researcher's own pick, when they made one. Null means "no explicit
+   * choice": the selection below follows the project binding, then the
+   * canonical row (segment) or the first row, so a saved default moves every
+   * picker that nobody overrode.
+   */
+  const [explicitSegmentModelId, setExplicitSegmentModelId] = useState<
+    string | null
+  >(null);
+  const [explicitTranscribeModelId, setExplicitTranscribeModelId] = useState<
+    string | null
+  >(null);
+  const projectDefaults = useProjectModelDefaults(projectId);
+
   /**
    * Always one of the catalog ids once the catalog loads; null only while
    * the list is empty or failed to load, when `model_id: null` is sent and
    * the backend resolves its own default.
    */
-  const [selectedSegmentModelId, setSelectedSegmentModelId] = useState<
-    string | null
-  >(null);
+  const selectedSegmentModelId = resolveSegmentModelId(
+    segmentModels,
+    explicitSegmentModelId,
+    projectDefaults.defaultModelId("segment"),
+  );
+  const selectedTranscribeModelId = resolveTranscribeModelId(
+    transcribeModels,
+    explicitTranscribeModelId,
+    projectDefaults.defaultModelId("transcribe"),
+  );
 
-  // The segment catalog for the picker, with the canonical row preselected.
-  // A failed request leaves an empty list and does not block segmenting.
+  // The catalog for both pickers. A failed request leaves empty lists and
+  // does not block queueing: the requests then omit `model_id`.
   useEffect(() => {
     let cancelled = false;
+    setExplicitSegmentModelId(null);
+    setExplicitTranscribeModelId(null);
     void (async () => {
       try {
         const catalog = await api.listInferenceModels();
         if (!cancelled) {
-          const segment = catalog.filter((model) => model.task === "segment");
-          setSegmentModels(segment);
-          setSelectedSegmentModelId((current) =>
-            resolveSegmentModelId(segment, current),
+          setSegmentModels(catalog.filter((model) => model.task === "segment"));
+          setTranscribeModels(
+            catalog.filter((model) => model.task === "transcribe"),
           );
         }
       } catch {
-        if (!cancelled) setSegmentModels([]);
+        if (!cancelled) {
+          setSegmentModels([]);
+          setTranscribeModels([]);
+        }
       }
     })();
     return () => {
@@ -99,6 +125,10 @@ export function DocumentWorkflowMenu({
         scope,
         model_id: selectedSegmentModelId,
       });
+      // The enqueue may have stored the chosen model as the project default;
+      // re-read so the quiet state shows without a reload. Fire and forget:
+      // the toast must not wait for the bindings round trip.
+      void projectDefaults.refresh();
       toast.success(batchQueuedMessage(result));
       onJobsQueued();
       close();
@@ -118,8 +148,12 @@ export function DocumentWorkflowMenu({
       const result = await api.enqueueDocumentTranscribe(
         projectId,
         documentId,
-        { scope: "unpaired", model_id: null },
+        { scope: "unpaired", model_id: selectedTranscribeModelId },
       );
+      // The enqueue may have stored the chosen model as the project default;
+      // re-read so the quiet state shows without a reload. Fire and forget:
+      // the toast must not wait for the bindings round trip.
+      void projectDefaults.refresh();
       toast.success(batchQueuedMessage(result));
       onJobsQueued();
       close();
@@ -161,14 +195,25 @@ export function DocumentWorkflowMenu({
         ) : (
           <>
             <ActionMenuSection>Segment</ActionMenuSection>
-            <PageEditorModelSelect
-              label="Seg"
-              ariaLabel="Segmentation model"
-              models={segmentModels}
-              selectedModelId={selectedSegmentModelId}
-              onSelectedModelIdChange={setSelectedSegmentModelId}
-              disabled={busy}
-            />
+            <div role="group" aria-label="Segment">
+              <PageEditorModelSelect
+                label="Seg"
+                ariaLabel="Segmentation model"
+                models={segmentModels}
+                selectedModelId={selectedSegmentModelId}
+                onSelectedModelIdChange={setExplicitSegmentModelId}
+                disabled={busy}
+              />
+              <ProjectModelDefaultControl
+                projectId={projectId}
+                task="segment"
+                selectedModelId={selectedSegmentModelId}
+                defaultModelId={projectDefaults.defaultModelId("segment")}
+                saving={projectDefaults.saving === "segment"}
+                saveError={projectDefaults.error}
+                onSave={projectDefaults.saveDefault}
+              />
+            </div>
             <ActionMenuItem
               label="Segment unsegmented pages"
               meta={String(unsegmented)}
@@ -188,9 +233,25 @@ export function DocumentWorkflowMenu({
             </ActionMenuWarning>
             <ActionMenuDivider />
             <ActionMenuSection>Transcribe</ActionMenuSection>
-            <ActionMenuCaption>
-              Model <strong>{TRANSCRIBE_MODEL_NAME}</strong>
-            </ActionMenuCaption>
+            <div role="group" aria-label="Transcribe">
+              <PageEditorModelSelect
+                label="HTR"
+                ariaLabel="HTR transcription model"
+                models={transcribeModels}
+                selectedModelId={selectedTranscribeModelId}
+                onSelectedModelIdChange={setExplicitTranscribeModelId}
+                disabled={busy}
+              />
+              <ProjectModelDefaultControl
+                projectId={projectId}
+                task="transcribe"
+                selectedModelId={selectedTranscribeModelId}
+                defaultModelId={projectDefaults.defaultModelId("transcribe")}
+                saving={projectDefaults.saving === "transcribe"}
+                saveError={projectDefaults.error}
+                onSave={projectDefaults.saveDefault}
+              />
+            </div>
             <ActionMenuItem
               label="Transcribe unpaired pages"
               meta={String(unpaired)}
