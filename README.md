@@ -7,6 +7,7 @@
     <a href="#why-nomikos"><strong>Why Nomikos</strong></a> ·
     <a href="#current-model-support"><strong>Models</strong></a> ·
     <a href="#accuracy"><strong>Accuracy</strong></a> ·
+    <a href="docs/talks/how-did-we-do-it.pdf"><strong>How we did it</strong></a> ·
     <a href="#quick-start"><strong>Quick Start</strong></a> ·
     <a href="docs/README.md"><strong>Documentation</strong></a> ·
     <a href="https://huggingface.co/nomikos-project"><strong>Hugging Face</strong></a> ·
@@ -155,6 +156,7 @@ See [`docs/security/`](docs/security/), [`docs/architecture.md`](docs/architectu
 
 ## Explore Nomikos
 
+- [How we did it: methodology slides (PDF)](docs/talks/how-did-we-do-it.pdf), the final project talk on data, models, training and evaluation for Armenian, Byzantine Greek, Coptic and Syriac
 - [Use and host Nomikos](docs/guides/using-and-hosting.md)
 - [Models and datasets](docs/inference/models-and-datasets.md)
 - [Technical architecture](docs/architecture.md)
