@@ -57,6 +57,55 @@ describe("characterConfidence", () => {
       { char: "c", confidence: 0.82 },
     ]);
   });
+
+  it("aligns explicit scores by code point, not UTF-16 unit", () => {
+    // "\u{10900}" is one code point in two UTF-16 units: text.length is 3
+    // while the API's array holds 2 entries. Counting UTF-16 units would
+    // reject the valid array and split the surrogate pair in the fallback.
+    const transcription: LineTranscriptionWithCharacterConfidence = {
+      ...BASE_TRANSCRIPTION,
+      text: "\u{10900}a",
+      character_confidences: [
+        { char: "\u{10900}", confidence: 0.91 },
+        { char: "a", confidence: 0.42 },
+      ],
+    };
+
+    expect(hasDistinctCharacterConfidences(transcription)).toBe(true);
+    expect(characterConfidencesForTranscription(transcription)).toEqual([
+      { char: "\u{10900}", confidence: 0.91 },
+      { char: "a", confidence: 0.42 },
+    ]);
+  });
+
+  it("falls back one entry per code point for text with a combining mark", () => {
+    // Greek alpha with a combining acute: two code points, two entries, with
+    // the accent kept as its own code point for the grouper to reattach.
+    const transcription: LineTranscriptionWithCharacterConfidence = {
+      ...BASE_TRANSCRIPTION,
+      text: "\u03B1\u0301",
+      confidence: 0.7,
+    };
+
+    expect(characterConfidencesForTranscription(transcription)).toEqual([
+      { char: "\u03B1", confidence: 0.7 },
+      { char: "\u0301", confidence: 0.7 },
+    ]);
+  });
+
+  it("falls back per code point when the array does not describe the text", () => {
+    const transcription: LineTranscriptionWithCharacterConfidence = {
+      ...BASE_TRANSCRIPTION,
+      text: "ab",
+      character_confidences: [{ char: "a", confidence: 0.99 }],
+    };
+
+    expect(hasDistinctCharacterConfidences(transcription)).toBe(false);
+    expect(characterConfidencesForTranscription(transcription)).toEqual([
+      { char: "a", confidence: 0.82 },
+      { char: "b", confidence: 0.82 },
+    ]);
+  });
 });
 
 describe("groupConfidenceRuns", () => {
