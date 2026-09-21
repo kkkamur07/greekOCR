@@ -36,13 +36,18 @@ export type ProjectDefaultResult =
 const CLEAR_ATTEMPTS = 3;
 
 /**
- * What one write leaves the hook to store: the row for its own task, plus the
- * whole project's rows when the write read them and so knows better than the
- * state it started from.
+ * What one write leaves the hook to store. A write speaks for its own task and
+ * for nothing else: `binding` replaces that task's row, or removes it when it
+ * is null, and every other task keeps whatever the state holds.
+ *
+ * `adopt` is the one exception, for rows a write read after somebody else's
+ * change: those are newer than the state, so they replace it whole. A list a
+ * write read *before* its own write is not that, however fresh it looked at
+ * the time: another member may have moved a different task since.
  */
 type WriteOutcome = {
   binding: ProjectBinding | null;
-  bindings?: ProjectBinding[];
+  adopt?: ProjectBinding[];
   stale?: boolean;
 };
 
@@ -153,12 +158,17 @@ export async function clearProjectDefault(
 export type PickRecord = { modelId: string; bindingId: string | null };
 
 /**
- * What an undo did, and what the project holds now. `stale` means the undo
- * found somebody else's value under the pick and left it alone.
+ * What an undo did. `stale` means it found somebody else's value under the
+ * pick and left it alone.
+ *
+ * `bindings` comes with a stale answer only, and then it is the whole project
+ * as the undo read it after that change: rows worth adopting. A reversal
+ * reports its own row and nothing else, because the list it walked was read
+ * before its write and may already be behind on the other tasks.
  */
 export type UndoOutcome = {
   binding: ProjectBinding | null;
-  bindings: ProjectBinding[];
+  bindings?: ProjectBinding[];
   stale: boolean;
 };
 
@@ -187,7 +197,6 @@ export async function undoProjectDefault(
     current.model_id === pick.modelId &&
     (pick.bindingId === null || current.id === pick.bindingId);
   if (!ours) return { binding: current, bindings, stale: true };
-  const rest = bindings.filter((binding) => binding.task !== task);
   try {
     if (previousModelId) {
       const binding = await store.update(
@@ -195,10 +204,10 @@ export async function undoProjectDefault(
         current.id,
         previousModelId,
       );
-      return { binding, bindings: [...rest, binding], stale: false };
+      return { binding, stale: false };
     }
     await store.remove(projectId, current.id);
-    return { binding: null, bindings: rest, stale: false };
+    return { binding: null, stale: false };
   } catch (err) {
     if (!(err instanceof ApiError) || err.status !== 404) throw err;
     // The row went between the read and the write, so somebody else is
@@ -338,11 +347,12 @@ export function useProjectModelDefaults(
         // The write outranks a list still in flight, and owns `loading` from
         // here: see generationRef.
         generationRef.current += 1;
-        if (outcome.bindings) {
-          // The write read the project's rows, so take all of them: they are
-          // newer than anything this hook held.
-          setBindings(outcome.bindings);
+        if (outcome.adopt) {
+          // Rows read after somebody else's change, so newer than the state.
+          setBindings(outcome.adopt);
         } else {
+          // Only the written task moves. The other tasks belong to the state,
+          // which may have learned a newer row while this write was in flight.
           setBindings((current) => [
             ...current.filter((binding) => binding.task !== task),
             ...(outcome.binding ? [outcome.binding] : []),
@@ -403,8 +413,22 @@ export function useProjectModelDefaults(
     ): Promise<ProjectDefaultResult> =>
       runWrite(
         task,
-        (id) =>
-          undoProjectDefault(resolvedStore, id, task, pick, previousModelId),
+        async (id) => {
+          const outcome = await undoProjectDefault(
+            resolvedStore,
+            id,
+            task,
+            pick,
+            previousModelId,
+          );
+          // `bindings` comes with a stale answer only, which is the one case
+          // where the write knows the other tasks better than the state does.
+          return {
+            binding: outcome.binding,
+            adopt: outcome.bindings,
+            stale: outcome.stale,
+          };
+        },
         "Could not undo the project default.",
       ),
     [runWrite, resolvedStore],

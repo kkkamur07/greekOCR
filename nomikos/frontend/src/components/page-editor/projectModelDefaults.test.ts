@@ -344,9 +344,12 @@ describe("undoProjectDefault", () => {
       PICK,
       null,
     );
-    expect(outcome.bindings).toEqual([
+    expect(await store.list("project-1")).toEqual([
       { id: "binding-2", task: "transcribe", model_id: "htr-greek" },
     ]);
+    // A reversal reports its own row only. The list it walked was read before
+    // its write, so it is no news about the other task.
+    expect(outcome.bindings).toBeUndefined();
   });
 
   it("adopts what is there when the row goes between the read and the write", async () => {
@@ -712,5 +715,92 @@ describe("useProjectModelDefaults", () => {
     // The hook now speaks for the project as it is, not as the pick left it.
     expect(result.current.defaultModelId("segment")).toBe("seg-c");
     expect(result.current.saving).toBe(false);
+  });
+  it("does not carry an undo's older view of the other task into state", async () => {
+    const store = storeWith([
+      { id: "binding-s", task: "segment", model_id: "seg-b" },
+      { id: "binding-t", task: "transcribe", model_id: "htr-x" },
+    ]);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const gated: BindingStore = {
+      ...store,
+      update: async (projectId, bindingId, modelId) => {
+        if (bindingId === "binding-s") await gate;
+        return store.update(projectId, bindingId, modelId);
+      },
+    };
+    const { result } = renderHook(() =>
+      useProjectModelDefaults("project-1", gated),
+    );
+    await waitFor(() => expect(result.current.known).toBe(true));
+
+    let pending!: Promise<unknown>;
+    await act(async () => {
+      pending = result.current.undoDefault(
+        "segment",
+        { modelId: "seg-b", bindingId: "binding-s" },
+        "seg-a",
+      );
+    });
+
+    // While the undo waits on the server, somebody else moves the other task
+    // and this session reads that.
+    await store.update("project-1", "binding-t", "htr-y");
+    await act(async () => {
+      await result.current.refresh();
+    });
+    expect(result.current.defaultModelId("transcribe")).toBe("htr-y");
+
+    await act(async () => {
+      release();
+      await pending;
+    });
+    // The undo listed the bindings before it wrote, when transcribe still read
+    // htr-x. A write speaks for its own task only, so that view stays out.
+    expect(result.current.defaultModelId("segment")).toBe("seg-a");
+    expect(result.current.defaultModelId("transcribe")).toBe("htr-y");
+  });
+
+  it("does not carry a save's older view of the other task into state", async () => {
+    const store = storeWith([
+      { id: "binding-s", task: "segment", model_id: "seg-a" },
+      { id: "binding-t", task: "transcribe", model_id: "htr-x" },
+    ]);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const gated: BindingStore = {
+      ...store,
+      update: async (projectId, bindingId, modelId) => {
+        if (bindingId === "binding-s") await gate;
+        return store.update(projectId, bindingId, modelId);
+      },
+    };
+    const { result } = renderHook(() =>
+      useProjectModelDefaults("project-1", gated),
+    );
+    await waitFor(() => expect(result.current.known).toBe(true));
+
+    let pending!: Promise<unknown>;
+    await act(async () => {
+      pending = result.current.saveDefault("segment", "seg-b");
+    });
+
+    await store.update("project-1", "binding-t", "htr-y");
+    await act(async () => {
+      await result.current.refresh();
+    });
+    expect(result.current.defaultModelId("transcribe")).toBe("htr-y");
+
+    await act(async () => {
+      release();
+      await pending;
+    });
+    expect(result.current.defaultModelId("segment")).toBe("seg-b");
+    expect(result.current.defaultModelId("transcribe")).toBe("htr-y");
   });
 });
