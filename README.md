@@ -35,7 +35,7 @@ Nomikos is the whole ecosystem, data, models, and the application to use them: w
 
 ## Built for Research
 
-Nomikos is being developed for the Nomos research ecosystem, with a focus on Syriac, Coptic, Armenian, Byzantine Greek, and related scripts. The platform itself is script agnostic: if you want to collaborate or develop models for your own script, get in touch via [GitHub](https://github.com/kkkamur07/greekOCR) or the [Hugging Face organization](https://huggingface.co/nomikos-project).
+Nomikos is being developed for the Nomos research ecosystem, with a focus on Syriac, Coptic, Armenian, Byzantine Greek, and related scripts. The platform itself is script agnostic: if you want to collaborate or develop models for your own script, get in touch via [GitHub](https://github.com/kkkamur07/nomikos) or the [Hugging Face organization](https://huggingface.co/nomikos-project).
 
 The system is expert-in-the-loop by design. Models draft, and researchers decide what is correct. Approved work produces processed line images and transcription files for publication or future model training.
 
@@ -102,8 +102,8 @@ The fastest way to evaluate the complete application is the development Compose 
 Prerequisites: Git, Docker Desktop with Compose, and about 10 GB of free disk space.
 
 ```bash
-git clone https://github.com/kkkamur07/greekOCR.git
-cd greekOCR
+git clone https://github.com/kkkamur07/nomikos.git
+cd nomikos
 cp infrastructure/.env.compose.example infrastructure/.env
 ```
 
@@ -169,7 +169,7 @@ See [`docs/security/`](docs/security/), [`docs/architecture.md`](docs/architectu
 
 ## Community
 
-Questions, script requests, and model contributions are welcome via [GitHub](https://github.com/kkkamur07/greekOCR), the [Hugging Face organization](https://huggingface.co/nomikos-project), and the [website](https://nomikos.app). The hosted editor is at [app.nomikos.app](https://app.nomikos.app).
+Questions, script requests, and model contributions are welcome via [GitHub](https://github.com/kkkamur07/nomikos), the [Hugging Face organization](https://huggingface.co/nomikos-project), and the [website](https://nomikos.app). The hosted editor is at [app.nomikos.app](https://app.nomikos.app).
 
 ## License
 
