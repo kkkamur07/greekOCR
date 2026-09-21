@@ -66,6 +66,20 @@ describe("ActionMenu focusout close", () => {
     );
   });
 
+  it("closes when focus leaves the whole wrapper through the trigger", async () => {
+    openMenu();
+    // Shift+Tab walked popup to trigger (inside the wrap, still open), then
+    // one more Shift+Tab leaves the widget entirely.
+    const trigger = screen.getByRole("button", { name: "Actions" });
+    (trigger as HTMLButtonElement).focus();
+    fireEvent.blur(trigger, {
+      relatedTarget: screen.getByRole("button", { name: "outside" }),
+    });
+    await waitFor(() =>
+      expect(screen.queryByRole("menu", { name: "Actions menu" })).toBeNull(),
+    );
+  });
+
   it("stays open when focus moves inside", () => {
     const menu = openMenu();
     const item = firstItem();

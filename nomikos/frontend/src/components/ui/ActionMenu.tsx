@@ -139,12 +139,13 @@ export function ActionMenu({
   }, [open, close]);
 
   /**
-   * Tab is never intercepted, so the popup has to notice focus leaving on its
-   * own. A move inside (arrows, or Tab between the popup's own controls)
-   * keeps it open; a move to a real target outside closes it, leaving focus
-   * wherever the browser put it. A null target (a Safari click that moves no
-   * focus, a press on a non-focusable spot, a window blur) closes nothing:
-   * outside pointer presses already have their own mousedown handling.
+   * Tab is never intercepted, so the wrapper has to notice focus leaving on
+   * its own. A move inside the wrapper (arrows, Tab between the popup's own
+   * controls, or either way between the trigger and the popup) keeps it
+   * open; a move to a real target outside closes it, leaving focus wherever
+   * the browser put it. A null target (a Safari click that moves no focus, a
+   * press on a non-focusable spot, a window blur) closes nothing: outside
+   * pointer presses already have their own mousedown handling.
    */
   function handleMenuFocusOut(event: FocusEvent<HTMLDivElement>) {
     const next = event.relatedTarget;
@@ -229,7 +230,7 @@ export function ActionMenu({
   }
 
   return (
-    <div className="action-menu" ref={wrapRef}>
+    <div className="action-menu" ref={wrapRef} onBlur={handleMenuFocusOut}>
       <button
         ref={triggerRef}
         type="button"
@@ -259,7 +260,6 @@ export function ActionMenu({
           tabIndex={-1}
           className={`action-menu__popup${wide ? " action-menu__popup--wide" : ""}`}
           onKeyDown={handleMenuKeyDown}
-          onBlur={handleMenuFocusOut}
         >
           {children(closeAndRestoreFocus)}
         </div>
