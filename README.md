@@ -17,6 +17,7 @@
   <a href="https://nomikos.app"><img src="https://img.shields.io/badge/Website-nomikos.app-navy" alt="Website"></a>
   <a href="https://app.nomikos.app"><img src="https://img.shields.io/badge/App-app.nomikos.app-green" alt="Application"></a>
   <a href="https://huggingface.co/nomikos-project"><img src="https://img.shields.io/badge/Models-Hugging_Face-yellow" alt="Hugging Face models"></a>
+  <a href="docs/talks/how-did-we-do-it.pdf"><img src="https://img.shields.io/badge/Slides-How_we_did_it-purple" alt="Methodology slides"></a>
 </div>
 
 Upload a manuscript page and Nomikos segments it into written lines, drafts a transcription where a compatible HTR model is available, and hands you a browser editor to correct, review, share, publish, and export. Behind that sit the editor, the API, storage, job state, streaming, and inference that runs on a researcher's laptop or in the cloud, all in this repository.
@@ -79,21 +80,17 @@ Point it at a different platform with `NOMIKOS_API_URL` or `--api-url`.
 
 ## Accuracy
 
-The Hugging Face model cards report these figures. The Greek, Armenian and Syriac rows come from the same evaluator, `python -m src.evaluate.calamari`, run over that script's held-out finetuning pack (`data/processed/greek/finetuning`, `data/processed/armenian/finetuning`, `data/processed/syriac/finetuning`). The Coptic test row is the card's held-out test figure, whose validation split and SROIE F1 the card does not give:
+Test character error rate (CER) of each transcription model, as reported on its Hugging Face model card. Lower is better.
 
-| Model | Split | Lines | CER | WER | Exact match | SROIE F1 |
-| --- | --- | ---: | ---: | ---: | ---: | ---: |
-| `greek-calamari-v1` | val | 19 | 0.156 | 0.648 | 0.000 | 0.415 |
-| `greek-calamari-v1` | test | 21 | 0.226 | 0.675 | 0.000 | 0.390 |
-| `armenian-calamari-v1` | val | 119 | 0.092 | 0.440 | 0.319 | 0.588 |
-| `armenian-calamari-v1` | test | 120 | 0.072 | 0.340 | 0.458 | 0.701 |
-| `syriac-calamari-v2` | val | 331 | 0.181 | 0.535 | 0.245 | 0.485 |
-| `syriac-calamari-v2` | test | 335 | 0.210 | 0.577 | 0.245 | 0.452 |
-| `coptic-calamari-v1` | test | 283 | 0.0823 | 0.591 | 0.431 |  |
+| Model | Script | Test CER |
+| --- | --- | ---: |
+| `greek-calamari-v1` | Byzantine Greek | 0.226 |
+| `armenian-calamari-v1` | Armenian | 0.072 |
+| `syriac-calamari-v2` | Syriac | 0.210 |
+| `syriac-ppocr-v1` | Syriac | about 0.07 |
+| `coptic-calamari-v1` | Coptic | 0.082 |
 
-Each of the Greek, Armenian and Syriac checkpoints selects `best.pt` on validation CER: 0.156 for Greek, 0.092 for Armenian, 0.181 for Syriac. Weigh the rows by how much text stands behind them.
-
-None of this is a platform-wide accuracy guarantee. Every pack here comes from specific manuscripts in specific hands, and CER moves with the script, the hand, image quality, layout, and the training data behind the checkpoint.
+These figures come from specific manuscripts and hands; expect CER to move with the script, the hand and the image quality. The [methodology slides](docs/talks/how-did-we-do-it.pdf) explain how the models were trained and evaluated.
 
 ## Quick Start
 
