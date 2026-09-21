@@ -195,23 +195,25 @@ export function DocumentWorkflowMenu({
         ) : (
           <>
             <ActionMenuSection>Segment</ActionMenuSection>
-            <PageEditorModelSelect
-              label="Seg"
-              ariaLabel="Segmentation model"
-              models={segmentModels}
-              selectedModelId={selectedSegmentModelId}
-              onSelectedModelIdChange={setExplicitSegmentModelId}
-              disabled={busy}
-            />
-            <ProjectModelDefaultControl
-              projectId={projectId}
-              task="segment"
-              selectedModelId={selectedSegmentModelId}
-              defaultModelId={projectDefaults.defaultModelId("segment")}
-              saving={projectDefaults.saving === "segment"}
-              saveError={projectDefaults.error}
-              onSave={projectDefaults.saveDefault}
-            />
+            <div role="group" aria-label="Segment">
+              <PageEditorModelSelect
+                label="Seg"
+                ariaLabel="Segmentation model"
+                models={segmentModels}
+                selectedModelId={selectedSegmentModelId}
+                onSelectedModelIdChange={setExplicitSegmentModelId}
+                disabled={busy}
+              />
+              <ProjectModelDefaultControl
+                projectId={projectId}
+                task="segment"
+                selectedModelId={selectedSegmentModelId}
+                defaultModelId={projectDefaults.defaultModelId("segment")}
+                saving={projectDefaults.saving === "segment"}
+                saveError={projectDefaults.error}
+                onSave={projectDefaults.saveDefault}
+              />
+            </div>
             <ActionMenuItem
               label="Segment unsegmented pages"
               meta={String(unsegmented)}
@@ -231,23 +233,25 @@ export function DocumentWorkflowMenu({
             </ActionMenuWarning>
             <ActionMenuDivider />
             <ActionMenuSection>Transcribe</ActionMenuSection>
-            <PageEditorModelSelect
-              label="HTR"
-              ariaLabel="HTR transcription model"
-              models={transcribeModels}
-              selectedModelId={selectedTranscribeModelId}
-              onSelectedModelIdChange={setExplicitTranscribeModelId}
-              disabled={busy}
-            />
-            <ProjectModelDefaultControl
-              projectId={projectId}
-              task="transcribe"
-              selectedModelId={selectedTranscribeModelId}
-              defaultModelId={projectDefaults.defaultModelId("transcribe")}
-              saving={projectDefaults.saving === "transcribe"}
-              saveError={projectDefaults.error}
-              onSave={projectDefaults.saveDefault}
-            />
+            <div role="group" aria-label="Transcribe">
+              <PageEditorModelSelect
+                label="HTR"
+                ariaLabel="HTR transcription model"
+                models={transcribeModels}
+                selectedModelId={selectedTranscribeModelId}
+                onSelectedModelIdChange={setExplicitTranscribeModelId}
+                disabled={busy}
+              />
+              <ProjectModelDefaultControl
+                projectId={projectId}
+                task="transcribe"
+                selectedModelId={selectedTranscribeModelId}
+                defaultModelId={projectDefaults.defaultModelId("transcribe")}
+                saving={projectDefaults.saving === "transcribe"}
+                saveError={projectDefaults.error}
+                onSave={projectDefaults.saveDefault}
+              />
+            </div>
             <ActionMenuItem
               label="Transcribe unpaired pages"
               meta={String(unpaired)}
