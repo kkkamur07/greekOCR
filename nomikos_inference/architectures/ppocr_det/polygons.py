@@ -384,6 +384,21 @@ def _raster_supersampled(
     return mask > 0
 
 
+def _contested_losses(
+    own_distance: np.ndarray, other_distance: np.ndarray, other: int, index: int
+) -> np.ndarray:
+    """Contested pixels the neighbour wins outright.
+
+    Strictly nearer pixels, plus exact ties when the neighbour has the
+    lower index, so every shared pixel has exactly one owner and no strip
+    lands in two transcription crops. A pixel stays in both masks only when
+    neither distance is strictly smaller, which for two floats means exactly
+    equal, so the equality branch is complete with no epsilon. Distances
+    compare exactly as the distance transform computed them.
+    """
+    return (other_distance < own_distance) | ((other_distance == own_distance) & (other < index))
+
+
 def grow_outlines_vertical(
     outlines: list[object],
     quad_rings: list[object],
@@ -400,8 +415,10 @@ def grow_outlines_vertical(
     about the quad centre (the along-line extent never moves), which covers
     ascenders and descenders where the pitch allows. Where grown outlines
     overlap, each contested pixel goes to the line whose ungrown outline is
-    nearer, so the boundary follows both shapes; where there is no neighbour
-    the grown outline stands. Results are integer points clipped to the page
+    nearer, with exact ties kept by the lower index, so the boundary follows
+    both shapes and no pixel lands in two outlines; where there is no
+    neighbour the grown outline stands. Results are integer points clipped
+    to the page
     and capped at ``MAX_POLYGON_POINTS``; any line whose grown contour is
     unusable keeps its ungrown outline. ``factor == 1.0`` returns the inputs
     unchanged. Quads and baselines are read only for direction, never moved.
@@ -422,6 +439,7 @@ def grow_outlines_vertical(
         (float(g[:, 0].min()), float(g[:, 0].max()), float(g[:, 1].min()), float(g[:, 1].max()))
         for g in grown
     ]
+    box_array = np.asarray(boxes, dtype=np.float64).reshape(-1, 4)
     ss = _GROWTH_SUPERSAMPLE
     approx_ss = max(float(outline_tolerance_px), 1e-9) * ss
     served: list[list[list[float]]] = []
@@ -446,16 +464,18 @@ def grow_outlines_vertical(
         keep = grown_mask.copy()
         # Contenders first: only lines whose grown masks truly share pixels
         # need distance transforms, so isolated lines skip them entirely.
+        hits = (
+            (box_array[:, 1] >= x0)
+            & (box_array[:, 0] <= x1)
+            & (box_array[:, 3] >= y0)
+            & (box_array[:, 2] <= y1)
+        )
+        hits[index] = False
         contenders: dict[int, np.ndarray] = {}
-        for other, other_grown in enumerate(grown):
-            if other == index:
-                continue
-            other_box = boxes[other]
-            if other_box[1] < x0 or other_box[0] > x1 or other_box[3] < y0 or other_box[2] > y1:
-                continue
-            other_mask = _raster_supersampled(other_grown, x0, y0, width, height, ss)
+        for other in np.flatnonzero(hits).tolist():
+            other_mask = _raster_supersampled(grown[other], x0, y0, width, height, ss)
             if (grown_mask & other_mask).any():
-                contenders[other] = other_mask
+                contenders[int(other)] = other_mask
         if contenders:
             plain_mask = _raster_supersampled(ring, x0, y0, width, height, ss)
             own_distance = cv2.distanceTransform((~plain_mask).astype(np.uint8), cv2.DIST_L2, 3)
@@ -465,7 +485,10 @@ def grow_outlines_vertical(
                 other_distance = cv2.distanceTransform(
                     (~other_plain).astype(np.uint8), cv2.DIST_L2, 3
                 )
-                keep[zone & (other_distance < own_distance)] = False
+                # Stable ownership: the nearer outline wins, and on an exact
+                # tie the lower index keeps the pixel, so no strip lands in
+                # two transcription crops.
+                keep[zone & _contested_losses(own_distance, other_distance, other, index)] = False
         contours, _ = cv2.findContours(
             keep.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
         )

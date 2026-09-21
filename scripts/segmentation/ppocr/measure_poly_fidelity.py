@@ -2,23 +2,24 @@
 """Served-polygon fidelity numbers for one ppocr-det code tree.
 
 Runs the production entry point with default params (``box_type=poly``)
-on the four fidelity pages and reports per page: lines, mean served
-points per line, mean adjacent-line overlap of the served polygons, zone
-ink kept inside the transcription-style mask (integer rounded polygon on
-white, the mask transcription crops with), share of lines with over 10
-percent of zone ink outside the polygon, and seconds per page.
+on the given pages and reports per page: lines, mean served points per
+line, mean adjacent-line overlap of the served polygons, zone ink kept
+inside the transcription-style mask (integer rounded polygon on white,
+the mask transcription crops with), share of lines with over 10 percent
+of zone ink outside the polygon, and seconds per page.
 
-Run once with this tree on ``PYTHONPATH`` and once with the 0.4.1 tree;
-zones are built from the 0.4.1 polygons both times so ink numbers compare.
-The ink helpers mirror the throwaway prototype (compare2.py
-``ink_page`` and ``line_recall_cut_kept``); the polygons always come from
-the production entry point.
+Run once with this tree on ``PYTHONPATH`` and once with the baseline
+tree; pass the baseline JSON as ``--zones-from`` both times so ink zones
+(and therefore ink numbers) compare. The ink helpers mirror the throwaway
+prototype (compare2.py ``ink_page`` and ``line_recall_cut_kept``); the
+polygons always come from the production entry point.
 
 Example::
 
-    PYTHONPATH=. PYTHONDONTWRITEBYTECODE=1 /Users/krishuagarwal/Desktop/Programming/python/greekOCR/.venv/bin/python \\
-        scripts/segmentation/ppocr/measure_poly_fidelity.py --output /tmp/nmk-poly-ship/numbers-new.json
-    PYTHONPATH=/tmp/nmk-base041 PYTHONDONTWRITEBYTECODE=1 ... --output /tmp/nmk-poly-ship/numbers-base.json --zones-from /tmp/nmk-poly-ship/numbers-base.json
+    PYTHONPATH=<tree> <venv-python> \\
+        scripts/segmentation/ppocr/measure_poly_fidelity.py \\
+        --model <detector.onnx> --pages <page1.jpg> [<page2.jpg> ...] \\
+        --output numbers-new.json --zones-from numbers-base.json
 """
 
 from __future__ import annotations
@@ -33,34 +34,17 @@ import cv2
 import numpy as np
 from shapely.geometry import Polygon as SPoly
 
-MODEL = Path(
-    "/Users/krishuagarwal/Desktop/Programming/python/greekOCR-wt/_ppocr-parity/pp-ocrv6-medium-det.onnx"
-)
-PAGES = (
-    (
-        "c13",
-        Path(
-            "/Users/krishuagarwal/Desktop/Programming/python/greekOCR-wt/_orli-env/pagexml-verify/c13.jpg"
-        ),
-    ),
-    (
-        "vat-1r",
-        Path(
-            "/Users/krishuagarwal/Desktop/Programming/python/greekOCR-wt/_orli-env/pagexml-verify/vat-1r.jpg"
-        ),
-    ),
-    (
-        "grec-p4",
-        Path(
-            "/Users/krishuagarwal/Desktop/Programming/python/greekOCR-wt/_ppocr-parity/adapter-e2e/grec-p4.jpg"
-        ),
-    ),
-    ("segment-page", None),
-)
-
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--model", type=Path, required=True, help="Detector ONNX artifact")
+    parser.add_argument(
+        "--pages",
+        type=Path,
+        nargs="+",
+        required=True,
+        help="Page images in order; the report names each by file stem",
+    )
     parser.add_argument("--output", type=Path, required=True, help="Where the JSON numbers go")
     parser.add_argument(
         "--zones-from",
@@ -69,10 +53,9 @@ def _parse_args() -> argparse.Namespace:
         help="Baseline JSON whose polygons define the ink zones (default: own polygons)",
     )
     parser.add_argument(
-        "--segment-page",
-        type=Path,
-        default=Path("tests/fixtures/manuscripts/greek/segment_page.jpeg"),
-        help="segment-page fixture inside the tree on PYTHONPATH",
+        "--artifact-sha256",
+        default=None,
+        help="Expected SHA-256 of the model artifact (default: unchecked)",
     )
     return parser.parse_args()
 
@@ -179,12 +162,14 @@ def main() -> int:
             zone_polys[name] = [np.asarray(p, dtype=np.float64) for p in entry["polygons"]]
     rows: dict[str, dict] = {}
     print("page lines pts/line adj_overlap crop_kept ink_cut sec/page", flush=True)
-    pages = [(name, path if path is not None else args.segment_page) for name, path in PAGES]
+    # File stems name the pages; underscores read as hyphens so fixture
+    # names like segment_page.jpeg match baseline keys like segment-page.
+    pages = [(path.stem.replace("_", "-"), path) for path in args.pages]
     # Warm-up untimed so the session load lands outside the per-page times.
     run_ppocr_det_segment(
         pages[0][1].read_bytes(),
-        model_path=MODEL,
-        artifact_sha256=None,
+        model_path=args.model,
+        artifact_sha256=args.artifact_sha256,
         params={"box_type": "poly"},
     )
     for name, path in pages:
@@ -192,7 +177,10 @@ def main() -> int:
         grey = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_GRAYSCALE)
         started = time.perf_counter()
         response = run_ppocr_det_segment(
-            data, model_path=MODEL, artifact_sha256=None, params={"box_type": "poly"}
+            data,
+            model_path=args.model,
+            artifact_sha256=args.artifact_sha256,
+            params={"box_type": "poly"},
         )
         seconds = time.perf_counter() - started
         polys = [

@@ -330,7 +330,8 @@ the page, and checked with pyclipper `SimplifyPolygon` keeping the largest
 piece. Then each outline grows by `vertical_growth` (1.35) across its own
 line direction about its centre line, never along it; where grown outlines
 overlap, each contested pixel goes to the line whose ungrown outline is
-nearer, and where there is no neighbour the grown outline stands. Growth
+nearer, with exact ties kept by the lower index so no pixel lands in two
+outlines, and where there is no neighbour the grown outline stands. Growth
 runs page-wide after all grouping decisions, so it can never merge, cut or
 reclassify a line. A contour whose polygon step fails keeps its quad as
 its polygon with `source_metadata.polygon_fallback: true`, so no line is

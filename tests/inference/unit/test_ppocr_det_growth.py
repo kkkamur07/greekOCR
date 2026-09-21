@@ -10,12 +10,14 @@ from __future__ import annotations
 
 import math
 
+import cv2
 import numpy as np
 import pytest
 from shapely.geometry import Polygon
 
 from nomikos_inference.architectures.ppocr_det.polygons import (
     MAX_POLYGON_POINTS,
+    _contested_losses,
     grow_outlines_vertical,
     ring_area,
 )
@@ -101,6 +103,67 @@ def test_close_lines_never_overlap_and_boundary_lies_between() -> None:
     # outline and above the upper edge of the lower one.
     assert max(p[1] for p in grown_upper) < 26.0
     assert min(p[1] for p in grown_lower) > 20.0
+
+
+def _block(rows: int, cols: int, top: int, bottom: int) -> np.ndarray:
+    """Boolean mask with rows top (inclusive) to bottom (exclusive) filled."""
+    mask = np.zeros((rows, cols), dtype=bool)
+    mask[top:bottom, :] = True
+    return mask
+
+
+def _distances(mask: np.ndarray) -> np.ndarray:
+    """Outside distance of a mask with the production transform settings."""
+    return cv2.distanceTransform((~mask).astype(np.uint8), cv2.DIST_L2, 3)
+
+
+def _kept(zone: np.ndarray, own: np.ndarray, other: np.ndarray, other_index: int, index: int):
+    return zone & ~_contested_losses(_distances(own), _distances(other), other_index, index)
+
+
+def test_tie_row_belongs_to_the_lower_index() -> None:
+    """Catches ties kept by both lines: one strip lands in two crops.
+
+    Mirror-symmetric plains (rows 0-9 against rows 19-28) give bit-exact
+    equal distances along row 14; the grown bands overlap over rows 10-18.
+    """
+    own = _block(29, 40, 0, 10)
+    other = _block(29, 40, 19, 29)
+    grown_own = _block(29, 40, 0, 19)
+    grown_other = _block(29, 40, 10, 29)
+    zone = grown_own & grown_other
+
+    assert (_distances(own)[14, :] == _distances(other)[14, :]).all()
+    kept_own = _kept(zone, own, other, 1, 0)
+    kept_other = _kept(zone, other, own, 0, 1)
+    assert not (kept_own & kept_other).any()
+    assert (kept_own | kept_other == zone).all()
+    assert kept_own[14, :].all()
+    assert not kept_other[14, :].any()
+
+
+def test_three_stacked_lines_share_no_pixels() -> None:
+    """Catches tie strips between every neighbour pair of a three stack."""
+    plains = [_block(47, 40, top, top + 10) for top in (0, 19, 38)]
+    growns = [_block(47, 40, 0, 19), _block(47, 40, 10, 38), _block(47, 40, 29, 47)]
+    kept = []
+    for index in range(3):
+        keep = growns[index].copy()
+        for other in range(3):
+            if other == index:
+                continue
+            zone = growns[index] & growns[other]
+            if zone.any():
+                keep = keep & ~_contested_losses(
+                    _distances(plains[index]), _distances(plains[other]), other, index
+                )
+        kept.append(keep)
+    for left in range(3):
+        for right in range(left + 1, 3):
+            assert not (kept[left] & kept[right]).any()
+    # Tie row 14 belongs to line 0, tie row 33 to line 1.
+    assert kept[0][14, :].all() and not kept[1][14, :].any()
+    assert kept[1][33, :].all() and not kept[2][33, :].any()
 
 
 def test_isolated_line_grows_by_the_full_factor() -> None:
