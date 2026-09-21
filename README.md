@@ -1,6 +1,6 @@
 <div align="center">
   <h1>Nomikos</h1>
-  <p><strong>Nomikos is an open-source platform for transcribing historical manuscripts you can run in minutes.</strong></p>
+  <p><strong>Nomikos is an open-source platform for transcribing historical manuscripts.</strong></p>
   <img src="landing/assets/screenshots/editor-1280.webp" alt="The Nomikos page editor open on Grec1360 p.3, a two-page Greek manuscript spread with 49 line segments outlined in green, an HTR model selector in the toolbar, and a paired/unpaired legend" width="720">
   <p><em>Grec1360 p.3, segmented into 49 lines. Pick an HTR model in the toolbar, let it draft the first pass, then correct, review, share, publish, and export.</em></p>
   <p>
@@ -18,6 +18,7 @@
   <a href="https://app.nomikos.app"><img src="https://img.shields.io/badge/App-app.nomikos.app-green" alt="Application"></a>
   <a href="https://huggingface.co/nomikos-project"><img src="https://img.shields.io/badge/Models-Hugging_Face-yellow" alt="Hugging Face models"></a>
   <a href="docs/talks/how-did-we-do-it.pdf"><img src="https://img.shields.io/badge/Slides-How_we_did_it-purple" alt="Methodology slides"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue" alt="License: Apache 2.0"></a>
 </div>
 
 Upload a manuscript page and Nomikos segments it into written lines, drafts a transcription where a compatible HTR model is available, and hands you a browser editor to correct, review, share, publish, and export. Behind that sit the editor, the API, storage, job state, streaming, and inference that runs on a researcher's laptop or in the cloud, all in this repository.
@@ -32,7 +33,7 @@ Upload a manuscript page and Nomikos segments it into written lines, drafts a tr
 
 ## Built for Research
 
-Nomikos is being developed for the Nomos research ecosystem, with a focus on Syriac, Coptic, Armenian, Byzantine Greek, and related scripts.
+Nomikos is being developed for the Nomos research ecosystem, with a focus on Syriac, Coptic, Armenian, Byzantine Greek, and related scripts. The platform itself is script agnostic: if you want to collaborate or develop models for your own script, get in touch via [GitHub](https://github.com/kkkamur07/greekOCR) or the [Hugging Face organization](https://huggingface.co/nomikos-project).
 
 The system is expert-in-the-loop by design. Models draft, and researchers decide what is correct. Approved work produces processed line images and transcription files for publication or future model training.
 
@@ -170,4 +171,4 @@ Questions, script requests, and model contributions are welcome via [GitHub](htt
 
 ## License
 
-Nomikos is developed as an open-source platform for the Nomos research ecosystem. No `LICENSE` file is published in this snapshot. See the repository and linked documentation for current terms.
+Nomikos is released under the [Apache License 2.0](LICENSE).
