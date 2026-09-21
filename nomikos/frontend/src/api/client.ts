@@ -85,6 +85,12 @@ export type InferenceModelResponse =
 export type InferenceTask = components["schemas"]["InferenceTask"];
 export type ResolvedModelBindingResponse =
   components["schemas"]["ResolvedModelBindingResponse"];
+export type ModelBindingResponse =
+  components["schemas"]["ModelBindingResponse"];
+export type ModelBindingCreateRequest =
+  components["schemas"]["ModelBindingCreateRequest"];
+export type ModelBindingUpdateRequest =
+  components["schemas"]["ModelBindingUpdateRequest"];
 export type EnqueueTestJobRequest =
   components["schemas"]["EnqueueTestJobRequest"];
 export type EnqueueTestJobResponse =
@@ -253,7 +259,7 @@ export type DocumentTranscribeScope = "unpaired" | "all";
 
 export type DocumentSegmentJobRequest = {
   scope: DocumentSegmentScope;
-  /** Null means "whatever the document resolves to", which is all the UI offers. */
+  /** Null means the backend resolves the project binding itself. */
   model_id: string | null;
 };
 
@@ -534,6 +540,87 @@ export function publicPartMediaUrl(
   return withShareToken(`${API_BASE_URL}/public/media/parts/${partId}`, token);
 }
 
+/**
+ * Best-effort project default: after a job with a chosen model enqueues
+ * successfully and the project has no binding for that task yet, remember
+ * the choice as the project default. Never overwrites, never throws, and
+ * never precedes the job: a slow bindings read must not delay a job start,
+ * and a rejected job must not write a default.
+ */
+async function ensureProjectModelDefault(
+  projectId: string,
+  task: InferenceTask,
+  modelId: string | null | undefined,
+): Promise<void> {
+  if (!modelId) return;
+  try {
+    const bindings = await apiRequest<ModelBindingResponse[]>(
+      `/projects/${projectId}/model-bindings`,
+    );
+    if (bindings.some((binding) => binding.task === task)) return;
+    try {
+      await apiRequest<ModelBindingResponse>(
+        `/projects/${projectId}/model-bindings`,
+        { method: "POST", body: { task, model_id: modelId } },
+      );
+    } catch (err) {
+      // A 409 means a collaborator saved a default in the meantime, which is
+      // exactly the outcome this call wanted. Anything else is not worth the
+      // job, so it stays silent below.
+      if (!(err instanceof ApiError) || err.status !== 409) throw err;
+    }
+    for (const listener of projectDefaultWrittenListeners) {
+      listener({ projectId, task });
+    }
+  } catch (err) {
+    console.warn("Could not save the project default model.", err);
+  }
+}
+
+type ProjectDefaultWritten = {
+  projectId: string;
+  task: InferenceTask;
+};
+
+type ProjectDefaultWrittenListener = (info: ProjectDefaultWritten) => void;
+
+const projectDefaultWrittenListeners = new Set<ProjectDefaultWrittenListener>();
+
+/** The latest automatic default write, for `whenProjectDefaultSettled`. */
+let lastDefaultWrite: Promise<void> = Promise.resolve();
+
+/**
+ * Resolves once the automatic default write in flight, if any, completes.
+ * Never rejects: the write itself swallows its failures into a warning.
+ */
+export function whenProjectDefaultSettled(): Promise<void> {
+  return lastDefaultWrite;
+}
+
+/** Called after each automatic default write that stored a binding. */
+export function subscribeProjectDefaultWritten(
+  listener: ProjectDefaultWrittenListener,
+): () => void {
+  projectDefaultWrittenListeners.add(listener);
+  return () => {
+    projectDefaultWrittenListeners.delete(listener);
+  };
+}
+
+/**
+ * Starts the automatic default write without awaiting it. Call only after
+ * the job request resolved successfully, so a rejected job writes nothing
+ * and the wrapper returns before the bindings traffic finishes.
+ */
+function rememberProjectDefaultWrite(
+  projectId: string,
+  task: InferenceTask,
+  modelId: string | null | undefined,
+): void {
+  const write = ensureProjectModelDefault(projectId, task, modelId);
+  lastDefaultWrite = write;
+}
+
 export const api = {
   login: (body: LoginRequest) =>
     apiRequest<TokenResponse>("/auth/login", {
@@ -730,25 +817,31 @@ export const api = {
       `/projects/${projectId}/documents/${documentId}/export/text${reviewedOnlyQuery(reviewedOnly)}`,
     ),
 
-  enqueueDocumentSegment: (
+  enqueueDocumentSegment: async (
     projectId: string,
     documentId: string,
     body: DocumentSegmentJobRequest,
-  ) =>
-    apiRequest<DocumentBatchJobResponse>(
+  ) => {
+    const response = await apiRequest<DocumentBatchJobResponse>(
       `/projects/${projectId}/documents/${documentId}/jobs/segment`,
       { method: "POST", body },
-    ),
+    );
+    rememberProjectDefaultWrite(projectId, "segment", body.model_id);
+    return response;
+  },
 
-  enqueueDocumentTranscribe: (
+  enqueueDocumentTranscribe: async (
     projectId: string,
     documentId: string,
     body: DocumentTranscribeJobRequest,
-  ) =>
-    apiRequest<DocumentBatchJobResponse>(
+  ) => {
+    const response = await apiRequest<DocumentBatchJobResponse>(
       `/projects/${projectId}/documents/${documentId}/jobs/transcribe`,
       { method: "POST", body },
-    ),
+    );
+    rememberProjectDefaultWrite(projectId, "transcribe", body.model_id);
+    return response;
+  },
 
   listTranscriptions: (projectId: string, documentId: string) =>
     apiRequest<TranscriptionLayerResponse[]>(
@@ -956,16 +1049,19 @@ export const api = {
       `/projects/${projectId}/documents/${documentId}/parts/${partId}/page-xml-bundle`,
     ),
 
-  segmentPart: (
+  segmentPart: async (
     projectId: string,
     documentId: string,
     partId: string,
     body?: SegmentPartRequest,
-  ) =>
-    apiRequest<EnqueueJobResponse>(
+  ) => {
+    const response = await apiRequest<EnqueueJobResponse>(
       `/projects/${projectId}/documents/${documentId}/parts/${partId}/segment`,
       { method: "POST", body: body ?? {} },
-    ),
+    );
+    rememberProjectDefaultWrite(projectId, "segment", body?.model_id);
+    return response;
+  },
 
   getSegmentHealth: (projectId: string, documentId: string, partId: string) =>
     apiRequest<SegmentHealthResponse>(
@@ -1024,16 +1120,19 @@ export const api = {
       { method: "POST", body: { line_id: lineId } },
     ),
 
-  enqueueTranscribePart: (
+  enqueueTranscribePart: async (
     projectId: string,
     documentId: string,
     partId: string,
     body?: TranscribePartRequest,
-  ) =>
-    apiRequest<EnqueueJobResponse>(
+  ) => {
+    const response = await apiRequest<EnqueueJobResponse>(
       `/projects/${projectId}/documents/${documentId}/parts/${partId}/transcribe`,
       { method: "POST", body: body ?? {} },
-    ),
+    );
+    rememberProjectDefaultWrite(projectId, "transcribe", body?.model_id);
+    return response;
+  },
 
   listInferenceModels: () =>
     apiRequest<InferenceModelResponse[]>("/inference/models"),
@@ -1046,6 +1145,28 @@ export const api = {
   ) =>
     apiRequest<ResolvedModelBindingResponse>(
       `/projects/${projectId}/documents/${documentId}/parts/${partId}/model-bindings/resolve?task=${task}`,
+    ),
+
+  listProjectModelBindings: (projectId: string) =>
+    apiRequest<ModelBindingResponse[]>(`/projects/${projectId}/model-bindings`),
+
+  createProjectModelBinding: (
+    projectId: string,
+    body: ModelBindingCreateRequest,
+  ) =>
+    apiRequest<ModelBindingResponse>(`/projects/${projectId}/model-bindings`, {
+      method: "POST",
+      body,
+    }),
+
+  updateProjectModelBinding: (
+    projectId: string,
+    bindingId: string,
+    body: ModelBindingUpdateRequest,
+  ) =>
+    apiRequest<ModelBindingResponse>(
+      `/projects/${projectId}/model-bindings/${bindingId}`,
+      { method: "PATCH", body },
     ),
 
   updateGroundTruthLineText: (
