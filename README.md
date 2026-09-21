@@ -23,6 +23,8 @@
 
 Upload a manuscript page and Nomikos segments it into written lines, drafts a transcription where a compatible HTR model is available, and hands you a browser editor to correct, review, share, publish, and export. Behind that sit the editor, the API, storage, job state, streaming, and inference that runs on a researcher's laptop or in the cloud, all in this repository.
 
+Nomikos is the whole ecosystem, data, models, and the application to use them: we trained transcription models for Byzantine Greek, Armenian, Syriac, and Coptic, and published them with open line-level datasets for Greek, Armenian, and Syriac on [Hugging Face](https://huggingface.co/nomikos-project).
+
 ## Why Nomikos
 
 - **Keep the expert in the loop.** Models draft segments and transcriptions; researchers correct and approve. Model output is never treated as automatic ground truth.
@@ -171,4 +173,4 @@ Questions, script requests, and model contributions are welcome via [GitHub](htt
 
 ## License
 
-Nomikos is released under the [Apache License 2.0](LICENSE).
+Copyright 2026 Astha Gupta and Krrish Agarwalla. Nomikos is released under the [Apache License 2.0](LICENSE).
