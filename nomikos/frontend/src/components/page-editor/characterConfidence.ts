@@ -76,39 +76,39 @@ export function hasDistinctCharacterConfidences(
 }
 
 /**
- * Unicode blocks whose letters are cursive and joining: the font picks an
- * initial, medial, final or isolated glyph from the neighbours, and a browser
- * only shapes across characters that sit in the same inline box with the same
- * layout. Syriac and Arabic and their supplements are the ones this platform
- * transcribes.
+ * A letter of a cursive joining script: the font picks an initial, medial,
+ * final or isolated glyph from the neighbours, and a browser only shapes
+ * across characters that sit in the same inline box under the same font.
+ *
+ * It has to be a letter. The Arabic and Syriac blocks also hold punctuation
+ * and Arabic-Indic digits, and a line carrying only those has nothing cursive
+ * in it, so it keeps the ordinary padded spans. `Script_Extensions` rather
+ * than `Script` so that the characters shared between these scripts, the
+ * tatweel U+0640 above all, still count.
  */
-const JOINING_SCRIPT_RANGES: ReadonlyArray<readonly [number, number]> = [
-  [0x0600, 0x06ff], // Arabic
-  [0x0700, 0x074f], // Syriac
-  [0x0750, 0x077f], // Arabic Supplement
-  [0x0860, 0x086f], // Syriac Supplement
-  [0x0870, 0x089f], // Arabic Extended-B
-  [0x08a0, 0x08ff], // Arabic Extended-A
-  [0xfb50, 0xfdff], // Arabic Presentation Forms-A
-  [0xfe70, 0xfeff], // Arabic Presentation Forms-B
-];
+const JOINING_SCRIPT_LETTER =
+  /(?=[\p{Script_Extensions=Syriac}\p{Script_Extensions=Arabic}\p{Script_Extensions=Mandaic}\p{Script_Extensions=Nko}\p{Script_Extensions=Mongolian}])\p{L}/u;
 
 export function containsJoiningScript(text: string): boolean {
-  for (const char of text) {
-    const code = char.codePointAt(0);
-    if (code === undefined) continue;
-    for (const [start, end] of JOINING_SCRIPT_RANGES) {
-      if (code >= start && code <= end) return true;
-    }
-  }
-  return false;
+  return JOINING_SCRIPT_LETTER.test(text);
 }
+
+/**
+ * A code point that belongs to the cluster before it rather than opening one:
+ * any combining mark, and the zero width non-joiner and joiner.
+ */
+const CONTINUES_CLUSTER = /[\p{M}\u200c\u200d]/u;
 
 /**
  * Grapheme clusters, so a base letter keeps its combining marks (Syriac vowel
  * points and seyame U+0308, the Coptic supralinear stroke) and an astral
- * character keeps its surrogate pair. `Array.from` is the code point fallback
- * for a runtime without `Intl.Segmenter`.
+ * character keeps its surrogate pair.
+ *
+ * The fallback for a runtime without `Intl.Segmenter` iterates by code point,
+ * which keeps a surrogate pair whole, and attaches marks itself. Plain
+ * `Array.from` would leave every mark standing alone, and a mark scored into a
+ * different tier than its base letter would then be rendered in its own span
+ * and drift off the letter it belongs to.
  */
 function graphemeClusters(text: string): string[] {
   const segmenter = (
@@ -120,7 +120,15 @@ function graphemeClusters(text: string): string[] {
       (entry) => entry.segment,
     );
   }
-  return Array.from(text);
+  const clusters: string[] = [];
+  for (const char of text) {
+    if (clusters.length > 0 && CONTINUES_CLUSTER.test(char)) {
+      clusters[clusters.length - 1] += char;
+    } else {
+      clusters.push(char);
+    }
+  }
+  return clusters;
 }
 
 /** One rendered span: consecutive grapheme clusters sharing a confidence tier. */

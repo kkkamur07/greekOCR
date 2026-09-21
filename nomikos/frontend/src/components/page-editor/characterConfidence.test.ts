@@ -124,14 +124,106 @@ describe("groupConfidenceRuns", () => {
 });
 
 describe("containsJoiningScript", () => {
-  it("is true for Syriac and Arabic, false for the other scripts served", () => {
-    expect(containsJoiningScript("\u0720\u0721")).toBe(true);
-    expect(containsJoiningScript("\u0645\u0631")).toBe(true);
-    expect(containsJoiningScript("\u0860")).toBe(true);
-    expect(containsJoiningScript("\u1F10\u03BD")).toBe(false);
-    expect(containsJoiningScript("\u2C81\u2C93")).toBe(false);
-    expect(containsJoiningScript("\u0531\u0561")).toBe(false);
+  it("is true for a letter of a joining script", () => {
+    expect(containsJoiningScript("\u0720\u0721")).toBe(true); // Syriac
+    expect(containsJoiningScript("\u0645\u0631")).toBe(true); // Arabic
+    expect(containsJoiningScript("\u0860")).toBe(true); // Syriac Supplement
+    expect(containsJoiningScript("\u08A0")).toBe(true); // Arabic Extended-A
+    expect(containsJoiningScript("\u0870")).toBe(true); // Arabic Extended-B
+    expect(containsJoiningScript("\uFB50")).toBe(true); // presentation form
+    expect(containsJoiningScript("\u07CA")).toBe(true); // N'Ko
+    expect(containsJoiningScript("\u0840")).toBe(true); // Mandaic
+    expect(containsJoiningScript("\u1820")).toBe(true); // Mongolian
+    expect(containsJoiningScript("\u0640")).toBe(true); // tatweel, shared
+  });
+
+  it("is true for a line that holds one such letter among other scripts", () => {
+    expect(containsJoiningScript("fol. 4v \u0720 line 22")).toBe(true);
+  });
+
+  it("is false for the non-joining scripts served", () => {
+    expect(containsJoiningScript("\u1F10\u03BD")).toBe(false); // Greek
+    expect(containsJoiningScript("\u2C81\u2C93")).toBe(false); // Coptic
+    expect(containsJoiningScript("\u0531\u0561")).toBe(false); // Armenian
+    expect(containsJoiningScript("\u05D0")).toBe(false); // Hebrew, not cursive
     expect(containsJoiningScript("")).toBe(false);
+  });
+
+  it("is false for punctuation and digits of those blocks with no letter", () => {
+    // These would have switched the whole line to the joining style, dropping
+    // the padding and the tier weights with nothing cursive to protect.
+    expect(containsJoiningScript("\u060C")).toBe(false); // Arabic comma
+    expect(containsJoiningScript("\u0660\u0661\u0662")).toBe(false); // Arabic-Indic digits
+    expect(containsJoiningScript("\u0700\u070A")).toBe(false); // Syriac punctuation
+    expect(containsJoiningScript("\u060C \u0661\u0662 \u0700")).toBe(false);
+  });
+});
+
+describe("groupConfidenceRuns without Intl.Segmenter", () => {
+  /** Runs the body on a runtime that has no `Intl.Segmenter`. */
+  function withoutSegmenter<T>(body: () => T): T {
+    const host = Intl as typeof Intl & { Segmenter?: typeof Intl.Segmenter };
+    const original = host.Segmenter;
+    delete host.Segmenter;
+    try {
+      return body();
+    } finally {
+      host.Segmenter = original;
+    }
+  }
+
+  it("takes the fallback path only when Intl.Segmenter is gone", () => {
+    expect(withoutSegmenter(() => "Segmenter" in Intl)).toBe(false);
+    expect("Segmenter" in Intl).toBe(true);
+  });
+
+  it("keeps a combining mark with its base letter across a tier change", () => {
+    // Scored on its own the seyame opens a low run of one mark, and the dots
+    // render away from the letter they belong to.
+    const runs = withoutSegmenter(() =>
+      groupConfidenceRuns([
+        { char: "\u071D", confidence: 0.95 },
+        { char: "\u0308", confidence: 0.2 },
+        { char: "\u0718", confidence: 0.95 },
+      ]),
+    );
+
+    expect(runs.map((run) => run.text)).toEqual(["\u071D\u0308", "\u0718"]);
+    expect(runs[0].confidence).toBe(0.2);
+    expect(runs[0].maxConfidence).toBe(0.95);
+  });
+
+  it("keeps a zero width joiner and an astral character with their cluster", () => {
+    const runs = withoutSegmenter(() =>
+      groupConfidenceRuns([
+        { char: "\u0645", confidence: 0.9 },
+        { char: "\u200D", confidence: 0.3 },
+        { char: "\u{10900}", confidence: 0.9 },
+      ]),
+    );
+
+    expect(runs.map((run) => run.text)).toEqual(["\u0645\u200D", "\u{10900}"]);
+  });
+
+  it("gives the same runs as Intl.Segmenter for the lines we render", () => {
+    const scored = (text: string) =>
+      Array.from(text, (char, index) => ({
+        char,
+        confidence: index % 3 === 0 ? 0.4 : 0.95,
+      }));
+
+    for (const line of [
+      "\u071D\u0308\u0718\u0721\u0710",
+      "\u0720\u0721\u072A\u071D \u0725\u0720\u0721\u0710",
+      "\u1F10\u03BD \u1F00\u03C1\u03C7\u1FC7",
+      "\u2C81\u0305\u2C93\u2CA1",
+    ]) {
+      const withIntl = groupConfidenceRuns(scored(line));
+      const fallback = withoutSegmenter(() =>
+        groupConfidenceRuns(scored(line)),
+      );
+      expect(fallback).toEqual(withIntl);
+    }
   });
 });
 
