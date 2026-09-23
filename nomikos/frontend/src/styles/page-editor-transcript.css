@@ -8,10 +8,10 @@
 }
 
 .pe-transcript-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: 2.5em minmax(0, 1fr);
+  column-gap: 8px;
+  align-items: start;
   font-size: 16px;
   padding: 2px 4px 2px 8px;
   border-left: 3px solid transparent;
@@ -36,8 +36,6 @@
 }
 
 .pe-transcript-num {
-  flex: 0 0 2.5em;
-  max-width: 2.5em;
   text-align: right;
   font-variant-numeric: tabular-nums;
   color: #78716c;
@@ -46,8 +44,8 @@
 }
 
 .pe-transcript-input {
-  flex: 1 1 auto;
   width: 100%;
+  min-width: 0;
   border: none;
   border-bottom: 1px solid var(--border, #ebe8e3);
   background: transparent;
@@ -74,8 +72,8 @@
 }
 
 .pe-transcript-error {
-  flex: 1 1 100%;
-  margin: 0 0 0 calc(2.5em + 8px);
+  grid-column: 2;
+  margin: 0;
   color: #b40000;
   font-size: 0.8125rem;
   line-height: 1.4;

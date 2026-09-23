@@ -221,4 +221,43 @@ describe("PageEditorCanvas sync", () => {
     );
     expect(setTransform).toHaveBeenCalledTimes(1);
   });
+
+  it("reads the live scale when the ref has no state key", () => {
+    const setTransform = vi.fn();
+    const viewport = {
+      instance: {
+        transformState: {
+          scale: 2,
+          positionX: 0,
+          positionY: 0,
+          previousScale: 2,
+        },
+        wrapperComponent: null,
+      },
+      setTransform,
+    } as unknown as ReactZoomPanPinchRef;
+    expect("state" in viewport).toBe(false);
+    capture.instance = viewport;
+    const view = render(<PageEditorCanvas {...baseProps()} />);
+    const host = view.container.querySelector(
+      ".pe-canvas-host",
+    ) as HTMLElement | null;
+    if (!host) throw new Error("canvas host missing");
+    Object.defineProperty(host, "clientWidth", {
+      value: 640,
+      configurable: true,
+    });
+    Object.defineProperty(host, "clientHeight", {
+      value: 900,
+      configurable: true,
+    });
+
+    view.rerender(
+      <PageEditorCanvas
+        {...baseProps({ focusRequest: { segmentId: "line-1", nonce: 1 } })}
+      />,
+    );
+    expect(setTransform).toHaveBeenCalledTimes(1);
+    expect(setTransform).toHaveBeenCalledWith(260, 410, 2, 200);
+  });
 });
