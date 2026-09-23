@@ -55,6 +55,18 @@ const PAN_CLICK_THRESHOLD_PX = 4;
 /** Animation for a programmatic "bring this segment into view" request. */
 const FOCUS_ANIMATION_MS = 200;
 
+/**
+ * The typings claim the ref carries `state`, but at runtime it is undefined.
+ * The live transform lives at `instance.transformState`.
+ */
+function currentScale(viewport: ReactZoomPanPinchRef): number {
+  const live = viewport as unknown as {
+    instance?: { transformState?: { scale?: number } };
+    state?: { scale?: number };
+  };
+  return live.instance?.transformState?.scale ?? live.state?.scale ?? 1;
+}
+
 /** Write through to an optional forwarded ref without disturbing the local one. */
 function assignRef<T>(ref: Ref<T> | undefined, value: T): void {
   if (!ref) return;
@@ -881,7 +893,7 @@ export function PageEditorCanvas({
     const ys = segmentPoints.map(([, y]) => y);
     const centerX = (Math.min(...xs) + Math.max(...xs)) / 2;
     const centerY = (Math.min(...ys) + Math.max(...ys)) / 2;
-    const scale = viewport.state.scale;
+    const scale = currentScale(viewport);
     viewport.setTransform(
       viewWidth / 2 - centerX * scale,
       viewHeight / 2 - centerY * scale,
