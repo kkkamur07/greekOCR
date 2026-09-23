@@ -275,7 +275,8 @@ export function PageEditorPlaceholderPage() {
   selectedSegmentIdRef.current = selectedSegmentId;
 
   const pairedIds = useMemo(() => segmentIdsWithGroundTruth(lines), [lines]);
-  const stripVisible = Boolean(selectedSegment) && !stripDismissed;
+  const stripVisible =
+    Boolean(selectedSegment) && !stripDismissed && !canvasSettings.sideBySide;
 
   function handleSelectSegment(lineId: string) {
     setSelectedLineId(null);

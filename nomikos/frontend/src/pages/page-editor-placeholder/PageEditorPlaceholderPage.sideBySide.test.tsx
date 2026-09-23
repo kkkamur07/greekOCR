@@ -111,9 +111,11 @@ describe("PageEditorPlaceholderPage side by side", () => {
 
     fireEvent.focus(screen.getByLabelText("Segment 1 text"));
 
-    expect(
-      await screen.findByRole("heading", { name: /segment 1/i }),
-    ).toBeTruthy();
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /^Segment 1/ }),
+      ).toHaveAttribute("aria-current", "true");
+    });
   });
 
   it("saves the edited text and focuses the next row on Enter", async () => {
@@ -159,6 +161,38 @@ describe("PageEditorPlaceholderPage side by side", () => {
     expect(screen.getByLabelText("Segment 2 text")).not.toBe(
       document.activeElement,
     );
+  });
+
+  it("keeps the segment strip closed when a canvas segment is clicked and the setting is on", async () => {
+    seedSideBySide(true);
+    seedEditor();
+    renderPageEditor();
+    await screen.findByLabelText("Page geometry canvas");
+
+    fireEvent.click(screen.getByRole("button", { name: /^Segment 1/ }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /^Segment 1/ }),
+      ).toHaveAttribute("aria-current", "true");
+    });
+    expect(
+      screen.queryByLabelText(/ground truth text for selected segment/i),
+    ).toBeNull();
+    expect(screen.queryByRole("heading", { name: /segment 1/i })).toBeNull();
+  });
+
+  it("still opens the segment strip when a canvas segment is clicked and the setting is off", async () => {
+    seedSideBySide(false);
+    seedEditor();
+    renderPageEditor();
+    await screen.findByLabelText("Page geometry canvas");
+
+    fireEvent.click(screen.getByRole("button", { name: /^Segment 1/ }));
+
+    expect(
+      await screen.findByLabelText(/ground truth text for selected segment/i),
+    ).toBeTruthy();
   });
 
   it("renders no split pane when the setting is off", async () => {
