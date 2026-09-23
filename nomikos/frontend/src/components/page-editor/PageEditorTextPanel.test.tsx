@@ -130,6 +130,30 @@ describe("PageEditorTextPanel", () => {
     expect(onCommitted).toHaveBeenCalledWith("line-a");
   });
 
+  it("focuses once on mount and keeps the caret while typing", () => {
+    const focusSpy = vi.spyOn(HTMLTextAreaElement.prototype, "focus");
+    try {
+      const view = render(
+        <PageEditorTextPanel {...panelProps({ editingSegmentId: "line-a" })} />,
+      );
+      const editor = screen.getByDisplayValue(
+        "true words",
+      ) as HTMLTextAreaElement;
+      fireEvent.change(editor, { target: { value: "true words!" } });
+      // A programmatic value set moves the caret in jsdom, so place it
+      // mid-line afterwards, the way a user editing there would.
+      editor.setSelectionRange(2, 2);
+      view.rerender(
+        <PageEditorTextPanel {...panelProps({ editingSegmentId: "line-a" })} />,
+      );
+      expect(editor.selectionStart).toBe(2);
+      fireEvent.change(editor, { target: { value: "true words!?" } });
+      expect(focusSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      focusSpy.mockRestore();
+    }
+  });
+
   it("cancels on Escape without committing", () => {
     const onCommitText = vi.fn();
     const onRequestEdit = vi.fn();

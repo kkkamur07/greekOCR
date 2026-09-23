@@ -49,6 +49,7 @@ type PageEditorTextPanelProps = {
   textDirection: "ltr" | "rtl";
   preferredLayerId?: string | null;
   fontScale?: number;
+  wheelZoomSpeed?: number;
   onSelectSegment: (lineId: string) => void;
   onHoverSegment: (lineId: string | null) => void;
   onRequestEdit: (lineId: string | null) => void;
@@ -91,6 +92,13 @@ function TextLineEditor({
   const [saving, setSaving] = useState(false);
   const [hasError, setHasError] = useState(false);
   const settledRef = useRef(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const element = textareaRef.current;
+    if (!element) return;
+    element.focus();
+    element.setSelectionRange(element.value.length, element.value.length);
+  }, []);
 
   const commit = async () => {
     if (saving || settledRef.current) return;
@@ -119,11 +127,7 @@ function TextLineEditor({
       dir={dir}
       value={value}
       style={{ fontSize }}
-      ref={(element) => {
-        if (!element) return;
-        element.focus();
-        element.setSelectionRange(element.value.length, element.value.length);
-      }}
+      ref={textareaRef}
       onChange={(event) => setValue(event.target.value)}
       onKeyDown={(event) => {
         event.stopPropagation();
@@ -153,6 +157,7 @@ export function PageEditorTextPanel({
   textDirection,
   preferredLayerId,
   fontScale = 1,
+  wheelZoomSpeed = 1,
   onSelectSegment,
   onHoverSegment,
   onRequestEdit,
@@ -166,7 +171,7 @@ export function PageEditorTextPanel({
   useSmoothWheelZoom(hostRef, transformRef, {
     minScale: MIN_SCALE,
     maxScale: MAX_SCALE,
-    speed: 1,
+    speed: wheelZoomSpeed,
   });
   useEffect(() => {
     mergeViewportRef(viewportRef, transformRef.current);
