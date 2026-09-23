@@ -21,6 +21,8 @@ export type PageEditorCanvasSettings = {
   showBaselines: boolean;
   /** Multiplier on how far one wheel notch or trackpad step zooms (0.25-3). */
   wheelZoomSpeed: number;
+  /** Show the text panel next to the canvas in a side-by-side layout. */
+  sideBySide: boolean;
 };
 
 export const DEFAULT_PAGE_EDITOR_SETTINGS: PageEditorCanvasSettings = {
@@ -31,6 +33,7 @@ export const DEFAULT_PAGE_EDITOR_SETTINGS: PageEditorCanvasSettings = {
   showLayoutBlocks: true,
   showBaselines: false,
   wheelZoomSpeed: 1,
+  sideBySide: true,
 };
 
 function clampNumber(
@@ -88,6 +91,10 @@ export function loadPageEditorSettings(): PageEditorCanvasSettings {
         WHEEL_ZOOM_SPEED_MAX,
         DEFAULT_PAGE_EDITOR_SETTINGS.wheelZoomSpeed,
       ),
+      sideBySide:
+        typeof parsed.sideBySide === "boolean"
+          ? parsed.sideBySide
+          : DEFAULT_PAGE_EDITOR_SETTINGS.sideBySide,
     };
   } catch {
     return DEFAULT_PAGE_EDITOR_SETTINGS;

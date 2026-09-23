@@ -23,6 +23,27 @@ describe("pageEditorSettings", () => {
     expect(loadPageEditorSettings().wheelZoomSpeed).toBe(1.5);
   });
 
+  it("shows the side-by-side text panel by default", () => {
+    expect(DEFAULT_PAGE_EDITOR_SETTINGS.sideBySide).toBe(true);
+    expect(loadPageEditorSettings().sideBySide).toBe(true);
+  });
+
+  it("round-trips a saved side-by-side choice", () => {
+    savePageEditorSettings({
+      ...DEFAULT_PAGE_EDITOR_SETTINGS,
+      sideBySide: false,
+    });
+    expect(loadPageEditorSettings().sideBySide).toBe(false);
+  });
+
+  it("keeps settings saved before the side-by-side toggle existed", () => {
+    localStorage.setItem(
+      "nomikos_page_editor_settings",
+      JSON.stringify({ overlayStrokeWidth: 2 }),
+    );
+    expect(loadPageEditorSettings().sideBySide).toBe(true);
+  });
+
   it("keeps settings saved before the wheel zoom speed existed", () => {
     // A profile written by an older build has no wheelZoomSpeed key at all.
     localStorage.setItem(
