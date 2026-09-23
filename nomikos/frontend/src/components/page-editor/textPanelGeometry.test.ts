@@ -216,6 +216,89 @@ describe("textPanelGeometry", () => {
     expect(displayText(makeLine(), null)).toEqual({ text: "", source: "none" });
   });
 
+  it("falls back to the bbox baseline for an identical-point baseline", () => {
+    const line = makeLine({
+      baseline: [
+        [650, 158],
+        [650, 158],
+      ],
+      mask: [
+        [500, 100],
+        [800, 100],
+        [800, 160],
+        [500, 160],
+      ],
+    });
+    expect(baselinePoints(line)).toEqual([
+      [500, 145],
+      [800, 145],
+    ]);
+  });
+
+  it("falls back for a short stub under a wide polygon", () => {
+    const line = makeLine({
+      baseline: [
+        [600, 150],
+        [633, 150],
+      ],
+      mask: [
+        [500, 100],
+        [800, 100],
+        [800, 160],
+        [500, 160],
+      ],
+    });
+    expect(baselinePoints(line)).toEqual([
+      [500, 145],
+      [800, 145],
+    ]);
+  });
+
+  it("keeps a proper baseline about the polygon width", () => {
+    const stored = [
+      [500, 140],
+      [800, 140],
+    ] as [number, number][];
+    const line = makeLine({
+      baseline: stored,
+      mask: [
+        [500, 100],
+        [800, 100],
+        [800, 160],
+        [500, 160],
+      ],
+    });
+    expect(baselinePoints(line)).toEqual(stored);
+  });
+
+  it("keeps a positive-length baseline when there is no polygon", () => {
+    const stored = [
+      [0, 0],
+      [3, 4],
+    ] as [number, number][];
+    expect(baselinePoints(makeLine({ baseline: stored }))).toEqual(stored);
+  });
+
+  it("caps the font size by polygon height", () => {
+    const line = makeLine({
+      baseline: [
+        [0, 15],
+        [50, 15],
+      ],
+      mask: [
+        [0, 0],
+        [100, 0],
+        [100, 20],
+        [0, 20],
+      ],
+    });
+    expect(baselinePoints(line)).toEqual([
+      [0, 15],
+      [50, 15],
+    ]);
+    expect(lineFontSize(line, 1)).toBe(18);
+  });
+
   it("ignores blank ground truth in favour of model text", () => {
     const line = makeLine({
       line_transcriptions: [
