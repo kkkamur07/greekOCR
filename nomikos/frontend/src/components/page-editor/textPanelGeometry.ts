@@ -13,17 +13,27 @@ export type TextSource = "ground_truth" | "model" | "none";
 /**
  * Usable baseline points for drawing a line's transcription.
  *
- * A real baseline with at least two points is used as is. Otherwise a fake
- * baseline is derived from the mask (or `points` when the mask is null):
- * from the leftmost polygon point to the rightmost one, both placed at the
- * polygon's lower quarter. Empty when no geometry exists at all.
+ * A stored baseline with at least two points is used only when it is not
+ * degenerate: its polyline length must be at least half the polygon
+ * bounding-box width (mask if present, else points), or greater than zero
+ * when there is no polygon. Otherwise a fake baseline is derived from the
+ * polygon: from the leftmost polygon point to the rightmost one, both
+ * placed at the polygon's lower quarter. Empty when no geometry exists.
  */
 export function baselinePoints(line: LineResponse): LinePoint[] {
   const baseline = normalizeGeometryPoints(line.baseline);
-  if (baseline.length >= 2) return baseline;
   const maskPoints = normalizeGeometryPoints(line.mask);
   const polygon =
     maskPoints.length > 0 ? maskPoints : normalizeGeometryPoints(line.points);
+  if (baseline.length >= 2) {
+    const length = polylineLength(baseline);
+    if (polygon.length === 0) {
+      if (length > 0) return baseline;
+    } else {
+      const bounds = polygonBounds(polygon);
+      if (length > 0 && length >= bounds.width * 0.5) return baseline;
+    }
+  }
   if (polygon.length === 0) return [];
   const bounds = polygonBounds(polygon);
   const lowerQuarterY = bounds.y + bounds.height * 0.75;
@@ -108,9 +118,14 @@ export function lineFontSize(line: LineResponse, fontScale = 1): number {
     polygon.length > 0 && length > 0
       ? polygonArea(polygon) / length
       : DEFAULT_STRIP_HEIGHT;
+  const raw = Math.round(FONT_SIZE_RATIO * stripHeight);
+  const heightCapped =
+    polygon.length > 0
+      ? Math.min(raw, 0.9 * polygonBounds(polygon).height)
+      : raw;
   const clamped = Math.min(
     MAX_FONT_SIZE,
-    Math.max(MIN_FONT_SIZE, Math.round(FONT_SIZE_RATIO * stripHeight)),
+    Math.max(MIN_FONT_SIZE, heightCapped),
   );
   return clamped * fontScale;
 }
