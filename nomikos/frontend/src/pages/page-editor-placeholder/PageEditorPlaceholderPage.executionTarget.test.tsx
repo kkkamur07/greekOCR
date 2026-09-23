@@ -81,7 +81,7 @@ function loadedPageWithOneSegment() {
 }
 
 async function runOcrOnTheSelectedSegment() {
-  fireEvent.click(await screen.findByLabelText(/^Segment 1/));
+  fireEvent.click(await screen.findByRole("button", { name: /^Segment 1/ }));
   fireEvent.click(
     screen.getByRole("button", { name: /re-run ocr on segment 1/i }),
   );
