@@ -51,6 +51,14 @@ function seedEditor() {
   mockedApi.listPartLines.mockResolvedValue(twoLines());
 }
 
+function transcriptRow(container: HTMLElement, lineId: string): HTMLElement {
+  const row = container.querySelector(
+    `.pe-transcript [data-line-id="${lineId}"]`,
+  );
+  expect(row).not.toBeNull();
+  return row as HTMLElement;
+}
+
 describe("PageEditorPlaceholderPage side by side", () => {
   beforeEach(() => {
     localStorage.clear();
@@ -62,25 +70,28 @@ describe("PageEditorPlaceholderPage side by side", () => {
     localStorage.clear();
   });
 
-  it("renders the text panel next to the canvas when the setting is on", async () => {
+  it("renders the canvas left and the transcript right when the setting is on", async () => {
     seedSideBySide(true);
     seedEditor();
     const { container } = renderPageEditor();
 
-    expect(await screen.findByLabelText("Page geometry canvas")).toBeTruthy();
-    expect(container.querySelector(".pe-side-by-side")).not.toBeNull();
-    expect(container.querySelector(".pe-text-panel")).not.toBeNull();
+    const canvas = await screen.findByLabelText("Page geometry canvas");
+    expect(container.querySelector(".pe-split")).not.toBeNull();
+    expect(container.querySelector(".pe-split-left")?.contains(canvas)).toBe(
+      true,
+    );
+    expect(
+      container.querySelector(".pe-split-right .pe-transcript"),
+    ).not.toBeNull();
   });
 
-  it("mirrors hovering a text line onto the same canvas segment", async () => {
+  it("mirrors hovering a transcript row onto the same canvas segment", async () => {
     seedSideBySide(true);
     seedEditor();
     const { container } = renderPageEditor();
     await screen.findByLabelText("Page geometry canvas");
 
-    const group = container.querySelector('[data-line-id="line-1"]');
-    expect(group).not.toBeNull();
-    fireEvent.mouseEnter(group!);
+    fireEvent.mouseEnter(transcriptRow(container, "line-1"));
 
     await waitFor(() => {
       expect(
@@ -91,33 +102,29 @@ describe("PageEditorPlaceholderPage side by side", () => {
     });
   });
 
-  it("selects the segment when its text line is clicked", async () => {
+  it("selects the segment when its transcript row is focused", async () => {
     seedSideBySide(true);
     seedEditor();
     const { container } = renderPageEditor();
     await screen.findByLabelText("Page geometry canvas");
+    expect(transcriptRow(container, "line-1")).toBeTruthy();
 
-    const group = container.querySelector('[data-line-id="line-1"]');
-    expect(group).not.toBeNull();
-    fireEvent.click(group!);
+    fireEvent.focus(screen.getByLabelText("Segment 1 text"));
 
     expect(
       await screen.findByRole("heading", { name: /segment 1/i }),
     ).toBeTruthy();
   });
 
-  it("saves the edited text and moves to the next segment in reading order", async () => {
+  it("saves the edited text and focuses the next row on Enter", async () => {
     seedSideBySide(true);
     seedEditor();
     const { container } = renderPageEditor();
     await screen.findByLabelText("Page geometry canvas");
+    expect(transcriptRow(container, "line-1")).toBeTruthy();
 
-    const group = container.querySelector('[data-line-id="line-1"]');
-    expect(group).not.toBeNull();
-    fireEvent.doubleClick(group!);
-
-    const editor = await screen.findByDisplayValue("first words");
-    fireEvent.change(editor, { target: { value: "first words edited" } });
+    const editor = screen.getByLabelText("Segment 1 text");
+    fireEvent.change(editor, { target: { value: "  first words edited  " } });
     fireEvent.keyDown(editor, { key: "Enter", shiftKey: false });
 
     await waitFor(() => {
@@ -130,44 +137,37 @@ describe("PageEditorPlaceholderPage side by side", () => {
       );
     });
     await waitFor(() => {
-      const panelEditor = container.querySelector(
-        ".pe-text-line-editor",
-      ) as HTMLTextAreaElement | null;
-      expect(panelEditor?.value).toBe("second words");
+      expect(screen.getByLabelText("Segment 2 text")).toBe(
+        document.activeElement,
+      );
     });
-    expect(
-      await screen.findByRole("heading", { name: /segment 2/i }),
-    ).toBeTruthy();
   });
 
-  it("closes the open editor when a different segment is selected", async () => {
+  it("marks the transcript row selected without focusing it when its canvas segment is clicked", async () => {
     seedSideBySide(true);
     seedEditor();
     const { container } = renderPageEditor();
     await screen.findByLabelText("Page geometry canvas");
 
-    const group = container.querySelector('[data-line-id="line-1"]');
-    expect(group).not.toBeNull();
-    fireEvent.doubleClick(group!);
-    expect(await screen.findByDisplayValue("first words")).toBeTruthy();
-
     fireEvent.click(screen.getByRole("button", { name: /^Segment 2/ }));
 
     await waitFor(() => {
-      expect(screen.queryByDisplayValue("first words")).toBeNull();
+      expect(
+        transcriptRow(container, "line-2").classList.contains("is-selected"),
+      ).toBe(true);
     });
-    expect(
-      await screen.findByRole("heading", { name: /segment 2/i }),
-    ).toBeTruthy();
+    expect(screen.getByLabelText("Segment 2 text")).not.toBe(
+      document.activeElement,
+    );
   });
 
-  it("hides the text panel when the setting is off", async () => {
+  it("renders no split pane when the setting is off", async () => {
     seedSideBySide(false);
     seedEditor();
     const { container } = renderPageEditor();
 
     expect(await screen.findByLabelText("Page geometry canvas")).toBeTruthy();
-    expect(container.querySelector(".pe-text-panel")).toBeNull();
-    expect(container.querySelector(".pe-side-by-side")).toBeNull();
+    expect(container.querySelector(".pe-split")).toBeNull();
+    expect(container.querySelector(".pe-transcript")).toBeNull();
   });
 });

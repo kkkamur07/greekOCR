@@ -5,9 +5,8 @@ import { invalidateAfter } from "../api/resources";
 import { useHostPreference } from "../inference";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import { PageEditorCanvas } from "../components/page-editor/PageEditorCanvas";
-import { PageEditorTextPanel } from "../components/page-editor/PageEditorTextPanel";
-import { useLinkedViewports } from "../components/page-editor/hooks/useLinkedViewports";
-import { nextInReadingOrder } from "../components/page-editor/readingOrder";
+import { PageEditorSplitPane } from "../components/page-editor/PageEditorSplitPane";
+import { PageEditorTranscriptEditor } from "../components/page-editor/PageEditorTranscriptEditor";
 import {
   PageEditorPageRail,
   PageEditorPageRailTab,
@@ -86,14 +85,12 @@ export function PageEditorPlaceholderPage() {
     null,
   );
   const [hoveredSegmentId, setHoveredSegmentId] = useState<string | null>(null);
-  const [editingSegmentId, setEditingSegmentId] = useState<string | null>(null);
   const [focusRequest, setFocusRequest] = useState<{
     segmentId: string;
     nonce: number;
   } | null>(null);
-  // The document response carries no script or direction field, so the text panel reads left to right.
+  // The document response carries no script or direction field, so the transcript reads left to right.
   const textDirection = "ltr" as const;
-  const linked = useLinkedViewports();
 
   // The page the editor is on. The route seeds it and mirrors it back, but the
   // editor turns pages by changing this rather than by re-entering the route,
@@ -111,7 +108,6 @@ export function PageEditorPlaceholderPage() {
     setStripDismissed(false);
     setSelectedVertexIndex(null);
     setHoveredSegmentId(null);
-    setEditingSegmentId(null);
     setFocusRequest(null);
   });
   const {
@@ -286,11 +282,6 @@ export function PageEditorPlaceholderPage() {
     setSaveMessage(null);
     setStripDismissed(false);
     setSelectedVertexIndex(null);
-    // A click inside the open editor's textarea bubbles to its group, which
-    // reports the segment already being edited: that must not close it.
-    setEditingSegmentId((current) =>
-      current !== null && current !== lineId ? null : current,
-    );
     selectSegment(lineId);
   }
 
@@ -336,16 +327,6 @@ export function PageEditorPlaceholderPage() {
       );
       throw err;
     }
-  }
-
-  function handleTextCommitted(lineId: string) {
-    const next = nextInReadingOrder(lines, lineId, 1, {
-      direction: textDirection,
-    });
-    if (!next) return;
-    selectSegment(next.id);
-    setEditingSegmentId(next.id);
-    setFocusRequest({ segmentId: next.id, nonce: Date.now() });
   }
 
   function handleRemoveSelectedVertex() {
@@ -409,26 +390,6 @@ export function PageEditorPlaceholderPage() {
     setDraftPolygon([]);
   }
 
-  // F2 opens the in-place text editor, like Enter does below. It lives here
-  // rather than in useKeyboardShortcuts because that hook has no F2 handler.
-  useEffect(() => {
-    if (!canvasSettings.sideBySide) return;
-    function handleF2(event: globalThis.KeyboardEvent) {
-      if (event.key !== "F2") return;
-      if (
-        event.target instanceof HTMLInputElement ||
-        event.target instanceof HTMLTextAreaElement
-      ) {
-        return;
-      }
-      if (!selectedSegmentId || editingSegmentId) return;
-      event.preventDefault();
-      setEditingSegmentId(selectedSegmentId);
-    }
-    window.addEventListener("keydown", handleF2);
-    return () => window.removeEventListener("keydown", handleF2);
-  }, [canvasSettings.sideBySide, selectedSegmentId, editingSegmentId]);
-
   useKeyboardShortcuts({
     onDrawBox: () => pickDrawMode("rectangle"),
     onDrawPolygon: () => pickDrawMode("polygon"),
@@ -441,17 +402,13 @@ export function PageEditorPlaceholderPage() {
               if (selectedLineId) void resetSelectedLine();
             }
           : undefined,
-    onEscape: editingSegmentId
-      ? () => setEditingSegmentId(null)
-      : handlePanSelect,
+    onEscape: handlePanSelect,
     onUndo: () => void undoEdit(),
     onRedo: () => void redoEdit(),
     onEnter:
       drawMode === "polygon" && draftPolygon.length >= 3
         ? completeDraftPolygon
-        : canvasSettings.sideBySide && selectedSegmentId && !editingSegmentId
-          ? () => setEditingSegmentId(selectedSegmentId)
-          : undefined,
+        : undefined,
     onPreviousPage: previousPartId ? goToPreviousPage : undefined,
     onNextPage: nextPartId ? goToNextPage : undefined,
   });
@@ -508,8 +465,6 @@ export function PageEditorPlaceholderPage() {
         pairedSegmentIds={pairedIds}
         hoveredSegmentId={hoveredSegmentId}
         onHoverSegment={setHoveredSegmentId}
-        viewportRef={linked.rightRef}
-        onTransformed={linked.onRightTransformed}
         focusRequest={focusRequest}
         settings={canvasSettings}
         drawingRectangle={drawMode === "rectangle"}
@@ -676,31 +631,31 @@ export function PageEditorPlaceholderPage() {
               ))}
             <div className="pe-canvas-pane">
               {canvasSettings.sideBySide ? (
-                <div className="pe-side-by-side">
-                  <div className="pe-side-by-side-left">
-                    <PageEditorTextPanel
+                <PageEditorSplitPane
+                  ratio={canvasSettings.splitRatio}
+                  onRatioChange={(ratio) =>
+                    handleCanvasSettingsChange({
+                      ...canvasSettings,
+                      splitRatio: ratio,
+                    })
+                  }
+                  left={canvasPaneContent}
+                  right={
+                    <PageEditorTranscriptEditor
                       lines={lines}
-                      imageWidth={imageWidth}
-                      imageHeight={imageHeight}
                       selectedSegmentId={selectedSegmentId}
                       hoveredSegmentId={hoveredSegmentId}
-                      editingSegmentId={editingSegmentId}
                       textDirection={textDirection}
                       preferredLayerId={preferredModelLayerId}
                       onSelectSegment={handleSelectSegment}
-                      wheelZoomSpeed={canvasSettings.wheelZoomSpeed}
                       onHoverSegment={setHoveredSegmentId}
-                      onRequestEdit={setEditingSegmentId}
+                      onFocusSegment={(id) =>
+                        setFocusRequest({ segmentId: id, nonce: Date.now() })
+                      }
                       onCommitText={handleCommitText}
-                      onCommitted={handleTextCommitted}
-                      viewportRef={linked.leftRef}
-                      onTransformed={linked.onLeftTransformed}
                     />
-                  </div>
-                  <div className="pe-side-by-side-right">
-                    {canvasPaneContent}
-                  </div>
-                </div>
+                  }
+                />
               ) : (
                 canvasPaneContent
               )}
