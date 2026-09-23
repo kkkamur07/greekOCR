@@ -1964,3 +1964,27 @@
 .pe-segment-shape.is-hovered {
   filter: brightness(1.2);
 }
+
+/* Side by side: text panel left, canvas right, same pixel frame. */
+.pe-side-by-side {
+  flex: 1;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+.pe-side-by-side-left,
+.pe-side-by-side-right {
+  width: 50%;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+.pe-side-by-side-left {
+  border-right: 1px solid var(--border);
+}
+.pe-side-by-side-left .pe-text-panel,
+.pe-side-by-side-right .pe-canvas-host {
+  flex: 1;
+}
