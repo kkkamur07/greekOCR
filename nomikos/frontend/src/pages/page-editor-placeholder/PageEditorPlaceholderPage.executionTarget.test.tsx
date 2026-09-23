@@ -96,6 +96,11 @@ async function openBackgroundJobs() {
 describe("the account-level host preference", () => {
   beforeEach(() => {
     resetPageEditorApiMocks();
+    // These tests exercise the segment strip, which only opens when the transcript column is off.
+    localStorage.setItem(
+      "nomikos_page_editor_settings",
+      JSON.stringify({ sideBySide: false }),
+    );
     mockedApi.getDocument.mockResolvedValue(DOCUMENT);
   });
 
@@ -153,6 +158,11 @@ function enqueued(overrides: Record<string, unknown> = {}) {
 describe("the announcement on a job", () => {
   beforeEach(() => {
     resetPageEditorApiMocks();
+    // These tests exercise the segment strip, which only opens when the transcript column is off.
+    localStorage.setItem(
+      "nomikos_page_editor_settings",
+      JSON.stringify({ sideBySide: false }),
+    );
     loadedPageWithOneSegment();
     mockedApi.enqueueTranscribePart.mockResolvedValue(enqueued());
   });
