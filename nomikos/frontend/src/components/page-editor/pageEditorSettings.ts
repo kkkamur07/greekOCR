@@ -23,6 +23,8 @@ export type PageEditorCanvasSettings = {
   wheelZoomSpeed: number;
   /** Show the text panel next to the canvas in a side-by-side layout. */
   sideBySide: boolean;
+  /** Width share of the manuscript pane, 0.2 to 0.8. */
+  splitRatio: number;
 };
 
 export const DEFAULT_PAGE_EDITOR_SETTINGS: PageEditorCanvasSettings = {
@@ -34,6 +36,7 @@ export const DEFAULT_PAGE_EDITOR_SETTINGS: PageEditorCanvasSettings = {
   showBaselines: false,
   wheelZoomSpeed: 1,
   sideBySide: true,
+  splitRatio: 0.55,
 };
 
 function clampNumber(
@@ -95,6 +98,18 @@ export function loadPageEditorSettings(): PageEditorCanvasSettings {
         typeof parsed.sideBySide === "boolean"
           ? parsed.sideBySide
           : DEFAULT_PAGE_EDITOR_SETTINGS.sideBySide,
+      // clampNumber falls back to the default for any out-of-range value,
+      // so pre-clamp numeric input to the bounds and let the helper cover
+      // the missing or non-numeric case.
+      splitRatio: clampNumber(
+        parsed.splitRatio,
+        0.2,
+        0.8,
+        typeof parsed.splitRatio === "number" &&
+          !Number.isNaN(parsed.splitRatio)
+          ? Math.min(0.8, Math.max(0.2, parsed.splitRatio))
+          : DEFAULT_PAGE_EDITOR_SETTINGS.splitRatio,
+      ),
     };
   } catch {
     return DEFAULT_PAGE_EDITOR_SETTINGS;
